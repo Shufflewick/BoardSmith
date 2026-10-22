@@ -328,6 +328,35 @@ describe('simulateRandomGames', () => {
     }
   });
 
+  it('lets other work run between games, so a long run does not hold its vitest worker (#1429)', async () => {
+    const log: string[] = [];
+    let running = true;
+    const tick = () => {
+      if (!running) return;
+      log.push('macrotask');
+      setImmediate(tick);
+    };
+    setImmediate(tick);
+    await simulateRandomGames(PickGame, {
+      count: 3,
+      playerCounts: [2],
+      seed: 'yields',
+      onGameComplete: (_result, { completed }) => log.push(`game ${completed}`),
+    });
+    running = false;
+    expect(log.slice(0, 5)).toEqual(['game 1', 'macrotask', 'game 2', 'macrotask', 'game 3']);
+  });
+
+  it('still finishes a run under fake timers, which fake setImmediate (#1429)', async () => {
+    vi.useFakeTimers();
+    try {
+      const results = await simulateRandomGames(PickGame, { count: 3, playerCounts: [2], seed: 'fake-timers' });
+      expect(results.total).toBe(3);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('is deterministic and reproducible from the base seed (F50)', async () => {
     const opts: SimulateRandomGamesOptions = {
       count: 6,
