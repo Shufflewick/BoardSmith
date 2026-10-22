@@ -68,7 +68,8 @@ const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
 // Each space between two markers has one place to go, so a failed match tries each split once (#1401).
 const QUOTE_MARKERS = String.raw` {0,3}>(?:(?:\t {0,3}| {0,4})>)*[ \t]?`;
-const QUOTES = `(?:${QUOTE_MARKERS})?`;
+/** The quote markers a line inside a blockquote opens with, if any. */
+export const QUOTES = `(?:${QUOTE_MARKERS})?`;
 /** A line holding nothing but whitespace and quote markers, which ends a paragraph (#1396, #1400). */
 export const BLANK_LINE = String.raw`${QUOTES}[ \t\r]*\n`;
 // A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
@@ -85,13 +86,14 @@ const THEMATIC_BREAK = String.raw`${QUOTES} {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*)
 const LIST_ITEM = String.raw`${QUOTES} {0,3}(?:[-+*]|0{0,8}1[.)])[ \t]+\S`;
 // shortcut: a > line ends the span only after an unquoted line, missing a nested quote's start and ending wrongly after a lazy line; #1402 tracks containers.
 const QUOTE_START = String.raw`(?<!^ {0,3}>[^\n]*\n) {0,3}>`;
-// A line that starts a block ends the paragraph before it, and so any code span open in it (#1393, #1396, #1397, #1401).
 const BLOCK_START = String.raw`${BLANK_LINE}|${ATX_HEADING}|${SETEXT_UNDERLINE}|${THEMATIC_BREAK}|${LIST_ITEM}|${QUOTE_START}`;
-// A heading is one line, so a span cannot run past its end either.
-const CODE_SPAN = new RegExp(
-  String.raw`(?<!\`)(\`+)(?!\`)(?:(?!\n(?:${BLOCK_START})|\n(?<=^${ATX_HEADING}[^\n]*\n))[\s\S])+?(?<!\`)\1(?!\`)`,
-  'gm',
-);
+/**
+ * At the start of a Markdown line, read with the `m` flag: a paragraph ended before it, since the line
+ * starts a block or the line before it is a heading, which is one line. So neither a code span
+ * (#1393, #1396, #1397, #1401) nor a wrapped citation (#1398) runs onto it.
+ */
+export const PARAGRAPH_ENDED = String.raw`(?:${BLOCK_START}|(?<=^${ATX_HEADING}[^\n]*\n))`;
+const CODE_SPAN = new RegExp(String.raw`(?<!\`)(\`+)(?!\`)(?:(?!\n${PARAGRAPH_ENDED})[\s\S])+?(?<!\`)\1(?!\`)`, 'gm');
 
 /**
  * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a fenced
