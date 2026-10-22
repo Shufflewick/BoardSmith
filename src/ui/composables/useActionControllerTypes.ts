@@ -600,11 +600,10 @@ export interface UseActionControllerReturn {
    *  surface binds this to its confirm control rather than deciding for itself. */
   confirmDisabledReason: ComputedRef<string | null>;
   /**
-   * SUBMIT THE DRAFT THE PLAYER HAS JUST BEEN QUOTED.
+   * Send the open action to the server with its picks so far.
    *
-   * The purchase, for a quoted action. Refused unless the draft is complete AND
-   * the price on screen is the price of that draft -- a confirmation of something
-   * nobody was shown is the defect this whole road exists to close.
+   * A quoted action is refused until every pick is answered AND the price on
+   * screen is the price of that draft (see {@link confirmDisabledReason}).
    */
   confirm: () => Promise<ControllerActionResult>;
 
