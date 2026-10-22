@@ -1,13 +1,14 @@
-import { configDefaults, defineConfig } from 'vitest/config';
-import { resolve, sep } from 'path';
+import { defineConfig } from 'vitest/config';
+import { resolve } from 'path';
 import vue from '@vitejs/plugin-vue';
-
-// vitest matches rerun triggers against absolute paths and its `**` skips dot folders, so a trigger is anchored here (#1307).
-const CHECKOUT_GLOB = __dirname.split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
+import { rerunTriggers } from './src/vite-config/index.js';
 
 export default defineConfig({
+  // The checkout, not the working directory, so the rerun triggers stay anchored here when vitest starts elsewhere (#1420).
+  root: __dirname,
   plugins: [
     vue(),
+    rerunTriggers(),
     // A test imports the Markdown it reads, so `--changed` runs it when that Markdown changes (#1370).
     // shortcut: vitest 3 drops `?raw` imports from `--changed`; on vitest 5 use `?raw` and delete this.
     { name: 'markdown-as-text', transform: (text, id) => (id.endsWith('.md') ? `export default ${JSON.stringify(text)};` : undefined) },
@@ -30,8 +31,6 @@ export default defineConfig({
     // ignores (#579): scripts/untracked-guard/guard.mjs says why and how to fix one.
     globalSetup: ['scripts/untracked-guard/global-setup.mjs'],
     setupFiles: ['scripts/untracked-guard/after-each-file.mjs'],
-    // vitest 3's default config glob (`**/vitest.config.*/**`) misses the file itself (#1419); vitest 5's default matches it, but not under a dot folder.
-    forceRerunTriggers: [...configDefaults.forceRerunTriggers, `${CHECKOUT_GLOB}/{vitest,vite}.config.*`],
   },
   resolve: {
     alias: {

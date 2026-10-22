@@ -10,6 +10,9 @@ import { createVitest } from 'vitest/node';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the shared rerun-trigger rule vitest.config.ts loads, so `--changed` runs this guard when it alone changes; nothing loads.
+import.meta.glob('/src/vite-config/index.js');
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SELF = fileURLToPath(import.meta.url);
 
@@ -23,7 +26,7 @@ describe('vitest config changes (#1419)', () => {
     expect(
       picked,
       'A change to only vitest.config.ts does not rerun the suite under --changed, so verify can pass with a test ' +
-        'red. Add a glob that matches it, anchored at the checkout, to `forceRerunTriggers` in vitest.config.ts.',
+        'red. Keep `rerunTriggers()` from src/vite-config/index.js in the plugins of vitest.config.ts.',
     ).toContain(SELF);
   });
 });
