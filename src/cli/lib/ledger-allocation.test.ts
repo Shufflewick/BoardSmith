@@ -165,6 +165,32 @@ describe('quoted ids are never citations (#437)', () => {
     }
   });
 
+  // #1397: a heading is a block of its own line(s), but a span ran into it and out of it.
+  it('ends a code span at an ATX heading line and a setext = underline, in an LF or a CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      const ended = [
+        `## Uses \`x${eol}See Ruling @a.1 and \`y${eol}`,
+        `#   Uses \`x ##${eol}See Ruling @a.1 and \`y${eol}`,
+        `> ## Uses \`x${eol}> See Ruling @a.1 and \`y${eol}`,
+        `a \`b${eol}## See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}#${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}   ###### c${eol}See Ruling @a.1 and \`d${eol}`,
+        `a \`b${eol}===${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}  = ${eol}See Ruling @a.1 and \`c${eol}`,
+        `> a \`b${eol}> ===${eol}> See Ruling @a.1 and \`c${eol}`,
+      ];
+      for (const text of ended) {
+        expect({ text, cites: provisionalReferences('design/notes.md', text) }).toEqual({ text, cites: ['Ruling @a.1'] });
+      }
+      // Paragraph text, not a heading line, so the span runs on past it.
+      const running = ['#hashtag', '####### seven', '    # indented', '\\# escaped', '= =', '=== x'];
+      for (const line of running) {
+        const text = `see \`Ruling${eol}${line}${eol}@x.1\` here${eol}`;
+        expect({ line, cites: provisionalReferences('design/notes.md', text) }).toEqual({ line, cites: [] });
+      }
+    }
+  });
+
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
     const root = new URL('../slash-command/bs/', import.meta.url).pathname;
     const markdown = (await fs.readdir(root, { recursive: true })).filter((f) => f.endsWith('.md'));

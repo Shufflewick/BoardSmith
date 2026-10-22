@@ -63,6 +63,18 @@ export function blankComments(text: string): string {
 
 const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
+const QUOTES = String.raw`(?: {0,3}>[ \t]?)*`;
+const ATX_HEADING = String.raw`${QUOTES} {0,3}#{1,6}(?![^ \t\r\n])`;
+// shortcut: an unquoted = line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
+const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}=+[ \t\r]*(?![^\n])`;
+// A line that starts a block ends the paragraph before it, and so any code span open in it (#1393, #1396, #1397).
+const BLOCK_START = String.raw`(?: {0,3}>)*[ \t\r]*\n|${ATX_HEADING}|${SETEXT_UNDERLINE}`;
+// A heading is one line, so a span cannot run past its end either.
+const CODE_SPAN = new RegExp(
+  String.raw`(?<!\`)(\`+)(?!\`)(?:(?!\n(?:${BLOCK_START})|\n(?<=^${ATX_HEADING}[^\n]*\n))[\s\S])+?(?<!\`)\1(?!\`)`,
+  'gm',
+);
+
 /**
  * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a fenced
  * code block or an inline code span is QUOTED, never cited. A filing that reproduces a ledger bug
@@ -77,8 +89,7 @@ export function citableText(path: string, text: string): string {
     .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
     // A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
     .replace(/^(?: {0,3}>[ \t]?)+ {0,3}(`{3,}|~{3,})[^\n]*(?:\n {0,3}>[^\n]*)*?(?:\n(?: {0,3}>[ \t]?)+ {0,3}\1[`~]*[ \t]*$|(?=\n(?! {0,3}>))|(?![\s\S]))/gm, blank)
-    // A blank line, or one holding only blockquote markers, ends the paragraph and so the span (#1396).
-    .replace(/(?<!`)(`+)(?!`)(?:(?!\n(?: {0,3}>)*[ \t\r]*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
+    .replace(CODE_SPAN, blank);
 }
 
 function lineOf(text: string, index: number): number {
