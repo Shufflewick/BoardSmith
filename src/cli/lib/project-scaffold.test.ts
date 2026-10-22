@@ -45,6 +45,94 @@ const config: ProjectConfig = {
   playerCount: { min: 2, max: 4 },
 };
 
+const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+// The type-checks below build TypeScript programs over the real engine and UI,
+// seconds on a busy machine, so they run here, where no test timeout applies (#1412).
+
+/**
+ * Diagnostics from the exact rules files `boardsmith init` generates, under the
+ * same gate `boardsmith validate` runs (tsc). This is the check that catches an
+ * unresolved re-export like `export { MyGamePlayer } from './elements.js'`
+ * (TS2305) — esbuild silently tolerates missing named re-exports on .ts files
+ * (it cannot know they aren't type-only), which is exactly how `boardsmith dev`
+ * masked the broken scaffold (CR-01).
+ */
+const rulesDiagnostics = ((): string[] => {
+  const dir = tempTree('bs-scaffold-compile-');
+  const rulesDir = join(dir, 'rules');
+  mkdirSync(rulesDir, { recursive: true });
+  writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
+  writeFileSync(join(rulesDir, 'game.ts'), generateGameTs('MyGame'));
+  writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
+  writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
+  writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
+  writeFileSync(join(rulesDir, 'metrics.ts'), generateMetricsTs('MyGame'));
+  mkdirSync(join(rulesDir, 'data'));
+  writeFileSync(join(rulesDir, 'data', 'cards.csv'), generateCardsCsv());
+
+  // vite/client is the scaffold tsconfig's one `types` entry, which types the `?raw` import.
+  const viteClient = join(dirname(createRequire(import.meta.url).resolve('vite/package.json')), 'client.d.ts');
+  const program = ts.createProgram([join(rulesDir, 'index.ts'), viteClient], {
+    // Mirrors the scaffold's generateTsConfig() compiler options.
+    strict: true,
+    noEmit: true,
+    skipLibCheck: true,
+    target: ts.ScriptTarget.ES2022,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    baseUrl: dir,
+    // 'boardsmith' resolves to the same entry the package.json "." export
+    // points at (src/engine/index.ts), matching a real scaffolded project.
+    paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
+  });
+  return ts.getPreEmitDiagnostics(program)
+    .filter((d) => d.file && d.file.fileName.startsWith(dir))
+    .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+})();
+
+/**
+ * The ImportMeta.env errors in a UI entry that re-exports a type from
+ * `boardsmith/ui`, which reaches `useActionController.ts`'s
+ * `import.meta.env.DEV` (a Vite-ambient global), compiled without and with
+ * `types: ['vite/client']` (Phase 149 dry-run Defect 1, WR-02).
+ */
+const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
+  const dir = tempTree('bs-scaffold-ui-compile-');
+  const uiDir = join(dir, 'ui');
+  mkdirSync(uiDir, { recursive: true });
+  // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
+  // value import, which is irrelevant to the ImportMeta.env resolution).
+  writeFileSync(
+    join(uiDir, 'index.ts'),
+    "export type { UseActionControllerReturn } from 'boardsmith/ui';\n",
+  );
+  const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
+
+  const errors = (types: string[]): string[] => {
+    const program = ts.createProgram([join(uiDir, 'index.ts')], {
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+      types,
+      baseUrl: dir,
+      paths: { 'boardsmith/ui': [uiEntry] },
+    });
+    return ts
+      .getPreEmitDiagnostics(program)
+      // TS2339 "Property 'env' does not exist on type 'ImportMeta'" — the
+      // exact diagnostic a fresh scaffold hit before the fix.
+      .filter((d) => d.code === 2339)
+      .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
+      .filter((m) => m.includes('env'));
+  };
+  return { without: errors([]), with: errors(['vite/client']) };
+})();
+
 describe('generateIndexHtml', () => {
   it('escapes the display name in the document title (#853)', () => {
     expect(generateIndexHtml({ displayName: 'Cats & Dogs </title>' })).toContain(
@@ -206,44 +294,7 @@ describe('generateRulesIndexTs', () => {
   });
 
   it('the full generated rules module set type-checks cleanly against the real engine (CR-01 regression)', () => {
-    // Write the exact rules files `boardsmith init` generates and run the same
-    // gate `boardsmith validate` runs (tsc). This is the check that catches an
-    // unresolved re-export like `export { MyGamePlayer } from './elements.js'`
-    // (TS2305) — esbuild silently tolerates missing named re-exports on .ts
-    // files (it cannot know they aren't type-only), which is exactly how
-    // `boardsmith dev` masked the broken scaffold.
-    const dir = tempTree('bs-scaffold-compile-');
-    const rulesDir = join(dir, 'rules');
-    mkdirSync(rulesDir, { recursive: true });
-    writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
-    writeFileSync(join(rulesDir, 'game.ts'), generateGameTs('MyGame'));
-    writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
-    writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
-    writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
-    writeFileSync(join(rulesDir, 'metrics.ts'), generateMetricsTs('MyGame'));
-    mkdirSync(join(rulesDir, 'data'));
-    writeFileSync(join(rulesDir, 'data', 'cards.csv'), generateCardsCsv());
-
-    // 'boardsmith' resolves to the same entry the package.json "." export
-    // points at (src/engine/index.ts), matching a real scaffolded project.
-    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-    // vite/client is the scaffold tsconfig's one `types` entry, which types the `?raw` import.
-    const viteClient = join(dirname(createRequire(import.meta.url).resolve('vite/package.json')), 'client.d.ts');
-    const program = ts.createProgram([join(rulesDir, 'index.ts'), viteClient], {
-      // Mirrors the scaffold's generateTsConfig() compiler options.
-      strict: true,
-      noEmit: true,
-      skipLibCheck: true,
-      target: ts.ScriptTarget.ES2022,
-      module: ts.ModuleKind.ESNext,
-      moduleResolution: ts.ModuleResolutionKind.Bundler,
-      baseUrl: dir,
-      paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
-    });
-    const diagnostics = ts.getPreEmitDiagnostics(program)
-      .filter((d) => d.file && d.file.fileName.startsWith(dir))
-      .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
-    expect(diagnostics).toEqual([]);
+    expect(rulesDiagnostics).toEqual([]);
   });
 
   it('types each action by the game, so no generated rule casts what it is handed (#620)', () => {
@@ -293,53 +344,13 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
   it('the UI type-graph compiles clean ONLY when vite/client types are present (WR-02: Defect 1 is load-bearing)', () => {
     // The string assertion above proves the config CONTAINS 'vite/client'; it
     // does not prove that removing it re-breaks a fresh scaffold. This test
-    // reproduces the actual failing graph: a UI entry that re-exports a type
-    // from `boardsmith/ui`, which reaches `useActionController.ts`'s
-    // `import.meta.env.DEV` (a Vite-ambient global). We compile that graph
-    // twice — without and with `types: ['vite/client']` — and assert the
-    // ImportMeta.env error appears without it and vanishes with it. Dropping
-    // 'vite/client' from generateTsConfig() therefore turns this test RED.
-    const dir = tempTree('bs-scaffold-ui-compile-');
-    const uiDir = join(dir, 'ui');
-    mkdirSync(uiDir, { recursive: true });
-    // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
-    // value import, which is irrelevant to the ImportMeta.env resolution).
-    writeFileSync(
-      join(uiDir, 'index.ts'),
-      "export type { UseActionControllerReturn } from 'boardsmith/ui';\n",
-    );
-
-    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-    const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
-
-    const importMetaEnvErrors = (types: string[]): string[] => {
-      const program = ts.createProgram([join(uiDir, 'index.ts')], {
-        strict: true,
-        noEmit: true,
-        skipLibCheck: true,
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
-        types,
-        baseUrl: dir,
-        paths: { 'boardsmith/ui': [uiEntry] },
-      });
-      return ts
-        .getPreEmitDiagnostics(program)
-        // TS2339 "Property 'env' does not exist on type 'ImportMeta'" — the
-        // exact diagnostic a fresh scaffold hit before the fix.
-        .filter((d) => d.code === 2339)
-        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
-        .filter((m) => m.includes('env'));
-    };
-
-    // Without vite/client: the original bug reproduces.
-    expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
-    // With vite/client: the ImportMeta.env access resolves cleanly.
-    expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
-    // Two type-checks of the UI graph take seconds; a busy run must not fail them on time alone.
-  }, 60_000);
+    // reproduces the actual failing graph (see uiImportMetaEnvErrors), compiled
+    // without and with `types: ['vite/client']`: the ImportMeta.env error
+    // appears without it and vanishes with it. Dropping 'vite/client' from
+    // generateTsConfig() therefore turns this test RED.
+    expect(uiImportMetaEnvErrors.without.length).toBeGreaterThan(0);
+    expect(uiImportMetaEnvErrors.with).toEqual([]);
+  });
 });
 
 describe('generatePackageJson — explicit vite devDependency (Phase 149 dry-run Defect 1)', () => {
