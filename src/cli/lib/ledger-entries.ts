@@ -75,7 +75,8 @@ export function citableText(path: string, text: string): string {
   if (!path.endsWith('.md')) return text;
   return blankComments(text)
     .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
-    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t\r]*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
+    // A blank line, or one holding only blockquote markers, ends the paragraph and so the span (#1396).
+    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t\r]*(?:>[ \t\r]*)*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
 }
 
 function lineOf(text: string, index: number): number {

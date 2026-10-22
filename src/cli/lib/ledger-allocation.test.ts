@@ -142,6 +142,19 @@ describe('quoted ids are never citations (#437)', () => {
     }
   });
 
+  // #1396: a line holding only `>` ends a paragraph in a blockquote, but did not end a code span.
+  it('ends a code span at a blockquote line holding only quote markers, in an LF or a CRLF file', () => {
+    const quotes = [['> ', '>'], ['> ', ' > '], ['> > ', '> >'], ['>> ', '>>']];
+    for (const eol of ['\n', '\r\n']) {
+      for (const [prefix, lone] of quotes) {
+        const text = `${prefix}a \`b${eol}${lone}${eol}${prefix}See Ruling @a.1 and \`c${eol}`;
+        expect({ eol, lone, cites: provisionalReferences('design/notes.md', text) }).toEqual({ eol, lone, cites: ['Ruling @a.1'] });
+        const wrapped = `${prefix}see \`Ruling${eol}${prefix}@x.1\` here${eol}`;
+        expect({ eol, lone, cites: provisionalReferences('design/notes.md', wrapped) }).toEqual({ eol, lone, cites: [] });
+      }
+    }
+  });
+
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
     const root = new URL('../slash-command/bs/', import.meta.url).pathname;
     const markdown = (await fs.readdir(root, { recursive: true })).filter((f) => f.endsWith('.md'));
