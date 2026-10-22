@@ -286,7 +286,7 @@ describe('provisional ids in list citations (#439)', () => {
       'Decision @ranged-units.9',
       'Ruling @ranged-units.4',
     ]);
-    expect(provisionalReferences('design/a.md', 'per Ruling\n> @a.1 here')).toEqual(['Ruling @a.1']);
+    expect(provisionalReferences('design/a.md', '> per Ruling\n> @a.1 here')).toEqual(['Ruling @a.1']);
   });
 
   it('names a provisional id written with no kind before it, so the merge can refuse it', () => {
@@ -587,5 +587,37 @@ describe('a dash range wrapped after its dash (#1394)', () => {
       files: { 'src/game.ts': '// Rulings 1 -\n//   3 apply.\n' },
       problems: [],
     });
+  });
+});
+
+/**
+ * #1398: in Markdown a heading or a list item starts a new block, so it does not continue the line
+ * before it, and a heading is one line. The line-wrap rule read `@a.1 -\n# 3 Player variant` as
+ * `@a.1 - 3` and refused correct work.
+ */
+describe('a Markdown line that starts a block does not continue a wrapped line (#1398)', () => {
+  it('reads no dash range or shortened id onto a heading, a list item or past a heading line, in an LF or CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      for (const text of [
+        `Changes since Ruling @a.1 -${eol}# 3 Player variant${eol}`,
+        `Changes since Ruling @a.1 -${eol}1. Players draw first${eol}`,
+        `Rulings @a.1 and Decision${eol}* .2 of the deck${eol}`,
+        `## Changes since Ruling @a.1 -${eol}3 players draw first${eol}`,
+      ]) {
+        expect({ text, read: unreadableShorthand('design/notes.md', text) }).toEqual({ text, read: [] });
+      }
+    }
+  });
+
+  it('gives an id on a list item or a new blockquote no kind from the line before it, in an LF or CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      expect(provisionalReferences('design/notes.md', `Rulings @a.1 and${eol}* @b.2 is new${eol}`)).toEqual(['Ruling @a.1', '@b.2']);
+      expect(provisionalReferences('design/notes.md', `per Ruling${eol}> @b.2 is new${eol}`)).toEqual(['@b.2']);
+    }
+  });
+
+  it('still reads a wrap inside a blockquote, and a # comment line in source code', () => {
+    expect(unreadableShorthand('design/notes.md', '> Rulings @a.1 -\r\n> 3 apply.\r\n')).toEqual(['@a.1 - 3']);
+    expect(unreadableShorthand('tools/deal.py', '# Rulings @a.1 -\n# 3 apply.\n')).toEqual(['@a.1 - 3']);
   });
 });
