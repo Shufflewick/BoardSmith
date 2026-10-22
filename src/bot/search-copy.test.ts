@@ -127,7 +127,8 @@ describe('the turn and the prompted seat in a search copy (#1428)', () => {
     truth.startFlow();
     truth.continueFlow('plan', {}, 1);
     const copy = searchCopyForSeat(truth, 2, 'search');
-    expect(turnAndPrompt(copy)).toEqual({ turn: undefined, prompted: undefined });
+    expect(turnAndPrompt(truth)).toEqual({ turn: undefined, prompted: undefined });
+    expect(turnAndPrompt(copy)).toEqual(turnAndPrompt(truth));
 
     planToTheFailedReveal(truth);
     planToTheFailedReveal(copy);
