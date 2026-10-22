@@ -1877,11 +1877,35 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | Property | Type | Description |
 |----------|------|-------------|
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
+| `currentArgs` | `Readonly<Ref<Readonly<Record<string, unknown>>>>` | Args collected so far for the current action. Read-only; change them with `start`, `fill`, `skip` or `clear` |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
+| `currentChoices` | `ComputedRef<ChoiceWithRefs[]>` | **Reactive** choices for the current pick; updates when fetched choices arrive |
+| `startCandidates` | `ComputedRef<ReadonlyMap<string, StartCandidates>>` | With no action open, each available action that opens with an element pick, mapped to `{ pick, elements }`. Empty off turn |
+| `isReady` | `ComputedRef<boolean>` | Whether every selection is filled and the action is ready to run |
 | `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
+| `errorTick` | `Readonly<Ref<number>>` | Goes up on every failure that sets `lastError`, even a repeat of the same message. Watch it to show each failure once |
+| `isLoadingChoices` | `Ref<boolean>` | Whether choices are being fetched from the server |
+| `repeatingState` | `Ref<RepeatingState \| null>` | Progress of a repeating selection: `{ selectionName, accumulated, awaitingServer, currentChoices? }` |
+| `pendingFollowUp` | `Ref<boolean>` | True between the server handing back a follow-up and it starting. Don't start another action meanwhile |
+| `pendingOnServer` | `Readonly<Ref<boolean>>` | True while the current action is a follow-up or an `onSelect` selection. These are never in `availableActions`, so don't cancel the action for being missing from it |
+| `stepOutstanding` | `Readonly<Ref<boolean>>` | True while an `onSelect` or repeating pick step is on its way to the server. `cancel()` tells the server too then |
+| `heldFollowUp` | `ComputedRef<FollowUpOffer \| undefined>` | The follow-up the server holds for this seat, if any. The seat keeps its turn while it is held; offer `resumeFollowUp` to start it again |
+| `actionStartTick` | `Readonly<Ref<number>>` | Goes up each time an action starts, including a restart of the action that just finished. Watch it with `currentAction` |
+| `actionCompletedTick` | `Readonly<Ref<number>>` | Goes up each time an action chain fully resolves (once per chain, not per action) |
 | `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
+| `multiSelectDraft` | `Ref<{ selectionName: string; values: unknown[] } \| null>` | The in-progress multiSelect or ordered-list values, shared by the Action Panel and custom UIs. Not in `currentArgs` until `confirmMultiSelect()` |
+| `currentPickDraft` | `ComputedRef<string \| number \| null>` | What the player has typed into the current number or text editor and not submitted. Write it with `setPickDraft` |
+| `actionQuote` | `ComputedRef<readonly string[] \| null>` | What the game says the current draft of a quoted action would cost, or `null` when no price is true right now |
+| `quotePending` | `ComputedRef<boolean>` | True while the price of the current draft is still being worked out |
+| `quoteError` | `ComputedRef<string \| null>` | Why the current draft could not be priced, or `null` |
+| `awaitingConfirmation` | `ComputedRef<boolean>` | True when a quoted action's draft is complete and waiting for `confirm()` |
+| `confirmDisabledReason` | `ComputedRef<string \| null>` | Why `confirm()` is refused right now, or `null` when it is allowed. Bind it to the confirm control |
+| `actionMenuPath` | `Ref<readonly string[]>` | The action-group path the player has opened in the Action Panel; empty at the top level |
+| `actionSnapshot` | `Ref<ActionStateSnapshot \| null>` | The current action's state frozen at start, including metadata for follow-ups not in `availableActions` |
+| `animationsPending` | `ComputedRef<boolean>` | Whether animations are playing. Always `false` without `animationEvents` |
+| `showActionPanel` | `ComputedRef<boolean>` | Whether to show action UI: `isMyTurn && !animationsPending && !pendingFollowUp` |
 
 ### Reading an action's return value (`lastActionResult`)
 
