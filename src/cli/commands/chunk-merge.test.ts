@@ -589,6 +589,29 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('does not refuse a "Decision .2" already on main, in a ledger the branch left alone or added to (#1395)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('quests', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n\n### Ruling @quests.1\n- Decision: quests expire.\n',
+    });
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+  });
+
+  it('refuses a second "Decision .2" the branch wrote beside the one already on main (#1395)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n\n### Ruling @trading.1\n- Decision: as Decision .2.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/RULINGS\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
   it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
     const constraints = await fs.readFile(join(main, 'design/CONSTRAINTS.md'), 'utf-8');
     await buildOnBranch('trading', 100, {
