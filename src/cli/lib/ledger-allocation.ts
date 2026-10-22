@@ -84,7 +84,7 @@ const listItem = (named: boolean, first: boolean): string => {
 const LIST_JOIN = `${GAP}(?:,${GAP}(?:(?:and|or)(?=\\s)${GAP})?|(?:and|or|&)(?=\\s)${GAP})`;
 /** A range joiner, only ever before a provisional or shorthand id: `Ruling @a.1 to 3 players` is no range. */
 const rangeJoin = (named: boolean) =>
-  `(?:${GAP}(${named ? '?<range>' : '?:'}to|through)(?=\\s)${GAP}|[ \\t]*(${named ? '?<dash>' : '?:'}[-–])[ \\t]*)(?=@|${SHORTHAND})`;
+  `(?:${GAP}(${named ? '?<range>' : '?:'}to|through)(?=\\s)${GAP}|[ \\t]*(${named ? '?<dash>' : '?:'}[-–])${GAP})(?=@|${SHORTHAND})`;
 const CITATION_LIST = new RegExp(`${listItem(false, true)}(?:(?:${rangeJoin(false)}|${LIST_JOIN})${listItem(false, false)})*`, 'g');
 const FIRST_ITEM = new RegExp(listItem(true, true), 'y');
 const NEXT_ITEM = new RegExp(`(?:${rangeJoin(true)}|${LIST_JOIN})${listItem(true, false)}`, 'y');
@@ -210,20 +210,23 @@ export function provisionalReferences(path: string, text: string): string[] {
   return [...new Set(provisionalCitations(path, text).citations.map((c) => c.id ?? c.written))];
 }
 
-const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}[ \\t]*[-–][ \\t]*\\d+(?!\\d)`, 'g');
+const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])(${PROVISIONAL_NUMBER}[ \\t]*[-–])(${GAP})(\\d+)(?!\\d)`, 'g');
 const SHORTHAND_AFTER_KIND = new RegExp(`\\b((?:${WORD_KINDS.join('|')})s?)(?=\\s)${GAP}(${SHORTHAND})(?!\\d)`, 'g');
 
 /**
  * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
- * shortened id right after a kind word (`Decision .2`, even wrapped onto the next line), which takes
- * no slug from an id before the kind word. Quoted text (`citableText`) is not read.
+ * shortened id right after a kind word (`Decision .2`), which takes no slug from an id before the
+ * kind word. Either may wrap onto the next line of its prose after its dash or kind word. Quoted
+ * text (`citableText`) is not read.
  */
 export function unreadableShorthand(path: string, text: string): string[] {
   const citable = citableText(path, text);
   return [
-    ...[...citable.matchAll(DASH_THEN_NUMBER)].map((m) => ({ index: m.index, written: m[0] })),
-    // A kind word may wrap onto the next line; it is quoted on one.
+    // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
+    ...[...citable.matchAll(DASH_THEN_NUMBER)]
+      .filter((m) => oneParagraph(path, m[2]))
+      .map((m) => ({ index: m.index, written: `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}` })),
     ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
   ]
     .sort((a, b) => a.index - b.index)

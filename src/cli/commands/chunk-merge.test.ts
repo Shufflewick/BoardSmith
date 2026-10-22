@@ -511,6 +511,21 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('refuses a dash then a plain number on the next line, in a CRLF file, and leaves main as it was (#1394)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1 -\r\n3.\r\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      expect.stringMatching(/^design\/notes\.md writes "@trading\.1 - 3", which reads as a range of ids, .*`Rulings @trading\.1 and @trading\.3`/),
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('says how to reword prose that only reads as a range, and how to write a shortened id in full (#446)', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
