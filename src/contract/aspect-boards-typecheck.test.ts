@@ -21,7 +21,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
-import { gameTsConfig, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
+import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
+import { markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 const ASPECTS = ['dice', 'hex-grid', 'playing-cards', 'square-grid'] as const;

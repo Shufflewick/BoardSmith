@@ -13,7 +13,7 @@ import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateTsConfig } from '../cli/lib/project-scaffold.js';
+import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
@@ -37,25 +37,6 @@ import uis from './uis.js';
 </template>
 `;
 
-/** The game's tsconfig as `boardsmith init` writes it, compiling the game's UI. */
-function gameTsConfig(): string {
-  const scaffolded = JSON.parse(generateTsConfig()) as { compilerOptions: Record<string, unknown> };
-  return JSON.stringify(
-    {
-      ...scaffolded,
-      compilerOptions: {
-        ...scaffolded.compilerOptions,
-        noEmit: true,
-        // Resolve from where the file SITS, not from where it really lives (see consumerInstall).
-        preserveSymlinks: true,
-      },
-      include: ['src/**/*.ts', 'src/**/*.vue'],
-    },
-    null,
-    2,
-  );
-}
-
 describe('a game that does not use dice type-checks without three installed (#590)', () => {
   it('reports zero vue-tsc errors for an auto-UI game holding every declared peer but three', () => {
     const root = consumerInstall({
@@ -66,7 +47,7 @@ describe('a game that does not use dice type-checks without three installed (#59
     mkdirSync(ui, { recursive: true });
     writeFileSync(join(ui, 'uis.ts'), UIS_TS);
     writeFileSync(join(ui, 'App.vue'), APP_VUE);
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['src/**/*.ts', 'src/**/*.vue']));
 
     expectCleanCompile(
       root,
