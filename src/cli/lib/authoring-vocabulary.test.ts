@@ -74,6 +74,17 @@ import { WORLD_REFUSALS } from '../../world/refusals.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..');
 const readSrc = (...parts: string[]) => readFileSync(join(REPO_ROOT, ...parts), 'utf-8');
+// Links the files read below by path, so `--changed` runs this test when one alone changes; nothing loads (#1417).
+import.meta.glob([
+  './boardsmith.schema.json',
+  '../../world/definition.ts',
+  '../../session/capabilities.ts',
+  '../commands/validate.ts',
+  '../commands/build.ts',
+  '../commands/init.ts',
+  '../commands/dev-world.ts',
+  '../../ui/composables/useBoardInteraction.ts',
+]);
 
 /** One author-facing string, and where a failure has to be fixed. */
 interface Surface {
