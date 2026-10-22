@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
-  Game, Player, Space, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, type GameOptions,
+  Game, Player, Space, Card, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, type GameOptions,
 } from '../engine/index.js';
 import { SeededRandom } from '../utils/random.js';
 import { _clearShownWarnings } from '../utils/dev.js';
@@ -92,6 +92,40 @@ describe('searchCopyForSeat (#1362)', () => {
     expect(() => searchCopyForSeat(truthWithSecondSeatToMove(), 3, 'search')).toThrow(
       'searchCopyForSeat was given seat 3, but this game has seats 1 to 2. Seats count from 1.',
     );
+  });
+});
+
+/** Seven's card (#1433): its own `color` shares a name with a player's identity field. */
+class TintedCard extends Card<TintedGame> {
+  color = 'red';
+}
+
+class TintedGame extends Game<TintedGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([TintedCard]);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }) });
+    const hand = this.create(Space, 'hand');
+    hand.player = this.getPlayer(2)!;
+    hand.contentsVisibleToOwner();
+    hand.create(TintedCard, 'card');
+  }
+}
+
+describe('a sampler and a hidden card\'s own color (#1433)', () => {
+  it('may write the color the seat was never told', () => {
+    const truth = new TintedGame({ playerCount: 2, seed: 'truth' });
+    truth.startFlow();
+
+    const copy = searchCopyForSeat(truth, 1, 'search', {
+      determinize: (game) => {
+        game.first(TintedCard)!.color = 'blue';
+      },
+      rng: () => 0.5,
+    });
+
+    expect(copy.first(TintedCard)!.color).toBe('blue');
   });
 });
 
