@@ -2531,18 +2531,20 @@ export class Game<
     if (!player) return {};
 
     const flowState = this.getFlowState();
-    const offered = new Set([...availableActionsForSeat(flowState, seat), followUpForSeat(flowState, seat)?.action]);
+    const followUp = followUpForSeat(flowState, seat)?.action;
     const reasons: Record<string, string> = {};
-    for (const action of this._actions.values()) {
-      if (!offered.has(action.name)) continue;
+    for (const name of [...availableActionsForSeat(flowState, seat), ...(followUp ? [followUp] : [])]) {
+      const action = this._actions.get(name);
+      if (!action) continue;
       const reason = orNoMoveWhenWithheld(
-        action.name,
+        name,
         seat,
-        () => (this._actionExecutor.isActionAvailable(action, player) ? this.getActionRefusalReason(action, player) : null),
+        // A held follow-up skips its condition, as performAction does.
+        () => (name === followUp || this._actionExecutor.isActionAvailable(action, player) ? this.getActionRefusalReason(action, player) : null),
         // No move for the seat is a refusal, so a seat offered only this one cannot move (#1432).
         (error) => error.message.split('\n')[0],
       );
-      if (reason) reasons[action.name] = reason;
+      if (reason) reasons[name] = reason;
     }
     return reasons;
   }
