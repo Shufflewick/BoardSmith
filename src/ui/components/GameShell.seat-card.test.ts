@@ -24,6 +24,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./GameShell.vue');
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 const gameShellSource = readFileSync(join(HERE, 'GameShell.vue'), 'utf8');
 

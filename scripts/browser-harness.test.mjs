@@ -30,6 +30,10 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
+import policy from '../.agent-policy.json';
+
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['../src/cli/commands/dev-world.ts', '../src/cli/commands/fixture-table.test-helper.ts', '../src/cli/commands/fixture-world.test-helper.ts']);
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -168,8 +172,6 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 });
 
 describe('#533: every browser regression runs automatically', () => {
-  const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
-
   it('runs the browser suite at merge when UI, dev host, world or browser script files change', () => {
     expect(policy.merge?.extraMergeSteps, 'merge.extraMergeSteps in .agent-policy.json').toBeDefined();
     const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');

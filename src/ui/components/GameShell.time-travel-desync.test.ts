@@ -41,6 +41,9 @@ import type {
   EnrichedValidElement,
 } from '../composables/useActionControllerTypes.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', '../composables/useTableActionWiring.ts', '../composables/useTableSeat.ts']);
+
 // ── (1) displayedState computed — both board-render branches ─────────────────
 
 interface FakeGameState {

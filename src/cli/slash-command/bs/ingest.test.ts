@@ -28,6 +28,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { SKILL_FILES, skillMarkdown } from '../skill-markdown.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['../../../../scripts/ingest-harness/check.mjs', '../../cli.ts', '../../commands/dev.ts', '../../commands/ingest-archive.ts', '../../commands/init.ts']);
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */
