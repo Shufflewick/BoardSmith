@@ -15,7 +15,7 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
+import { BLANK_LINE, PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
@@ -309,8 +309,8 @@ function runProblem(
 const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
 /** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
 const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
-/** A line break that ends a paragraph: a blank line, or one holding only a comment or quote marker. */
-const PARAGRAPH_BREAK = /\n[ \t\r]*(?:(?:\*|\/\/|#|>)[ \t\r]*)?\n/;
+/** A line break that ends a paragraph: a blank line, or one holding only a comment marker or quote markers. */
+const PARAGRAPH_BREAK = new RegExp(String.raw`\n(?:[ \t\r]*(?:\*|\/\/|#)[ \t\r]*\n|${BLANK_LINE})`);
 /** A line of source code that is not a comment line, so not the comment's prose. */
 const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
 

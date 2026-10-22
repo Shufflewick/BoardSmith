@@ -144,7 +144,7 @@ describe('quoted ids are never citations (#437)', () => {
 
   // #1396: a line holding only `>` ends a paragraph in a blockquote, but did not end a code span.
   it('ends a code span at a blockquote line holding only quote markers, in an LF or a CRLF file', () => {
-    const quotes = [['> ', '>'], ['> ', ' > '], ['> > ', '> >'], ['>> ', '>>']];
+    const quotes = [['> ', '>'], ['> ', ' > '], ['> > ', '> >'], ['>> ', '>>'], ['> > ', '>\t>']];
     for (const eol of ['\n', '\r\n']) {
       for (const [prefix, lone] of quotes) {
         const text = `${prefix}a \`b${eol}${lone}${eol}${prefix}See Ruling @a.1 and \`c${eol}`;
@@ -454,6 +454,19 @@ describe('a shortened id outside its provisional id\'s list (#1363)', () => {
       'design/notes.md': 'Decision @a.1 sets the deck.\r\n\r\n.2 of the deck is drawn.\r\n',
     };
     expect(allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]).problems).toEqual([]);
+  });
+
+  // #1400: a line holding only nested quote markers was not read as the end of the paragraph.
+  it('reads a line holding only quote markers as the end of a blockquote paragraph, in an LF or a CRLF file', () => {
+    const quotes = [['> ', '>'], ['> > ', '> >'], ['>> ', '>>'], ['> > ', ' >\t> ']];
+    for (const eol of ['\n', '\r\n']) {
+      for (const [prefix, lone] of quotes) {
+        const split = `${prefix}Decision @a.1 sets the deck.${eol}${lone}${eol}${prefix}.2 of the deck is drawn.${eol}`;
+        expect({ eol, lone, problems: allocate(split).problems }).toEqual({ eol, lone, problems: [] });
+        const joined = `${prefix}Decision @a.1 sets the deck.${eol}${prefix}.2 of the deck is drawn.${eol}`;
+        expect({ eol, lone, problems: allocate(joined).problems.length }).toEqual({ eol, lone, problems: 1 });
+      }
+    }
   });
 
   it('refuses a .N on a later comment line of the same paragraph', () => {
