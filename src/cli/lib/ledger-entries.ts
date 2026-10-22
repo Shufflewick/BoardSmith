@@ -67,7 +67,7 @@ export function blankComments(text: string): string {
 const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
 // Each space between two markers has one place to go, so a failed match tries each split once (#1401).
-const QUOTE_MARKERS = String.raw` {0,3}>(?:(?:\t {0,3}| {0,4})>)*[ \t]?`;
+export const QUOTE_MARKERS = String.raw` {0,3}>(?:(?:\t {0,3}| {0,4})>)*[ \t]?`;
 const QUOTES = `(?:${QUOTE_MARKERS})?`;
 // A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
 const QUOTED_FENCE = new RegExp(

@@ -456,6 +456,19 @@ describe('a shortened id outside its provisional id\'s list (#1363)', () => {
     expect(allocateProvisional(files, [{ spec: DECISIONS, path: 'design/DECISIONS.md' }]).problems).toEqual([]);
   });
 
+  // #1400: a line holding only nested quote markers was not read as the end of the paragraph.
+  it('reads a line holding only quote markers as the end of a blockquote paragraph, in an LF or a CRLF file', () => {
+    const quotes = [['> ', '>'], ['> > ', '> >'], ['>> ', '>>'], ['> > ', ' >\t> ']];
+    for (const eol of ['\n', '\r\n']) {
+      for (const [prefix, lone] of quotes) {
+        const split = `${prefix}Decision @a.1 sets the deck.${eol}${lone}${eol}${prefix}.2 of the deck is drawn.${eol}`;
+        expect({ eol, lone, problems: allocate(split).problems }).toEqual({ eol, lone, problems: [] });
+        const joined = `${prefix}Decision @a.1 sets the deck.${eol}${prefix}.2 of the deck is drawn.${eol}`;
+        expect({ eol, lone, problems: allocate(joined).problems.length }).toEqual({ eol, lone, problems: 1 });
+      }
+    }
+  });
+
   it('refuses a .N on a later comment line of the same paragraph', () => {
     const files = {
       'design/DECISIONS.md': '### Decision @a.1\n\n### Decision @a.2\n',
