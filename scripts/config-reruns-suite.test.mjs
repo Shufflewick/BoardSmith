@@ -23,7 +23,7 @@ describe('vitest config changes (#1419)', () => {
     expect(
       picked,
       'A change to only vitest.config.ts does not rerun the suite under --changed, so verify can pass with a test ' +
-        'red. Add a glob that matches it, anchored at the checkout, to `forceRerunTriggers` in vitest.config.ts.',
+        'red. Keep `rerunTriggers()` from src/vite-config/index.js in the plugins of vitest.config.ts.',
     ).toContain(SELF);
   });
 });

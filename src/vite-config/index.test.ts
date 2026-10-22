@@ -41,7 +41,7 @@ describe('defineGameViteConfig', () => {
     // boardsmith.json, package.json and vite.config.ts sit at the project root, whatever folder the tests run from.
     const plugin = defineGameViteConfig().plugins?.flat().find((p) => p && typeof p === 'object' && 'name' in p && p.name === 'boardsmith:rerun-triggers') as unknown as { config: (c: object) => { test: { forceRerunTriggers: string[] } } };
     const { test } = plugin.config({ root: '/p/game', test: { root: '/p/game/tests' } });
-    expect(test.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((t) => `/p/game/${t}`));
+    expect(test.forceRerunTriggers).toEqual([...configDefaults.forceRerunTriggers, '{vitest,vite}.config.*', 'boardsmith.json'].map((t) => `/p/game/${t}`));
   });
 
   it("keeps a game's own settings, adding its excludes to the shipped ones", () => {
@@ -91,8 +91,10 @@ describe('defineGameViteConfig', () => {
     ['', 'boardsmith.json'],
     ['.worktrees/t', 'boardsmith.json'],
     ['.worktrees/t', 'package.json'],
+    ['', 'vite.config.ts'],
+    ['.worktrees/t', 'vite.config.ts'],
   ])('runs every test under --changed when only its own config changed, in a game at "%s": %s (#1211, #1307)', (within, changed) => {
-    // No test imports boardsmith.json, yet TestGame and the headless session read their options from it.
+    // No test imports boardsmith.json or vite.config.ts, yet TestGame and the headless session read their options from one and vitest runs on the other (#1420).
     // A thread or chunk worktree puts the game under a dot folder, where verify runs.
     const run = changedRun(within, changed);
 
