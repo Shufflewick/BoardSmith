@@ -18,7 +18,7 @@
     },
     {
       "name": "related-tests",
-      "run": "npx vitest run --changed {changeBase} --passWithNoTests=false",
+      "run": "npx vitest run --changed {changeBase} --passWithNoTests=false --reporter=default --reporter=json --outputFile.json={reportFile}",
       "reporter": "vitest",
       "related": true
     }
@@ -47,7 +47,7 @@
   ],
   "slice": {
     "count": 20,
-    "run": "npx vitest run --shard={slice}",
+    "run": "npx vitest run --shard={slice} --reporter=default --reporter=json --outputFile.json={reportFile}",
     "reporter": "vitest"
   },
   "merge": {
