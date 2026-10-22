@@ -15,7 +15,7 @@ type Table = 'Controller Methods' | 'Controller State';
 
 // The type checker requires every member, refuses any other name, and checks each member's table.
 const MEMBERS: {
-  [K in keyof UseActionControllerReturn]-?: UseActionControllerReturn[K] extends (...args: never[]) => unknown
+  [K in keyof UseActionControllerReturn]-?: NonNullable<UseActionControllerReturn[K]> extends (...args: never[]) => unknown
     ? 'Controller Methods'
     : 'Controller State';
 } = {
@@ -79,7 +79,7 @@ function rowNames(table: Table): string[] {
   if (heading === -1) throw new Error(`docs/ui-components.md has no "### ${table}" heading; the test reads the controller table under it.`);
   const start = lines.findIndex((line, i) => i > heading && line.startsWith('|'));
   const end = lines.findIndex((line, i) => i > start && !line.startsWith('|'));
-  return lines.slice(start + 2, end).map((row) => /^\|\s*`([^`]+)`/.exec(row)?.[1] ?? `unreadable row: ${row}`);
+  return lines.slice(start + 2, end === -1 ? undefined : end).map((row) => /^\|\s*`([^`]+)`/.exec(row)?.[1] ?? `unreadable row: ${row}`);
 }
 
 describe('UseActionControllerReturn', () => {
@@ -90,7 +90,8 @@ describe('UseActionControllerReturn', () => {
       expect({
         missing: expected.filter((name) => !documented.includes(name)),
         stale: documented.filter((name) => !expected.includes(name)),
-      }, `${table} table`).toEqual({ missing: [], stale: [] });
+        duplicated: documented.filter((name, i) => documented.indexOf(name) !== i),
+      }, `${table} table`).toEqual({ missing: [], stale: [], duplicated: [] });
     });
   }
 });
