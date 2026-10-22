@@ -5,6 +5,7 @@
  * `generateTsConfig()` through here, so a change to the scaffold's tsconfig
  * reaches all of them, and none keeps a hand-copied setting that drifts.
  */
+import { join } from 'node:path';
 import ts from 'typescript';
 import { generateTsConfig } from './project-scaffold.js';
 
@@ -28,10 +29,17 @@ export function gameTsConfig(include: readonly string[]): string {
 }
 
 /**
- * `gameTsConfig(include)` read the way tsc reads a game in `dir`: its relative
- * `paths` resolve from `dir`, and `fileNames` lists what `include` matches there.
- * Config errors are in `errors`, for the caller's test to report.
+ * `gameTsConfig(include)` read the way tsc reads `dir/tsconfig.json`: its
+ * relative `paths` and its `types` resolve from `dir`, so `dir/node_modules`
+ * must hold what the game installs, and `fileNames` lists what `include`
+ * matches there. Config errors are in `errors`, for the caller's test to report.
  */
 export function gameProject(dir: string, include: readonly string[]): ts.ParsedCommandLine {
-  return ts.parseJsonConfigFileContent(JSON.parse(gameTsConfig(include)), ts.sys, dir);
+  return ts.parseJsonConfigFileContent(
+    JSON.parse(gameTsConfig(include)),
+    ts.sys,
+    dir,
+    undefined,
+    join(dir, 'tsconfig.json'),
+  );
 }

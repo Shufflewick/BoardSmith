@@ -1,6 +1,7 @@
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, symlinkSync } from 'node:fs';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
 import {
@@ -50,6 +51,14 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
 // The type-checks below build TypeScript programs over the real engine and UI,
 // seconds on a busy machine, so they run here, where no test timeout applies (#1412).
 
+/** A temp game folder holding the vite that the scaffold's `types: ['vite/client']` names, as `npm install` leaves it. */
+function gameDir(prefix: string): string {
+  const dir = tempTree(prefix);
+  mkdirSync(join(dir, 'node_modules'));
+  symlinkSync(dirname(createRequire(import.meta.url).resolve('vite/package.json')), join(dir, 'node_modules', 'vite'));
+  return dir;
+}
+
 /**
  * Diagnostics from the exact rules files `boardsmith init` generates, under the
  * same gate `boardsmith validate` runs (tsc). This is the check that catches an
@@ -59,7 +68,7 @@ const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..')
  * masked the broken scaffold (CR-01).
  */
 const rulesDiagnostics = ((): string[] => {
-  const dir = tempTree('bs-scaffold-compile-');
+  const dir = gameDir('bs-scaffold-compile-');
   const rulesDir = join(dir, 'rules');
   mkdirSync(rulesDir, { recursive: true });
   writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
@@ -91,7 +100,7 @@ const rulesDiagnostics = ((): string[] => {
  * `types` emptied (Phase 149 dry-run Defect 1, WR-02, #1423).
  */
 const uiImportMetaEnvErrors = ((): { without: string[]; with: string[] } => {
-  const dir = tempTree('bs-scaffold-ui-compile-');
+  const dir = gameDir('bs-scaffold-ui-compile-');
   const uiDir = join(dir, 'ui');
   mkdirSync(uiDir, { recursive: true });
   // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
