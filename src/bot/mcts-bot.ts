@@ -682,16 +682,18 @@ export class MCTSBot<G extends Game = Game> {
    * is narrowed to the moves this world allows and no child has yet, so
    * expansion never tries a move the current world would refuse.
    *
-   * A root under a forced threat response is left alone: the game said MUST.
+   * A root under a forced threat response is left alone: the game said MUST,
+   * and its moves are checked against the world's whole move list, not a
+   * random sample that may miss them (#1391).
    */
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
+    const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
     const enumerated = live.complete
       ? []
-      : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
+      : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: !forced });
 
-    const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
     const legalMoves = forced
       ? enumerated.filter((move) => forced.has(this.getMoveKey(move)))
       : enumerated;
