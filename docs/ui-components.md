@@ -1866,7 +1866,7 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
 | `confirm` | `() => Promise<ControllerActionResult>` | Send the open action to the server with its picks so far. A quoted action is refused until every pick is answered and the price on screen is that draft's price (see `confirmDisabledReason`) |
 | `resumeFollowUp` | `() => Promise<void>` | Start the follow-up the server holds for this seat (`heldFollowUp`), even one cancelled before. Does nothing while another action is open, while an action is out to the server, while viewing history, or when no follow-up is held |
-| `toggleMultiSelect` | `(selectionName: string, value: unknown) => Promise<void>` | Add or remove a value in the multiSelect draft of a pick of the open action; ignored for a name that is not one. An add past `max` is ignored. Confirms on its own when `min === max` and that count is reached |
+| `toggleMultiSelect` | `(selectionName: string, value: unknown) => Promise<void>` | Add or remove a value in the draft of a multiSelect pick of the open action; ignored for a name that is not one. An add past `max` is ignored. Confirms on its own when `min === max` and that count is reached |
 | `confirmMultiSelect` | `() => Promise<PickValidationResult \| void>` | Fill the multiSelect or ordered-list selection with its draft |
 | `isMultiSelectSelected` | `(selectionName: string, value: unknown) => boolean` | Whether a value is in the draft for that selection |
 | `appendListEntry` | `(selectionName: string, value: unknown) => Promise<void>` | Add one entry to an `orderedList` draft (the same value again adds a second entry). Appends past `max` are ignored |
