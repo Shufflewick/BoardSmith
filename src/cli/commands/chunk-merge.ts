@@ -252,7 +252,12 @@ async function keepMainLock(ctx: MergeContext): Promise<void> {
 
 /** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
 function citationRefusal(name: string, id: string): string {
-  const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
+  const orExample = name.endsWith('.md')
+    ? ', or, if it is an example rather than a citation, put it in a code span. Inside an HTML block such as <details>, ' +
+      'backticks and <code> are plain text: there, put the example in an HTML comment, or on a line of its own after a ' +
+      'blank line, where Markdown is read again (not inside <pre>, <script>, <style> or <textarea>, which end only at ' +
+      'their closing tag).'
+    : '.';
   if (id.startsWith('@')) {
     return (
       `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +

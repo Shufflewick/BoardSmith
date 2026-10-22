@@ -115,6 +115,19 @@ describe('quoted ids are never citations (#437)', () => {
     expect(provisionalReferences('src/a.ts', 'const note = `Ruling @a.1 holds`;\n')).toEqual(['Ruling @a.1']);
   });
 
+  // #1410: CommonMark reads no Markdown inside an HTML block, so backticks there are not a code span.
+  it('reads a backticked id inside an HTML block as a citation, and quotes it in a comment or on a Markdown line after a blank line', () => {
+    const cites = (text: string): string[] => provisionalReferences('design/notes.md', text);
+    expect(cites('<details>\n`Ruling @x.1` is the form\n</details>\n')).toEqual(['Ruling @x.1']);
+    expect(cites('<details>\n<code>Ruling @x.1</code>\n</details>\n')).toEqual(['Ruling @x.1']);
+    expect(cites('<details><summary>`Ruling @x.1` form</summary>\n\n</details>\n')).toEqual(['Ruling @x.1']);
+    // A <pre> block ends only at its closing tag, so a blank line inside it is still HTML.
+    expect(cites('<pre>\n\n`Ruling @x.1` is the form\n</pre>\n')).toEqual(['Ruling @x.1']);
+    expect(cites('<details>\n\n`Ruling @x.1` is the form\n</details>\n')).toEqual([]);
+    expect(cites('<pre>\n<!-- Ruling @x.1 -->\n</pre>\n')).toEqual([]);
+    expect(cites('<details><summary><!-- Ruling @x.1 --> form</summary>\n</details>\n')).toEqual([]);
+  });
+
   it('leaves a quoted id as written when it allocates, and rewrites the citations around it', () => {
     const ledger = '### Filing 25\n- a\n### Filing @x.1\n- Reported: recorded\n';
     const prose = 'Per Filing @x.1, the heading `### Filing @x.1` is read as Filing 25\'s.\n';

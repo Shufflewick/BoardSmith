@@ -705,6 +705,22 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     );
   });
 
+  it('refuses a backticked id nobody declared inside an HTML block, saying backticks there are not a code span (#1410)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': '<details>\n`Ruling @trading.2` is the form\n</details>\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md cites Ruling @trading.2, but no ledger entry is headed Ruling @trading.2. Correct the citation on the ' +
+        'branch, or, if it is an example rather than a citation, put it in a code span. Inside an HTML block such as ' +
+        '<details>, backticks and <code> are plain text: there, put the example in an HTML comment, or on a line of its ' +
+        'own after a blank line, where Markdown is read again (not inside <pre>, <script>, <style> or <textarea>, which ' +
+        'end only at their closing tag).',
+    ]);
+  });
+
   it('refuses a branch that took a real number itself, which is how two branches collide', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling 2\n- Decision: prices are public.\n',
