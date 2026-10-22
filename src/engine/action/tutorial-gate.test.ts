@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action } from '../index.js';
+import { Game, Player, Action, simultaneousActionStep } from '../index.js';
 import { ActionExecutor } from './action.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
 
@@ -62,9 +62,16 @@ const runningProgress: TutorialProgress = { stepId: 'step1', status: 'running' }
 // Test setup helpers
 // ============================================================
 
+/** Opens one step that offers `move` and `pass` to both seats, since only what a seat is offered is gated (#1432). */
+function offerMoveAndPass(game: TutorialTestGame): void {
+  game.setFlow({ root: simultaneousActionStep({ actions: ['move', 'pass'] }) });
+  game.startFlow();
+}
+
 function makeGame(withTutorial: boolean): TutorialTestGame {
   const game = new TutorialTestGame({ playerCount: 2 });
   game.registerActions(makeMoveAction(), makePassAction());
+  offerMoveAndPass(game);
 
   if (withTutorial) {
     game.tutorialDefinition = tutorialDef;
@@ -539,6 +546,7 @@ describe('HR-01: Tutorial action-level gate enforced at execution', () => {
   function makeEnforcementGame(): TutorialTestGame {
     const g = new TutorialTestGame({ playerCount: 2 });
     g.registerActions(makeMoveAction(), makePassAction());
+    offerMoveAndPass(g);
     g.tutorialDefinition = moveOnlyTutorial;
     // Seat 1 is in the tutorial, seat 2 is not
     g.tutorialProgress.set(1, { stepId: 'step-move', status: 'running' });

@@ -71,7 +71,7 @@ import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
-import { PlayerFacingError, StaleAllocationStampError } from '../errors.js';
+import { PlayerFacingError, StaleAllocationStampError, orNoMoveWhenWithheld } from '../errors.js';
 
 // ---------------------------------------------------------------------------
 // INTRO-01 / INTRO-02 view types
@@ -115,7 +115,7 @@ export interface ActionSpaceView {
 }
 
 import { FlowEngine } from '../flow/engine.js';
-import { canSeatAct } from '../flow/seat-activity.js';
+import { canSeatAct, followUpForSeat } from '../flow/seat-activity.js';
 import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY } from '../../persistence/persistence.js';
@@ -2505,7 +2505,9 @@ export class Game<
   }
 
   /**
-   * Get the reason each currently-available action is disabled for a seat.
+   * Get the reason each action the seat is offered right now (its step's
+   * actions and a follow-up it holds) is disabled. An action it is not offered
+   * is not checked, so its rules never run (#1432).
    *
    * Returns a `Record<actionName, reason>` covering both sources of a
    * disabled action, in one place so the UI has a single channel to render:
@@ -2528,9 +2530,18 @@ export class Game<
     const player = this.getPlayer(seat);
     if (!player) return {};
 
+    const flowState = this.getFlowState();
+    const offered = new Set([...availableActionsForSeat(flowState, seat), followUpForSeat(flowState, seat)?.action]);
     const reasons: Record<string, string> = {};
-    for (const action of this.getAvailableActions(player)) {
-      const reason = this.getActionRefusalReason(action, player);
+    for (const action of this._actions.values()) {
+      if (!offered.has(action.name)) continue;
+      const reason = orNoMoveWhenWithheld(
+        action.name,
+        seat,
+        () => (this._actionExecutor.isActionAvailable(action, player) ? this.getActionRefusalReason(action, player) : null),
+        // No move for the seat is a refusal, so a seat offered only this one cannot move (#1432).
+        (error) => error.message.split('\n')[0],
+      );
       if (reason) reasons[action.name] = reason;
     }
     return reasons;
@@ -2549,11 +2560,10 @@ export class Game<
    *
    * PUBLIC because a THIRD caller needs it (#169). A persistent world builds a
    * seat's offer one action at a time, hydrating each one's declaration as it
-   * goes, so it cannot use `getDisabledActions` -- that re-enumerates every
-   * registered action at once, against partitions this world deliberately does
-   * not hold, which is the exact failure `world/engine.ts:viewFor` refuses to
-   * repeat. Reaching the shared evaluator is what stops the world growing a
-   * fourth opinion about what "disabled" means.
+   * goes, so it cannot use `getDisabledActions` -- that reads the offer from a
+   * table's flow, which a world does not run (see `world/engine.ts:viewFor`).
+   * Reaching the shared evaluator is what stops the world growing a fourth
+   * opinion about what "disabled" means.
    */
   getActionDisabledReason(
     action: ActionDefinition,

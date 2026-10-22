@@ -162,6 +162,26 @@ export function warnNoMoveFromWhatThisCopyKnows(actionName: string, seat: number
 }
 
 /**
+ * `check`'s answer for `actionName`, or `noMove`'s when a rule it runs read an
+ * attribute this copy withholds, which only a bot's search copy does: a step's
+ * offer and a seat's disabled reasons both answer that way (#1431, #1432).
+ */
+export function orNoMoveWhenWithheld<T>(
+  actionName: string,
+  seat: number,
+  check: () => T,
+  noMove: (error: RedactedAttributeError) => T,
+): T {
+  try {
+    return check();
+  } catch (error) {
+    if (!(error instanceof RedactedAttributeError)) throw error;
+    warnNoMoveFromWhatThisCopyKnows(actionName, seat, error);
+    return noMove(error);
+  }
+}
+
+/**
  * Thrown by `enumerateLegalMoves` when one action has more moves than
  * enumeration will build (#691). An action's moves are the product of its
  * selections, so a few listable selections in a row can hold billions of

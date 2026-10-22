@@ -12,12 +12,14 @@
  *      the button gave.
  *   3. Tutorial gate reasons and `.disabled()` reasons arrive through the one
  *      channel, with the tutorial's more immediate instruction winning.
+ *   4. Only what the seat is offered is checked: its step's actions and a
+ *      follow-up it holds (#1432).
  *
  * Uses a minimal in-test Game subclass; no external game packages.
  */
 
 import { describe, it, expect, beforeEach } from 'vitest';
-import { Game, Player, Action } from '../index.js';
+import { Game, Player, Action, actionStep, simultaneousActionStep } from '../index.js';
 import type { TutorialDefinition } from '../tutorial/types.js';
 
 class DisabledTestGame extends Game<DisabledTestGame, Player> {
@@ -29,7 +31,14 @@ class DisabledTestGame extends Game<DisabledTestGame, Player> {
 
 const NOT_ENOUGH_WOOD = 'You need 3 wood to build; you have 1.';
 
-function makeGame(): DisabledTestGame {
+/** Opens one step that offers `actions` to both seats at once. */
+function offerToBothSeats(game: DisabledTestGame, actions: string[]): void {
+  game.setFlow({ root: simultaneousActionStep({ actions }) });
+  game.startFlow();
+}
+
+/** `build`, `pass` and `start`, whose follow-up is `build`, offered as `offer` says. */
+function makeGame(offer: (game: DisabledTestGame) => void = (game) => offerToBothSeats(game, ['build', 'pass'])): DisabledTestGame {
   const game = new DisabledTestGame({ playerCount: 2 });
   game.registerActions(
     Action.create<DisabledTestGame>('build')
@@ -38,7 +47,9 @@ function makeGame(): DisabledTestGame {
         ctx.game.built += 1;
       }),
     Action.create<DisabledTestGame>('pass').execute(() => {}),
+    Action.create<DisabledTestGame>('start').execute(() => ({ success: true, followUp: { action: 'build', args: {} } })),
   );
+  offer(game);
   return game;
 }
 
@@ -93,6 +104,7 @@ describe('action-level .disabled()', () => {
         .disabled(ctx => (ctx.player.seat === 2 ? 'Only the first player may act.' : false))
         .execute(() => {}),
     );
+    offerToBothSeats(perSeat, ['act']);
 
     expect(perSeat.getDisabledActions(1)).toEqual({});
     expect(perSeat.getDisabledActions(2)).toEqual({ act: 'Only the first player may act.' });
@@ -100,6 +112,23 @@ describe('action-level .disabled()', () => {
 
   it('reports nothing for a seat that does not exist', () => {
     expect(game.getDisabledActions(99)).toEqual({});
+  });
+
+  it('reports nothing for an action the seat is not offered, and never runs its rule', () => {
+    const unoffered = makeGame((game) => offerToBothSeats(game, ['pass']));
+
+    expect(unoffered.getDisabledActions(1)).toEqual({});
+  });
+
+  it('reports the reason for a follow-up the seat holds, which its step does not list', () => {
+    const held = makeGame((game) => {
+      game.setFlow({ root: actionStep({ actions: ['start'] }) });
+      game.startFlow();
+    });
+
+    held.continueFlow('start', {}, 1);
+
+    expect(held.getDisabledActions(1)).toEqual({ build: NOT_ENOUGH_WOOD });
   });
 });
 

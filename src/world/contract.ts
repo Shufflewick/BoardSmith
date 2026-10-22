@@ -1380,8 +1380,8 @@ export interface WorldEngine {
    * look at: a resident world holds a deliberately partial tree, so anything
    * that walks past the named partitions is reaching for something that is
    * absent on purpose. That rules out the table's action space -- BoardSmith's
-   * `createPlayerView` calls `getDisabledActions`, which evaluates every action
-   * a bundle registered and the selection choices inside them -- and it was an
+   * `createPlayerView` once called `getDisabledActions` over every action a
+   * bundle registered and the selection choices inside them -- and it was an
    * implementation of this method calling it that made the MUD example's world work
    * exactly once, in the instance where `world.genesis` happened to leave every
    * partition resident.
