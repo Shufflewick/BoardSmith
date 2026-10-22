@@ -388,6 +388,11 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
     const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
     expect(parsed.devDependencies.vitest).toBe(own.devDependencies.vitest);
   });
+
+  it('requires, as a peer, the vitest it pins (#1344: a game still on vitest 2 installed without a warning)', () => {
+    const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
+    expect(own.peerDependencies.vitest).toBe(own.devDependencies.vitest);
+  });
 });
 
 describe('tableUiFiles — a11y example test harness', () => {
