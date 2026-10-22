@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, relative } from 'node:path';
+import { dirname, join, matchesGlob, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
@@ -41,6 +41,8 @@ import.meta.glob(['../src/cli/commands/dev-world.ts', '../src/cli/commands/fixtu
 import.meta.glob('./browser-regressions.browser-test.mjs');
 // Links the commands the import walk below starts from, so `--changed` runs this file when one or a file it imports changes; nothing loads (#1425).
 import.meta.glob(['../src/cli/commands/init.ts', '../src/cli/commands/dev.ts']);
+// Links the scripts and setup files the walk below reads, for the same reason; nothing loads (#1425).
+import.meta.glob(['./*-browser.mjs', './untracked-guard/*.mjs', '!./untracked-guard/*.test.mjs']);
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -182,6 +184,7 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 const inLibrary = (path) => /^src\/(?!cli\/|testing\/)/.test(path);
 
 /** An `import` or `export ... from` that loads its module when it runs, which a type-only one does not. */
+// `import { type A }` still loads its module: verbatimModuleSyntax keeps it as `import {}`.
 const isStaticLoad = (node) =>
   (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && !(node.importClause?.isTypeOnly ?? node.isTypeOnly);
 
@@ -247,6 +250,11 @@ describe('#533: every browser regression runs automatically', () => {
     for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts', 'scripts/browser-harness.test.mjs']) {
       expect(runsFor(path), path).toBe(false);
     }
+  });
+
+  it('leaves no file the browser suite runs untested, or a change to it alone would skip the check above', () => {
+    const untested = browserSuiteFiles().filter((path) => policy.untested.some((glob) => matchesGlob(path, glob)));
+    expect(untested, 'take these out of `untested` in .agent-policy.json; this test is related to them').toEqual([]);
   });
 
   it('runs the browser suite after typecheck and before the slow related tests', () => {

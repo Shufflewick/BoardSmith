@@ -333,9 +333,9 @@ trusted: `scripts/browser-harness.test.mjs` walks the imports of those files and
 of the commands the suite runs, stopping at the rest of the library, and fails
 naming each file `whenChanged` leaves out (#1425). `agent-policy verify` does not
 run it, so run it by hand while working on those areas. A change to browser
-scripts alone runs no vitest tests in verify either (they are `untested` in
-`.agent-policy.json`, #1124), so the merge's `browser` step is the first thing
-to run them. They are **not** part of a plain `boardsmith test`, so the default
+scripts alone runs only `scripts/browser-harness.test.mjs` in verify, which
+checks the scripts without running them (#1425), so the merge's `browser` step
+is the first thing to run them. They are **not** part of a plain `boardsmith test`, so the default
 suite needs no Chromium, and
 `--browser` skips the type check a plain run does first, since the merge's
 `typecheck` check has done it on the same commit. They use
