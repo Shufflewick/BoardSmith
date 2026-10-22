@@ -40,6 +40,8 @@ const FIXTURE_SUPERSEDED_DIR = join(
   'one-two-punch',
   'slices',
 );
+// These tests read the fixture from disk; importing it links them to it (#1370).
+import.meta.glob('/.planning/phases/175-impact-map-repair-gating/175-FIXTURES/**/*.md', { eager: true });
 
 let dir: string;
 

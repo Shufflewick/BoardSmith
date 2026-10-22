@@ -308,6 +308,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
   }
 
+  /** A reply to a step of an action since cancelled or replaced: only a completion is published. */
+  function lateStepReply(actionName: string, player: number, result: PickStepResponse): null {
+    if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+    return null;
+  }
+
   /**
    * Send one pick step of the current action. Resolves null when the action
    * moved on before the reply, which then touches nothing current. A step that
@@ -326,9 +332,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
-      if (!actionMovedOn(seq)) return result;
-      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
-      return null;
+      if (actionMovedOn(seq)) return lateStepReply(actionName, player, result);
+      // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
+      pendingOnServer.value ||= result.success;
+      return result;
     } catch (err) {
       // A failed step of an abandoned action is nothing the player needs told.
       if (actionMovedOn(seq)) return null;
@@ -392,7 +399,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
 
-  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
+  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing).
+  // Once a step is accepted every later pick must continue it: sending the whole action would repeat its picks (#325).
   const pendingOnServer = ref(false);
 
   // Pit of Success: Client-owned action state snapshot
@@ -544,6 +552,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   if (isViewingHistory) {
     watch(isViewingHistory, (browsing) => {
       if (browsing) return;
+      settlePickOnReturn();
       if (heldFollowUp) {
         autoStartHeldFollowUp();
         return;
@@ -552,6 +561,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       followUpFromHistory = undefined;
       if (kept && !currentAction.value && !pendingFollowUp.value && !isExecuting.value) queueFollowUp(kept);
     });
+  }
+
+  /** Answer the pick a prefill or auto-fill was held back from while history was on screen, as the pick watcher and handleOnSelectFill would have. */
+  function settlePickOnReturn(): void {
+    const sel = currentPick.value;
+    const snapshot = actionSnapshot.value;
+    // A pick whose choices are still loading is settled by the pick watcher once they land.
+    if (!sel || !snapshot?.pickSnapshots.has(sel.name) || snapshot.choiceFetches.has(sel.name)) return;
+    if (stepOutstanding() || isExecuting.value || consumePrefill(sel) || !tryAutoFillSelection(sel)) return;
+    // A held action takes the auto-filled answer as a step; any other only records it, as the pick watcher does.
+    if (pendingOnServer.value) void handleOnSelectFill(sel, currentArgs.value[sel.name]);
   }
 
   /**
@@ -1036,7 +1056,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
   function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return true;
+    // An auto-fill of a held action sends a step to the live game, so it waits for the return from history (#1385).
+    if (!getAutoFill() || isExecuting.value || isViewingHistoryValue()) return true;
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
 
@@ -1627,6 +1648,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
     if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
+
+    // A prefill or auto-fill can answer the live game, so it waits for the return from history (#1385).
+    if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
@@ -2427,11 +2451,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
-      // The server now holds this action pending, with this pick's onEach
-      // already run. Every later pick must continue it: sending the whole
-      // action instead would make the repeat's picks a second time (#325).
-      pendingOnServer.value = true;
-
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
         // Capture the action name before it is nulled below, then publish the
@@ -2504,9 +2523,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(error);
         return { valid: false, error };
       }
-
-      // Mark that we now have server-side pending state
-      pendingOnServer.value = true;
 
       if (result.actionComplete) {
         // Capture the action name BEFORE clearing currentAction — it is nulled below
@@ -3038,6 +3054,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
+    // True while a pick step of the current action is on its way to the server.
+    // The server may already hold the action, so cancelling it then tells the server too.
+    stepOutstanding: computed(stepOutstanding),
     heldFollowUp: heldFollowUpOffer,
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).

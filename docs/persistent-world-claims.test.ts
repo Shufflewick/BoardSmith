@@ -69,7 +69,9 @@ const arrival = (now: number) => ({ kind: 'arrival', now }) as const;
 
 const DOCS = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(DOCS, '..');
-const read = (name: string) => readFileSync(join(DOCS, name), 'utf-8');
+/** Every doc here and the root README, keyed `./<name>` and `../README.md`. */
+const MARKDOWN = import.meta.glob<string>(['./*.md', '../README.md'], { eager: true, import: 'default' });
+const read = (name: string) => MARKDOWN[name.startsWith('../') ? name : `./${name}`];
 const readSrc = (...parts: string[]) => readFileSync(join(REPO_ROOT, ...parts), 'utf-8');
 
 /** The authoring guide every other doc sends a world author to. */
@@ -237,12 +239,9 @@ const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
  * from GitHub or npm reads first and which now carries the product pitch
  * (#168). A false world claim is no less false for living one directory up.
  */
-const proseDocs = [
-  '../README.md',
-  ...readdirSync(DOCS)
-    .filter((name) => name.endsWith('.md'))
-    .sort(),
-];
+const proseDocs = Object.keys(MARKDOWN)
+  .map((key) => key.replace(/^\.\//, ''))
+  .sort();
 
 describe('no BoardSmith doc makes a claim about worlds that the code contradicts', () => {
   it('reads the docs directory it thinks it is reading', () => {

@@ -27,6 +27,7 @@ import {
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { readChunkTemplate, withInterpretation, writeChunk } from './design-project.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * `chunk-provenance` exists because PROV-02's whole point is that a partial verification must
@@ -1362,20 +1363,14 @@ describe('chunk-provenance-status', () => {
    */
   describe('parseVerifiedAgainst — heading location', () => {
     it('the template exactly as shipped (real section present) still returns unknown, not malformed', async () => {
-      const template = await fs.readFile(
-        new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-        'utf-8',
-      );
+      const template = skillMarkdown('bs/templates/CHUNK.template.md');
       const parsed = parseVerifiedAgainst(template);
       expect(parsed.state).toBe(PROVENANCE_UNKNOWN);
       expect(parsed.blockMalformed).toBe(false);
     });
 
     it('a chunk whose real "## Verified Against" section is deleted, with the template\'s line-18 prose mention of the heading still present, returns unknown/not-malformed — never blockMalformed: true', async () => {
-      const template = await fs.readFile(
-        new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-        'utf-8',
-      );
+      const template = skillMarkdown('bs/templates/CHUNK.template.md');
       const headingIdx = template.indexOf('\n## Verified Against\n');
       expect(headingIdx).toBeGreaterThan(-1); // sanity: the real section exists in the shipped template
       const sectionDeleted = template.slice(0, headingIdx) + '\n';

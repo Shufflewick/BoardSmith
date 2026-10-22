@@ -13,7 +13,7 @@ describe('UseActionControllerReturn', () => {
     expectTypeOf<keyof UseActionControllerReturn>().toEqualTypeOf<
       | 'currentAction' | 'currentArgs' | 'currentPick' | 'validElements' | 'currentChoices' | 'startCandidates'
       | 'isReady' | 'isExecuting' | 'lastError' | 'errorTick' | 'isLoadingChoices'
-      | 'repeatingState' | 'pendingFollowUp' | 'pendingOnServer' | 'heldFollowUp'
+      | 'repeatingState' | 'pendingFollowUp' | 'pendingOnServer' | 'stepOutstanding' | 'heldFollowUp'
       | 'resumeFollowUp' | 'actionCompletedTick' | 'actionStartTick' | 'lastActionResult'
       | 'execute' | 'start' | 'fill' | 'skip' | 'clear' | 'canClear' | 'cancel'
       | 'multiSelectDraft' | 'currentPickDraft' | 'setPickDraft'

@@ -5,11 +5,7 @@
  * by hand and an internal method.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const doc = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'bot-system.md'), 'utf-8');
+import doc from './bot-system.md';
 
 describe('the sampler-testing recipe in docs/bot-system.md (#1362)', () => {
   it('builds the sandbox with searchCopyForSeat, not by hand', () => {

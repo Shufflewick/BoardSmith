@@ -579,7 +579,7 @@ export interface GameDefinitionLike {
    * Optional bot configuration — passed to `createBot` by EVERY op that builds a
    * bot: botSuggest, hint, and heatmapToggle. Provides the MCTS hooks
    * (`objectives`, `moveOrdering`, `playoutPolicy`, `threatResponseMoves`,
-   * `uctConstant`) plus `hintTargetFromMove` for per-game board-highlight
+   * `candidateMoves`, `uctConstant`) plus `hintTargetFromMove` for per-game board-highlight
    * extraction. A bot built without it searches with generic defaults, so any op
    * that skips it plays a materially different (and worse) game than the one the
    * game author configured. When absent entirely, hint/heatmap ops return a
@@ -1269,7 +1269,7 @@ async function handleBotSuggest(
 
   const seatLevel = op.seats.find((s) => s.seat === botPlayer)?.level;
   // `def.bot` MUST be threaded through — it carries the game's MCTS hooks
-  // (objectives, moveOrdering, playoutPolicy, threatResponseMoves, uctConstant).
+  // (objectives, moveOrdering, playoutPolicy, threatResponseMoves, candidateMoves, uctConstant).
   // Omitting it silently downgrades every bot move to a hookless generic search
   // that treats concede-style actions (resign / offer draw) as ordinary moves and,
   // at low iteration budgets, picks them — chess bots resigned on move one.

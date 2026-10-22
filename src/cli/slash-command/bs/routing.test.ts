@@ -9,15 +9,16 @@
  * roles and never models, and give every reviewer the verify result and only judgement checks.
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { SKILL_NAMES } from '../../commands/install-claude-command.js';
+import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
 /** The bs/ skill tree this file sits in. */
 const BS_DIR = fileURLToPath(new URL('.', import.meta.url));
 
 /** A bs/ file's text; `flat` collapses line wrapping so a phrase matches across a wrapped line. */
-const read = (file: string) => readFileSync(BS_DIR + file, 'utf-8');
+const read = (file: string) => skillMarkdown(`bs/${file}`);
 const flat = (text: string) => text.split(/\s+/).join(' ');
 
 /** The source file of each entry-point skill: `bs-build-chunk` is `build-chunk.md`. */
