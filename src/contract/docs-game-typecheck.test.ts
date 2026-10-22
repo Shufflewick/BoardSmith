@@ -24,7 +24,8 @@ import { dirname, join } from 'node:path';
 import { TestGame } from '../testing/index.js';
 import type { Game, GameOptions, Player } from '../engine/index.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
-import { gameBlockFiles, gameTsConfig, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
+import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
+import { gameBlockFiles, markedDocBlocks } from './doc-typecheck-blocks.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 const blocks = markedDocBlocks('game');
