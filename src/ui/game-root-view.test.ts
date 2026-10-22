@@ -27,6 +27,9 @@ import type { PlayerGameState } from '../session/index.js';
 import type { PlayerState } from '../client/types.js';
 import type { SeatProjection, WorldSeatView } from '../testing/index.js';
 import type { GameRootView, GameViewElement } from './types.js';
+// Type imports are erased; these link the test to the files for verify's related-tests check.
+import '../client/types.js';
+import './types.js';
 import type { useTableSeat } from './composables/useTableSeat.js';
 
 type GameRootJSON = ReturnType<Game['toJSON']>;
