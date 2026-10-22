@@ -1101,22 +1101,9 @@ function getSelectionDisplay(selectionName: string, value: unknown): string {
   return getDisplayFromValue(value);
 }
 
-// Clear a specific selection (and all subsequent selections)
+// The controller clears every selection after it too, and the bridge re-feeds the board (#1371).
 function clearSelection(selectionName: string) {
-  if (!currentActionMeta.value) return;
-
-  // Find the index of this selection
-  const index = currentActionMeta.value.selections.findIndex(s => s.name === selectionName);
-  if (index === -1) return;
-
-  // Clear this selection and all subsequent ones
-  for (let i = index; i < currentActionMeta.value.selections.length; i++) {
-    const sel = currentActionMeta.value.selections[i];
-    actionController.clear(sel.name);
-  }
-
-  // Clear board interaction
-  boardInteraction?.clear();
+  actionController.clear(selectionName);
 }
 
 // Auto-start, stale-action cleanup, and execution-complete retry now live in
@@ -1599,7 +1586,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <template v-for="(value, key) in displayableArgs" :key="key">
             <div class="selected-value from-board">
               <span class="value-display">{{ getSelectionDisplay(key as string, value) }}</span>
+              <!-- The controller's rule, so the panel and a custom UI offer the same clears (#1366, #1373). -->
               <button
+                v-if="actionController.canClear(key as string)"
                 class="clear-selection-btn"
                 @click="clearSelection(key as string)"
                 :aria-label="`Clear ${(key as string).replace(/([A-Z])/g, ' $1').trim().toLowerCase()}`"

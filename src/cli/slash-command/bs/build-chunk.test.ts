@@ -29,12 +29,13 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */
 function read(relativePath: string): string {
-  return readFileSync(join(__dirname, relativePath), 'utf-8');
+  return skillMarkdown(`bs/${relativePath}`);
 }
 
 /**
@@ -124,7 +125,7 @@ const SESSION_LOCK_NONE = 'Session Lock: none';
 /** SKILLDEF-01: the exact clock-read command — the only sanctioned lock-timestamp source. */
 const LOCK_CLOCK_READ = 'date -u +%Y-%m-%dT%H:%M:%SZ';
 
-/** SKILLDEF-02: the live-symlink read-only-library marker, must appear alongside "read-only". */
+/** SKILLDEF-02: the read-only-library marker, must appear alongside "read-only". */
 const NODE_MODULES_BOARDSMITH = 'node_modules/boardsmith';
 
 /** SKILLDEF-03: the LIBX-01 rename of the retired `suppressActionPanel` fenced escape hatch. */
@@ -1236,12 +1237,18 @@ describe('SKILLDEF-02 — game/library boundary', () => {
     expect(build).toContain('## Boundaries');
   });
 
-  it('build.md states node_modules/boardsmith is a read-only live symlink', () => {
+  it('build.md states node_modules/boardsmith is read-only', () => {
     const build = read('build/build.md');
     expect(build).toContain(NODE_MODULES_BOARDSMITH);
     expect(build).toMatch(/read-only/i);
-    expect(build).toMatch(/symlink/i);
   });
+
+  it.each(['build/build.md', 'build/investigate.md', 'orchestrate/filings.md'])(
+    '%s does not call node_modules/boardsmith a live symlink, which an install from the pack is not (#1306)',
+    (file) => {
+      expect(read(file)).not.toMatch(/live symlink/i);
+    },
+  );
 
   it('build.md states a library gap is FILED, never patched', () => {
     const build = read('build/build.md');

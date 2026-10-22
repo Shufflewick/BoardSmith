@@ -143,4 +143,23 @@ describe("dispatchStep (#539)", () => {
     );
     expect(whens[0]).toEqual({ kind: "arrival", now: 1_000 });
   });
+
+  it("answers the boxes the walk declared, for the host to check notice writes against (#975)", async () => {
+    const { host } = recordingHost();
+    let round = 0;
+    const box = { entries: [], dropped: 0 };
+    const { answers } = await dispatchStep(
+      { player: "p1", command: COMMAND, timing: null, arrivedAt: 1_000 },
+      {
+        ...host,
+        declare: async () =>
+          round++ === 0
+            ? { partitions: [], seats: [], noticeBoxes: [3] }
+            : { partitions: [], seats: [], noticeBoxes: [] },
+        readNoticeBox: async (seat) => ({ seat, box }),
+      },
+      BUDGETS,
+    );
+    expect(answers.declaredNotices).toEqual([{ seat: 3, box }]);
+  });
 });

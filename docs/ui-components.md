@@ -1858,10 +1858,26 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | Method | Signature | Description |
 |--------|-----------|-------------|
 | `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ControllerActionResult>` | Execute an action immediately with provided args; resolves to the server's answer as a `ControllerActionResult` (`.success`/`.error`) |
-| `start` | `(name: string, options?: StartOptions) => Promise<void>` | Start wizard mode for a multi-selection action (await before driving further selections) |
+| `start` | `(name: string, options?: StartOptions) => Promise<ControllerActionResult>` | Start wizard mode for a multi-selection action (await before driving further selections). `success: true` means wizard mode began, not that the action ran |
 | `fill` | `(name: string, value: unknown) => Promise<PickValidationResult>` | Fill a specific selection in wizard mode (async) |
 | `skip` | `(selectionName: string) => void` | Skip an optional selection (requires the selection name) |
+| `clear` | `(selectionName: string) => boolean` | Take back a pick and every pick after it, keeping the action open so the cleared pick is asked again. Returns `false` and sets `lastError` when refused: a pick step still waiting on the server, a name that is not one of the action's picks, or a pick at or before an answer the server already holds. The Action Panel's clear button calls it |
+| `canClear` | `(selectionName: string) => boolean` | Whether `clear()` would take this pick back now, by the same rules. Draw a clear control only where this is true, as the Action Panel does |
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
+| `confirm` | `() => Promise<ControllerActionResult>` | Submit a quoted action's complete draft. Refused unless the price on screen is that draft's price (see `confirmDisabledReason`) |
+| `resumeFollowUp` | `() => Promise<void>` | Start the follow-up the server holds for this seat (`heldFollowUp`), even one cancelled before. Does nothing while another action is open |
+| `toggleMultiSelect` | `(selectionName: string, value: unknown) => Promise<void>` | Add or remove a value in the multiSelect draft. Confirms on its own when `min === max` and that count is reached |
+| `confirmMultiSelect` | `() => Promise<PickValidationResult \| void>` | Fill the multiSelect or ordered-list selection with its draft |
+| `isMultiSelectSelected` | `(selectionName: string, value: unknown) => boolean` | Whether a value is in the draft for that selection |
+| `appendListEntry` | `(selectionName: string, value: unknown) => Promise<void>` | Add one entry to an `orderedList` draft (the same value again adds a second entry). Appends past `max` are ignored |
+| `removeListEntry` | `(selectionName: string, index: number) => void` | Drop the ordered-list draft entry at `index` |
+| `setPickDraft` | `(value: string \| number \| null) => void` | Record what the player has typed into the current number or text editor and not submitted, or `null` to clear it |
+| `getChoices` | `(pick: EnrichedPickMetadata) => Array<{ value, display, disabled? }>` | Choices for a pick (handles `filterBy` and `dependsOn`) |
+| `getValidElements` | `(pick: EnrichedPickMetadata) => EnrichedValidElement[]` | Valid elements for an element pick, from the cache. Not reactive; use `validElements` for the current pick |
+| `getActionMetadata` | `(actionName: string) => EnrichedActionMetadata \| undefined` | Metadata for an action |
+| `getCollectedPick` | `(name: string) => CollectedPick \| undefined` | A pick collected so far: `{ value, display, skipped }` |
+| `onBeforeAutoExecute` | `(hook: BeforeAutoExecuteHook) => () => void` | Add a hook that runs just before a pick auto-executes an action. Returns a function that removes it. See [useActionAnimations](#useactionanimations) |
+| `onAfterAutoExecute` | `(listener: AfterAutoExecuteListener) => () => void` | Add a listener told how each auto-executed action ended. Returns a function that removes it |
 
 **StartOptions:**
 
@@ -1877,11 +1893,35 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | Property | Type | Description |
 |----------|------|-------------|
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
+| `currentArgs` | `Readonly<Ref<Readonly<Record<string, unknown>>>>` | Args collected so far for the current action. Read-only; change them with `start`, `fill`, `skip` or `clear` |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
+| `currentChoices` | `ComputedRef<ChoiceWithRefs[]>` | **Reactive** choices for the current pick; updates when fetched choices arrive |
+| `startCandidates` | `ComputedRef<ReadonlyMap<string, StartCandidates>>` | With no action open, each available action that opens with an element pick, mapped to `{ pick, elements }`. Empty off turn |
+| `isReady` | `ComputedRef<boolean>` | Whether an action is open with no pick left to answer (a skipped optional pick counts as answered). A quoted action then still waits for `confirm()` |
 | `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
+| `errorTick` | `Readonly<Ref<number>>` | Goes up on every failure that sets `lastError`, even a repeat of the same message. Watch it to show each failure once |
+| `isLoadingChoices` | `Ref<boolean>` | Whether choices are being fetched from the server |
+| `repeatingState` | `Ref<RepeatingState \| null>` | Progress of a repeating selection: `{ selectionName, accumulated, awaitingServer, currentChoices? }` |
+| `pendingFollowUp` | `Ref<boolean>` | True between the server handing back a follow-up and it starting. Don't start another action meanwhile |
+| `pendingOnServer` | `Readonly<Ref<boolean>>` | True while the current action is a follow-up or an `onSelect` selection. These are never in `availableActions`, so don't cancel the action for being missing from it |
+| `stepOutstanding` | `Readonly<Ref<boolean>>` | True while an `onSelect` or repeating pick step is on its way to the server. `cancel()` tells the server too then |
+| `heldFollowUp` | `ComputedRef<FollowUpOffer \| undefined>` | The follow-up the server holds for this seat, if any. The seat keeps its turn while it is held; offer `resumeFollowUp` to start it again |
+| `actionStartTick` | `Readonly<Ref<number>>` | Goes up each time an action starts, including a restart of the action that just finished. Watch it with `currentAction` |
+| `actionCompletedTick` | `Readonly<Ref<number>>` | Goes up each time an action chain fully resolves (once per chain, not per action) |
 | `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
+| `multiSelectDraft` | `Ref<{ selectionName: string; values: unknown[] } \| null>` | The in-progress multiSelect or ordered-list values, shared by the Action Panel and custom UIs. Not in `currentArgs` until `confirmMultiSelect()` |
+| `currentPickDraft` | `ComputedRef<string \| number \| null>` | What the player has entered into the current number or text editor and not submitted; an untouched number pick reads its `initial`. Write it with `setPickDraft` |
+| `actionQuote` | `ComputedRef<readonly string[] \| null>` | What the game says the current draft of a quoted action would cost, or `null` when no price is true right now |
+| `quotePending` | `ComputedRef<boolean>` | True while the price of the current draft is still being worked out |
+| `quoteError` | `ComputedRef<string \| null>` | Why the current draft could not be priced, or `null` |
+| `awaitingConfirmation` | `ComputedRef<boolean>` | True when a quoted action's draft is complete and waiting for `confirm()` |
+| `confirmDisabledReason` | `ComputedRef<string \| null>` | For an open quoted action, why `confirm()` is refused right now, or `null` when it is allowed. Also `null` when no quoted action is open. Bind it to the confirm control |
+| `actionMenuPath` | `Ref<readonly string[]>` | The action-group path the player has opened in the Action Panel; empty at the top level |
+| `actionSnapshot` | `Ref<ActionStateSnapshot \| null>` | The current action's state: its metadata, frozen at start (so a follow-up not in `availableActions` has it), and the picks collected so far. Read it; don't write it |
+| `animationsPending` | `ComputedRef<boolean>` | Whether animations are playing. Always `false` without `animationEvents` |
+| `showActionPanel` | `ComputedRef<boolean>` | Whether to show action UI: `isMyTurn && !animationsPending && !pendingFollowUp` |
 
 ### Reading an action's return value (`lastActionResult`)
 
@@ -1980,6 +2020,11 @@ actionController.fill('destination', cellId);
 // Skip an optional selection (pass the selection's name)
 actionController.skip('destination');
 
+// Take a pick back (and every pick after it). Draw the control only where
+// canClear() is true, as the Action Panel does: a value the game set, or a pick
+// the server already holds (one a follow-up answered, say), cannot be cleared.
+if (actionController.canClear('piece')) actionController.clear('piece');
+
 // Cancel and clear
 actionController.cancel();
 ```
@@ -2060,10 +2105,10 @@ Show feedback while actions are processing:
   <!-- Disable board interactions while executing -->
   <div
     class="game-board"
-    :class="{ 'is-loading': actionController.isExecuting }"
+    :class="{ 'is-loading': actionController.isExecuting.value }"
   >
     <!-- Loading overlay -->
-    <div v-if="actionController.isExecuting" class="loading-overlay">
+    <div v-if="actionController.isExecuting.value" class="loading-overlay">
       <span class="spinner" />
     </div>
 
@@ -2072,11 +2117,11 @@ Show feedback while actions are processing:
       v-for="action in availableActions"
       :key="action"
       v-disabled-reason="
-        disabledActions?.[action] || (actionController.isExecuting && 'Finishing your last move.')
+        disabledActions?.[action] || (actionController.isExecuting.value && 'Finishing your last move.')
       "
       @click="executeAction(action)"
     >
-      {{ actionController.isExecuting ? 'Working...' : action }}
+      {{ actionController.isExecuting.value ? 'Working...' : action }}
     </button>
   </div>
 </template>
@@ -2520,7 +2565,7 @@ async function onCardClick(card: any) {
   if (!props.availableActions.includes('play')) return;
 
   // Check if card is selectable via board interaction (wizard mode active)
-  if (boardInteraction?.isSelectableElement(card)) {
+  if (boardInteraction.isSelectableElement(card)) {
     boardInteraction.triggerElementSelect(card);
   } else {
     // Direct action execution
@@ -2547,9 +2592,9 @@ watch(() => props.gameView, (newView, oldView) => {
         :key="card.id"
         class="card"
         :class="{
-          'highlighted': boardInteraction?.isHighlighted(card),
-          'selected': boardInteraction?.isSelected(card),
-          'selectable': boardInteraction?.isSelectableElement(card),
+          'highlighted': boardInteraction.isHighlighted(card),
+          'selected': boardInteraction.isSelected(card),
+          'selectable': boardInteraction.isSelectableElement(card),
         }"
         :data-element-id="card.id"
         @click="onCardClick(card)"

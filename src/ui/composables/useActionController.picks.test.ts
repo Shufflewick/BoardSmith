@@ -1858,6 +1858,302 @@ describe('useActionController picks', () => {
     });
   });
 
+  it("asks a pick with the prompt its fetch answered, which a world's offer leaves out when it reads an earlier pick (#1350)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      build: {
+        name: 'build',
+        selections: [
+          { name: 'plot', type: 'choice', prompt: 'Plot', choices: [{ value: 'commons', display: 'Commons' }] },
+          { name: 'size', type: 'choice' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'build'];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
+      pick === 'size'
+        ? { success: true, prompt: 'Size for commons', choices: [{ value: 'small', display: 'Small' }] }
+        : { success: true, choices: [{ value: 'commons', display: 'Commons' }] });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    await controller.start('build');
+    expect(controller.currentPick.value?.prompt).toBe('Plot');
+    await controller.fill('plot', 'commons');
+
+    expect(controller.currentPick.value?.prompt).toBe('Size for commons');
+  });
+
+  it("asks a later NUMBER pick for its prompt too, since a world's offer leaves a function one out (#1350)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      refuel: {
+        name: 'refuel',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'amount', type: 'number' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'refuel'];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
+      pick === 'amount'
+        ? { success: true, prompt: 'Fuel for the dory' }
+        : { success: true, choices: [{ value: 'dory', display: 'Dory' }] });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    await controller.start('refuel');
+    await controller.fill('ship', 'dory');
+
+    expect(controller.currentPick.value?.prompt).toBe('Fuel for the dory');
+  });
+
+  /** A ship pick, then a crew pick whose prompt and bounds the server fills in for the dory only. */
+  function boardWithCrewForDory() {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const crew = [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }];
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
+      return args.ship === 'dory'
+        ? { success: true, prompt: 'Crew for dory', choices: crew, multiSelect: { min: 1, max: 1 } }
+        : { success: false, error: 'The skiff has no crew list yet' };
+    });
+    return useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
+    });
+  }
+
+  it("drops a later pick's fetched snapshot when an earlier pick is cleared, so it is asked again (#1354)", async () => {
+    const controller = boardWithCrewForDory();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    expect(controller.currentPick.value?.prompt).toBe('Crew for dory');
+
+    controller.clear('ship');
+
+    expect(controller.actionSnapshot.value?.pickSnapshots.has('crew')).toBe(false);
+    expect(controller.actionSnapshot.value?.pickSnapshots.has('ship')).toBe(true);
+  });
+
+  it('clears the answers to the picks after a cleared one, so they are asked again against the new value (#1359)', async () => {
+    const controller = boardWithCrewForDory();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    await controller.fill('crew', ['ann']);
+    expect(controller.currentArgs.value).toEqual({ ship: 'dory', crew: ['ann'] });
+
+    controller.clear('ship');
+    await controller.fill('ship', 'skiff');
+
+    expect(controller.currentArgs.value).toEqual({ ship: 'skiff' });
+    expect(controller.actionSnapshot.value?.collectedPicks.has('crew')).toBe(false);
+    expect(controller.currentPick.value?.name).toBe('crew');
+    expect(controller.isReady.value).toBe(false);
+  });
+
+  it("drops a pick's fetched prompt and bounds when its re-ask is refused, so the old answer's are not shown (#1354)", async () => {
+    const controller = boardWithCrewForDory();
+    await controller.start('board');
+    await controller.fill('ship', 'dory');
+    expect(controller.currentPick.value?.prompt).toBe('Crew for dory');
+
+    await controller.fill('ship', 'skiff');
+
+    expect(controller.currentPick.value?.name).toBe('crew');
+    expect(controller.currentPick.value?.prompt).toBe('Crew');
+    expect(controller.currentPick.value?.multiSelect).toBeUndefined();
+    expect(controller.lastError.value).toBe('The skiff has no crew list yet');
+  });
+
+  /**
+   * A ship pick, then a crew pick of one listed choice whose fetch offers two,
+   * and which the test settles itself, one ship at a time.
+   */
+  function boardWithHeldCrew() {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew', choices: [{ value: 'ann', display: 'Ann' }] },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const held = new Map<string, () => void>();
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
+      await new Promise<void>(resolve => { held.set(String(args.ship), resolve); });
+      return { success: true, prompt: `Crew for ${String(args.ship)}`, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+    });
+    const settle = async (ship: string) => {
+      await vi.waitFor(() => expect(held.has(ship)).toBe(true));
+      held.get(ship)?.();
+      await nextTick();
+    };
+    return { controller, fetchPickChoices, settle };
+  }
+
+  it.each([true, false])("neither joins nor keeps a later pick's fetch still out for an earlier pick's old answer, cleared first: %s (#1358)", async (clearFirst) => {
+    const { controller, fetchPickChoices, settle } = boardWithHeldCrew();
+    await controller.start('board');
+
+    const doryFill = controller.fill('ship', 'dory');
+    await nextTick();
+    if (clearFirst) controller.clear('ship');
+    const skiffFill = controller.fill('ship', 'skiff');
+    await settle('skiff');
+    await settle('dory');
+    await Promise.all([doryFill, skiffFill]);
+
+    expect(fetchPickChoices).toHaveBeenCalledWith('board', 'crew', 0, { ship: 'skiff' });
+    expect(controller.currentPick.value?.prompt).toBe('Crew for skiff');
+  });
+
+  it("keeps loading while the fetch for an earlier pick's new answer is still out (#1358 review F2)", async () => {
+    const { controller, settle } = boardWithHeldCrew();
+    await controller.start('board');
+
+    const doryFill = controller.fill('ship', 'dory');
+    const skiffFill = controller.fill('ship', 'skiff');
+    await settle('dory');
+    expect(controller.isLoadingChoices.value).toBe(true);
+    await settle('skiff');
+    await Promise.all([doryFill, skiffFill]);
+
+    expect(controller.isLoadingChoices.value).toBe(false);
+  });
+
+  it.each([false, true])("keeps loading while a later pick's fetch is out after an earlier pick's settles, both in one tick: %s (#1367)", async (oneTick) => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew', choices: [{ value: 'ann', display: 'Ann' }] },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    const held = new Map<string, (result: PickChoicesResult) => void>();
+    const fetchPickChoices = vi.fn((_action: string, pick: string) =>
+      new Promise<PickChoicesResult>(resolve => { held.set(pick, resolve); }));
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    const started = controller.start('board');
+    const filled = controller.fill('ship', 'dory');
+    await vi.waitFor(() => expect(held.has('crew')).toBe(true));
+    held.get('ship')?.({ success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] });
+    if (!oneTick) {
+      await started;
+      expect(controller.isLoadingChoices.value).toBe(true);
+    }
+
+    held.get('crew')?.({ success: true, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] });
+    await Promise.all([started, filled]);
+    expect(controller.isLoadingChoices.value).toBe(false);
+  });
+
+  it("does not auto-fill the next pick from a fill whose answer was cleared while its fetch was out (#1358 review F1)", async () => {
+    const { controller, settle } = boardWithHeldCrew();
+    await controller.start('board');
+
+    const doryFill = controller.fill('ship', 'dory');
+    await nextTick();
+    controller.clear('ship');
+    await settle('dory');
+
+    expect(await doryFill).toMatchObject({ valid: false });
+    expect(controller.currentArgs.value).toEqual({});
+  });
+
+  it("does not auto-fill the next pick from a start whose answer was cleared while its fetch was out (#1358 review F3)", async () => {
+    const { controller, settle } = boardWithHeldCrew();
+
+    const starting = controller.start('board', { args: { ship: 'dory' } });
+    await nextTick();
+    controller.clear('ship');
+    await settle('dory');
+    await starting;
+
+    expect(controller.currentArgs.value).toEqual({});
+  });
+
+  it("applies a pick's prefill against the fetch for an earlier pick's new answer, not the dropped one (#1358 review F4)", async () => {
+    const { controller, settle } = boardWithHeldCrew();
+    const starting = controller.start('board', { args: { ship: 'dory' }, prefill: { crew: 'bo' } });
+    await nextTick();
+
+    const skiffFill = controller.fill('ship', 'skiff');
+    await settle('dory');
+    await settle('skiff');
+    await Promise.all([starting, skiffFill]);
+
+    await vi.waitFor(() => expect(controller.currentArgs.value).toEqual({ ship: 'skiff', crew: 'bo' }));
+    expect(controller.lastError.value).toBeNull();
+  });
+
+  it("asks a pick again when it comes up while its fetch for an earlier pick's old answer is still out (#1358)", async () => {
+    actionMetadata.value = {
+      ...createTestMetadata(),
+      board: {
+        name: 'board',
+        selections: [
+          { name: 'ship', type: 'choice', prompt: 'Ship', choices: [{ value: 'dory', display: 'Dory' }] },
+          { name: 'crew', type: 'choice', prompt: 'Crew' },
+        ],
+      },
+    };
+    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    let settleFirst: (() => void) | undefined;
+    let crewAsks = 0;
+    const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> => {
+      if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }] };
+      crewAsks++;
+      if (crewAsks === 1) await new Promise<void>(resolve => { settleFirst = resolve; });
+      return { success: true, prompt: `Crew, ask ${crewAsks}`, choices: [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }] };
+    });
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata, isMyTurn,
+      autoExecute: false, playerSeat: ref(0), fetchPickChoices,
+    });
+
+    // The lone ship is auto-filled each time it comes up, which starts no fetch of its own for the crew.
+    const starting = controller.start('board');
+    await vi.waitFor(() => expect(settleFirst).toBeDefined());
+    controller.clear('ship');
+    await vi.waitFor(() => expect(crewAsks).toBe(2));
+    settleFirst?.();
+    await starting;
+
+    await vi.waitFor(() => expect(controller.actionSnapshot.value?.pickSnapshots.get('crew')?.prompt).toBe('Crew, ask 2'));
+  });
+
   describe('multiSelect validation', () => {
     // Note: Current implementation validates array elements individually,
     // which means multiSelect arrays pass if any element matches a choice.

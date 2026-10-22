@@ -20,6 +20,7 @@ import { sha256Hex } from '../lib/hash.js';
 import { dirname, join } from 'node:path';
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
 import { renderIndex } from './ingest-archive.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /** The fixture writers a suite gets for its own temp tree. */
 interface DesignProjectFixtures {
@@ -109,7 +110,7 @@ const INTERPRETATION_PLACEHOLDER = [
 
 /** The real `CHUNK.template.md`, as a chunk fixture starts from it. */
 export async function readChunkTemplate(): Promise<string> {
-  return fs.readFile(new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url), 'utf-8');
+  return skillMarkdown('bs/templates/CHUNK.template.md');
 }
 
 /**

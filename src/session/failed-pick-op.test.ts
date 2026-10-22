@@ -30,6 +30,7 @@ class UndoGame extends Game<UndoGame, Player> {
   to!: Zone;
   taps = 0;
   cancels = 0;
+  selects = 0;
 
   constructor(options: GameOptions) {
     super(options);
@@ -77,10 +78,20 @@ class UndoGame extends Game<UndoGame, Player> {
       Action.create('repeatMoveCrash')
         .chooseFrom('items', { choices: ['x', 'done'], onSelect: () => { move('one'); crash(); }, repeat: { until: (_ctx, item) => item === 'done' } })
         .execute(() => {}),
+      Action.create('gatherUntilCrash')
+        .chooseFrom('items', { choices: ['one', 'two', 'done'], repeat: { until: (_ctx, item) => (item === 'two' ? crash() : item === 'done') } })
+        .execute(() => {}),
+      Action.create('tallyEachCrash')
+        .chooseFrom('items', {
+          choices: ['x', 'done'],
+          onSelect: () => { this.selects++; },
+          repeat: { onEach: (_ctx, item) => { if (item === 'x') crash(); }, until: (_ctx, item) => item === 'done' },
+        })
+        .execute(() => {}),
     );
     this.setFlow({
       root: simultaneousActionStep({
-        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap', 'smash', 'pairSelectCrash', 'pairRepeatCrash', 'repeatMoveCrash'],
+        actions: ['gather', 'gatherRefused', 'pairRefused', 'pairCrash', 'askRefused', 'askVetoed', 'tap', 'smash', 'pairSelectCrash', 'pairRepeatCrash', 'repeatMoveCrash', 'gatherUntilCrash', 'tallyEachCrash'],
         playerDone: () => false,
       }),
     });
@@ -495,5 +506,42 @@ describe('checkpoints off: onCancel runs once per pick (#1189)', () => {
         expect(r.actionHistory).toHaveLength(0);
       });
     }
+  }
+});
+
+describe('checkpoints off: a repeating pick whose onEach or until crashed is dropped from the repeat (#1317)', () => {
+  for (const [name, route] of Object.entries(routes)) {
+    for (const action of ['gather', 'gatherUntilCrash']) {
+      it(`keeps only the picks before the crashed one in '${action}', so a retry does not add it twice, on the ${name} route`, async () => {
+        vi.spyOn(console, 'error').mockImplementation(() => {});
+        const r = runner(false);
+        const seat = route(action, r);
+        expect((await seat.pick('items', 'one')).success).toBe(true);
+        const repeat = { selectionName: 'items', accumulated: ['one'], iterationCount: 1 };
+        expect(seat.pending()?.repeating).toEqual(repeat);
+
+        expect(await seat.pick('items', 'two')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+        expect(seat.pending()?.repeating).toEqual(repeat);
+        expect(await seat.pick('items', 'two')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+        expect(seat.pending()?.repeating).toEqual(repeat);
+
+        expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
+        expect(r.actionHistory.at(-1)).toMatchObject({ args: { items: ['one', 'done'] } });
+      });
+    }
+
+    it(`keeps the repeat and does not run onSelect again after the first pick's onEach crashed, on the ${name} route`, async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+      const r = runner(false);
+      const seat = route('tallyEachCrash', r);
+
+      expect(await seat.pick('items', 'x')).toMatchObject({ success: false, errorCode: ErrorCode.ENGINE_ERROR });
+      expect(seat.pending()?.repeating).toMatchObject({ accumulated: [], iterationCount: 0 });
+      expect(r.game.selects).toBe(1);
+
+      expect(await seat.pick('items', 'done')).toMatchObject({ success: true, actionComplete: true });
+      expect(r.game.selects).toBe(1);
+      expect(r.actionHistory.at(-1)).toMatchObject({ args: { items: ['done'] } });
+    });
   }
 });

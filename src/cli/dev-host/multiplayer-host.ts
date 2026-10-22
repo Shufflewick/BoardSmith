@@ -37,7 +37,8 @@ import { dueSeats, type SeatActivityState } from '../../engine/index.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
-import type { GameOptionDefinition } from '../../session/types.js';
+import type { GameOptionDefinition, PlayerOptionDefinition } from '../../session/types.js';
+import { defaultSeatOptions, exclusiveSeats, seatOptionsRefusal } from '../lib/player-options.js';
 import {
   PERSIST_KEY,
   PersistenceStore,
@@ -53,6 +54,8 @@ interface SeatInfo {
   name: string;
   color?: string;
   connected: boolean;
+  /** The seat's player options, colour aside: what the next start op gives it (#1323). */
+  playerOptions: Record<string, unknown>;
 }
 
 /**
@@ -72,6 +75,8 @@ export interface LobbySeat {
   connected: boolean;
   /** A bot plays this seat now: the live roster, not the startup `--bot` list (#887). */
   bot: boolean;
+  /** The seat's player options, colour aside, which Table setup shows and sets (#1323). */
+  playerOptions: Record<string, unknown>;
 }
 
 export type LobbyPhase = 'lobby' | 'playing';
@@ -197,7 +202,13 @@ export type ClientInbound =
    * out-of-choices value is rejected with an `error` reply and never
    * reaches the start op.
    */
-  | { type: 'configure'; gameOptions?: Record<string, unknown>; preset?: string };
+  | { type: 'configure'; gameOptions?: Record<string, unknown>; preset?: string }
+  /**
+   * Table setup's player options (#1323): one set of values per seat, in seat
+   * order, each exclusive option on the one seat holding it. Checked whole by
+   * `seatOptionsRefusal`, then the next game is dealt with them.
+   */
+  | { type: 'setPlayerOptions'; playerOptions: unknown };
 
 export interface MultiplayerHostOptions {
   playerCount: number;
@@ -221,8 +232,11 @@ export interface MultiplayerHostOptions {
   designatedBotSeats?: number[];
   /** Seat colors offered in the lobby (1-indexed by position). */
   colorPalette?: Array<{ value: string; label: string }>;
-  /** What every seat's player options start as: each declared option's default, colour aside (#1304). */
-  playerOptionDefaults?: Record<string, unknown>;
+  /**
+   * The game's declared player options. Each seat starts with their defaults
+   * (#1304, #1325), and a `setPlayerOptions` is admitted against them (#1323).
+   */
+  playerOptions?: Record<string, PlayerOptionDefinition>;
   /**
    * The game options the first `start` op carries (the declared defaults,
    * overlaid by `--preset` and `--game-option`), already admitted by
@@ -528,8 +542,9 @@ export class MultiplayerHost {
     this.clock = heldClock(opts.clock ?? createNodeWorldClock(), opts.hostWork ?? runsAtOnce);
     this.executeOp = opts.executeOp;
     for (let seat = 1; seat <= opts.playerCount; seat++) {
-      this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
+      this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false, playerOptions: {} });
     }
+    this.setSeatOptions(defaultSeatOptions(opts.playerOptions ?? {}, opts.playerCount));
     this.appliedGameOptions = opts.baseGameOptions ?? selectDesignerGameOptions(opts.declaredGameOptions, {});
   }
 
@@ -715,6 +730,8 @@ export class MultiplayerHost {
         return this.handleUiSwitch(msg);
       case 'configure':
         return this.handleConfigure(clientId, msg);
+      case 'setPlayerOptions':
+        return this.handleSetPlayerOptions(clientId, msg.playerOptions);
       case 'fireDeadline':
         return this.handleFireDeadline(clientId);
     }
@@ -843,6 +860,26 @@ export class MultiplayerHost {
     await this.startGame();
   }
 
+  /** Give each seat the player options Table setup chose, and deal a game with them (#1323). */
+  private async handleSetPlayerOptions(clientId: string, table: unknown): Promise<void> {
+    // The start in flight would ignore them, so they would describe a game that never starts (#886).
+    const refusal = this.starting
+      ? STARTING
+      : seatOptionsRefusal(this.opts.playerOptions ?? {}, table, this.opts.playerCount);
+    if (refusal !== undefined) {
+      this.send(clientId, { type: 'error', message: refusal });
+      return;
+    }
+    this.setSeatOptions(table as Array<Record<string, unknown>>);
+    await this.startGame();
+  }
+
+  private setSeatOptions(table: Array<Record<string, unknown>>): void {
+    table.forEach((values, index) => {
+      this.seats.get(index + 1)!.playerOptions = { ...values };
+    });
+  }
+
   /**
    * CR-01 (D13/DEVHOST-01): resize the seat map to `newCount` so it stays
    * consistent with a preset-declared (or otherwise configured) player count
@@ -861,7 +898,7 @@ export class MultiplayerHost {
     if (newCount === current) return;
     if (newCount > current) {
       for (let seat = current + 1; seat <= newCount; seat++) {
-        this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false });
+        this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false, playerOptions: {} });
       }
     } else {
       for (let seat = current; seat > newCount; seat--) {
@@ -871,6 +908,8 @@ export class MultiplayerHost {
       }
     }
     this.opts.playerCount = newCount;
+    // An exclusive option's default names a seat by the count, so a new count starts from the defaults.
+    this.setSeatOptions(defaultSeatOptions(this.opts.playerOptions ?? {}, newCount));
   }
 
   /** Toggle "follow active seat" for a client (must be seated and in a game). */
@@ -1350,6 +1389,8 @@ export class MultiplayerHost {
       // color selections win, mirroring the production per-seat override.
       ...this.buildColorGameOptions(),
       playerOptions: perSeatOptions,
+      // Which seat holds each exclusive option, as the platform's start sends it (#1325).
+      exclusiveSeats: exclusiveSeats(this.opts.playerOptions ?? {}, perSeatOptions),
       playerIsBot: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
       // The per-seat playerConfigs a lobby builds from its slots, so games that read
       // options.playerConfigs[seat-1] — e.g. per-seat isBot to drive in-flow bot —
@@ -1447,7 +1488,7 @@ export class MultiplayerHost {
     // come back within the reconnect grace) is not driven by anyone:
     // `playerIsBot` in the start op was computed pre-await from the same stale
     // `humanSeats`, so the game treats it as human. bot-cover it now so
-    // `runBotTurns()` (next) has a driver and the flow loop cannot stall on a
+    // `runBotTurns()` (after the reinit below) has a driver and the flow loop cannot stall on a
     // vanished human. A seat still within its grace is left alone: its player
     // is reloading (#412). The seat's `clientId` reservation is untouched —
     // this is a loop-driver-only cover; `hello`'s reconnect branch removes it
@@ -1456,11 +1497,7 @@ export class MultiplayerHost {
       if (!this.heldByHuman(seat) && this.followerClientId === null) this.addBotSeat(seat);
     }
 
-    // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
-    // drive any bot turns before handing control to the humans, then send state.
     this.announceRoster();
-    await session.host.runBotTurns();
-
     this.broadcastLobby();
     // WR-02: reinit every CURRENTLY seated + connected client, not just the
     // pre-await `humanSeats` snapshot. A `join` (handleJoin has no `starting`
@@ -1480,6 +1517,8 @@ export class MultiplayerHost {
       if (clientId === this.followerClientId) this.reinitFollower();
       else if (clientId) this.reinitSeat(clientId, seat);
     }
+    // After the reinit, so a long opening bot run reaches the seated pages as ordinary pushes (#1384).
+    await session.host.runBotTurns();
   }
 
   /**
@@ -1573,12 +1612,12 @@ export class MultiplayerHost {
 
   // ── Helpers ───────────────────────────────────────────────────────────────
 
-  /** Per-seat playerOptions for the start op: the declared defaults and each seat's chosen/default color. */
+  /** Per-seat playerOptions for the start op: each seat's player options and its chosen/default color. */
   private buildPerSeatOptions(): Array<Record<string, unknown>> {
     return Array.from({ length: this.opts.playerCount }, (_, i) => {
       const seat = this.seats.get(i + 1);
       const color = seat?.color ?? this.opts.colorPalette?.[i]?.value;
-      const perSeat: Record<string, unknown> = { ...this.opts.playerOptionDefaults };
+      const perSeat: Record<string, unknown> = { ...seat?.playerOptions };
       if (color !== undefined) perSeat.color = color;
       return perSeat;
     });

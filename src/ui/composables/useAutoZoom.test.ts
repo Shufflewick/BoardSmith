@@ -52,13 +52,23 @@ describe('computeFitZoom (AZ-1)', () => {
   });
 
   it("B20: 'width' ignores the height term entirely", () => {
-    // Same boxes as the constraining-axis case: height would force 1.5.
-    expect(computeFitZoom({ width: 500, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(2);
     // A board far taller than the space still fits at 1 when its width matches.
     expect(computeFitZoom({ width: 367, height: 4000 }, { width: 367, height: 600 }, 'width')).toBe(1);
     // Genuine horizontal overflow is still fitted — that is the one case where
     // scaling a pinned board down is correct.
     expect(computeFitZoom({ width: 800, height: 100 }, { width: 400, height: 600 }, 'width')).toBe(0.5);
+  });
+
+  it("#1369: 'width' never zooms a pinned board up, so a pin from a narrower region cannot overflow the region sideways", () => {
+    // The region widened and the pin has not caught up yet: zooming to 1000/950 would leave the board wider than the region once it does.
+    expect(computeFitZoom({ width: 950, height: 400 }, { width: 1000, height: 600 }, 'width')).toBe(1);
+  });
+
+  it("#1374: 'width' reads a pinned board less than half a layout unit wider than the region as fitting it", () => {
+    // Dividing out the zoom measured a fitting board this much wider in Chromium; layout cannot overflow by under 1/64px.
+    expect(computeFitZoom({ width: 765.406031, height: 400 }, { width: 765.406, height: 600 }, 'width')).toBe(1);
+    // One whole layout unit is a real overflow.
+    expect(computeFitZoom({ width: 400 + 1 / 64, height: 400 }, { width: 400, height: 600 }, 'width')).toBeLessThan(1);
   });
 
   it("B20: 'width' still fits when the height boxes are unmeasurable", () => {
@@ -91,19 +101,20 @@ function fakeBoard(width: number, height: number, appliedZoom = 1) {
   return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
 }
 
-/** Mutable fake region: clientWidth/clientHeight are getter-backed over a
- *  mutable size object so a test can drive a post-startup region resize
- *  (mirrors fakeBoard's shape). */
-function fakeRegion(clientWidth: number, clientHeight: number, reservedPanel = 0) {
-  const size = { width: clientWidth, height: clientHeight };
+/** Mutable fake region: its computed width (what the fit reads) and its
+ *  clientHeight can change, so a test can drive a post-startup region resize. */
+function fakeRegion(width: number, clientHeight: number, reservedPanel = 0) {
+  const size = { height: clientHeight };
   const el = document.createElement('div');
   // The Action Panel's CONSTANT reserved footprint is the region's padding-bottom
   // (--bsg-panel-reserved in GameShell.vue). The fit subtracts region padding and
   // knows nothing about a panel — see the module docblock (#13).
   el.style.paddingBottom = `${reservedPanel}px`;
-  Object.defineProperty(el, 'clientWidth', { get: () => size.width, configurable: true });
+  el.style.width = `${width}px`;
+  // jsdom recomputes a style change only for an element in the document.
+  document.body.appendChild(el);
   Object.defineProperty(el, 'clientHeight', { get: () => size.height, configurable: true });
-  return { el, setSize: (w: number, h: number) => { size.width = w; size.height = h; } };
+  return { el, setSize: (w: number, h: number) => { el.style.width = `${w}px`; size.height = h; } };
 }
 
 /** Controllable ResizeObserver stub: jsdom has none, and the composable's
@@ -179,6 +190,7 @@ describe('useAutoZoom', () => {
     vi.useRealTimers();
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+    document.body.innerHTML = '';
   });
 
   it('AZ-2: fits at startup from element measurements', async () => {

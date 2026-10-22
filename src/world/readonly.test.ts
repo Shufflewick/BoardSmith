@@ -6,10 +6,10 @@
 // separate and a fix that closed only the first would look complete here
 // without one of these cases -- assignment is the obvious one, and a mutating
 // METHOD writing through its own `this` is the one a `set` trap alone misses.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Game, PersistentMap, Piece, Player, Space } from "../engine/index.js";
 import type { GameOptions } from "../engine/index.js";
-import { readOnlyProjection } from "./readonly.js";
+import { plainCopy, readOnlyProjection } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
@@ -494,5 +494,123 @@ describe("readOnlyProjection over built-in objects (#1171)", () => {
     expect([[...array], [...array.slice(1)], [...array.map((value) => value * 2)], array.reduce((sum, value) => sum + value, 0)]).toEqual([
       [3, 1, 2], [1, 2], [6, 2, 4], 6,
     ]);
+  });
+});
+
+describe("readOnlyProjection over arrays a standard method builds (#1327)", () => {
+  it("answers filter, map, slice, concat, flat, flatMap, toSorted, toReversed, toSpliced and with as the caller's own plain array", () => {
+    const projection = readOnlyProjection({ a: [3, 1, 2], nested: [[1], [2]] });
+    // This repo's tsconfig lib predates ES2023, though the runtime has these methods.
+    const es2023 = projection.a as unknown as Record<"toSorted" | "toReversed" | "toSpliced" | "with", (...args: number[]) => number[]>;
+    const built = [
+      projection.a.filter((value) => value > 1),
+      projection.a.map((value) => value * 2),
+      projection.a.slice(1),
+      projection.a.concat([4]),
+      projection.nested.flat(),
+      projection.a.flatMap((value) => [value]),
+      es2023.toSorted(),
+      es2023.toReversed(),
+      es2023.toSpliced(0, 1),
+      es2023.with(0, 9),
+    ];
+
+    expect(built.map((array) => structuredClone(array))).toEqual([
+      [3, 2], [6, 2, 4], [1, 2], [3, 1, 2, 4], [1, 2], [3, 1, 2], [1, 2, 3], [2, 1, 3], [1, 2], [9, 1, 2],
+    ]);
+    built[0].push(7);
+    expect(built[0]).toEqual([3, 2, 7]);
+  });
+
+  it("still answers what a built array holds read-only, so a write cannot reach the world through it", () => {
+    const { here } = world();
+    here.tags = ["calm"];
+    const projection = readOnlyProjection({ rooms: [here] });
+
+    const [room] = projection.rooms.filter(() => true);
+    expect(() => room.tags.push("leaked")).toThrow(WorldRefusal);
+    expect(here.tags).toEqual(["calm"]);
+  });
+
+  it("still refuses structuredClone of a built array whose elements are objects, since they stay projections (#1337)", () => {
+    const projection = readOnlyProjection({ a: [{ n: 1 }] });
+
+    expect(() => structuredClone(projection.a.filter(() => true))).toThrow(DOMException);
+    expect(structuredClone(projection.a.map((item) => ({ ...item })))).toEqual([{ n: 1 }]);
+  });
+
+  it("answers an ElementCollection's own filter and slice as the caller's, as its inherited map is", () => {
+    const { game, here } = world();
+    const rooms = readOnlyProjection(game).all(Room);
+
+    const built = [rooms.filter(() => true), rooms.slice(0), rooms.map((room) => room)];
+    for (const array of built) array.push(readOnlyProjection(here));
+    expect(built.map((array) => array.length)).toEqual([3, 3, 3]);
+    expect(() => built[0][0].tags.push("leaked")).toThrow(WorldRefusal);
+  });
+});
+
+describe("plainCopy of plain data read through a projection (#1347)", () => {
+  const saved = () => ({ kind: "value", value: [{ id: "body:1", stock: { ore: 1 }, plots: [{ x: 0, building: null }] }] });
+
+  it("answers a detached plain copy that clones, stringifies and takes writes without reaching the world", () => {
+    const live = saved();
+    const copy = plainCopy(readOnlyProjection(live));
+
+    expect(structuredClone(copy)).toEqual(saved());
+    expect(JSON.stringify(copy)).toBe(JSON.stringify(saved()));
+    copy.value[0].stock.ore = 9;
+    expect(live.value[0].stock.ore).toBe(1);
+  });
+
+  it("walks the data itself, not the projection's traps", () => {
+    const projection = readOnlyProjection(saved());
+    const reads = vi.spyOn(Reflect, "ownKeys");
+    plainCopy(projection);
+    // Every projection answers its keys through Reflect.ownKeys; counted before expect, whose own proxy reads too.
+    const trapped = reads.mock.calls.length;
+    reads.mockRestore();
+    expect(trapped).toBe(0);
+  });
+
+  it("copies projections a callback put in its own object", () => {
+    const projection = readOnlyProjection(saved());
+
+    expect(plainCopy({ page: projection.value[0].stock })).toEqual({ page: { ore: 1 } });
+  });
+
+  it("refuses an element, a Map or a function, since only plain data is copied", () => {
+    const { here } = world();
+
+    expect(() => plainCopy(readOnlyProjection({ room: here }))).toThrow(/at "room" is a Room/);
+    expect(() => plainCopy(readOnlyProjection({ a: [new Map()] }))).toThrow(/at "a\.0" is a Map/);
+    expect(() => plainCopy(readOnlyProjection({ f: () => 1 }))).toThrow(/at "f" is a function/);
+  });
+
+  it("refuses a getter without running it, since it would run against the live world", () => {
+    const run = vi.fn(() => 1);
+    const live = Object.defineProperty({}, "n", { get: run, enumerable: true });
+
+    expect(() => plainCopy(readOnlyProjection(live))).toThrow(/at "n" is a getter/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("names a refused class without running its Symbol.toStringTag getter", () => {
+    const run = vi.fn(() => "Tagged");
+    class Ledger {
+      get [Symbol.toStringTag]() {
+        return run();
+      }
+    }
+
+    expect(() => plainCopy(readOnlyProjection({ ledger: new Ledger() }))).toThrow(/at "ledger" is a Ledger/);
+    expect(run).not.toHaveBeenCalled();
+  });
+
+  it("refuses a cycle, which plain data cannot hold", () => {
+    const live: Record<string, unknown> = {};
+    live.self = live;
+
+    expect(() => plainCopy(readOnlyProjection(live))).toThrow(/at "self" refers back to an object that contains it/);
   });
 });

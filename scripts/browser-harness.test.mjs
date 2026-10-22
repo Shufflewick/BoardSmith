@@ -28,7 +28,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { browserScripts, recordWorldFrames } from './browser-harness.mjs';
+import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
@@ -91,12 +91,12 @@ describe('every browser regression launches the one Chromium build the harness p
     // the run then refused instead of checking anything. The harness owns the
     // choice, so it is made once.
     const source = read(name);
-    expect(source, `${name} must launch with the harness's launch()`).toContain('await launch()');
+    expect(source, `${name} must launch with the harness's launch()`).toMatch(/await launch\((\{ classicScrollbars: true \})?\)/);
     expect(source, `${name} must not choose its own browser build`).not.toContain('chromium.launch(');
   });
 
   it('launches the full Chromium build, headless', () => {
-    expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium' })");
+    expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium',");
   });
 });
 
@@ -183,6 +183,17 @@ describe('#533: every browser regression runs automatically', () => {
     }
   });
 
+  it('runs the browser suite after typecheck and before the slow related tests', () => {
+    const names = policy.verify.map((check) => check.name);
+    const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
+    expect(step, 'merge.extraMergeSteps has no step named browser').toBeDefined();
+    const after = step.after;
+    expect(names, 'the verify list needs typecheck and related-tests').toEqual(expect.arrayContaining(['typecheck', 'related-tests']));
+    expect(names, `browser runs after "${after}", which is not a verify check`).toContain(after);
+    expect(names.indexOf(after)).toBeGreaterThanOrEqual(names.indexOf('typecheck'));
+    expect(names.indexOf(after)).toBeLessThan(names.indexOf('related-tests'));
+  });
+
   it('lists the browser suite without an error', () => {
     expect(listed.status, browserSuiteCases).toBe(0);
   });
@@ -249,6 +260,14 @@ describe('#922: one recorder for the world socket\'s frames', () => {
   it.each(browserScripts())('%s records socket frames through recordWorldFrames', (name) => {
     expect(read(name), `${name} listens for socket frames itself; use recordWorldFrames`).not.toMatch(
       /framesent|framereceived/,
+    );
+  });
+});
+
+describe('#1318: a table fixture is `true` or `{ files }`', () => {
+  it.each([[{}], [{ file: {} }], [{ files: null }]])('refuses table: %j before it serves anything', async (table) => {
+    await expect(runBrowserRegression({ script: 'x-browser.mjs', table }, () => 0)).rejects.toThrow(
+      'x-browser.mjs: `table` is `true` or `{ files: { <path in the project>: <text> } }`',
     );
   });
 });

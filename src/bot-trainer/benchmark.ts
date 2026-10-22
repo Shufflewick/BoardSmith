@@ -14,6 +14,11 @@ export interface BenchmarkConfig {
   /** Number of games to run */
   gameCount?: number;
   /**
+   * Play only this game (0-based) of the `gameCount` games, exactly as the whole benchmark
+   * plays it, so a pool of workers can share one benchmark's games out (#1307).
+   */
+  game?: number;
+  /**
    * Timeout per game in ms (default 60000). Only for a benchmark that is not
    * `reproducible`: a reproducible one has no clock bound, so passing both is refused.
    */
@@ -131,6 +136,7 @@ export async function benchmarkBot<G extends Game>(
     ...Array.from({ length: halfCount }, (_, i) => ({ trainedPlayerIndex: 1, seed: `${seed}-p1-${i}` })),
     ...(gameCount % 2 !== 0 ? [{ trainedPlayerIndex: 0, seed: `${seed}-extra` }] : []),
   ];
+  const played = config.game === undefined ? schedule : [schedule[scheduledGame(config.game, gameCount)]];
 
   const tally: Tally = {
     win: 0, loss: 0, draw: 0, incomplete: 0,
@@ -140,7 +146,7 @@ export async function benchmarkBot<G extends Game>(
   };
   const failures = new Set<string>();
 
-  for (const { trainedPlayerIndex, seed: gameSeed } of schedule) {
+  for (const { trainedPlayerIndex, seed: gameSeed } of played) {
     const { outcome, reason } = await runBenchmarkGame(GameClass, gameType, {
       trainedPlayerIndex,
       trainedBot,
@@ -156,7 +162,7 @@ export async function benchmarkBot<G extends Game>(
   }
 
   const gamesPlayed = tally.win + tally.loss + tally.draw;
-  const gamesAttempted = schedule.length;
+  const gamesAttempted = played.length;
   const incompleteRate = gamesAttempted > 0 ? tally.incomplete / gamesAttempted : 0;
 
   const result: BenchmarkResult = {
@@ -202,6 +208,12 @@ function recordOutcome(tally: Tally, trainedPlayerIndex: number, outcome: GameOu
   tally[outcome]++;
   if (outcome !== 'incomplete') tally[`decidedAsPlayer${seat}`]++;
   if (outcome === 'win') tally[`winsAsPlayer${seat}`]++;
+}
+
+/** `game`, refused unless it is one of the benchmark's `gameCount` games. */
+function scheduledGame(game: number, gameCount: number): number {
+  if (Number.isInteger(game) && game >= 0 && game < gameCount) return game;
+  throw new Error(`There is no benchmark game ${game}: a benchmark of ${gameCount} games has games 0 to ${gameCount - 1}.`);
 }
 
 /** Each game's clock bound: none for a reproducible benchmark, which refuses one. */

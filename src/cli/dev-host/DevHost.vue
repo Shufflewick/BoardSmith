@@ -50,6 +50,8 @@ interface SeatInfo {
   connected: boolean;
   /** A bot plays the seat now. */
   bot: boolean;
+  /** The seat's player options, colour aside, as the host will start it (#1323). */
+  playerOptions: Record<string, unknown>;
 }
 // The game is always live on the host: this client is in the game once it holds a
 // seat (mySeat). The first client to connect is auto-seated by the host and lands
@@ -119,6 +121,35 @@ function applyLobbyOptions(): void {
   const message: Record<string, unknown> = { type: 'configure', gameOptions };
   if (presetSelection.value) message.preset = presetSelection.value;
   wsSend(message);
+}
+
+// ── Each seat's player options (#1323) ─────────────────────────────────────────
+// Colour is chosen with the seat, so Table setup sets every other option.
+const seatOptionDefs = cfg.playerOptions.filter((o) => o.type !== 'color');
+/** Table setup's fields: each seat's options, an exclusive one only on the seat holding it. */
+const seatOptionEdits = ref<Array<Record<string, unknown>>>([]);
+let seatOptionsKey = '';
+
+/** Take each seat's options from a lobby message, only when they changed, as `onAppliedOptions` does. */
+function onSeatOptions(lobbySeats: SeatInfo[]): void {
+  const held = lobbySeats.map((s) => s.playerOptions);
+  const key = JSON.stringify(held);
+  if (key === seatOptionsKey) return;
+  seatOptionsKey = key;
+  seatOptionEdits.value = held.map((values) => ({ ...values }));
+}
+
+/** Give an exclusive option to `seat` alone, as the platform's lobby assigns one. */
+function giveExclusive(opt: (typeof seatOptionDefs)[number], seat: number): void {
+  seatOptionEdits.value.forEach((values, index) => {
+    if (index === seat - 1) values[opt.id] = opt.choices?.[0]?.value;
+    else delete values[opt.id];
+  });
+}
+
+function applySeatOptions(): void {
+  errorMsg.value = null;
+  wsSend({ type: 'setPlayerOptions', playerOptions: seatOptionEdits.value });
 }
 
 // ── Destructive restart confirm (DEV-07) ──────────────────────────────────────
@@ -254,6 +285,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
       seats.value = msg.seats as SeatInfo[];
       setDebugAvailable(msg.debug === true);
       onAppliedOptions(msg.gameOptions as Record<string, unknown>);
+      onSeatOptions(msg.seats as SeatInfo[]);
       const mine = (msg.seats as SeatInfo[]).find((s) => s.mine);
       // Don't clear an already-known seat from a lobby broadcast (init is authoritative).
       if (mine) mySeat.value = mine.seat;
@@ -452,7 +484,7 @@ const overflowOpen = ref(false);
 const overflowRef = ref<HTMLElement | null>(null);
 const overflowTrigger = ref<HTMLElement | null>(null);
 
-// ── Table setup panel (read-only config display — DEV-04) ─────────────────────
+// ── Table setup panel (DEV-04): the table's config and each seat's player options ──
 const tableSetupOpen = ref(false);
 /** The panel's first control, where opening it from the … menu puts focus (#668). */
 const dealSeedField = ref<HTMLElement | null>(null);
@@ -939,7 +971,7 @@ onUnmounted(() => {
             </div>
           </div>
         </div>
-        <!-- Table setup panel — read-only summary of injected config (DEV-04) -->
+        <!-- Table setup panel: the table's config (DEV-04), each seat's player options (#1323), and a deal from a seed -->
         <div v-if="tableSetupOpen" class="table-setup">
           <dl class="table-setup__dl">
             <div class="table-setup__row">
@@ -977,18 +1009,59 @@ onUnmounted(() => {
                 <dd>{{ optionValueLabel(opt, appliedOptions[opt.id]) }}</dd>
               </div>
             </template>
-            <template v-if="cfg.playerOptions.length">
-              <div class="table-setup__group-header">Player options</div>
-              <div
-                v-for="opt in cfg.playerOptions"
-                :key="opt.id"
-                class="table-setup__row"
-              >
-                <dt>{{ opt.label || opt.id }}</dt>
-                <dd>{{ optionValueLabel(opt, opt.default) }}</dd>
-              </div>
-            </template>
           </dl>
+          <form
+            v-if="seatOptionDefs.length"
+            class="table-setup__seat-options"
+            data-testid="seat-options-form"
+            @submit.prevent="applySeatOptions"
+          >
+            <div class="table-setup__group-header">Player options</div>
+            <fieldset
+              v-for="(values, index) in seatOptionEdits"
+              :key="index"
+              class="table-setup__seat"
+            >
+              <legend>Seat {{ index + 1 }}<template v-if="seats[index]?.held"> · {{ seats[index].name }}</template></legend>
+              <label v-for="opt in seatOptionDefs" :key="opt.id" class="table-setup__seat-option">
+                <span>{{ opt.label || opt.id }}</span>
+                <select
+                  v-if="opt.type === 'select'"
+                  v-model="values[opt.id]"
+                  class="dev-chrome__select"
+                  :data-testid="`seat-option-${index + 1}-${opt.id}`"
+                >
+                  <option v-for="c in opt.choices" :key="choiceValueKey(c.value)" :value="c.value">
+                    {{ choiceLabel(c) }}
+                  </option>
+                </select>
+                <input
+                  v-else-if="opt.type === 'number'"
+                  v-model.number="values[opt.id]"
+                  type="number"
+                  :min="opt.min"
+                  :max="opt.max"
+                  :step="opt.step"
+                  :data-testid="`seat-option-${index + 1}-${opt.id}`"
+                />
+                <input
+                  v-else-if="opt.type === 'boolean'"
+                  v-model="values[opt.id]"
+                  type="checkbox"
+                  :data-testid="`seat-option-${index + 1}-${opt.id}`"
+                />
+                <input
+                  v-else-if="opt.type === 'exclusive'"
+                  type="radio"
+                  :name="`seat-option-${opt.id}`"
+                  :checked="values[opt.id] !== undefined"
+                  :data-testid="`seat-option-${index + 1}-${opt.id}`"
+                  @change="giveExclusive(opt, index + 1)"
+                />
+              </label>
+            </fieldset>
+            <button type="submit" class="btn" data-testid="apply-player-options">Apply and deal</button>
+          </form>
           <form class="table-setup__deal" data-testid="deal-form" @submit.prevent="dealFromSeed">
             <label>
               Deal from seed
@@ -1572,14 +1645,61 @@ onUnmounted(() => {
   color: var(--bsg-ink-3);
 }
 
-.table-setup__deal input {
-  margin-left: 8px;
+.table-setup__seat-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-end;
+  margin-top: 6px;
+  border-top: 1px solid var(--bsg-line-2);
+}
+
+.table-setup__seat-options .table-setup__group-header {
+  flex-basis: 100%;
+}
+
+.table-setup__seat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 160px;
+  margin: 0;
+  padding: 4px 10px 8px;
+  border: 1px solid var(--bsg-line-2);
+  border-radius: 6px;
+}
+
+.table-setup__seat legend {
+  padding: 0 4px;
+  font-size: 0.8rem;
+  color: var(--bsg-ink);
+}
+
+.table-setup__seat-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.8rem;
+  color: var(--bsg-ink-3);
+}
+
+.table-setup__seat-option input[type='number'] {
+  width: 5em;
+}
+
+.table-setup__deal input,
+.table-setup__seat-option input[type='number'] {
   font: inherit;
   color: var(--bsg-ink);
   background: var(--bsg-bg);
   border: 1px solid var(--bsg-line);
   border-radius: 4px;
   padding: 3px 6px;
+}
+
+.table-setup__deal input {
+  margin-left: 8px;
 }
 
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */

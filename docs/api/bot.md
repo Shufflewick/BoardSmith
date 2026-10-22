@@ -21,6 +21,7 @@ import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmit
 
 - `createBot()` - Create an MCTS bot for a game
 - `parseBotLevel()` - Parse difficulty from string (for CLI)
+- `searchCopyForSeat()` - The copy the bot searches for one seat, sampled the way the bot samples it, for testing a `determinize` sampler (see [Testing your sampler](../bot-system.md#testing-your-sampler))
 
 ### Classes
 
@@ -40,6 +41,7 @@ import { createBot, MCTSBot, parseBotLevel, DIFFICULTY_PRESETS } from 'boardsmit
 - `Objective` - A single weighted evaluation term
 - `ThreatResponse` - Threat response result
 - `DifficultyLevel` - Difficulty preset names (`'easy' | 'medium' | 'hard'`)
+- `WorldSample` - A sampler and its random source, for `searchCopyForSeat()`
 
 ## Examples
 
@@ -161,7 +163,8 @@ The remaining hooks, all optional:
 | `objectives` | `(game, playerIndex) => Record<string, Objective>` | Partial-credit position evaluation during playouts |
 | `threatResponseMoves` | `(game, playerIndex, availableMoves) => ThreatResponse` | Force or prioritize defensive moves. `{ moves, urgent }` — `urgent: true` restricts the search to `moves` |
 | `playoutPolicy` | `(game, playerIndex, availableMoves, rng) => BotMove` | Replace random playout move selection with game-specific heuristics. Use `rng` — weighted-random, not deterministic |
-| `moveOrdering` | `(game, playerIndex, moves) => BotMove[]` | Soft ordering: explore promising moves first. All moves are still explored |
+| `moveOrdering` | `(game, playerIndex, moves) => BotMove[]` | Soft ordering: explore promising moves first. All moves are still explored; leave moves out with `candidateMoves` |
+| `candidateMoves` | `(game, seat, listMoves) => BotMove[]` | The moves the search considers for `seat` at the root, in the tree and in playouts. Filter `listMoves()` or return the game's own list; an empty list for a seat with moves throws |
 | `hintTargetFromMove` | `(move) => ElementRef \| undefined` | Anchor hint/heatmap overlays when the game's destination arg is non-standard |
 | `uctConstant` | `(game, playerIndex) => number` | Dynamic exploration constant, evaluated once per move selection |
 

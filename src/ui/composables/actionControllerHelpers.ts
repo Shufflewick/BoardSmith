@@ -6,7 +6,7 @@
  */
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
-import { labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
+import { findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
 
@@ -128,6 +128,12 @@ export function resolvePickCounts(
 export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefined {
   const refs = choice.refs ?? [];
   return refs.find(r => r.role === 'target')?.ref ?? refs[0]?.ref;
+}
+
+/** The board element a choice answer marks, by the rule fill() matches the value with, or undefined. */
+export function answerMark(value: unknown, offered: readonly ChoiceWithRefs[]): ElementRef | undefined {
+  const chosen = findMatchingChoice(value, offered);
+  return chosen && choiceBoardTarget(chosen);
 }
 
 // ============================================

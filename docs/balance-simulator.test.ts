@@ -14,15 +14,15 @@
  * Everything runs while the file is collected, where no test timeout applies
  * (#363): each simulate bundles the rules.
  */
-import { readFileSync, rmSync } from 'node:fs';
+import { rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 import { smokeProject } from '../src/cli/commands/smoke-project.test-helper.js';
 import { spawnCli } from '../src/cli/spawn-cli.test-helper.js';
 import { applyFileStep, balanceSimulatorSteps } from './balance-simulator-steps.js';
+import DOC from './balance-simulator.md';
 
-const DOC = readFileSync(join(import.meta.dirname, 'balance-simulator.md'), 'utf-8');
 const steps = balanceSimulatorSteps();
 
 interface SimulateRun {
@@ -93,13 +93,13 @@ const words = (line: string) => line.trim().split(/\s+/).map((word) => word.repl
 
 describe('docs/balance-simulator.md, run block by block (#556)', () => {
   it('starts from boardsmith init --sim, which the project here was scaffolded with', () => {
-    expect(DOC).toMatch(/npx boardsmith init bazaar --sim/);
+    expect(DOC).toMatch(/^boardsmith init bazaar --sim$/m);
   });
 
   it('marks every TypeScript, CSV and command block, leaving out only the shell setup and the report excerpt', () => {
     const unmarked = blocks.filter((block) => !block.marked);
     expect(unmarked.map((block) => block.lang)).toEqual(['bash', '']);
-    expect(unmarked[0].body).toMatch(/^npx boardsmith init bazaar --sim\n/);
+    expect(unmarked[0].body).toMatch(/^boardsmith init bazaar --sim\n/);
     expect(unmarked[1].body).toMatch(/^4 players: /);
   });
 

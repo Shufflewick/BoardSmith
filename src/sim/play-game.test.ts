@@ -417,4 +417,10 @@ describe('playGame with policies (#556)', () => {
       playGame(race, { playerCount: 3, seed: 'short', policies: [random(), random()], maxActions: 10 }),
     ).rejects.toThrow(/3 seats.*2 policies/);
   });
+
+  it.each([NaN, 0, -5, '100' as unknown as number])('refuses a timeout of %s, which is no number of milliseconds above 0 (#1307)', async (timeout) => {
+    await expect(
+      playGame(race, { playerCount: 2, seed: 'timeout', policies: [random(), random()], maxActions: 10, timeout }),
+    ).rejects.toThrow(`A timeout of ${String(timeout)} ms cannot bound a game: give a number of milliseconds above 0.`);
+  });
 });

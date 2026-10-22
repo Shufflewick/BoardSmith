@@ -9,15 +9,16 @@ import type {
 import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
-import { createSnapshot, createSeatSnapshot, snapshotTree } from '../engine/utils/index.js';
-import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
-import { constructGame } from '../engine/element/game.js';
+import { createSnapshot, createSeatSnapshot } from '../engine/utils/index.js';
+import { acceptsSubmission, enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
+import { NotSimulableError } from '../engine/errors.js';
 import type {
   BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
   DeterminizeSampler,
 } from './types.js';
 import { DEFAULT_CONFIG } from './types.js';
-import { adoptSeatView, applyDeterminization } from './determinization.js';
+import { applyDeterminization } from './determinization.js';
+import { restoreSeatCopy } from './search-copy.js';
 import { SeededRandom, mintSeed } from '../utils/random.js';
 import { isDevMode } from '../utils/dev.js';
 
@@ -96,6 +97,7 @@ export class MCTSBot<G extends Game = Game> {
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+  private candidateMoves?: BotStrategy['candidateMoves'];
   private uctConstant?: (game: Game, playerIndex: number) => number;
   /**
    * The game's declared world sampler (#73). Its presence, and nothing else,
@@ -146,11 +148,11 @@ export class MCTSBot<G extends Game = Game> {
    */
   private simultaneousBaseline?: G;
   /**
-   * Root move keys a `threatResponseMoves` hook forced for THIS search (#73).
+   * Root moves a `threatResponseMoves` hook forced for THIS search (#73).
    * Only set when the game said a block is mandatory; the per-world root
    * refresh must not widen past it. Undefined for every other search.
    */
-  private forcedRootMoveKeys?: Set<string>;
+  private forcedRootMoves?: BotMove[];
   /** RAVE table for move value estimation across all playouts */
   private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
@@ -171,6 +173,7 @@ export class MCTSBot<G extends Game = Game> {
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
+    this.candidateMoves = botStrategy?.candidateMoves;
     this.uctConstant = botStrategy?.uctConstant;
     this.determinize = botStrategy?.determinize;
     this.seed = this.config.seed;
@@ -298,6 +301,7 @@ export class MCTSBot<G extends Game = Game> {
           threatResponseMoves: this.threatResponseMoves,
           playoutPolicy: this.playoutPolicy,
           moveOrdering: this.moveOrdering,
+          candidateMoves: this.candidateMoves,
           uctConstant: this.uctConstant,
           determinize: this.determinize,
         }
@@ -357,12 +361,11 @@ export class MCTSBot<G extends Game = Game> {
     // full-search one. For perfect-information games (no hidden zones) the
     // redacted view is byte-identical to the full view, so this is a no-op.
     this.rootSnapshot = this.captureSnapshot();
-    this.searchGame = this.restoreGame(this.rootSnapshot) as G;
-    this.dropSavedCopies();
     // #73: the first world. Every later iteration gets its own from
     // `restoreSearchGameToRoot`, so the tree's statistics average over worlds
     // rather than describing the one this root happened to draw.
-    this.sampleWorld();
+    this.searchGame = this.restoreGame(this.rootSnapshot, this.rootSnapshot.randomState, true);
+    this.dropSavedCopies();
     const flowState = this.searchGame.getFlowState() ?? liveFlowState;
 
     // Cache UCT constant once per move (not per selectChild call)
@@ -396,9 +399,9 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Check for threats BEFORE sampling - this is critical!
-    // The threat response needs to see ALL possible moves to find blocking cells
+    // The threat response needs to see every move (every candidate move, with candidateMoves) to find blocking cells
     let moves: BotMove[];
-    this.forcedRootMoveKeys = undefined;
+    this.forcedRootMoves = undefined;
 
     if (this.threatResponseMoves) {
       const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
@@ -409,7 +412,7 @@ export class MCTSBot<G extends Game = Game> {
         // #73: a forced block stays forced under determinization. Without this
         // the per-world root refresh would widen the root straight back to
         // every move, quietly undoing the game's "you MUST block" ruling.
-        this.forcedRootMoveKeys = new Set(moves.map(m => this.getMoveKey(m)));
+        this.forcedRootMoves = moves;
       } else {
         moves = this.sampleRootMoves(allMoves);
       }
@@ -680,19 +683,19 @@ export class MCTSBot<G extends Game = Game> {
    * is narrowed to the moves this world allows and no child has yet, so
    * expansion never tries a move the current world would refuse.
    *
-   * A root under a forced threat response is left alone: the game said MUST.
+   * A root under a forced threat response is left alone: the game said MUST,
+   * and each forced move is asked of the world directly, since a random sample
+   * of the world's moves may leave it out (#1391).
    */
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
-    const enumerated = live.complete
+    const forced = node.parent === null ? this.forcedRootMoves : undefined;
+    const legalMoves = live.complete
       ? []
-      : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
-
-    const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
-    const legalMoves = forced
-      ? enumerated.filter((move) => forced.has(this.getMoveKey(move)))
-      : enumerated;
+      : forced
+        ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
+        : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
 
     if (!forced) {
@@ -1051,11 +1054,10 @@ export class MCTSBot<G extends Game = Game> {
    * args resolve by element id, and ids are stable across restore, so making
    * the tree path's moves on the fresh instance is sound (see `rebindArgs`).
    */
-  private resumeSearchGame(copy?: string): void {
+  private resumeSearchGame(copy?: string, sampleWorld = false): void {
     if (!this.rootSnapshot || !this.searchGame) return;
     const rngState = this.searchGame.getRandomState();
-    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy)) as G;
-    this.searchGame.setRandomState(rngState);
+    this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy), rngState, sampleWorld);
     this.resumedRandomState = rngState;
     // F-07: drop any baseline captured last iteration — it was cloned from the
     // now-discarded searchGame instance. It is re-captured fresh during this
@@ -1068,11 +1070,10 @@ export class MCTSBot<G extends Game = Game> {
    * a world sampler, after every step (see runSearch).
    */
   private restoreSearchGameToRoot(): void {
-    this.resumeSearchGame();
     // #73: a fresh world for the next iteration. Re-sampling HERE — per
     // playout, not per move — is what makes the tree's statistics describe the
     // seat's uncertainty instead of one hypothesis it happened to draw.
-    this.sampleWorld();
+    this.resumeSearchGame(undefined, true);
   }
 
   /**
@@ -1121,15 +1122,15 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Draw one world consistent with this seat's information set into
-   * `searchGame`, if the game declared a sampler (#73).
+   * `game`, if the game declared a sampler (#73).
    *
    * No-op for every game without one, which is why a game with no hidden state
    * pays nothing for this feature existing.
    */
-  private sampleWorld(): void {
-    if (!this.determinize || !this.searchGame) return;
+  private sampleWorld(game: Game): void {
+    if (!this.determinize) return;
     applyDeterminization(
-      this.searchGame,
+      game,
       this.playerIndex,
       this.determinize,
       () => this.rng.next(),
@@ -1235,12 +1236,32 @@ export class MCTSBot<G extends Game = Game> {
    * when one was captured (T-159-07): a co-decider's moves must not depend on
    * what an earlier co-decider already picked. The action list and follow-up
    * still come from `flowState`, the world's own position.
+   *
+   * A game's `candidateMoves` hook, when it has one, decides what this
+   * returns, from the listing or from its own list (#1387).
    */
   private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     const enumerationGame: G =
       flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
         ? this.simultaneousBaseline
         : game;
+    let listed: BotMove[] | undefined;
+    const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
+    if (!this.candidateMoves) return listMoves();
+
+    // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
+    const candidates = this.candidateMoves(enumerationGame, seat, listMoves);
+    if (candidates.length === 0 && listMoves().length > 0) {
+      throw new Error(
+        `The bot strategy's candidateMoves returned no moves for seat ${seat}, which has ${listMoves().length} moves to make, ` +
+          'so the bot cannot choose one. Return at least one move whenever listMoves() returns any.',
+      );
+    }
+    return candidates;
+  }
+
+  /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */
+  private listSeatMoves(enumerationGame: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     // The player and action definitions come from the SAME game instance the
     // args are enumerated against: their closures are bound to it.
     const player = enumerationGame.getPlayer(seat);
@@ -1277,6 +1298,27 @@ export class MCTSBot<G extends Game = Game> {
     return moves;
   }
 
+  /**
+   * Whether the world loaded into `searchGame` takes `move` from `seat` now,
+   * with the gates {@link listSeatMoves} applies, without listing the world's
+   * other moves (#1391). Only for the root, where no simultaneous baseline is held.
+   */
+  private worldAllows(flowState: FlowState, seat: number, move: BotMove): boolean {
+    const game = this.searchGame!;
+    const action = game.getAction(move.action);
+    const player = game.getPlayer(seat);
+    const offered = availableActionsForSeat(flowState, seat).includes(move.action)
+      || followUpForSeat(flowState, seat)?.action === move.action;
+    if (!action || !player || !offered || game.getActionRefusalReason(action, player)) return false;
+    try {
+      return acceptsSubmission(game, move.action, seat, this.rebindArgs(move.args));
+    } catch (error) {
+      // A gate that needs what this world was never told rules the move out, as enumeration does (#19).
+      if (error instanceof NotSimulableError) return false;
+      throw error;
+    }
+  }
+
   /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */
   private sampleRootMoves(moves: BotMove[]): BotMove[] {
     return moves.length > MAX_SAMPLED_ARGS ? this.rng.shuffle(moves).slice(0, MAX_SAMPLED_ARGS) : moves;
@@ -1310,7 +1352,7 @@ export class MCTSBot<G extends Game = Game> {
    */
   private cloneSearchGame(game: G): G {
     const snapshot = createSnapshot(game, this.gameType, [], this.seed);
-    return this.restoreGame(snapshot) as G;
+    return this.restoreGame(snapshot);
   }
 
 
@@ -1384,71 +1426,9 @@ export class MCTSBot<G extends Game = Game> {
     return createSeatSnapshot(this.game, this.gameType, this.seed, { forSeat: this.playerIndex, reseed: String(this.rng.next()) });
   }
 
-  /**
-   * Restore a game from a snapshot — fully STATE-AUTHORITATIVE, NO replay.
-   *
-   * Mirrors `GameRunner.fromSnapshot`: the snapshot carries the complete
-   * authoritative state (element tree, flow position, sequence counter, seeded
-   * RNG), so we adopt those directly instead of replaying action history.
-   * Replay was unsound for the search root: selection-step /
-   * pending-completed actions mutate the tree via `Piece.putInto` and are not
-   * recorded in action history, so a root carrying such a mutation lost it on
-   * every clone and the bot searched from a wrong position. Adopting the
-   * serialized tree keeps those mutations.
-   */
-  private restoreGame(snapshot: GameStateSnapshot): Game {
-    // The game's own constructor options, custom ones (playerConfigs) and its
-    // element id key included, with the search game's own seed (#776). Every
-    // snapshot this bot restores is one it captured itself, and
-    // `createSeatSnapshot` and `createSnapshot` always record them. They are required: element ids are
-    // minted under the game's own key (#447), which only these options carry,
-    // and `snapshot.seed` is the BOT's search seed, not the search game's.
-    const gameOptions = snapshot.gameOptions;
-    if (gameOptions === undefined) {
-      throw new Error(
-        'MCTS bot cannot restore a snapshot without gameOptions: the search game must be built ' +
-          "with the game's own options and seed. Capture it with createSeatSnapshot, which records them.",
-      );
-    }
-
-    const game = constructGame(this.GameClass, gameOptions as any);
-
-    // Adopt the authoritative element tree (clears + rebuilds children, re-points
-    // the game's own serialized refs, resolves element references).
-    //
-    // The message log rides beside the tree, not in it. The search game gets it
-    // so a game whose rules read `game.messages` evaluates the same way inside
-    // the search as it does outside — a silently empty log there would make the
-    // bot reason over a different world than the one it is playing in. On a
-    // seat clone `createSeatSnapshot` has already filtered it to that seat's
-    // audience, so the sandbox cannot see private lines the seat may not.
-    game.loadSerializedState(snapshotTree(snapshot), { messageLog: snapshot.messageLog ?? [] });
-    // The tree is the seat's view: read it as the seat was shown it (#1291).
-    adoptSeatView(game, this.playerIndex);
-
-    // Restore the element id sequence so newly created elements don't drift.
-    if (snapshot.sequence !== undefined) {
-      game._ctx.sequence = snapshot.sequence;
-    }
-
-    // Restore the snapshot's RNG position: the search game's own, never the live game's (#776).
-    game.setRandomState(snapshot.randomState);
-
-    // Restore the authoritative flow position. Every element the flow holds
-    // (flow variables and frame data, `forEach` items included) was written as
-    // a marker by getPosition; restoreFlowState relinks it to the freshly
-    // loaded tree. `hiddenIdRemap` (CR-02, 159) is only ever present on a
-    // redacted (`forSeat`) snapshot: it lets a marker that pointed at a
-    // now-anonymized hidden-zone child relink to its redacted placeholder, and
-    // passing it is what allows a missing element to relink to its concealing
-    // zone at all (#947); a restore with no map refuses instead. A
-    // DESCENDANT clone's snapshot is written from the already-redacted search
-    // game, whose markers hold its own ids, so it needs no remap.
-    if (snapshot.flowState) {
-      game.restoreFlowState(snapshot.flowState, snapshot.hiddenIdRemap);
-    }
-
-    return game;
+  /** Restore this seat's search copy from `snapshot` (see `restoreSeatCopy`), drawing a fresh world into it when `sampleWorld`. */
+  private restoreGame(snapshot: GameStateSnapshot, randomState = snapshot.randomState, sampleWorld = false): G {
+    return restoreSeatCopy(this.GameClass, snapshot, this.playerIndex, randomState, sampleWorld ? (game) => this.sampleWorld(game) : undefined);
   }
 
   /**

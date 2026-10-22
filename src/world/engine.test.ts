@@ -26,6 +26,7 @@ import { rulesErrorSentence } from "../engine/action/rules-error.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
+import { seatView } from "../engine/element/seat-placeholders.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
@@ -2957,7 +2958,7 @@ describe("ShufflewickPub #411/#413 -- one body for every seat that holds the sam
 
     const seat = answered.seats[0]!;
     if (seat.refused) throw new Error("p1 was refused");
-    const room = roomIn(answered.bodies[seat.at])!;
+    const room = roomIn(seatView(answered.bodies[seat.at], seat.placeholders))!;
     expect(room.childCount).toBe(2);
     expect(room.children!.map((child) => child.name)).toEqual([undefined, undefined, "nested-gem"]);
     expect(room.children!.slice(0, 2).every((child) => child.id < 0)).toBe(true);

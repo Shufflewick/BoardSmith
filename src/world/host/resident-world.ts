@@ -85,6 +85,7 @@ import {
   type WorldActionOffer,
   type WorldOrder,
   type WorldTiming,
+  type DeclaredNoticeBox,
   type SettledNoticeBox,
   type WorldNoticeWrites,
 } from "../index.js";
@@ -220,8 +221,12 @@ export interface WorldStartOutcome {
 
 /** One player's view, or the reason there is not one. */
 interface WorldSeatProjections {
-  /** This seat's own body, or null when it has none. */
-  bodyFor: (player: string) => unknown;
+  /**
+   * The body this seat holds, shared byte for byte with every seat shown the
+   * same thing, and the seat's own ids for its placeholders beside it (#1326):
+   * exactly what a `world_state` frame carries. `view` is null when it has none.
+   */
+  seatFor: (player: string) => { readonly view: unknown; readonly placeholders: readonly number[] };
   /** Why a named player has no body, by player. */
   readonly failed: Readonly<Record<string, { code?: string; message: string }>>;
   /**
@@ -709,9 +714,9 @@ export class ResidentWorld {
     // encoded once for everybody naming it.
     const { bodies, of, refused } = await runner.viewsFor(projecting);
     return {
-      bodyFor: (player: string): unknown => {
-        const at = of[player];
-        return at === undefined ? null : (bodies[at] ?? null);
+      seatFor: (player: string) => {
+        const held = of[player];
+        return held === undefined ? { view: null, placeholders: [] } : { view: bodies[held.at], placeholders: held.placeholders };
       },
       failed: { ...declined, ...refused },
       revision,
@@ -764,10 +769,10 @@ export class ResidentWorld {
    * ONE SELECTION, RE-EVALUATED WITH THE ARGS BOUND SO FAR (ShufflewickPub
    * #378).
    *
-   * A world's offer is enumerated in one frame with nothing bound, so a
-   * selection whose `multiSelect` bounds or `choices` callback read an earlier
-   * selection's value cannot be answered there: the panel asks again once it has
-   * something to ask with, exactly as a table's does.
+   * A world's offer resolves only the first selection, with nothing bound, so
+   * the panel asks for every later one when the player reaches it, with the
+   * answers so far -- none, when only skipped optional picks precede it
+   * (#1345, #1355).
    *
    * It is a READ. Nothing is dispatched and nothing is checkpointed -- what it
    * changes is what is LOADED, which is residency and not state, and a partition
@@ -1003,7 +1008,7 @@ export class ResidentWorld {
     // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
     // plan the command's schedules against the same allowance. The checkpoint
     // below is this host's own, per command.
-    const { result, plan } = await dispatchStep(
+    const { result, answers: walked, plan } = await dispatchStep(
       { player, command, timing, arrivedAt },
       {
         declare: (supplied, when, declared) =>
@@ -1092,7 +1097,7 @@ export class ResidentWorld {
         // THE NOTICE BOXES THIS DISPATCH SENT TO OR TOOK (ShufflewickPub #521),
         // in the same write as its effects, so a notice exists exactly when the
         // command that sent it does.
-        ...(await this.#noticeWrite(result.notices)),
+        ...(await this.#noticeWrite(result.notices, walked.declaredNotices)),
         // THE ENDING IS DURABLE WITH THE EFFECTS THAT DECLARED IT (#395), and
         // the store empties the queue in the same write.
         ...(result.ending === "completed" ? { endedAt: arrivedAt } : {}),
@@ -1121,12 +1126,14 @@ export class ResidentWorld {
   /** The boxes a dispatch's notice writes leave, for its checkpoint (#521). */
   async #noticeWrite(
     notices: WorldNoticeWrites | undefined,
+    declaredNotices: readonly DeclaredNoticeBox[],
   ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
     if (notices === undefined) return {};
     return {
       notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat), {
         seatCount: this.#world.seatCount,
         budgets: this.#budgets,
+        declaredNotices,
       }),
     };
   }

@@ -284,7 +284,7 @@ function assertSeatsMatch<G extends Game>(definition: SimulatedGame<G>, config: 
  * does not change another seat's draws. A policy whose work changes the game
  * ends the game as crashed, naming the policy.
  *
- * A bad player count, policy list or `gameOptions` throws; everything the game
+ * A bad player count, policy list, `timeout` or `gameOptions` throws; everything the game
  * or a policy does is reported on the result.
  */
 export async function playGame<G extends Game>(
@@ -294,6 +294,9 @@ export async function playGame<G extends Game>(
   const { playerCount, seed, policies, timeout = Infinity, maxActions, gameOptions, isResting } = config;
   assertSeatsMatch(definition, config);
   assertGameOptionsAreGameSpecific(gameOptions);
+  if (typeof timeout !== 'number' || !(timeout > 0)) {
+    throw new Error(`A timeout of ${String(timeout)} ms cannot bound a game: give a number of milliseconds above 0.`);
+  }
   const startTime = Date.now();
   const mover = new SeededRandom(`${seed}:mover`);
   const seatRandom = policies.map((_, i) => new SeededRandom(`${seed}:seat-${i + 1}`));
@@ -303,7 +306,7 @@ export async function playGame<G extends Game>(
   let timedOut = false;
   let exceededMaxActions = false;
   let stuck = false;
-  let stuckReason: string | undefined;
+  let stopReason: string | undefined;
   let restReason: string | undefined;
   const recorder = metricRecorder(definition.metrics);
 
@@ -324,7 +327,7 @@ export async function playGame<G extends Game>(
     while (!testGame.isComplete()) {
       if (Date.now() - startTime > timeout) {
         timedOut = true;
-        stuckReason =
+        stopReason =
           `Game did not finish within its timeout of ${timeout} ms. ` +
           'Raise timeout if the game is just slow, or check for a move or rule that takes far longer than it should.';
         break;
@@ -332,7 +335,7 @@ export async function playGame<G extends Game>(
 
       if (actionCount >= maxActions) {
         exceededMaxActions = true;
-        stuckReason =
+        stopReason =
           `Game did not finish within the maximum of ${maxActions} action${maxActions === 1 ? '' : 's'}. ` +
           'Raise maxActions if the game is just long, or check its flow for a loop that never ends.';
         break;
@@ -341,7 +344,7 @@ export async function playGame<G extends Game>(
       // Not complete and not awaiting input: the flow is stuck.
       if (!testGame.isAwaitingInput()) {
         stuck = true;
-        stuckReason =
+        stopReason =
           'Game is neither complete nor awaiting input -- the flow stalled without a terminal state.';
         break;
       }
@@ -349,14 +352,14 @@ export async function playGame<G extends Game>(
       const flowState = testGame.getFlowState();
       if (!flowState) {
         stuck = true;
-        stuckReason = 'Game is awaiting input but exposes no flow state.';
+        stopReason = 'Game is awaiting input but exposes no flow state.';
         break;
       }
 
       const { seats, refused } = enabledSeats(testGame.game, flowState);
       if (seats.length === 0) {
         stuck = true;
-        stuckReason =
+        stopReason =
           'Game is awaiting input but no player has an enabled action to take.' +
           (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '') +
           ' If the game is meant to rest here until a rule not built yet ends it, declare that ' +
@@ -383,7 +386,7 @@ export async function playGame<G extends Game>(
       );
       if ('noMove' in choice) {
         stuck = true;
-        stuckReason = choice.noMove;
+        stopReason = choice.noMove;
         break;
       }
 
@@ -405,7 +408,7 @@ export async function playGame<G extends Game>(
       // The game rejected the move a policy chose: fail the game on the first one (#910).
       recorder.discard();
       stuck = true;
-      stuckReason =
+      stopReason =
         `Action '${choice.action}' rejected ${describeMove(choice.args, testGame.game, choice.action)}, chosen by policy '${policy.name}': ` +
         `${(result.error ?? 'unknown error').replace(/\.$/, '')}. A simulated game fails on its first rejected move: ` +
         'an action must accept every move its enabled choices offer, and a policy must choose only from them.';
@@ -424,7 +427,7 @@ export async function playGame<G extends Game>(
       stuck,
       resting: restReason !== undefined,
       ...(restReason !== undefined ? { restReason } : {}),
-      error: stuckReason,
+      error: stopReason,
       actionCount,
       duration,
       playerCount,

@@ -22,8 +22,10 @@ let fitnessOf: (objectives: ObjectiveWeight[], config?: BenchmarkConfig) => numb
 const benchmarkCalls: ObjectiveWeight[][][] = [];
 
 vi.mock('./parallel-benchmark.js', () => ({
-  runParallelBenchmarks: vi.fn(async (_path: string, _type: string, jobs: BenchmarkJob[]) => {
+  runParallelBenchmarks: vi.fn(async (_path: string, _type: string, jobs: BenchmarkJob[], _options: unknown, onProgress?: (completed: number, total: number) => void) => {
     benchmarkCalls.push(jobs.map((job) => job.weights));
+    const games = jobs.reduce((sum, job) => sum + job.config.gameCount, 0);
+    onProgress?.(games, games);
     return jobs.map((job) => fitnessOf(job.weights, job.config));
   }),
 }));
@@ -235,6 +237,19 @@ describe('WeightEvolver.evolve', () => {
     }
   });
 
+  it('uses the default for a setting passed as undefined (#1307)', async () => {
+    const progress: TrainingProgress[] = [];
+    await evolver({
+      evolutionGenerations: undefined, evolutionBenchmarkGames: undefined, benchmarkMCTSIterations: undefined,
+      maxActionsPerGame: undefined, evolutionSigma: undefined, evolutionMu: undefined, evolutionLambda: undefined,
+      onProgress: (p) => progress.push(p),
+    }).evolve(objectives(5));
+    expect(benchmarkConfigs()[0]).toEqual([expect.objectContaining({ gameCount: 50, mctsIterations: 100, maxActions: 1000 })]);
+    expect(benchmarkConfigs()[1]).toHaveLength(25);
+    expect(progress.at(-1)!.totalIterations).toBe(5);
+    expect(benchmarkCalls[1].flat().every((o) => Number.isFinite(o.weight))).toBe(true);
+  });
+
   it('benchmarks every evaluation reproducibly from the evolution seed, with no game clock (#699)', async () => {
     await evolver({ seed: 'repeat' }).evolve(objectives(5));
     const configs = benchmarkConfigs();
@@ -305,45 +320,48 @@ describe('WeightEvolver confirms the search pick on fresh games before keeping i
     expect(accepted).toBeLessThanOrEqual(10);
   });
 
-  it('accepts a clearly stronger candidate, and reports the confirmation rates over all its batches, not the search score', async () => {
+  it('accepts a clearly stronger candidate, and reports the confirmation rates, not the search score', async () => {
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
     const result = await evolver({ ...defaultSearch, seed: 'stronger' }).evolve(original);
 
     expect(result.objectives).not.toEqual(original);
     const confirmation = result.confirmation!;
     expect(confirmation.accepted).toBe(true);
-    const overBatches = (strength: number, weights: ObjectiveWeight[]) =>
-      Array.from({ length: 20 }, (_, b) => noisy(() => strength)(weights, { gameCount: 20, seed: `stronger-confirm-${b}` }))
-        .reduce((sum, rate) => sum + rate, 0) / 20;
-    expect(confirmation.originalWinRate).toBe(overBatches(0.5, original));
-    expect(confirmation.candidateWinRate).toBe(overBatches(0.7, result.objectives));
+    const confirmed = (strength: number, weights: ObjectiveWeight[]) =>
+      noisy(() => strength)(weights, { gameCount: 400, seed: 'stronger-confirm' });
+    expect(confirmation.originalWinRate).toBe(confirmed(0.5, original));
+    expect(confirmation.candidateWinRate).toBe(confirmed(0.7, result.objectives));
   });
 
-  it('splits each set\'s 400 games into 20 separately seeded batches, both sets on the same games, on seeds the search never used (#1031)', async () => {
+  it("plays each set's 400 games as one job, both sets on the same games, on seeds the search never used (#1307)", async () => {
+    // runParallelBenchmarks shares each job's games across the pool, so the confirmation needs no batches of its own.
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
-    await evolver({ seed: 'fresh', benchmarkMCTSIterations: 7, maxActionsPerGame: 9 }).evolve(original);
+    await evolver({ seed: 'fresh', benchmarkMCTSIterations: 7, maxActionsPerGame: 9, workerCount: 16 }).evolve(original);
     const [confirm, ...search] = benchmarkConfigs().reverse();
-    const jobs = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)![2];
-    const batchSeeds = Array.from({ length: 20 }, (_, b) => `fresh-confirm-${b}`);
-    const [originalJobs, candidateJobs] = [jobs.slice(0, 20), jobs.slice(20)];
+    const [, , jobs, options] = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)!;
 
-    expect(jobs).toHaveLength(40);
-    expect(originalJobs.every((job) => job.weights === original)).toBe(true);
-    expect(candidateJobs.every((job) => job.weights === candidateJobs[0].weights && job.weights !== original)).toBe(true);
-    expect(originalJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
-    expect(candidateJobs.map((job) => job.config.seed)).toEqual(batchSeeds);
-    for (const config of confirm) {
-      expect(config).toMatchObject({ gameCount: 20, mctsIterations: 7, maxActions: 9, reproducible: true });
-    }
+    expect(jobs.map((job) => job.weights === original)).toEqual([true, false]);
+    expect(confirm).toEqual([0, 1].map(() => ({ gameCount: 400, mctsIterations: 7, maxActions: 9, seed: 'fresh-confirm', reproducible: true })));
+    expect(options).toEqual({ workerCount: 16 });
     expect(search.flat().some((c) => c.seed!.includes('confirm'))).toBe(false);
   });
 
-  it('gives the pool at least as many confirmation jobs as workers, so none sits idle (#1031)', async () => {
+  it('reports the confirmation in games, ending with all 800 played (#1307)', async () => {
     fitnessOf = noisy((individual) => (isOriginal(individual) ? 0.5 : 0.7));
-    await evolver({ seed: 'busy', workerCount: 16 }).evolve(original);
-    const [, , jobs, options] = vi.mocked(runParallelBenchmarks).mock.calls.at(-1)!;
-    expect(options).toEqual({ workerCount: 16 });
-    expect(jobs.length).toBeGreaterThanOrEqual(16);
+    const progress: TrainingProgress[] = [];
+    await evolver({ seed: 'stronger', ...defaultSearch, onProgress: (p) => progress.push(p) }).evolve(original);
+    const confirming = progress.filter((p) => p.message.startsWith('Confirming'));
+
+    expect(confirming.map((p) => [p.gamesCompleted, p.totalGames])).toEqual([[0, 800], [800, 800]]);
+  });
+
+  it('reports each generation in games played, not candidates (#1307)', async () => {
+    const progress: TrainingProgress[] = [];
+    await evolver({ evolutionGenerations: 1, onProgress: (p) => progress.push(p) }).evolve(objectives(5));
+    // 2 parents and 3 offspring, 4 games each.
+    const generation = progress.filter((p) => p.iteration === 1 && !p.message.includes('Generating'));
+
+    expect(generation.map((p) => [p.gamesCompleted, p.totalGames])).toEqual([[0, 20], [20, 20], [20, 20]]);
   });
 
   it('confirms nothing when the search kept the original', async () => {

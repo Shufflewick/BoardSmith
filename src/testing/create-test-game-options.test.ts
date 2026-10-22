@@ -64,6 +64,15 @@ describe('createTestGame fills the options boardsmith.json declares (#701)', () 
     expect([game.rounds, game.lootScale]).toEqual([3, 1]);
   });
 
+  it('plays with the options boardsmith.json holds now, after it changes, even when modules are not reloaded (#1307)', () => {
+    // A watch-mode rerun that does not re-evaluate modules must still see the edited file.
+    inProject({ gameOptions });
+    createTestGame(OptionsGame, { playerCount: 1 });
+    writeFileSync('boardsmith.json', JSON.stringify({ name: 'options', backend: 'table', gameOptions: [{ ...gameOptions[0], default: 5 }] }));
+    const { game } = createTestGame(OptionsGame, { playerCount: 1 });
+    expect(game.rounds).toBe(5);
+  });
+
   it('refuses to start outside any game project, rather than leave the options out', () => {
     process.chdir(tempTree('bs-test-game-no-project-'));
     expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(

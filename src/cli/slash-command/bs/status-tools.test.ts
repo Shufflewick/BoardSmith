@@ -27,19 +27,20 @@
  * duplicate them in a second file.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
   RULES_STALE_MARKER,
   REPAIR_GATE_DISPOSITIONS,
 } from '../../commands/verify-impact.js';
+import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */
 function read(relativePath: string): string {
-  return readFileSync(join(__dirname, relativePath), 'utf-8');
+  return skillMarkdown(`bs/${relativePath}`);
 }
 
 /** CHUNK-level stale marker (em-dash, not hyphen) — set by /bs-insert-chunk. */

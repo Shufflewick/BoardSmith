@@ -27,13 +27,13 @@
  *    thing that makes it false must fail here first.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
 
-const DOCS = dirname(fileURLToPath(import.meta.url));
-const ROOT = join(DOCS, '..');
-const read = (path: string) => readFileSync(join(ROOT, path), 'utf-8');
+/** The landing pages below, keyed by path from the repo root with a leading `/`. */
+const PAGES = import.meta.glob<string>(['/README.md', '/docs/README.md', '/docs/getting-started.md'], {
+  eager: true,
+  import: 'default',
+});
+const read = (path: string) => PAGES[`/${path}`];
 
 /**
  * Every page a new author lands on, with the relative prefix each one needs to
@@ -116,6 +116,13 @@ describe('#168: the product path is written down where an author lands', () => {
       'No `boardsmith` package is published on npm, so `npx boardsmith init` with nothing ' +
         'installed fails or runs whoever claims the name, and init refuses to run from ' +
         "npm's _npx cache (#1007). The pitch says to install first.",
+    ).not.toContain('npx boardsmith');
+  });
+
+  it.each(LANDING_PAGES)('$path runs no command through npx boardsmith (#1306)', ({ path }) => {
+    expect(
+      read(path),
+      `${path} says to install BoardSmith and then run \`boardsmith\`, so its commands must not go back to npx.`,
     ).not.toContain('npx boardsmith');
   });
 

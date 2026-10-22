@@ -32,7 +32,7 @@ new game links to the BoardSmith that ran `init`, so `init` refuses to run from
 a one-off download in npm's `_npx` cache, which npm clears.
 
 ```bash
-npx boardsmith init my-game
+boardsmith init my-game
 cd my-game
 npm install
 ```
@@ -94,7 +94,7 @@ transcription.
 To balance the rules before building anything to look at, pass `--sim`:
 
 ```bash
-npx boardsmith init my-game --sim
+boardsmith init my-game --sim
 cd my-game
 npm install
 boardsmith simulate --policy greedy
@@ -127,7 +127,7 @@ It is what a game IS, not something a run selects, so it is chosen once, when
 the project is created:
 
 ```bash
-npx boardsmith init my-world --world
+boardsmith init my-world --world
 cd my-world
 npm install
 boardsmith test
@@ -292,7 +292,11 @@ that shares its worker with other test files (`isolate: false`), and every
 test file when the config has a `globalSetup`. Once Vitest confirms that a
 mutant made a test fail, the mutation check stops that run's workers,
 including tests already running. A surviving mutant still runs every test file
-that loads its file to completion.
+that loads its file to completion. Those test files must pass on their own,
+without the rest of the suite: the check runs each such set once unmodified,
+and when a test there fails, because it needs something another test file left
+behind, the check stops and names it rather than count a failure the mutant
+may not have caused.
 
 A game with Vitest projects (`test.projects` in its config, or a workspace:
 `test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
@@ -316,14 +320,16 @@ Mutants run one at a time unless `boardsmith.json` sets a budget:
 
 Then `trials` mutants run at once, each in its own Vitest run with `workers / trials`
 test workers (rounded down), and the unmutated run first gets all `workers`.
-Outcomes are reported in the same order as a serial run. Vitest sizes its pools
+Outcomes are reported in the same order as a serial run. Vitest 2 and 3 size their pools
 from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
-the worker count, and runs files of different pools at the same time, so with a
+the worker count, and run files of different pools at the same time, so with a
 budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
 typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
 different pool per project or a custom pool, rather than run more workers than
-the budget says. A setting can come from the config file or from an environment
-variable Vitest reads, such as `VITEST_MAX_FORKS`.
+the budget says. Vitest 4 runs each project's files with that project's own
+`maxWorkers`, so under Vitest 4 it also refuses a `maxWorkers` over the run's share.
+A setting can come from the config file or from an environment
+variable Vitest reads, such as `VITEST_MAX_FORKS` or `VITEST_MAX_WORKERS`.
 
 Stopping mutation verification with Ctrl+C or SIGTERM stops every Vitest process
 group it started and waits for them to close before removing that run's temporary files.
