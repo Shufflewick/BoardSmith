@@ -1475,9 +1475,6 @@ export class FlowEngine<G extends Game = Game> {
     // Restore move-limit tracking for action steps
     this.restoreActionStepTracking();
 
-    // A position edited to a finished game (an arranged one, #1427) still says it awaits a seat; end it as run() would.
-    if (!this.complete && this.isOver()) this.endFlow();
-
     return { success: true };
   }
 
@@ -1700,6 +1697,17 @@ export class FlowEngine<G extends Game = Game> {
    */
   private isOver(): boolean {
     return this.game.isFinished();
+  }
+
+  /**
+   * End the flow if the game is finished, as `run()` would, and say whether it
+   * ended. A restore puts the flow back without running it, so a position
+   * edited to a finished game (an arranged one, #1427) still awaits a seat.
+   */
+  endIfOver(): boolean {
+    if (this.complete || !this.isOver()) return false;
+    this.endFlow();
+    return true;
   }
 
   /** Mark the flow complete. A complete flow prompts no seat. */

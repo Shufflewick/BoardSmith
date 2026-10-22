@@ -208,6 +208,27 @@ describe('createHeadlessSession as a test harness (#529)', () => {
     expect(result.success).toBe(false);
   });
 
+  it("finishes the game when an arranged position meets the game's own isFinished() (#1427)", async () => {
+    class FirstToTenGame extends TallyGame {
+      override isFinished(): boolean {
+        return this.tallies.some((t) => t >= 10);
+      }
+    }
+    const session = createHeadlessSession(
+      { gameClass: FirstToTenGame, gameType: 'first-to-ten', minPlayers: 2, maxPlayers: 2 },
+      { playerCount: 2, seed: 'harness' },
+    );
+    await session.start();
+
+    await session.arrange((game) => {
+      game.tallies = [10, 0];
+    });
+
+    expect(session.readGame().phase).toBe('finished');
+    expect(session.playerState(1).isMyTurn).toBe(false);
+    expect(session.playerState(1).availableActions).toEqual([]);
+  });
+
   it("starts the game with the players' names and a chosen game option", async () => {
     const options = selectGameOptions({ step: { type: 'number', label: 'Step', default: 1 } }, { step: 5 });
     const session = createHeadlessSession(tallyGameDef, {
