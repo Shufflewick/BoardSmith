@@ -199,10 +199,13 @@ describe('the actions a step offers in a search copy (#1431)', () => {
     _clearShownWarnings();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    copy.continueFlow('draw', {}, 2);
+    try {
+      copy.continueFlow('draw', {}, 2);
 
-    expect(offered(copy)).toEqual([[1, ['score']]]);
-    expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Action "score" .* seat 2 .*"secret" on Holder/));
-    warn.mockRestore();
+      expect(offered(copy)).toEqual([[1, ['score']]]);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/Action "score" .* seat 2 .*"secret" on Holder/));
+    } finally {
+      warn.mockRestore();
+    }
   });
 });

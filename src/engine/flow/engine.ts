@@ -3,7 +3,7 @@ import type { VisibilityState } from '../element/visibility.js';
 import { GameElement, hasZoneVisibility, withheldFromSeat, WITHHELD_PILE_BRANCH } from '../element/game-element.js';
 import { Player } from '../player/player.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
-import { NotSimulableError, PlayerFacingError, warnNoMoveFromWhatThisCopyKnows } from '../errors.js';
+import { PlayerFacingError, RedactedAttributeError, warnNoMoveFromWhatThisCopyKnows } from '../errors.js';
 import { withDevDetail } from '../action/rules-error.js';
 import { changing, flowStateRead } from '../element/state-version.js';
 import type { ActionResult, FollowUpAction } from '../action/types.js';
@@ -360,8 +360,8 @@ export class FlowEngine<G extends Game = Game> {
       try {
         return executor.isActionAvailable(action, player);
       } catch (error) {
-        // In a search copy another seat's hidden state has no value: that seat gets no move, as move listing gives it (#1431).
-        if (!(error instanceof NotSimulableError)) throw error;
+        // Only a search copy withholds attributes, and there the seat gets no move, as move listing gives it (#1431).
+        if (!(error instanceof RedactedAttributeError)) throw error;
         warnNoMoveFromWhatThisCopyKnows(name, player.seat, error);
         return false;
       }

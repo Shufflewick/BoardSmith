@@ -1,3 +1,5 @@
+import { devWarn } from '../utils/dev.js';
+
 /**
  * Engine errors whose message is written FOR the person who will read it.
  *
@@ -19,7 +21,6 @@
  * never contain a stack trace, a file path, an internal identifier, or the
  * text of an exception the author did not write.
  */
-import { devWarn } from '../utils/dev.js';
 export class PlayerFacingError extends Error {
   constructor(message: string) {
     super(message);
