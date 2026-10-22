@@ -181,16 +181,21 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 /** The library the suite tests: the walk below stops at it, and the step runs only for the parts #533 named. */
 const inLibrary = (path) => /^src\/(?!cli\/|testing\/)/.test(path);
 
-/** The repo files `path` loads when it runs: its static imports and literal dynamic ones, by relative path, not type-only ones. */
+/** An `import` or `export ... from` that loads its module when it runs, which a type-only one does not. */
+const isStaticLoad = (node) =>
+  (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) && node.moduleSpecifier && !(node.importClause?.isTypeOnly ?? node.isTypeOnly);
+
+/** An `import()` of a literal path. */
+const isDynamicLoad = (node) =>
+  ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteralLike(node.arguments[0]);
+
+/** The repo files `path` loads when it runs: its static imports and literal dynamic ones, by relative path. */
 function runtimeImports(path) {
   const source = ts.createSourceFile(path, readFileSync(join(REPO, path), 'utf8'), ts.ScriptTarget.Latest);
   const specifiers = [];
   const visit = (node) => {
-    if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) specifiers.push(node.moduleSpecifier.text);
-    else if (ts.isExportDeclaration(node) && node.moduleSpecifier && !node.isTypeOnly) specifiers.push(node.moduleSpecifier.text);
-    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteralLike(node.arguments[0])) {
-      specifiers.push(node.arguments[0].text);
-    }
+    if (isStaticLoad(node)) specifiers.push(node.moduleSpecifier.text);
+    else if (isDynamicLoad(node)) specifiers.push(node.arguments[0].text);
     ts.forEachChild(node, visit);
   };
   visit(source);
