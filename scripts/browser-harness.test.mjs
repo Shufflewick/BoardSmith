@@ -24,10 +24,11 @@
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 // Imported so `vitest run --changed` runs this file, which lists the suite through it, when it changes (#1375).
@@ -38,6 +39,8 @@ import policy from '../.agent-policy.json';
 import.meta.glob(['../src/cli/commands/dev-world.ts', '../src/cli/commands/fixture-table.test-helper.ts', '../src/cli/commands/fixture-world.test-helper.ts']);
 // Links the browser suite's test file, which `vitest list` below collects, so `--changed` runs this file when it changes; nothing loads (#1409).
 import.meta.glob('./browser-regressions.browser-test.mjs');
+// Links the commands the import walk below starts from, so `--changed` runs this file when one or a file it imports changes; nothing loads (#1425).
+import.meta.glob(['../src/cli/commands/init.ts', '../src/cli/commands/dev.ts']);
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 const REPO = join(SCRIPTS, '..');
@@ -175,17 +178,67 @@ describe('#358: a browser regression finds the packages where Node does', () => 
   });
 });
 
+/** The library the suite tests: the walk below stops at it, and the step runs only for the parts #533 named. */
+const inLibrary = (path) => /^src\/(?!cli\/|testing\/)/.test(path);
+
+/** The repo files `path` loads when it runs: its static imports and literal dynamic ones, by relative path, not type-only ones. */
+function runtimeImports(path) {
+  const source = ts.createSourceFile(path, readFileSync(join(REPO, path), 'utf8'), ts.ScriptTarget.Latest);
+  const specifiers = [];
+  const visit = (node) => {
+    if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) specifiers.push(node.moduleSpecifier.text);
+    else if (ts.isExportDeclaration(node) && node.moduleSpecifier && !node.isTypeOnly) specifiers.push(node.moduleSpecifier.text);
+    else if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword && ts.isStringLiteralLike(node.arguments[0])) {
+      specifiers.push(node.arguments[0].text);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return specifiers.filter((specifier) => specifier.startsWith('.')).map((specifier) => {
+    const target = join(REPO, dirname(path), specifier);
+    // tsx loads a `.js` specifier from its `.ts` source.
+    const file = [target, target.replace(/\.js$/, '.ts'), `${target}.ts`, join(target, 'index.ts')].find((f) => existsSync(f) && statSync(f).isFile());
+    if (!file) throw new Error(`${path} imports ${specifier}, which is no file in this checkout`);
+    return relative(REPO, file);
+  });
+}
+
+/**
+ * Every file of this repo the browser suite runs, outside the library it tests:
+ * the import graph of its config, the setup files and test it loads, the harness,
+ * each script, and the commands the suite runs through (#1425).
+ */
+function browserSuiteFiles() {
+  const { include, globalSetup, setupFiles } = browserConfig.test;
+  const entries = [
+    BROWSER_SUITE_CONFIG, ...include, ...globalSetup, ...setupFiles,
+    'scripts/browser-harness.mjs', ...browserScripts().map((name) => `scripts/${name}`),
+    'src/cli/commands/test.ts',
+    // The table fixture runs these as child processes, which no import shows.
+    'src/cli/commands/init.ts', 'src/cli/commands/dev.ts',
+  ];
+  // The step's `run` starts here; cli.ts imports every command only to register it, so neither is walked.
+  const found = new Set(['bin/boardsmith.js', 'src/cli/cli.ts']);
+  const walk = (path) => {
+    if (found.has(path) || inLibrary(path)) return;
+    found.add(path);
+    if (/\.[cm]?[jt]s$/.test(path)) runtimeImports(path).forEach(walk);
+  };
+  entries.forEach(walk);
+  return [...found].sort();
+}
+
 describe('#533: every browser regression runs automatically', () => {
   it('runs the browser suite at merge when UI, dev host, world or a file the browser suite is built from changes', () => {
     expect(policy.merge?.extraMergeSteps, 'merge.extraMergeSteps in .agent-policy.json').toBeDefined();
     const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
     expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
     const runsFor = (path) => new RegExp(step.whenChanged).test(path);
-    const { include, globalSetup, setupFiles } = browserConfig.test;
-    const suite = [BROWSER_SUITE_CONFIG, 'src/cli/commands/test.ts', 'scripts/browser-harness.mjs', ...include, ...globalSetup, ...setupFiles, 'scripts/untracked-guard/guard.mjs'];
-    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs', ...suite]) {
+    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs']) {
       expect(runsFor(path), path).toBe(true);
     }
+    const missing = browserSuiteFiles().filter((path) => !runsFor(path));
+    expect(missing, `The browser suite runs these files, so add each to the browser step's whenChanged in .agent-policy.json:\n${missing.join('\n')}\n`).toEqual([]);
     for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts', 'scripts/browser-harness.test.mjs']) {
       expect(runsFor(path), path).toBe(false);
     }

@@ -24,13 +24,10 @@
  * @module
  */
 import { readdirSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
-
-/** This checkout, whose own TypeScript the fixture world is served by. */
-const REPO = join(SCRIPTS, '..');
 
 // ── Chromium, or an actionable refusal ─────────────────────────────────────
 
@@ -44,7 +41,7 @@ const REPO = join(SCRIPTS, '..');
  * `loadFixtures`, which has loaded `tsx`.
  */
 async function loadChromium() {
-  const { playwrightChromium, browserProblem } = await import(join(REPO, 'src/cli/commands/smoke.ts'));
+  const { playwrightChromium, browserProblem } = await import('../src/cli/commands/smoke.ts');
   const browser = await playwrightChromium();
   const problem = browserProblem(browser);
   if (problem) {
@@ -295,8 +292,8 @@ export function summarise(what) {
 async function loadFixtures(script) {
   try {
     await import('tsx');
-    const { withFixtureWorld } = await import(join(REPO, 'src/cli/commands/fixture-world.test-helper.ts'));
-    const { withFixtureTable } = await import(join(REPO, 'src/cli/commands/fixture-table.test-helper.ts'));
+    const { withFixtureWorld } = await import('../src/cli/commands/fixture-world.test-helper.ts');
+    const { withFixtureTable } = await import('../src/cli/commands/fixture-table.test-helper.ts');
     return { withFixtureWorld, withFixtureTable };
   } catch (thrown) {
     console.error(
