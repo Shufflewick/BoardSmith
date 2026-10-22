@@ -405,3 +405,33 @@ describe('a shortened id on the line after its kind word (#1389)', () => {
     expect(provisionalReferences('design/notes.md', 'Rulings 8 and\r\n@a.1.\r\n')).toEqual(['Ruling @a.1']);
   });
 });
+
+/**
+ * #1390: `G.2` after a constraint letter was neither read as a citation nor refused, so it merged naming
+ * nothing. It is refused only where it would name an id the merge allocated, since "Appendix G.2" is prose.
+ */
+describe('a shortened id straight after a constraint letter (#1390)', () => {
+  const G = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'G')!;
+  const problemsIn = (path: string, text: string) =>
+    allocateProvisional({ 'design/CONSTRAINTS.md': '### G@a.1\n\n### G@a.2\n', [path]: text }, [
+      { spec: G, path: 'design/CONSTRAINTS.md' },
+    ]).problems.map((p) => p.detail);
+
+  it('refuses it after a provisional id in its paragraph, as the id of the letter written', () => {
+    expect(problemsIn('design/notes.md', 'See G@a.1 and G.2.\n')).toEqual([
+      'writes "G.2" after G@a.1, but a shortened id is never read after a constraint letter, so the merge cannot ' +
+        'read it as G@a.2 and would leave it naming nothing. Write the id in full on the branch (for example ' +
+        '"G@a.2"), and merge again.',
+    ]);
+    expect(problemsIn('design/notes.md', 'Prices follow Ruling @a.1, within G.2.\n')).toEqual([
+      expect.stringMatching(/^writes "G\.2" after Ruling @a\.1, .* read it as G@a\.2 /),
+    ]);
+  });
+
+  it('leaves prose and code that name no allocated id alone', () => {
+    expect(problemsIn('design/notes.md', 'See Appendix C.3, Table G.2 and G.2.1.\n')).toEqual([]);
+    expect(problemsIn('design/notes.md', 'See G@a.1.\n\nAppendix G.2 has the rest.\n')).toEqual([]);
+    expect(problemsIn('design/notes.md', 'See G@a.1 and G.5, `G.2`, PG.2.\n')).toEqual([]);
+    expect(problemsIn('src/game.ts', '// See G@a.1.\nconst version = "G.2";\n')).toEqual([]);
+  });
+});
