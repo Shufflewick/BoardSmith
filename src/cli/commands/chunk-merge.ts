@@ -300,15 +300,13 @@ async function sourcesOnMain(ctx: MergeContext): Promise<Map<string, string>> {
 }
 
 /**
- * The runs of lines, `[first, end)`, of `name` in the combined tree that differ from the main line's
- * copy, `from` when git reads it as renamed.
+ * Each run of lines of `name` in the combined tree that differs from the main line's copy (`from`
+ * when git reads it as renamed), as its first line and count. A count of 0 is lines deleted after `start`.
  */
 async function linesBranchWrote(ctx: MergeContext, name: string, from: string | undefined): Promise<[number, number][]> {
-  const diff = await git(ctx.top, ['diff', '-M', '--unified=0', '--no-color', '--no-ext-diff', ctx.mainCommit, '--', name, ...(from ? [from] : [])]);
-  return [...diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gm)].map(([, start, count]) => [
-    Number(start),
-    Number(start) + Number(count ?? 1),
-  ]);
+  const args = ['diff', '-M', '--unified=0', '--no-color', '--no-ext-diff', '--no-textconv', ctx.mainCommit, '--', name];
+  const diff = await git(ctx.top, from ? [...args, from] : args);
+  return [...diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gm)].map(([, start, count]) => [Number(start), Number(count ?? 1)]);
 }
 
 /**
@@ -325,7 +323,11 @@ async function branchShorthandRefusals(ctx: MergeContext, files: Record<string, 
     sources ??= await sourcesOnMain(ctx);
     const wrote = await linesBranchWrote(ctx, name, sources.get(name));
     for (const { written, firstLine, lastLine } of found) {
-      if (wrote.some(([first, end]) => first <= lastLine && firstLine < end)) refusals.push(shorthandRefusal(name, written));
+      // A deletion touches it only by joining two of its lines (#1399 review F1).
+      const touched = wrote.some(([start, count]) =>
+        count === 0 ? firstLine <= start && start < lastLine : start <= lastLine && firstLine < start + count,
+      );
+      if (touched) refusals.push(shorthandRefusal(name, written));
     }
   }
   return refusals;

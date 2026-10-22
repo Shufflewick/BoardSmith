@@ -635,6 +635,15 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(result.refusals).toEqual([expect.stringMatching(/^design\/b\.md writes "Decision \.3", a shortened id straight after a kind word\./)]);
   });
 
+  it('refuses a "Decision .2" the branch made only by deleting the blank line between its words (#1399 review F1)', async () => {
+    await write(main, { 'design/a.md': '# Notes\n\nSee Decision\n\n.2 of the deck.\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'no shorthand on main');
+    await buildOnBranch('trading', 100, { 'design/a.md': '# Notes\n\nSee Decision\n.2 of the deck.\n' });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/a\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
   it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
     const constraints = await fs.readFile(join(main, 'design/CONSTRAINTS.md'), 'utf-8');
     await buildOnBranch('trading', 100, {

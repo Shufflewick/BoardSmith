@@ -15,7 +15,7 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { BLANK_LINE, PARAGRAPH_ENDED, PROVISIONAL_NUMBER, QUOTES, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
+import { BLANK_LINE, PARAGRAPH_ENDED, PROVISIONAL_NUMBER, QUOTES, blankComments, citableText, entryHeadingPattern, lineOf } from './ledger-entries.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
@@ -249,12 +249,11 @@ export interface UnreadableShorthand {
 export function unreadableShorthand(path: string, text: string): UnreadableShorthand[] {
   const citable = citableText(path, text);
   const grammar = grammarOf(path);
-  const lineAt = (index: number): number => citable.slice(0, index).split('\n').length;
   const at = (m: RegExpExecArray, written: string) => ({
     index: m.index,
     written,
-    firstLine: lineAt(m.index),
-    lastLine: lineAt(m.index + m[0].length),
+    firstLine: lineOf(citable, m.index),
+    lastLine: lineOf(citable, m.index + m[0].length),
   });
   return [
     // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
