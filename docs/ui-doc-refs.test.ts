@@ -8,20 +8,11 @@
  * and tells the reader it can.
  */
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
 /** Every shipped page that teaches UI code: the docs, the API reference and the skill templates. */
-const PAGES = ['docs', 'docs/api', 'src/cli/slash-command']
-  .flatMap((dir) =>
-    readdirSync(join(REPO, dir), { recursive: dir === 'src/cli/slash-command', encoding: 'utf8' })
-      .filter((file) => file.endsWith('.md'))
-      .map((file) => `${dir}/${file}`),
-  )
-  .map((file) => ({ file, text: readFileSync(join(REPO, file), 'utf8') }));
+const PAGES = Object.entries(
+  import.meta.glob<string>(['/docs/*.md', '/docs/api/*.md', '/src/cli/slash-command/**/*.md'], { eager: true, import: 'default' }),
+).map(([path, text]) => ({ file: path.slice(1), text }));
 
 const BLOCKS = PAGES.flatMap(({ file, text }) => [...text.matchAll(/^\s*```[\s\S]*?^\s*```/gm)].map(([code]) => ({ file, code })));
 

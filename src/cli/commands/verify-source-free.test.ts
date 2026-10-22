@@ -14,6 +14,7 @@ import {
 } from './verify-source-free.js';
 import { computeVerificationScope, renderVerifiedAgainst } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /** The Verified Against block a chunk verified under `scope` would carry. */
 const renderScope = (scope: Awaited<ReturnType<typeof computeVerificationScope>>): string =>
@@ -39,8 +40,7 @@ const renderScope = (scope: Awaited<ReturnType<typeof computeVerificationScope>>
  */
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const SKILL_DIR = join(__dirname, '../slash-command/bs');
-const VERIFY_GAME_MD = join(SKILL_DIR, 'verify-game.md');
+const VERIFY_GAME_MD = skillMarkdown('bs/verify-game.md');
 
 /** Parses every `## Step N: <title>` heading out of `verify-game.md`, at test time — never a
  * hand-copied list, so this test observes the real file, not a snapshot of it. */
@@ -56,7 +56,7 @@ function parseStepHeadings(text: string): Array<{ step: number; title: string }>
 
 describe('decision 7 — VERIFY_PIPELINE_STEPS coverage of the real pipeline', () => {
   it('every ## Step N: heading in verify-game.md has a VERIFY_PIPELINE_STEPS entry', () => {
-    const text = readFileSync(VERIFY_GAME_MD, 'utf-8');
+    const text = VERIFY_GAME_MD;
     const headings = parseStepHeadings(text);
     expect(headings.length).toBeGreaterThan(0);
     for (const heading of headings) {
@@ -68,7 +68,7 @@ describe('decision 7 — VERIFY_PIPELINE_STEPS coverage of the real pipeline', (
   });
 
   it('every VERIFY_PIPELINE_STEPS entry names a step number present in verify-game.md (reverse drift)', () => {
-    const text = readFileSync(VERIFY_GAME_MD, 'utf-8');
+    const text = VERIFY_GAME_MD;
     const headings = parseStepHeadings(text);
     const headingSteps = new Set(headings.map((h) => h.step));
     for (const entry of VERIFY_PIPELINE_STEPS) {
@@ -118,7 +118,7 @@ describe('decision 7 — VERIFY_PIPELINE_STEPS coverage of the real pipeline', (
       'the real file). This test exists only to document, for a future reader, exactly what edit ' +
       'reproduces that demonstration.',
     () => {
-      const text = readFileSync(VERIFY_GAME_MD, 'utf-8');
+      const text = VERIFY_GAME_MD;
       expect(text).not.toContain('## Step 10:');
     },
   );

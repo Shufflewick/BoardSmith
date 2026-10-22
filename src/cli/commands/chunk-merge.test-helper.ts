@@ -10,6 +10,7 @@ import { recordSignoff } from './chunk-signoff.js';
 import { recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import type { TestRunner } from './constraint-check.js';
 import type { TypeCheckRun } from './validate.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 export const git = (cwd: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf-8' });
@@ -76,10 +77,7 @@ const CONSTRAINTS_MD = [
 ].join('\n');
 
 export async function chunkMd(slug: string): Promise<string> {
-  const template = await fs.readFile(
-    new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-    'utf-8',
-  );
+  const template = skillMarkdown('bs/templates/CHUNK.template.md');
   return template
     .replace(/^Status: proposed$/m, 'Status: built')
     .replace('<!-- | src/... | written / pending | -->', `| src/${slug}.ts | written |`)

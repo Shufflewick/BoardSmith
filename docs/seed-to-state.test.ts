@@ -11,14 +11,13 @@
  * src/cli/slash-command/bs/templates.test.ts
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
+import doc from './seed-to-state.md';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, '..');
-const DOC_PATH = join(__dirname, 'seed-to-state.md');
-const doc = readFileSync(DOC_PATH, 'utf-8');
 
 const REQUIRED_SECTIONS = [
   '## Problem',

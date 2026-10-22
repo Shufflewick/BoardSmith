@@ -28,6 +28,6 @@
   // The whole package: every `.ts` and `.vue` under src/ (tests included), the
   // documentation tests, and the vitest config. `vue-tsc` checks `.vue` SFC
   // scripts AND templates; plain `tsc` sees neither.
-  "include": ["src/**/*.ts", "src/**/*.vue", "docs/**/*.ts", "vitest.config.ts"],
+  "include": ["src/**/*.ts", "src/**/*.vue", "docs/**/*.ts", "vitest.config.ts", "markdown.d.ts"],
   "exclude": ["node_modules"]
 }

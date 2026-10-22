@@ -6,6 +6,7 @@ import { checkClaimQuotes, claimQuoteCheckCommand, parseInterpretationQuotes } f
 import { parseInterpretationClaims } from './build-manifest.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * `claim-quote-check` is issue #289's code gate: every `## Interpretation` claim carries the exact
@@ -549,10 +550,7 @@ describe('claim-quote-check through the real CLI entry point', () => {
 
 describe('the CHUNK.md template', () => {
   it('scaffolds an Interpretation the check refuses until a real quote and Source are written', async () => {
-    const template = await fs.readFile(
-      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-      'utf-8',
-    );
+    const template = skillMarkdown('bs/templates/CHUNK.template.md');
     await write('design/chunks/combat/CHUNK.md', template);
     const refusals = (await checkClaimQuotes(project, 'combat')).refusals;
     expect(refusals).toHaveLength(1);
