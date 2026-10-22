@@ -446,3 +446,33 @@ describe('a shortened id straight after a constraint letter (#1390)', () => {
     expect(problemsIn('src/game.ts', '// See G@a.1.\nconst version = "G.2";\n')).toEqual([]);
   });
 });
+
+/**
+ * #1394: a dash range may wrap after its dash, like a list after its kind word (#1389), so
+ * `@a.1 -\n3` is the same unreadable shorthand as `@a.1 - 3`, and `@a.1 -\n.3` the same range as
+ * `@a.1 - .3`. The wrapped number was not caught, so the merge rewrote `@a.1` and named nothing.
+ */
+describe('a dash range wrapped after its dash (#1394)', () => {
+  const ledger = '### Ruling @a.1\n\n### Ruling @a.2\n\n### Ruling @a.3\n';
+  const allocate = (notes: string) =>
+    allocateProvisional({ 'design/RULINGS.md': ledger, 'design/notes.md': notes }, [{ spec: RULINGS, path: 'design/RULINGS.md' }]);
+
+  it('names a dash then a plain number on the next line as written on one line, in an LF or CRLF file or a wrapped comment', () => {
+    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\n3 apply.\n')).toEqual(['@a.1 - 3']);
+    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1-\r\n3 apply.\r\n')).toEqual(['@a.1- 3']);
+    expect(unreadableShorthand('src/game.ts', '// Rulings @a.1 –\n//   3 apply.\n')).toEqual(['@a.1 – 3']);
+  });
+
+  it('names nothing across a blank line', () => {
+    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\n\n3 players.\n')).toEqual([]);
+    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\r\n\r\n3 players.\r\n')).toEqual([]);
+  });
+
+  it('reads a range wrapped after its dash, in an LF or CRLF file, as it does on one line', () => {
+    expect(allocate('Rulings @a.1 -\n.3 apply.\n')).toMatchObject({ files: { 'design/notes.md': 'Rulings 1 -\n3 apply.\n' }, problems: [] });
+    expect(allocate('Rulings @a.1 -\r\n@a.3 apply.\r\n')).toMatchObject({
+      files: { 'design/notes.md': 'Rulings 1 -\r\n3 apply.\r\n' },
+      problems: [],
+    });
+  });
+});
