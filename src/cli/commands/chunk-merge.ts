@@ -279,9 +279,9 @@ function shorthandRefusal(name: string, written: string): string {
     );
   }
   return (
-    `${name} writes "${written}", a shortened id straight after a kind word. A shortened id takes its slug only ` +
-    `from the provisional id right before it in a list (as in "@<slug>.1, .2"), never across a kind word, so the ` +
-    `merge cannot give it a real number. Write the id in full on the branch (for example ` +
+    `${name} writes "${written}", a shortened id straight after a kind word. A kind word must be followed by an id ` +
+    `in full: a shortened id is read only after a provisional id in a list (as in "@<slug>.1, .2"), so the merge ` +
+    `cannot give this one a real number. Write the id in full on the branch (for example ` +
     `\`${written.replace(/\.(\d+)$/, '@<slug>.$1')}\`), and merge again.`
   );
 }

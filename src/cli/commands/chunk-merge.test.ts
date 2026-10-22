@@ -523,15 +523,12 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
         '@trading.2 or real number 2. If it is a range, write each id in full on the branch (for example ' +
         '`Rulings @trading.1 and @trading.2`); if 2 is not an id, put something other than a dash between them ' +
         '(for example "@trading.1: 2"). Then merge again.',
-      'design/notes.md writes "Decision .2", a shortened id straight after a kind word. A shortened id takes its slug ' +
-        'only from the provisional id right before it in a list (as in "@<slug>.1, .2"), never across a kind word, so ' +
-        'the merge cannot give it a real number. Write the id in full on the branch (for example `Decision @<slug>.2`), ' +
-        'and merge again.',
+      expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\./),
     ]);
     expect(status()).toBe('');
   });
 
-  it('says a shortened id after a kind word is never read, even after a provisional id in the same list (#1386)', async () => {
+  it('says a kind word must be followed by an id in full, even when a provisional id comes before it (#1386)', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
       'design/notes.md': 'Prices follow Rulings @trading.1 and Decision .2.\n',
@@ -539,9 +536,9 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
     expect(result.merged).toBe(false);
     expect(result.refusals).toEqual([
-      'design/notes.md writes "Decision .2", a shortened id straight after a kind word. A shortened id takes its slug ' +
-        'only from the provisional id right before it in a list (as in "@<slug>.1, .2"), never across a kind ' +
-        'word, so the merge cannot give it a real number. Write the id in full on the branch (for example ' +
+      'design/notes.md writes "Decision .2", a shortened id straight after a kind word. A kind word must be followed ' +
+        'by an id in full: a shortened id is read only after a provisional id in a list (as in "@<slug>.1, .2"), so ' +
+        'the merge cannot give this one a real number. Write the id in full on the branch (for example ' +
         '`Decision @<slug>.2`), and merge again.',
     ]);
     expect(status()).toBe('');
