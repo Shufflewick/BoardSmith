@@ -32,7 +32,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 4
+        "count": 3
       }
     },
     "src/cli/commands/audit.ts": {
