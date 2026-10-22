@@ -354,7 +354,8 @@ shorthand that names no id it can map: a dash then a plain number after a provis
 (`@<slug>.1-3`), a shortened id straight after a kind word (`Decision .2`), and a shortened id
 that a word or a parenthetical separates from its provisional id (`Decision @<slug>.2 supersedes .1`),
 which is not in its list, or that follows a constraint letter (`G@<slug>.1 and G.2`); write that id
-in full. Shorthand already on the main line does not stop it, since the branch did not write it.
+in full. Only shorthand on a line the branch wrote stops it, so shorthand the main line already had,
+even in a file the branch renamed, does not.
 
 ## Git Protocol
 

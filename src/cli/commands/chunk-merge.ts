@@ -286,21 +286,46 @@ function shorthandRefusal(name: string, written: string): string {
   );
 }
 
+/** Each file in the combined tree that git reads as renamed or copied from a main-line file, and that file. */
+async function sourcesOnMain(ctx: MergeContext): Promise<Map<string, string>> {
+  const fields = (await git(ctx.top, ['diff', '-M', '--name-status', '-z', ctx.mainCommit])).split('\0');
+  const sources = new Map<string, string>();
+  for (let i = 0; i < fields.length - 1; ) {
+    if (/^[RC]/.test(fields[i])) {
+      sources.set(fields[i + 2], fields[i + 1]);
+      i += 3;
+    } else i += 2;
+  }
+  return sources;
+}
+
 /**
- * A refusal for each `unreadableShorthand` in `files` (the combined tree) that the branch wrote: each
- * one already in the main line's copy is left out, as the branch did not write it and cannot fix it (#1395).
+ * The runs of lines, `[first, end)`, of `name` in the combined tree that differ from the main line's
+ * copy, `from` when git reads it as renamed.
+ */
+async function linesBranchWrote(ctx: MergeContext, name: string, from: string | undefined): Promise<[number, number][]> {
+  const diff = await git(ctx.top, ['diff', '-M', '--unified=0', '--no-color', '--no-ext-diff', ctx.mainCommit, '--', name, ...(from ? [from] : [])]);
+  return [...diff.matchAll(/^@@ -\S+ \+(\d+)(?:,(\d+))? @@/gm)].map(([, start, count]) => [
+    Number(start),
+    Number(start) + Number(count ?? 1),
+  ]);
+}
+
+/**
+ * A refusal for each `unreadableShorthand` in `files` (the combined tree) on a line the branch wrote,
+ * by git's diff against the main line: one main already had is not the branch's to fix (#1395), even
+ * in a file the branch moved it within or renamed (#1399).
  */
 async function branchShorthandRefusals(ctx: MergeContext, files: Record<string, string>): Promise<string[]> {
   const refusals: string[] = [];
+  let sources: Map<string, string> | undefined;
   for (const [name, text] of Object.entries(files)) {
-    const written = unreadableShorthand(name, text);
-    if (written.length === 0) continue;
-    // A file the branch added has no main-line copy.
-    const onMain = unreadableShorthand(name, await git(ctx.top, ['show', `${ctx.mainCommit}:${name}`]).catch(() => ''));
-    for (const w of written) {
-      const at = onMain.indexOf(w);
-      if (at === -1) refusals.push(shorthandRefusal(name, w));
-      else onMain.splice(at, 1);
+    const found = unreadableShorthand(name, text);
+    if (found.length === 0) continue;
+    sources ??= await sourcesOnMain(ctx);
+    const wrote = await linesBranchWrote(ctx, name, sources.get(name));
+    for (const { written, firstLine, lastLine } of found) {
+      if (wrote.some(([first, end]) => first <= lastLine && firstLine < end)) refusals.push(shorthandRefusal(name, written));
     }
   }
   return refusals;

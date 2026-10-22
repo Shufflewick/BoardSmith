@@ -612,6 +612,29 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(result.refusals).toEqual([expect.stringMatching(/^design\/RULINGS\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
   });
 
+  it('refuses a "Decision .2" the branch moved to a line it wrote, though main had one elsewhere in the file (#1399)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: as Decision .2.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/RULINGS\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
+  it('refuses in a file the branch renamed only the "Decision .3" it wrote, not the "Decision .2" main had (#1399)', async () => {
+    const notes = '# Notes\n\nThe market opens at dawn.\nPrices rise with demand.\nSee Decision .2.\nTraders leave at dusk.\n';
+    await write(main, { 'design/a.md': notes });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'shorthand on main');
+    const trading = await buildOnBranch('trading', 100);
+    git(trading, 'mv', 'design/a.md', 'design/b.md');
+    await write(trading, { 'design/b.md': `${notes}Also Decision .3.\n` });
+    git(trading, 'commit', '-q', '-am', 'chunk-trading/close: rename the notes');
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/b\.md writes "Decision \.3", a shortened id straight after a kind word\./)]);
+  });
+
   it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
     const constraints = await fs.readFile(join(main, 'design/CONSTRAINTS.md'), 'utf-8');
     await buildOnBranch('trading', 100, {

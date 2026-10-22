@@ -232,25 +232,39 @@ export function provisionalReferences(path: string, text: string): string[] {
   return [...new Set(provisionalCitations(path, text).citations.map((c) => c.id ?? c.written))];
 }
 
+/** One `unreadableShorthand`, as written, and the 1-based lines of the file it starts and ends on. */
+export interface UnreadableShorthand {
+  written: string;
+  firstLine: number;
+  lastLine: number;
+}
+
 /**
- * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
+ * Shorthand in file `path` that names no id the merge can map (#446), in file order: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
  * shortened id right after a kind word (`Decision .2`), which takes no slug from an id before the
  * kind word. Either may wrap onto the next line of its prose after its dash or kind word. Quoted
  * text (`citableText`) is not read.
  */
-export function unreadableShorthand(path: string, text: string): string[] {
+export function unreadableShorthand(path: string, text: string): UnreadableShorthand[] {
   const citable = citableText(path, text);
   const grammar = grammarOf(path);
+  const lineAt = (index: number): number => citable.slice(0, index).split('\n').length;
+  const at = (m: RegExpExecArray, written: string) => ({
+    index: m.index,
+    written,
+    firstLine: lineAt(m.index),
+    lastLine: lineAt(m.index + m[0].length),
+  });
   return [
     // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
     ...[...citable.matchAll(grammar.dashThenNumber)]
       .filter((m) => oneParagraph(path, citable, m.index + m[1].length, m.index + m[1].length + m[2].length))
-      .map((m) => ({ index: m.index, written: `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}` })),
-    ...[...citable.matchAll(grammar.shorthandAfterKind)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
+      .map((m) => at(m, `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}`)),
+    ...[...citable.matchAll(grammar.shorthandAfterKind)].map((m) => at(m, `${m[1]} ${m[2]}`)),
   ]
     .sort((a, b) => a.index - b.index)
-    .map((m) => m.written);
+    .map(({ written, firstLine, lastLine }) => ({ written, firstLine, lastLine }));
 }
 
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
