@@ -17,7 +17,7 @@ import { describe, it, expect } from 'vitest';
 import { createVitest } from 'vitest/node';
 import ts from 'typescript';
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
@@ -76,7 +76,7 @@ function evaluatorFor(fileName, source) {
   const imported = (specifier) => {
     const from = specifier.parent.parent.parent.moduleSpecifier.text;
     if (!from.startsWith('.')) return undefined;
-    const target = [from.replace(/\.js$/, '.ts'), from].map((path) => resolve(dirname(fileName), path)).find((path) => existsSync(path));
+    const target = [from.replace(/\.js$/, '.ts'), from].map((path) => resolve(dirname(fileName), path)).find((path) => statSync(path, { throwIfNoEntry: false })?.isFile());
     if (!target) return undefined;
     const other = parsedImport(target);
     const declaration = exportedConst(other.sourceFile, (specifier.propertyName ?? specifier.name).text);
@@ -176,6 +176,7 @@ describe('readsOf: the files a test reads by a path it spells out (#1418)', () =
       "for (const name of ['a.ts']) readFileSync(join(import.meta.dirname, name));",
       "let dir = import.meta.dirname;\nreadFileSync(join(dir, 'a.ts'));",
       "import { REPO_ROOT } from './root.js';\nreadFileSync(join(REPO_ROOT, 'a.ts'));",
+      "import { REPO_ROOT } from '../cli';\nreadFileSync(join(REPO_ROOT, 'a.ts'));",
       "readFileSync(join(process.cwd(), 'a.ts'));",
       "readFileSync('a.ts');",
     ];
