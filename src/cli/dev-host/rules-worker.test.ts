@@ -19,6 +19,9 @@ import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { openTable, tableProject } from './table-host.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
+// The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
+import.meta.glob('./world-rules-worker.ts');
+
 /** Set on the global object of every thread that evaluates a rules file below. */
 const MARK = 'bs885RulesEvaluatedHere';
 const markLine = `(globalThis as Record<string, unknown>).${MARK} = true;`;

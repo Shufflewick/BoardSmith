@@ -24,6 +24,9 @@ import { hostHoldings } from '../dev-host/shutdown.js';
 import { worldStoreDir, worldStorePath } from '../dev-host/world-store.js';
 import { devProject, EXIT_WITHIN_MS, spawnDev } from './dev-project.test-helper.js';
 
+// The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
+import.meta.glob('../dev-host/world-rules-worker.ts');
+
 // Each run bundles the project's rules first, which under full-suite
 // parallelism can exceed Vitest's default. A hang guard, not a budget.
 vi.setConfig({ testTimeout: 90_000 });
