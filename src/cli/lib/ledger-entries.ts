@@ -76,6 +76,8 @@ export interface Citable {
 type MarkdownNode = ReturnType<typeof fromMarkdown> | ReturnType<typeof fromMarkdown>['children'][number];
 // A container holds blocks; every other block (a paragraph, a heading, code) is one leaf block.
 const CONTAINERS = new Set(['root', 'blockquote', 'list', 'listItem']);
+// In an HTML block a comment its container ends before its `-->` runs to the block's end.
+const HTML_COMMENT = /<!--(?:[\s\S]*?-->|[\s\S]*)/g;
 
 /**
  * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a code block
@@ -97,7 +99,7 @@ export function citableText(path: string, text: string): Citable {
     if (leafBlock) blocks.push([start, end]);
     if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') {
       const quoted = text.slice(start, end);
-      citable += text.slice(from, start) + (node.type === 'html' ? blankComments(quoted) : blank(quoted));
+      citable += text.slice(from, start) + (node.type === 'html' ? quoted.replace(HTML_COMMENT, blank) : blank(quoted));
       from = end;
     }
     if (!('children' in node)) return;

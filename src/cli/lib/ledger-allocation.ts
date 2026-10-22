@@ -350,7 +350,7 @@ const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`,
 /** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
 const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
 /** A line break that ends a comment's paragraph: a blank line, or one holding only a comment marker. */
-const PARAGRAPH_BREAK = /\n[ \t\r]*(?:\*|\/\/|#|>)?[ \t\r]*\n/;
+const PARAGRAPH_BREAK = /\n[ \t\r]*(?:\*|\/\/|#)?[ \t\r]*\n/;
 /** A line of source code that is not a comment line, so not the comment's prose. */
 const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
 

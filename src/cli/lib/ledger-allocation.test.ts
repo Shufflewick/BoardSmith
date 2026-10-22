@@ -679,6 +679,8 @@ describe('Markdown blocks inside lists and blockquotes (#1402, #1404)', () => {
         [['> > a `b', '> \t>', '> > See Ruling @a.1 and `c'], ['Ruling @a.1']],
         // An indented code block is code, as a fenced one is (#1403).
         [['Intro.', '', '    ### Ruling @x.1', '', 'Ruling @a.1'], ['Ruling @a.1']],
+        // A comment the quote ends before its --> is still a comment, to the quote's end (#1403 review F1).
+        [['> <!--', '> Ruling @x.1', '-->', '', 'Ruling @a.1'], ['Ruling @a.1']],
       ];
       for (const [lines, cites] of cases) {
         const text = lines.join(eol) + eol;
