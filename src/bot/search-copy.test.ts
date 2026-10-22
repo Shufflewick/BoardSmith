@@ -6,7 +6,9 @@
  * then the sampler, then the hooks.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Space, Action, loop, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
+import {
+  Game, Player, Space, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, type GameOptions,
+} from '../engine/index.js';
 import { SeededRandom } from '../utils/random.js';
 import { searchCopyForSeat } from './index.js';
 
@@ -89,5 +91,51 @@ describe('searchCopyForSeat (#1362)', () => {
     expect(() => searchCopyForSeat(truthWithSecondSeatToMove(), 3, 'search')).toThrow(
       'searchCopyForSeat was given seat 3, but this game has seats 1 to 2. Seats count from 1.',
     );
+  });
+});
+
+/** Both seats plan at once, then a rule fails while the plans resolve: one-two-punch's shape (#1428). */
+class PlanGame extends Game<PlanGame, Player> {
+  planned: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(Action.create('plan').execute((_args, ctx) => {
+      this.planned = [...this.planned, ctx.player.seat];
+    }));
+    this.setFlow({
+      root: sequence(
+        simultaneousActionStep({ actions: ['plan'], playerDone: (_ctx, player) => this.planned.includes(player.seat) }),
+        execute(() => {
+          throw new Error('the reveal failed');
+        }),
+      ),
+    });
+  }
+}
+
+const turnAndPrompt = (game: PlanGame) => ({ turn: game.currentPlayer?.seat, prompted: game.getCurrentFlowPlayer()?.seat });
+
+/** Seat 1 has planned; seat 2's plan closes the step and runs the failing rule. */
+function planToTheFailedReveal(game: PlanGame): void {
+  expect(() => game.continueFlow('plan', {}, 2)).toThrow(/the reveal failed/);
+}
+
+describe('the turn and the prompted seat in a search copy (#1428)', () => {
+  it('match the live game at rest and after a rule fails mid-flow', () => {
+    const truth = new PlanGame({ playerCount: 2, seed: 'truth' });
+    truth.startFlow();
+    truth.continueFlow('plan', {}, 1);
+    const copy = searchCopyForSeat(truth, 2, 'search');
+    expect(turnAndPrompt(truth)).toEqual({ turn: undefined, prompted: undefined });
+    expect(turnAndPrompt(copy)).toEqual(turnAndPrompt(truth));
+
+    planToTheFailedReveal(truth);
+    planToTheFailedReveal(copy);
+
+    // They differ by design: seat 1 holds the turn from the flow's start and nothing moved it,
+    // but the flow stopped in an execute, so no step is prompting anyone.
+    expect(turnAndPrompt(truth)).toEqual({ turn: 1, prompted: undefined });
+    expect(turnAndPrompt(copy)).toEqual(turnAndPrompt(truth));
   });
 });
