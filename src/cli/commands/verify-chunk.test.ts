@@ -162,15 +162,14 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     );
   });
 
-  it("checks only the commits not yet pushed to the main branch's upstream, so pushed history is left alone (#1201)", async () => {
+  it('checks only the commits not yet pushed to a remote, wherever they were pushed, so pushed history is left alone (#1201)', async () => {
     const dir = await gameOnBranch(false);
     await write(dir, { 'src/rules.ts': `${await fs.readFile(join(dir, 'src', 'rules.ts'), 'utf-8')}export const tax = 1;\n` });
     commitAll(dir, 'chunk-combat/step-investigate');
     const origin = join(dirname(dir), 'origin.git');
     git(dirname(dir), 'init', '-q', '--bare', origin);
     git(dir, 'remote', 'add', 'origin', origin);
-    git(dir, 'branch', '-f', 'main', 'HEAD');
-    git(dir, 'push', '-q', '-u', 'origin', 'main');
+    git(dir, 'push', '-q', 'origin', 'chunk/deal');
     await write(dir, { 'design/chunks/combat/CHUNK.md': '# combat\n' });
     commitAll(dir, 'chunk-combat/step-redteam');
 

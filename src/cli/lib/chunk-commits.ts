@@ -40,11 +40,11 @@ async function checkoutTips(projectDir: string): Promise<string[]> {
   return merging.trim() === '' ? ['HEAD'] : ['HEAD', 'MERGE_HEAD'];
 }
 
-/** The chunk's commits reachable from the checkout but not from `exclude`, newest first, each with its parents and subject. */
-async function readChunkLog(projectDir: string, slug: string, exclude: string[] = []): Promise<{ hash: string; parents: string[]; subject: string }[]> {
+/** The chunk's commits, newest first, each with its parents and subject; with `unpushed`, only those on no remote-tracking branch. */
+async function readChunkLog(projectDir: string, slug: string, unpushed = false): Promise<{ hash: string; parents: string[]; subject: string }[]> {
   let log: string;
   try {
-    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s', ...(await checkoutTips(projectDir)), ...exclude.map((c) => `^${c}`), '--']);
+    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s', ...(await checkoutTips(projectDir)), ...(unpushed ? ['--not', '--remotes'] : []), '--']);
   } catch {
     throw new Error(
       `${projectDir} is not a git repository with commits.\n` +
@@ -89,25 +89,16 @@ export async function chunkBeforeSpec(projectDir: string, slug: string): Promise
 
 const isBeforeSpec = (slug: string, subject: string) => BEFORE_SPEC.has(subject.slice(`chunk-${slug}/`.length).split(/[\s:]/)[0]);
 
-/** What the main branch's upstream has (`main@{upstream}`, else `master@{upstream}`): the pushed history, or none. */
-async function pushedTips(projectDir: string): Promise<string[]> {
-  for (const branch of ['main', 'master']) {
-    const tip = (await git(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}@{upstream}`]).catch(() => '')).trim();
-    if (tip !== '') return [tip];
-  }
-  return [];
-}
-
 /**
  * The chunk's commits named for a step before spec that changed files outside `design/`, oldest
  * first, each with those files (project-relative). Those steps write only design files, so game
- * code cannot arrive under their name and skip the tests spec writes (#1201). Only commits not yet
- * on the main branch's upstream are read, since pushed ones cannot be rewritten; a main branch
- * with no upstream has pushed nothing, so every commit is read.
+ * code cannot arrive under their name and skip the tests spec writes (#1201). Only commits on no
+ * remote-tracking branch are read, since pushed ones cannot be rewritten; a repository with no
+ * remote has pushed nothing, so every commit is read.
  */
 export async function preSpecCodeChanges(projectDir: string, slug: string): Promise<{ commit: ChunkCommit; files: string[] }[]> {
   const found: { commit: ChunkCommit; files: string[] }[] = [];
-  for (const c of (await readChunkLog(projectDir, slug, await pushedTips(projectDir))).reverse()) {
+  for (const c of (await readChunkLog(projectDir, slug, true)).reverse()) {
     if (!isBeforeSpec(slug, c.subject)) continue;
     // --cc: a merge commit's own changes, the files it left unlike every parent.
     const changed = await git(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '-z', '--relative', c.hash]);
