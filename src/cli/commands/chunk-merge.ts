@@ -287,6 +287,26 @@ function shorthandRefusal(name: string, written: string): string {
 }
 
 /**
+ * A refusal for each `unreadableShorthand` in `files` (the combined tree) that the branch wrote: each
+ * one already in the main line's copy is left out, as the branch did not write it and cannot fix it (#1395).
+ */
+async function branchShorthandRefusals(ctx: MergeContext, files: Record<string, string>): Promise<string[]> {
+  const refusals: string[] = [];
+  for (const [name, text] of Object.entries(files)) {
+    const written = unreadableShorthand(name, text);
+    if (written.length === 0) continue;
+    // A file the branch added has no main-line copy.
+    const onMain = unreadableShorthand(name, await git(ctx.top, ['show', `${ctx.mainCommit}:${name}`]).catch(() => ''));
+    for (const w of written) {
+      const at = onMain.indexOf(w);
+      if (at === -1) refusals.push(shorthandRefusal(name, w));
+      else onMain.splice(at, 1);
+    }
+  }
+  return refusals;
+}
+
+/**
  * Gives every provisional id a real number on the combined tree and rewrites its citations.
  * `renumbered` is each source file (outside design/, project-relative) whose text that changed.
  */
@@ -302,10 +322,7 @@ async function allocate(
   }
   const { files: rewritten, mapping, problems } = allocateProvisional(files, ledgers);
   // A range left as written is refused for what it is, not again as ids nobody declared.
-  const refusals = [
-    ...Object.entries(files).flatMap(([name, text]) => unreadableShorthand(name, text).map((written) => shorthandRefusal(name, written))),
-    ...problems.map((p) => `${p.path} ${p.detail}`),
-  ];
+  const refusals = [...(await branchShorthandRefusals(ctx, files)), ...problems.map((p) => `${p.path} ${p.detail}`)];
   const kept = new Set(problems.flatMap((p) => p.ids.map((id) => `${p.path}\0${id}`)));
   const renumbered: string[] = [];
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
