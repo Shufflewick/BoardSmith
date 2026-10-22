@@ -544,6 +544,36 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('refuses a shortened id on the line after its kind word for the kind written, not the id before it (#1389)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n\n' +
+        '### Ruling @trading.2\n- Decision: prices move.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1 and Decision\n.2.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\..*`Decision @<slug>\.2`/),
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
+  it('refuses a shortened id on the line after its kind word in a CRLF file with no provisional id before it (#1389)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Ruling @trading.1.\r\n\r\nSee Decision\r\n.2 too.\r\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('refuses a shortened id a parenthetical separates from its provisional id, and leaves main as it was (#1363)', async () => {
     await buildOnBranch('trading', 100, {
       'design/QUESTIONS.md': '# Questions\n\n### Question @trading.9\n- a\n\n### Question @trading.10\n- b\n',
