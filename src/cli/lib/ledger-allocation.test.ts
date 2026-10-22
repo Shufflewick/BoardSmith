@@ -132,11 +132,13 @@ describe('quoted ids are never citations (#437)', () => {
   });
 
   // #1393: a CRLF blank line was not read as one, so a stray backtick quoted every paragraph up to the next.
-  it('ends a code span at a blank line in an LF or a CRLF file', () => {
+  it('ends a code span at a blank line, and closes a wrapped span and a fenced block, in an LF or a CRLF file', () => {
     for (const eol of ['\n', '\r\n']) {
       const text = `a \`b${eol}${eol}See Decision${eol}.2 and Ruling @a.1 \`c.${eol}`;
       expect({ eol, shorthand: unreadableShorthand('design/notes.md', text) }).toEqual({ eol, shorthand: ['Decision .2'] });
       expect({ eol, cites: provisionalReferences('design/notes.md', text) }).toEqual({ eol, cites: ['Ruling @a.1'] });
+      const quoted = `\`Ruling${eol}@x.1\` and${eol}\`\`\`${eol}Ruling @x.2${eol}\`\`\`${eol}Ruling @a.1${eol}`;
+      expect({ eol, cites: provisionalReferences('design/notes.md', quoted) }).toEqual({ eol, cites: ['Ruling @a.1'] });
     }
   });
 
