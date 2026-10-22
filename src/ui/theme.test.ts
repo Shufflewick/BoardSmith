@@ -80,8 +80,9 @@ describe('themeCSS — Slate default emission', () => {
   });
 
   it('defines every token drag-drop.css reads, so no drag style falls back to nothing', () => {
-    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'animation', 'drag-drop.css'), 'utf-8');
-    const read = [...new Set([...css.matchAll(/var\((--bsg-[a-z0-9-]+)\)/g)].map((m) => m[1]!))];
+    const css = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'animation', 'drag-drop.css'), 'utf-8')
+      .replace(/\/\*[\s\S]*?\*\//g, '');
+    const read = [...new Set([...css.matchAll(/var\(\s*(--bsg-[a-z0-9-]+)/g)].map((m) => m[1]!))];
     expect(read).toContain('--bsg-draggable-cursor');
     expect(read.filter((token) => !themeCSS.includes(`${token}:`))).toEqual([]);
   });
