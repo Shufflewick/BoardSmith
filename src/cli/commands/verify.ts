@@ -370,11 +370,15 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
   };
 }
 
+/** Why no test can run: a chunk's step before spec that wrote game code (#1201), or a suite that cannot run. */
+async function testsCannotRun(ctx: VerifyContext): Promise<VerifyCheckOutcome | undefined> {
+  const early = ctx.chunk === undefined ? undefined : await preSpecRefusal(ctx.projectDir, ctx.chunk, `\`boardsmith verify --chunk ${ctx.chunk}\``);
+  return early ?? suiteCannotRun(ctx.projectDir);
+}
+
 /** 1. The full suite, run the way `boardsmith test` runs it; with `--chunk`, the chunk's own test files. */
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
-  const early = ctx.chunk === undefined ? undefined : await preSpecRefusal(ctx.projectDir, ctx.chunk, `\`boardsmith verify --chunk ${ctx.chunk}\``);
-  if (early) return early;
-  const cannot = await suiteCannotRun(ctx.projectDir);
+  const cannot = await testsCannotRun(ctx);
   if (cannot) return cannot;
   const files = ctx.chunk === undefined ? [] : await chunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit, ctx.changed.files);
   if (!Array.isArray(files)) return files;

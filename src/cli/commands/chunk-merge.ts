@@ -465,6 +465,12 @@ async function signoffProblems(projectDir: string): Promise<string[]> {
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');
 
+/** A step before spec that changed game code (#1201), as chunk-merge refuses it. */
+async function preSpecProblems(ctx: MergeContext): Promise<string[]> {
+  const early = await preSpecRefusal(ctx.projectDir, ctx.slug, 'chunk-merge');
+  return early ? [`${early.summary} ${early.next}`] : [];
+}
+
 /**
  * Every tree-wide check on the combined tree, then, only if they pass, the merged chunk's fast
  * checks (#987): the tests it added or changed since its base, and typecheck, as its gates ran them
@@ -478,13 +484,12 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
     ...ledgers.findings.map(describeFinding),
     ...(await checkConstraints(ctx.projectDir, { runTests })).refusals,
     ...(await signoffProblems(ctx.projectDir)),
+    ...(await preSpecProblems(ctx)),
   ];
   if (problems.length > 0) return problems;
   const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
   // The files the chunk's branch changed, as its own `verify --chunk` measured them; not what the main line changed.
   const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
-  const early = await preSpecRefusal(ctx.projectDir, ctx.slug, 'chunk-merge');
-  if (early) return [`${early.summary} ${early.next}`];
   const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
   if (!Array.isArray(tests)) {
     if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''} Then run chunk-merge again.`];
