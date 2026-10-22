@@ -192,6 +192,43 @@ describe('createHeadlessSession as a test harness (#529)', () => {
     expect(session.readGame().tallies).toEqual([11, 20]);
   });
 
+  it('offers no action once an arranged position finishes the game, as the server refuses one (#1427)', async () => {
+    const session = createHeadlessSession(tallyGameDef, { playerCount: 2, seed: 'harness' });
+    await session.start();
+
+    await session.arrange((game) => {
+      game.finish([game.getPlayer(1)!]);
+    });
+
+    const seat1 = session.playerState(1);
+    expect(seat1.isMyTurn).toBe(false);
+    expect(seat1.availableActions).toEqual([]);
+    expect(seat1.actionMetadata).toBeUndefined();
+    const result = await session.send(1, { type: 'action', actionName: 'add', player: 1, args: {} });
+    expect(result.success).toBe(false);
+  });
+
+  it("finishes the game when an arranged position meets the game's own isFinished() (#1427)", async () => {
+    class FirstToTenGame extends TallyGame {
+      override isFinished(): boolean {
+        return this.tallies.some((t) => t >= 10);
+      }
+    }
+    const session = createHeadlessSession(
+      { gameClass: FirstToTenGame, gameType: 'first-to-ten', minPlayers: 2, maxPlayers: 2 },
+      { playerCount: 2, seed: 'harness' },
+    );
+    await session.start();
+
+    await session.arrange((game) => {
+      game.tallies = [10, 0];
+    });
+
+    expect(session.readGame().phase).toBe('finished');
+    expect(session.playerState(1).isMyTurn).toBe(false);
+    expect(session.playerState(1).availableActions).toEqual([]);
+  });
+
   it("starts the game with the players' names and a chosen game option", async () => {
     const options = selectGameOptions({ step: { type: 'number', label: 'Step', default: 1 } }, { step: 5 });
     const session = createHeadlessSession(tallyGameDef, {
