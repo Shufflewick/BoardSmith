@@ -10,7 +10,8 @@ import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
 import { createSnapshot, createSeatSnapshot } from '../engine/utils/index.js';
-import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
+import { acceptsSubmission, enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
+import { NotSimulableError } from '../engine/errors.js';
 import type {
   BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
   DeterminizeSampler,
@@ -96,6 +97,7 @@ export class MCTSBot<G extends Game = Game> {
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
+  private candidateMoves?: BotStrategy['candidateMoves'];
   private uctConstant?: (game: Game, playerIndex: number) => number;
   /**
    * The game's declared world sampler (#73). Its presence, and nothing else,
@@ -146,11 +148,11 @@ export class MCTSBot<G extends Game = Game> {
    */
   private simultaneousBaseline?: G;
   /**
-   * Root move keys a `threatResponseMoves` hook forced for THIS search (#73).
+   * Root moves a `threatResponseMoves` hook forced for THIS search (#73).
    * Only set when the game said a block is mandatory; the per-world root
    * refresh must not widen past it. Undefined for every other search.
    */
-  private forcedRootMoveKeys?: Set<string>;
+  private forcedRootMoves?: BotMove[];
   /** RAVE table for move value estimation across all playouts */
   private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
@@ -171,6 +173,7 @@ export class MCTSBot<G extends Game = Game> {
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
+    this.candidateMoves = botStrategy?.candidateMoves;
     this.uctConstant = botStrategy?.uctConstant;
     this.determinize = botStrategy?.determinize;
     this.seed = this.config.seed;
@@ -298,6 +301,7 @@ export class MCTSBot<G extends Game = Game> {
           threatResponseMoves: this.threatResponseMoves,
           playoutPolicy: this.playoutPolicy,
           moveOrdering: this.moveOrdering,
+          candidateMoves: this.candidateMoves,
           uctConstant: this.uctConstant,
           determinize: this.determinize,
         }
@@ -395,9 +399,9 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Check for threats BEFORE sampling - this is critical!
-    // The threat response needs to see ALL possible moves to find blocking cells
+    // The threat response needs to see every move (every candidate move, with candidateMoves) to find blocking cells
     let moves: BotMove[];
-    this.forcedRootMoveKeys = undefined;
+    this.forcedRootMoves = undefined;
 
     if (this.threatResponseMoves) {
       const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
@@ -408,7 +412,7 @@ export class MCTSBot<G extends Game = Game> {
         // #73: a forced block stays forced under determinization. Without this
         // the per-world root refresh would widen the root straight back to
         // every move, quietly undoing the game's "you MUST block" ruling.
-        this.forcedRootMoveKeys = new Set(moves.map(m => this.getMoveKey(m)));
+        this.forcedRootMoves = moves;
       } else {
         moves = this.sampleRootMoves(allMoves);
       }
@@ -679,19 +683,19 @@ export class MCTSBot<G extends Game = Game> {
    * is narrowed to the moves this world allows and no child has yet, so
    * expansion never tries a move the current world would refuse.
    *
-   * A root under a forced threat response is left alone: the game said MUST.
+   * A root under a forced threat response is left alone: the game said MUST,
+   * and each forced move is asked of the world directly, since a random sample
+   * of the world's moves may leave it out (#1391).
    */
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
-    const enumerated = live.complete
+    const forced = node.parent === null ? this.forcedRootMoves : undefined;
+    const legalMoves = live.complete
       ? []
-      : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
-
-    const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
-    const legalMoves = forced
-      ? enumerated.filter((move) => forced.has(this.getMoveKey(move)))
-      : enumerated;
+      : forced
+        ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
+        : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
 
     if (!forced) {
@@ -1232,12 +1236,32 @@ export class MCTSBot<G extends Game = Game> {
    * when one was captured (T-159-07): a co-decider's moves must not depend on
    * what an earlier co-decider already picked. The action list and follow-up
    * still come from `flowState`, the world's own position.
+   *
+   * A game's `candidateMoves` hook, when it has one, decides what this
+   * returns, from the listing or from its own list (#1387).
    */
   private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     const enumerationGame: G =
       flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
         ? this.simultaneousBaseline
         : game;
+    let listed: BotMove[] | undefined;
+    const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
+    if (!this.candidateMoves) return listMoves();
+
+    // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
+    const candidates = this.candidateMoves(enumerationGame, seat, listMoves);
+    if (candidates.length === 0 && listMoves().length > 0) {
+      throw new Error(
+        `The bot strategy's candidateMoves returned no moves for seat ${seat}, which has ${listMoves().length} moves to make, ` +
+          'so the bot cannot choose one. Return at least one move whenever listMoves() returns any.',
+      );
+    }
+    return candidates;
+  }
+
+  /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */
+  private listSeatMoves(enumerationGame: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     // The player and action definitions come from the SAME game instance the
     // args are enumerated against: their closures are bound to it.
     const player = enumerationGame.getPlayer(seat);
@@ -1272,6 +1296,27 @@ export class MCTSBot<G extends Game = Game> {
     if (followUp && followUpDef) add(followUpDef, followUp);
 
     return moves;
+  }
+
+  /**
+   * Whether the world loaded into `searchGame` takes `move` from `seat` now,
+   * with the gates {@link listSeatMoves} applies, without listing the world's
+   * other moves (#1391). Only for the root, where no simultaneous baseline is held.
+   */
+  private worldAllows(flowState: FlowState, seat: number, move: BotMove): boolean {
+    const game = this.searchGame!;
+    const action = game.getAction(move.action);
+    const player = game.getPlayer(seat);
+    const offered = availableActionsForSeat(flowState, seat).includes(move.action)
+      || followUpForSeat(flowState, seat)?.action === move.action;
+    if (!action || !player || !offered || game.getActionRefusalReason(action, player)) return false;
+    try {
+      return acceptsSubmission(game, move.action, seat, this.rebindArgs(move.args));
+    } catch (error) {
+      // A gate that needs what this world was never told rules the move out, as enumeration does (#19).
+      if (error instanceof NotSimulableError) return false;
+      throw error;
+    }
   }
 
   /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */

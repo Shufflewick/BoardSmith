@@ -444,6 +444,12 @@ export interface UseActionControllerReturn {
    */
   pendingOnServer: Readonly<Ref<boolean>>;
   /**
+   * True while a pick step of the current action (an onSelect or repeating
+   * pick) is on its way to the server and its reply has not landed. The server
+   * may already hold the action then, so `cancel()` tells the server too.
+   */
+  stepOutstanding: Readonly<Ref<boolean>>;
+  /**
    * The follow-up the server holds for this seat (the `heldFollowUp` option),
    * or `undefined`. While it is held the seat keeps its turn, so a UI that lets
    * the player cancel it must offer a way to start it again: `resumeFollowUp`.
@@ -520,8 +526,10 @@ export interface UseActionControllerReturn {
   fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
   skip: (selectionName: string) => void;
-  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value */
-  clear: (selectionName: string) => void;
+  /** Clear a selection's value and the value of every selection after it, since those were answered against the old value. False, with lastError set, when refused because the name is not one of the action's picks (a follow-up's server-bound value, say), because a pick step still awaits the server, or because the server holds an answer to it or a later pick (a pick the held follow-up answered, or any step of a repeating pick, included). */
+  clear: (selectionName: string) => boolean;
+  /** Whether clear() would take this value back now, by the same rules it refuses by. Draw a clear control only where this is true, as the action panel does. */
+  canClear: (selectionName: string) => boolean;
   /** Cancel the current action */
   cancel: () => void;
 

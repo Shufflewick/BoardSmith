@@ -36,7 +36,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { answerMark, choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 
@@ -424,19 +424,23 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // staying a deliberate press.
   //
   // Except an action the server already holds (a follow-up, a repeating pick
-  // after its first step, an onSelect pick): cancelling it sends cancel_action
-  // to the LIVE game and throws the chain away for good, so it stays open, as
-  // the availableActions teardown above spares it. The controller still refuses
+  // after its first step, an onSelect pick), or may hold because a step is still
+  // out (#1388): cancelling it sends cancel_action to the LIVE game and throws
+  // the chain away for good, so it stays open, as the availableActions teardown
+  // above spares a held one. A step refused while history is on screen leaves
+  // the action unheld, and it is cancelled then. The controller still refuses
   // every commit to it while history is on screen.
   watch(() => isViewingHistory.value, (browsing) => {
-    if (!browsing) {
-      scheduleAutoStart(/* skipNoSelections */ true);
-      return;
-    }
-    if (!currentAction.value || controller.pendingOnServer?.value) return;
-    controller.cancel();
-    board.clear();
+    if (!browsing) scheduleAutoStart(/* skipNoSelections */ true);
   });
+  watch(
+    () => isViewingHistory.value && currentAction.value !== null && !controller.pendingOnServer.value && !controller.stepOutstanding.value,
+    (unheldInHistory) => {
+      if (!unheldInHistory) return;
+      controller.cancel();
+      board.clear();
+    },
+  );
 
   // Retry auto-start when an execution completes (next action may auto-start).
   watch(isExecuting, (executing, wasExecuting) => {
@@ -575,6 +579,31 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     }
   }, { immediate: true });
 
+  // The board marks the last standing choice answer, however it was given: a panel or board click, a custom UI's
+  // fill(), auto-fill, a prefill, or a clear() taking later answers back (#1371, #1377, #1380).
+  const answeredMark = computed(() => {
+    const args = currentArgs.value;
+    const marks = (currentActionMeta.value?.selections ?? [])
+      .filter(s => s.type === 'choice' && s.name in args)
+      .map(s => answerMark(args[s.name], controller.getChoices(s) as ChoiceWithRefs[]))
+      .filter(ref => ref !== undefined);
+    return marks.at(-1) ?? null;
+  });
+  const answeredCount = () => Object.keys(currentArgs.value).length;
+  // A clear() re-marks even when the mark stands, dropping what the board showed for the answers taken back.
+  const remarks = (wasMark: ElementRef | null, wasAnswered: number) => answeredMark.value !== wasMark || answeredCount() < wasAnswered;
+
+  // History hides a held action with the board's mark, a choice's or a custom board's own. On return the board shows
+  // what it would have shown had history never opened: that mark, unless the answers given meanwhile re-mark (#1383).
+  let hidden: { start: number; shown: ElementRef | null; mark: ElementRef | null; answered: number } | null = null;
+  function hideMark(start: number): void {
+    hidden = currentAction.value ? { start, shown: board.selectedElement, mark: answeredMark.value, answered: answeredCount() } : null;
+  }
+  function showHiddenMark(start: number): void {
+    if (hidden?.start === start) board.selectElement(remarks(hidden.mark, hidden.answered) ? answeredMark.value : hidden.shown);
+    hidden = null;
+  }
+
   // Mirror the controller's action into the board substrate + expose the choice
   // callback so custom UIs can trigger non-element choices (e.g. suit selection).
   //
@@ -584,7 +613,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // and never runs, so the board stays cleared by createActionMutators().startAction, and
   // the external-cancel watcher below reads that empty board as the player
   // cancelling.
-  watch([shownAction, controller.actionStartTick], ([action]) => {
+  watch([shownAction, controller.actionStartTick], ([action, start]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
       const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;
@@ -601,7 +630,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
             `Fill selections in order, or trigger the choice once '${selectionName}' is the active selection.`,
         );
       });
+      showHiddenMark(start);
     } else {
+      hideMark(start);
       board.clear();
       feedStartCandidates();
     }
@@ -618,6 +649,11 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         controller.cancel();
       }
     });
+  });
+
+  // Not while history is on screen, where the board shows the past: the return marks (#1381, #1383).
+  watch(() => [answeredMark.value, answeredCount()] as const, (_, [wasMark, wasAnswered]) => {
+    if (!isViewingHistory.value && remarks(wasMark, wasAnswered)) board.selectElement(answeredMark.value);
   });
 
   // Board element clicked: dispatch selection, or auto-start an action whose

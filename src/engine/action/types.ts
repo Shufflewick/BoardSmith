@@ -820,7 +820,8 @@ export interface FollowUpAction {
   args?: Record<string, unknown>;
   /**
    * Display strings for args shown in the action panel.
-   * Use this to provide user-friendly names for ID-based args.
+   * Use this to provide user-friendly names for ID-based args. An element pick
+   * pre-filled by id needs none: it is labelled as that pick's choices are.
    * @example
    * ```typescript
    * followUp: {

@@ -25,6 +25,7 @@ export function makeController(opts: {
   const actionSnapshot = ref(null);
   const pendingFollowUp = ref(false);
   const pendingOnServer = ref(false);
+  const stepOutstanding = ref(false);
   const actionStartTick = ref(0);
   const heldFollowUp = computed(() => undefined);
 
@@ -51,6 +52,7 @@ export function makeController(opts: {
     actionSnapshot,
     pendingFollowUp,
     pendingOnServer,
+    stepOutstanding,
     actionStartTick,
     heldFollowUp,
     currentChoices,
