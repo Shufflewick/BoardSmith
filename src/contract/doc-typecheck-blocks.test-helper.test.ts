@@ -5,11 +5,7 @@
  * imports is a file an author copies, so it must carry a marker (#1050).
  */
 import { describe, expect, it } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { gameBlockFiles, parseMarkedBlocks, unmarkedFileBlocks } from './doc-typecheck-blocks.test-helper.js';
-import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 const block = (marker: string, code = 'export {};\n') => `${marker}\n\`\`\`typescript\n${code}\`\`\`\n`;
 
@@ -82,12 +78,9 @@ describe('every doc block that shows its imports is compiled (#1050)', () => {
   });
 
   it('finds none in docs/*.md and docs/api/*.md', () => {
-    const unmarked = ['docs', 'docs/api'].flatMap((dir) =>
-      readdirSync(join(REPO_ROOT, dir))
-        .filter((name) => name.endsWith('.md'))
-        .flatMap((name) =>
-          unmarkedFileBlocks(readFileSync(join(REPO_ROOT, dir, name), 'utf8')).map((line) => `${dir}/${name}:${line}`),
-        ),
+    const docs = import.meta.glob<string>(['/docs/*.md', '/docs/api/*.md'], { eager: true, import: 'default' });
+    const unmarked = Object.entries(docs).flatMap(([path, text]) =>
+      unmarkedFileBlocks(text).map((line) => `${path.slice(1)}:${line}`),
     );
     expect(
       unmarked,

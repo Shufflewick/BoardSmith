@@ -1488,7 +1488,7 @@ export class MultiplayerHost {
     // come back within the reconnect grace) is not driven by anyone:
     // `playerIsBot` in the start op was computed pre-await from the same stale
     // `humanSeats`, so the game treats it as human. bot-cover it now so
-    // `runBotTurns()` (next) has a driver and the flow loop cannot stall on a
+    // `runBotTurns()` (after the reinit below) has a driver and the flow loop cannot stall on a
     // vanished human. A seat still within its grace is left alone: its player
     // is reloading (#412). The seat's `clientId` reservation is untouched —
     // this is a loop-driver-only cover; `hello`'s reconnect branch removes it
@@ -1497,11 +1497,7 @@ export class MultiplayerHost {
       if (!this.heldByHuman(seat) && this.followerClientId === null) this.addBotSeat(seat);
     }
 
-    // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
-    // drive any bot turns before handing control to the humans, then send state.
     this.announceRoster();
-    await session.host.runBotTurns();
-
     this.broadcastLobby();
     // WR-02: reinit every CURRENTLY seated + connected client, not just the
     // pre-await `humanSeats` snapshot. A `join` (handleJoin has no `starting`
@@ -1521,6 +1517,8 @@ export class MultiplayerHost {
       if (clientId === this.followerClientId) this.reinitFollower();
       else if (clientId) this.reinitSeat(clientId, seat);
     }
+    // After the reinit, so a long opening bot run reaches the seated pages as ordinary pushes (#1384).
+    await session.host.runBotTurns();
   }
 
   /**

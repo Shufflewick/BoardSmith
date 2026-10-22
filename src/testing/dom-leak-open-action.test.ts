@@ -54,20 +54,26 @@ describe('assertNoHiddenInfoLeak with an action open (#405)', () => {
     await expect(assertNoHiddenInfoLeak(makeGame(), 2, { component: TargetBoard })).resolves.toBeUndefined();
   });
 
-  it('catches the same label before any action opens, where the board offers what peek starts with (#1192)', async () => {
+  it('catches the same label before any action opens, where the board offers what guess starts with (#1192)', async () => {
     await expect(assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard }))
       .rejects.toThrow(/Hidden-info leak: "King" \(attribute "rank"\)/);
   });
 
-  it("catches a target labelled with the face it hides, once the action is open", async () => {
+  it("catches a target labelled with a face the seat cannot see, once the action is open", async () => {
+    await expect(
+      assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard, startAction: { name: 'guess' } }),
+    ).rejects.toThrow(/Hidden-info leak: "King" \(attribute "rank"\)/);
+  });
+
+  it('passes a blind pick whose display would name the hidden face, which the engine labels instead (#1293)', async () => {
     await expect(
       assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard, startAction: { name: 'peek' } }),
-    ).rejects.toThrow(/Hidden-info leak: "King" \(attribute "rank"\)/);
+    ).resolves.toBeUndefined();
   });
 
   it('passes the same open action on a board that does not name its targets by their faces', async () => {
     await expect(
-      assertNoHiddenInfoLeak(makeGame(), 1, { component: PositionalTargetBoard, startAction: { name: 'peek' } }),
+      assertNoHiddenInfoLeak(makeGame(), 1, { component: PositionalTargetBoard, startAction: { name: 'guess' } }),
     ).resolves.toBeUndefined();
   });
 

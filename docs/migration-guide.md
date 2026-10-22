@@ -1,5 +1,17 @@
 # Migration Guide
 
+## A callback handed a hidden card writes no text the player reads (#1293)
+
+A selection's `display`, `disabled` reason, `validate` message and `prompt`
+function, the action's `.validate()` message and an `unavailable` sentence are
+now replaced by the engine's own text when the callback was handed a card the
+acting player cannot see: the value it judges, an earlier pick in `args`, or a
+candidate `display` receives (a `chooseFrom` `display` or label only for a
+choice that is a hidden card). A hidden candidate is always labelled "Card #1"
+and so on, even with a `display`. The rule's outcome is unchanged and your text
+goes to the dev log. `actions-and-flow.md` § "Text a player reads never names a
+card they cannot see" lists what each one becomes.
+
 ## `createColorOption` takes no arguments (#1196)
 
 `createColorOption(label)` is now `createColorOption()`, labelled "Color".

@@ -37,6 +37,7 @@ import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneEleme
 import { numberRuleErrors } from './number-rules.js';
 import { formatRepeatCandidates } from '../element/pick-candidates.js';
 import { namesNothing, seatIdOf } from '../element/seat-placeholders.js';
+import { hidesFrom, NEUTRAL_DISABLED, seatText } from './seat-text.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
 import { textRuleErrors } from './text-rules.js';
 import { actingFor, changing } from '../element/state-version.js';
@@ -283,16 +284,18 @@ export function evaluateCondition(
  * @param result - Whatever the callback returned
  * @param what - Human-readable identification of the callback, for the message
  * @param genericFailure - Message to use for a bare `false`
+ * @param handedHidden - The callback was handed a card the player cannot see, so its message is not shown (#1293)
  * @returns The error string, or `null` when the value passes
  */
 function interpretValidateResult(
   result: unknown,
   what: string,
   genericFailure: string,
+  handedHidden: boolean,
 ): string | null {
   if (result === true) return null;
   if (result === false) return genericFailure;
-  if (typeof result === 'string') return result;
+  if (typeof result === 'string') return seatText(result, genericFailure, handedHidden, what);
   return (
     `${what} returned ${describeValidateReturn(result)}, which is not a valid result. ` +
     `Return true to allow, false to reject, or a string to reject with that message ` +
@@ -697,8 +700,15 @@ export class ActionExecutor {
         : {};
     const { disabled } = rule;
     const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
+    const argsHidden = disabled !== undefined && hidesFrom(player.seat, args);
     return candidates.map((candidate) => {
-      const gameDisabled = disabled ? disabled(candidate.value, context, prepared) : false;
+      const reason = disabled ? disabled(candidate.value, context, prepared) : false;
+      const gameDisabled = reason === false ? false : seatText(
+        reason,
+        NEUTRAL_DISABLED,
+        argsHidden || hidesFrom(player.seat, candidate.value),
+        `disabled for selection '${selection.name}'` + (actionName ? ` of action '${actionName}'` : ''),
+      );
       // OR-in gate reason: only when no game-defined reason already applies.
       if (tutorialStep && gameDisabled === false) {
         const gateReason = getGateReasonForValue(tutorialStep, actionName!, candidate.value, selection.name);
@@ -1064,6 +1074,7 @@ export class ActionExecutor {
         `validate for selection '${selection.name}'` +
           (actionName ? ` of action '${actionName}'` : ''),
         `Invalid ${selection.name}`,
+        hidesFrom(player.seat, [value, args]),
       );
       if (error) errors.push(error);
     }
@@ -1175,7 +1186,9 @@ export class ActionExecutor {
       ? seatIdOf(value, context.player.seat)
       : namesNothing(value) ? undefined : value;
     const message: unknown = selection.unavailable!(shown, context);
-    if (typeof message === 'string' && message.trim() !== '') return message;
+    if (typeof message === 'string' && message.trim() !== '') {
+      return seatText(message, NO_LONGER_AVAILABLE, hidesFrom(context.player.seat, context.args), `unavailable for selection '${selection.name}'`);
+    }
     const returned = typeof message === 'string' ? 'an empty string' : describeValidateReturn(message);
     throw new Error(
       `unavailable for selection '${selection.name}'` +
@@ -1208,6 +1221,7 @@ export class ActionExecutor {
       action.validate(context.args, context),
       `validate for action '${action.name}'`,
       `Action '${action.name}' is not allowed with these choices`,
+      hidesFrom(context.player.seat, context.args),
     );
   }
 
@@ -1977,6 +1991,7 @@ export class ActionExecutor {
       validate(pick, context.args, context),
       `validate for selection '${selection.name}' of action '${action.name}'`,
       `Invalid ${selection.name}`,
+      hidesFrom(context.player.seat, [pick, context.args]),
     );
   }
 

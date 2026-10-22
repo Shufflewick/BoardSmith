@@ -347,6 +347,25 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(false);
     });
 
+    it('refuses to clear an arg that is not one of the action\'s picks, and leaves it (#1359, #1366)', async () => {
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => { });
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+      });
+
+      await controller.start('playCard', { args: { boundByServer: 'x' } });
+      // True would tell a caller to clear the board, which cancels the action (#1366).
+      expect(controller.clear('boundByServer')).toBe(false);
+
+      expect(controller.currentArgs.value.boundByServer).toBe('x');
+      expect(controller.lastError.value).toBe('This value was set by the game, not picked by you, so it cannot be cleared.');
+      warnSpy.mockRestore();
+    });
+
     it('should cancel an action', async () => {
       const controller = useActionController({
         sendAction,

@@ -62,7 +62,16 @@ function baseRule(selector: string): string {
 function mountHandoffAfterChoice() {
   const controller = stubActionController({
     currentAction: ref('placePack'),
-    actionSnapshot: ref({ actionName: 'placePack', metadata: { prompt: 'Buy and place a pack' } }),
+    actionSnapshot: ref({
+      actionName: 'placePack',
+      metadata: {
+        prompt: 'Buy and place a pack',
+        selections: [
+          { name: 'unit', type: 'choice', prompt: 'Which pack?' },
+          { name: 'space', type: 'element', prompt: 'Choose where the middle of the front row goes' },
+        ],
+      },
+    }),
     currentArgs: ref({ unit: 'Scuttlers' }),
     currentPick: ref({ name: 'space', type: 'element', prompt: 'Choose where the middle of the front row goes' }),
     validElements: ref(

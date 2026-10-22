@@ -17,6 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -81,7 +82,7 @@ describe('installClaudeCommand from an installed copy (#723)', () => {
     expect(result.stderr).toBe('');
     expect(result.status).toBe(0);
     expect(readFileSync(staleSkill, 'utf8')).toBe(
-      readFileSync(join(REPO_ROOT, 'src', 'cli', 'slash-command', 'bs', 'create-game.md'), 'utf8'),
+      skillMarkdown('bs/create-game.md'),
     );
   });
 

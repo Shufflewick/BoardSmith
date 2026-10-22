@@ -294,15 +294,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   // The actionStartTick of the action whose pick step is awaiting the server, if any.
-  let stepSeq: number | null = null;
-  const stepOutstanding = (): boolean => stepSeq !== null && !actionMovedOn(stepSeq);
+  // A ref, so the panel's clear button (canClear) follows it.
+  const stepSeq = ref<number | null>(null);
+  const stepOutstanding = (): boolean => stepSeq.value !== null && !actionMovedOn(stepSeq.value);
   const STEP_OUTSTANDING = 'Still waiting for the server to answer your last pick.';
+  const ANSWER_HELD = 'The server already holds this answer, so it cannot be cleared now. Cancel the action to start it again.';
+  const NOT_A_PICK = 'This value was set by the game, not picked by you, so it cannot be cleared.';
   // Not set as lastError: the player moved on themselves, so there is nothing to report.
   const MOVED_ON: PickValidationResult = { valid: false, error: 'The action changed before the server answered this pick.' };
 
   /** Publish the action a pick step completed, with the result its response carries. */
   function resolveStep(actionName: string, player: number, result: PickStepResponse): void {
     resolveAction(actionName, player, { success: true, data: result.data, message: result.message, followUp: result.followUp });
+  }
+
+  /** A reply to a step of an action since cancelled or replaced: only a completion is published. */
+  function lateStepReply(actionName: string, player: number, result: PickStepResponse): null {
+    if (result.success && result.actionComplete) resolveStep(actionName, player, result);
+    return null;
   }
 
   /**
@@ -320,18 +329,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const seq = actionStartTick.value;
     const actionName = currentAction.value as string;
     const player = playerSeat?.value ?? 0;
-    stepSeq = seq;
+    stepSeq.value = seq;
     try {
       const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
-      if (!actionMovedOn(seq)) return result;
-      if (result.success && result.actionComplete) resolveStep(actionName, player, result);
-      return null;
+      if (actionMovedOn(seq)) return lateStepReply(actionName, player, result);
+      // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
+      pendingOnServer.value ||= result.success;
+      return result;
     } catch (err) {
       // A failed step of an abandoned action is nothing the player needs told.
       if (actionMovedOn(seq)) return null;
       throw err;
     } finally {
-      if (stepSeq === seq) stepSeq = null;
+      if (stepSeq.value === seq) stepSeq.value = null;
     }
   }
 
@@ -389,7 +399,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // Repeating selections state
   const repeatingState = ref<RepeatingState | null>(null);
 
-  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing)
+  // Tracks whether the current action has server-side pending state (via pickStep/onSelect routing).
+  // Once a step is accepted every later pick must continue it: sending the whole action would repeat its picks (#325).
   const pendingOnServer = ref(false);
 
   // Pit of Success: Client-owned action state snapshot
@@ -496,8 +507,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     repeatingState.value = null;
     actionSnapshot.value = null;
     pendingOnServer.value = false;
-    // A fetch still in flight for the torn-down action no longer ends the
-    // loading state (#663), so it ends here.
+    // The torn-down action's fetches are no longer in use (#663), so loading ends here.
     isLoadingChoices.value = false;
   }
 
@@ -542,6 +552,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   if (isViewingHistory) {
     watch(isViewingHistory, (browsing) => {
       if (browsing) return;
+      settlePickOnReturn();
       if (heldFollowUp) {
         autoStartHeldFollowUp();
         return;
@@ -550,6 +561,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       followUpFromHistory = undefined;
       if (kept && !currentAction.value && !pendingFollowUp.value && !isExecuting.value) queueFollowUp(kept);
     });
+  }
+
+  /** Answer the pick a prefill or auto-fill was held back from while history was on screen, as the pick watcher and handleOnSelectFill would have. */
+  function settlePickOnReturn(): void {
+    const sel = currentPick.value;
+    const snapshot = actionSnapshot.value;
+    // A pick whose choices are still loading is settled by the pick watcher once they land.
+    if (!sel || !snapshot?.pickSnapshots.has(sel.name) || snapshot.choiceFetches.has(sel.name)) return;
+    if (stepOutstanding() || isExecuting.value || consumePrefill(sel) || !tryAutoFillSelection(sel)) return;
+    // A held action takes the auto-filled answer as a step; any other only records it, as the pick watcher does.
+    if (pendingOnServer.value) void handleOnSelectFill(sel, currentArgs.value[sel.name]);
   }
 
   /**
@@ -1034,7 +1056,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
   function autoFillHeldBack(selection: EnrichedPickMetadata): boolean {
-    if (!getAutoFill() || isExecuting.value) return true;
+    // An auto-fill of a held action sends a step to the live game, so it waits for the return from history (#1385).
+    if (!getAutoFill() || isExecuting.value || isViewingHistoryValue()) return true;
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
 
@@ -1068,8 +1091,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const seq = actionStartTick.value;
-    await fetchChoicesForPick(selection.name);
-    if (actionMovedOn(seq)) return;
+    const kept = await fetchChoicesForPick(selection.name);
+    if (!kept || actionMovedOn(seq)) return;
 
     if (tryAutoFillSelection(selection)) {
       // Recursively handle next selection
@@ -1088,14 +1111,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * that knows a fetch is outstanding, so callers never have to mark a pick as
    * fetched themselves. Awaiting this function is always enough to have the
    * choices in hand (#226: the prefill watcher used to skip an in-flight fetch
-   * and then judged the player's prefill against an empty choice list).
+   * and then judged the player's prefill against an empty choice list), unless
+   * it resolves false: the fetch was dropped because the action moved on or an
+   * earlier answer it was asked against was cleared or changed (#1358).
    */
-  function fetchChoicesForPick(selectionName: string): Promise<void> {
+  function fetchChoicesForPick(selectionName: string): Promise<boolean> {
     const fetches = actionSnapshot.value?.choiceFetches;
+    const askedAgainst = answersBefore(selectionName);
     const inFlight = fetches?.get(selectionName);
-    if (inFlight) return inFlight;
+    if (inFlight && sameAnswers(inFlight.askedAgainst, askedAgainst)) return inFlight.request;
 
-    const request = requestChoicesForPick(selectionName);
+    const request = requestChoicesForPick(selectionName, askedAgainst);
     if (!fetches) return request;
 
     // The entry is cleared as soon as the request settles, so a pick whose
@@ -1103,11 +1129,35 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Cleanup is registered on the side rather than chained onto what callers
     // await, so joining a fetch costs a caller no extra microtask.
     const forget = () => {
-      if (fetches.get(selectionName) === request) fetches.delete(selectionName);
+      if (fetches.get(selectionName)?.request === request) fetches.delete(selectionName);
+      // Loading ends once no fetch of the current action still in use is out (#663, #1358, #1367).
+      if (!fetchInUse()) isLoadingChoices.value = false;
     };
-    fetches.set(selectionName, request);
+    fetches.set(selectionName, { request, askedAgainst });
     void request.then(forget, forget);
     return request;
+  }
+
+  /** The answers to the picks before `selectionName`, which a fetch of its choices is asked against. */
+  function answersBefore(selectionName: string): (CollectedPick | undefined)[] {
+    const snapshot = actionSnapshot.value;
+    const names = snapshot?.metadata.selections.map(s => s.name) ?? [];
+    const index = names.indexOf(selectionName);
+    if (!snapshot || index === -1) return [];
+    return names.slice(0, index).map(name => snapshot.collectedPicks.get(name));
+  }
+
+  /** Each answer is stored as a new object, so one cleared or changed since is a different one. */
+  function sameAnswers(a: (CollectedPick | undefined)[], b: (CollectedPick | undefined)[]): boolean {
+    return a.length === b.length && a.every((pick, i) => pick === b[i]);
+  }
+
+  /** Whether a choice fetch of the current action is out and not dropped for a changed earlier answer. */
+  function fetchInUse(): boolean {
+    for (const [name, out] of actionSnapshot.value?.choiceFetches ?? []) {
+      if (sameAnswers(out.askedAgainst, answersBefore(name))) return true;
+    }
+    return false;
   }
 
   /** A refused re-ask leaves no answer to an earlier question in place of its own (#1354). */
@@ -1115,13 +1165,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (actionSnapshot.value?.pickSnapshots.delete(selectionName)) snapshotVersion.value++;
   }
 
-  async function requestChoicesForPick(selectionName: string): Promise<void> {
+  async function requestChoicesForPick(selectionName: string, askedAgainst: (CollectedPick | undefined)[]): Promise<boolean> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
-      return;
+      return true;
     }
     if (!currentAction.value) {
-      return;
+      return true;
     }
 
     // Get pick metadata - check snapshot first (for followUp actions), then live metadata
@@ -1135,7 +1185,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selection = meta?.selections.find(s => s.name === selectionName);
     if (!selection) {
       console.warn(`[ActionController] fetchChoicesForPick: pick "${selectionName}" not found in metadata`);
-      return;
+      return true;
     }
 
     // A number or text pick is asked too: a world's offer leaves out a later pick's function prompt (#1350).
@@ -1144,6 +1194,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // If the action is gone or replaced after the round trip, discard the
     // result, success or failure, rather than apply it to the new action (R-06, #663).
     const seq = actionStartTick.value;
+    // Nor apply it once an earlier pick it was asked against is cleared or changed (#1358).
+    const superseded = () => actionMovedOn(seq) || !sameAnswers(askedAgainst, answersBefore(selectionName));
 
     isLoadingChoices.value = true;
     const fetchStartTime = Date.now();
@@ -1157,7 +1209,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         buildServerArgs()
       );
 
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return false;
 
       const fetchDuration = Date.now() - fetchStartTime;
 
@@ -1188,7 +1240,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
-      if (actionMovedOn(seq)) return;
+      if (superseded()) return false;
       const fetchDuration = Date.now() - fetchStartTime;
       console.error(
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
@@ -1196,10 +1248,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       forgetPickSnapshot(selectionName);
       setError(describeUndescribablePick(selection));
-    } finally {
-      // Only a request of the current action ends its loading state (#663).
-      if (!actionMovedOn(seq)) isLoadingChoices.value = false;
     }
+    return true;
   }
 
 
@@ -1590,16 +1640,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // one choice that is really two picks for the player (#226). A fetch
     // started by start()/fill() is normally still in flight when this watcher
     // first runs, so join it; otherwise start one for a pick not fetched yet.
-    const inFlight = actionSnapshot.value?.choiceFetches.get(sel.name);
-    if (inFlight) {
-      await inFlight;
-    } else if (!actionSnapshot.value?.pickSnapshots.has(sel.name)) {
-      await fetchChoicesForPick(sel.name);
+    // A fetch dropped because an earlier answer changed is asked again (#1358).
+    while (actionSnapshot.value?.choiceFetches.has(sel.name) || !actionSnapshot.value?.pickSnapshots.has(sel.name)) {
+      if (await fetchChoicesForPick(sel.name) || actionMovedOn(seq) || currentPick.value?.name !== sel.name) break;
     }
 
     // The action can be cancelled, replaced or advanced while choices load.
     // The watcher refires for whatever pick is current now, so drop this run.
     if (isExecuting.value || actionMovedOn(seq) || currentPick.value?.name !== sel.name) return;
+
+    // A prefill or auto-fill can answer the live game, so it waits for the return from history (#1385).
+    if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
     if (consumePrefill(sel)) return;
@@ -2400,11 +2451,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
-      // The server now holds this action pending, with this pick's onEach
-      // already run. Every later pick must continue it: sending the whole
-      // action instead would make the repeat's picks a second time (#325).
-      pendingOnServer.value = true;
-
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
         // Capture the action name before it is nulled below, then publish the
@@ -2478,9 +2524,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
-      // Mark that we now have server-side pending state
-      pendingOnServer.value = true;
-
       if (result.actionComplete) {
         // Capture the action name BEFORE clearing currentAction — it is nulled below
         // and would be unavailable for the boardsmith:action-resolved dispatch.
@@ -2551,13 +2594,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Fetch the pick after `afterName`, resolving that pick, or false when the
-   * action moved on meanwhile. Null, without waiting, when there is no next pick.
+   * action moved on or an earlier answer changed meanwhile. Null, without waiting, when there is no next pick.
    */
   function fetchNextPick(afterName: string): Promise<EnrichedPickMetadata | false> | null {
     const nextSel = getNextSelection(afterName);
     if (!nextSel) return null;
     const seq = actionStartTick.value;
-    return fetchChoicesForPick(nextSel.name).then(() => (!actionMovedOn(seq) && nextSel));
+    return fetchChoicesForPick(nextSel.name).then(kept => (kept && !actionMovedOn(seq) && nextSel));
   }
 
   /** Get the next selection after the given one */
@@ -2627,30 +2670,56 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  /** A later pick was fetched against the cleared answer, so it is asked again (#1354). */
-  function dropLaterPickSnapshots(run: ActionStateSnapshot, selectionName: string): void {
-    const selections = run.metadata.selections;
-    const index = selections.findIndex(s => s.name === selectionName);
-    if (index === -1) return;
-    for (const later of selections.slice(index + 1)) forgetPickSnapshot(later.name);
+  /** Forget one pick's answer and any draft of it. */
+  function forgetAnswer(name: string): void {
+    delete currentArgs.value[name];
+    actionSnapshot.value?.collectedPicks.delete(name);
+    if (multiSelectDraft.value?.selectionName === name) multiSelectDraft.value = null;
+    if (pickDraft.value?.identity === draftIdentityFor(name)) pickDraft.value = null;
+    // Only reached when the server holds none of its rounds, so it starts again from the first.
+    if (repeatingState.value?.selectionName === name) repeatingState.value = null;
   }
 
-  function clear(selectionName: string): void {
-    delete currentArgs.value[selectionName];
+  /** Whether the server holds an answer to any of these picks: it then takes no pick at or before it again (#1365, #1371). */
+  function serverHoldsAnswer(picks: EnrichedPickMetadata[]): boolean {
+    const repeating = repeatingState.value;
+    // Once the action is pending every step carries all answers so far, so the server holds each one.
+    return pendingOnServer.value && picks.some(s =>
+      s.name in currentArgs.value || (s.name === repeating?.selectionName && repeating.accumulated.length > 0));
+  }
 
-    // Remove from snapshot
-    if (actionSnapshot.value) {
-      actionSnapshot.value.collectedPicks.delete(selectionName);
-      dropLaterPickSnapshots(actionSnapshot.value, selectionName);
-    }
+  /** Why this value cannot be cleared, or undefined when it can; the panel's clear button and clear() both ask it (#1373). */
+  function clearRefusal(selectionName: string): string | undefined {
+    // The step's reply would write its pick back, answered against the value cleared here (#1364).
+    if (stepOutstanding()) return STEP_OUTSTANDING;
+    const selections = currentActionMeta.value?.selections ?? [];
+    const index = selections.findIndex(s => s.name === selectionName);
+    // Not a pick (a follow-up's server-bound arg, say): true would have the caller clear the board, cancelling the action (#1366).
+    if (index === -1) return NOT_A_PICK;
+    // A pick the held follow-up answered is held too, so the server would not use a new answer (#1373).
+    if (serverHoldsAnswer(selections.slice(index))) return ANSWER_HELD;
+    return undefined;
+  }
 
-    // Drop an in-progress draft for this selection, if any
-    if (multiSelectDraft.value?.selectionName === selectionName) {
-      multiSelectDraft.value = null;
+  function canClear(selectionName: string): boolean {
+    return clearRefusal(selectionName) === undefined;
+  }
+
+  function clear(selectionName: string): boolean {
+    const refusal = clearRefusal(selectionName);
+    if (refusal) {
+      setError(refusal);
+      return false;
     }
-    if (pickDraft.value?.identity === draftIdentityFor(selectionName)) {
-      pickDraft.value = null;
+    const selections = currentActionMeta.value!.selections;
+    const index = selections.findIndex(s => s.name === selectionName);
+    forgetAnswer(selectionName);
+    // Later picks were answered and fetched against the old value, so they are asked again (#1354, #1359).
+    for (const later of selections.slice(index + 1)) {
+      forgetAnswer(later.name);
+      forgetPickSnapshot(later.name);
     }
+    return true;
   }
 
   /**
@@ -2985,6 +3054,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
+    // True while a pick step of the current action is on its way to the server.
+    // The server may already hold the action, so cancelling it then tells the server too.
+    stepOutstanding: computed(stepOutstanding),
     heldFollowUp: heldFollowUpOffer,
     resumeFollowUp,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
@@ -2997,6 +3069,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     fill,
     skip,
     clear,
+    canClear,
     cancel,
 
     // The current editor's draft (shared source of truth for a typed value that

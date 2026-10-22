@@ -33,9 +33,15 @@ const grab = worldAction<PouchWorld>('grab').chooseFrom('card', {
   (card as Card).putInto((card as Card).game.first(Commons)!);
 });
 
+const peek = worldAction<PouchWorld>('peek').chooseElement('card', {
+  needs: () => ['commons'],
+  elements: ({ game }) => game.first(Pouch)!.all(Card),
+  display: (card) => `the ${card.name}`,
+}).execute(() => {});
+
 const world: WorldDefinition = {
   maxPlayers: 2,
-  actions: [filch, grab],
+  actions: [filch, grab, peek],
   view: () => ['commons'],
   genesis: (game: Game) => {
     const commons = game.create(Commons, 'commons');
@@ -91,6 +97,13 @@ describe("a world's pick candidates the seat cannot see (#715)", () => {
     await test.take(1, 'grab', { card: { id: second, className: 'Card' } });
     const after = await test.getPlayerView(1);
     expect(find(after.state as ElementJSON, 'commons')!.children!.map((c) => c.name)).toContain('KH');
+    await test.close();
+  });
+
+  it("labels them neutrally even when the game's display would name them (#1293)", async () => {
+    const test = await started();
+    const pick = await test.resolvePick(1, 'peek', 'card', {});
+    expect(pick.validElements?.map((e) => e.display)).toEqual(['Card #1', 'Card #2']);
     await test.close();
   });
 });

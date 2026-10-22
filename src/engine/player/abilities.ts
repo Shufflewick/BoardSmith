@@ -1,26 +1,20 @@
 /**
- * Ability System - Generic player ability/power-up management
+ * Player abilities (earned powers) as plain data.
  *
- * Provides a reusable system for games where players earn and use
- * special abilities. Common in dice games, roll-and-write games,
- * and games with unlockable powers.
+ * A Player holds its abilities as a plain `Ability<T>[]` field and these
+ * functions act on it, so the list survives every snapshot, undo and bot clone
+ * as ordinary data.
  *
  * @example
  * ```typescript
- * // Define ability types for your game
- * type MyAbilityType = 'reroll' | 'bonus' | 'skip';
+ * type GameAbility = 'reroll' | 'bonus';
  *
- * // Create ability manager for a player
- * const abilities = new AbilityManager<MyAbilityType>();
- *
- * // Add abilities when earned
- * abilities.add('reroll');
- * abilities.add('reroll'); // Player now has 2 reroll abilities
- *
- * // Check and use abilities
- * if (abilities.hasUnused('reroll')) {
- *   abilities.use('reroll');
+ * class MyPlayer extends Player {
+ *   abilities: Ability<GameAbility>[] = [];
  * }
+ *
+ * addAbility(player.abilities, 'reroll');
+ * if (hasUnusedAbility(player.abilities, 'reroll')) spendAbility(player.abilities, 'reroll');
  * ```
  */
 
@@ -35,183 +29,6 @@ export interface Ability<T extends string = string> {
   /** Optional metadata about how/when the ability was earned */
   earnedFrom?: string;
 }
-
-/**
- * Manages a collection of abilities for a player
- *
- * @typeParam T - The ability type string literal union for type safety
- *
- * @example
- * ```typescript
- * // Type-safe ability types
- * type GameAbility = 'reroll-2' | 'flip' | 'refresh' | 'adjust';
- *
- * class MyPlayer extends Player {
- *   abilities = new AbilityManager<GameAbility>();
- * }
- *
- * // Usage
- * player.abilities.add('reroll-2');
- * player.abilities.hasUnused('reroll-2'); // true
- * player.abilities.use('reroll-2');
- * player.abilities.hasUnused('reroll-2'); // false
- * ```
- */
-export class AbilityManager<T extends string = string> {
-  private abilities: Ability<T>[] = [];
-
-  /**
-   * Add a new ability
-   * @param type - The ability type
-   * @param earnedFrom - Optional description of how it was earned
-   */
-  add(type: T, earnedFrom?: string): void {
-    this.abilities.push({ type, used: false, earnedFrom });
-  }
-
-  /**
-   * Check if the player has any unused ability of the given type
-   */
-  hasUnused(type: T): boolean {
-    return this.abilities.some(a => a.type === type && !a.used);
-  }
-
-  /**
-   * Check if the player has any ability of the given type (used or unused)
-   */
-  has(type: T): boolean {
-    return this.abilities.some(a => a.type === type);
-  }
-
-  /**
-   * Count unused abilities of a given type
-   */
-  countUnused(type: T): number {
-    return this.abilities.filter(a => a.type === type && !a.used).length;
-  }
-
-  /**
-   * Count total abilities of a given type
-   */
-  count(type: T): number {
-    return this.abilities.filter(a => a.type === type).length;
-  }
-
-  /**
-   * Count all unused abilities
-   */
-  countAllUnused(): number {
-    return this.abilities.filter(a => !a.used).length;
-  }
-
-  /**
-   * Use an ability (marks one unused ability of the type as used)
-   * @returns true if an ability was used, false if none available
-   */
-  use(type: T): boolean {
-    const ability = this.abilities.find(a => a.type === type && !a.used);
-    if (ability) {
-      ability.used = true;
-      return true;
-    }
-    return false;
-  }
-
-  /**
-   * Get all abilities
-   */
-  getAll(): readonly Ability<T>[] {
-    return this.abilities;
-  }
-
-  /**
-   * Get all unused abilities
-   */
-  getUnused(): Ability<T>[] {
-    return this.abilities.filter(a => !a.used);
-  }
-
-  /**
-   * Get all used abilities
-   */
-  getUsed(): Ability<T>[] {
-    return this.abilities.filter(a => a.used);
-  }
-
-  /**
-   * Get unique ability types the player has (for display)
-   */
-  getTypes(): T[] {
-    return [...new Set(this.abilities.map(a => a.type))];
-  }
-
-  /**
-   * Get abilities grouped by type with counts
-   */
-  getGrouped(): Array<{ type: T; total: number; unused: number }> {
-    const grouped = new Map<T, { total: number; unused: number }>();
-
-    for (const ability of this.abilities) {
-      const current = grouped.get(ability.type) ?? { total: 0, unused: 0 };
-      current.total++;
-      if (!ability.used) {
-        current.unused++;
-      }
-      grouped.set(ability.type, current);
-    }
-
-    return Array.from(grouped.entries()).map(([type, counts]) => ({
-      type,
-      ...counts,
-    }));
-  }
-
-  /**
-   * Reset all abilities to unused state (for new game/round)
-   */
-  resetAll(): void {
-    for (const ability of this.abilities) {
-      ability.used = false;
-    }
-  }
-
-  /**
-   * Clear all abilities
-   */
-  clear(): void {
-    this.abilities = [];
-  }
-
-  /**
-   * Serialize for saving/transmission
-   */
-  toJSON(): Ability<T>[] {
-    return this.abilities.map(a => ({ ...a }));
-  }
-
-  /**
-   * Restore from serialized data
-   */
-  fromJSON(data: Ability<T>[]): void {
-    this.abilities = data.map(a => ({ ...a }));
-  }
-
-  /**
-   * Create a new AbilityManager from serialized data
-   */
-  static fromJSON<T extends string>(data: Ability<T>[]): AbilityManager<T> {
-    const manager = new AbilityManager<T>();
-    manager.fromJSON(data);
-    return manager;
-  }
-}
-
-// ============================================
-// Plain-data abilities (#779)
-// ============================================
-// A Player holds its abilities as a plain `Ability<T>[]` field and these
-// functions act on it, so the list survives every snapshot, undo and bot clone
-// as ordinary data. AbilityManager does not: the serializer restores it bare.
 
 /** Give the player a new, unused ability of `type`, noting `earnedFrom` when given. */
 export function addAbility<T extends string>(abilities: Ability<T>[], type: T, earnedFrom?: string): void {

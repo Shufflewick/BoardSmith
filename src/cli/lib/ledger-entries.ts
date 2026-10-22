@@ -55,13 +55,45 @@ export interface LedgerEntry {
 /**
  * Replaces every HTML comment with blanks of the same shape, so the template's illustrative
  * examples (which live inside `<!-- -->`) are never read as entries, and every line number still
- * points at the real line in the file.
+ * points at the real line in the file. The `>` markers that start a line inside one are kept, so a
+ * blockquote's line still reads as quoted (#1401).
  */
 export function blankComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+  return text.replace(/<!--[\s\S]*?-->/g, (comment) =>
+    comment.replace(/(\n(?: {0,3}>)*)|[^\n]/g, (_, lineStart?: string) => lineStart ?? ' '),
+  );
 }
 
 const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
+
+// Each space between two markers has one place to go, so a failed match tries each split once (#1401).
+const QUOTE_MARKERS = String.raw` {0,3}>(?:(?:\t {0,3}| {0,4})>)*[ \t]?`;
+/** The quote markers a line inside a blockquote opens with, if any. */
+export const QUOTES = `(?:${QUOTE_MARKERS})?`;
+/** A line holding nothing but whitespace and quote markers, which ends a paragraph (#1396, #1400). */
+export const BLANK_LINE = String.raw`${QUOTES}[ \t\r]*\n`;
+// A fence in a blockquote ends at its closing fence or where the quote ends (#1396).
+const QUOTED_FENCE = new RegExp(
+  String.raw`^${QUOTE_MARKERS} {0,3}(\`{3,}|~{3,})[^\n]*(?:\n {0,3}>[^\n]*)*?(?:\n${QUOTE_MARKERS} {0,3}\1[\`~]*[ \t]*$|(?=\n(?! {0,3}>))|(?![\s\S]))`,
+  'gm',
+);
+const ATX_HEADING = String.raw`${QUOTES} {0,3}#{1,6}(?![^ \t\r\n])`;
+// shortcut: an unquoted = or -- line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
+const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}(?:=+|-+)[ \t\r]*(?![^\n])`;
+const THEMATIC_BREAK = String.raw`${QUOTES} {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?(?![^\n])`;
+// Only a non-empty item, and an ordered one only from 1, can interrupt a paragraph (CommonMark 5.2).
+// shortcut: an item numbered 2 or more starts one only inside a list, so it does not end the span; #1402 tracks containers.
+const LIST_ITEM = String.raw`${QUOTES} {0,3}(?:[-+*]|0{0,8}1[.)])[ \t]+\S`;
+// shortcut: a > line ends the span only after an unquoted line, missing a nested quote's start and ending wrongly after a lazy line; #1402 tracks containers.
+const QUOTE_START = String.raw`(?<!^ {0,3}>[^\n]*\n) {0,3}>`;
+const BLOCK_START = String.raw`${BLANK_LINE}|${ATX_HEADING}|${SETEXT_UNDERLINE}|${THEMATIC_BREAK}|${LIST_ITEM}|${QUOTE_START}`;
+/**
+ * At the start of a Markdown line, read with the `m` flag: a paragraph ended before it, since the line
+ * starts a block or the line before it is a heading, which is one line. So neither a code span
+ * (#1393, #1396, #1397, #1401) nor a wrapped citation (#1398) runs onto it.
+ */
+export const PARAGRAPH_ENDED = String.raw`(?:${BLOCK_START}|(?<=^${ATX_HEADING}[^\n]*\n))`;
+const CODE_SPAN = new RegExp(String.raw`(?<!\`)(\`+)(?!\`)(?:(?!\n${PARAGRAPH_ENDED})[\s\S])+?(?<!\`)\1(?!\`)`, 'gm');
 
 /**
  * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a fenced
@@ -75,10 +107,12 @@ export function citableText(path: string, text: string): string {
   if (!path.endsWith('.md')) return text;
   return blankComments(text)
     .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
-    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
+    .replace(QUOTED_FENCE, blank)
+    .replace(CODE_SPAN, blank);
 }
 
-function lineOf(text: string, index: number): number {
+/** The 1-based line of `text` that `index` is on. */
+export function lineOf(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
   return line;

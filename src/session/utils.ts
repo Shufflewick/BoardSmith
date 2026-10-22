@@ -4,6 +4,7 @@
 
 import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
+import { formatElementCandidates, type AnnotatedCandidate } from '../engine/element/pick-candidates.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
@@ -183,6 +184,27 @@ export function buildSingleActionMetadata(
 }
 
 /**
+ * Labels for a follow-up's element picks the game pre-filled, each read off
+ * that pick's own choices (its display(), else notation or name, numbered among
+ * its siblings), so the panel never shows a raw id (#1378).
+ */
+function elementArgLabels(game: Game, player: Player, followUp: FollowUpAction): Record<string, string> {
+  const action = game.getAction(followUp.action);
+  if (!action || !followUp.args) return {};
+  const executor = game.getActionExecutor();
+  const labels: Record<string, string> = {};
+  executor.resolveArgs(action, followUp.args, player, undefined, (selection, pick, before) => {
+    if (selection.type !== 'element' && selection.type !== 'elements') return;
+    const candidates = executor.getChoices(selection, player, before) as AnnotatedCandidate[];
+    const shown = formatElementCandidates(candidates, selection, { game, player, args: before }, []);
+    const at = [pick].flat().map((element) => candidates.findIndex((candidate) => candidate.value === element));
+    if (at.length === 0 || at.includes(-1)) return;
+    labels[selection.name] = at.map((index) => shown[index]!.display).join(', ');
+  });
+  return labels;
+}
+
+/**
  * The follow-up the flow holds for `seat`, as that seat's client receives it:
  * with the metadata of the action it names, which is usually not in that
  * seat's available actions. `undefined` when the flow holds no follow-up, or
@@ -195,8 +217,10 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
   if (!owned) return undefined;
   const followUp: FollowUpAction = { action: owned.action };
   if (owned.args !== undefined) followUp.args = owned.args;
-  if (owned.display !== undefined) followUp.display = owned.display;
   const player = game.getPlayer(seat);
+  const display = { ...owned.display };
+  for (const [name, label] of Object.entries(player ? elementArgLabels(game, player, followUp) : {})) display[name] ??= label;
+  if (Object.keys(display).length > 0) followUp.display = display;
   // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
   const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;
   return { ...followUp, metadata };

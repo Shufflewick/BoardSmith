@@ -1,7 +1,7 @@
 {
-  "revision": 267,
-  "surfaceHash": "d615bc0c99f7b4b9",
-  "payloadHash": "7418fecc0604b2a0",
+  "revision": 270,
+  "surfaceHash": "1cd31abda6ec9808",
+  "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -2079,6 +2079,30 @@
       "payloadHash": "7418fecc0604b2a0",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world's offer (offersFor, offerPartitions) now runs the round and candidates of an action's first pick only (#1355). Since r262 it ran them through the first required pick, so a required pick after an optional one was read with that optional pick unbound, and a list or round built from it threw during the offer or sent the panel an empty list. Every later pick is now offered by its shape and asked on the re-ask (resolvePick) with the answers so far. The bundled panel (useWorldPlay) now re-asks any pick but the first even with nothing bound, as when the optional pick before it was skipped. Platform: re-vendor so such an action is offered and its later picks asked. Payload and stored format unchanged; no game needs a rebuild."
+    },
+    {
+      "revision": 268,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A game callback handed a card the acting seat cannot see no longer writes text that seat reads (#1293): a pick's display and choice labels, disabled reasons, selection and action validate messages, function prompts and unavailable sentences become the engine's neutral text (\"Card #1\", a generic reason or refusal, no prompt), with the game's text in the dev log; rule outcomes are unchanged. The world fixture now offers a neighbour the looker cannot see. Platform: re-vendor; worlds get it then, and a table game when it is rebuilt. Not an ABI break."
+    },
+    {
+      "revision": 269,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A follow-up offer now labels each chooseElement/chooseElements arg the game pre-filled with element ids and gave no display for, by that pick's own label rule (its display(), else the element's notation or name; a hidden element gets its neutral label), so the action panel's chip no longer shows the raw id (Checkers' multi-jump showed '1873686213') (#1378). A display the game passes still wins. Platform: re-vendor; a table game gets it when it is rebuilt. Not an ABI break."
+    },
+    {
+      "revision": 270,
+      "date": "2026-10-21",
+      "surfaceHash": "1cd31abda6ec9808",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Track, MonotonicTrack, UniqueTrack, CounterTrack and AbilityManager classes are gone from 'boardsmith' (#969); games use the plain-data track and ability functions from #779 (monotonicTrack/uniqueTrack/counterTrack, addToTrack, trackPoints, addAbility, spendAbility and the rest), which polyhedral-potions now does. No change to snapshots, views or ops. Platform: re-vendor; a polyhedral-potions build from before its #7 merge imports the removed classes and must be rebuilt."
     }
   ]
 }

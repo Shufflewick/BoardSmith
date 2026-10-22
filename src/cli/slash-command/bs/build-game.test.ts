@@ -12,15 +12,16 @@
  * `build-chunk.test.ts`, so a missing file fails one assertion rather than aborting collection.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ file relative to this test file's directory. */
 function read(relativePath: string): string {
-  return readFileSync(join(__dirname, relativePath), 'utf-8');
+  return skillMarkdown(`bs/${relativePath}`);
 }
 
 /** Collapse markdown line wrapping so a pinned phrase matches across a wrapped line. */
