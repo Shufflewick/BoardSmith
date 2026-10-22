@@ -16,6 +16,9 @@ import {
  * tree, one merge at a time. These pin the allocation and the refusals around it.
  */
 
+/** Each `unreadableShorthand` as written, for the tests that pin what it reads, not where. */
+const shorthandWritten = (path: string, text: string): string[] => unreadableShorthand(path, text).map((s) => s.written);
+
 const RULINGS = NUMBERED_LEDGER_SPECS.find((s) => s.file === 'RULINGS.md')!;
 const CONSTRAINTS_G = NUMBERED_LEDGER_SPECS.find((s) => s.file === 'CONSTRAINTS.md' && s.kind === 'G')!;
 
@@ -135,7 +138,7 @@ describe('quoted ids are never citations (#437)', () => {
   it('ends a code span at a blank line, and closes a wrapped span and a fenced block, in an LF or a CRLF file', () => {
     for (const eol of ['\n', '\r\n']) {
       const text = `a \`b${eol}${eol}See Decision${eol}.2 and Ruling @a.1 \`c.${eol}`;
-      expect({ eol, shorthand: unreadableShorthand('design/notes.md', text) }).toEqual({ eol, shorthand: ['Decision .2'] });
+      expect({ eol, shorthand: shorthandWritten('design/notes.md', text) }).toEqual({ eol, shorthand: ['Decision .2'] });
       expect({ eol, cites: provisionalReferences('design/notes.md', text) }).toEqual({ eol, cites: ['Ruling @a.1'] });
       const quoted = `\`Ruling${eol}@x.1\` and${eol}\`\`\`${eol}Ruling @x.2${eol}\`\`\`${eol}Ruling @a.1${eol}`;
       expect({ eol, cites: provisionalReferences('design/notes.md', quoted) }).toEqual({ eol, cites: ['Ruling @a.1'] });
@@ -482,8 +485,8 @@ describe('a shortened id outside its provisional id\'s list (#1363)', () => {
 describe('shorthand the merge cannot read (#446)', () => {
   it('names a dash then a plain number after a provisional id, and a shortened id after a kind word', () => {
     const text = 'Rulings @a.1-3 apply. Rulings @a.1 and Decision .2 too. Ruling @a.1 - .2 and Ruling 4-5 are fine.\n';
-    expect(unreadableShorthand('design/notes.md', text)).toEqual(['@a.1-3', 'Decision .2']);
-    expect(unreadableShorthand('design/notes.md', 'quoted: `Rulings @a.1-3`, and 0.5 seconds\n')).toEqual([]);
+    expect(shorthandWritten('design/notes.md', text)).toEqual(['@a.1-3', 'Decision .2']);
+    expect(shorthandWritten('design/notes.md', 'quoted: `Rulings @a.1-3`, and 0.5 seconds\n')).toEqual([]);
   });
 });
 
@@ -494,14 +497,21 @@ describe('shorthand the merge cannot read (#446)', () => {
  */
 describe('a shortened id on the line after its kind word (#1389)', () => {
   it('names it as written on one line, in an LF or CRLF file or a wrapped comment', () => {
-    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 and Decision\n.2.\n')).toEqual(['Decision .2']);
-    expect(unreadableShorthand('design/notes.md', 'See Decisions\r\n.2 too.\r\n')).toEqual(['Decisions .2']);
-    expect(unreadableShorthand('src/game.ts', '// See Decision\n//   .2 too.\n')).toEqual(['Decision .2']);
+    expect(shorthandWritten('design/notes.md', 'Rulings @a.1 and Decision\n.2.\n')).toEqual(['Decision .2']);
+    expect(shorthandWritten('design/notes.md', 'See Decisions\r\n.2 too.\r\n')).toEqual(['Decisions .2']);
+    expect(shorthandWritten('src/game.ts', '// See Decision\n//   .2 too.\n')).toEqual(['Decision .2']);
+  });
+
+  it('gives the lines it starts and ends on (#1399)', () => {
+    expect(unreadableShorthand('design/notes.md', 'Intro.\nRulings @a.1 and Decision\n.2, and @a.1-3.\n')).toEqual([
+      { written: 'Decision .2', firstLine: 2, lastLine: 3 },
+      { written: '@a.1-3', firstLine: 3, lastLine: 3 },
+    ]);
   });
 
   it('names nothing across a blank line', () => {
-    expect(unreadableShorthand('design/notes.md', 'See Decision\n\n.2 of the deck.\n')).toEqual([]);
-    expect(unreadableShorthand('design/notes.md', 'See Decision\r\n\r\n.2 of the deck.\r\n')).toEqual([]);
+    expect(shorthandWritten('design/notes.md', 'See Decision\n\n.2 of the deck.\n')).toEqual([]);
+    expect(shorthandWritten('design/notes.md', 'See Decision\r\n\r\n.2 of the deck.\r\n')).toEqual([]);
   });
 
   it('does not refuse it again under the kind of the provisional id before it', () => {
@@ -562,19 +572,19 @@ describe('a dash range wrapped after its dash (#1394)', () => {
     allocateProvisional({ 'design/RULINGS.md': ledger, 'design/notes.md': notes }, [{ spec: RULINGS, path: 'design/RULINGS.md' }]);
 
   it('names a dash then a plain number on the next line as written on one line, in an LF or CRLF file or a wrapped comment', () => {
-    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\n3 apply.\n')).toEqual(['@a.1 - 3']);
-    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1-\r\n3 apply.\r\n')).toEqual(['@a.1- 3']);
-    expect(unreadableShorthand('src/game.ts', '// Rulings @a.1 –\n//   3 apply.\n')).toEqual(['@a.1 – 3']);
+    expect(shorthandWritten('design/notes.md', 'Rulings @a.1 -\n3 apply.\n')).toEqual(['@a.1 - 3']);
+    expect(shorthandWritten('design/notes.md', 'Rulings @a.1-\r\n3 apply.\r\n')).toEqual(['@a.1- 3']);
+    expect(shorthandWritten('src/game.ts', '// Rulings @a.1 –\n//   3 apply.\n')).toEqual(['@a.1 – 3']);
   });
 
   it('names nothing across a blank line', () => {
-    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\n\n3 players.\n')).toEqual([]);
-    expect(unreadableShorthand('design/notes.md', 'Rulings @a.1 -\r\n\r\n3 players.\r\n')).toEqual([]);
-    expect(unreadableShorthand('src/game.ts', '// Rulings @a.1 -\n//\n// 3 players.\n')).toEqual([]);
+    expect(shorthandWritten('design/notes.md', 'Rulings @a.1 -\n\n3 players.\n')).toEqual([]);
+    expect(shorthandWritten('design/notes.md', 'Rulings @a.1 -\r\n\r\n3 players.\r\n')).toEqual([]);
+    expect(shorthandWritten('src/game.ts', '// Rulings @a.1 -\n//\n// 3 players.\n')).toEqual([]);
   });
 
   it('names nothing when the number opens a line of code after the comment', () => {
-    expect(unreadableShorthand('src/data.ts', 'const PRICES = [ // Ruling @a.1 -\n  3, 5, 8,\n];\n')).toEqual([]);
+    expect(shorthandWritten('src/data.ts', 'const PRICES = [ // Ruling @a.1 -\n  3, 5, 8,\n];\n')).toEqual([]);
   });
 
   it('reads a range wrapped after its dash, in an LF or CRLF file, as it does on one line', () => {
@@ -604,7 +614,7 @@ describe('a Markdown line that starts a block does not continue a wrapped line (
         `Rulings @a.1 and Decision${eol}* .2 of the deck${eol}`,
         `## Changes since Ruling @a.1 -${eol}3 players draw first${eol}`,
       ]) {
-        expect({ text, read: unreadableShorthand('design/notes.md', text) }).toEqual({ text, read: [] });
+        expect({ text, read: shorthandWritten('design/notes.md', text) }).toEqual({ text, read: [] });
       }
     }
   });
@@ -618,8 +628,8 @@ describe('a Markdown line that starts a block does not continue a wrapped line (
 
   it('reads no # or * on the next line as a comment marker, in an LF or CRLF file', () => {
     for (const eol of ['\n', '\r\n']) {
-      expect(unreadableShorthand('design/notes.md', `Rulings @a.1 -${eol}#3 players${eol}`)).toEqual([]);
-      expect(unreadableShorthand('design/notes.md', `Rulings @a.1 -${eol}*3 players*${eol}`)).toEqual([]);
+      expect(shorthandWritten('design/notes.md', `Rulings @a.1 -${eol}#3 players${eol}`)).toEqual([]);
+      expect(shorthandWritten('design/notes.md', `Rulings @a.1 -${eol}*3 players*${eol}`)).toEqual([]);
     }
   });
 
@@ -635,8 +645,8 @@ describe('a Markdown line that starts a block does not continue a wrapped line (
   });
 
   it('still reads a wrap inside a blockquote, nested or not, and a # comment line in source code', () => {
-    expect(unreadableShorthand('design/notes.md', '> Rulings @a.1 -\r\n> 3 apply.\r\n')).toEqual(['@a.1 - 3']);
-    expect(unreadableShorthand('design/notes.md', '> > Rulings @a.1 -\n> > 3 apply.\n')).toEqual(['@a.1 - 3']);
-    expect(unreadableShorthand('tools/deal.py', '# Rulings @a.1 -\n# 3 apply.\n')).toEqual(['@a.1 - 3']);
+    expect(shorthandWritten('design/notes.md', '> Rulings @a.1 -\r\n> 3 apply.\r\n')).toEqual(['@a.1 - 3']);
+    expect(shorthandWritten('design/notes.md', '> > Rulings @a.1 -\n> > 3 apply.\n')).toEqual(['@a.1 - 3']);
+    expect(shorthandWritten('tools/deal.py', '# Rulings @a.1 -\n# 3 apply.\n')).toEqual(['@a.1 - 3']);
   });
 });

@@ -111,7 +111,8 @@ export function citableText(path: string, text: string): string {
     .replace(CODE_SPAN, blank);
 }
 
-function lineOf(text: string, index: number): number {
+/** The 1-based line of `text` that `index` is on. */
+export function lineOf(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
   return line;
