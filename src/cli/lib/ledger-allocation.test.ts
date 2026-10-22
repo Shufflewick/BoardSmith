@@ -191,6 +191,38 @@ describe('quoted ids are never citations (#437)', () => {
     }
   });
 
+  // #1401: a blockquote, a list item and a thematic break or - underline each end a paragraph, but a span ran past them.
+  it('ends a code span at a line that starts a blockquote, a list item or a thematic break, in an LF or a CRLF file', () => {
+    for (const eol of ['\n', '\r\n']) {
+      const ended = [
+        `a \`b${eol}> See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}   >See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}- See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}+\tSee Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}* See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}1. See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}  01) See Ruling @a.1 and \`c${eol}`,
+        `- a \`b${eol}- See Ruling @a.1 and \`c${eol}`,
+        `> a \`b${eol}> - See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}---${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}-${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}***${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol} _ _ _ ${eol}See Ruling @a.1 and \`c${eol}`,
+        `a \`b${eol}- - -${eol}See Ruling @a.1 and \`c${eol}`,
+        `> a \`b${eol}> ***${eol}> See Ruling @a.1 and \`c${eol}`,
+      ];
+      for (const text of ended) {
+        expect({ text, cites: provisionalReferences('design/notes.md', text) }).toEqual({ text, cites: ['Ruling @a.1'] });
+      }
+      // Paragraph text, not a block start, so the span runs on past it.
+      const running = ['-not a list', '+', '* ', '1.', '2. two', '1.5 apples', '-- two', '**bold**', '_ _', '    - indented', '\\- escaped', 'a > b'];
+      for (const line of running) {
+        const text = `see \`Ruling${eol}${line}${eol}@x.1\` here${eol}`;
+        expect({ line, cites: provisionalReferences('design/notes.md', text) }).toEqual({ line, cites: [] });
+      }
+    }
+  });
+
   it('finds no citation in any shipped template or skill file, so they pass chunk-merge unchanged', async () => {
     const root = new URL('../slash-command/bs/', import.meta.url).pathname;
     const markdown = (await fs.readdir(root, { recursive: true })).filter((f) => f.endsWith('.md'));

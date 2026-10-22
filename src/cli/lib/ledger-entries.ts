@@ -65,10 +65,16 @@ const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
 
 const QUOTES = String.raw`(?: {0,3}>[ \t]?)*`;
 const ATX_HEADING = String.raw`${QUOTES} {0,3}#{1,6}(?![^ \t\r\n])`;
-// shortcut: an unquoted = line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
-const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}=+[ \t\r]*(?![^\n])`;
-// A line that starts a block ends the paragraph before it, and so any code span open in it (#1393, #1396, #1397).
-const BLOCK_START = String.raw`(?: {0,3}>)*[ \t\r]*\n|${ATX_HEADING}|${SETEXT_UNDERLINE}`;
+// shortcut: an unquoted = or -- line lazily continuing a quote or list paragraph is text, yet ends the span here too; #1402 tracks containers.
+const SETEXT_UNDERLINE = String.raw`${QUOTES} {0,3}(?:=+|-+)[ \t\r]*(?![^\n])`;
+const THEMATIC_BREAK = String.raw`${QUOTES} {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})\r?(?![^\n])`;
+// Only a non-empty item, and an ordered one only from 1, can interrupt a paragraph (CommonMark 5.2).
+// shortcut: an item numbered 2 or more starts one only inside a list, so it does not end the span; #1402 tracks containers.
+const LIST_ITEM = String.raw`${QUOTES} {0,3}(?:[-+*]|0{0,8}1[.)])[ \t]+\S`;
+// shortcut: a > line ends the span only after an unquoted line, missing a nested quote's start and ending wrongly after a lazy line; #1402 tracks containers.
+const QUOTE_START = String.raw`(?<!^ {0,3}>[^\n]*\n) {0,3}>`;
+// A line that starts a block ends the paragraph before it, and so any code span open in it (#1393, #1396, #1397, #1401).
+const BLOCK_START = String.raw`(?: {0,3}>)*[ \t\r]*\n|${ATX_HEADING}|${SETEXT_UNDERLINE}|${THEMATIC_BREAK}|${LIST_ITEM}|${QUOTE_START}`;
 // A heading is one line, so a span cannot run past its end either.
 const CODE_SPAN = new RegExp(
   String.raw`(?<!\`)(\`+)(?!\`)(?:(?!\n(?:${BLOCK_START})|\n(?<=^${ATX_HEADING}[^\n]*\n))[\s\S])+?(?<!\`)\1(?!\`)`,
