@@ -12,6 +12,15 @@ import { expect } from 'vitest';
 import { runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 
+// The walk loads these in Chromium by their paths; this links the smoke tests to them, loading nothing (#1415, #1416).
+import.meta.glob([
+  '../../testing/browser-smoke.ts',
+  '../dev-host/host.html',
+  '../dev-host/host-main.ts',
+  '../dev-host/world-host.html',
+  '../dev-host/world-host-main.ts',
+]);
+
 export const quiet = () => {};
 
 /**

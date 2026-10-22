@@ -47,7 +47,7 @@
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
-import { chunkBeforeSpec, chunkVerifyBase } from '../lib/chunk-commits.js';
+import { chunkBeforeSpec, chunkVerifyBase, commitName, preSpecCodeChanges } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { type MutantCache, captureExecutionContext, executionContextChange, openMutantCache } from '../lib/mutant-cache.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -311,6 +311,25 @@ async function unpassedSuite(
 }
 
 /**
+ * A step before spec that changed a file outside `design/`, as a failed check, or undefined when none
+ * did (#1201). `rerun` is the command to run again once those commits are rewritten.
+ */
+export async function preSpecRefusal(projectDir: string, chunk: string, rerun: string): Promise<VerifyCheckOutcome | undefined> {
+  const early = await preSpecCodeChanges(projectDir, chunk);
+  if (early.length === 0) return undefined;
+  return {
+    passed: false,
+    summary:
+      `Chunk "${chunk}" changed files outside design/ in a step before spec, which writes no game code: ` +
+      `${early.map((e) => `${commitName(e.commit)} changed ${e.files.join(', ')}`).join('; ')}.`,
+    next:
+      'Game code belongs to the step that writes it (spec or build): rewrite those commits, which are not pushed yet, ' +
+      'moving their changes outside design/ into the spec or build commit; a new commit on top, a revert included, does not clear this. ' +
+      `Then run ${rerun} again.`,
+  };
+}
+
+/**
  * The tests a chunk's fast checks run (#985): the test files among `changed` (project-relative,
  * since the chunk's base `base`) that exist. With none, the outcome `noChunkTests` gives instead.
  * `--chunk` runs them on the chunk's commit, and chunk-merge on the combined tree (#987).
@@ -351,9 +370,15 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
   };
 }
 
+/** Why no test can run: a chunk's step before spec that wrote game code (#1201), or a suite that cannot run. */
+async function testsCannotRun(ctx: VerifyContext): Promise<VerifyCheckOutcome | undefined> {
+  const early = ctx.chunk === undefined ? undefined : await preSpecRefusal(ctx.projectDir, ctx.chunk, `\`boardsmith verify --chunk ${ctx.chunk}\``);
+  return early ?? suiteCannotRun(ctx.projectDir);
+}
+
 /** 1. The full suite, run the way `boardsmith test` runs it; with `--chunk`, the chunk's own test files. */
 async function testCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
-  const cannot = await suiteCannotRun(ctx.projectDir);
+  const cannot = await testsCannotRun(ctx);
   if (cannot) return cannot;
   const files = ctx.chunk === undefined ? [] : await chunkTests(ctx.projectDir, ctx.chunk, ctx.base.commit, ctx.changed.files);
   if (!Array.isArray(files)) return files;

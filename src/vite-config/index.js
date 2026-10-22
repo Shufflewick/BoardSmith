@@ -24,11 +24,7 @@ import { configDefaults, mergeConfig } from 'vitest/config';
  *   in-browser smoke test under `tests/browser/` at any depth, which runs under Playwright
  *   (`boardsmith verify`, `boardsmith smoke`), not vitest. `configDefaults.exclude` is spread in
  *   because setting `exclude` at all replaces vitest's defaults.
- * - `boardsmith.json` as a rerun trigger, so `vitest --changed` runs the whole suite when it changes
- *   (#1211). No test imports it, but `TestGame` and the headless session read game options from it.
- *   Every trigger, vitest's own included, is anchored at the project root (#1307): vitest matches
- *   triggers against absolute paths and its `**` skips dot folders, so an unanchored trigger missed
- *   a game checked out under `.worktrees/`, and matched other checkouts' and folders' files.
+ * - The rerun triggers of `rerunTriggers` below.
  *
  * `boardsmith test`, `constraint-check`, `chunk-merge` and `verify` refuse a project whose config is
  * not built with this (`testRunScopeProblem`).
@@ -54,18 +50,25 @@ export function defineGameViteConfig(overrides = {}) {
 }
 
 /**
- * vitest's rerun triggers and the project's own `boardsmith.json`, each under the project root
- * (vite's `root`, not a `test.root` inside it), which a plugin learns from the config it is handed.
+ * Files no test imports whose change makes `vitest --changed` run the whole suite: vitest's own
+ * triggers, the project's `vite.config.*` or `vitest.config.*` (vitest 3's default glob ends in `/**`
+ * and so misses the file itself, #1419, #1420), and its `boardsmith.json`, which `TestGame` and the
+ * headless session read game options from (#1211). BoardSmith's own vitest config uses it too.
+ *
+ * Every trigger is anchored at the project root (vite's `root`, not a `test.root` inside it), which a
+ * plugin learns from the config it is handed (#1307): vitest matches triggers against absolute paths
+ * and its `**` skips dot folders, so an unanchored trigger missed a game checked out under
+ * `.worktrees/`, and matched other checkouts' and folders' files.
  *
  * @returns {import('vite').Plugin}
  */
-function rerunTriggers() {
+export function rerunTriggers() {
   return {
     name: 'boardsmith:rerun-triggers',
     config(config) {
       // vitest compares forward-slash paths, so a Windows root is written with them before glob characters are escaped.
       const root = resolve(config.root || process.cwd()).split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
-      return { test: { forceRerunTriggers: [...configDefaults.forceRerunTriggers, 'boardsmith.json'].map((trigger) => `${root}/${trigger}`) } };
+      return { test: { forceRerunTriggers: [...configDefaults.forceRerunTriggers, '{vitest,vite}.config.*', 'boardsmith.json'].map((trigger) => `${root}/${trigger}`) } };
     },
   };
 }

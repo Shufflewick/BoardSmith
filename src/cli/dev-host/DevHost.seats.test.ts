@@ -10,6 +10,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils';
 import DevHost from './DevHost.vue';
 import type { DevHostConfig } from './config-types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './config-types.js';
 
 // ── Mock WebSocket ────────────────────────────────────────────────────────────
 

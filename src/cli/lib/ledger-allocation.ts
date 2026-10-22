@@ -15,7 +15,7 @@
  * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
  * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern } from './ledger-entries.js';
+import { type Citable, PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern, lineOf } from './ledger-entries.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
@@ -68,27 +68,45 @@ export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): str
  */
 const WORD_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === ' ').map((s) => escapeRegExp(s.kind));
 const LETTER_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === '').map((s) => escapeRegExp(s.kind));
+const SHORTHAND = '\\.\\d+';
+/** The citation grammar read across `gap`, the whitespace that may wrap a citation onto the next line. */
+function citationGrammar(gap: string) {
+  /** A kind word or letter, then an id; the groups are named only where one item is read at a time. */
+  const listItem = (named: boolean, first: boolean): string => {
+    const group = (name: string) => (named ? `?<${name}>` : '?:');
+    const kind = `(?:\\b(${group('word')}${WORD_KINDS.join('|')})s?(?=\\s)${gap}|\\b(${group('letter')}${LETTER_KINDS.join('|')}))`;
+    const id = `${kind}${first ? '' : '?'}(${group('number')}\\d+|${PROVISIONAL_NUMBER})`;
+    return `(?:${first ? id : `${id}|(${group('short')}${SHORTHAND})`})(?!\\d)`;
+  };
+  const listJoin = `${gap}(?:,${gap}(?:(?:and|or)(?=\\s)${gap})?|(?:and|or|&)(?=\\s)${gap})`;
+  /** A range joiner, only ever before a provisional or shorthand id: `Ruling @a.1 to 3 players` is no range. */
+  const rangeJoin = (named: boolean) =>
+    `(?:${gap}(${named ? '?<range>' : '?:'}to|through)(?=\\s)${gap}|[ \\t]*(${named ? '?<dash>' : '?:'}[-–])${gap})(?=@|${SHORTHAND})`;
+  return {
+    list: new RegExp(`${listItem(false, true)}(?:(?:${rangeJoin(false)}|${listJoin})${listItem(false, false)})*`, 'gm'),
+    firstItem: new RegExp(listItem(true, true), 'ym'),
+    nextItem: new RegExp(`(?:${rangeJoin(true)}|${listJoin})${listItem(true, false)}`, 'ym'),
+    dashThenNumber: new RegExp(`(?<![\\w@.])(${PROVISIONAL_NUMBER}[ \\t]*[-–])(${gap})(\\d+)(?!\\d)`, 'gm'),
+    shorthandAfterKind: new RegExp(`\\b((?:${WORD_KINDS.join('|')})s?)(?=\\s)${gap}(${SHORTHAND})(?!\\d)`, 'gm'),
+  };
+}
 /**
  * Whitespace that may wrap onto the next line, never across a blank line. The next line may open
  * with a comment or quote marker (` * `, `// `, `# `, `> `), since prose is wrapped inside those too.
  */
-const GAP = '[ \\t]*(?:\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?';
-const SHORTHAND = '\\.\\d+';
-/** A kind word or letter, then an id; the groups are named only where one item is read at a time. */
-const listItem = (named: boolean, first: boolean): string => {
-  const group = (name: string) => (named ? `?<${name}>` : '?:');
-  const kind = `(?:\\b(${group('word')}${WORD_KINDS.join('|')})s?(?=\\s)${GAP}|\\b(${group('letter')}${LETTER_KINDS.join('|')}))`;
-  const id = `${kind}${first ? '' : '?'}(${group('number')}\\d+|${PROVISIONAL_NUMBER})`;
-  return `(?:${first ? id : `${id}|(${group('short')}${SHORTHAND})`})(?!\\d)`;
-};
-const LIST_JOIN = `${GAP}(?:,${GAP}(?:(?:and|or)(?=\\s)${GAP})?|(?:and|or|&)(?=\\s)${GAP})`;
-/** A range joiner, only ever before a provisional or shorthand id: `Ruling @a.1 to 3 players` is no range. */
-const rangeJoin = (named: boolean) =>
-  `(?:${GAP}(${named ? '?<range>' : '?:'}to|through)(?=\\s)${GAP}|[ \\t]*(${named ? '?<dash>' : '?:'}[-–])[ \\t]*)(?=@|${SHORTHAND})`;
-const CITATION_LIST = new RegExp(`${listItem(false, true)}(?:(?:${rangeJoin(false)}|${LIST_JOIN})${listItem(false, false)})*`, 'g');
-const FIRST_ITEM = new RegExp(listItem(true, true), 'y');
-const NEXT_ITEM = new RegExp(`(?:${rangeJoin(true)}|${LIST_JOIN})${listItem(true, false)}`, 'y');
+const CODE_GRAMMAR = citationGrammar('[ \\t]*(?:\\r?\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?');
+// In Markdown a citation is read within one block (`citableText`), whose wrapped lines open only with quote markers (#1398).
+const MARKDOWN_GRAMMAR = citationGrammar('[ \\t]*(?:\\r?\\n[ \\t>]*)?');
+type CitationGrammar = ReturnType<typeof citationGrammar>;
+const grammarOf = (path: string) => (path.endsWith('.md') ? MARKDOWN_GRAMMAR : CODE_GRAMMAR);
 const BARE_PROVISIONAL = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}(?!\\d)`, 'g');
+
+/** Each match of `pattern` within one block of `citable`, so none runs out of its block, at its offset in the whole text. */
+function blockMatches({ text, blocks }: Citable, pattern: RegExp): RegExpExecArray[] {
+  return blocks.flatMap(([start, end]) =>
+    [...text.slice(start, end).matchAll(pattern)].map((m) => Object.assign(m, { index: m.index + start })),
+  );
+}
 
 /** One id in a citation list: a real number, or a provisional one (a shorthand `.N` read as its full id). */
 interface ListItem {
@@ -120,15 +138,20 @@ interface ProvisionalRange {
 }
 
 /** Each item of the citation list `citable[at, end)`, as its regex groups and where it ends. */
-function* listMatches(citable: string, at: number, end: number): Generator<{ groups: ItemGroups; end: number }> {
-  let pattern = FIRST_ITEM;
+function* listMatches(
+  grammar: CitationGrammar,
+  citable: string,
+  at: number,
+  end: number,
+): Generator<{ groups: ItemGroups; end: number }> {
+  let pattern = grammar.firstItem;
   let pos = at;
   while (pos < end) {
     pattern.lastIndex = pos;
     const m = pattern.exec(citable);
     if (!m || m.index + m[0].length > end) return;
     pos = m.index + m[0].length;
-    pattern = NEXT_ITEM;
+    pattern = grammar.nextItem;
     yield { groups: m.groups!, end: pos };
   }
 }
@@ -158,12 +181,17 @@ function rangeTo(previous: ListItem | undefined, item: ListItem, groups: ItemGro
 }
 
 /** Reads one citation list matched at `at` in `citable`, item by item. */
-function readList(citable: string, at: number, length: number): { items: ListItem[]; ranges: ProvisionalRange[] } {
+function readList(
+  grammar: CitationGrammar,
+  citable: string,
+  at: number,
+  length: number,
+): { items: ListItem[]; ranges: ProvisionalRange[] } {
   const items: ListItem[] = [];
   const ranges: ProvisionalRange[] = [];
   let kind = '';
   let slug: string | undefined;
-  for (const { groups, end } of listMatches(citable, at, at + length)) {
+  for (const { groups, end } of listMatches(grammar, citable, at, at + length)) {
     kind = groups.word !== undefined ? `${groups.word} ` : (groups.letter ?? kind);
     const provisional = provisionalOf(groups.number, groups.short, slug);
     // After a real number no shorthand follows.
@@ -178,13 +206,17 @@ function readList(citable: string, at: number, length: number): { items: ListIte
 }
 
 /** Every provisional id cited in file `path`, in file order, and every range one ends. */
-function provisionalCitations(path: string, text: string): { citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
+function provisionalCitations(
+  path: string,
+  text: string,
+): { citable: Citable; citations: ProvisionalCitation[]; ranges: ProvisionalRange[] } {
   const citable = citableText(path, text);
   const citations: ProvisionalCitation[] = [];
   const ranges: ProvisionalRange[] = [];
   const attributed = new Set<number>();
-  for (const list of citable.matchAll(CITATION_LIST)) {
-    const read = readList(citable, list.index, list[0].length);
+  const grammar = grammarOf(path);
+  for (const list of blockMatches(citable, grammar.list)) {
+    const read = readList(grammar, citable.text, list.index, list[0].length);
     ranges.push(...read.ranges);
     for (const item of read.items) {
       if (item.provisional === undefined) continue;
@@ -192,10 +224,10 @@ function provisionalCitations(path: string, text: string): { citations: Provisio
       citations.push({ index: item.index, written: item.written, id: `${item.kind}${item.provisional}` });
     }
   }
-  for (const m of citable.matchAll(BARE_PROVISIONAL)) {
+  for (const m of citable.text.matchAll(BARE_PROVISIONAL)) {
     if (!attributed.has(m.index)) citations.push({ index: m.index, written: m[0], id: undefined });
   }
-  return { citations: citations.sort((a, b) => a.index - b.index), ranges };
+  return { citable, citations: citations.sort((a, b) => a.index - b.index), ranges };
 }
 
 /**
@@ -207,20 +239,38 @@ export function provisionalReferences(path: string, text: string): string[] {
   return [...new Set(provisionalCitations(path, text).citations.map((c) => c.id ?? c.written))];
 }
 
-const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}[ \\t]*[-–][ \\t]*\\d+(?!\\d)`, 'g');
-const SHORTHAND_AFTER_KIND = new RegExp(`\\b(?:${WORD_KINDS.join('|')})s?[ \\t]+${SHORTHAND}(?!\\d)`, 'g');
+/** One `unreadableShorthand`, as written, and the 1-based lines of the file it starts and ends on. */
+export interface UnreadableShorthand {
+  written: string;
+  firstLine: number;
+  lastLine: number;
+}
 
 /**
- * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
+ * Shorthand in file `path` that names no id the merge can map (#446), in file order: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
- * shortened id right after a kind word (`Decision .2`), which has no provisional id before it to
- * take its slug from. Quoted text (`citableText`) is not read.
+ * shortened id right after a kind word (`Decision .2`), which takes no slug from an id before the
+ * kind word. Either may wrap onto the next line of its prose after its dash or kind word. Quoted
+ * text (`citableText`) is not read.
  */
-export function unreadableShorthand(path: string, text: string): string[] {
+export function unreadableShorthand(path: string, text: string): UnreadableShorthand[] {
   const citable = citableText(path, text);
-  return [...citable.matchAll(DASH_THEN_NUMBER), ...citable.matchAll(SHORTHAND_AFTER_KIND)]
+  const grammar = grammarOf(path);
+  const at = (m: RegExpExecArray, written: string) => ({
+    index: m.index,
+    written,
+    firstLine: lineOf(citable.text, m.index),
+    lastLine: lineOf(citable.text, m.index + m[0].length),
+  });
+  return [
+    // A kind word, or a range's dash, may wrap onto the next line; it is quoted on one.
+    ...blockMatches(citable, grammar.dashThenNumber)
+      .filter((m) => oneParagraph(path, citable, m.index + m[1].length, m.index + m[1].length + m[2].length))
+      .map((m) => at(m, `${m[1]}${m[2].includes('\n') ? ' ' : m[2]}${m[3]}`)),
+    ...blockMatches(citable, grammar.shorthandAfterKind).map((m) => at(m, `${m[1]} ${m[2]}`)),
+  ]
     .sort((a, b) => a.index - b.index)
-    .map((m) => m[0]);
+    .map(({ written, firstLine, lastLine }) => ({ written, firstLine, lastLine }));
 }
 
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
@@ -231,7 +281,7 @@ export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedge
     .map((n) => `${spec.kind}${spec.sep}${n}`);
 }
 
-/** A range of citations the merge cannot rewrite one to one, in file `path`, and why. */
+/** A range or shortened id the merge cannot rewrite one to one, in file `path`, and why. */
 interface AllocationProblem {
   path: string;
   /** The provisional ids at the range's ends, which the merge leaves as written. */
@@ -295,6 +345,61 @@ function runProblem(
   return `, but those ids became ${plural(kind)}${listed(became.map(String))}, which are not one unbroken run of numbers. ${listFix(kind, ids)}`;
 }
 
+/** A `.N` standing alone: not part of a word or number (`p.20`, `0.5`), a unit (`.5em`) or a quote (`'.2'`). */
+const LONE_SHORTHAND = new RegExp(`(?<![\\w@.)\\]'"\`\\\\])${SHORTHAND}(?!\\w)`, 'g');
+/** A `.N` straight after a constraint letter (`G.2`), not the start of a longer label (`C.3.1`). */
+const LETTER_SHORTHAND = new RegExp(`\\b(${LETTER_KINDS.join('|')})(${SHORTHAND})(?!\\w|\\.\\d)`, 'g');
+/** A line break that ends a comment's paragraph: a blank line, or one holding only a comment marker. */
+const PARAGRAPH_BREAK = /\n[ \t\r]*(?:\*|\/\/|#)?[ \t\r]*\n/;
+/** A line of source code that is not a comment line, so not the comment's prose. */
+const CODE_LINE = /\n(?![ \t]*(?:\*|\/\/|#))/;
+
+/** Whether `text[from, to)`, from a citation to a `.N`, stays in one paragraph of prose. */
+function oneParagraph(path: string, { text, blocks }: Citable, from: number, to: number): boolean {
+  if (path.endsWith('.md')) return blocks.some(([start, end]) => start <= from && to <= end);
+  const between = text.slice(from, to);
+  return !PARAGRAPH_BREAK.test(between) && !CODE_LINE.test(between);
+}
+
+/**
+ * Each `.N` no citation list read, after a provisional id in the same paragraph of prose, whose
+ * slug's id N the merge allocated (#1363): `Decision @a.2 supersedes .1`, and `G@a.1 and G.2`, as
+ * the letter's kind (#1390). The merge cannot tell it from prose ("Appendix G.2"), so it refuses it
+ * only then, rather than leave it naming nothing. A `.N` straight after a kind word is
+ * `unreadableShorthand`'s.
+ */
+function strayShorthand(
+  path: string,
+  citable: Citable,
+  citations: ProvisionalCitation[],
+  mapping: Record<string, string>,
+): AllocationProblem[] {
+  const read = new Set(citations.map((c) => c.index));
+  const afterKind = new Set(blockMatches(citable, grammarOf(path).shorthandAfterKind).map((m) => m.index + m[0].length));
+  const lone = [...citable.text.matchAll(LONE_SHORTHAND)]
+    .filter((m) => !read.has(m.index) && !afterKind.has(m.index + m[0].length))
+    .map((m) => ({ index: m.index, written: m[0], letter: undefined, short: m[0] }));
+  const afterLetter = [...citable.text.matchAll(LETTER_SHORTHAND)].map((m) => ({ index: m.index, written: m[0], letter: m[1], short: m[2] }));
+  const problems: AllocationProblem[] = [];
+  for (const { index, written, letter, short } of [...lone, ...afterLetter].sort((a, b) => a.index - b.index)) {
+    const before = citations.filter((c) => c.index < index).at(-1);
+    if (before === undefined || !oneParagraph(path, citable, before.index, index)) continue;
+    const after = before.id ?? before.written;
+    const slug = after.slice(0, after.lastIndexOf('.'));
+    const id = letter === undefined ? `${slug}${short}` : `${letter}${slug.slice(slug.indexOf('@'))}${short}`;
+    if (!(id in mapping)) continue;
+    const why = letter === undefined ? 'not in a list with it' : 'a shortened id is never read after a constraint letter';
+    problems.push({
+      path,
+      ids: [],
+      detail:
+        `writes "${written}" after ${after}, but ${why}, so the merge cannot read it as ${id} and would ` +
+        `leave it naming nothing. Write the id in full on the branch (for example "${id}"), and merge again.`,
+    });
+  }
+  return problems;
+}
+
 /**
  * `text` with each provisional id `mapping` allocated replaced by its real number, and every range
  * that cannot be rewritten one to one, left as written. Found on the citable text, spliced into the
@@ -305,8 +410,8 @@ function rewriteCitations(
   text: string,
   mapping: Record<string, string>,
 ): { text: string; problems: AllocationProblem[] } {
-  const { citations, ranges } = provisionalCitations(path, text);
-  const problems: AllocationProblem[] = [];
+  const { citable, citations, ranges } = provisionalCitations(path, text);
+  const problems = strayShorthand(path, citable, citations, mapping);
   const kept = new Set<number>();
   for (const range of ranges) {
     const detail = rangeProblem(range, mapping);
@@ -330,7 +435,7 @@ interface AllocationResult {
   files: Record<string, string>;
   /** Each provisional id and the real id it became, e.g. `{ 'Ruling @a.1': 'Ruling 139' }`. */
   mapping: Record<string, string>;
-  /** Every range of ids that could not be rewritten one to one, left as written (#446). */
+  /** Every range or shortened id that could not be rewritten one to one, left as written (#446, #1363). */
   problems: AllocationProblem[];
 }
 

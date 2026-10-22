@@ -767,16 +767,18 @@ describe('wallClockBudgets', () => {
   });
 });
 
+// Parsing every test file is slow on a busy machine, so it runs here, where no test timeout applies (#1422).
+const findings = trackedTestFiles(['src', 'docs', 'scripts'])
+  // This file's own examples above are budgets on purpose.
+  .filter(({ path }) => path !== 'scripts/no-wall-clock-budgets.test.mjs')
+  .flatMap(({ path, text }) =>
+    wallClockBudgets(text, path).map(
+      ({ line, text }) => `${path}:${line}  ${text}`,
+    ),
+  );
+
 describe('the test suite (#360)', () => {
   it('holds no wall-clock budget assertion', () => {
-    const tracked = trackedTestFiles(['src', 'docs', 'scripts'])
-      // This file's own examples above are budgets on purpose.
-      .filter(({ path }) => path !== 'scripts/no-wall-clock-budgets.test.mjs');
-    const findings = tracked.flatMap(({ path, text }) =>
-      wallClockBudgets(text, path).map(
-        ({ line, text }) => `${path}:${line}  ${text}`,
-      ),
-    );
     expect(
       findings,
       'These tests assert how long something took, which fails on a busy machine with nothing '

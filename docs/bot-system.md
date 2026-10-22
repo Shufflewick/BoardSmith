@@ -150,6 +150,38 @@ to 0.9. The score is 0.5 when there are no objectives, or when every weight is 0
 A playout that reaches the end of the game scores 1 for a win, 0 for a loss and
 0.5 when the game declares no winner.
 
+## Choosing the moves the bot searches
+
+`candidateMoves` decides which moves the search considers for a seat, wherever
+it lists them: the root, every tree node (including each world's refresh under
+a `determinize` sampler) and every playout. It is the one hook that can leave a
+move out of the search; `threatResponseMoves` with `urgent: true` reaches only
+the root, `moveOrdering` only orders, and `playoutPolicy` only picks within a
+playout. The other hooks see only the moves it returns.
+
+It is handed the search's copy of the game, the seat whose moves are listed
+(not always the bot's own) and `listMoves`, which lists every move the search
+would otherwise consider. Filter that listing to leave moves out, or return the
+game's own short list without calling `listMoves`, which spares the full
+enumeration of an action with a large or open-ended set of args. Moves are in
+wire form (element ids). Return only legal moves: the bot can choose any move
+it is given, so an illegal one can reach the engine as the bot's move. An empty
+list for a seat that has moves throws.
+
+<!-- typecheck: game src/candidate-moves.ts -->
+```typescript
+import type { BotStrategy } from 'boardsmith/bot';
+
+export const botStrategy: BotStrategy = {
+  // Moving a pack bought this round is legal without limit and never worth searching.
+  candidateMoves: (_game, _seat, listMoves) => {
+    const moves = listMoves();
+    const useful = moves.filter((move) => move.action !== 'movePack');
+    return useful.length > 0 ? useful : moves;
+  },
+};
+```
+
 ## Example: Checkers Bot
 
 A simplified version of the Checkers game's `bot.ts`:
@@ -507,7 +539,10 @@ against the sampler rather than swallowed.
   a move only rare worlds allow is starved forever.
 - **The root searches the union.** Root moves accumulate across samples instead
   of being capped to one world's list. A forced `threatResponseMoves` block
-  still wins: the game said MUST.
+  still wins: the game said MUST. Each world is asked whether it takes each
+  forced move, with the same gates enumeration applies, rather than finding it
+  in that world's sampled move list, so a forced move is searched in every world
+  that allows it, however many moves its action has (#1391).
 - **Costs nothing when absent.** No sampler means no sampling, no per-world
   refresh, and the classic UCT term unchanged. Games without hidden state pay
   for none of this.

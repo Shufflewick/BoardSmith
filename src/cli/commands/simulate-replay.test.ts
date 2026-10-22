@@ -24,6 +24,8 @@ import { scoreProject } from './simulate-project.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const fixture = resolve(here, 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 const simIndex = resolve(here, '../../sim/index.ts');
 const cli = resolve(here, '../../../bin/boardsmith.js');
 

@@ -51,13 +51,11 @@ import {
 
 - `Player` - Base class for player state
 - `addAbility()`, `hasUnusedAbility()`, `spendAbility()`, `countUnusedAbilities()`, `groupAbilities()` - Work with a player's plain `Ability[]` list
-- `AbilityManager` - Older class form; not restorable, use the functions above
 
 ### Scoring System
 
 - `monotonicTrack()`, `uniqueTrack()`, `counterTrack()` - Make a plain-data scoring track (`TrackState`)
 - `canAddToTrack()`, `addToTrack()`, `incrementCounter()`, `isTrackComplete()`, `trackPoints()` - Read and change a track
-- `Track`, `MonotonicTrack`, `UniqueTrack`, `CounterTrack` - Older class form; not restorable, use the functions above
 
 ### Visibility
 

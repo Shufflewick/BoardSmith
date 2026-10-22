@@ -22,6 +22,9 @@ import { bundleWorldRules, openWorldRun, startWorldRuntime } from '../commands/d
 import { rulesProject } from './rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 
+// The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
+import.meta.glob('./world-rules-worker.ts');
+
 const CHANNEL = `bs-284-${process.pid}`;
 
 const RULES = `import { Game, Player, Space } from 'boardsmith';

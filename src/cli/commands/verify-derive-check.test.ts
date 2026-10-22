@@ -805,6 +805,8 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
  * this is a deliberate, disclosed fixture amendment, not a fabricated scenario.
  */
 const FIXTURES_DIR = join(__dirname, '__fixtures__', '177-22-run1-seven');
+// These tests read the fixtures by their paths; this links them to the fixtures, loading nothing (#1416).
+import.meta.glob('./__fixtures__/177-22-run1-seven/*.json');
 
 function loadFixtureJson<T>(name: string): T {
   return JSON.parse(readFileSync(join(FIXTURES_DIR, name), 'utf-8')) as T;

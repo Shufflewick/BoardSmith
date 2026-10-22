@@ -284,6 +284,8 @@ describe('simulateCommand', () => {
  * because each bundles the rules (#363, #417). The tests assert what they left.
  */
 const deadEndFixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 
 /** A project whose rules module is `rules`, already holding a scratch file and a chunk worktree. */
 function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFilesKept: () => void } {

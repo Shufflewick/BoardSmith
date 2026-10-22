@@ -20,6 +20,9 @@ import { describe, expect, it } from 'vitest';
 import { withFixtureTable } from './fixture-table.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 
+// The dev server serves its host page by its path; this links these tests to it, loading nothing (#1416).
+import.meta.glob('../dev-host/host.html');
+
 /** A hang guard for one case, not a budget. */
 const CASE_GUARD_MS = 240_000;
 

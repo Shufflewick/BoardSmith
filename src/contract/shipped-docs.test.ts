@@ -9,7 +9,7 @@
  * the CLI's messages and generated code name.
  */
 import { describe, it, expect } from 'vitest';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, posix } from 'node:path';
 
 import { packedFiles } from './npm-pack.test-helper.js';
@@ -21,18 +21,22 @@ const SHIPPED = new Set(packedFiles(REPO_ROOT));
 const DOC_PATH = /\bdocs\/[\w/.-]+\.md\b/g;
 const INSTALLED = 'node_modules/boardsmith/';
 
-const SKILLS = join(REPO_ROOT, 'src/cli/slash-command');
-const SKILL_TEXT = readdirSync(SKILLS, { recursive: true, encoding: 'utf8' })
-  .filter((file) => file.endsWith('.md'))
-  .map((file) => ({ file, text: readFileSync(join(SKILLS, file), 'utf8') }));
+const SKILL_TEXT = Object.entries(
+  import.meta.glob<string>('/src/cli/slash-command/**/*.md', { eager: true, import: 'default' }),
+).map(([path, text]) => ({ file: path.slice('/src/cli/slash-command/'.length), text }));
+
+/** The Markdown the pack holds outside `src/`: package.json `files`, and the README npm always packs. */
+const PACKABLE_MARKDOWN = import.meta.glob<string>(['/README.md', '/docs/*.md', '/docs/api/*.md'], { eager: true, import: 'default' });
 const NAMED_DOCS = new Set(SKILL_TEXT.flatMap(({ text }) => text.match(DOC_PATH) ?? []));
 
 /** Every relative link target in a shipped Markdown file outside `src/`, resolved from the package root, with its anchor dropped. */
 const DOC_LINKS = [...SHIPPED]
   .filter((path) => path.endsWith('.md') && !path.startsWith('src/'))
   .flatMap((doc) => {
+    const text = PACKABLE_MARKDOWN[`/${doc}`];
+    if (text === undefined) throw new Error(`${doc} is in the pack but not in PACKABLE_MARKDOWN; add its folder there.`);
     // A fenced block is code, so a `](` in it is not a link.
-    const prose = readFileSync(join(REPO_ROOT, doc), 'utf8').replace(/^```[\s\S]*?^```/gm, '');
+    const prose = text.replace(/^```[\s\S]*?^```/gm, '');
     return [...prose.matchAll(/\]\(([^)\s]+)/g)]
       .map(([, target]) => target)
       .filter((target) => !/^[a-z]+:/i.test(target) && !target.startsWith('#'))

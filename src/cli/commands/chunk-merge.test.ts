@@ -29,6 +29,7 @@ import {
   head,
   status,
 } from './chunk-merge.test-helper.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * These tests merge real branches, so each one runs real git processes: at most about 80 (building
@@ -357,6 +358,19 @@ describe("chunkMerge: the merged chunk's tests and typecheck, never the whole su
     expect((await chunkMerge(main, 'quests', { runTests: recording, typeCheck })).refusals).toEqual([]);
     expect(runs).toEqual([['tests/budget.test.ts']]);
   });
+
+  it('refuses a chunk whose step before spec changed game code, saying once to run chunk-merge again (#1201)', async () => {
+    const before = head();
+    const quests = await buildOnBranch('quests', 100);
+    await write(quests, { 'src/extra.ts': 'export const extra = 2;\n' });
+    git(quests, 'add', '-A');
+    git(quests, 'commit', '-q', '-m', 'chunk-quests/step-investigate');
+    const refusal = (await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck })).refusals.join('\n');
+    expect(refusal).toMatch(/^Chunk "quests" changed files outside design\/ in a step before spec[\s\S]* changed src\/extra\.ts\./);
+    expect(refusal).toMatch(/Then run chunk-merge again\.$/);
+    expect(refusal).not.toMatch(/verify --chunk/);
+    expect([head(), status()]).toEqual([before, '']);
+  });
 });
 
 describe("chunkMerge: parallel-check's refusals for chunks built together (#820)", () => {
@@ -434,10 +448,7 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
   });
 
   it('merges a filing whose reproduction quotes example ids, written into the shipped FILINGS template (#437)', async () => {
-    const template = await fs.readFile(
-      new URL('../slash-command/bs/templates/FILINGS.template.md', import.meta.url),
-      'utf-8',
-    );
+    const template = skillMarkdown('bs/templates/FILINGS.template.md');
     const filing = [
       '### Filing @trading.1',
       '- Kind: bug',
@@ -511,6 +522,21 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('refuses a dash then a plain number on the next line, in a CRLF file, and leaves main as it was (#1394)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1 -\r\n3.\r\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      expect.stringMatching(/^design\/notes\.md writes "@trading\.1 - 3", which reads as a range of ids, .*`Rulings @trading\.1 and @trading\.3`/),
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('says how to reword prose that only reads as a range, and how to write a shortened id in full (#446)', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
@@ -523,10 +549,146 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
         '@trading.2 or real number 2. If it is a range, write each id in full on the branch (for example ' +
         '`Rulings @trading.1 and @trading.2`); if 2 is not an id, put something other than a dash between them ' +
         '(for example "@trading.1: 2"). Then merge again.',
-      'design/notes.md writes "Decision .2", a shortened id with no provisional id before it to take its slug from, ' +
-        'so the merge cannot give it a real number. Write the id in full on the branch (for example ' +
+      expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\./),
+    ]);
+    expect(status()).toBe('');
+  });
+
+  it('says a kind word must be followed by an id in full, even when a provisional id comes before it (#1386)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1 and Decision .2.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes "Decision .2", a shortened id straight after a kind word. A kind word must be followed ' +
+        'by an id in full: a shortened id is read only after a provisional id in a list (as in "@<slug>.1, .2"), so ' +
+        'the merge cannot give this one a real number. Write the id in full on the branch (for example ' +
         '`Decision @<slug>.2`), and merge again.',
     ]);
+    expect(status()).toBe('');
+  });
+
+  it('refuses a shortened id on the line after its kind word for the kind written, not the id before it (#1389)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n\n' +
+        '### Ruling @trading.2\n- Decision: prices move.\n',
+      'design/notes.md': 'Prices follow Rulings @trading.1 and Decision\n.2.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\..*`Decision @<slug>\.2`/),
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
+  it('refuses a shortened id on the line after its kind word in a CRLF file with no provisional id before it (#1389)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Ruling @trading.1.\r\n\r\nSee Decision\r\n.2 too.\r\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/notes\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
+  it('does not refuse a "Decision .2" already on main, in a ledger the branch left alone or added to (#1395)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('quests', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n\n### Ruling @quests.1\n- Decision: quests expire.\n',
+    });
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: budgetRunner, typeCheck })).refusals).toEqual([]);
+  });
+
+  it('refuses a second "Decision .2" the branch wrote beside the one already on main (#1395)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md':
+        '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n\n### Ruling @trading.1\n- Decision: as Decision .2.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/RULINGS\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
+  it('refuses a "Decision .2" the branch moved to a line it wrote, though main had one elsewhere in the file (#1399)', async () => {
+    await write(main, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop. See Decision .2.\n' });
+    git(main, 'commit', '-q', '-am', 'shorthand on main');
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: as Decision .2.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/RULINGS\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
+  it('refuses in a file the branch renamed only the "Decision .3" it wrote, not the "Decision .2" main had (#1399)', async () => {
+    const notes = '# Notes\n\nThe market opens at dawn.\nPrices rise with demand.\nSee Decision .2.\nTraders leave at dusk.\n';
+    await write(main, { 'design/a.md': notes });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'shorthand on main');
+    const trading = await buildOnBranch('trading', 100);
+    git(trading, 'mv', 'design/a.md', 'design/b.md');
+    await write(trading, { 'design/b.md': `${notes}Also Decision .3.\n` });
+    git(trading, 'commit', '-q', '-am', 'chunk-trading/close: rename the notes');
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/b\.md writes "Decision \.3", a shortened id straight after a kind word\./)]);
+  });
+
+  it('refuses a "Decision .2" the branch made only by deleting the blank line between its words (#1399 review F1)', async () => {
+    await write(main, { 'design/a.md': '# Notes\n\nSee Decision\n\n.2 of the deck.\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'no shorthand on main');
+    await buildOnBranch('trading', 100, { 'design/a.md': '# Notes\n\nSee Decision\n.2 of the deck.\n' });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.refusals).toEqual([expect.stringMatching(/^design\/a\.md writes "Decision \.2", a shortened id straight after a kind word\./)]);
+  });
+
+  it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
+    const constraints = await fs.readFile(join(main, 'design/CONSTRAINTS.md'), 'utf-8');
+    await buildOnBranch('trading', 100, {
+      'design/CONSTRAINTS.md':
+        `${constraints}\n### G@trading.1\n- State: Market.prices\n- Grows with: turns\n- Chunk: trading\n- Ruling: Ruling 1\n` +
+        '\n### G@trading.2\n- State: Market.offers\n- Grows with: turns\n- Chunk: trading\n- Ruling: Ruling 1\n',
+      'design/notes.md': 'Prices follow G@trading.1 and G.2.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes "G.2" after G@trading.1, but a shortened id is never read after a constraint letter, so ' +
+        'the merge cannot read it as G@trading.2 and would leave it naming nothing. Write the id in full on the branch ' +
+        '(for example "G@trading.2"), and merge again.',
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
+  it('refuses a shortened id a parenthetical separates from its provisional id, and leaves main as it was (#1363)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/QUESTIONS.md': '# Questions\n\n### Question @trading.9\n- a\n\n### Question @trading.10\n- b\n',
+      'design/notes.md': 'Questions @trading.9 (owner-only data, issue #92) and .10 (round-3 triage).\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md writes ".10" after Question @trading.9, but not in a list with it, so the merge cannot read it ' +
+        'as Question @trading.10 and would leave it naming nothing. Write the id in full on the branch (for example ' +
+        '"Question @trading.10"), and merge again.',
+    ]);
+    expect(head()).toBe(before);
     expect(status()).toBe('');
   });
 
@@ -541,6 +703,22 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
       'design/notes.md cites @trading.1 without saying what kind of entry it is. Write the kind in front of it ' +
         '(for example `Ruling @trading.1`, or in a list, `Rulings 8 and @trading.1`) on the branch',
     );
+  });
+
+  it('refuses a backticked id nobody declared inside an HTML block, saying backticks there are not a code span (#1410)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': '<details>\n`Ruling @trading.2` is the form\n</details>\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      'design/notes.md cites Ruling @trading.2, but no ledger entry is headed Ruling @trading.2. Correct the citation on the ' +
+        'branch, or, if it is an example rather than a citation, put it in a code span. Inside an HTML block such as ' +
+        '<details>, backticks and <code> are plain text: there, put the example in an HTML comment, or on a line of its ' +
+        'own after a blank line, where Markdown is read again (not inside <pre>, <script>, <style> or <textarea>, which ' +
+        'end only at their closing tag).',
+    ]);
   });
 
   it('refuses a branch that took a real number itself, which is how two branches collide', async () => {

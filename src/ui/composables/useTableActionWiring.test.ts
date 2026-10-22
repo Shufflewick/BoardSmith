@@ -25,6 +25,9 @@ import { createBoardInteraction, type BoardInteraction } from './useBoardInterac
 import type { TableActionWiring } from './useTableActionWiring.js';
 import { mountTableWiring, settle, startTable } from './table-wiring.test-helper.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['../components/GameShell.vue', './useTableSeat.ts']);
+
 const SEAT = 1;
 
 interface Table {

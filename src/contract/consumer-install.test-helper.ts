@@ -30,6 +30,7 @@ import { dirname, join } from 'node:path';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
+import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
 
 /**
  * What a game installs alongside us to run `vue-tsc` at all. Anything NOT in
@@ -117,7 +118,8 @@ interface ConsumerInstall {
 /**
  * A tree that holds this package as a consumer would hold it: our `src` under
  * `node_modules/boardsmith`, and beside it only what the install being modelled
- * actually provides. Returns the tree's root; `tsconfig.json` sits at the top.
+ * actually provides. Returns the tree's root; `tsconfig.json` at the top is the one
+ * `boardsmith init` writes, compiling `entryPoints`.
  */
 export function consumerInstall({ entryPoints, alsoInstalled = [] }: ConsumerInstall): string {
   const root = tempTree('bs-consumer-install-');
@@ -146,21 +148,8 @@ export function consumerInstall({ entryPoints, alsoInstalled = [] }: ConsumerIns
     join(root, 'tsconfig.json'),
     JSON.stringify(
       {
-        compilerOptions: {
-          target: 'ES2022',
-          module: 'ESNext',
-          moduleResolution: 'bundler',
-          lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-          strict: true,
-          esModuleInterop: true,
-          skipLibCheck: true,
-          resolveJsonModule: true,
-          jsx: 'preserve',
-          types: ['vite/client', 'node'],
-          noEmit: true,
-          // Resolve from where the file SITS, not from where it really lives.
-          preserveSymlinks: true,
-        },
+        ...JSON.parse(gameTsConfig([])),
+        // `files`, not `include`: the scaffold's `exclude` skips `node_modules`, where these entry points sit.
         files: entryPoints.map((entry) => `node_modules/boardsmith/${entry}`),
       },
       null,

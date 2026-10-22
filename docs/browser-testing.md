@@ -324,10 +324,19 @@ node scripts/ordered-list-browser.mjs    # one, with its checks printed as it go
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
 exit 0. A merge runs it as its `browser` step when the merge changes
-`src/ui/`, `src/cli/dev-host/`, `src/world/` or a browser script
-(`merge.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
-run it, so run it by hand while working on those areas. They are **not**
-part of a plain `boardsmith test`, so the default suite needs no Chromium, and
+`src/ui/`, `src/cli/dev-host/`, `src/world/` or a file the browser suite
+runs: a browser script, `scripts/browser-harness.mjs`,
+`scripts/browser-regressions.browser-test.mjs`, `vitest.browser.config.ts` and
+the setup files it loads, and the CLI code and test helpers they load (the
+step's `whenChanged` in `.agent-policy.json`, #1409). That list is checked, not
+trusted: `scripts/browser-harness.test.mjs` walks the imports of those files and
+of the commands the suite runs, stopping at the rest of the library, and fails
+naming each file `whenChanged` leaves out (#1425). `agent-policy verify` does not
+run it, so run it by hand while working on those areas. A change to browser
+scripts alone runs only `scripts/browser-harness.test.mjs` in verify, which
+checks the scripts without running them (#1425), so the merge's `browser` step
+is the first thing to run them. They are **not** part of a plain `boardsmith test`, so the default
+suite needs no Chromium, and
 `--browser` skips the type check a plain run does first, since the merge's
 `typecheck` check has done it on the same commit. They use
 BoardSmith's own Playwright and the Chromium `boardsmith install-browser` puts on

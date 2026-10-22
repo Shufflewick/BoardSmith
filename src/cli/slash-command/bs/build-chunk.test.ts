@@ -29,12 +29,16 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { skillMarkdown } from '../skill-markdown.test-helper.js';
+
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../../cli.ts');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** Read a bs/ shared-reference file relative to this test file's directory. */
 function read(relativePath: string): string {
-  return readFileSync(join(__dirname, relativePath), 'utf-8');
+  return skillMarkdown(`bs/${relativePath}`);
 }
 
 /**

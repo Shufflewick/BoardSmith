@@ -28,6 +28,9 @@ import { mount } from '@vue/test-utils';
 import { defineComponent, ref, onUnmounted, nextTick } from 'vue';
 import type { PropType } from 'vue';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', './PlayShell.vue']);
+
 // ---------------------------------------------------------------------------
 // ActionbarHarness — isolated test component that mirrors GameShell.vue's
 // .actionbar template conditions exactly.

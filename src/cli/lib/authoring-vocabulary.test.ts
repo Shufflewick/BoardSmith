@@ -54,7 +54,7 @@
  *   header prose is on the honour system.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { generateScaffoldFiles, tableUiFiles } from './project-scaffold.js';
@@ -74,6 +74,17 @@ import { WORLD_REFUSALS } from '../../world/refusals.js';
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '..', '..', '..');
 const readSrc = (...parts: string[]) => readFileSync(join(REPO_ROOT, ...parts), 'utf-8');
+// Links the files read below by path, so `--changed` runs this test when one alone changes; nothing loads (#1417).
+import.meta.glob([
+  './boardsmith.schema.json',
+  '../../world/definition.ts',
+  '../../session/capabilities.ts',
+  '../commands/validate.ts',
+  '../commands/build.ts',
+  '../commands/init.ts',
+  '../commands/dev-world.ts',
+  '../../ui/composables/useBoardInteraction.ts',
+]);
 
 /** One author-facing string, and where a failure has to be fixed. */
 interface Surface {
@@ -182,11 +193,8 @@ function refusalSurfaces(): Surface[] {
  *  because getting-started.md sends an author to run `init --world` and then
  *  tells them what it wrote. */
 function docSurfaces(): Surface[] {
-  const dir = join(REPO_ROOT, 'docs');
-  return readdirSync(dir)
-    .filter((name) => name.endsWith('.md'))
-    .sort()
-    .map((name) => ({ where: `docs/${name}`, text: readFileSync(join(dir, name), 'utf-8') }));
+  const docs = import.meta.glob<string>('/docs/*.md', { eager: true, import: 'default' });
+  return Object.entries(docs).map(([path, text]) => ({ where: path.slice(1), text }));
 }
 
 const surfaces: Surface[] = [

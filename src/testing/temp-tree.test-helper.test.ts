@@ -28,6 +28,9 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROBE_MARKER } from './temp-tree.probe.test.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../../vitest.config.ts');
+
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** This file, the probe and the owner: the three that talk about `mkdtemp`. */

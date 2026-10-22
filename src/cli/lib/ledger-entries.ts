@@ -8,6 +8,7 @@
  * tools come to disagree about what a ledger says: before #436 this reader knew only real numbers,
  * so it read a chunk branch's provisional entry as part of the numbered entry above it.
  */
+import { fromMarkdown } from 'mdast-util-from-markdown';
 import { escapeRegExp } from '../../utils/regexp.js';
 
 const SLUG = '[A-Za-z0-9_-]+';
@@ -52,33 +53,64 @@ export interface LedgerEntry {
   body: string;
 }
 
+const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
+const COMMENT = /<!--[\s\S]*?-->/g;
+
 /**
  * Replaces every HTML comment with blanks of the same shape, so the template's illustrative
  * examples (which live inside `<!-- -->`) are never read as entries, and every line number still
  * points at the real line in the file.
  */
 export function blankComments(text: string): string {
-  return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
+  return text.replace(COMMENT, blank);
 }
 
-const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
+/** A file's text as a citation reader reads it (`citableText`). */
+export interface Citable {
+  /** The text with every quoted region blanked to the same shape. */
+  text: string;
+  /** The [start, end) offsets of each block of prose, which no citation runs out of. */
+  blocks: Array<[number, number]>;
+}
+
+type MarkdownNode = ReturnType<typeof fromMarkdown> | ReturnType<typeof fromMarkdown>['children'][number];
+// A container holds blocks; every other block (a paragraph, a heading, code) is one leaf block.
+const CONTAINERS = new Set(['root', 'blockquote', 'list', 'listItem']);
+// In an HTML block a comment its container ends before its `-->` runs to the block's end.
+const HTML_COMMENT = /<!--(?:[\s\S]*?-->|[\s\S]*)/g;
 
 /**
- * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a fenced
- * code block or an inline code span is QUOTED, never cited. A filing that reproduces a ledger bug
- * writes `### Filing @x.1` as an example, and a skill writes `Ruling @<slug>.<n>` as a form; neither
- * names an entry. Returns `text` with every quoted region blanked to the same shape, so offsets and
- * line numbers still point into the real file. Outside Markdown (source code) backticks are not
- * quoting, so the text is returned unchanged: `// Ruling @a.1` in a `.ts` file is a citation.
+ * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a code block
+ * or an inline code span is QUOTED, never cited. A filing that reproduces a ledger bug writes
+ * `### Filing @x.1` as an example, and a skill writes `Ruling @<slug>.<n>` as a form; neither names
+ * an entry. Returns `text` with every quoted region blanked to the same shape, so offsets and line
+ * numbers still point into the real file, and its leaf blocks (paragraphs, headings), as a CommonMark
+ * parser reads them (#1403). Outside Markdown (source code) backticks are not quoting, so the text is
+ * returned unchanged, as one block: `// Ruling @a.1` in a `.ts` file is a citation.
  */
-export function citableText(path: string, text: string): string {
-  if (!path.endsWith('.md')) return text;
-  return blankComments(text)
-    .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
-    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
+export function citableText(path: string, text: string): Citable {
+  if (!path.endsWith('.md')) return { text, blocks: [[0, text.length]] };
+  const blocks: Array<[number, number]> = [];
+  let citable = '';
+  let from = 0;
+  const visit = (node: MarkdownNode, leafBlock: boolean): void => {
+    const start = node.position!.start.offset!;
+    const end = node.position!.end.offset!;
+    if (leafBlock) blocks.push([start, end]);
+    if (node.type === 'code' || node.type === 'inlineCode' || node.type === 'html') {
+      const quoted = text.slice(start, end);
+      citable += text.slice(from, start) + (node.type === 'html' ? quoted.replace(HTML_COMMENT, blank) : blank(quoted));
+      from = end;
+    }
+    if (!('children' in node)) return;
+    for (const child of node.children) visit(child, CONTAINERS.has(node.type) && !CONTAINERS.has(child.type));
+  };
+  visit(fromMarkdown(text), false);
+  return { text: citable + text.slice(from), blocks };
 }
 
-function lineOf(text: string, index: number): number {
+/** The 1-based line of `text` that `index` is on. */
+export function lineOf(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;
   return line;

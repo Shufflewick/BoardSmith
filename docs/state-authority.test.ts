@@ -14,11 +14,6 @@
  * tells the next editor WHY the sentence they just wrote is wrong.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const DOCS = dirname(fileURLToPath(import.meta.url));
 
 /** Every prose doc that describes how state is stored or restored. */
 const STATE_MODEL_DOCS = [
@@ -29,7 +24,15 @@ const STATE_MODEL_DOCS = [
   'state-size.md',
 ] as const;
 
-const read = (name: string) => readFileSync(join(DOCS, name), 'utf-8');
+const DOCS = import.meta.glob<string>(
+  ['./agent-control.md', './architecture.md', './core-concepts.md', './nomenclature.md', './state-size.md'],
+  { eager: true, import: 'default' },
+);
+const read = (name: string) => {
+  const text = DOCS[`./${name}`];
+  if (text === undefined) throw new Error(`docs/${name} is missing, or not in the import.meta.glob list above.`);
+  return text;
+};
 
 /**
  * Claims that assert the abandoned model. Each is matched case-insensitively

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { describeFlowPosition } from './describe-flow-position.js';
 import type { FlowNode, FlowPosition, FlowState } from './types.js';
+// Type imports are erased; this links the test to the file for verify's related-tests check.
+import './types.js';
 
 function actionStepNode(actions: string[], name?: string): FlowNode {
   return { type: 'action-step', config: { actions, name } };

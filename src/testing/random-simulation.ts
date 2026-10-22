@@ -116,6 +116,9 @@ export interface SimulationResults {
   seed: string;
 }
 
+// Taken at load so a test's vi.useFakeTimers() cannot stall the run between games (#1429).
+const realSetImmediate = setImmediate;
+
 /** The random policy at every seat. */
 function randomSeats(
   playerCount: number,
@@ -251,6 +254,9 @@ export async function simulateRandomGames<G extends Game>(
       if (onGameComplete) {
         onGameComplete(result, { completed: total, total: count });
       }
+
+      // Lets the worker answer its test runner: vitest 3 fails the run when a worker is held over a minute (#1429).
+      await new Promise((resolve) => realSetImmediate(resolve));
     }
   }
 

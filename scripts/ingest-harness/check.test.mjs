@@ -24,12 +24,18 @@ import path from 'node:path';
 import { checkIngestArtifacts, CHECK_IDS } from './check.mjs';
 import { CONFORMING_DIR, CONFORMING_SOURCE_HASH } from './conforming-fixture.test-helper.mjs';
 import { tempTree } from '../../src/testing/temp-tree.test-helper.ts';
+import README from './README.md';
+
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('./run.mjs');
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const FIXTURES_DIR = path.join(__dirname, '__fixtures__');
 const NONCONFORMING_DIR = path.join(FIXTURES_DIR, 'nonconforming');
+// The checker reads the fixture from disk; importing it links this test to it (#1370).
+import.meta.glob('./__fixtures__/nonconforming/**/*.md', { eager: true });
 
 // The real seven/rules.pdf hash, verified 2026-07-27 and re-verified at the proof run
 // (170-05-PLAN.md context block). Used only as the "expected" hash against the
@@ -339,8 +345,10 @@ describe('stated check counts', () => {
   const WORDS = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen'];
   const COUNT = new RegExp(`\\b(${WORDS.join('|')})(?:\\s+|-)(produced-artifact checks|checks|row|pass)\\b`, 'g');
 
-  it.each(['README.md', 'run.mjs'])('%s states CHECK_IDS.length produced-artifact checks, plus one for gate item (g)', (file) => {
-    const text = fs.readFileSync(path.join(__dirname, file), 'utf8');
+  it.each([
+    ['README.md', README],
+    ['run.mjs', fs.readFileSync(path.join(__dirname, 'run.mjs'), 'utf8')],
+  ])('%s states CHECK_IDS.length produced-artifact checks, plus one for gate item (g)', (_file, text) => {
     const stated = [...text.matchAll(COUNT)].map(([phrase, word, kind]) => ({
       phrase: phrase.replace(/\s+/g, ' '),
       count: WORDS.indexOf(word),

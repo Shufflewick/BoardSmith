@@ -21,6 +21,7 @@ import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
+import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
  * `example-derivation.ts` is the ONE shared module both TEST-01 (build-side) and CHECK-06
@@ -1352,10 +1353,6 @@ describe('module header comment — Task 3 acceptance criterion', () => {
  */
 describe('SC-3 — both pipeline sides derive from one module', () => {
   const CLI_PATH = fileURLToPath(new URL('../cli.ts', import.meta.url));
-  const BUILD_TEST_MD_PATH = fileURLToPath(
-    new URL('../slash-command/bs/build/test.md', import.meta.url),
-  );
-  const VERIFY_GAME_MD_PATH = fileURLToPath(new URL('../slash-command/bs/verify-game.md', import.meta.url));
   const REPLAY_PATH = fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url));
   const EMIT_PATH = fileURLToPath(new URL('./example-test-emit.ts', import.meta.url));
   const RUN_PATH = fileURLToPath(new URL('./example-test-run.ts', import.meta.url));
@@ -1385,8 +1382,8 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
     async () => {
       const [buildTestMd, verifyGameMd, cliSource, replaySource, emitSource, runSource] =
         await Promise.all([
-          readAll(BUILD_TEST_MD_PATH),
-          readAll(VERIFY_GAME_MD_PATH),
+          skillMarkdown('bs/build/test.md'),
+          skillMarkdown('bs/verify-game.md'),
           readAll(CLI_PATH),
           readAll(REPLAY_PATH),
           readAll(EMIT_PATH),

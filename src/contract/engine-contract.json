@@ -1,6 +1,6 @@
 {
-  "revision": 268,
-  "surfaceHash": "d615bc0c99f7b4b9",
+  "revision": 271,
+  "surfaceHash": "6589109a6e37a1e0",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2087,6 +2087,30 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A game callback handed a card the acting seat cannot see no longer writes text that seat reads (#1293): a pick's display and choice labels, disabled reasons, selection and action validate messages, function prompts and unavailable sentences become the engine's neutral text (\"Card #1\", a generic reason or refusal, no prompt), with the game's text in the dev log; rule outcomes are unchanged. The world fixture now offers a neighbour the looker cannot see. Platform: re-vendor; worlds get it then, and a table game when it is rebuilt. Not an ABI break."
+    },
+    {
+      "revision": 269,
+      "date": "2026-10-21",
+      "surfaceHash": "d615bc0c99f7b4b9",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A follow-up offer now labels each chooseElement/chooseElements arg the game pre-filled with element ids and gave no display for, by that pick's own label rule (its display(), else the element's notation or name; a hidden element gets its neutral label), so the action panel's chip no longer shows the raw id (Checkers' multi-jump showed '1873686213') (#1378). A display the game passes still wins. Platform: re-vendor; a table game gets it when it is rebuilt. Not an ABI break."
+    },
+    {
+      "revision": 270,
+      "date": "2026-10-21",
+      "surfaceHash": "1cd31abda6ec9808",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Track, MonotonicTrack, UniqueTrack, CounterTrack and AbilityManager classes are gone from 'boardsmith' (#969); games use the plain-data track and ability functions from #779 (monotonicTrack/uniqueTrack/counterTrack, addToTrack, trackPoints, addAbility, spendAbility and the rest), which polyhedral-potions now does. No change to snapshots, views or ops. Platform: re-vendor; a polyhedral-potions build from before its #7 merge imports the removed classes and must be rebuilt."
+    },
+    {
+      "revision": 271,
+      "date": "2026-10-22",
+      "surfaceHash": "6589109a6e37a1e0",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Game gains endFlowIfFinished(), which a host calls after restoring an arranged position so a finished game's flow ends and no seat is offered an action (#1427)"
     }
   ]
 }

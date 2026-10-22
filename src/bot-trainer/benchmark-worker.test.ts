@@ -29,6 +29,8 @@ import { cliBuildOptions } from '../cli/lib/build-cli.js';
 import { REPO_ROOT } from '../contract/vue-tsc-run.test-helper.js';
 import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
+// These tests start the worker by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./benchmark-worker.ts');
 
 const ENGINE = join(REPO_ROOT, 'src/engine/index.ts');
 

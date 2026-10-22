@@ -75,6 +75,8 @@ vi.mock('../../bot-trainer/index.js', async (importOriginal) => {
 const { evolveBotWeightsCommand } = await import('./evolve-bot-weights.js');
 
 const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
+// These tests run the fixture by its path; this links them to it, loading nothing (#1415).
+import.meta.glob('./simulate.fixture.ts');
 
 const BOT = [
   'export const objectives = () => ({',

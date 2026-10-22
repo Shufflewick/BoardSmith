@@ -25,7 +25,8 @@ import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { generateSmokeSpecTs, generateTsConfig } from '../cli/lib/project-scaffold.js';
+import { generateSmokeSpecTs } from '../cli/lib/project-scaffold.js';
+import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
@@ -42,28 +43,6 @@ export async function renderSeatOne(game: TestGame<Game>): Promise<string> {
 export const create = createTestGame;
 `;
 
-/** The game's tsconfig as `boardsmith init` writes it, compiling only the one test file. */
-function gameTsConfig(): string {
-  const scaffolded = JSON.parse(generateTsConfig()) as {
-    compilerOptions: Record<string, unknown>;
-    include: string[];
-  };
-  return JSON.stringify(
-    {
-      ...scaffolded,
-      compilerOptions: {
-        ...scaffolded.compilerOptions,
-        noEmit: true,
-        // Resolve from where the file SITS, not from where it really lives (see consumerInstall).
-        preserveSymlinks: true,
-      },
-      include: ['tests/**/*'],
-    },
-    null,
-    2,
-  );
-}
-
 describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411)", () => {
   it('reports zero vue-tsc errors for a game test that imports it', () => {
     // The declared peers are installed because `@vue/test-utils` is one, and a
@@ -71,7 +50,7 @@ describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411
     const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
     mkdirSync(join(root, 'tests'), { recursive: true });
     writeFileSync(join(root, 'tests', 'seat.test.ts'), GAME_TEST);
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['tests/**/*']));
 
     expectCleanCompile(
       root,
@@ -88,7 +67,7 @@ describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411
     const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
     mkdirSync(join(root, 'tests', 'browser'), { recursive: true });
     writeFileSync(join(root, 'tests', 'browser', 'smoke.spec.ts'), generateSmokeSpecTs(['move']));
-    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
+    writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['tests/**/*']));
 
     expectCleanCompile(
       root,

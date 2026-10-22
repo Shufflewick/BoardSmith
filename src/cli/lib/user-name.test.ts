@@ -5,6 +5,9 @@ import { describe, it, expect } from 'vitest';
 
 import { assertBareName, assertGameName } from './user-name.js';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob('../cli.ts');
+
 describe('assertGameName', () => {
   it('accepts the kebab-case names the catalogue actually uses', () => {
     // Every game in ~/BoardSmithGames satisfies this; the rule was read off

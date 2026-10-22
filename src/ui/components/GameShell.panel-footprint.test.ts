@@ -23,6 +23,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
+import.meta.glob(['./GameShell.vue', './PlayShell.vue', './helpers/AnnotationLayer.vue']);
+
 /**
  * BOTH HALVES OF THE SHELL, because since #170 the constraint spans the pair.
  *

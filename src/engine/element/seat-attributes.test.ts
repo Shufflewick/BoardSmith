@@ -73,11 +73,16 @@ class Reserved extends Piece<TestGame> {
   static override seatAttributes = { name: () => 'renamed' };
 }
 
+/** `color` is a player's identity field, not a piece's (#1433). */
+class Tinted extends Piece<TestGame> {
+  static override seatAttributes = { color: () => 'blue' };
+}
+
 class TestGame extends Game<TestGame, Player> {
   constructor(options: ConstructorParameters<typeof Game>[0]) {
     super(options);
     this.registerElements([
-      Gps, Character, SharedBoard, Throwing, Unserializable, Colliding, Whitelisted, Reserved,
+      Gps, Character, SharedBoard, Throwing, Unserializable, Colliding, Whitelisted, Reserved, Tinted,
     ]);
   }
 }
@@ -180,6 +185,11 @@ describe('static seatAttributes (#269)', () => {
   it('refuses a derived name the engine owns', () => {
     game.create(Reserved, 'reserved');
     expect(() => game.toJSONForPlayer(1)).toThrow(/Reserved\.seatAttributes\.name/);
+  });
+
+  it('lets a piece derive a name that only a player owns', () => {
+    game.create(Tinted, 'tinted');
+    expect(findByName(game.toJSONForPlayer(1).children, 'tinted').attributes.color).toBe('blue');
   });
 
   it('does not restore a derived value as stored state', () => {
