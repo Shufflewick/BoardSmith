@@ -398,7 +398,7 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     // Check for threats BEFORE sampling - this is critical!
-    // The threat response needs to see ALL possible moves to find blocking cells
+    // The threat response needs to see every move (every candidate move, with candidateMoves) to find blocking cells
     let moves: BotMove[];
     this.forcedRootMoveKeys = undefined;
 

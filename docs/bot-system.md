@@ -164,8 +164,9 @@ It is handed the search's copy of the game, the seat whose moves are listed
 would otherwise consider. Filter that listing to leave moves out, or return the
 game's own short list without calling `listMoves`, which spares the full
 enumeration of an action with a large or open-ended set of args. Moves are in
-wire form (element ids). A move the engine refuses is dropped from the search,
-and an empty list for a seat that has moves throws.
+wire form (element ids). Return only legal moves: the bot can choose any move
+it is given, so an illegal one can reach the engine as the bot's move. An empty
+list for a seat that has moves throws.
 
 <!-- typecheck: game src/candidate-moves.ts -->
 ```typescript

@@ -268,7 +268,8 @@ export interface BotStrategy {
    * search entirely, or return the game's own short list of sensible moves
    * without calling `listMoves`, which spares the full enumeration of an
    * action with a large or open-ended set of args. Moves are in wire form
-   * (element ids). A move the engine refuses is dropped from the search.
+   * (element ids). Return only legal moves: the bot can choose any move it
+   * is given, so an illegal one can reach the engine as the bot's move.
    *
    * Return at least one move whenever `listMoves()` returns any: an empty
    * list for a seat that has moves throws.
