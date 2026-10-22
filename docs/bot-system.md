@@ -577,6 +577,14 @@ each one:
   subclass, for the shared secret that belongs to no element: a map seed, a
   hidden objective deck order.
 
+A hidden element's own `seat`, `color` or `status` is withheld like any other
+attribute: only a player's are engine-owned, so in a search copy reading one on
+a hidden piece throws `RedactedAttributeError` (#1434). A game whose bot or
+rules read such attributes, for example to find a piece by its owner with
+`game.first(Piece, p => p.seat === seat)`, must fill them in its `determinize`
+sampler, or look owners up through something always visible, such as the
+container the piece sits in.
+
 ```typescript
 determinize: (sandbox, seat, rng) => {
   const game = sandbox as MyGame;
