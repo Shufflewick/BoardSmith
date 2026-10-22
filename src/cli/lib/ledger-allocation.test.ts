@@ -405,3 +405,14 @@ describe('a shortened id on the line after its kind word (#1389)', () => {
     expect(provisionalReferences('design/notes.md', 'Rulings 8 and\r\n@a.1.\r\n')).toEqual(['Ruling @a.1']);
   });
 });
+
+/** #1390: `G.2` after a constraint letter was neither read as a citation nor refused, so it merged naming nothing. */
+describe('a shortened id straight after a constraint letter (#1390)', () => {
+  it('names it as written, alone or after a provisional id in a list', () => {
+    expect(unreadableShorthand('design/notes.md', 'see G@trading.1 and G.2, and C.3 alone.\n')).toEqual(['G.2', 'C.3']);
+  });
+
+  it('names nothing in a word, a real number or a quote', () => {
+    expect(unreadableShorthand('design/notes.md', 'PG.2, G12.5, `G.2` and g.2\n')).toEqual([]);
+  });
+});

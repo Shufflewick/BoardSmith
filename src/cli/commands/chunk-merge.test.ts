@@ -574,6 +574,21 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(status()).toBe('');
   });
 
+  it('refuses a shortened id straight after a constraint letter, and leaves main as it was (#1390)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Ruling @trading.1, within G.2.\n',
+    });
+    const before = head();
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner, typeCheck });
+    expect(result.merged).toBe(false);
+    expect(result.refusals).toEqual([
+      expect.stringMatching(/^design\/notes\.md writes "G\.2", a shortened id straight after a kind word\..*`G@<slug>\.2`/),
+    ]);
+    expect(head()).toBe(before);
+    expect(status()).toBe('');
+  });
+
   it('refuses a shortened id a parenthetical separates from its provisional id, and leaves main as it was (#1363)', async () => {
     await buildOnBranch('trading', 100, {
       'design/QUESTIONS.md': '# Questions\n\n### Question @trading.9\n- a\n\n### Question @trading.10\n- b\n',

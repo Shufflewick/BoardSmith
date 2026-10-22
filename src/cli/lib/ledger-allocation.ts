@@ -211,20 +211,26 @@ export function provisionalReferences(path: string, text: string): string[] {
 }
 
 const DASH_THEN_NUMBER = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}[ \\t]*[-–][ \\t]*\\d+(?!\\d)`, 'g');
-const SHORTHAND_AFTER_KIND = new RegExp(`\\b((?:${WORD_KINDS.join('|')})s?)(?=\\s)${GAP}(${SHORTHAND})(?!\\d)`, 'g');
+const SHORTHAND_AFTER_KIND = new RegExp(
+  `\\b(?:((?:${WORD_KINDS.join('|')})s?)(?=\\s)${GAP}|(${LETTER_KINDS.join('|')}))(${SHORTHAND})(?!\\d)`,
+  'g',
+);
 
 /**
  * Shorthand in file `path` that names no id the merge can map (#446), as written: a dash then a
  * plain number after a provisional id (`@a.1-3`, which may mean `@a.3` or real number 3), and a
- * shortened id right after a kind word (`Decision .2`, even wrapped onto the next line), which takes
- * no slug from an id before the kind word. Quoted text (`citableText`) is not read.
+ * shortened id right after a kind word or letter (`Decision .2`, even wrapped onto the next line, or
+ * `G.2`), which takes no slug from an id before the kind. Quoted text (`citableText`) is not read.
  */
 export function unreadableShorthand(path: string, text: string): string[] {
   const citable = citableText(path, text);
   return [
     ...[...citable.matchAll(DASH_THEN_NUMBER)].map((m) => ({ index: m.index, written: m[0] })),
     // A kind word may wrap onto the next line; it is quoted on one.
-    ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({ index: m.index, written: `${m[1]} ${m[2]}` })),
+    ...[...citable.matchAll(SHORTHAND_AFTER_KIND)].map((m) => ({
+      index: m.index,
+      written: m[1] === undefined ? `${m[2]}${m[3]}` : `${m[1]} ${m[3]}`,
+    })),
   ]
     .sort((a, b) => a.index - b.index)
     .map((m) => m.written);
