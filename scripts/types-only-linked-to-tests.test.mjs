@@ -20,7 +20,8 @@ import.meta.glob(['/src/**/*.ts', '/docs/**/*.test.ts', '/scripts/**/*.test.mjs'
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GUARD = fileURLToPath(import.meta.url);
 
-const source = execFileSync('git', ['ls-files', '-z', '--', 'src/*.ts'], { cwd: ROOT, encoding: 'utf-8' })
+// Untracked files too, so a new types-only file is checked before its first commit.
+const source = execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard', '--', 'src/*.ts'], { cwd: ROOT, encoding: 'utf-8' })
   .split('\0')
   .filter((file) => file && !file.endsWith('.test.ts') && !file.endsWith('.d.ts'));
 const compilerOptions = { removeComments: true, verbatimModuleSyntax: true, module: ts.ModuleKind.ESNext };
