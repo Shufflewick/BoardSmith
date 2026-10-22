@@ -389,9 +389,9 @@ describe('generatePackageJson — axe-core scaffold devDependency', () => {
     expect(parsed.devDependencies.vitest).toBe(own.devDependencies.vitest);
   });
 
-  it('requires, as a peer, the vitest it pins (#1344: a game still on vitest 2 installed without a warning)', () => {
+  it('requires, as a peer, at least the vitest it pins, and leaves later majors open (#1344; the CLI handles Vitest 4, #1310)', () => {
     const own = JSON.parse(readFileSync(join(boardsmithPackageRoot(), 'package.json'), 'utf8'));
-    expect(own.peerDependencies.vitest).toBe(own.devDependencies.vitest);
+    expect(own.peerDependencies.vitest).toBe(own.devDependencies.vitest.replace(/^\^/, '>='));
   });
 });
 

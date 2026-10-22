@@ -123,7 +123,7 @@
     "@vitejs/plugin-vue": ">=5.0.0",
     "@vue/test-utils": "^2.4.0",
     "three": ">=0.180.0",
-    "vitest": "^3.2.7",
+    "vitest": ">=3.2.7",
     "vue": "^3.5.0"
   },
   "peerDependenciesMeta": {
