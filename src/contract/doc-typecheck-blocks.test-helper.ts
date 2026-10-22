@@ -14,11 +14,7 @@
  * `aspect-boards-typecheck.test.ts` compiles the `board` blocks (#570), and
  * the boards the aspect templates teach under the same `gameTsConfig`.
  */
-import { readFileSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { generateTsConfig } from '../cli/lib/project-scaffold.js';
-import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 /** One marked block: the doc it is in, the path its marker names, and its code. */
 export interface MarkedDocBlock {
@@ -95,20 +91,18 @@ const FILE_START: Record<string, RegExp> = { ts: IMPORT_LINE, typescript: IMPORT
 // A `doc-test: file` block is compiled by the doc's own test (docs/balance-simulator.test.ts, #556).
 const COMPILED_MARKER = /^<!-- (typecheck:|doc-test: file )/;
 
-/** The folders whose `*.md` files may mark blocks, relative to the repo root. */
-const MARKED_DIRS = ['docs', 'docs/api', 'src/cli/slash-command/aspects'];
+/** The `*.md` that may mark blocks, keyed by path from the repo root with a leading `/`. */
+const MARKED_DOCS = import.meta.glob<string>(['/docs/*.md', '/docs/api/*.md', '/src/cli/slash-command/aspects/*.md'], {
+  eager: true,
+  import: 'default',
+});
 
 /**
- * Every block in the `*.md` of `MARKED_DIRS` whose marker names `kind`, in
- * document order (see `parseMarkedBlocks`).
+ * Every block in `MARKED_DOCS` whose marker names `kind`, in document order
+ * (see `parseMarkedBlocks`).
  */
 export function markedDocBlocks(kind: string): MarkedDocBlock[] {
-  return MARKED_DIRS.flatMap((dir) =>
-    readdirSync(join(REPO_ROOT, dir))
-      .filter((name) => name.endsWith('.md'))
-      .sort()
-      .flatMap((name) => parseMarkedBlocks(`${dir}/${name}`, readFileSync(join(REPO_ROOT, dir, name), 'utf8'), kind)),
-  );
+  return Object.entries(MARKED_DOCS).flatMap(([path, text]) => parseMarkedBlocks(path.slice(1), text, kind));
 }
 
 /**

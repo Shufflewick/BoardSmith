@@ -40,6 +40,8 @@ const FIXTURE_ROOT = join(
   '174-07-contradictory',
   'staged',
 );
+// These tests read the fixture from disk; importing it links them to it (#1370).
+import.meta.glob('/.planning/phases/175-impact-map-repair-gating/175-FIXTURES/**/*.md', { eager: true });
 
 async function fixtureSha256Tree(dir: string): Promise<Record<string, string>> {
   const map: Record<string, string> = {};

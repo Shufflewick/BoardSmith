@@ -97,7 +97,6 @@ export { parseCsv, type CsvColumnType, type CsvValue, type CsvRow } from './util
 // Player system
 export {
   Player,
-  AbilityManager,
   addAbility,
   hasUnusedAbility,
   spendAbility,
@@ -109,10 +108,6 @@ export type { Ability, PlayerStatus } from './player/index.js';
 
 // Scoring system (tracks for dice/roll-and-write games)
 export {
-  Track,
-  MonotonicTrack,
-  UniqueTrack,
-  CounterTrack,
   monotonicTrack,
   uniqueTrack,
   counterTrack,

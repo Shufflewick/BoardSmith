@@ -351,7 +351,11 @@ rewrites a range only when the ids in it became one unbroken run of numbers; oth
 the range has no entry, the entries were headed out of order, or the range starts at a real
 number) it stops the merge, and the fix is to write the ids out as a list. It also stops on
 shorthand that names no id it can map: a dash then a plain number after a provisional id
-(`@<slug>.1-3`), and a shortened id straight after a kind word (`Decision .2`).
+(`@<slug>.1-3`), a shortened id straight after a kind word (`Decision .2`), and a shortened id
+that a word or a parenthetical separates from its provisional id (`Decision @<slug>.2 supersedes .1`),
+which is not in its list, or that follows a constraint letter (`G@<slug>.1 and G.2`); write that id
+in full. Only shorthand on a line the branch wrote stops it, so shorthand the main line already had,
+even in a file the branch renamed, does not.
 
 ## Git Protocol
 

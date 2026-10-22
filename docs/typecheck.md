@@ -46,6 +46,7 @@ real.
 | `src/**/*.vue` | SFC scripts and template expressions |
 | `docs/**/*.ts` | The documentation tests |
 | `vitest.config.ts` | |
+| `markdown.d.ts` | Types a test's `.md` import as its text |
 
 `scripts/typecheck-coverage.test.mjs` asks `vue-tsc` which files it compiled
 and fails if any tracked `.ts` or `.vue` file under `src/` or `docs/` is

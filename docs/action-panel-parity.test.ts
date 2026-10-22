@@ -30,7 +30,12 @@ import { dirname, join, sep } from 'node:path';
 const DOCS = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(DOCS);
 
-const read = (p: string): string => readFileSync(join(REPO, p), 'utf8');
+/** The Markdown read below, keyed by path from the repo root with a leading `/`. */
+const MARKDOWN = import.meta.glob<string>(
+  ['/docs/actions-and-flow.md', '/docs/custom-ui-guide.md', '/docs/ui-components.md', '/src/cli/slash-command/bs/build/build.md'],
+  { eager: true, import: 'default' },
+);
+const read = (p: string): string => (p.endsWith('.md') ? MARKDOWN[`/${p}`] : readFileSync(join(REPO, p), 'utf8'));
 
 /**
  * Read a doc as one flowed line with markdown/JSDoc decoration removed, so a
