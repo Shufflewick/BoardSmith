@@ -324,12 +324,12 @@ node scripts/ordered-list-browser.mjs    # one, with its checks printed as it go
 `boardsmith test --browser` (`vitest.browser.config.ts`, #533) runs one case per
 `scripts/*-browser.mjs`, found by name, that runs the script and expects it to
 exit 0. A merge runs it as its `browser` step when the merge changes
-`src/ui/`, `src/cli/dev-host/`, `src/world/` or a browser script
-(`merge.extraMergeSteps` in `.agent-policy.json`); `agent-policy verify` does not
-run it, so run it by hand while working on those areas. A change to browser
-scripts alone runs no vitest tests in verify either (they are `untested` in
-`.agent-policy.json`, #1124), so the merge's `browser` step is the first thing
-to run them. They are **not** part of a plain `boardsmith test`, so the default
+`src/ui/`, `src/cli/dev-host/`, `src/world/`, a browser script or
+`vitest.browser.config.ts` (`merge.extraMergeSteps` in `.agent-policy.json`);
+`agent-policy verify` does not run it, so run it by hand while working on those
+areas. A change to browser scripts or `vitest.browser.config.ts` alone runs no
+vitest tests in verify either (they are `untested` in `.agent-policy.json`,
+#1124, #1375), so the merge's `browser` step is the first thing to run them. They are **not** part of a plain `boardsmith test`, so the default
 suite needs no Chromium, and
 `--browser` skips the type check a plain run does first, since the merge's
 `typecheck` check has done it on the same commit. They use

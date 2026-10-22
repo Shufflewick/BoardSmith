@@ -43,7 +43,8 @@
     "CLAUDE.md",
     "scripts/ingest-harness/__fixtures__/README.md",
     "scripts/ingest-harness/__fixtures__/interactive-nonconforming/**/*.md",
-    "scripts/*-browser.mjs"
+    "scripts/*-browser.mjs",
+    "vitest.browser.config.ts"
   ],
   "slice": {
     "count": 20,
@@ -57,7 +58,7 @@
         "name": "browser",
         "run": "node bin/boardsmith.js test --browser",
         "after": "catalogue",
-        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$)"
+        "whenChanged": "^(src/ui/|src/cli/dev-host/|src/world/|scripts/[^/]*-browser\\.mjs$|vitest\\.browser\\.config\\.ts$)"
       }
     ]
   },

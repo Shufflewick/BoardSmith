@@ -170,17 +170,21 @@ describe('#358: a browser regression finds the packages where Node does', () => 
 describe('#533: every browser regression runs automatically', () => {
   const policy = JSON.parse(readFileSync(join(REPO, '.agent-policy.json'), 'utf8'));
 
-  it('runs the browser suite at merge when UI, dev host, world or browser script files change', () => {
+  it('runs the browser suite at merge when UI, dev host, world, browser script or browser config files change', () => {
     expect(policy.merge?.extraMergeSteps, 'merge.extraMergeSteps in .agent-policy.json').toBeDefined();
     const step = policy.merge.extraMergeSteps.find((s) => s.name === 'browser');
     expect(step).toMatchObject({ run: 'node bin/boardsmith.js test --browser' });
     const runsFor = (path) => new RegExp(step.whenChanged).test(path);
-    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs']) {
+    for (const path of ['src/ui/components/GameShell.vue', 'src/cli/dev-host/bridge.ts', 'src/world/engine.ts', 'scripts/ordered-list-browser.mjs', 'vitest.browser.config.ts']) {
       expect(runsFor(path), path).toBe(true);
     }
-    for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md']) {
+    for (const path of ['src/bot/mcts-bot.ts', 'src/cli/commands/verify.ts', 'docs/browser-testing.md', 'vitest.config.ts']) {
       expect(runsFor(path), path).toBe(false);
     }
+  });
+
+  it('needs no related vitest tests for the browser config alone, since no unit test imports it (#1375)', () => {
+    expect(policy.untested, 'untested in .agent-policy.json').toContain('vitest.browser.config.ts');
   });
 
   it('runs the browser suite after typecheck and before the slow related tests', () => {
