@@ -13,7 +13,7 @@
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
     "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
-    "src/ui/components/PlayShell.vue:764-776|src/ui/components/PlayShell.vue:970-982",
+    "src/ui/components/PlayShell.vue:764-776|src/ui/components/PlayShell.vue:988-1000",
     "src/engine/element/game-element.ts:1164-1170|src/engine/element/game-element.ts:1225-1231",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
