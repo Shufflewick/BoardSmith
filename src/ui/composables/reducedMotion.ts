@@ -3,8 +3,8 @@
  *
  * It is on when the device asks for less motion or the player turned on
  * Reduce motion in GameShell's controls menu (#1442). Import it from
- * `boardsmith/ui` to skip or shorten a game's own animations. `useFLIP` and
- * `useFlyingElements` already honour it, and CSS follows it through the
+ * `boardsmith/ui` to skip or shorten a game's own animations. `useFLIP`, `Die3D`,
+ * `useFlyingElements` and `useActionAnimations` already honour it, and CSS follows it through the
  * `bs-reduce-motion` class kept on `<html>` by `syncReducedMotionClass()`.
  */
 import { customRef, effectScope, watchEffect, type Ref } from 'vue';

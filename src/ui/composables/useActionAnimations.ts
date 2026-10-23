@@ -105,6 +105,7 @@
 import { watch, onScopeDispose, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { prefersReducedMotion } from './reducedMotion.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { escapeCssString } from '../utils/css-string.js';
 import type { GameViewElement } from '../types.js';
@@ -681,9 +682,11 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
     } finally {
       // Clean up inline styles after animation completes
       if (shouldHideDestination) {
-        // Wait for any CSS transition to complete
-        const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        // Wait for any CSS transition to complete; with motion reduced there is none to wait for
+        if (!prefersReducedMotion.value) {
+          const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
+          await new Promise((resolve) => setTimeout(resolve, waitTime));
+        }
 
         // Clear inline styles and data attribute
         destHtmlElement.removeAttribute('data-action-animating');

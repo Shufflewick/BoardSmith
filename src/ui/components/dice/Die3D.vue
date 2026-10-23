@@ -19,6 +19,7 @@ import {
   type DieAnimationContext,
 } from './die3d-state';
 import { dieAriaLabel } from './die-label.js';
+import { prefersReducedMotion } from '../../composables/reducedMotion.js';
 
 // Inject animation context from parent UI, or create a local fallback
 // Each UI tree should provide its own context so dice animate independently in each UI
@@ -675,7 +676,8 @@ function animate() {
 
   if (isAnimating) {
     const elapsed = Date.now() - animationStartTime;
-    const progress = Math.min(elapsed / animationDuration, 1);
+    // With motion reduced the roll lands on its first frame.
+    const progress = prefersReducedMotion.value ? 1 : Math.min(elapsed / animationDuration, 1);
     const eased = 1 - Math.pow(1 - progress, 3);
 
     mesh.rotation.x = startRotation.x + rollSpins.x * eased;

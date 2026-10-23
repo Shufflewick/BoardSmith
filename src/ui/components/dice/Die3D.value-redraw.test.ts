@@ -9,9 +9,10 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises, type VueWrapper } from '@vue/test-utils';
 import { defineComponent, h, reactive } from 'vue';
 
-declare global { var __scenesBuilt: number | undefined; var __liveContexts: number; var __mostLiveContexts: number }
+declare global { var __scenesBuilt: number | undefined; var __liveContexts: number; var __mostLiveContexts: number; var __framesDrawn: string[] }
 globalThis.__liveContexts = 0;
 globalThis.__mostLiveContexts = 0;
+globalThis.__framesDrawn = [];
 interface DrawnScene { children: { type: string; rotation: { x: number; y: number; z: number } }[] }
 
 vi.mock('three', async (importOriginal) => ({
@@ -30,6 +31,7 @@ vi.mock('three', async (importOriginal) => ({
     render(scene: DrawnScene) {
       const { x, y, z } = scene.children.find((c) => c.type === 'Mesh')!.rotation;
       this.drawn = [x, y, z].map((n) => n.toFixed(4)).join(',');
+      globalThis.__framesDrawn.push(`data:${this.drawn}`);
     }
     dispose() {}
     forceContextLoss() { globalThis.__liveContexts--; }
@@ -44,6 +46,7 @@ vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
 
 const { Die3D } = await import('./index.js');
 const { MAX_LIVE_DIE_CONTEXTS } = await import('./die3d-state.js');
+const { reduceMotionPreference } = await import('../../composables/reducedMotion.js');
 // Die3D is an async component; load it here so the mount below renders it at once.
 await (Die3D as unknown as { __asyncLoader: () => Promise<unknown> }).__asyncLoader();
 
@@ -210,5 +213,27 @@ describe('Die3D draws several dice at once, within the WebGL context limit (#897
     await settle();
     expect(scenesBuilt()).toBe(20);
     expect(globalThis.__mostLiveContexts).toBe(MAX_LIVE_DIE_CONTEXTS);
+  });
+});
+
+describe('Die3D with Reduce motion on (#1447)', () => {
+  it('draws only the rolled face, with no spin', async () => {
+    vi.useFakeTimers();
+    const reduceMotion = reduceMotionPreference().use('reduceMotion');
+    reduceMotion.value = true;
+    try {
+      const faceFive = await stillOf(5);
+      const { wrapper, props } = mountDie(2, 'reduced-motion');
+      await settle();
+      globalThis.__framesDrawn = [];
+
+      props.value = 5;
+      props.rollCount = 1;
+
+      expect(await settle(wrapper)).toBe(faceFive);
+      expect(new Set(globalThis.__framesDrawn)).toEqual(new Set([faceFive]));
+    } finally {
+      reduceMotion.value = false;
+    }
   });
 });

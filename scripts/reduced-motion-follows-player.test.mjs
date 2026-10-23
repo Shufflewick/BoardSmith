@@ -55,3 +55,18 @@ describe('CSS keyed on .bs-reduce-motion keeps the class in step itself (#1446)'
     expect(findings, 'Each of these classes needs a script that sets it and calls `syncReducedMotionClass()`, so the stylesheet works on a page with no shell.').toEqual([]);
   });
 });
+
+describe('motion driven from script reads prefersReducedMotion (#1447)', () => {
+  it('every source that tweens over time, runs element.animate() or sets an inline transition checks it', () => {
+    const code = (text) => text.split('\n').filter((line) => !/^\s*(\*|\/\/|\/\*)/.test(line)).join('\n');
+    const tweens = (text) => /requestAnimationFrame/.test(text) && /Date\.now\(\)|performance\.now\(\)/.test(text);
+    const animates = (text) => /\)\.animate\(|\w\.animate\(\s*\[/.test(text);
+    const transitions = (text) => /setProperty\(\s*'transition',(?!\s*'none')|\.transition\s*=(?!\s*'none')/.test(text);
+    const findings = shippedSources()
+      .filter(({ path }) => !path.endsWith('.css'))
+      .filter(({ text }) => [tweens, animates, transitions].some((moves) => moves(code(text))))
+      .filter(({ text }) => !/\bprefersReducedMotion\b/.test(text))
+      .map(({ path }) => path);
+    expect(findings, 'Each of these moves things from script; read `prefersReducedMotion` and skip or shorten the motion when it is on.').toEqual([]);
+  });
+});
