@@ -209,7 +209,6 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   const gatedCanUndo = computed(() => !isViewingHistory.value && (state.value?.state.canUndo ?? false));
 
   const provisions: Provision[] = [
-    // The game context below provides the wiring's controller again, the same value.
     ...wiring.provisions,
     [ANIMATION_EVENTS_KEY, animationEvents],
     [ANNOUNCER_KEY, announcer],

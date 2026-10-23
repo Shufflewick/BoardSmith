@@ -428,11 +428,12 @@ above).
      fetchPickChoices: (actionName, selectionName, player, args) =>
        session.send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
    });
-   // Gives the board and ActionPanel below the board interaction, the controller and the action holds.
+   // Gives the board below its board interaction and action holds.
    provideTableActionWiring(wiring);
    ```
 
-   Feed the ActionPanel `wiring.actionMetadata` and `wiring.disabledActions`. Call
+   Feed the ActionPanel `wiring.actionMetadata` and `wiring.disabledActions`, and provide
+   `wiring.controller` under `GAME_CONTEXT_KEYS.actionController` for it. Call
    `provideTableActionWiring` in the component that renders the board, even when that board sits
    inside a real GameShell: the nearest provide wins, so a board's `useActionHolds` then greys out
    your panel and cancels your controller's held draft, not the shell's.

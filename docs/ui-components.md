@@ -1062,24 +1062,27 @@ export function wireSeat(
     sendAction,
     fetchPickChoices,
   });
-  // The board and the Action Panel below inject what they need from this wiring.
+  // The board below injects its board interaction and action holds from this wiring.
   provideTableActionWiring(wiring);
   return wiring;
 }
 ```
 
-`provideTableActionWiring(wiring)` provides, to the components below, the
-three things the board and the Action Panel inject from the wiring: the board
-interaction, the action controller and the register `useActionHolds` adds to.
-Call it in the `setup` of the component that renders your board and panel, and
-feed the panel `wiring.disabledActions`, which already carries the board's
-holds. So a board's holds grey out the harness's panel, and its controller
-cancels a held draft, with nothing else wired.
+`provideTableActionWiring(wiring)` provides, to the components below, the two
+things a board injects from the wiring: the board interaction and the register
+`useActionHolds` adds to. Call it in the `setup` of the component that renders
+your board, and feed the Action Panel `wiring.disabledActions`, which already
+carries the board's holds. So a board's holds grey out the harness's panel, and
+its controller cancels a held draft. The controller is not among them: it is
+part of the game context (`GAME_CONTEXT_KEYS.actionController`, which the
+Action Panel reads), and a shell provides that context whole.
 
 A harness that puts its board inside a real GameShell (to give the board the
 rest of the table's context) still calls it, around the board: the nearest
 provide wins, so the board's holds and its board interaction go to the
-harness's wiring, and the shell's own panel does not see them. Commands a
+harness's wiring, and the shell's own panel and controller do not see them,
+nor does the shell announce a held draft the harness's controller cancels
+(read `wiring.controller.holdNotice` instead). Commands a
 board lists with `useMenuCommands` belong to a controls menu, which only
 GameShell and WorldShell have, so they go to the shell's menu.
 

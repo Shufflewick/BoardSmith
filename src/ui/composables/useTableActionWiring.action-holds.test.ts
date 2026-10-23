@@ -10,7 +10,7 @@
  * provide is the nearer one, so the holds go to the harness's wiring.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { computed, defineComponent, h, ref, type Ref } from 'vue';
+import { computed, defineComponent, h, provide, ref, type Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import type { PlayerGameState } from '../../session/types.js';
 import { MoveGame } from '../../session/move-game.test-helper.js';
@@ -18,6 +18,7 @@ import ActionPanel from '../components/auto-ui/ActionPanel.vue';
 import { leaveIframe, mountTableWithDebugPanel } from '../components/GameShell.platform-mount.test-helper.js';
 import { useActionHolds } from './actionHolds.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
+import { GAME_CONTEXT_KEYS } from './useGameContext.js';
 import { provideTableActionWiring, useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
 import { settle, startTable } from './table-wiring.test-helper.js';
 
@@ -52,6 +53,8 @@ async function harness(): Promise<{ Harness: ReturnType<typeof defineComponent>;
           session.send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
       });
       provideTableActionWiring(wired);
+      // The Action Panel reads the controller from the game context, which no shell provides here.
+      provide(GAME_CONTEXT_KEYS.actionController, wired.controller);
       wiring = wired;
       return () =>
         h('div', { 'data-testid': 'harness' }, [
