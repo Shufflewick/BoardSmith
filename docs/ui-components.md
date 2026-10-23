@@ -355,17 +355,6 @@ Pass them where the world entry mounts the shell, in `src/world-main.ts`:
 render: () => h(WorldShell, { uis, displayName: 'My World', preferences }),
 ```
 
-#### Action help
-
-Every game also gets a built-in "Show action help" item in "Preferences", just
-after Reduce motion, in both GameShell and WorldShell. While it is on, the
-action panel puts a "?" beside each action that has `.help(text)` or a disabled
-reason, and the "?" shows that text. It is on by default and saved once for all
-BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`).
-The item is hidden while no available action has help text or a disabled
-reason, so it never shows a switch that does nothing. Host teaching lockout
-(`teachingDisabled`) does not hide it: help explains the rules, not a good move.
-
 #### Reduce motion
 
 Every game also gets a built-in "Reduce motion" item at the top of
@@ -397,6 +386,17 @@ A BoardSmith component whose CSS keys on `.bs-reduce-motion` calls
 script that calls it (`drag-drop.css` by `useDragDrop`), so the rule works on a
 page with no shell. The call does its work once per page. A test refuses a
 component or stylesheet that skips it.
+
+#### Action help
+
+Every game also gets a built-in "Show action help" item in "Preferences", just
+after Reduce motion, in both GameShell and WorldShell. While it is on, the
+action panel puts a "?" beside each action that has `.help(text)` or a disabled
+reason, and the "?" shows that text. It is on by default and saved once for all
+BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`).
+The item is hidden while no available action has help text or a disabled
+reason, so it never shows a switch that does nothing. Host teaching lockout
+(`teachingDisabled`) does not hide it: help explains the rules, not a good move.
 
 #### Game commands
 
