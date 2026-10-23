@@ -10,6 +10,8 @@ import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
 import { useDebugBridge, type DebugBridge } from '../composables/useDebugBridge.js';
 import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
+import { worldAction } from '../../world/index.js';
+import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -384,6 +386,37 @@ describe('WorldShell — the shared chrome (#170)', () => {
     tell(wrapper, stateFrame());
     await nextTick();
     expect(wrapper.find('[data-testid="bs-action-panel"]').text().toLowerCase()).toContain('look');
+    wrapper.unmount();
+  });
+
+  it("shows a world verb's grouped choices as categories in the shared panel (#1441)", async () => {
+    const recruit = worldAction('recruit')
+      .needs(() => [PARTITION])
+      .chooseFrom('unit', {
+        choices: ['Scout', 'Rifleman', 'Tank'],
+        group: (unit) => (unit === 'Scout' ? [] : unit === 'Tank' ? ['Vehicles', 'Heavy'] : ['Infantry']),
+      })
+      .execute(() => {});
+    // Through JSON, as the host relays the offer frame.
+    const actions = JSON.parse(JSON.stringify(await offersFor([recruit], 'shell-groups')));
+    const wrapper = mountShell();
+    await drawn(wrapper, stateFrame({ actions }));
+    const shown = () =>
+      wrapper.findAll('.selection-input .choice-btn:not(.skip-btn)').map((button) => {
+        const category = button.attributes('data-bs-choice-group');
+        return category ? `[${category}]` : button.text();
+      });
+    const press = async (selector: string) => {
+      await wrapper.get(selector).trigger('click');
+      await flushPromises();
+    };
+
+    await press('[data-bs-action="recruit"]');
+    expect(shown()).toEqual(['Scout', '[Infantry]', '[Vehicles]']);
+    await press('[data-bs-choice-group="Vehicles"]');
+    expect(shown()).toEqual(['[Heavy]']);
+    await press('[data-bs-choice-group="Heavy"]');
+    expect(shown()).toEqual(['Tank']);
     wrapper.unmount();
   });
 
