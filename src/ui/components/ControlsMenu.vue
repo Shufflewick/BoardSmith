@@ -3,7 +3,8 @@
  * ControlsMenu — ⋯ controls popover anchored at the far-left of the action bar.
  *
  * Provides a single trigger button (aria-haspopup="menu") plus a role="menu" popover
- * containing game-control items: Auto end turn, Undo, zoom magnifier.
+ * containing a table's Play group (Auto end turn, Undo, zoom magnifier) and the
+ * player's Preferences, which a world's menu holds alone (#1443).
  * The popover is teleported to <body> with fixed positioning (openUp/align props) so
  * the action bar's overflow:auto can't clip it.
  *
@@ -21,14 +22,20 @@ import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
-  /** Current auto-end-turn state */
-  autoEndTurn: boolean;
-  /** Current zoom level; a fitted board can sit below the slider's minimum (#1162). */
-  zoom: number;
-  /** False where the browser has no CSS zoom, so the menu offers none (#1361). */
-  zoomSupported: boolean;
-  /** Whether the undo action is currently available */
-  canUndo: boolean;
+  /**
+   * The Play group's state: a table's turn, undo and zoom. A world has none of
+   * them, so it passes no `play` and its menu has no Play group (#1443).
+   */
+  play?: {
+    /** Current auto-end-turn state */
+    autoEndTurn: boolean;
+    /** Current zoom level; a fitted board can sit below the slider's minimum (#1162). */
+    zoom: number;
+    /** False where the browser has no CSS zoom, so the menu offers none (#1361). */
+    zoomSupported: boolean;
+    /** Whether the undo action is currently available */
+    canUndo: boolean;
+  };
   /** Open the popover upward (for a bottom-anchored trigger, e.g. the action bar). */
   openUp?: boolean;
   /** Horizontal edge the popover aligns to. */
@@ -89,6 +96,8 @@ const props = withDefaults(defineProps<{
 }>(), {
   openUp: false,
   align: 'right',
+  // An absent boolean prop reads false, which would show the Teaching group to a menu that passed no showHint.
+  showHint: undefined,
   isActionHelpVisible: false,
   hasActionHelp: true,
   heatmapSupported: true,
@@ -204,87 +213,89 @@ function handleUndo() {
 
     <Teleport to="body">
     <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" :style="menuStyle" @keydown="trapKeydown">
-      <div class="grouplabel">Play</div>
+      <template v-if="play">
+        <div class="grouplabel">Play</div>
 
-      <!-- Auto end turn -->
-      <button
-        class="mi"
-        type="button"
-        role="menuitemcheckbox"
-        :aria-checked="autoEndTurn"
-        @click="emit('update:autoEndTurn', !autoEndTurn)"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Auto end turn
-        <span class="r">
-          <span class="toggle" :class="{ on: autoEndTurn }"></span>
-        </span>
-      </button>
+        <!-- Auto end turn -->
+        <button
+          class="mi"
+          type="button"
+          role="menuitemcheckbox"
+          :aria-checked="play.autoEndTurn"
+          @click="emit('update:autoEndTurn', !play.autoEndTurn)"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12l5 5L20 7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Auto end turn
+          <span class="r">
+            <span class="toggle" :class="{ on: play.autoEndTurn }"></span>
+          </span>
+        </button>
 
-      <!-- Show action help (Play group — not bot-gated; hidden when no available
-           action has help text, so the toggle is never present-but-inert). -->
-      <button
-        v-if="hasActionHelp"
-        class="mi"
-        type="button"
-        role="menuitemcheckbox"
-        :aria-checked="isActionHelpVisible"
-        @click="emit('teaching-action', 'help-toggle')"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <path d="M12 16v-.5c0-.8.5-1.5 1.2-1.8C14.4 13.2 15 12 15 10.5a3 3 0 0 0-6 0" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="12" cy="18.5" r="0.75" fill="currentColor" stroke="none"/>
-        </svg>
-        Show action help
-        <span class="r">
-          <span class="toggle" :class="{ on: isActionHelpVisible }"></span>
-        </span>
-      </button>
+        <!-- Show action help (Play group — not bot-gated; hidden when no available
+             action has help text, so the toggle is never present-but-inert). -->
+        <button
+          v-if="hasActionHelp"
+          class="mi"
+          type="button"
+          role="menuitemcheckbox"
+          :aria-checked="isActionHelpVisible"
+          @click="emit('teaching-action', 'help-toggle')"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 16v-.5c0-.8.5-1.5 1.2-1.8C14.4 13.2 15 12 15 10.5a3 3 0 0 0-6 0" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="12" cy="18.5" r="0.75" fill="currentColor" stroke="none"/>
+          </svg>
+          Show action help
+          <span class="r">
+            <span class="toggle" :class="{ on: isActionHelpVisible }"></span>
+          </span>
+        </button>
 
-      <!-- Undo -->
-      <button
-        class="mi"
-        type="button"
-        role="menuitem"
-        :disabled="!canUndo"
-        :aria-disabled="!canUndo"
-        @click="handleUndo"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Undo last action
-      </button>
+        <!-- Undo -->
+        <button
+          class="mi"
+          type="button"
+          role="menuitem"
+          :disabled="!play.canUndo"
+          :aria-disabled="!play.canUndo"
+          @click="handleUndo"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          Undo last action
+        </button>
 
-      <!-- Zoom: fitted once at game startup; the slider adjusts manually and
-           "Fit" re-fits the board to the available space on demand. -->
-      <div v-if="zoomSupported" class="mi zoom-mi" role="menuitem">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
-        Zoom
-        <span class="r">
-          <input
-            type="range"
-            class="zoom-range"
-            :min="ZOOM_MIN"
-            :max="ZOOM_MAX"
-            step="0.1"
-            :value="zoom"
-            aria-label="Zoom"
-            :aria-valuetext="Math.round(zoom * 100) + '%'"
-            @input="handleZoomInput"
-          />
-          <button
-            type="button"
-            class="zoom-fit"
-            title="Fit board to available space"
-            @click="emit('fit-zoom')"
-          >
-            Fit
-          </button>
-        </span>
-      </div>
+        <!-- Zoom: fitted once at game startup; the slider adjusts manually and
+             "Fit" re-fits the board to the available space on demand. -->
+        <div v-if="play.zoomSupported" class="mi zoom-mi" role="menuitem">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
+          Zoom
+          <span class="r">
+            <input
+              type="range"
+              class="zoom-range"
+              :min="ZOOM_MIN"
+              :max="ZOOM_MAX"
+              step="0.1"
+              :value="play.zoom"
+              aria-label="Zoom"
+              :aria-valuetext="Math.round(play.zoom * 100) + '%'"
+              @input="handleZoomInput"
+            />
+            <button
+              type="button"
+              class="zoom-fit"
+              title="Fit board to available space"
+              @click="emit('fit-zoom')"
+            >
+              Fit
+            </button>
+          </span>
+        </div>
+        <div class="sep"></div>
+      </template>
 
       <!-- Built-in Reduce motion (#1442), then the game's own preferences (#1440). -->
-      <div class="sep"></div>
       <div class="grouplabel">Preferences</div>
       <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
       <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />

@@ -34,10 +34,7 @@ vi.stubGlobal('ResizeObserver', vi.fn(() => ({
 function mountMenu(props: Record<string, unknown> = {}) {
   return mount(ControlsMenu, {
     props: {
-      autoEndTurn: false,
-      zoom: 1,
-      zoomSupported: true,
-      canUndo: false,
+      play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
       // showHint intentionally omitted (non-bot game) unless overridden
       ...props,
     },

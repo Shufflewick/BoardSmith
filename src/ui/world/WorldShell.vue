@@ -78,6 +78,11 @@
         </p>
       </template>
 
+      <!-- A world has no turn, undo or zoom, so its menu holds only Preferences (#1443). -->
+      <template #controls>
+        <ControlsMenu class="actionbar-controls" open-up align="left" :preferences="preferences" />
+      </template>
+
       <template #board>
         <!-- `boardHostReady` gate (#204): a board mounts one tick after
              the chrome is in the document, so a game's documented
@@ -111,9 +116,11 @@ import { useWorldHost } from './useWorldHost.js';
 import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
+import ControlsMenu from '../components/ControlsMenu.vue';
 import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import type { GameUIRegistry } from '../game-uis.js';
+import type { PlayerPreferences } from '../player-preferences.js';
 import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
@@ -159,6 +166,8 @@ const props = defineProps<{
   trustedOrigins?: string[];
   /** Start with the action bar collapsed to its thin line; the player can still open it (#1439). */
   actionBarStartsCollapsed?: boolean;
+  /** The game's own player preferences from `definePlayerPreferences`, listed in the controls menu (#1443). */
+  preferences?: PlayerPreferences;
 }>();
 
 /**

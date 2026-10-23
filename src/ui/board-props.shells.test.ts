@@ -78,7 +78,7 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
     expect(panel.props('actionMetadata')).toBe(chrome.props('actionMetadata'));
     expect(panel.props('canUndo')).toBe(received.canUndo);
     expect(chrome.props('canUndo')).toBe(received.canUndo);
-    expect(menu.props('canUndo')).toBe(received.canUndo);
+    expect(menu.props('play')?.canUndo).toBe(received.canUndo);
   }
 
   it('gates disabled actions, action metadata and undo once, live', async () => {

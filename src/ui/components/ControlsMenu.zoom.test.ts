@@ -15,7 +15,7 @@ vi.stubGlobal('matchMedia', vi.fn(() => ({
 describe('ControlsMenu zoom slider', () => {
   it('keeps a 0.5 minimum and reports a fitted zoom below it without changing it', async () => {
     const wrapper = mount(ControlsMenu, {
-      props: { autoEndTurn: false, zoom: 0.23, zoomSupported: true, canUndo: false },
+      props: { play: { autoEndTurn: false, zoom: 0.23, zoomSupported: true, canUndo: false } },
       attachTo: document.body,
     });
     await wrapper.find('button.menubtn').trigger('click');

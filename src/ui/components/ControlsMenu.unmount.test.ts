@@ -19,7 +19,7 @@ describe('ControlsMenu unmount', () => {
     app.id = 'app';
     document.body.appendChild(app);
     const wrapper = mount(ControlsMenu, {
-      props: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+      props: { play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false } },
       attachTo: app,
     });
 
