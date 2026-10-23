@@ -83,6 +83,9 @@ describe('GameShell action holds (#1450)', () => {
     // The hold is this screen's own state, not a failed action, so it is told as a notice (#1461).
     expect(document.querySelector('.toast.info')?.textContent).toContain(WAIT);
     expect(document.querySelector('.toast.error')).toBeNull();
+    // Spoken through the shell's polite live region too, since a toast inserted with its text is often not read.
+    await nextTick();
+    expect(wrapper.get('p.vh[role="status"]').text()).toBe(WAIT);
     wrapper.unmount();
   });
 

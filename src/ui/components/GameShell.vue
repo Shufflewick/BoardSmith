@@ -1273,9 +1273,11 @@ watch(actionController.errorTick, () => {
   announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
-// A hold cancelling the open action is this screen's own state, not a failure (#1461); the toast's role=status speaks it.
+// A hold cancelling the open action is this screen's own state, not a failure, so it is a notice (#1461).
 watch(actionController.holdNotice, (notice) => {
-  if (notice) toast.info(notice.reason, 4000);
+  if (!notice) return;
+  toast.info(notice.reason, 4000);
+  announcer.announce(notice.reason);
 });
 
 // UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
