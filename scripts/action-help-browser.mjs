@@ -10,8 +10,8 @@
  * Served from `boardsmith init`'s table sample, with help on both actions and
  * both offered on the first step so the panel shows their buttons. With a
  * mouse at 1440px: hover opens, a click leaves it open, a second click closes
- * it. With touch at 390px: a tap opens, a second tap closes. With the keyboard:
- * Enter opens, Escape closes.
+ * it. On a fresh touch page at 390px with no mouse: a tap opens, a second tap
+ * closes. With the keyboard: Enter opens, Escape closes.
  *
  * The play action's help is taller than the window, so it fits neither above
  * nor below its "?". It must not be clamped down over the "?" (the pointer
@@ -28,7 +28,7 @@
  * `node scripts/action-help-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, onFreshPage, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const HELP = 'Take the top card of the deck into your hand.';
 const TALL_HELP = 'Score a card from your hand, adding its points to your total. '.repeat(40).trim();
@@ -80,14 +80,8 @@ const TIP = '#draw-help-tip';
 const TALL_TRIGGER = 'button[aria-label="Help for Play a card from your hand"]';
 const TALL_TIP = '#play-help-tip';
 
-/** The game frame, once the draw action's "?" is drawn. */
-async function openGame(page, hostUrl) {
-  await page.goto(hostUrl);
-  await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
-  const frame = page.frameLocator('.dev-host__frame');
-  await frame.locator(TRIGGER).waitFor({ timeout: 60_000 });
-  return frame;
-}
+const gameFrame = (page) => page.frameLocator('.dev-host__frame');
+const triggerDrawn = (page) => gameFrame(page).locator(TRIGGER).waitFor({ timeout: 60_000 });
 
 /** Whether the help shows, read once the trigger and the tip (which fades out) have settled on `expected`. */
 async function helpShows(frame, expected) {
@@ -127,95 +121,97 @@ await runBrowserRegression(
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      // One player for the whole run (a second browser would be a second player); touch is on so it can tap too.
-      const context = await browser.newContext({ viewport: { width: 1440, height: 900 }, hasTouch: true });
-      const page = await context.newPage();
-      const mouse = { frame: await openGame(page, hostUrl) };
-      await mouse.frame.locator(TRIGGER).hover();
-      const hovered = await helpShows(mouse.frame, true);
-      await check('with a mouse, hovering the "?" opens the help', async () => {
-        assert(hovered.visible && hovered.text === HELP, `the help did not show on hover: ${JSON.stringify(hovered)}`);
-      });
-      await mouse.frame.locator(TRIGGER).click();
-      const clicked = await helpShows(mouse.frame, true);
-      await check('with a mouse, clicking the "?" after hovering it leaves the help open', async () => {
-        assert(clicked.visible && clicked.expanded === 'true', `the click closed the help: ${JSON.stringify(clicked)}`);
-      });
-      await mouse.frame.locator(TRIGGER).click();
-      const again = await helpShows(mouse.frame, false);
-      await check('with a mouse, a second click on the "?" closes the help', async () => {
-        assert(!again.visible && again.expanded === 'false', `the help stayed open: ${JSON.stringify(again)}`);
-      });
-      await mouse.frame.locator(TRIGGER).focus();
-      await mouse.frame.locator(TRIGGER).press('Enter');
-      const keyed = await helpShows(mouse.frame, true);
-      await check('with the keyboard, Enter on the "?" opens the help', async () => {
-        assert(keyed.visible && keyed.text === HELP, `Enter did not open the help: ${JSON.stringify(keyed)}`);
-      });
-      await mouse.frame.locator(TRIGGER).press('Escape');
-      const escaped = await helpShows(mouse.frame, false);
-      await check('with the keyboard, Escape closes the help', async () => {
-        assert(!escaped.visible, `Escape left the help open: ${JSON.stringify(escaped)}`);
-      });
-
-      const tall = mouse.frame.locator(TALL_TRIGGER);
-      const tallTip = mouse.frame.locator(TALL_TIP);
-      const scroller = mouse.frame.locator(`${TALL_TIP} .ahp-scroll`);
-      const tallShows = (expected) => waitUntil(() => tallTip.isVisible(), (now) => now === expected, 2_000);
-      const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
-      // A plain move, not hover(): hover() retries while the help covers the "?", which is the bug under test.
-      const triggerBox = await tall.boundingBox();
-      await page.mouse.move(triggerBox.x + triggerBox.width / 2, triggerBox.y + triggerBox.height / 2);
-      const tallOpen = await tallShows(true);
-      const tipBox = tallOpen ? await tallTip.boundingBox() : null;
-      await check('help taller than the window opens clear of its "?", inside the window, and scrolls inside (#1454)', async () => {
-        assert(tipBox, 'hovering the "?" did not leave the tall help open');
-        const clear = tipBox.y + tipBox.height <= triggerBox.y || tipBox.y >= triggerBox.y + triggerBox.height;
-        assert(clear, `the help covers its "?": help ${JSON.stringify(tipBox)}, "?" ${JSON.stringify(triggerBox)}`);
-        assert(tipBox.y >= 0 && tipBox.y + tipBox.height <= 900, `the help runs off the window: ${JSON.stringify(tipBox)}`);
-        const overflow = await scroller.evaluate((el) => el.scrollHeight - el.clientHeight);
-        assert(overflow > 0, 'the help is not scrollable, so the end of the text is out of reach');
-      });
-      if (tipBox) {
-        await page.mouse.move(tipBox.x + tipBox.width / 2, tipBox.y + tipBox.height / 2, { steps: 10 });
-        await page.mouse.wheel(0, 200);
-        const scrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
-        const stillOpen = await tallShows(true);
-        await check('with a mouse, the tall help stays open while the pointer moves into it and scrolls it (#1454)', async () => {
-          assert(stillOpen, 'the help closed when the pointer moved from the "?" into it');
-          assert(scrolled > 0, `the wheel did not scroll the help (scrollTop ${scrolled})`);
+      let player;
+      await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 } }, triggerDrawn, async (page) => {
+        // The touch page reclaims this seat with the same client id; a new one would be a second, unseated player.
+        player = await page.context().storageState();
+        const frame = gameFrame(page);
+        await frame.locator(TRIGGER).hover();
+        const hovered = await helpShows(frame, true);
+        await check('with a mouse, hovering the "?" opens the help', async () => {
+          assert(hovered.visible && hovered.text === HELP, `the help did not show on hover: ${JSON.stringify(hovered)}`);
         });
-        await page.mouse.move(2, 2, { steps: 5 });
-        const left = await tallShows(false);
-        await check('with a mouse, leaving the tall help closes it (#1454)', async () => {
-          assert(left === false, 'the help stayed open after the pointer left it');
+        await frame.locator(TRIGGER).click();
+        const clicked = await helpShows(frame, true);
+        await check('with a mouse, clicking the "?" after hovering it leaves the help open', async () => {
+          assert(clicked.visible && clicked.expanded === 'true', `the click closed the help: ${JSON.stringify(clicked)}`);
         });
-      }
-      await tall.focus();
-      await tall.press('Enter');
-      await tallShows(true);
-      await tall.press('PageDown');
-      const keyScrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
-      await check('with the keyboard, Page Down on the "?" scrolls the tall help (#1454)', async () => {
-        assert(keyScrolled > 0, `Page Down did not scroll the help (scrollTop ${keyScrolled})`);
-      });
-      await tall.press('Escape');
-      await checkOpenActionHelp(mouse.frame, 1440);
+        await frame.locator(TRIGGER).click();
+        const again = await helpShows(frame, false);
+        await check('with a mouse, a second click on the "?" closes the help', async () => {
+          assert(!again.visible && again.expanded === 'false', `the help stayed open: ${JSON.stringify(again)}`);
+        });
+        await frame.locator(TRIGGER).focus();
+        await frame.locator(TRIGGER).press('Enter');
+        const keyed = await helpShows(frame, true);
+        await check('with the keyboard, Enter on the "?" opens the help', async () => {
+          assert(keyed.visible && keyed.text === HELP, `Enter did not open the help: ${JSON.stringify(keyed)}`);
+        });
+        await frame.locator(TRIGGER).press('Escape');
+        const escaped = await helpShows(frame, false);
+        await check('with the keyboard, Escape closes the help', async () => {
+          assert(!escaped.visible, `Escape left the help open: ${JSON.stringify(escaped)}`);
+        });
 
-      await page.setViewportSize({ width: 390, height: 844 });
-      const touch = { frame: await openGame(page, hostUrl) };
-      await touch.frame.locator(TRIGGER).tap();
-      const tapped = await helpShows(touch.frame, true);
-      await check('on a touch screen, a tap on the "?" shows the help', async () => {
-        assert(tapped.visible && tapped.text === HELP, `the tap did not leave the help showing: ${JSON.stringify(tapped)}`);
+        const tall = frame.locator(TALL_TRIGGER);
+        const tallTip = frame.locator(TALL_TIP);
+        const scroller = frame.locator(`${TALL_TIP} .ahp-scroll`);
+        const tallShows = (expected) => waitUntil(() => tallTip.isVisible(), (now) => now === expected, 2_000);
+        const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
+        // A plain move, not hover(): hover() retries while the help covers the "?", which is the bug under test.
+        const triggerBox = await tall.boundingBox();
+        await page.mouse.move(triggerBox.x + triggerBox.width / 2, triggerBox.y + triggerBox.height / 2);
+        const tallOpen = await tallShows(true);
+        const tipBox = tallOpen ? await tallTip.boundingBox() : null;
+        await check('help taller than the window opens clear of its "?", inside the window, and scrolls inside (#1454)', async () => {
+          assert(tipBox, 'hovering the "?" did not leave the tall help open');
+          const clear = tipBox.y + tipBox.height <= triggerBox.y || tipBox.y >= triggerBox.y + triggerBox.height;
+          assert(clear, `the help covers its "?": help ${JSON.stringify(tipBox)}, "?" ${JSON.stringify(triggerBox)}`);
+          assert(tipBox.y >= 0 && tipBox.y + tipBox.height <= 900, `the help runs off the window: ${JSON.stringify(tipBox)}`);
+          const overflow = await scroller.evaluate((el) => el.scrollHeight - el.clientHeight);
+          assert(overflow > 0, 'the help is not scrollable, so the end of the text is out of reach');
+        });
+        if (tipBox) {
+          await page.mouse.move(tipBox.x + tipBox.width / 2, tipBox.y + tipBox.height / 2, { steps: 10 });
+          await page.mouse.wheel(0, 200);
+          const scrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
+          const stillOpen = await tallShows(true);
+          await check('with a mouse, the tall help stays open while the pointer moves into it and scrolls it (#1454)', async () => {
+            assert(stillOpen, 'the help closed when the pointer moved from the "?" into it');
+            assert(scrolled > 0, `the wheel did not scroll the help (scrollTop ${scrolled})`);
+          });
+          await page.mouse.move(2, 2, { steps: 5 });
+          const left = await tallShows(false);
+          await check('with a mouse, leaving the tall help closes it (#1454)', async () => {
+            assert(left === false, 'the help stayed open after the pointer left it');
+          });
+        }
+        await tall.focus();
+        await tall.press('Enter');
+        await tallShows(true);
+        await tall.press('PageDown');
+        const keyScrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
+        await check('with the keyboard, Page Down on the "?" scrolls the tall help (#1454)', async () => {
+          assert(keyScrolled > 0, `Page Down did not scroll the help (scrollTop ${keyScrolled})`);
+        });
+        await tall.press('Escape');
+        await checkOpenActionHelp(frame, 1440);
       });
-      await touch.frame.locator(TRIGGER).tap();
-      const tappedAgain = await helpShows(touch.frame, false);
-      await check('on a touch screen, a second tap on the "?" closes the help', async () => {
-        assert(!tappedAgain.visible && tappedAgain.expanded === 'false', `the help stayed open: ${JSON.stringify(tappedAgain)}`);
+      // A fresh touch page with no mouse, so a pointer resting over the "?" cannot open the help the taps check.
+      await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: player }, triggerDrawn, async (page) => {
+        const frame = gameFrame(page);
+        await frame.locator(TRIGGER).tap();
+        const tapped = await helpShows(frame, true);
+        await check('on a touch screen, a tap on the "?" shows the help', async () => {
+          assert(tapped.visible && tapped.text === HELP, `the tap did not leave the help showing: ${JSON.stringify(tapped)}`);
+        });
+        await frame.locator(TRIGGER).tap();
+        const tappedAgain = await helpShows(frame, false);
+        await check('on a touch screen, a second tap on the "?" closes the help', async () => {
+          assert(!tappedAgain.visible && tappedAgain.expanded === 'false', `the help stayed open: ${JSON.stringify(tappedAgain)}`);
+        });
+        await checkOpenActionHelp(frame, 390);
       });
-      await checkOpenActionHelp(touch.frame, 390);
-      await context.close();
     } finally {
       await browser.close();
     }
