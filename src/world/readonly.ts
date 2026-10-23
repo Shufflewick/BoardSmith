@@ -262,20 +262,43 @@ for (const prototype of [GameElement.prototype, Game.prototype, ElementCollectio
   }
 }
 
+/** A base whose constructor answers the object it is handed, so a subclass's
+ *  private field is stamped onto an object it did not build: the projection. */
+class Stamped {
+  constructor(held: object) {
+    return held as Stamped;
+  }
+}
+
 /**
- * WHAT A PROJECTION ANSWERS FOR ITS SOURCE, and nothing else does (#374, #1438).
+ * THE SOURCE A PROJECTION WAS MINTED FOR, kept on the projection itself (#374, #1438).
  *
  * A projection handed back into a read door has to go in as the object it
- * wraps, and a projection projected again has to come back as itself. Asking
- * the projection, rather than a table of every projection ever minted, is what
- * lets a scope's table die with its call: module-wide weak tables reached
- * millions of entries and slowed every later call 5-20x.
+ * wraps, and a projection projected again has to come back as itself. Keeping
+ * that on the projection, rather than in a table of every projection ever
+ * minted, is what lets a scope's table die with its call: module-wide weak
+ * tables reached millions of entries and slowed every later call 5-20x.
+ *
+ * A PRIVATE FIELD, because reading it runs no trap and no getter. A property
+ * key would be handed to any Proxy game code passes in, and that key would
+ * then open every projection's live object.
  */
-const SOURCE = Symbol("read-only projection source");
+class Projected extends Stamped {
+  readonly #source: object;
 
-/** The object a projection was minted for, or undefined for anything else. */
-function sourceOf(value: object): object | undefined {
-  return (value as Record<symbol, object | undefined>)[SOURCE];
+  private constructor(projection: object, source: object) {
+    super(projection);
+    this.#source = source;
+  }
+
+  static stamp(projection: object, source: object): void {
+    new Projected(projection, source);
+  }
+
+  /** The object a projection was minted for, or undefined for anything else. */
+  static sourceOf(value: object): object | undefined {
+    return #source in value ? (value as Projected).#source : undefined;
+  }
 }
 
 function refuseWrite(property: string | symbol): never {
@@ -324,7 +347,7 @@ function liveArgument(argument: unknown, table: Table): unknown {
   if (argument === null || (typeof argument !== "object" && typeof argument !== "function")) {
     return argument;
   }
-  const held = sourceOf(argument);
+  const held = Projected.sourceOf(argument);
   if (held !== undefined) return held;
   if (typeof argument === "function") return projectingCallback(argument, table);
   if (Object.prototype.toString.call(argument) !== "[object Object]") return argument;
@@ -547,7 +570,7 @@ function project<T>(value: T, table: Table): T {
   // ALREADY READ-ONLY, SO ALREADY DONE (#374), whichever scope minted it. This
   // is the branch that keeps a method's projected return value from being
   // projected a second time.
-  if (sourceOf(subject) !== undefined) return value;
+  if (Projected.sourceOf(subject) !== undefined) return value;
   const existing = table.get(subject);
   if (existing !== undefined) return existing as T;
   if (typeof subject === "function" && isClass(subject)) return value;
@@ -574,8 +597,6 @@ function project<T>(value: T, table: Table): T {
   const projection: object = new Proxy(cloak, {
     ...REFUSALS,
     get(_target, property, receiver) {
-      // Only to the projection itself: an object built on it as a prototype is not a projection.
-      if (property === SOURCE) return receiver === projection ? subject : undefined;
       return projectedProperty(subject, property, receiver, projection, safeReceiver, table, cached);
     },
     has(_target, property) {
@@ -601,6 +622,7 @@ function project<T>(value: T, table: Table): T {
     },
   });
 
+  Projected.stamp(projection, subject);
   table.set(subject, projection);
   return projection as T;
 }
@@ -638,7 +660,7 @@ function copyPlain(value: unknown, path: string[], within: Set<object>): unknown
 
 /** The real object behind a value, refused unless it is a plain object or array not already being copied. */
 function plainSubject(value: object, path: string[], within: Set<object>): object {
-  const subject = sourceOf(value) ?? value;
+  const subject = Projected.sourceOf(value) ?? value;
   if (typeof subject === "function") refuseCopy(path, "is a function");
   if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
   const prototype = Object.getPrototypeOf(subject) as object | null;

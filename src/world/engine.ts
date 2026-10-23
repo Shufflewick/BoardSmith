@@ -136,14 +136,13 @@ import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { failedExecute } from "../engine/action/action.js";
 import type { AnnotatedChoice } from "../engine/action/types.js";
 import { readOnlyScope } from "./readonly.js";
-
-/** The function one call projects through, so its reads share one identity (#1438). */
-type Projecting = ReturnType<typeof readOnlyScope>;
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
 import { StaleAllocationStampError } from "../engine/errors.js";
 
+/** The function one call projects through, so its reads share one identity (#1438). */
+type Projecting = ReturnType<typeof readOnlyScope>;
 
 /**
  * The authoring types below are EXPORTED, and that reverses the call this file

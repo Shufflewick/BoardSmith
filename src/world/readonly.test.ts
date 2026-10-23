@@ -644,3 +644,19 @@ describe("readOnlyScope (#1438)", () => {
     expect(plainCopy(readOnlyScope()({ visits: [1] }))).toEqual({ visits: [1] });
   });
 });
+
+describe("readOnlyScope recognising its own projections (#1438 review F1)", () => {
+  it("hands a Proxy that game code made no key that opens a projection", () => {
+    const { game } = world();
+    const projection = readOnlyProjection(game);
+    const keys: (string | symbol)[] = [];
+    const spy = new Proxy({}, { get: (_target, key) => void keys.push(key) });
+    try {
+      projection.first(spy as never);
+    } catch {
+      // Whatever the finder makes of the spy, only the keys it was shown matter here.
+    }
+
+    expect(keys.some((key) => Reflect.get(projection, key) === game)).toBe(false);
+  });
+});
