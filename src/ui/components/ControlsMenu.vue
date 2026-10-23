@@ -319,7 +319,7 @@ function handleUndo() {
           </div>
           <button
             v-else
-            class="mi"
+            class="mi pref-toggle"
             type="button"
             role="menuitemcheckbox"
             :aria-checked="item.value.value === true"
@@ -526,9 +526,13 @@ function handleUndo() {
   color: var(--bsg-accent);
 }
 
-/* Player preferences (#1440): no icon, so the label starts at the item's padding. */
+/* Player preferences (#1440) have no icon; indent them to line up with the
+   labels of items that do (10px padding + 18px icon + 11px gap). */
+.pref-toggle {
+  padding-left: 39px;
+}
 .pref-choice {
-  padding: 10px 10px 4px;
+  padding: 10px 10px 4px 39px;
   font-size: var(--bsg-text-sm);
   color: var(--bsg-ink);
 }
@@ -554,7 +558,7 @@ function handleUndo() {
   color: var(--bsg-accent-ink);
 }
 .pref-desc {
-  padding: 0 10px 8px;
+  padding: 0 10px 8px 39px;
   margin-top: -4px;
   font-size: var(--bsg-text-xs);
   color: var(--bsg-ink-3);
