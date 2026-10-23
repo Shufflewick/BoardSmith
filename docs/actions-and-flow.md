@@ -1560,6 +1560,52 @@ action metadata, so the shared panel gets the same hierarchy in a world as at a
 table with nothing translated in between. This is the case the feature was asked
 for: a resident world offers every verb that is relevant at once.
 
+#### `group` arranges the choices inside a pick
+
+A large `chooseFrom` or `chooseElement` wraps into rows of buttons. `group`
+puts each choice under a category, the way `.group()` places an action: it
+returns a path of labels, outermost first, and `[]` leaves the choice at the top
+level.
+
+```typescript
+Action.create('recruit')
+  .chooseFrom('unit', {
+    choices: ['Scout', 'Rifleman', 'Sniper', 'Tank'],
+    group: (unit) => (unit === 'Scout' ? [] : unit === 'Tank' ? ['Vehicles', 'Heavy'] : ['Infantry']),
+  })
+  .execute(...)
+
+Action.create('upgrade')
+  .chooseElement('building', {
+    elements: (ctx) => [...ctx.game.all(Building)],
+    group: (building, ctx) => [building.kind],
+  })
+  .execute(...)
+```
+
+The panel shows `Scout`, `Infantry` and `Vehicles`. Opening `Vehicles` shows
+`Heavy`, and opening that shows `Tank`. It works like action groups:
+
+- **One level at a time**, with `Back` and the category's name. Opening a
+  category only changes what is shown; it never submits anything.
+- **A category with no choices does not appear.** Categories come from the
+  choices offered, so an empty one cannot exist.
+- **Choices keep their order.** A category sits where its first choice would.
+- **The rules do not change.** Which choices are offered, why one is disabled,
+  and what the server accepts are the same with or without `group`. A disabled
+  choice shows its reason inside its category.
+- **The board is unaffected.** A custom UI gets every candidate, each with its
+  `group` path, and a board click answers the pick whatever category the panel
+  shows. A large grouped set is listed by category instead of being handed to
+  the board.
+
+`group` only works on a pick that takes one choice. With `multiSelect` or
+`orderedList` it is a type error, and refused when the action is declared. A
+blank label is refused when the choices are listed. A choice that holds a card
+the player cannot see stays at the top level, since its category could name the
+card, and so does every element of a `chooseElement` whose earlier picks hold
+one.
+
 ---
 
 ## Action Chaining with `followUp`

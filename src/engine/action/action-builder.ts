@@ -204,6 +204,13 @@ type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, 
   choices: T[] | ((context: PickContext<G, C>) => T[]);
   /** The label for a choice that did not bring its own. */
   display?: (choice: ChoiceValue<T>) => string;
+  /**
+   * The Action Panel category a choice sits under, as a path of labels,
+   * outermost first, the way `.group()` places an action: `['Vehicles', 'Heavy']`.
+   * `[]` leaves it at the top level. Only arranges buttons; not on a
+   * `multiSelect` or `orderedList` pick (#1439).
+   */
+  group?: (choice: ChoiceValue<T>) => readonly string[];
   optional?: O;
   /** `args` holds the picks declared before this one (on a repeating pick, also this pick's earlier values). */
   validate?: (value: V, args: A, context: ActionContext<G, A>) => boolean | string;
@@ -242,8 +249,8 @@ type CountOption<G extends Game, A extends Record<string, unknown>, C> = number 
 
 /** A `chooseFrom` that asks for an array: a set (`multiSelect`) or a sequence (`orderedList`). */
 type ManyOptions<G extends Game, A extends Record<string, unknown>> =
-  | { multiSelect: CountOption<G, A, MultiSelectConfig>; orderedList?: undefined }
-  | { orderedList: CountOption<G, A, OrderedListConfig>; multiSelect?: undefined };
+  | { multiSelect: CountOption<G, A, MultiSelectConfig>; orderedList?: undefined; group?: undefined }
+  | { orderedList: CountOption<G, A, OrderedListConfig>; multiSelect?: undefined; group?: undefined };
 
 /** A `chooseFrom` that asks for one value. */
 type OneOptions = { multiSelect?: undefined; orderedList?: undefined };
@@ -276,6 +283,8 @@ type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T e
    * candidate list too, so a label can disambiguate against its siblings.
    */
   display?: (element: T, context: PickContext<G, C>, allElements: T[]) => string;
+  /** The Action Panel category an element sits under, as `group` on `chooseFrom` (#1439). */
+  group?: (element: T, context: PickContext<G, C>) => readonly string[];
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: PickContext<G, C>) => ElementRef;
   /**
@@ -809,12 +818,20 @@ export class Action<
         + `Keep multiSelect for "choose N of these"; keep orderedList for "do these, in this order".`
       );
     }
+    const many = options.multiSelect !== undefined ? 'multiSelect' : options.orderedList !== undefined ? 'orderedList' : null;
+    if (options.group && many) {
+      throw new Error(
+        `chooseFrom('${name}') declares group with ${many}. The Action Panel shows one category `
+        + `at a time, so it can only group a pick that takes one choice. Remove group, or ${many}.`
+      );
+    }
     const selection = {
       type: 'choice',
       name,
       prompt: options.prompt,
       choices: options.choices,
       display: options.display,
+      group: options.group,
       optional: options.optional,
       validate: options.validate,
       boardRefs: options.boardRefs,
@@ -920,6 +937,7 @@ export class Action<
       optional: options.optional,
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
+      group: options.group as ElementSelection<T>['group'],
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
       dependsOn: options.dependsOn,
       repeat: options.repeat,

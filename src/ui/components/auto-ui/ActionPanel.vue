@@ -47,6 +47,7 @@ import {
 // (#229 for text, #237 for number).
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
+import MenuGroupButton from './MenuGroupButton.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
 import type { HistoryMessage } from '../GameHistory.vue';
@@ -354,11 +355,12 @@ const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 /** The full path, for the current-level label. */
 const menuBreadcrumb = computed(() => menuLevel.value.group?.path.join(' / ') ?? '');
 
-/** Where Back goes, said out loud for a screen reader. */
-const backLabel = computed(() => {
-  const path = menuLevel.value.group?.path ?? [];
-  return path.length > 1 ? `Back to ${path[path.length - 2]}` : 'Back to all actions';
-});
+/** Where Back goes from `path`, said out loud for a screen reader; `top` names the top level. */
+function backLabelFor(path: readonly string[], top: string): string {
+  return path.length > 1 ? `Back to ${path[path.length - 2]}` : `Back to ${top}`;
+}
+
+const backLabel = computed(() => backLabelFor(menuLevel.value.group?.path ?? [], 'all actions'));
 
 /** What a screen reader is told when a level moved under the player. */
 const menuAnnouncement = ref('');
@@ -371,10 +373,10 @@ function groupContents(group: ActionMenuGroup<EnrichedActionMetadata>): string {
 
 const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group]';
 
-/** The group button carrying `label` in the level now rendered. */
-function groupButton(root: HTMLElement, label: string): HTMLElement | null {
-  for (const candidate of root.querySelectorAll<HTMLElement>('[data-bs-action-group]')) {
-    if (candidate.getAttribute('data-bs-action-group') === label) return candidate;
+/** The group button carrying `label` in `attribute`, in the level now rendered. */
+function groupButton(root: HTMLElement, label: string, attribute: string): HTMLElement | null {
+  for (const candidate of root.querySelectorAll<HTMLElement>(`[${attribute}]`)) {
+    if (candidate.getAttribute(attribute) === label) return candidate;
   }
   return null;
 }
@@ -403,19 +405,19 @@ function leaveGroup(): void {
   void restoreFocusToGroup(leaving);
 }
 
-async function focusIntoLevel(): Promise<void> {
+async function focusIntoLevel(buttons = MENU_BUTTONS): Promise<void> {
   await nextTick();
   const root = panelRoot.value;
   if (!root?.isConnected) return;
-  firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS))?.focus();
+  firstOperableOf(root.querySelectorAll<HTMLElement>(buttons))?.focus();
 }
 
-async function restoreFocusToGroup(label: string): Promise<void> {
+async function restoreFocusToGroup(label: string, attribute = 'data-bs-action-group', buttons = MENU_BUTTONS): Promise<void> {
   await nextTick();
   const root = panelRoot.value;
   if (!root?.isConnected) return;
-  const button = groupButton(root, label)
-    ?? firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS));
+  const button = groupButton(root, label, attribute)
+    ?? firstOperableOf(root.querySelectorAll<HTMLElement>(buttons));
   button?.focus();
 }
 
@@ -902,8 +904,9 @@ const offeredElements = actionController.validElements;
 // keyboard/SR users always have an operable control even when all picks are
 // board-anchored. splitAnchoredChoices applies only for 'choice' picks.
 // #718: a set or list pick keeps every choice in its checkbox / Add controls, the only ones that toggle or append and show the draft.
+// #1439: a grouped pick keeps every choice in its categories, so none is listed apart.
 const _splitChoices = computed(() =>
-  (currentMultiSelect.value || currentOrderedList.value) && !deferPickToBoard.value
+  ((currentMultiSelect.value || currentOrderedList.value) && !deferPickToBoard.value) || pickCategories.value
     ? { primary: offeredChoices.value, anchored: [] }
     : splitAnchoredChoices(offeredChoices.value, currentPick.value?.type));
 
@@ -932,10 +935,62 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  */
 const deferPickToBoard = computed(() => {
   if (props.boardFailed) return false;
+  // A game that grouped its choices asked the panel to list them by category (#1439).
+  if (pickCategories.value) return false;
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
   return shouldDeferElementPickToBoard(type, offeredElements.value);
 });
+
+// ── Categories inside a pick (#1439) ─────────────────────────────────────────
+//
+// The start buttons' model again: a choice's `group` is a path of labels, and
+// opening a category only changes which level is drawn. The path is the panel's
+// own, and every new question starts at its top level.
+const choicePath = ref<readonly string[]>([]);
+watch([currentAction, () => currentPick.value?.name], () => {
+  choicePath.value = [];
+});
+
+/** The single `chooseFrom` pick's level and the `chooseElement` pick's, drawn by their own branches. */
+const choiceLevel = computed(() => menuLevelAt(buildActionMenu(filteredChoices.value), choicePath.value));
+const elementLevel = computed(() => menuLevelAt(buildActionMenu(offeredElements.value), choicePath.value));
+
+/** Whether the open pick is a single choice or element the game grouped. */
+const pickCategories = computed(() => {
+  const type = currentPick.value?.type;
+  if (type === 'element') return offeredElements.value.some((element) => element.group);
+  return type === 'choice' && offeredChoices.value.some((choice) => choice.group);
+});
+
+/** The category the player has opened in the open pick, or null at its top level. */
+const openCategory = computed(() =>
+  (currentPick.value?.type === 'element' ? elementLevel : choiceLevel).value.group);
+
+const categoryBackLabel = computed(() => backLabelFor(openCategory.value?.path ?? [], 'all options'));
+
+function enterCategory(group: { path: readonly string[] }): void {
+  choicePath.value = group.path;
+  void focusIntoLevel('.selection-input .choice-btn');
+}
+
+function leaveCategory(): void {
+  const path = openCategory.value?.path;
+  if (!path) return;
+  choicePath.value = path.slice(0, -1);
+  void restoreFocusToGroup(path[path.length - 1]!, 'data-bs-choice-group', '.selection-input .choice-btn');
+}
+
+/** A category's button: its label, and how many choices are behind it for its accessible name. */
+function categoryButton(group: { label: string; children: readonly unknown[] }) {
+  const count = group.children.length;
+  return {
+    class: 'choice-btn choice-group-btn',
+    'data-bs-choice-group': group.label,
+    label: group.label,
+    contents: `category, ${count} ${count === 1 ? 'option' : 'options'}`,
+  };
+}
 
 /** How many candidates the board handoff sends the player to. */
 const boardCandidateCount = computed(() =>
@@ -1515,22 +1570,20 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
            .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
       <div
         v-for="node in menuLevel.nodes"
-        :key="node.kind === 'group' ? `group:${node.label}` : node.action.name"
+        :key="node.kind === 'group' ? `group:${node.label}` : node.item.name"
         class="action-btn-group"
       >
         <!-- A GROUP BUTTON IS NAVIGATION AND NOTHING ELSE. `enterGroup` assigns
              one local ref; the node it is handed has no action name on it, so
              there is nothing here that could submit an order or take a turn. -->
-        <button
+        <MenuGroupButton
           v-if="node.kind === 'group'"
           class="action-btn action-group-btn"
           :data-bs-action-group="node.label"
+          :label="node.label"
+          :contents="groupContents(node)"
           @click="enterGroup(node)"
-        >
-          {{ node.label }}
-          <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
-          <span class="sr-only">{{ groupContents(node) }}</span>
-        </button>
+        />
         <template v-else>
           <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
                and swallows the activation. It uses aria-disabled rather than the
@@ -1538,27 +1591,27 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                button cannot be reached by keyboard, taking the reason with it. -->
           <button
             class="action-btn"
-            :class="{ destructive: node.action.destructive }"
-            :data-bs-action="node.action.name"
-            v-disabled-reason="actionDisabledReason(node.action.name)"
-            @click="startAction(node.action.name)"
+            :class="{ destructive: node.item.destructive }"
+            :data-bs-action="node.item.name"
+            v-disabled-reason="actionDisabledReason(node.item.name)"
+            @click="startAction(node.item.name)"
           >
             <!-- #268: the emphasis on a destructive verb is carried FOUR ways,
                  only one of which is colour -- the plate, an inset ring (CSS),
                  this glyph, and the words a screen reader reads. A player who
                  cannot separate the hues still gets the warning. -->
-            <span v-if="node.action.destructive" class="sr-only">Destructive action.</span>
-            <span v-if="node.action.destructive" aria-hidden="true" class="action-destructive-mark">&#9888;</span>
-            {{ node.action.prompt || formatActionName(node.action.name) }}
+            <span v-if="node.item.destructive" class="sr-only">Destructive action.</span>
+            <span v-if="node.item.destructive" aria-hidden="true" class="action-destructive-mark">&#9888;</span>
+            {{ node.item.prompt || formatActionName(node.item.name) }}
           </button>
           <!-- "?" affordance: shown when global toggle is ON and content exists.
                Disabled-reason-only case also shows the affordance (UI-SPEC Interaction States). -->
           <ActionHelpPopover
-            v-if="isActionHelpVisible && (node.action.help || disabledActions?.[node.action.name])"
-            :action-name="node.action.name"
-            :help-text="node.action.help"
-            :disabled-reason="disabledActions?.[node.action.name]"
-            :trigger-label="node.action.prompt || formatActionName(node.action.name)"
+            v-if="isActionHelpVisible && (node.item.help || disabledActions?.[node.item.name])"
+            :action-name="node.item.name"
+            :help-text="node.item.help"
+            :disabled-reason="disabledActions?.[node.item.name]"
+            :trigger-label="node.item.prompt || formatActionName(node.item.name)"
           />
         </template>
       </div>
@@ -1645,6 +1698,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
       <!-- Current selection input -->
       <div v-if="currentPick" class="selection-input">
+        <!-- #1439: the category of the open pick the player is in, and the way out. Navigation only. -->
+        <div v-if="openCategory" class="action-menu-header">
+          <button class="action-btn menu-back-btn" data-bs-choice-back :aria-label="categoryBackLabel" @click="leaveCategory">
+            <span aria-hidden="true">&lsaquo;</span> Back
+          </button>
+          <span class="action-menu-label">{{ openCategory.path.join(' / ') }}</span>
+        </div>
         <!-- #172 / #313: too many candidates to read as a list, and the board draws
              every one of them. Prompt + a single control that hands focus to the
              board. An ordered list keeps its own block below, because its entries
@@ -1678,24 +1738,26 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-else-if="currentPick.type === 'element' && offeredElements.length">
+        <!-- Element selection, and a many-element pick without multiSelect: a button for each valid element -->
+        <template v-else-if="(currentPick.type === 'element' || (currentPick.type === 'elements' && !currentMultiSelect)) && offeredElements.length">
           <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.elementClassName || 'element'}` }}
+            {{ currentPick.prompt || (currentPick.type === 'element' ? `Select ${currentPick.elementClassName || 'element'}` : `Select ${currentPick.name}`) }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
-            <button
-              v-for="element in offeredElements"
-              :key="element.id"
-              class="choice-btn element-btn"
-              v-disabled-reason="element.disabled"
-              @click="selectElement(element.id)"
-              @mouseenter="handleElementHover(element)"
-              @mouseleave="handleElementLeave"
-            >
-              {{ element.display || element.id }}
-            </button>
+            <template v-for="node in elementLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : node.item.id">
+              <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
+              <button
+                v-else
+                class="choice-btn element-btn"
+                v-disabled-reason="node.item.disabled"
+                @click="selectElement(node.item.id)"
+                @mouseenter="handleElementHover(node.item)"
+                @mouseleave="handleElementLeave"
+              >
+                {{ node.item.display || node.item.id }}
+              </button>
+            </template>
             <button
               v-if="currentPick.optional"
               class="choice-btn skip-btn"
@@ -1744,34 +1806,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
-            <button
-              v-if="currentPick.optional"
-              class="choice-btn skip-btn"
-              @click="skipOptionalSelection"
-            >
-              {{ skipLabel }}
-            </button>
-          </div>
-        </template>
-
-        <!-- Elements selection without multiSelect (buttons for single element selection) -->
-        <template v-else-if="currentPick.type === 'elements' && offeredElements.length">
-          <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons element-selection">
-            <button
-              v-for="element in offeredElements"
-              :key="element.id"
-              class="choice-btn element-btn"
-              v-disabled-reason="element.disabled"
-              @click="selectElement(element.id)"
-              @mouseenter="handleElementHover(element)"
-              @mouseleave="handleElementLeave"
-            >
-              {{ element.display || element.id }}
-            </button>
             <button
               v-if="currentPick.optional"
               class="choice-btn skip-btn"
@@ -1919,18 +1953,20 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons">
-            <button
-              v-for="choice in filteredChoices"
-              :key="choiceValueKey(choice.value)"
-              class="choice-btn"
-              :class="{ 'filtered-choice-btn': isDependentChoicePick }"
-              v-disabled-reason="choice.disabled"
-              @click="isDependentChoicePick ? executeChoice(currentPick.name, choice) : setSelectionValue(currentPick.name, choice.value, choice.display)"
-              @mouseenter="handleChoiceHover(choice)"
-              @mouseleave="handleChoiceLeave"
-            >
-              {{ choice.display }}
-            </button>
+            <template v-for="node in choiceLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : choiceValueKey(node.item.value)">
+              <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
+              <button
+                v-else
+                class="choice-btn"
+                :class="{ 'filtered-choice-btn': isDependentChoicePick }"
+                v-disabled-reason="node.item.disabled"
+                @click="isDependentChoicePick ? executeChoice(currentPick.name, node.item) : setSelectionValue(currentPick.name, node.item.value, node.item.display)"
+                @mouseenter="handleChoiceHover(node.item)"
+                @mouseleave="handleChoiceLeave"
+              >
+                {{ node.item.display }}
+              </button>
+            </template>
             <!-- Loading guard (R-06): show loading indicator while choices are being fetched
                  so we never flash "No options available" when choices are in-flight.
                  Only show "No options available" once the fetch completes with zero results.
@@ -2291,13 +2327,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .menu-back-btn:hover:not([aria-disabled='true']) {
   background: var(--bsg-surface-3);
   box-shadow: var(--bsg-shadow-sm);
-}
-
-/* A group button says it leads somewhere. Same plate as an action button so the
-   level reads as one row of choices, with the chevron carrying the difference. */
-.action-group-chevron {
-  margin-left: 6px;
-  opacity: 0.75;
 }
 
 /* Action configuration - horizontal flow layout */

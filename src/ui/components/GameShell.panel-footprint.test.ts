@@ -99,6 +99,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-panel-pad': declaration('.game-shell__game', '--bsg-panel-pad'),
     '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
+    '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
   };
   if (tier === 'base') return base;
   const m = landscapeTokens().match(/--bsg-panel-reserved\s*:\s*([\s\S]*?);/);
@@ -206,14 +207,19 @@ describe('#13 / #444: the Action Panel stays inside a constant, token-derived fo
  * The collapsed state overrides the one token to the collapsed-row quantity.
  * The bar's cap is that same token, so nothing can be covered by construction.
  */
-describe('#230: minimizing the bar reserves one row and gives the rest back', () => {
-  it('declares the collapsed row once and derives it from the panel metrics', () => {
-    // Derived from the same row/padding tokens as the open footprint, so there
-    // is ONE definition of a control row in the stylesheet.
-    const collapsed = declaration('.game-shell__game', '--bsg-action-bar-collapsed');
-    expect(collapsed).toContain('var(--bsg-panel-row)');
-    expect(collapsed).toContain('var(--bsg-panel-pad)');
-    expect(collapsed).toContain('env(safe-area-inset-bottom)');
+describe('#230, #1439: minimizing the bar reserves a thin line and gives the rest back', () => {
+  it.each(ENVIRONMENTS)('reserves a thin line, not a control row (#1439, safe-area $safeArea)', (env) => {
+    // The line holds the controls menu at the WCAG 2.5.8 minimum target of
+    // 24px, so it is at least that tall and well under one 44px control row.
+    const tokens = tokensFor('base');
+    const line = px('var(--bsg-action-bar-collapsed)', tokens, env) - env.safeArea;
+    expect(line).toBeGreaterThanOrEqual(24);
+    expect(line).toBeLessThan(px('var(--bsg-panel-row)', tokens, env) / 2 + 8);
+  });
+
+  it('draws the controls menu as a horizontal line of dots, at the 24px target floor (#1439)', () => {
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'height')).toBe('24px');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'transform')).toBe('rotate(90deg)');
   });
 
   it('overrides the reservation, and only that, while the bar is down', () => {

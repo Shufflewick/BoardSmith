@@ -280,6 +280,26 @@ should do the same.
 </GameShell>
 ```
 
+#### The action bar can start collapsed
+
+The player can collapse the action bar with the round arrow button on its top
+edge. Collapsed, the bar is a thin line along the bottom of the screen holding
+only the controls menu (the three dots, drawn horizontally) and that button, and
+the board gets the rest of the space. A dot on the button and its spoken label
+("Expand action bar, your move") say when the game is waiting on this player. The
+bar opens itself while an action is asking a question and collapses again after.
+
+A game whose board already offers most choices can start the bar collapsed:
+
+```vue
+<GameShell :uis="uis" action-bar-starts-collapsed />
+```
+
+`actionBarStartsCollapsed` sets only the starting state, default open, and
+`WorldShell` takes the same prop. The player can still open and close the bar,
+and it never goes away, so the controls menu and the button stay reachable by
+keyboard and screen reader.
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
@@ -318,6 +338,16 @@ the flat panel exactly as it is. The same metadata reaches this panel in world
 mode, where it matters most. The full rule, including how it relates to
 `.suppressFromActionPanel()`, is in
 [Actions & Flow](./actions-and-flow.md#group-and-order-arrange-the-start-buttons).
+
+#### A pick's choices can be grouped too
+
+The same idea works inside one question. `group` on `chooseFrom` or
+`chooseElement` puts each choice under a category path, and the panel shows the
+categories and the ungrouped choices first. Opening a category shows its
+choices, with `Back` and the category's name; it never submits anything, and a
+category with no choices does not appear. The board still offers every choice,
+so a board click answers the pick whatever category the panel shows. See
+[Actions & Flow](./actions-and-flow.md#group-arranges-the-choices-inside-a-pick).
 
 #### The ActionPanel offers hierarchy, never free text
 

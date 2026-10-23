@@ -25,23 +25,25 @@ import {
   menuLevelAt,
   type ActionMenuGroup,
   type ActionMenuNode,
-  type MenuAction,
+  type MenuItem,
 } from './action-menu.js';
 
-/** The subset of action metadata the menu model reads. */
-function action(name: string, placement?: { group?: string[]; order?: number }): MenuAction {
+/** The subset of action metadata the menu model reads, and a name to tell actions apart by. */
+type Named = MenuItem & { name: string };
+
+function action(name: string, placement?: { group?: string[]; order?: number }): Named {
   return { name, ...placement };
 }
 
 /** A level, read as text: a group in brackets, an action by its name. */
-const labels = (nodes: readonly ActionMenuNode<MenuAction>[]): string[] =>
-  nodes.map((node) => (node.kind === 'group' ? `[${node.label}]` : node.action.name));
+const labels = (nodes: readonly ActionMenuNode<Named>[]): string[] =>
+  nodes.map((node) => (node.kind === 'group' ? `[${node.label}]` : node.item.name));
 
 describe('buildActionMenu', () => {
   it('leaves an ungrouped list flat and in the order it was given', () => {
     const menu = buildActionMenu([action('build'), action('upgrade'), action('rename')]);
     expect(labels(menu)).toEqual(['build', 'upgrade', 'rename']);
-    expect(menu.every((node) => node.kind === 'action')).toBe(true);
+    expect(menu.every((node) => node.kind === 'item')).toBe(true);
   });
 
   it('collapses every member of a group into ONE node at the parent level', () => {
@@ -53,7 +55,7 @@ describe('buildActionMenu', () => {
     ]);
 
     expect(labels(menu)).toEqual(['build', '[Dump]']);
-    const dump = menu[1] as ActionMenuGroup<MenuAction>;
+    const dump = menu[1] as ActionMenuGroup<Named>;
     expect(labels(dump.children)).toEqual(['dumpOre', 'dumpWater', 'dumpFood']);
     expect(dump.path).toEqual(['Dump']);
   });
@@ -66,18 +68,18 @@ describe('buildActionMenu', () => {
     ]);
 
     expect(labels(menu)).toEqual(['[More]']);
-    const more = menu[0] as ActionMenuGroup<MenuAction>;
+    const more = menu[0] as ActionMenuGroup<Named>;
     // `Empire settings` first because `renamePlanet` named it before
     // `skipMission` arrived: with no declared order, arrival decides.
     expect(labels(more.children)).toEqual(['[Empire settings]', 'skipMission']);
-    const settings = more.children[0] as ActionMenuGroup<MenuAction>;
+    const settings = more.children[0] as ActionMenuGroup<Named>;
     expect(settings.path).toEqual(['More', 'Empire settings']);
     expect(labels(settings.children)).toEqual(['renamePlanet', 'describeEmpire']);
   });
 
   it('has no way to name an action on a group node', () => {
     const menu = buildActionMenu([action('dumpOre', { group: ['Dump'] })]);
-    const group = menu[0] as ActionMenuGroup<MenuAction>;
+    const group = menu[0] as ActionMenuGroup<Named>;
     expect(Object.keys(group).sort()).toEqual(['children', 'kind', 'label', 'path']);
   });
 
@@ -106,7 +108,7 @@ describe('buildActionMenu', () => {
       action('dumpWater', { group: ['Dump'], order: 2 }),
       action('dumpOre', { group: ['Dump'], order: 1 }),
     ]);
-    const dump = menu[0] as ActionMenuGroup<MenuAction>;
+    const dump = menu[0] as ActionMenuGroup<Named>;
     expect(labels(menu)).toEqual(['[Dump]']);
     expect(labels(dump.children)).toEqual(['dumpOre', 'dumpWater']);
   });

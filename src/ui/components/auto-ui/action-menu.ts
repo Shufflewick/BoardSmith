@@ -33,25 +33,27 @@
  * popover keep working inside a group exactly as they do at the root.
  */
 
-/** The part of an action's metadata that decides where its button sits. */
-export interface MenuAction {
-  readonly name: string;
+/**
+ * The part of an action's metadata, or of a pick's choice (#1439), that decides
+ * where its button sits.
+ */
+export interface MenuItem {
   /**
-   * The menu path this action's start button sits at, outermost first. Absent
-   * means the top level, which is where every action sat before #228 and where
-   * a game that declares nothing keeps them.
+   * The menu path this button sits at, outermost first. Absent means the top
+   * level, which is where every action sat before #228 and where a game that
+   * declares nothing keeps them.
    */
   readonly group?: readonly string[];
   /** Sort key within its level. Absent sorts as `0` -- see `sortKeyOf`. */
   readonly order?: number;
 }
 
-/** One action's start button. Not exported: `ActionMenuNode` is the arm a
- *  consumer narrows, and `kind` is what narrows it. */
-interface ActionMenuLeaf<A extends MenuAction> {
-  readonly kind: 'action';
-  /** The metadata verbatim, so a leaf renders exactly as a flat button does. */
-  readonly action: A;
+/** One action's start button, or one choice. Not exported: `ActionMenuNode`
+ *  is the arm a consumer narrows, and `kind` is what narrows it. */
+interface ActionMenuLeaf<A extends MenuItem> {
+  readonly kind: 'item';
+  /** The item verbatim, so a leaf renders exactly as a flat button does. */
+  readonly item: A;
 }
 
 /**
@@ -61,7 +63,7 @@ interface ActionMenuLeaf<A extends MenuAction> {
  * labels, so two actions in one group cannot disagree about what it is called.
  * That is why there is no id to register and no dangling reference to make.
  */
-export interface ActionMenuGroup<A extends MenuAction> {
+export interface ActionMenuGroup<A extends MenuItem> {
   readonly kind: 'group';
   readonly label: string;
   /** The full path from the root, so a level can be addressed by it. */
@@ -69,10 +71,10 @@ export interface ActionMenuGroup<A extends MenuAction> {
   readonly children: readonly ActionMenuNode<A>[];
 }
 
-export type ActionMenuNode<A extends MenuAction> = ActionMenuLeaf<A> | ActionMenuGroup<A>;
+export type ActionMenuNode<A extends MenuItem> = ActionMenuLeaf<A> | ActionMenuGroup<A>;
 
 /** One rendered level: the nodes in it, and the group it belongs to. */
-interface ActionMenuLevel<A extends MenuAction> {
+interface ActionMenuLevel<A extends MenuItem> {
   /** The group whose level this is; `null` at the root. */
   readonly group: ActionMenuGroup<A> | null;
   readonly nodes: readonly ActionMenuNode<A>[];
@@ -87,10 +89,10 @@ interface ActionMenuLevel<A extends MenuAction> {
  * order the actions arrived in, which for an ungrouped game is the availability
  * order the panel has always drawn.
  */
-const sortKeyOf = <A extends MenuAction>(action: A): number => action.order ?? 0;
+const sortKeyOf = <A extends MenuItem>(item: A): number => item.order ?? 0;
 
 /** A mutable group while the tree is being built. */
-interface Building<A extends MenuAction> {
+interface Building<A extends MenuItem> {
   readonly label: string;
   readonly path: readonly string[];
   readonly children: Slot<A>[];
@@ -98,17 +100,17 @@ interface Building<A extends MenuAction> {
 }
 
 /** One entry at a level, with the two keys a level is sorted by. */
-interface Slot<A extends MenuAction> {
+interface Slot<A extends MenuItem> {
   readonly arrival: number;
   sortKey: number;
   readonly node: ActionMenuLeaf<A> | Building<A>;
 }
 
-const isBuilding = <A extends MenuAction>(
+const isBuilding = <A extends MenuItem>(
   node: ActionMenuLeaf<A> | Building<A>,
 ): node is Building<A> => !('kind' in node);
 
-function newLevel<A extends MenuAction>(label: string, path: readonly string[]): Building<A> {
+function newLevel<A extends MenuItem>(label: string, path: readonly string[]): Building<A> {
   return { label, path, children: [], groups: new Map() };
 }
 
@@ -121,7 +123,7 @@ function newLevel<A extends MenuAction>(label: string, path: readonly string[]):
  * the group itself -- would have to be declared once per member, and two
  * members disagreeing about it is a state this shape simply cannot reach.
  */
-function levelFor<A extends MenuAction>(
+function levelFor<A extends MenuItem>(
   root: Building<A>,
   path: readonly string[],
   sortKey: number,
@@ -145,7 +147,7 @@ function levelFor<A extends MenuAction>(
 }
 
 /** Sorted, frozen output for one built level. */
-function freeze<A extends MenuAction>(level: Building<A>): readonly ActionMenuNode<A>[] {
+function freeze<A extends MenuItem>(level: Building<A>): readonly ActionMenuNode<A>[] {
   const ordered = [...level.children].sort(
     (a, b) => a.sortKey - b.sortKey || a.arrival - b.arrival,
   );
@@ -165,20 +167,20 @@ function freeze<A extends MenuAction>(level: Building<A>): readonly ActionMenuNo
  * With no `group` anywhere this returns the flat list it was given, in the same
  * order, which is how a game that declares nothing keeps the panel it has.
  */
-export function buildActionMenu<A extends MenuAction>(
-  actions: readonly A[],
+export function buildActionMenu<A extends MenuItem>(
+  items: readonly A[],
 ): readonly ActionMenuNode<A>[] {
   const root = newLevel<A>('', []);
-  actions.forEach((action, arrival) => {
-    const sortKey = sortKeyOf(action);
-    const level = levelFor(root, action.group ?? [], sortKey, arrival);
-    level.children.push({ arrival, sortKey, node: { kind: 'action', action } });
+  items.forEach((item, arrival) => {
+    const sortKey = sortKeyOf(item);
+    const level = levelFor(root, item.group ?? [], sortKey, arrival);
+    level.children.push({ arrival, sortKey, node: { kind: 'item', item } });
   });
   return freeze(root);
 }
 
 /** The group a level's path names, or `null` for the root / a path that has gone. */
-function groupAt<A extends MenuAction>(
+function groupAt<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],
   path: readonly string[],
 ): ActionMenuGroup<A> | null {
@@ -207,7 +209,7 @@ function groupAt<A extends MenuAction>(
  * A leaf's name is not a level: `['build']` resolves to the root, so a path can
  * never address something the panel would then try to draw children for.
  */
-export function resolveMenuPath<A extends MenuAction>(
+export function resolveMenuPath<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],
   requested: readonly string[],
 ): readonly string[] {
@@ -225,7 +227,7 @@ export function resolveMenuPath<A extends MenuAction>(
  * the panel must always have something to draw: an empty level is a prompt with
  * nothing to press, which is the trap `suppressFromActionPanel` already learned.
  */
-export function menuLevelAt<A extends MenuAction>(
+export function menuLevelAt<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],
   path: readonly string[],
 ): ActionMenuLevel<A> {

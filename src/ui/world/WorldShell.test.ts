@@ -367,6 +367,18 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it('starts the action bar down when the game asks, and the player can still open it (#1439)', async () => {
+    const wrapper = mount(WorldShell, {
+      props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall', actionBarStartsCollapsed: true },
+    });
+    await drawn(wrapper, stateFrame());
+    const bar = () => wrapper.get('[data-testid="bs-actionbar"]');
+    expect(bar().classes()).toContain('collapsed');
+    await wrapper.get('[data-testid="bs-actionbar-toggle"]').trigger('click');
+    expect(bar().classes()).not.toContain('collapsed');
+    wrapper.unmount();
+  });
+
   it('offers the seat its enumerated actions in the shared panel', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame());

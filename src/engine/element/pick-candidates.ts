@@ -20,7 +20,7 @@
  * and the selection's `disabled`'s business, and it has already happened by the
  * time a value reaches this file.
  */
-import { isDevThrowEnabled } from '../../utils/dev.js';
+import { devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement, type GameElement } from './game-element.js';
 import { seatIdOf } from './seat-placeholders.js';
 import { labelOfValue } from '../action/choice-matching.js';
@@ -116,6 +116,7 @@ export function formatChoiceCandidates(
     }
 
     if (disabled !== false) choice.disabled = disabled;
+    setGroup(choice, selection.group, value, hidesFrom(ctx.player.seat, value), selection.name);
     return choice;
   });
 }
@@ -138,12 +139,17 @@ export function formatElementCandidates(
   const elements = candidates.map(({ value }) => value) as ElementLike[];
   const sight = seatSight(elements, ctx);
   const labels = labelElements(elements, selection, ctx, warnings, sight);
+  // Only `chooseElement` groups; a many-element pick has no `group`.
+  const elementGroup = selection.type === 'element' ? selection.group : undefined;
+  const groupOfElement = elementGroup && ((element: ElementLike) => elementGroup(element as never, ctx as never));
 
   return candidates.map(({ value: elementRaw, disabled }, index) => {
     const element = elementRaw as ElementLike;
     const validElem: ValidElement = { id: sight.idOf(element), display: labels[index]! };
     validElem.refs = [{ ref: refFor(element, selection, ctx, warnings, sight), role: 'highlight' }];
     if (disabled !== false) validElem.disabled = disabled;
+    // `group` is handed the earlier picks too, as `display` is, so a hidden card there hides every category.
+    setGroup(validElem, groupOfElement, element, hidesFrom(ctx.player.seat, [ctx.args, element]), selection.name);
     return validElem;
   });
 }
@@ -166,11 +172,39 @@ export function formatRepeatCandidates(
 ): ChoiceWithRefs[] {
   if (selection.type === 'choice') return formatChoiceCandidates(candidates, selection, ctx, warnings);
   const elements = candidates.filter((c) => isElement(c.value));
-  return formatElementCandidates(elements, selection, ctx, warnings).map(({ id, display, refs, disabled }) => {
+  return formatElementCandidates(elements, selection, ctx, warnings).map(({ id, display, refs, disabled, group }) => {
     const choice: ChoiceWithRefs = { value: id, display: display!, refs };
     if (disabled !== undefined) choice.disabled = disabled;
+    if (group !== undefined) choice.group = group;
     return choice;
   });
+}
+
+/**
+ * Give a candidate its category path as the seat may be sent it (#1439): none
+ * at the top level, and none for a candidate the seat cannot see, since its
+ * category could name it (#1293).
+ */
+function setGroup<V>(
+  candidate: { group?: readonly string[] },
+  groupOf: ((value: V) => readonly string[]) | undefined,
+  value: V,
+  hidden: boolean,
+  selectionName: string,
+): void {
+  const path = groupOf?.(value);
+  if (!path || path.length === 0) return;
+  if (path.some((label) => label.trim() === '')) {
+    throw new Error(
+      `group for selection '${selectionName}' returned a blank category label in [${path.map((l) => `"${l}"`).join(', ')}]. `
+      + 'Name every category, or return [] to leave the choice at the top level.',
+    );
+  }
+  if (!hidden) {
+    candidate.group = path;
+    return;
+  }
+  devWarn(`group-hidden:${selectionName}`, `group for selection '${selectionName}' was handed a card the player cannot see, so that choice is shown at the top level (#1293).`);
 }
 
 /** The little of an element these formatters read. */
