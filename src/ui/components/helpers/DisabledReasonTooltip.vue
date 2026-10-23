@@ -26,6 +26,9 @@ import {
   DISABLED_TOOLTIP_MAX_WIDTH,
 } from '../../composables/useDisabledReasonTooltip.js';
 import { computePopoverPosition, type PopoverPosition } from './popover-position.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 const { text, anchor, showCount } = useDisabledReasonTooltip();
 

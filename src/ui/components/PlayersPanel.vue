@@ -14,6 +14,9 @@
 import { computed, ref, watch } from 'vue';
 import PlayerToken from './PlayerToken.vue';
 import { YOUR_MOVE, describePlaying } from '../composables/liveRegionAnnouncer.js';
+import { syncReducedMotionClass } from '../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 export interface Player {
   seat: number;

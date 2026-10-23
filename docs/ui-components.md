@@ -380,6 +380,11 @@ on, and both script and CSS follow that one setting:
 
 A test refuses any `prefers-reduced-motion` in BoardSmith's own source outside
 `src/ui/composables/reducedMotion.ts`, the one place that reads the device setting.
+A BoardSmith component whose CSS keys on `.bs-reduce-motion` calls
+`syncReducedMotionClass()` in its setup, and a stylesheet's classes are set by a
+script that calls it (`drag-drop.css` by `useDragDrop`), so the rule works on a
+page with no shell. The call does its work once per page. A test refuses a
+component or stylesheet that skips it.
 
 ### AutoUI
 

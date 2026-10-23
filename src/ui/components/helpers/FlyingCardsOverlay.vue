@@ -35,6 +35,9 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { seatDisplay } from '../../seat-display.js';
 import { isUrlImage, isSpriteImage, getImageSrc, getSpriteStyle } from '../../utils/image.js';
 import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 defineProps<{
   /** Array of flying cards from useFlyingElements composable */

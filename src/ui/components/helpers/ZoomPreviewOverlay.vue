@@ -31,6 +31,9 @@ import type { PreviewState } from '../../composables/useZoomPreview.js';
 import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../dice/die-preview-registry.js';
 import { parseImageInfo, getSpriteStyle } from '../../utils/image.js';
 import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 const props = defineProps<{
   /** Preview state from useZoomPreview */

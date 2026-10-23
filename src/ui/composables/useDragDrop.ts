@@ -91,6 +91,7 @@
 import { tryUseBoardInteraction, type ElementRef } from './useBoardInteraction.js';
 import { setTransformAwareDragImage } from './dragImage.js';
 import { devWarn } from '../../utils/dev.js';
+import { syncReducedMotionClass } from './reducedMotion.js';
 
 /**
  * Warn (once) when a drag/drop handler fires with no `<GameShell>` provider.
@@ -227,6 +228,7 @@ export interface UseDragDropReturn {
 }
 
 export function useDragDrop(): UseDragDropReturn {
+  syncReducedMotionClass();
   const boardInteraction = tryUseBoardInteraction();
 
   const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | InertDragProps => {

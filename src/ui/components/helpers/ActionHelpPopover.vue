@@ -23,6 +23,9 @@
 
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
 import { computePopoverPosition, type PopoverPosition } from './popover-position.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 

@@ -33,6 +33,9 @@ import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
 import type { GameElement } from './auto-ui-helpers.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 // ---------------------------------------------------------------------------
 // Props — interaction arrays removed (useBoardInteraction provides those)
