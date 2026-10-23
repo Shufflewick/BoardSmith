@@ -11,7 +11,10 @@
  *   - close(): restores focus to the previously-focused element; hands inert
  *     back to the trap below, if any. Closing a closed trap does nothing.
  *   - handleKeydown(e): traps Tab within the focusable set (cycle on boundaries);
- *     closes via onClose on Escape ONLY when escapeToClose is true.
+ *     closes via onClose on Escape ONLY when escapeToClose is true. The caller
+ *     wires it to the dialog's keydown; while the trap is the top one, the trap
+ *     also hears keys pressed with focus on <body>, where a focused item that
+ *     turned disabled leaves it.
  *
  * Pitfall 3 guard: `aria-modal="true"` is an AT hint, not DOM enforcement.
  * `inert` on background siblings is the only mechanism that prevents Tab from
@@ -92,10 +95,12 @@ function inertSiblingsOf(node: HTMLElement, parent: HTMLElement) {
   }
 }
 
+const topTrap = () => openTraps.filter((r) => r.value).at(-1);
+
 function syncInert() {
   for (const el of inertAdded) el.removeAttribute('inert');
   inertAdded = [];
-  let node = openTraps.filter((r) => r.value).at(-1)?.value ?? null;
+  let node = topTrap()?.value ?? null;
   while (node && node !== document.body && node.parentElement) {
     inertSiblingsOf(node, node.parentElement);
     node = node.parentElement;
@@ -113,6 +118,11 @@ export function useFocusTrap(
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
 
+  // A focused item that turns disabled drops focus to <body>, out of reach of the dialog's own keydown (#1453).
+  function escapeFromBody(e: KeyboardEvent) {
+    if (e.target === document.body && topTrap() === dialogRef) handleKeydown(e);
+  }
+
   // --------------------------------------------------------------------------
   // open() — save context, apply inert, focus first element
   // --------------------------------------------------------------------------
@@ -122,6 +132,7 @@ export function useFocusTrap(
     previouslyFocused = document.activeElement as HTMLElement | null;
     openTraps.push(dialogRef);
     syncInert();
+    document.addEventListener('keydown', escapeFromBody);
     nextTick(() => {
       if (!dialogRef.value) return;
       const focusable = getFocusable(dialogRef.value);
@@ -138,6 +149,7 @@ export function useFocusTrap(
     if (index === -1) return;
     openTraps.splice(index, 1);
     syncInert();
+    document.removeEventListener('keydown', escapeFromBody);
     previouslyFocused?.focus();
   }
 
