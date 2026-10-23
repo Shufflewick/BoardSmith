@@ -4,7 +4,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Action, Game, Piece, Space, type GameOptions } from '../engine/index.js';
-import { readOnlyProjection } from './readonly.js';
+import { readOnlyScope } from './readonly.js';
 
 class Token extends Piece<SeenGame> {
   seen = 0;
@@ -42,7 +42,7 @@ describe('chooseElement default root (#771)', () => {
   it('refuses a filter write in a world offer with `from` omitted, as with `from` named, and leaves the live game alone', () => {
     for (const name of ['named', 'omitted']) {
       const game = fresh();
-      expect(() => offer(game, name, readOnlyProjection(game))).toThrow();
+      expect(() => offer(game, name, readOnlyScope()(game))).toThrow();
       expect(seenOf(game)).toEqual([0, 0]);
     }
   });

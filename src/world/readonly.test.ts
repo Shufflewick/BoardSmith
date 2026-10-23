@@ -6,10 +6,10 @@
 // separate and a fix that closed only the first would look complete here
 // without one of these cases -- assignment is the obvious one, and a mutating
 // METHOD writing through its own `this` is the one a `set` trap alone misses.
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Game, PersistentMap, Piece, Player, Space } from "../engine/index.js";
 import type { GameOptions } from "../engine/index.js";
-import { plainCopy, readOnlyProjection } from "./readonly.js";
+import { plainCopy, readOnlyScope } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
 
@@ -24,6 +24,12 @@ class ProjectionGame extends Game<ProjectionGame, Player> {
     this.registerElements([Room, Token]);
   }
 }
+
+// One scope per test, as the engine opens one per call.
+let readOnlyProjection: <T>(value: T) => T;
+beforeEach(() => {
+  readOnlyProjection = readOnlyScope();
+});
 
 function world() {
   const game = new ProjectionGame({ playerCount: 2, seed: "projection", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
@@ -612,5 +618,29 @@ describe("plainCopy of plain data read through a projection (#1347)", () => {
     live.self = live;
 
     expect(() => plainCopy(readOnlyProjection(live))).toThrow(/at "self" refers back to an object that contains it/);
+  });
+});
+
+describe("readOnlyScope (#1438)", () => {
+  it("keeps its projections to itself, so one call's tables never grow the next call's", () => {
+    // Module-wide tables slowed every later call once they held millions of entries.
+    const { here } = world();
+    const first = readOnlyScope();
+    const second = readOnlyScope();
+
+    expect(first(here)).toBe(first(here));
+    expect(first(here).first(Token)).toBe(first(here.first(Token)!));
+    expect(second(here) === first(here)).toBe(false);
+    expect(second(here).first(Token) === first(here).first(Token)).toBe(false);
+  });
+
+  it("still recognises a projection an earlier scope minted", () => {
+    const { game, here } = world();
+    const earlier = readOnlyScope()(here);
+    const later = readOnlyScope();
+
+    expect(later(earlier)).toBe(earlier);
+    expect(later(game).all(Token).contains(earlier.first(Token)!)).toBe(true);
+    expect(plainCopy(readOnlyScope()({ visits: [1] }))).toEqual({ visits: [1] });
   });
 });

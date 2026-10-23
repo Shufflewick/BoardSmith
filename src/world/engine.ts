@@ -135,7 +135,10 @@ import {
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { failedExecute } from "../engine/action/action.js";
 import type { AnnotatedChoice } from "../engine/action/types.js";
-import { readOnlyProjection } from "./readonly.js";
+import { readOnlyScope } from "./readonly.js";
+
+/** The function one call projects through, so its reads share one identity (#1438). */
+type Projecting = ReturnType<typeof readOnlyScope>;
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
@@ -691,7 +694,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * that outlived that would let game code reach a tree the platform has since
    * evicted.
    */
-  private residentWorld(): WorldResidency {
+  private residentWorld(project: Projecting): WorldResidency {
     return {
       partition: (name) => {
         const id = this.residentIds.get(name);
@@ -711,7 +714,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // a declaration writing -- and a declare-time write lands outside both
         // protections the handler surface has. `world-readonly.ts` carries the
         // whole argument.
-        return root === undefined ? undefined : readOnlyProjection(root);
+        return root === undefined ? undefined : project(root);
       },
     };
   }
@@ -725,12 +728,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * therefore the wrong one. A view that wants the time takes it from the
    * partition it is projecting.
    */
-  private declaringWorld(when: WorldDispatchWhen): WorldDeclarationFacilities {
+  private declaringWorld(when: WorldDispatchWhen, project: Projecting): WorldDeclarationFacilities {
     return when.kind === "scheduled"
       ? // ITS CLOCK IS ITS OCCURRENCE'S OWN `due` (#375), read off the timing
         // rather than taken as a second number a host could get wrong.
-        { ...this.residentWorld(), now: when.timing.due, timing: when.timing }
-      : { ...this.residentWorld(), now: when.now, timing: null };
+        { ...this.residentWorld(project), now: when.timing.due, timing: when.timing }
+      : { ...this.residentWorld(project), now: when.now, timing: null };
   }
 
   /**
@@ -802,7 +805,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * declaration reads through, and a write is the refusal it already raises.
    */
   surveyPartition<TDigest>(name: string, fold: (element: GameElement) => TDigest): TDigest {
-    return fold(readOnlyProjection(this.rootOf(name)));
+    return fold(readOnlyScope()(this.rootOf(name)));
   }
 
   /**
@@ -834,6 +837,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // what makes a join bounded.
     let sources: Game | undefined;
     const read = new Map<string, GameElement>();
+    const project = readOnlyScope();
     return run((name) => {
       const already = read.get(name);
       if (already !== undefined) return already;
@@ -861,7 +865,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       sources ??= this.buildSourceGame();
       assertMintedUnderThisKey(name, stored.parentId, sources.id);
-      const root = readOnlyProjection(sources.adoptSubtree(stored.json as ElementJSON));
+      const root = project(sources.adoptSubtree(stored.json as ElementJSON));
       read.set(name, root);
       return root;
     });
@@ -1165,7 +1169,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
     const seat = this.seatFor(player);
-    const acting = readOnlyProjection(this.playerFor(seat));
+    const project = readOnlyScope();
+    const acting = project(this.playerFor(seat));
     const offers: WorldActionOffer[] = [];
 
     for (const definition of this.actions.values()) {
@@ -1174,7 +1179,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // rule enforceable only by the client, which is not a place a rule can
       // live; `actionFor` is the other half.
       if (definition.world?.seatless === true) continue;
-      const offer = await this.offerOf(definition, seat, acting, stamp);
+      const offer = await this.offerOf(definition, seat, acting, stamp, project);
       if (offer !== null) offers.push(offer);
     }
     // By name, so a surface's order is the game's own fact rather than the
@@ -1254,13 +1259,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number,
     acting: Player,
     stamp: WorldOfferStamp,
+    project: Projecting,
   ): Promise<WorldActionOffer | null> {
     const named: string[] = [];
     // AN OFFER IS A SEAT'S, so nothing accumulates here: a seated action may
     // not declare an activity round at all (ShufflewickPub #423), which
     // `assertWorldAction` refuses at construction.
     const namedSeats: number[] = [];
-    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
+    const facilities = this.readOnlyFacilities(definition.name, named, stamp, project);
     bindWorldFacilities(this.game, facilities);
     try {
       // ROUND ONE (and any round that shares its place), before anything is
@@ -1271,7 +1277,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // whose condition is false is not offered and no further round runs, so a
       // verb that is irrelevant here costs one predicate and no hydration past
       // round one.
-      if (!this.conditionHolds(definition, acting)) return null;
+      if (!this.conditionHolds(definition, acting, project)) return null;
 
       // Deliberately NOT `isActionAvailable`, and the reason is the whole of
       // why `viewFor` refuses `createPlayerView`: that helper enumerates every
@@ -1284,7 +1290,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // candidates may read an earlier pick, required or optional, so they wait
       // for the re-ask with it bound (#1338); the offer carries their shape.
       const selections = definition.selections.map((_, index) =>
-        index === 0 ? this.pickOf(definition, 0, acting, named) : this.pickShapeOf(definition, index, acting),
+        index === 0 ? this.pickOf(definition, 0, acting, named, project) : this.pickShapeOf(definition, index, acting, project),
       );
       const satisfiable = askable(selections[0]);
       // THE REASON IT CANNOT BE TAKEN OUTRANKS WHETHER IT HAS AN ANSWER (#187).
@@ -1309,7 +1315,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // greying rule is answering "may this seat take it", which changes
       // nothing.
       const disabled = this.game.readingOnly(() =>
-        this.game.getActionDisabledReason(definition, acting, readOnlyProjection(this.game)),
+        this.game.getActionDisabledReason(definition, acting, project(this.game)),
       );
       if (disabled === null && !satisfiable) return warnDropped(definition, seat);
 
@@ -1323,13 +1329,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
    *  a table evaluates availability. PROJECTED, AND WITH REACH-MARKING OFF
    *  (ShufflewickPub #384/#295): a finder reached through a projected game marks
    *  what it touched, and marking is a write these traps refuse. */
-  private conditionHolds(definition: ActionDefinition, acting: Player): boolean {
+  private conditionHolds(definition: ActionDefinition, acting: Player, project: Projecting): boolean {
     return (
       !definition.condition ||
       this.game.readingOnly(() =>
         evaluateCondition(
           definition.condition!,
-          { game: readOnlyProjection(this.game), player: acting, args: {} },
+          { game: project(this.game), player: acting, args: {} },
           `action '${definition.name}'`,
         ),
       )
@@ -1367,8 +1373,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound. A
     // later round may read what an earlier one loaded, and with arguments in hand
     // a round can name a partition the empty-args offer could not.
-    return this.answeringRead(player, definition, index, index, args, stamp, (acting, named, draft) =>
-      this.pickOf(definition, index, acting, named, draft),
+    return this.answeringRead(player, definition, index, index, args, stamp, (acting, named, draft, project) =>
+      this.pickOf(definition, index, acting, named, project, draft),
     );
   }
 
@@ -1401,20 +1407,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
     boundBefore: number,
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
-    answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>) => T,
+    answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>, project: Projecting) => T,
   ): Promise<T> {
     this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
-    const acting = readOnlyProjection(this.playerFor(seat));
+    const project = readOnlyScope();
+    const acting = project(this.playerFor(seat));
     const named: string[] = [];
     // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];
-    bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp));
+    bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp, project));
     try {
       for (let step = 0; step <= through; step++) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now));
         // AFTER ROUND ZERO, as offerOf: a read answers only what the offer shows (#798).
-        if (step === 0 && !this.conditionHolds(definition, acting)) {
+        if (step === 0 && !this.conditionHolds(definition, acting, project)) {
           throw worldRefusal(
             "unknown-command",
             `"${definition.name}" is not offered to this seat right now, so there is nothing to ` +
@@ -1422,7 +1429,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           );
         }
       }
-      return answer(acting, named, this.resolveDraft(definition, args, acting, named, through));
+      return answer(acting, named, this.resolveDraft(definition, args, acting, named, through, project), project);
     } finally {
       bindWorldFacilities(this.game, null);
     }
@@ -1459,7 +1466,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // the state the purchase writes to and that partition is usually named by the
     // round after the last selection.
     return this.answeringRead(player, definition, definition.selections.length, 0, args, stamp,
-      (acting, _named, draft) =>
+      (acting, _named, draft, project) =>
         // READ-ONLY FOR THE WHOLE CALLBACK, exactly as a pick's own callbacks are
         // (ShufflewickPub #384/#295): the projection refuses a write and
         // `readingOnly` refuses a reach-mark, so a quote cannot move the world it
@@ -1467,7 +1474,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         this.game.readingOnly(() =>
           quote(
             { ...draft },
-            { game: readOnlyProjection(this.game), player: acting, args: { ...draft } },
+            { game: project(this.game), player: acting, args: { ...draft } },
           ),
         ),
     );
@@ -1507,9 +1514,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     acting: Player,
     named: readonly string[],
     through: number,
+    project: Projecting,
   ): Readonly<Record<string, unknown>> {
     const executor = this.game.getActionExecutor();
-    const reading = readOnlyProjection(this.game);
+    const reading = project(this.game);
     // The callbacks it runs read the tree, so it is a read with reach-marking off (#1203).
     return this.game.readingOnly(() =>
       // Each element pick is checked before a later pick is resolved against it (#1223).
@@ -1698,25 +1706,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
     index: number,
     acting: Player,
     named: readonly string[],
+    project: Projecting,
     args: Readonly<Record<string, unknown>> = {},
   ): PickMetadata {
     // READ-ONLY FOR THE WHOLE PICK (#384/#295). Everything below runs the
     // bundle's own callbacks, and every one of them is answering a question
     // rather than taking a moment.
-    return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args));
+    return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args, project));
   }
 
   /** A pick's shape with no candidates, read-only as `pickOf`: what an offer
    *  carries for every pick after the first (#1345, #1355). Its function
    *  `prompt`, `multiSelect` and `orderedList` may read the picks before it,
    *  so they are left to the re-ask, as its round and candidates are (#1350). */
-  private pickShapeOf(definition: ActionDefinition, index: number, acting: Player): PickMetadata {
+  private pickShapeOf(definition: ActionDefinition, index: number, acting: Player, project: Projecting): PickMetadata {
     const selection = { ...definition.selections[index]! };
     for (const key of ["prompt", "multiSelect", "orderedList"]) {
       if (typeof Reflect.get(selection, key) === "function") Reflect.deleteProperty(selection, key);
     }
     return this.game.readingOnly(() =>
-      buildPickMetadata(readOnlyProjection(this.game), acting, definition.name, selection),
+      buildPickMetadata(project(this.game), acting, definition.name, selection),
     );
   }
 
@@ -1726,6 +1735,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     acting: Player,
     named: readonly string[],
     args: Readonly<Record<string, unknown>>,
+    project: Projecting,
   ): PickMetadata {
     const selection = definition.selections[index]!;
     // THE GAME AN OFFER'S OWN CALLBACKS SEE IS PROJECTED (ShufflewickPub #384),
@@ -1733,7 +1743,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // rollback and no checkpoint, so a `prompt`, a `display` or a `multiSelect`
     // that wrote would reach every watcher's frame and be reverted at the next
     // hibernation with nobody told.
-    const reading = readOnlyProjection(this.game);
+    const reading = project(this.game);
     const pick = buildPickMetadata(reading, acting, definition.name, selection, { ...args });
     if (selection.type === "number" || selection.type === "text") return pick;
 
@@ -1902,13 +1912,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
   ): number | null {
     const player = seat === null ? null : this.playerFor(seat);
+    const project = readOnlyScope();
     const box = this.game.readingOnly(() =>
       round.box({
-        game: readOnlyProjection(this.game),
-        player: player === null ? null : readOnlyProjection(player),
+        game: project(this.game),
+        player: player === null ? null : project(player),
         seat,
         args: args as Record<string, unknown>,
-        world: this.declaringWorld(when),
+        world: this.declaringWorld(when, project),
       }),
     );
     if (box === null) return null;
@@ -1947,18 +1958,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
     when: WorldDispatchWhen,
   ): readonly string[] {
     const player = seat === null ? null : this.playerFor(seat);
+    const project = readOnlyScope();
     return declaredOnce(
       this.game.readingOnly(() =>
         round.declare({
-          game: readOnlyProjection(this.game),
-          player: player === null ? null : readOnlyProjection(player),
+          game: project(this.game),
+          player: player === null ? null : project(player),
           seat,
           args: args as Record<string, unknown>,
           // BY NAME, AND INDEXED (#374). The alternative a declaration is left
           // with when this is absent is `game.first(Class, name)`, which walks
           // the resident tree through the projection to rediscover an id
           // `residentIds` already holds -- the whole of the cost #374 measured.
-          world: this.declaringWorld(when),
+          world: this.declaringWorld(when, project),
         }),
       ),
     );
@@ -1983,12 +1995,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
     when: WorldDispatchWhen,
     action: string,
   ): number | null {
+    const project = readOnlyScope();
     const about = this.game.readingOnly(() =>
       round.about({
-        game: readOnlyProjection(this.game),
+        game: project(this.game),
         seat: null,
         args: args as Record<string, unknown>,
-        world: this.declaringWorld(when),
+        world: this.declaringWorld(when, project),
       }),
     );
     if (about === null) return null;
@@ -2123,6 +2136,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
     named: readonly string[],
     stamp: WorldOfferStamp,
+    project: Projecting,
   ): WorldClockFacilities {
     const refuse = (what: string): never => {
       throw worldRefusal(
@@ -2149,7 +2163,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // watcher's next frame, was never made durable, and was reverted at the
         // next hibernation with nobody told. `world-readonly.ts` carries the
         // whole argument; this is the same projection a declaration is handed.
-        return readOnlyProjection(this.rootOf(name));
+        return project(this.rootOf(name));
       },
       // AN OFFER HAS NAMED NO CHAIR (ShufflewickPub #423), so there is nothing
       // to answer with. Refused rather than absent for the reason `schedule` is
@@ -2204,7 +2218,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private viewDeclaredFor(seat: number): readonly string[] {
     // Read-only for the same reason `declaredFor` is, and told so for the same
     // reason (#295): a view decides what to LOAD and may not write.
-    return declaredOnce(this.game.readingOnly(() => this.view(seat, this.residentWorld())));
+    return declaredOnce(this.game.readingOnly(() => this.view(seat, this.residentWorld(readOnlyScope()))));
   }
 
   async viewFor(player: string): Promise<unknown> {
@@ -3242,7 +3256,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
   /** One seat's view run against only the partitions `declared` names (#717). */
   private judgeView(seat: number, declared: readonly string[]): JudgedView {
-    const resident = this.residentWorld();
+    const resident = this.residentWorld(readOnlyScope());
     const undeclared: string[] = [];
     const world: WorldResidency = {
       partition: (name) => {
