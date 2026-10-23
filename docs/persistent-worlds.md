@@ -820,6 +820,12 @@ Each of them takes `needs:` as its own declaration round, `optional:`, and
 `disabled:` -- and `disabled:` is the one to reach for before `validate:`, for
 the reason the next-but-one heading gives.
 
+`chooseFrom` and `chooseElement` also take `group:`, which puts each choice
+under an Action Panel category, as on a table; see
+[`group` arranges the choices inside a pick](./actions-and-flow.md#group-arranges-the-choices-inside-a-pick). A `chooseElement`'s `group` gets the
+world context, `ctx.world` included. It is not taken with `multiSelect` or
+`orderedList`, or on `chooseElements`.
+
 ### `ctx.world`: what a world gives an action that a table cannot
 
 `ActionContext` is `{ game, player, args }` and stays that: the table backend has

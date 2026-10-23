@@ -426,6 +426,8 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined, O = boolea
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   choices: T[] | ((context: WorldActionContext<G>) => T[]);
   display?: (choice: ChoiceValue<T>) => string;
+  /** The Action Panel category a choice sits under; see the engine's `chooseFrom` (#1439). Not on a `multiSelect` or `orderedList`. */
+  group?: (choice: ChoiceValue<T>) => readonly string[];
   optional?: O;
   validate?: (
     value: V,
@@ -1121,6 +1123,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     options: WorldChoiceOptions<G, T, P, O, ChoiceValue<T>[]> & {
       multiSelect: WorldMultiSelect<G>;
       orderedList?: never;
+      group?: never;
     },
   ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[], O>>;
   // A LIST IS A THIRD SIGNATURE AND NOT A FLAG (#249). `orderedList?: never` on
@@ -1131,6 +1134,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     options: WorldChoiceOptions<G, T, P, O, ChoiceValue<T>[]> & {
       orderedList: WorldOrderedList<G>;
       multiSelect?: never;
+      group?: never;
     },
   ): WorldAction<G, AddArg<A, K, ChoiceValue<T>[], O>>;
   chooseFrom<K extends string, T, P = undefined, O extends boolean | string = false>(
@@ -1158,6 +1162,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
           ? (context) => (options.choices as (c: WorldActionContext<G>) => T[])(withWorld<G>(context))
           : options.choices,
       display: options.display,
+      group: options.group,
       optional: options.optional,
       validate: forwardValidate(options.validate),
       boardRefs: options.boardRefs
@@ -1191,11 +1196,15 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         args: Record<string, unknown>,
         context: WorldActionContext<G>,
       ) => boolean | string;
+      /** The Action Panel category an element sits under; see the engine's `chooseElement` (#1439). */
+      group?: (element: T, context: WorldActionContext<G>) => readonly string[];
     },
   ): WorldAction<G, AddArg<A, K, T, O>> {
     this.declareSelection(options.needs);
+    const group = options.group;
     this.inner.chooseElement<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
+      group: group ? (element, context) => group(element, withWorld<G>(context)) : undefined,
       validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T, O>>;
