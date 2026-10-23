@@ -18,7 +18,9 @@
  *  - trigger: role=button, aria-label="Help for {triggerLabel}", aria-expanded, aria-controls
  *  - aria-describedby applied to trigger ONLY when popover is mounted (Pitfall 3)
  *  - popover: role=tooltip, aria-live=polite
- *  - Dismiss: outside mousedown, Escape key, the mouse leaving the trigger
+ *  - Dismiss: outside mousedown, Escape key, the mouse leaving the trigger and the popover
+ *  - Help taller than the room scrolls inside the popover: by mouse over it, by
+ *    arrow and Page keys on the trigger (#1454)
  *  - Reduced motion: `.bs-reduce-motion` → transition: none
  */
 
@@ -48,6 +50,7 @@ const isOpen = ref(false);
 let openedByHover = false;
 const triggerRef = ref<HTMLButtonElement | null>(null);
 const popoverRef = ref<HTMLDivElement | null>(null);
+const scrollRef = ref<HTMLDivElement | null>(null);
 
 // ── Position ──────────────────────────────────────────────────────────────────
 
@@ -58,27 +61,13 @@ const popoverRef = ref<HTMLDivElement | null>(null);
 const POPOVER_FALLBACK_HEIGHT = 220;
 const POPOVER_MAX_WIDTH = 240;
 
-const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 });
-
-/**
- * Placement delegates to the shared `computePopoverPosition` — the same maths
- * the disabled-reason tooltip uses, so the two anchored popovers flip and clamp
- * identically. Stale position on scroll is accepted (RESEARCH.md Pitfall 4).
- *
- * @param actualHeight - The RENDERED height, so a tall dual-section popover
- *   flips at the right moment (WR-01). Pass POPOVER_FALLBACK_HEIGHT before the
- *   element exists.
- */
-function computePosition(actualHeight: number): PopoverPosition {
-  const el = triggerRef.value;
-  if (!el) return { top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2 };
-  return computePopoverPosition(el.getBoundingClientRect(), actualHeight, POPOVER_MAX_WIDTH);
-}
+const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2, maxHeight: 0 });
 
 const popoverStyle = computed(() => ({
   position: 'fixed' as const,
   top: `${position.value.top}px`,
   left: `${position.value.left}px`,
+  maxHeight: `${position.value.maxHeight}px`,
   zIndex: '60',
 }));
 
@@ -88,15 +77,21 @@ async function show() {
   const el = triggerRef.value;
   if (!el) return;
   // Phase 1: place popover at an initial position so the element mounts and can be measured.
+  // Capped only at the window, which is taller than the room on either side, so the measure decides the side.
   const rect = el.getBoundingClientRect();
-  position.value = { top: rect.bottom + 4, left: rect.left, caretSide: 'top', caretLeft: rect.width / 2 };
+  position.value = { top: rect.bottom + 4, left: rect.left, caretSide: 'top', caretLeft: rect.width / 2, maxHeight: window.innerHeight };
   isOpen.value = true;
-  // Phase 2: after Vue renders the teleported element, measure its actual rendered height
-  // and recompute — this prevents viewport overflow for tall dual-section popovers (WR-01).
+  // Phase 2: after Vue renders the teleported element, measure its actual rendered size and
+  // place it with the shared maths the disabled-reason tooltip uses, so the two flip and clamp
+  // identically (WR-01). Stale position on scroll is accepted (RESEARCH.md Pitfall 4).
   await nextTick();
   if (!isOpen.value) return; // hide() was called during the async tick
-  const actualHeight = popoverRef.value?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT;
-  position.value = computePosition(actualHeight);
+  const box = popoverRef.value;
+  position.value = computePopoverPosition(
+    el.getBoundingClientRect(),
+    box?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT,
+    box?.offsetWidth ?? POPOVER_MAX_WIDTH,
+  );
 }
 
 function hide() {
@@ -122,8 +117,27 @@ function hoverOpen(event: PointerEvent) {
   show();
 }
 
+// Moving between the trigger and the popover keeps it open, so the mouse can scroll the popover.
 function hoverClose(event: PointerEvent) {
-  if (event.pointerType === 'mouse') hide();
+  const to = event.relatedTarget as Node | null;
+  if (event.pointerType !== 'mouse' || triggerRef.value?.contains(to) || popoverRef.value?.contains(to)) return;
+  hide();
+}
+
+const SCROLL_KEYS: Record<string, (page: number) => number> = {
+  ArrowDown: () => 40,
+  ArrowUp: () => -40,
+  PageDown: (page) => page,
+  PageUp: (page) => -page,
+};
+
+// The popover is teleported out of the tab order, so its scroll keys work from the trigger.
+function scrollPopover(event: KeyboardEvent) {
+  const scroller = scrollRef.value;
+  const step = SCROLL_KEYS[event.key];
+  if (!scroller || !step || scroller.scrollHeight <= scroller.clientHeight) return;
+  event.preventDefault();
+  scroller.scrollBy({ top: step(scroller.clientHeight) });
 }
 
 // ── Outside-click + Escape dismiss ───────────────────────────────────────────
@@ -134,6 +148,8 @@ function handleOutsideClick(event: MouseEvent) {
   const trigger = triggerRef.value;
   // If the click is inside the trigger button, let the @click handler manage state
   if (trigger && trigger.contains(target)) return;
+  // A press inside the popover is a drag on its scrollbar.
+  if (popoverRef.value?.contains(target)) return;
   if (isOpen.value) {
     hide();
   }
@@ -173,6 +189,7 @@ onUnmounted(() => {
     @click="toggle"
     @pointerenter="hoverOpen"
     @pointerleave="hoverClose"
+    @keydown="scrollPopover"
   >
     <!-- Circled question mark — 14×14 viewBox (UI-SPEC §2) -->
     <svg
@@ -208,7 +225,9 @@ onUnmounted(() => {
         role="tooltip"
         aria-live="polite"
         class="action-help-popover"
+        :class="`action-help-popover--caret-${position.caretSide}`"
         :style="popoverStyle"
+        @pointerleave="hoverClose"
       >
         <!-- Caret: points toward trigger (upward when popover is below, downward when above).
              --ahp-caret-left tracks the trigger's horizontal center relative to the
@@ -221,6 +240,7 @@ onUnmounted(() => {
           aria-hidden="true"
         ></span>
 
+        <div ref="scrollRef" class="ahp-scroll">
         <!-- Help text section — text interpolation only (T-108-03, no raw HTML binding) -->
         <p v-if="helpText" class="ahp-help-body">{{ helpText }}</p>
 
@@ -237,6 +257,7 @@ onUnmounted(() => {
           <span class="ahp-disabled-label">Why it's disabled:</span>
           <p class="ahp-disabled-body">{{ disabledReason }}</p>
         </template>
+        </div>
       </div>
     </Transition>
   </Teleport>
@@ -285,7 +306,35 @@ onUnmounted(() => {
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-md);
   box-shadow: var(--bsg-shadow-sm);
+
+  /* The inline max-height is the room beside the trigger; .ahp-scroll shrinks into it and scrolls (#1454). */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The scroller lives inside the box so the caret, which sits outside the box, is not clipped. */
+.ahp-scroll {
+  min-height: 0;
+  overflow-y: auto;
   padding: var(--bsg-s2) var(--bsg-s3); /* 8px 12px (UI-SPEC) */
+}
+
+/* Bridges the gap to the trigger, so the mouse never leaves both on its way into the popover. */
+.action-help-popover::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 6px;
+}
+
+.action-help-popover--caret-top::before {
+  top: -6px;
+}
+
+.action-help-popover--caret-bottom::before {
+  bottom: -6px;
 }
 
 /* ── Caret (border-trick, mirrors BoardMessage.vue lines 258-308) ────────── */

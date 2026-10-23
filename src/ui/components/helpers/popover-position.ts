@@ -20,6 +20,8 @@ export interface PopoverPosition {
   caretSide: 'top' | 'bottom';
   /** Caret centre, relative to the popover's left edge, after edge-clamping. */
   caretLeft: number;
+  /** The room on the popover's side of the trigger: a taller popover scrolls inside this height. */
+  maxHeight: number;
 }
 
 /**
@@ -39,7 +41,8 @@ const CARET_INSET = 12;
 
 /**
  * Place a popover below its trigger, flipping above when the bottom edge would
- * crowd the viewport, and clamping horizontally so it never overflows the right
+ * crowd the viewport. One that fits neither side goes on the roomier side,
+ * capped to that room, so it never covers its trigger (#1454). Clamps horizontally so it never overflows the right
  * edge. The caret tracks the trigger's centre through that clamping, so it keeps
  * pointing at the control it describes.
  *
@@ -47,31 +50,33 @@ const CARET_INSET = 12;
  * @param height      - The popover's RENDERED height. Measure it (after the
  *                      element mounts) rather than guessing: flip detection on a
  *                      guessed height is what lets a tall popover run off-screen.
- * @param maxWidth    - The popover's max width, used for the right-edge clamp.
+ * @param width       - The popover's RENDERED width, for the right-edge clamp. A
+ *                      narrower guess than the real one would leave a short popover
+ *                      clear of a trigger near the right edge, with no path into it.
  */
 export function computePopoverPosition(
   triggerRect: DOMRect,
   height: number,
-  maxWidth: number,
+  width: number,
 ): PopoverPosition {
-  let top = triggerRect.bottom + OFFSET;
+  const roomBelow = window.innerHeight - FLIP_THRESHOLD - triggerRect.bottom - OFFSET;
+  const roomAbove = triggerRect.top - OFFSET - EDGE_MARGIN;
+  const below = height <= roomBelow || (height > roomAbove && roomBelow >= roomAbove);
+  const maxHeight = below ? roomBelow : roomAbove;
+  const top = below ? triggerRect.bottom + OFFSET : triggerRect.top - OFFSET - Math.min(height, maxHeight);
+  const caretSide = below ? 'top' : 'bottom';
+
   let left = triggerRect.left;
-  let caretSide: 'top' | 'bottom' = 'top';
 
-  if (top + height > window.innerHeight - FLIP_THRESHOLD) {
-    top = Math.max(EDGE_MARGIN, triggerRect.top - height - OFFSET);
-    caretSide = 'bottom';
-  }
-
-  if (left + maxWidth > window.innerWidth - EDGE_MARGIN) {
-    left = window.innerWidth - maxWidth - EDGE_MARGIN;
+  if (left + width > window.innerWidth - EDGE_MARGIN) {
+    left = window.innerWidth - width - EDGE_MARGIN;
   }
   if (left < EDGE_MARGIN) {
     left = EDGE_MARGIN;
   }
 
   const triggerMidX = triggerRect.left + triggerRect.width / 2;
-  const caretLeft = Math.min(maxWidth - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
+  const caretLeft = Math.min(width - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
 
-  return { top, left, caretSide, caretLeft };
+  return { top, left, caretSide, caretLeft, maxHeight };
 }

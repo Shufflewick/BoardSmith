@@ -38,6 +38,7 @@ const position = ref<PopoverPosition>({
   left: 0,
   caretSide: 'top',
   caretLeft: DISABLED_TOOLTIP_MAX_WIDTH / 2,
+  maxHeight: 0,
 });
 
 /**
@@ -53,13 +54,14 @@ watch([showCount, anchor], async () => {
   const el = anchor.value;
   if (!el) return;
   const rect = el.getBoundingClientRect();
-  position.value = computePopoverPosition(rect, FALLBACK_HEIGHT, DISABLED_TOOLTIP_MAX_WIDTH);
+  // Capped only at the window, which is taller than the room on either side, so the measure decides the side.
+  position.value = { ...computePopoverPosition(rect, FALLBACK_HEIGHT, DISABLED_TOOLTIP_MAX_WIDTH), maxHeight: window.innerHeight };
   await nextTick();
   if (anchor.value !== el) return; // moved to another control mid-tick
   position.value = computePopoverPosition(
     el.getBoundingClientRect(),
     box.value?.offsetHeight ?? FALLBACK_HEIGHT,
-    DISABLED_TOOLTIP_MAX_WIDTH,
+    box.value?.offsetWidth ?? DISABLED_TOOLTIP_MAX_WIDTH,
   );
 });
 
@@ -68,6 +70,7 @@ const style = computed(() => ({
   top: `${position.value.top}px`,
   left: `${position.value.left}px`,
   maxWidth: `${DISABLED_TOOLTIP_MAX_WIDTH}px`,
+  maxHeight: `${position.value.maxHeight}px`,
   zIndex: '70',
 }));
 </script>
@@ -92,7 +95,7 @@ const style = computed(() => ({
           :style="{ '--tip-caret-left': `${position.caretLeft}px` }"
           aria-hidden="true"
         ></span>
-        {{ text }}
+        <div class="bs-disabled-tip__text">{{ text }}</div>
       </div>
     </Transition>
   </Teleport>
@@ -104,7 +107,10 @@ const style = computed(() => ({
   font-family: var(--bsg-font);
   width: max-content;
   min-width: 80px;
-  padding: var(--bsg-s2) var(--bsg-s3);
+  /* The inline max-height is the room beside the control; the text shrinks into it (#1454). */
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
   background: var(--bsg-surface-3);
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-md);
@@ -115,6 +121,13 @@ const style = computed(() => ({
   /* The tooltip must never eat the pointer: it can open directly under the
      cursor, and a tooltip that swallows the next click is its own bug. */
   pointer-events: none;
+}
+
+/* Inside the box, so the caret outside the box is not clipped. */
+.bs-disabled-tip__text {
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--bsg-s2) var(--bsg-s3);
 }
 
 /* Caret — border trick, mirrors ActionHelpPopover. */
