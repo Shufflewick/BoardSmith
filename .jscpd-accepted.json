@@ -1,18 +1,3 @@
 {
-  "accepted": [
-    {
-      "content": "5b31c53b62a98159",
-      "lines": 25,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.vue"
-      ]
-    },
-    {
-      "content": "b5acc3db533e31a4",
-      "lines": 30,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.vue"
-      ]
-    }
-  ]
+  "accepted": []
 }

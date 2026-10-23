@@ -47,6 +47,7 @@ import {
 // (#229 for text, #237 for number).
 import { choiceValueKey } from '../../../engine/action/choice-matching.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
+import MenuGroupButton from './MenuGroupButton.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
 import type { HistoryMessage } from '../GameHistory.vue';
@@ -354,11 +355,12 @@ const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 /** The full path, for the current-level label. */
 const menuBreadcrumb = computed(() => menuLevel.value.group?.path.join(' / ') ?? '');
 
-/** Where Back goes, said out loud for a screen reader. */
-const backLabel = computed(() => {
-  const path = menuLevel.value.group?.path ?? [];
-  return path.length > 1 ? `Back to ${path[path.length - 2]}` : 'Back to all actions';
-});
+/** Where Back goes from `path`, said out loud for a screen reader; `top` names the top level. */
+function backLabelFor(path: readonly string[], top: string): string {
+  return path.length > 1 ? `Back to ${path[path.length - 2]}` : `Back to ${top}`;
+}
+
+const backLabel = computed(() => backLabelFor(menuLevel.value.group?.path ?? [], 'all actions'));
 
 /** What a screen reader is told when a level moved under the player. */
 const menuAnnouncement = ref('');
@@ -964,11 +966,7 @@ const pickCategories = computed(() => {
 const openCategory = computed(() =>
   (currentPick.value?.type === 'element' ? elementLevel : choiceLevel).value.group);
 
-/** Where Back goes, said out loud for a screen reader. */
-const categoryBackLabel = computed(() => {
-  const path = openCategory.value?.path ?? [];
-  return path.length > 1 ? `Back to ${path[path.length - 2]}` : 'Back to all options';
-});
+const categoryBackLabel = computed(() => backLabelFor(openCategory.value?.path ?? [], 'all options'));
 
 function enterCategory(group: { path: readonly string[] }): void {
   choicePath.value = group.path;
@@ -982,10 +980,15 @@ function leaveCategory(): void {
   void restoreFocusToGroup(path[path.length - 1]!, 'data-bs-choice-group', '.selection-input .choice-btn');
 }
 
-/** How many choices are behind a category's button, for its accessible name. */
-function categoryContents(group: { children: readonly unknown[] }): string {
+/** A category's button: its label, and how many choices are behind it for its accessible name. */
+function categoryButton(group: { label: string; children: readonly unknown[] }) {
   const count = group.children.length;
-  return `category, ${count} ${count === 1 ? 'option' : 'options'}`;
+  return {
+    class: 'choice-btn choice-group-btn',
+    'data-bs-choice-group': group.label,
+    label: group.label,
+    contents: `category, ${count} ${count === 1 ? 'option' : 'options'}`,
+  };
 }
 
 /** How many candidates the board handoff sends the player to. */
@@ -1572,16 +1575,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <!-- A GROUP BUTTON IS NAVIGATION AND NOTHING ELSE. `enterGroup` assigns
              one local ref; the node it is handed has no action name on it, so
              there is nothing here that could submit an order or take a turn. -->
-        <button
+        <MenuGroupButton
           v-if="node.kind === 'group'"
           class="action-btn action-group-btn"
           :data-bs-action-group="node.label"
+          :label="node.label"
+          :contents="groupContents(node)"
           @click="enterGroup(node)"
-        >
-          {{ node.label }}
-          <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
-          <span class="sr-only">{{ groupContents(node) }}</span>
-        </button>
+        />
         <template v-else>
           <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
                and swallows the activation. It uses aria-disabled rather than the
@@ -1736,18 +1737,15 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-else-if="currentPick.type === 'element' && offeredElements.length">
+        <!-- Element selection, and a many-element pick without multiSelect: a button for each valid element -->
+        <template v-else-if="(currentPick.type === 'element' || (currentPick.type === 'elements' && !currentMultiSelect)) && offeredElements.length">
           <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.elementClassName || 'element'}` }}
+            {{ currentPick.prompt || (currentPick.type === 'element' ? `Select ${currentPick.elementClassName || 'element'}` : `Select ${currentPick.name}`) }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <template v-for="node in elementLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : node.item.id">
-              <button v-if="node.kind === 'group'" class="choice-btn choice-group-btn" :data-bs-choice-group="node.label" @click="enterCategory(node)">
-                {{ node.label }} <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
-                <span class="sr-only">{{ categoryContents(node) }}</span>
-              </button>
+              <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
               <button
                 v-else
                 class="choice-btn element-btn"
@@ -1807,39 +1805,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
-            <button
-              v-if="currentPick.optional"
-              class="choice-btn skip-btn"
-              @click="skipOptionalSelection"
-            >
-              {{ skipLabel }}
-            </button>
-          </div>
-        </template>
-
-        <!-- Elements selection without multiSelect (buttons for single element selection) -->
-        <template v-else-if="currentPick.type === 'elements' && offeredElements.length">
-          <div class="selection-prompt">
-            {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </div>
-          <div class="choice-buttons element-selection">
-            <template v-for="node in elementLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : node.item.id">
-              <button v-if="node.kind === 'group'" class="choice-btn choice-group-btn" :data-bs-choice-group="node.label" @click="enterCategory(node)">
-                {{ node.label }} <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
-                <span class="sr-only">{{ categoryContents(node) }}</span>
-              </button>
-              <button
-                v-else
-                class="choice-btn element-btn"
-                v-disabled-reason="node.item.disabled"
-                @click="selectElement(node.item.id)"
-                @mouseenter="handleElementHover(node.item)"
-                @mouseleave="handleElementLeave"
-              >
-                {{ node.item.display || node.item.id }}
-              </button>
-            </template>
             <button
               v-if="currentPick.optional"
               class="choice-btn skip-btn"
@@ -1988,10 +1953,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
           <div class="choice-buttons">
             <template v-for="node in choiceLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : choiceValueKey(node.item.value)">
-              <button v-if="node.kind === 'group'" class="choice-btn choice-group-btn" :data-bs-choice-group="node.label" @click="enterCategory(node)">
-                {{ node.label }} <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
-                <span class="sr-only">{{ categoryContents(node) }}</span>
-              </button>
+              <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
               <button
                 v-else
                 class="choice-btn"
@@ -2368,11 +2330,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
 /* A group button says it leads somewhere. Same plate as an action button so the
    level reads as one row of choices, with the chevron carrying the difference. */
-.action-group-chevron {
-  margin-left: 6px;
-  opacity: 0.75;
-}
-
 /* Action configuration - horizontal flow layout */
 /* Flattened into the action bar's flow (see .action-panel) so the action title, cancel,
    prompt, and option buttons all wrap inline together. */
