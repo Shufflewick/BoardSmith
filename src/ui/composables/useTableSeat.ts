@@ -18,23 +18,19 @@
  * Call it inside a component's `setup` or an `effectScope`: it registers
  * watchers (the controller's, the board bridge's and the animation queue's).
  */
-import { computed, provide, ref, type ComputedRef, type InjectionKey, type Ref } from 'vue';
+import { computed, provide, ref, type ComputedRef, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
 import type { GameRootView } from '../types.js';
-import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
+import type { BoardInteraction } from './useBoardInteraction.js';
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
-import { ACTION_HOLDS_KEY } from './actionHolds.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
-import { useTableActionWiring, type TableActionWiring, type TableActionWiringOptions } from './useTableActionWiring.js';
-
-/** One value a board below can inject, under its key. */
-type Provision = readonly [key: InjectionKey<unknown>, value: unknown];
+import { useTableActionWiring, type Provision, type TableActionWiring, type TableActionWiringOptions } from './useTableActionWiring.js';
 
 /** How the seat reaches the game: taking an action, fetching a pick's choices, and the rest. */
 type SeatTransport = Omit<
@@ -213,12 +209,11 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   const gatedCanUndo = computed(() => !isViewingHistory.value && (state.value?.state.canUndo ?? false));
 
   const provisions: Provision[] = [
-    [BOARD_INTERACTION_KEY, boardInteraction],
+    ...wiring.provisions,
     [ANIMATION_EVENTS_KEY, animationEvents],
     [ANNOUNCER_KEY, announcer],
     [GAME_OVER_HOLDS_KEY, gameOver.holds],
     [MENU_COMMANDS_KEY, menuCommands],
-    [ACTION_HOLDS_KEY, wiring.actionHolds],
     ...gameContextProvisions({
       gameState: state,
       gameView,

@@ -19,12 +19,17 @@
  * wired the way production is.
  *
  * Call it inside a component's `setup` or an `effectScope`, like any composable
- * that registers watchers.
+ * that registers watchers. Then call {@link provideTableActionWiring} in the
+ * `setup` of the component that renders the board (#1462): it gives the board
+ * the board interaction and the action holds, so a board's `useActionHolds`
+ * reaches this wiring even inside a real GameShell, whose own provides are
+ * farther away. The controller is not among them: it is part of the game
+ * context, which a shell provides whole.
  */
-import { computed, type ComputedRef, type Ref } from 'vue';
+import { computed, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { FollowUpOffer, TutorialStepView } from '../../engine/index.js';
 import type { ActionMetadata as WireActionMetadata } from '../../types/protocol.js';
-import type { BoardInteraction } from './useBoardInteraction.js';
+import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
 import type {
   EnrichedActionMetadata,
   UseActionControllerOptions,
@@ -32,7 +37,7 @@ import type {
 } from './useActionControllerTypes.js';
 import { useActionController } from './useActionController.js';
 import { useBoardActionBridge, type RunnerIdentity } from './useBoardActionBridge.js';
-import { createActionHolds, withHolds } from './actionHolds.js';
+import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from './actionHolds.js';
 
 /**
  * The fields of a seat's published state this wiring reads. Both
@@ -82,9 +87,12 @@ export interface TableActionWiring {
   actionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
   /** Read off the seat state, with the board's holds added: action name to the reason it is disabled. Feed the Action Panel this. */
   disabledActions: ComputedRef<Record<string, string> | undefined>;
-  /** The actions the board holds back on this client (`useActionHolds`). Provide it under `ACTION_HOLDS_KEY`. */
-  actionHolds: ReturnType<typeof createActionHolds>;
+  /** What the board injects from this wiring: the board interaction and the action holds. Publish with {@link provideTableActionWiring}. */
+  provisions: readonly Provision[];
 }
+
+/** One value a board below can inject, under its key. */
+export type Provision = readonly [key: InjectionKey<unknown>, value: unknown];
 
 export function useTableActionWiring(opts: TableActionWiringOptions): TableActionWiring {
   const { seatState, boardInteraction, autoEndTurn, isViewingHistory, availableActions, isMyTurn, playerSeat, ...transport } = opts;
@@ -133,5 +141,15 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     runnerIdentity,
   });
 
-  return { controller, actionMetadata, disabledActions, actionHolds };
+  const provisions: Provision[] = [
+    [BOARD_INTERACTION_KEY, boardInteraction],
+    [ACTION_HOLDS_KEY, actionHolds],
+  ];
+
+  return { controller, actionMetadata, disabledActions, provisions };
+}
+
+/** Provide a wiring's {@link TableActionWiring.provisions} to the board below. Call it in `setup`. */
+export function provideTableActionWiring(wiring: TableActionWiring): void {
+  for (const [key, value] of wiring.provisions) provide(key, value);
 }
