@@ -7,7 +7,7 @@
  * `useFlyingElements` already honour it, and CSS follows it through the
  * `bs-reduce-motion` class the shells keep on `<html>`.
  */
-import { customRef, onScopeDispose, watchEffect, type Ref } from 'vue';
+import { customRef, effectScope, watchEffect, type Ref } from 'vue';
 import { definePlayerPreferences } from '../player-preferences.js';
 
 // ---------------------------------------------------------------------------
@@ -81,13 +81,26 @@ export const prefersReducedMotion = customRef<boolean>((track, trigger) => ({
   },
 }));
 
+let classSynced = false;
+
 /**
- * Keep the `bs-reduce-motion` class on `<html>` while motion is reduced, so
- * every reduced-motion CSS rule, teleported overlays included, follows the
- * same setting as script. Called by the shells; removed when the caller goes.
+ * Keep the `bs-reduce-motion` class on `<html>` while motion is reduced, and
+ * install the rule that halts every CSS animation and transition under it, so
+ * all CSS (teleported overlays included) follows the same setting as script.
+ * Called by the shells; it runs once per page and lives as long as the page,
+ * since the setting it mirrors belongs to the page, not to one shell.
  */
-export function useReducedMotionClass(): void {
+export function syncReducedMotionClass(): void {
+  if (classSynced) return;
+  classSynced = true;
+  const halt = document.createElement('style');
+  halt.id = 'bs-reduce-motion';
+  halt.textContent = `.bs-reduce-motion *, .bs-reduce-motion *::before, .bs-reduce-motion *::after {
+  animation-duration: .01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: .01ms !important;
+}`;
+  document.head.appendChild(halt);
   const root = document.documentElement;
-  watchEffect(() => root.classList.toggle('bs-reduce-motion', prefersReducedMotion.value));
-  onScopeDispose(() => root.classList.remove('bs-reduce-motion'));
+  effectScope(true).run(() => watchEffect(() => root.classList.toggle('bs-reduce-motion', prefersReducedMotion.value)));
 }

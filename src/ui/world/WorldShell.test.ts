@@ -186,6 +186,12 @@ describe('WorldShell', () => {
     vi.useRealTimers();
   });
 
+  it('installs the rule that halts all CSS motion while motion is reduced (#1442 review F4)', () => {
+    const wrapper = mountShell();
+    expect(document.getElementById('bs-reduce-motion')?.textContent).toContain('.bs-reduce-motion *');
+    wrapper.unmount();
+  });
+
   it('says hello to the host on mount so a quiet world still draws', () => {
     const posted: unknown[] = [];
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));

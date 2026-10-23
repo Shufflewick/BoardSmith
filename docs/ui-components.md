@@ -357,7 +357,9 @@ on, and both script and CSS follow that one setting:
 
 - `prefersReducedMotion` (from `boardsmith/ui`) reads `true`. `useFLIP` and
   `useFlyingElements` skip their animations.
-- GameShell and WorldShell keep the class `bs-reduce-motion` on `<html>`. Key a
+- GameShell and WorldShell keep the class `bs-reduce-motion` on `<html>`, with
+  a page-wide rule that cuts every CSS animation and transition under it to
+  near zero. Key a
   reduced-motion CSS rule on it, never on the `prefers-reduced-motion` media
   query, which sees only the device and would keep animating for a player who
   turned the item on:

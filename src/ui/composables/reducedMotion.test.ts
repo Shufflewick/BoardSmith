@@ -18,7 +18,7 @@ vi.stubGlobal('matchMedia', (query: string) => ({
   removeEventListener: () => {},
 }));
 
-const { prefersReducedMotion, reduceMotionPreference, useReducedMotionClass } = await import('./reducedMotion.js');
+const { prefersReducedMotion, reduceMotionPreference, syncReducedMotionClass } = await import('./reducedMotion.js');
 const playerChoice = () => reduceMotionPreference().use('reduceMotion');
 const htmlHasClass = () => document.documentElement.classList.contains('bs-reduce-motion');
 
@@ -45,10 +45,9 @@ describe('prefersReducedMotion (#1442)', () => {
   });
 });
 
-describe('useReducedMotionClass (#1442)', () => {
-  it('keeps bs-reduce-motion on <html> in step with the setting, and takes it off when the shell goes', async () => {
-    const scope = effectScope();
-    scope.run(() => useReducedMotionClass());
+describe('syncReducedMotionClass (#1442)', () => {
+  it('keeps bs-reduce-motion on <html> in step with the setting', async () => {
+    syncReducedMotionClass();
     expect(htmlHasClass()).toBe(false);
     playerChoice().value = true;
     await nextTick();
@@ -57,7 +56,25 @@ describe('useReducedMotionClass (#1442)', () => {
     deviceChange!({ matches: true });
     await nextTick();
     expect(htmlHasClass()).toBe(true);
-    scope.stop();
-    expect(htmlHasClass()).toBe(false);
+  });
+
+  it('stays in step for a shell still mounted after another one goes (review F1)', async () => {
+    const first = effectScope();
+    first.run(() => syncReducedMotionClass());
+    const second = effectScope();
+    second.run(() => syncReducedMotionClass());
+    playerChoice().value = true;
+    await nextTick();
+    first.stop();
+    expect(htmlHasClass()).toBe(true);
+    second.stop();
+  });
+
+  it('installs the rule that halts all CSS motion once (review F4)', () => {
+    syncReducedMotionClass();
+    syncReducedMotionClass();
+    const rules = document.querySelectorAll('style#bs-reduce-motion');
+    expect(rules).toHaveLength(1);
+    expect(rules[0].textContent).toContain('.bs-reduce-motion *');
   });
 });

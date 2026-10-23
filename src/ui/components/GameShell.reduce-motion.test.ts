@@ -89,8 +89,7 @@ describe('GameShell Reduce motion (#1442)', () => {
     expect(document.documentElement.classList.contains('bs-reduce-motion')).toBe(true);
     expect(localStorage.getItem('boardsmith-preference:boardsmith:reduceMotion')).toBe('true');
 
-    item!.click();
     wrapper.unmount();
-    expect(document.documentElement.classList.contains('bs-reduce-motion')).toBe(false);
+    expect(document.documentElement.classList.contains('bs-reduce-motion'), 'unmounting a shell must not drop the class another shell relies on').toBe(true);
   });
 });
