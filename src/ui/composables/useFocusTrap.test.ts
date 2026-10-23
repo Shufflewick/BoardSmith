@@ -46,10 +46,11 @@ describe('useFocusTrap', () => {
   // -------------------------------------------------------------------------
 
   describe('a focused item that turns disabled hands focus to another item (#1457)', () => {
-    // A browser drops focus from a disabled element with a focusout whose relatedTarget is null; jsdom does neither.
-    function disable(button: HTMLButtonElement) {
+    // A browser drops focus from a disabled or removed item with a focusout whose relatedTarget is null; jsdom does not, so blur() stands in.
+    async function disable(button: HTMLButtonElement) {
+      button.blur();
       button.disabled = true;
-      button.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      await Promise.resolve();
     }
 
     async function openOn(html: string) {
@@ -63,7 +64,7 @@ describe('useFocusTrap', () => {
     it('moves focus to the next enabled item', async () => {
       const { button } = await openOn('<button id="a">A</button><button id="b" disabled>B</button><button id="c">C</button>');
 
-      disable(button('a'));
+      await disable(button('a'));
 
       expect(document.activeElement).toBe(button('c'));
     });
@@ -72,7 +73,7 @@ describe('useFocusTrap', () => {
       const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
       button('b').focus();
 
-      disable(button('b'));
+      await disable(button('b'));
 
       expect(document.activeElement).toBe(button('a'));
     });
@@ -81,17 +82,41 @@ describe('useFocusTrap', () => {
       const { dialog, button } = await openOn('<button id="a">A</button>');
       dialog.tabIndex = -1;
 
-      disable(button('a'));
+      await disable(button('a'));
 
       expect(document.activeElement).toBe(dialog);
     });
 
-    it('leaves focus alone when the item can still take it (the window lost focus, or a click on plain text)', async () => {
+    it('moves focus to another item when the focused one is removed', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      const a = button('a');
+
+      a.blur();
+      a.remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(button('b'));
+    });
+
+    it('leaves focus alone when the window loses it, even on an element outside the Tab order', async () => {
+      const { dialog, button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      dialog.tabIndex = -1;
+      dialog.focus();
+
+      dialog.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(dialog);
+      expect(button('a')).not.toBe(document.activeElement);
+    });
+
+    it('leaves focus alone after a click on plain text, where the item can still take focus', async () => {
       const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
 
-      button('a').dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      button('a').blur();
+      await Promise.resolve();
 
-      expect(document.activeElement).toBe(button('a'));
+      expect(document.activeElement).toBe(document.body);
     });
 
     it('does nothing once the trap is closed', async () => {
@@ -99,9 +124,9 @@ describe('useFocusTrap', () => {
       t.close();
       button('a').focus();
 
-      disable(button('a'));
+      await disable(button('a'));
 
-      expect(document.activeElement).toBe(button('a'));
+      expect(document.activeElement).toBe(document.body);
     });
   });
 

@@ -221,7 +221,7 @@ function runCommand(command: MenuCommand) {
     </button>
 
     <Teleport to="body">
-    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" :style="menuStyle" @keydown="trapKeydown">
+    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" tabindex="-1" :style="menuStyle" @keydown="trapKeydown">
       <template v-if="play">
         <div class="grouplabel">Play</div>
 
