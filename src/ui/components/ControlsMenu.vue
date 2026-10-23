@@ -13,9 +13,10 @@
  *
  * Phase 102 adds the Appearance and Debug panel items.
  */
-import { ref, computed, nextTick, onMounted, onUnmounted, useId } from 'vue';
+import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
+import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
@@ -171,20 +172,6 @@ onUnmounted(() => {
   document.removeEventListener('mousedown', handleOutsideClick);
 });
 
-const idPrefix = `bs-pref-${useId()}`;
-const preferenceItems = computed(() => {
-  const prefs = props.preferences;
-  if (!prefs) return [];
-  return Object.entries(prefs.declarations).map(([key, d]) => ({
-    key,
-    label: d.label,
-    descriptionId: d.description ? `${idPrefix}-${key}` : undefined,
-    description: d.description,
-    options: 'options' in d ? d.options : undefined,
-    value: prefs.use(key),
-  }));
-});
-
 function handleZoomInput(event: Event) {
   const value = parseFloat((event.target as HTMLInputElement).value);
   emit('update:zoom', value);
@@ -295,44 +282,11 @@ function handleUndo() {
         </span>
       </div>
 
-      <!-- The game's own preferences (#1440): an on/off one is a checkbox item,
-           a pick-from-list one a group of radio items. -->
-      <template v-if="preferenceItems.length">
+      <!-- The game's own preferences (#1440). -->
+      <template v-if="preferences">
         <div class="sep"></div>
         <div class="grouplabel">Preferences</div>
-        <template v-for="item in preferenceItems" :key="item.key">
-          <div v-if="item.options" class="pref-choice" role="group" :aria-label="item.label" :aria-describedby="item.descriptionId">
-            <div class="pref-label">{{ item.label }}</div>
-            <div class="pref-options">
-              <button
-                v-for="option in item.options"
-                :key="option.value"
-                class="pref-option"
-                type="button"
-                role="menuitemradio"
-                :aria-checked="item.value.value === option.value"
-                @click="item.value.value = option.value"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-          </div>
-          <button
-            v-else
-            class="mi pref-toggle"
-            type="button"
-            role="menuitemcheckbox"
-            :aria-checked="item.value.value === true"
-            :aria-describedby="item.descriptionId"
-            @click="item.value.value = !item.value.value"
-          >
-            {{ item.label }}
-            <span class="r">
-              <span class="toggle" :class="{ on: item.value.value === true }"></span>
-            </span>
-          </button>
-          <div v-if="item.description" :id="item.descriptionId" class="pref-desc">{{ item.description }}</div>
-        </template>
+        <PlayerPreferenceItems :preferences="preferences" />
       </template>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
@@ -459,8 +413,8 @@ function handleUndo() {
   padding: 10px 10px 5px;
 }
 
-/* Menu item button */
-.mi {
+/* Menu item button; :deep so PlayerPreferenceItems' items share it. */
+.menu :deep(.mi) {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -475,7 +429,11 @@ function handleUndo() {
   cursor: pointer;
   text-align: left;
 }
-.mi:hover {
+/* A player preference toggle has no icon; line its label up with the others. */
+.menu :deep(.pref-toggle) {
+  padding-left: 39px;
+}
+.menu :deep(.mi:hover) {
   background: var(--bsg-surface-2);
 }
 .mi:disabled {
@@ -493,7 +451,7 @@ function handleUndo() {
   flex: none;
 }
 /* Right-aligned slot (toggle, zoom input) */
-.mi .r {
+.menu :deep(.mi .r) {
   margin-left: auto;
   color: var(--bsg-ink-3);
   font-size: var(--bsg-text-xs);
@@ -526,44 +484,6 @@ function handleUndo() {
   color: var(--bsg-accent);
 }
 
-/* Player preferences (#1440) have no icon; indent them to line up with the
-   labels of items that do (10px padding + 18px icon + 11px gap). */
-.pref-toggle {
-  padding-left: 39px;
-}
-.pref-choice {
-  padding: 10px 10px 4px 39px;
-  font-size: var(--bsg-text-sm);
-  color: var(--bsg-ink);
-}
-.pref-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 8px;
-}
-.pref-option {
-  border: 1px solid var(--bsg-line-2);
-  border-radius: var(--bsg-r-pill);
-  background: none;
-  color: var(--bsg-ink-2);
-  font: inherit;
-  font-size: var(--bsg-text-xs);
-  padding: 4px 12px;
-  cursor: pointer;
-}
-.pref-option[aria-checked="true"] {
-  background: var(--bsg-accent);
-  border-color: var(--bsg-accent);
-  color: var(--bsg-accent-ink);
-}
-.pref-desc {
-  padding: 0 10px 8px 39px;
-  margin-top: -4px;
-  font-size: var(--bsg-text-xs);
-  color: var(--bsg-ink-3);
-}
-
 /* Section separator */
 .sep {
   height: 1px;
@@ -572,7 +492,7 @@ function handleUndo() {
 }
 
 /* Toggle pill */
-.toggle {
+.menu :deep(.toggle) {
   width: 38px;
   height: 22px;
   border-radius: var(--bsg-r-pill);
@@ -581,7 +501,7 @@ function handleUndo() {
   transition: background var(--bsg-dur-fast);
   flex: none;
 }
-.toggle::after {
+.menu :deep(.toggle::after) {
   content: "";
   position: absolute;
   top: 2px;
@@ -593,10 +513,10 @@ function handleUndo() {
   transition: left var(--bsg-dur-fast);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
-.toggle.on {
+.menu :deep(.toggle.on) {
   background: var(--bsg-accent);
 }
-.toggle.on::after {
+.menu :deep(.toggle.on::after) {
   left: 18px;
 }
 </style>
