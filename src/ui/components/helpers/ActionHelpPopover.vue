@@ -18,7 +18,7 @@
  *  - aria-describedby applied to trigger ONLY when popover is mounted (Pitfall 3)
  *  - popover: role=tooltip, aria-live=polite
  *  - Dismiss: outside mousedown, Escape key, mouseleave (pointer)
- *  - Reduced motion: @media (prefers-reduced-motion: reduce) → transition: none
+ *  - Reduced motion: `.bs-reduce-motion` → transition: none
  */
 
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
@@ -360,10 +360,8 @@ onUnmounted(() => {
 }
 
 /* Reduced motion: instant show/hide, no animation (UI-SPEC §3, mirrors BoardMessage) */
-@media (prefers-reduced-motion: reduce) {
-  .action-help-popover-enter-active,
-  .action-help-popover-leave-active {
-    transition: none;
-  }
+.bs-reduce-motion .action-help-popover-enter-active,
+.bs-reduce-motion .action-help-popover-leave-active {
+  transition: none;
 }
 </style>

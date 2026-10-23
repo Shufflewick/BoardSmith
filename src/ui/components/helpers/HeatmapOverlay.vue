@@ -213,10 +213,8 @@ useOverlayTracking({
   }
 }
 
-/* prefers-reduced-motion: instant display, no animation (107-UI-SPEC). */
-@media (prefers-reduced-motion: reduce) {
-  .bsg-heatmap-overlay > * {
-    animation: none !important;
-  }
+/* Reduced motion: instant display, no animation (107-UI-SPEC). */
+.bs-reduce-motion .bsg-heatmap-overlay > * {
+  animation: none !important;
 }
 </style>

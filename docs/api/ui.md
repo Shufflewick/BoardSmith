@@ -76,7 +76,7 @@ Unified FLIP animation API for smooth element transitions:
 
 - `useFLIP()` - FLIP animations with single or multiple container support
 - `createFLIPSnapshot()` - Create FLIP snapshot for one-off animations
-- `prefersReducedMotion` - Reactive ref for reduced motion preference
+- `prefersReducedMotion` - Reactive ref, `true` while the device or the player's Reduce motion item asks for less motion (CSS: `.bs-reduce-motion` on `<html>`)
 
 ```typescript
 // Single container

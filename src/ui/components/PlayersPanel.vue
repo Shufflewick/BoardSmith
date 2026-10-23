@@ -8,7 +8,7 @@
  * phones (IA-06 compact tier).
  *
  * A11Y-04: active player's listitem carries aria-current="true".
- * A11Y-08: under prefers-reduced-motion the breathe becomes a static
+ * A11Y-08: under reduced motion the breathe becomes a static
  *   high-contrast border instead of disappearing.
  */
 import { computed, ref, watch } from 'vue';
@@ -448,19 +448,17 @@ defineSlots<{
    (does not simply vanish under reduced-motion preference). The ring's
    unanimated resting state is the full-size, fully-opaque ring, so the cue
    stays visible rather than vanishing. */
-@media (prefers-reduced-motion: reduce) {
-  .turn-indicator-dot::after {
-    animation: none;
-  }
-  .player-card.current {
-    border: 2px solid var(--bsg-accent);
-  }
-  /* The pulse is pure attention-motion with no state of its own, so under
-     reduced motion it is simply removed — the static high-contrast border above
-     is the standing cue for which seat is active, and it does not vanish. */
-  .turn-pulse {
-    display: none;
-  }
+.bs-reduce-motion .turn-indicator-dot::after {
+  animation: none;
+}
+.bs-reduce-motion .player-card.current {
+  border: 2px solid var(--bsg-accent);
+}
+/* The pulse is pure attention-motion with no state of its own, so under
+   reduced motion it is simply removed — the static high-contrast border above
+   is the standing cue for which seat is active, and it does not vanish. */
+.bs-reduce-motion .turn-pulse {
+  display: none;
 }
 
 /* ── Seat strip: the compact icon-only representation (IA-06). Used in two places:

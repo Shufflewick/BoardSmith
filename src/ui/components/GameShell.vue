@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
+import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
 import { devUiNames, resolveUiComponent, withDevAutoUI, type GameUIRegistry } from '../game-uis.js';
@@ -981,6 +982,8 @@ onMounted(() => {
   shellMounted.value = true;
 });
 
+syncReducedMotionClass();
+
 // Mount: the host (ShufflewickPub in prod, the boardsmith dev
 // host locally) manages the session and drives everything via postMessage.
 onMounted(async () => {
@@ -1715,18 +1718,6 @@ defineExpose({
   outline: none;
   box-shadow: 0 0 0 2px var(--bsg-bg), 0 0 0 4px var(--bsg-accent);
   border-radius: var(--bsg-r-sm);
-}
-
-/* ─── Reduced-motion block ───────────────────────────────────────────────────
-   Halts all animations/transitions globally when the user has requested it.
-   Covers pulse/slide/breathe/fly animations in all renderers.
-   Source: 101-RESEARCH.md A11Y-08:515-525. */
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after {
-    animation-duration: .01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: .01ms !important;
-  }
 }
 
 /* ─── Visually-hidden utility ────────────────────────────────────────────────

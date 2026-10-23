@@ -48,16 +48,14 @@
 }
 
 /* Accessibility: Reduce motion for users who prefer it */
-@media (prefers-reduced-motion: reduce) {
-  .bs-draggable,
-  .bs-dragging,
-  .bs-drop-target,
-  .bs-drop-hover {
-    transition: none;
-  }
+.bs-reduce-motion .bs-draggable,
+.bs-reduce-motion .bs-dragging,
+.bs-reduce-motion .bs-drop-target,
+.bs-reduce-motion .bs-drop-hover {
+  transition: none;
+}
 
-  .bs-dragging,
-  .bs-drop-hover {
-    transform: none;
-  }
+.bs-reduce-motion .bs-dragging,
+.bs-reduce-motion .bs-drop-hover {
+  transform: none;
 }

@@ -13,7 +13,7 @@
  * requestAnimationFrame timing.
  *
  * Test mode is an EXPLICIT, opt-in flag — default OFF. It is never toggled by
- * `prefers-reduced-motion` or any environment/build-mode detection: those are
+ * `prefersReducedMotion` or any environment/build-mode detection: those are
  * a real accessibility preference (reduced animation duration), while this is
  * a completely different concern (deterministic, assertable animation
  * tracing for tests). Merging the two would let a user's OS-level a11y

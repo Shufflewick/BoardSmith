@@ -17,6 +17,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
 import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
+import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
@@ -282,12 +283,11 @@ function handleUndo() {
         </span>
       </div>
 
-      <!-- The game's own preferences (#1440). -->
-      <template v-if="preferences">
-        <div class="sep"></div>
-        <div class="grouplabel">Preferences</div>
-        <PlayerPreferenceItems :preferences="preferences" />
-      </template>
+      <!-- Built-in Reduce motion (#1442), then the game's own preferences (#1440). -->
+      <div class="sep"></div>
+      <div class="grouplabel">Preferences</div>
+      <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
+      <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
            has a bot player (showHint !== undefined) OR a tutorial (hasTutorial),
