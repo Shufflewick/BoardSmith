@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
- * ESCAPE STILL CLOSES THE CONTROLS MENU AFTER ITS FOCUSED ITEM TURNS DISABLED (#1453).
+ * FOCUS STAYS IN THE CONTROLS MENU AFTER ITS FOCUSED ITEM TURNS DISABLED (#1453, #1457).
  *
- * When a focused button turns disabled, the browser drops focus to `<body>`, so
- * a keydown listener on the menu no longer hears Escape while the rest of the
- * page stays inert. "Undo last action" does this when another seat's move
- * clears `canUndo`. jsdom keeps the focus on the disabled button, so only a
+ * When a focused button turns disabled, the browser drops focus to `<body>`
+ * (firing focusout with no relatedTarget), where no key reaches the menu while
+ * the rest of the page stays inert. "Undo last action" does this when another
+ * seat's move clears `canUndo`. The trap moves focus to the next item, so every
+ * key keeps working. jsdom keeps the focus on the disabled button, so only a
  * real browser shows it.
  *
  * Runs under `boardsmith test --browser`, or by hand with
@@ -28,35 +29,47 @@ await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', tab
     });
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
-      const at = `at ${viewport.width}px`;
-      await page.setViewportSize(viewport);
-      await trigger.focus();
-      await page.keyboard.press('Enter');
-      await focusedItem.waitFor({ timeout: 5_000 });
+      // "removed" is a focused item a v-if unmounts, such as action help when no action has any.
+      for (const how of ['disabled', 'removed']) {
+        const at = `when ${how} at ${viewport.width}px`;
+        await page.setViewportSize(viewport);
+        await trigger.focus();
+        await page.keyboard.press('Enter');
+        await focusedItem.waitFor({ timeout: 5_000 });
 
-      const dropped = await focusedItem.evaluate(async (button) => {
-        button.disabled = true;
-        // The browser moves focus off a disabled element when it next renders.
-        await new Promise((settle) => requestAnimationFrame(() => requestAnimationFrame(settle)));
-        return button.ownerDocument.activeElement?.tagName;
-      });
-      await check(`disabling the focused menu item drops focus to the page body ${at}`, async () => {
-        assert(dropped === 'BODY', `focus stayed on ${dropped}, so this run does not reproduce #1453`);
-      });
-
-      await page.keyboard.press('Escape');
-      await check(`Escape closes the menu while focus is on the page body ${at}`, async () => {
-        await menu.waitFor({ state: 'detached', timeout: 5_000 }).catch(() => {
-          throw new Error('the controls menu stayed open after Escape');
+        const after = await focusedItem.evaluate(async (button, how) => {
+          const doc = button.ownerDocument;
+          const menuEl = button.closest('[role="menu"]');
+          let dropped = false;
+          doc.addEventListener('focusout', (e) => { dropped ||= e.target === button && e.relatedTarget === null; });
+          if (how === 'disabled') button.disabled = true;
+          else button.remove();
+          // The browser moves focus off a disabled element when it next renders.
+          await new Promise((settle) => requestAnimationFrame(() => requestAnimationFrame(settle)));
+          const active = doc.activeElement;
+          return { dropped, inMenu: active !== button && active !== menuEl && menuEl.contains(active), on: active === doc.body ? 'the page body' : active?.getAttribute('aria-label') || active?.textContent?.trim() };
+        }, how);
+        await check(`the focused menu item drops its focus ${at}`, async () => {
+          assert(after.dropped, 'the browser fired no focusout with an empty relatedTarget, so this run does not reproduce #1453');
         });
-      });
-      await check(`closing the menu hands focus back to its trigger ${at}`, async () => {
-        const now = await focused();
-        assert(now === 'Game controls', `focus is on "${now}", not the Game controls button`);
-      });
+        await check(`focus moves to another item in the menu ${at}`, async () => {
+          assert(after.inMenu, `focus is on "${after.on}", not on an enabled item in the controls menu`);
+        });
+
+        await page.keyboard.press('Escape');
+        await check(`Escape closes the menu ${at}`, async () => {
+          await menu.waitFor({ state: 'detached', timeout: 5_000 }).catch(() => {
+            throw new Error('the controls menu stayed open after Escape');
+          });
+        });
+        await check(`closing the menu hands focus back to its trigger ${at}`, async () => {
+          const now = await focused();
+          assert(now === 'Game controls', `focus is on "${now}", not the Game controls button`);
+        });
+      }
     }
   } finally {
     await browser.close();
   }
-  return summarise('with a controls menu item disabled while focused');
+  return summarise('with a focused controls menu item disabled or removed');
 });

@@ -12,9 +12,11 @@
  *     back to the trap below, if any. Closing a closed trap does nothing.
  *   - handleKeydown(e): traps Tab within the focusable set (cycle on boundaries);
  *     closes via onClose on Escape ONLY when escapeToClose is true. The caller
- *     wires it to the dialog's keydown; while the trap is the top one, the trap
- *     also hears keys pressed with focus on <body>, where a focused item that
- *     turned disabled leaves it.
+ *     wires it to the dialog's keydown.
+ *   - A focused item that turns disabled or is removed while the trap is the
+ *     top one hands focus to the next item (or the one before, or the dialog),
+ *     so the dialog's keydown keeps hearing every key. Give the dialog
+ *     tabindex="-1" so focus has somewhere to go when no item is left.
  *
  * Pitfall 3 guard: `aria-modal="true"` is an AT hint, not DOM enforcement.
  * `inert` on background siblings is the only mechanism that prevents Tab from
@@ -118,9 +120,19 @@ export function useFocusTrap(
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
 
-  // A focused item that turns disabled drops focus to <body>, out of reach of the dialog's own keydown (#1453).
-  function escapeFromBody(e: KeyboardEvent) {
-    if (e.target === document.body && topTrap() === dialogRef) handleKeydown(e);
+  // A browser drops focus from a disabled or removed item to <body>, out of reach of the dialog's keydown (#1453, #1457).
+  function refocusLostItem(e: FocusEvent) {
+    const dialog = dialogRef.value;
+    const lost = e.target as HTMLElement;
+    if (e.relatedTarget || !dialog?.contains(lost)) return;
+    // A removed item is still attached when its focusout fires, so look once the change is done.
+    queueMicrotask(() => {
+      if (topTrap() !== dialogRef || document.activeElement !== document.body) return;
+      if (lost.isConnected && !lost.matches(':disabled') && canTakeFocus(lost)) return;
+      const focusable = getFocusable(dialog);
+      const next = focusable.find((el) => lost.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      (next ?? focusable.at(-1) ?? dialog).focus();
+    });
   }
 
   // --------------------------------------------------------------------------
@@ -132,7 +144,7 @@ export function useFocusTrap(
     previouslyFocused = document.activeElement as HTMLElement | null;
     openTraps.push(dialogRef);
     syncInert();
-    document.addEventListener('keydown', escapeFromBody);
+    document.addEventListener('focusout', refocusLostItem);
     nextTick(() => {
       if (!dialogRef.value) return;
       const focusable = getFocusable(dialogRef.value);
@@ -149,7 +161,7 @@ export function useFocusTrap(
     if (index === -1) return;
     openTraps.splice(index, 1);
     syncInert();
-    document.removeEventListener('keydown', escapeFromBody);
+    document.removeEventListener('focusout', refocusLostItem);
     previouslyFocused?.focus();
   }
 

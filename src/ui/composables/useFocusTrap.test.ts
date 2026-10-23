@@ -42,57 +42,91 @@ describe('useFocusTrap', () => {
   });
 
   // -------------------------------------------------------------------------
-  // Escape after focus fell out of the dialog (#1453)
+  // A focused item that turns disabled (#1453, #1457)
   // -------------------------------------------------------------------------
 
-  describe('Escape while focus has fallen to <body> (a focused item turned disabled, #1453)', () => {
-    const escapeOnBody = () => document.body.dispatchEvent(makeKeyEvent('Escape'));
+  describe('a focused item that turns disabled hands focus to another item (#1457)', () => {
+    // A browser drops focus from a disabled or removed item with a focusout whose relatedTarget is null; jsdom does not, so blur() stands in.
+    async function disable(button: HTMLButtonElement) {
+      button.blur();
+      button.disabled = true;
+      await Promise.resolve();
+    }
 
-    it('closes the open trap', () => {
-      const onClose = vi.fn();
-      trap(ref(appendDialog('<button>Undo</button>')), { onClose }).open();
+    async function openOn(html: string) {
+      const dialog = appendDialog(html);
+      const t = trap(ref(dialog), { onClose: vi.fn() });
+      t.open();
+      await nextTick();
+      return { dialog, t, button: (id: string) => dialog.querySelector<HTMLButtonElement>(`#${id}`)! };
+    }
 
-      escapeOnBody();
+    it('moves focus to the next enabled item', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b" disabled>B</button><button id="c">C</button>');
 
-      expect(onClose).toHaveBeenCalledTimes(1);
+      await disable(button('a'));
+
+      expect(document.activeElement).toBe(button('c'));
     });
 
-    it('closes only the top trap of a stack', () => {
-      const menuClose = vi.fn();
-      const cardClose = vi.fn();
-      trap(ref(appendDialog('<button>Menu</button>')), { onClose: menuClose }).open();
-      trap(ref(appendDialog('<button>Card</button>')), { onClose: cardClose }).open();
+    it('moves focus to the item before when the last one is disabled', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      button('b').focus();
 
-      escapeOnBody();
+      await disable(button('b'));
 
-      expect(cardClose).toHaveBeenCalledTimes(1);
-      expect(menuClose).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(button('a'));
     });
 
-    it('does nothing once the trap is closed, or when escapeToClose is false', () => {
-      const closed = vi.fn();
-      const kept = vi.fn();
-      const a = trap(ref(appendDialog('<button>A</button>')), { onClose: closed });
-      a.open();
-      a.close();
-      trap(ref(appendDialog('<button>B</button>')), { escapeToClose: false, onClose: kept }).open();
+    it('moves focus to the dialog itself when no item is left', async () => {
+      const { dialog, button } = await openOn('<button id="a">A</button>');
+      dialog.tabIndex = -1;
 
-      escapeOnBody();
+      await disable(button('a'));
 
-      expect(closed).not.toHaveBeenCalled();
-      expect(kept).not.toHaveBeenCalled();
+      expect(document.activeElement).toBe(dialog);
     });
 
-    it('leaves an Escape from inside the dialog to handleKeydown alone', () => {
-      const onClose = vi.fn();
-      const dialog = appendDialog('<button>Undo</button>');
-      const { open, handleKeydown } = trap(ref(dialog), { onClose });
-      open();
-      dialog.addEventListener('keydown', handleKeydown);
+    it('moves focus to another item when the focused one is removed', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      const a = button('a');
 
-      dialog.querySelector('button')!.dispatchEvent(makeKeyEvent('Escape'));
+      a.blur();
+      a.remove();
+      await Promise.resolve();
 
-      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(document.activeElement).toBe(button('b'));
+    });
+
+    it('leaves focus alone when the window loses it, even on an element outside the Tab order', async () => {
+      const { dialog, button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      dialog.tabIndex = -1;
+      dialog.focus();
+
+      dialog.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: null }));
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(dialog);
+      expect(button('a')).not.toBe(document.activeElement);
+    });
+
+    it('leaves focus alone after a click on plain text, where the item can still take focus', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+
+      button('a').blur();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(document.body);
+    });
+
+    it('does nothing once the trap is closed', async () => {
+      const { t, button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      t.close();
+      button('a').focus();
+
+      await disable(button('a'));
+
+      expect(document.activeElement).toBe(document.body);
     });
   });
 
