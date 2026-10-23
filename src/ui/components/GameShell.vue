@@ -571,6 +571,7 @@ const {
   announcer,
   liveRegion: { polite: politeMessage, assertive: assertiveMessage },
   gameOverRevealed,
+  menuCommands,
 } = tableSeat;
 
 // The session's formatted, seat-scoped messages are the ONLY source. There used
@@ -1602,6 +1603,7 @@ defineExpose({
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
           :preferences="preferences"
+          :commands="menuCommands.commands.value"
           @undo="handleUndo"
           @teaching-action="handleTeachingAction"
         />

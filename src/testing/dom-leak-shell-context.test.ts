@@ -23,6 +23,7 @@ import { WORLD_CONTEXT_KEY } from '../ui/world/useWorld.js';
 import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
+import { useMenuCommands } from '../ui/composables/menuCommands.js';
 import {
   enterIframe,
   leaveIframe,
@@ -153,6 +154,23 @@ describe('renderAsSeat provides the game-over hold GameShell provides (#419)', (
   });
 });
 
+/** A board that lists its own command in the controls menu. */
+const CommandBoard = defineComponent({
+  name: 'CommandBoard',
+  setup() {
+    useMenuCommands(() => [{ label: 'Watch the last battle', run: () => {} }]);
+    return () => h('div', { class: 'board' });
+  },
+});
+
+describe('renderAsSeat provides the menu commands GameShell provides (#1448)', () => {
+  it('mounts a board that adds a command to the menu, as the shell does', async () => {
+    const wrapper = await render(renderAsSeat(moveGame(), 1, { component: CommandBoard }));
+
+    expect(wrapper.find('.board').exists()).toBe(true);
+  });
+});
+
 /** A board that plays the seat's `flash` events, recording each one it is handed. */
 const played: unknown[] = [];
 const AnimatedBoard = defineComponent({
@@ -216,7 +234,7 @@ async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Prom
 }
 
 /** Keys GameShell must be seen to provide, so a comparison is against something. */
-const TABLE_SHELL_PROVIDES = ['bs:gameState', 'bs:actionController', 'announcer', 'animationEvents', 'boardsmith:game-over-holds'];
+const TABLE_SHELL_PROVIDES = ['bs:gameState', 'bs:actionController', 'announcer', 'animationEvents', 'boardsmith:game-over-holds', 'boardsmith:menu-commands'];
 
 describe('renderAsSeat and GameShell give a board the same things (#406, #453)', () => {
   it('provides exactly the keys GameShell provides to the board it mounts, no more and no fewer', async () => {

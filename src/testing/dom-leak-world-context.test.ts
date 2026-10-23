@@ -263,7 +263,7 @@ async function keysInsideWorldShell(world: TestWorld, seat: number): Promise<Set
 }
 
 /** Keys WorldShell must be seen to provide, so a comparison is against something. */
-const WORLD_SHELL_PROVIDES = ['boardsmith-world', 'bs:gameView', 'bs:actionController', 'boardInteraction'];
+const WORLD_SHELL_PROVIDES = ['boardsmith-world', 'bs:gameView', 'bs:actionController', 'boardInteraction', 'boardsmith:menu-commands'];
 
 describe('renderAsSeat and WorldShell give a world board the same things (#413, #453)', () => {
   it('provides exactly the keys WorldShell provides to the board it mounts, no more and no fewer', async () => {

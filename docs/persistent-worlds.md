@@ -68,8 +68,10 @@ Read this before you plan your week.
   action help" when an offered verb has `.help(text)` or a disabled reason, and
   any your game declares with `definePlayerPreferences`, passed to `WorldShell`
   as `preferences` (see "Player preferences" and "Action help" in
-  `docs/ui-components.md`). A table's turn, undo and zoom controls are not
-  there, since a world has none of them.
+  `docs/ui-components.md`). Above it, a "Game" group lists any commands your
+  board registers with `useMenuCommands` (see "Game commands" there). A
+  table's turn, undo and zoom controls are not there, since a world has none
+  of them.
 
 So the loop for writing a world is the loop for writing anything else: write the
 rules, drive them from a test file against `createWorld`, open them in a browser
