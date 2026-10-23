@@ -19,9 +19,9 @@ vi.stubGlobal('matchMedia', (query: string) => ({
   removeEventListener: () => {},
 }));
 
-// Dynamic import: each test needs a fresh module, so no earlier mount has synced the class.
 const freshModules = async () => {
   vi.resetModules();
+  // Dynamic import: each test needs a fresh module, so no earlier mount has synced the class.
   return {
     BoardMessage: (await import('../components/helpers/BoardMessage.vue')).default,
     useDragDrop: (await import('./useDragDrop.js')).useDragDrop,
