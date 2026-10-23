@@ -86,14 +86,37 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
-    it('trigger has aria-controls pointing to ${actionName}-help-tip', () => {
+    it('trigger has aria-controls naming its action', () => {
       const wrapper = mountPopover({
         actionName: 'move',
         triggerLabel: 'Move Piece',
         helpText: 'Click a square to move.',
       });
       const btn = wrapper.find('.action-help-btn');
-      expect(btn.attributes('aria-controls')).toBe('move-help-tip');
+      expect(btn.attributes('aria-controls')).toMatch(/^move-help-tip-/);
+      wrapper.unmount();
+    });
+
+    it('two popovers for one action, open at once, each point at their own tooltip (#1460)', async () => {
+      // The open action's "?" can open while its button's "?" popover is still fading out.
+      const wrapper = mount(
+        {
+          components: { ActionHelpPopover },
+          template: `<div>
+            <ActionHelpPopover action-name="play" trigger-label="Play" help-text="Play a card." />
+            <ActionHelpPopover action-name="play" trigger-label="Play" help-text="Play a card." />
+          </div>`,
+        },
+        { global: { stubs: { Teleport: true } }, attachTo: document.body },
+      );
+      for (const btn of wrapper.findAll('.action-help-btn')) await btn.trigger('click');
+      await nextTick();
+
+      const ids = wrapper.findAll('[role="tooltip"]').map((tip) => tip.attributes('id'));
+      expect(ids).toHaveLength(2);
+      expect(new Set(ids).size).toBe(2);
+      expect(wrapper.findAll('.action-help-btn').map((btn) => btn.attributes('aria-describedby'))).toEqual(ids);
+      expect(wrapper.findAll('.action-help-btn').map((btn) => btn.attributes('aria-controls'))).toEqual(ids);
       wrapper.unmount();
     });
 
@@ -123,7 +146,7 @@ describe('ActionHelpPopover', () => {
 
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.exists()).toBe(true);
-      expect(tooltip.attributes('id')).toBe('attack-help-tip');
+      expect(tooltip.attributes('id')).toMatch(/^attack-help-tip-/);
       wrapper.unmount();
     });
 
@@ -149,7 +172,7 @@ describe('ActionHelpPopover', () => {
       await wrapper.find('.action-help-btn').trigger('click');
       await nextTick();
 
-      expect(wrapper.find('.action-help-btn').attributes('aria-describedby')).toBe('attack-help-tip');
+      expect(wrapper.find('.action-help-btn').attributes('aria-describedby')).toBe(wrapper.find('[role="tooltip"]').attributes('id'));
       wrapper.unmount();
     });
 

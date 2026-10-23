@@ -76,21 +76,23 @@ export function createGameFlow(): FlowDefinition<TableFixtureGame> {
 `;
 
 const TRIGGER = 'button[aria-label="Help for Draw a card from the deck"]';
-const TIP = '#draw-help-tip';
 const TALL_TRIGGER = 'button[aria-label="Help for Play a card from your hand"]';
-const TALL_TIP = '#play-help-tip';
+
+/** The help this "?" opens, by its aria-controls: another "?" for the same action may still be fading its own out (#1460). */
+const tipOf = async (frame, trigger) => frame.locator(`[id="${await trigger.getAttribute('aria-controls')}"]`);
 
 const gameFrame = (page) => page.frameLocator('.dev-host__frame');
 const triggerDrawn = (page) => gameFrame(page).locator(TRIGGER).waitFor({ timeout: 60_000 });
 
 /** Whether the help shows, read once the trigger and the tip (which fades out) have settled on `expected`. */
 async function helpShows(frame, expected) {
+  const tip = await tipOf(frame, frame.locator(TRIGGER));
   const read = async () => ({
     expanded: await frame.locator(TRIGGER).getAttribute('aria-expanded'),
-    visible: await frame.locator(TIP).isVisible(),
+    visible: await tip.isVisible(),
   });
   const seen = await waitUntil(read, (now) => now.expanded === String(expected) && now.visible === expected, 2_000);
-  return { ...seen, text: seen.visible ? (await frame.locator(TIP).innerText()).trim() : '' };
+  return { ...seen, text: seen.visible ? (await tip.innerText()).trim() : '' };
 }
 
 /** Opens the play action and checks its "?" beside the prompt, then cancels it (#1455). */
@@ -108,7 +110,8 @@ async function checkOpenActionHelp(frame, width) {
     assert(middle > title.y && middle < title.y + title.height, `the "?" is off the prompt's line: "?" ${JSON.stringify(help)}, prompt ${JSON.stringify(title)}`);
   });
   await trigger.click();
-  const shown = await waitUntil(() => frame.locator(TALL_TIP).isVisible(), (now) => now, 2_000);
+  const tip = await tipOf(frame, trigger);
+  const shown = await waitUntil(() => tip.isVisible(), (now) => now, 2_000);
   await check(`at ${width}px, clicking an open action's "?" shows its help (#1455)`, async () => {
     assert(shown, 'the help did not show');
   });
@@ -154,8 +157,8 @@ await runBrowserRegression(
         });
 
         const tall = frame.locator(TALL_TRIGGER);
-        const tallTip = frame.locator(TALL_TIP);
-        const scroller = frame.locator(`${TALL_TIP} .ahp-scroll`);
+        const tallTip = await tipOf(frame, tall);
+        const scroller = tallTip.locator('.ahp-scroll');
         const tallShows = (expected) => waitUntil(() => tallTip.isVisible(), (now) => now === expected, 2_000);
         const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
         // A plain move, not hover(): hover() retries while the help covers the "?", which is the bug under test.

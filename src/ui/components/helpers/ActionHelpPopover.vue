@@ -24,7 +24,7 @@
  *  - Reduced motion: `.bs-reduce-motion` → transition: none
  */
 
-import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, useId } from 'vue';
 import { computePopoverPosition, type PopoverPosition } from './popover-position.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
 
@@ -33,7 +33,7 @@ syncReducedMotionClass();
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 const props = defineProps<{
-  /** Used to build id="${actionName}-help-tip" on the tooltip element. */
+  /** Names the tooltip's id, which also carries a per-instance part. */
   actionName: string;
   /** From ActionMetadata.help (Plan 01). Display-only; never a predicate. */
   helpText?: string;
@@ -44,6 +44,10 @@ const props = defineProps<{
 }>();
 
 // ── State ─────────────────────────────────────────────────────────────────────
+
+// Per instance: an action's button "?" popover can still be fading out when the open action's "?" opens its own (#1460).
+const instanceId = useId();
+const tipId = computed(() => `${props.actionName}-help-tip-${instanceId}`);
 
 const isOpen = ref(false);
 /** Open because the mouse is over the trigger, so the click that follows keeps it open. */
@@ -184,8 +188,8 @@ onUnmounted(() => {
     class="action-help-btn"
     :aria-label="`Help for ${triggerLabel}`"
     :aria-expanded="isOpen"
-    :aria-controls="`${actionName}-help-tip`"
-    :aria-describedby="isOpen ? `${actionName}-help-tip` : undefined"
+    :aria-controls="tipId"
+    :aria-describedby="isOpen ? tipId : undefined"
     @click="toggle"
     @pointerenter="hoverOpen"
     @pointerleave="hoverClose"
@@ -221,7 +225,7 @@ onUnmounted(() => {
       <div
         ref="popoverRef"
         v-if="isOpen"
-        :id="`${actionName}-help-tip`"
+        :id="tipId"
         role="tooltip"
         aria-live="polite"
         class="action-help-popover"
