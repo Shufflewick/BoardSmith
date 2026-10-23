@@ -39,9 +39,9 @@ function accepts(declaration: PlayerPreferenceDeclaration, value: unknown): bool
 
 const storageKey = (game: string, key: string) => `boardsmith-preference:${game}:${key}`;
 
-function readStored(storageKey: string, declaration: PlayerPreferenceDeclaration): unknown {
+function readStored(key: string, declaration: PlayerPreferenceDeclaration): unknown {
   try {
-    const raw = localStorage.getItem(storageKey);
+    const raw = localStorage.getItem(key);
     const value: unknown = raw === null ? undefined : JSON.parse(raw);
     return accepts(declaration, value) ? value : declaration.default;
   } catch {
