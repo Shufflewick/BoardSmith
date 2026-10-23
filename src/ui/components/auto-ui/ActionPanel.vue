@@ -904,8 +904,9 @@ const offeredElements = actionController.validElements;
 // keyboard/SR users always have an operable control even when all picks are
 // board-anchored. splitAnchoredChoices applies only for 'choice' picks.
 // #718: a set or list pick keeps every choice in its checkbox / Add controls, the only ones that toggle or append and show the draft.
+// #1439: a grouped pick keeps every choice in its categories, so none is listed apart.
 const _splitChoices = computed(() =>
-  (currentMultiSelect.value || currentOrderedList.value) && !deferPickToBoard.value
+  ((currentMultiSelect.value || currentOrderedList.value) && !deferPickToBoard.value) || pickCategories.value
     ? { primary: offeredChoices.value, anchored: [] }
     : splitAnchoredChoices(offeredChoices.value, currentPick.value?.type));
 
@@ -2328,8 +2329,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   box-shadow: var(--bsg-shadow-sm);
 }
 
-/* A group button says it leads somewhere. Same plate as an action button so the
-   level reads as one row of choices, with the chevron carrying the difference. */
 /* Action configuration - horizontal flow layout */
 /* Flattened into the action bar's flow (see .action-panel) so the action title, cancel,
    prompt, and option buttons all wrap inline together. */

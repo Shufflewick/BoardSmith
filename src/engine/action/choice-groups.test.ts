@@ -81,13 +81,13 @@ describe('group on chooseElement', () => {
     kind!: string;
   }
 
-  function candidates(hidden: boolean) {
+  function candidates(hidden: boolean, args: (game: ArmyGame) => Record<string, unknown> = () => ({})) {
     const game = new ArmyGame({ playerCount: 2, seed: 'elements' });
     const barracks = game.create(Building, 'Barracks', { kind: 'Military' });
     const farm = game.create(Building, 'Farm', { kind: 'Economy' });
     if (hidden) barracks.hideFromAll();
     const selection = { type: 'element', name: 'building', group: (b: Building) => [b.kind] } as unknown as ElementSelection;
-    const ctx = { game, player: game.getPlayer(1)!, args: {} };
+    const ctx = { game, player: game.getPlayer(1)!, args: args(game) };
     return formatElementCandidates([barracks, farm].map((value) => ({ value, disabled: false as const })), selection, ctx, []);
   }
 
@@ -97,5 +97,14 @@ describe('group on chooseElement', () => {
 
   it('leaves an element the seat cannot see at the top level, since its category could name it (#1293)', () => {
     expect(candidates(true).map((e) => e.group)).toEqual([undefined, ['Economy']]);
+  });
+
+  it('sends no categories when an earlier pick holds a card the seat cannot see, since group() could read it (#1293)', () => {
+    const hiddenCard = (game: ArmyGame) => {
+      const card = game.create(Building, 'Secret', { kind: 'Hearts' });
+      card.hideFromAll();
+      return { card };
+    };
+    expect(candidates(false, hiddenCard).map((e) => e.group)).toEqual([undefined, undefined]);
   });
 });

@@ -1603,7 +1603,8 @@ The panel shows `Scout`, `Infantry` and `Vehicles`. Opening `Vehicles` shows
 `orderedList` it is a type error, and refused when the action is declared. A
 blank label is refused when the choices are listed. A choice that holds a card
 the player cannot see stays at the top level, since its category could name the
-card.
+card, and so does every element of a `chooseElement` whose earlier picks hold
+one.
 
 ---
 

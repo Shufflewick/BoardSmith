@@ -60,6 +60,16 @@ class ArmyGame extends Game<ArmyGame, Player> {
         .execute(({ building }, ctx) => {
           ctx.game.upgraded.push(building.name!);
         }),
+      Action.create<ArmyGame>('deploy')
+        .prompt('Deploy')
+        .chooseFrom('square', {
+          prompt: 'Choose a square',
+          choices: ['a1', 'a2', 'b1'],
+          // Each choice names its own board square, so ungrouped it would be listed apart as anchored.
+          boardRefs: (square) => ({ refs: [{ ref: { notation: square }, role: 'target' }] }),
+          group: (square) => [`Rank ${square[0]}`],
+        })
+        .execute(() => {}),
       Action.create<ArmyGame>('build')
         .prompt('Build')
         .chooseElement('plot', {
@@ -69,7 +79,7 @@ class ArmyGame extends Game<ArmyGame, Player> {
         })
         .execute(() => {}),
     );
-    this.setFlow({ root: loop({ maxIterations: 20, do: actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['recruit', 'upgrade', 'build'] }) }) });
+    this.setFlow({ root: loop({ maxIterations: 20, do: actionStep({ player: (ctx) => ctx.game.getPlayer(1)!, actions: ['recruit', 'upgrade', 'build', 'deploy'] }) }) });
   }
 }
 
@@ -78,7 +88,7 @@ afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
 });
 
-async function panelAt(action: 'recruit' | 'upgrade' | 'build') {
+async function panelAt(action: 'recruit' | 'upgrade' | 'build' | 'deploy') {
   const seat = await mountLiveSeat(ArmyGame, 'choice-groups', mounted);
   const wrapper = mount(ActionPanel, {
     attachTo: document.body,
@@ -165,6 +175,13 @@ describe('grouped chooseFrom choices in the Action Panel (#1439)', () => {
     await wrapper.findAll('.choice-btn').find((b) => b.text() === 'Rifleman')!.trigger('click');
     await settle();
     expect(session.readGame().recruited).toEqual(['Rifleman']);
+  });
+
+  it('groups choices that name their own board squares, rather than listing them apart', async () => {
+    const { wrapper } = await panelAt('deploy');
+    expect(shown(wrapper)).toEqual(['[Rank a]', '[Rank b]']);
+    await openCategory(wrapper, 'Rank a');
+    expect(shown(wrapper)).toEqual(['a1', 'a2']);
   });
 });
 

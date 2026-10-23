@@ -21,6 +21,7 @@ defineProps<{
 
 <style scoped src="../sr-only.css"></style>
 <style scoped>
+/* The button keeps its caller's plate, so a level reads as one row; the chevron carries the difference. */
 .chevron {
   margin-left: 6px;
   opacity: 0.75;

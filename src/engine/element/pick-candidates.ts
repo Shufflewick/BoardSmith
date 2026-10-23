@@ -148,7 +148,8 @@ export function formatElementCandidates(
     const validElem: ValidElement = { id: sight.idOf(element), display: labels[index]! };
     validElem.refs = [{ ref: refFor(element, selection, ctx, warnings, sight), role: 'highlight' }];
     if (disabled !== false) validElem.disabled = disabled;
-    setGroup(validElem, groupOfElement, element, hidesFrom(ctx.player.seat, element), selection.name);
+    // `group` is handed the earlier picks too, as `display` is, so a hidden card there hides every category.
+    setGroup(validElem, groupOfElement, element, hidesFrom(ctx.player.seat, [ctx.args, element]), selection.name);
     return validElem;
   });
 }
