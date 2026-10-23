@@ -1,21 +1,16 @@
 // @vitest-environment jsdom
 /**
- * ControlsMenu — "Show action help" toggle (Plan 108-03, Task 1)
+ * ControlsMenu: the "Show action help" toggle (#108, #1449).
  *
- * The popover is Teleported to <body>, so assertions use document.body
- * queries rather than wrapper.findAll (which only searches inside the wrapper).
- *
- * Behaviors under test:
- *   A. A "Show action help" menuitemcheckbox renders even when `showHint` is
- *      undefined (non-bot game / Teaching group hidden).
- *   B. Clicking it emits `teaching-action` with payload `'help-toggle'`.
- *   C. `aria-checked` reflects the `isActionHelpVisible` prop.
- *   D. The `.toggle` pill carries the `on` class when `isActionHelpVisible` is true.
+ * It is a built-in preference, so it shows in a world's menu (no `play`) as
+ * well as a table's, and both read one stored value. The popover is
+ * teleported to <body>, so queries use document.body.
  */
-
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import ControlsMenu from './ControlsMenu.vue';
+import { actionHelpPreference } from '../composables/actionHelp.js';
 
 // jsdom lacks matchMedia
 vi.stubGlobal('matchMedia', vi.fn(() => ({
@@ -24,135 +19,59 @@ vi.stubGlobal('matchMedia', vi.fn(() => ({
   removeEventListener: vi.fn(),
 })));
 
-// jsdom lacks ResizeObserver
-vi.stubGlobal('ResizeObserver', vi.fn(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-})));
+const actionHelp = actionHelpPreference().use('actionHelp');
 
-function mountMenu(props: Record<string, unknown> = {}) {
-  return mount(ControlsMenu, {
-    props: {
-      play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
-      // showHint intentionally omitted (non-bot game) unless overridden
-      ...props,
-    },
-    attachTo: document.body,
-  });
+async function openMenu(props: Record<string, unknown> = {}) {
+  const wrapper = mount(ControlsMenu, { props, attachTo: document.body });
+  await wrapper.find('button.menubtn').trigger('click');
+  return wrapper;
 }
 
-/** Find a menuitemcheckbox by label text within document.body (handles Teleport). */
-function findHelpToggle(): Element | undefined {
-  const buttons = document.body.querySelectorAll('[role="menuitemcheckbox"]');
-  return Array.from(buttons).find(b => b.textContent?.includes('Show action help'));
+function findHelpToggle(): HTMLElement | undefined {
+  const items = document.body.querySelectorAll<HTMLElement>('[role="menuitemcheckbox"]');
+  return Array.from(items).find((el) => el.textContent?.includes('Show action help'));
 }
 
-describe('ControlsMenu — Show action help toggle', () => {
+describe('ControlsMenu: Show action help', () => {
   beforeEach(() => {
     document.body.innerHTML = '';
+    localStorage.clear();
+    actionHelp.value = true;
   });
 
-  it('A: renders "Show action help" menuitemcheckbox even when showHint is undefined', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: true });
-    // Open the menu
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Expected "Show action help" menuitemcheckbox to be present').toBeDefined();
+  it('is on by default', () => {
+    expect(actionHelp.value).toBe(true);
+  });
+
+  it('shows in a menu with no Play group, as a world has (#1449)', async () => {
+    const wrapper = await openMenu();
+    expect(findHelpToggle()).toBeDefined();
     wrapper.unmount();
   });
 
-  it('B: clicking emits teaching-action with payload "help-toggle"', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: false });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Expected "Show action help" button to be present').toBeDefined();
-    (helpBtn as HTMLElement).click();
-    const emitted = wrapper.emitted('teaching-action') as string[][];
-    expect(emitted).toBeDefined();
-    expect(emitted.some(args => args[0] === 'help-toggle')).toBe(true);
+  it('shows in a table menu without a bot, whatever the teaching lockout', async () => {
+    const wrapper = await openMenu({
+      play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+      teachingDisabled: true,
+    });
+    expect(findHelpToggle()).toBeDefined();
     wrapper.unmount();
   });
 
-  it('C: aria-checked is true when isActionHelpVisible prop is true', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: true });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn).toBeDefined();
-    expect(helpBtn!.getAttribute('aria-checked')).toBe('true');
+  it('flips the shared preference and saves it for every game in this browser', async () => {
+    const wrapper = await openMenu();
+    expect(findHelpToggle()!.getAttribute('aria-checked')).toBe('true');
+    findHelpToggle()!.click();
+    await nextTick();
+    expect(actionHelp.value).toBe(false);
+    expect(findHelpToggle()!.getAttribute('aria-checked')).toBe('false');
+    expect(localStorage.getItem('boardsmith-preference:boardsmith:actionHelp')).toBe('false');
     wrapper.unmount();
   });
 
-  it('C: aria-checked is false when isActionHelpVisible prop is false', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: false });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn).toBeDefined();
-    expect(helpBtn!.getAttribute('aria-checked')).toBe('false');
-    wrapper.unmount();
-  });
-
-  it('D: .toggle pill has "on" class when isActionHelpVisible is true', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: true });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn).toBeDefined();
-    const pill = helpBtn!.querySelector('.toggle');
-    expect(pill).toBeTruthy();
-    expect(pill!.classList.contains('on')).toBe(true);
-    wrapper.unmount();
-  });
-
-  it('D: .toggle pill does NOT have "on" class when isActionHelpVisible is false', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: false });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn).toBeDefined();
-    const pill = helpBtn!.querySelector('.toggle');
-    expect(pill).toBeTruthy();
-    expect(pill!.classList.contains('on')).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('WR-04: aria-checked is "false" (not absent) when isActionHelpVisible prop is omitted', async () => {
-    // When the prop is omitted, withDefaults must supply false so the DOM has
-    // aria-checked="false" rather than a missing attribute. A missing aria-checked
-    // on role="menuitemcheckbox" is technically valid per ARIA spec but the contract
-    // is fragile — any consumer that forgets the prop should still get a well-formed checkbox.
-    const wrapper = mountMenu(/* no isActionHelpVisible */);
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn).toBeDefined();
-    expect(helpBtn!.getAttribute('aria-checked')).toBe('false');
-    wrapper.unmount();
-  });
-
-  it('E: hides the toggle entirely when hasActionHelp is false (no inert no-op toggle)', async () => {
-    // A game that authored no help text on any available action has nothing for the
-    // toggle to reveal — showing it makes a global control that does nothing, which
-    // reads as broken. With hasActionHelp=false the toggle must not render at all.
-    const wrapper = mountMenu({ isActionHelpVisible: true, hasActionHelp: false });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Toggle must be hidden when no action has help text').toBeUndefined();
-    wrapper.unmount();
-  });
-
-  it('F: shows the toggle when hasActionHelp is true', async () => {
-    const wrapper = mountMenu({ isActionHelpVisible: true, hasActionHelp: true });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Toggle must be visible when at least one action has help').toBeDefined();
-    wrapper.unmount();
-  });
-
-  it('toggle is NOT inside the Teaching group (showHint-gated) — visible without showHint', async () => {
-    // Mount without showHint — if the toggle was inside v-if="showHint !== undefined",
-    // it would be absent. This verifies it is in the Play group.
-    const wrapper = mountMenu({ isActionHelpVisible: true, showHint: undefined });
-    await wrapper.find('button.menubtn').trigger('click');
-    const helpBtn = findHelpToggle();
-    expect(helpBtn, 'Toggle must be visible in non-bot games (Play group, not Teaching group)').toBeDefined();
+  it('is hidden when no available action has help to reveal', async () => {
+    const wrapper = await openMenu({ hasActionHelp: false });
+    expect(findHelpToggle()).toBeUndefined();
     wrapper.unmount();
   });
 });

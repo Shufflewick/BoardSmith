@@ -214,7 +214,7 @@ describe('ControlsMenu — teachingDisabled lockout (Phase 111 LOCK-01)', () => 
   });
 
   it('LOCK-01-B: action help toggle (Show action help) still renders when teachingDisabled=true and hasActionHelp=true', async () => {
-    // D-06: Action help is in the Play group (not Teaching) and is never gated by teachingDisabled.
+    // D-06: Action help is in Preferences (not Teaching) and is never gated by teachingDisabled.
     const wrapper = mountMenu({
       showHint: true,
       hasTutorial: true,

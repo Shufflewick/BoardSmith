@@ -1,5 +1,5 @@
 /**
- * The teaching controls' dispatch — hint, demo, heatmap, help, tutorial (#41).
+ * The teaching controls' dispatch — hint, demo, heatmap, tutorial (#41).
  *
  * This lived inside `GameShell.vue` as a six-branch `if/else` amongst WebSocket
  * bridging, clipboard, localStorage, lobby joining and platform-mode
@@ -21,7 +21,6 @@ type TeachingAction =
   | 'hint'
   | 'demo-toggle'
   | 'heatmap-toggle'
-  | 'help-toggle'
   | 'start-tutorial'
   | 'exit-tutorial';
 
@@ -38,10 +37,6 @@ export interface TeachingActionsOptions {
   heatmapPending: Ref<boolean | null>;
   /** True while a heatmap toggle is in flight. */
   heatmapToggling: Ref<boolean>;
-  /** Whether per-action help is showing. A pure client preference. */
-  isActionHelpVisible: Ref<boolean>;
-  /** Persist the help preference. */
-  setActionHelpEnabled: (enabled: boolean) => void;
   /**
    * Show a message to the player. `duration: 0` means "until removed".
    *
@@ -67,8 +62,7 @@ interface TeachingActionsReturn {
  * Wire the teaching controls to their host ops.
  *
  * Each control delegates to a `platformRequest` op so the dev bridge and the
- * production host can implement the server side; `help-toggle` is the one
- * exception, being a pure client display preference with no round-trip.
+ * production host can implement the server side.
  */
 export function useTeachingActions(options: TeachingActionsOptions): TeachingActionsReturn {
   const {
@@ -78,8 +72,6 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
     isHeatmapVisible,
     heatmapPending,
     heatmapToggling,
-    isActionHelpVisible,
-    setActionHelpEnabled,
     toast,
   } = options;
 
@@ -133,12 +125,6 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
     }
   }
 
-  function helpToggle(): void {
-    // Pure client display preference — no server round-trip.
-    isActionHelpVisible.value = !isActionHelpVisible.value;
-    setActionHelpEnabled(isActionHelpVisible.value);
-  }
-
   async function handleTeachingAction(action: TeachingAction): Promise<void> {
     switch (action) {
       case 'hint':
@@ -147,8 +133,6 @@ export function useTeachingActions(options: TeachingActionsOptions): TeachingAct
         return demoToggle();
       case 'heatmap-toggle':
         return heatmapToggle();
-      case 'help-toggle':
-        return helpToggle();
       case 'start-tutorial':
         return request('start-tutorial', { seat: playerSeat.value }, 'Failed to start tutorial.', 'tutorials');
       case 'exit-tutorial':

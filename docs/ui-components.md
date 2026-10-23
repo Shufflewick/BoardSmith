@@ -347,12 +347,24 @@ preferences are menu checkboxes and list picks are menu radio buttons, so both
 work by keyboard and screen reader.
 
 `WorldShell` takes the same prop. A world has no turn, undo or zoom, so its
-controls menu holds only "Preferences": Reduce motion, then the world's own.
+controls menu holds only "Preferences": Reduce motion, Show action help, then
+the world's own.
 Pass them where the world entry mounts the shell, in `src/world-main.ts`:
 
 ```ts
 render: () => h(WorldShell, { uis, displayName: 'My World', preferences }),
 ```
+
+#### Action help
+
+Every game also gets a built-in "Show action help" item in "Preferences", just
+after Reduce motion, in both GameShell and WorldShell. While it is on, the
+action panel puts a "?" beside each action that has `.help(text)` or a disabled
+reason, and the "?" shows that text. It is on by default and saved once for all
+BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`).
+The item is hidden while no available action has help text or a disabled
+reason, so it never shows a switch that does nothing. Host teaching lockout
+(`teachingDisabled`) does not hide it: help explains the rules, not a good move.
 
 #### Reduce motion
 

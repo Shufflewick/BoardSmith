@@ -19,6 +19,7 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
 import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
+import { actionHelpPreference } from '../composables/actionHelp.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
@@ -61,8 +62,6 @@ const props = withDefaults(defineProps<{
    * unless the host explicitly reports the game has no spatial board.
    */
   heatmapSupported?: boolean;
-  /** Whether action help affordances are currently visible (drives aria-checked). */
-  isActionHelpVisible?: boolean;
   /**
    * Whether any currently-available action actually has help text. When false,
    * the "Show action help" toggle is hidden entirely — a global toggle with
@@ -86,7 +85,7 @@ const props = withDefaults(defineProps<{
    * (host anti-cheat lockout). Get-a-hint, Watch-bot-demo, Show-move-quality,
    * and Start-tutorial will not render.
    *
-   * Action help (the "Show action help" toggle in the Play group) is NEVER
+   * Action help (the "Show action help" toggle in Preferences) is NEVER
    * gated by this prop — action help explains the rules, not a good move,
    * so it is always available (D-06).
    */
@@ -98,7 +97,6 @@ const props = withDefaults(defineProps<{
   align: 'right',
   // An absent boolean prop reads false, which would show the Teaching group to a menu that passed no showHint.
   showHint: undefined,
-  isActionHelpVisible: false,
   hasActionHelp: true,
   heatmapSupported: true,
   teachingDisabled: false,
@@ -116,11 +114,10 @@ const emit = defineEmits<{
    * - 'hint': request a one-shot move hint from the bot
    * - 'demo-toggle': start or stop the bot narrated demo
    * - 'heatmap-toggle': toggle the per-cell move quality overlay
-   * - 'help-toggle': toggle action help affordances (Play group, always visible)
    * - 'start-tutorial': (re)start the tutorial from step 0
    * - 'exit-tutorial': exit the active tutorial (shown only when isTutorialRunning)
    */
-  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'help-toggle' | 'start-tutorial' | 'exit-tutorial'];
+  'teaching-action': [action: 'hint' | 'demo-toggle' | 'heatmap-toggle' | 'start-tutorial' | 'exit-tutorial'];
 }>();
 
 const isOpen = ref(false);
@@ -231,27 +228,6 @@ function handleUndo() {
           </span>
         </button>
 
-        <!-- Show action help (Play group — not bot-gated; hidden when no available
-             action has help text, so the toggle is never present-but-inert). -->
-        <button
-          v-if="hasActionHelp"
-          class="mi"
-          type="button"
-          role="menuitemcheckbox"
-          :aria-checked="isActionHelpVisible"
-          @click="emit('teaching-action', 'help-toggle')"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <circle cx="12" cy="12" r="9"/>
-            <path d="M12 16v-.5c0-.8.5-1.5 1.2-1.8C14.4 13.2 15 12 15 10.5a3 3 0 0 0-6 0" stroke-linecap="round" stroke-linejoin="round"/>
-            <circle cx="12" cy="18.5" r="0.75" fill="currentColor" stroke="none"/>
-          </svg>
-          Show action help
-          <span class="r">
-            <span class="toggle" :class="{ on: isActionHelpVisible }"></span>
-          </span>
-        </button>
-
         <!-- Undo -->
         <button
           class="mi"
@@ -295,9 +271,11 @@ function handleUndo() {
         <div class="sep"></div>
       </template>
 
-      <!-- Built-in Reduce motion (#1442), then the game's own preferences (#1440). -->
+      <!-- Built-in Reduce motion (#1442) and action help (#1449), then the game's own
+           preferences (#1440). Action help hides when no available action has any. -->
       <div class="grouplabel">Preferences</div>
       <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
+      <PlayerPreferenceItems v-if="hasActionHelp" :preferences="actionHelpPreference()" />
       <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
