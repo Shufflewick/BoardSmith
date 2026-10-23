@@ -448,8 +448,8 @@ board can start it. When the hold lifts, the action is back at once.
   action is both disabled by its rule and held, the rule's reason shows.
 - **An open action that becomes held is cancelled**, and the hold's reason
   shows the way a refused action's does. Left open, it would wait at a pick the
-  board will not answer until the hold lifts. An action already sent to the
-  server is left to finish.
+  board will not answer until the hold lifts. An action whose submission is
+  already on its way to the server is left to finish.
 - **The holds lift when the board unmounts.** `useActionHolds` works in any
   board GameShell or WorldShell renders and in one `renderAsSeat` mounts;
   called anywhere else it throws.

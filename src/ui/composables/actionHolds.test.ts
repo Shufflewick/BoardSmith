@@ -31,6 +31,18 @@ describe('action holds (#1450)', () => {
     expect(disabled.value).toEqual({ placePack: WAIT, pass: 'Passing waits too.' });
   });
 
+  it('keeps the same disabled actions while a hold reads state that leaves it unchanged', () => {
+    const holds = createActionHolds();
+    const frame = ref(0);
+    const disabled = withHolds(computed(() => ({ pass: 'You must place first.' })), holds);
+    holds.register(() => (frame.value >= 0 ? { placePack: WAIT } : null));
+    const held = holds.held.value;
+    const before = disabled.value;
+    frame.value++;
+    expect(holds.held.value).toBe(held);
+    expect(disabled.value).toBe(before);
+  });
+
   it('is placed by a board mounted under the shell, and lifted when it unmounts', () => {
     const holds = createActionHolds();
     const Board = defineComponent({

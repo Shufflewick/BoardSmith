@@ -40,7 +40,15 @@ export function createActionHolds(): ActionHolds {
       active.add(entry);
       return () => active.delete(entry);
     },
-    held: computed(() => Object.assign({}, ...[...active].map((holds) => holds()))),
+    // The previous record when nothing changed, so a hold that reads fast-changing state does not wake every reader.
+    held: computed((previous) => {
+      const next: Record<string, string> = Object.assign({}, ...[...active].map((holds) => holds()));
+      const same =
+        previous !== undefined &&
+        Object.keys(previous).length === Object.keys(next).length &&
+        Object.entries(next).every(([name, reason]) => previous[name] === reason);
+      return same ? previous : next;
+    }),
   };
 }
 
@@ -57,12 +65,12 @@ export function withHolds(
  * Call it in a board's `setup`; see the file comment.
  */
 export function useActionHolds(holds: () => Readonly<Record<string, string>> | null): void {
-  const register = inject(ACTION_HOLDS_KEY, null);
-  if (!register) {
+  const actionHolds = inject(ACTION_HOLDS_KEY, null);
+  if (!actionHolds) {
     throw new Error(
       'useActionHolds() was called outside a board. Call it in the setup of the board ' +
         'GameShell or WorldShell renders (or one renderAsSeat mounts): the Action Panel it greys out is theirs.',
     );
   }
-  onScopeDispose(register.register(holds));
+  onScopeDispose(actionHolds.register(holds));
 }
