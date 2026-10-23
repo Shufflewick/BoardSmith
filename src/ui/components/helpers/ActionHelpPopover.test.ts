@@ -268,7 +268,7 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
-    it('mouseenter shows popover, mouseleave hides it', async () => {
+    it('a mouse moving onto the trigger shows the popover, and moving off hides it', async () => {
       const wrapper = mountPopover({
         actionName: 'move',
         triggerLabel: 'Move',
@@ -276,13 +276,45 @@ describe('ActionHelpPopover', () => {
       });
       const btn = wrapper.find('.action-help-btn');
 
-      await btn.trigger('mouseenter');
+      await btn.trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
 
-      await btn.trigger('mouseleave');
+      await btn.trigger('pointerleave', { pointerType: 'mouse' });
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('a click after a mouse hover leaves the popover open, and a second click closes it (#1451)', async () => {
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const btn = wrapper.find('.action-help-btn');
+
+      await btn.trigger('pointerenter', { pointerType: 'mouse' });
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+      await btn.trigger('click');
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+
+      await btn.trigger('click');
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('a tap opens the popover: the touch pointer entering does not, so the tap\'s click is what opens it (#1451)', async () => {
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const btn = wrapper.find('.action-help-btn');
+
+      await btn.trigger('pointerenter', { pointerType: 'touch' });
+      await btn.trigger('mouseenter');
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+
+      await btn.trigger('click');
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
       wrapper.unmount();
     });
   });
@@ -495,7 +527,7 @@ describe('ActionHelpPopover', () => {
         helpText: 'Move to an adjacent tile.',
       });
 
-      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       await nextTick(); // second tick for Phase 2 position update
 
@@ -531,7 +563,7 @@ describe('ActionHelpPopover', () => {
 
       // Patch offsetHeight on the popover element by overriding the ref after mount
       // via a MutationObserver shim: instead, patch it globally after nextTick.
-      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick(); // Phase 1 renders the element
 
       // Now the popoverRef element is in the DOM; mock its offsetHeight to 200
@@ -561,7 +593,7 @@ describe('ActionHelpPopover', () => {
         helpText: 'Reduce incoming damage.',
       });
 
-      await wrapper.find('.action-help-btn').trigger('mouseenter');
+      await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       await nextTick(); // Phase 2
 

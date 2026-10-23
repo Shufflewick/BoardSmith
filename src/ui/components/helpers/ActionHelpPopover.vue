@@ -3,7 +3,8 @@
  * ActionHelpPopover — shared reveal surface for action help text and disabled reasons.
  *
  * Renders a circled "?" trigger button that opens a Teleport-to-body fixed-positioned
- * popover on hover (pointer) or tap (touch). The same popover also surfaces the
+ * popover on mouse hover, or on click, tap or Enter. A click on help a hover opened keeps
+ * it open, and the next click closes it (#1451). The same popover also surfaces the
  * previously-dead `disabledActions` reason, closing the v2.8 "why disabled" friction loop.
  *
  * Parity: this single shared component is used by both ActionPanel (AutoUI) and custom
@@ -17,7 +18,7 @@
  *  - trigger: role=button, aria-label="Help for {triggerLabel}", aria-expanded, aria-controls
  *  - aria-describedby applied to trigger ONLY when popover is mounted (Pitfall 3)
  *  - popover: role=tooltip, aria-live=polite
- *  - Dismiss: outside mousedown, Escape key, mouseleave (pointer)
+ *  - Dismiss: outside mousedown, Escape key, the mouse leaving the trigger
  *  - Reduced motion: `.bs-reduce-motion` → transition: none
  */
 
@@ -43,6 +44,8 @@ const props = defineProps<{
 // ── State ─────────────────────────────────────────────────────────────────────
 
 const isOpen = ref(false);
+/** Open because the mouse is over the trigger, so the click that follows keeps it open. */
+let openedByHover = false;
 const triggerRef = ref<HTMLButtonElement | null>(null);
 const popoverRef = ref<HTMLDivElement | null>(null);
 
@@ -98,14 +101,28 @@ async function show() {
 
 function hide() {
   isOpen.value = false;
+  openedByHover = false;
 }
 
 function toggle() {
-  if (isOpen.value) {
+  if (openedByHover) {
+    openedByHover = false;
+  } else if (isOpen.value) {
     hide();
   } else {
     show();
   }
+}
+
+// Mouse only: a tap also sends enter and leave, and opening on those would race the tap's click.
+function hoverOpen(event: PointerEvent) {
+  if (event.pointerType !== 'mouse' || isOpen.value) return;
+  openedByHover = true;
+  show();
+}
+
+function hoverClose(event: PointerEvent) {
+  if (event.pointerType === 'mouse') hide();
 }
 
 // ── Outside-click + Escape dismiss ───────────────────────────────────────────
@@ -153,8 +170,8 @@ onUnmounted(() => {
     :aria-controls="`${actionName}-help-tip`"
     :aria-describedby="isOpen ? `${actionName}-help-tip` : undefined"
     @click="toggle"
-    @mouseenter="show"
-    @mouseleave="hide"
+    @pointerenter="hoverOpen"
+    @pointerleave="hoverClose"
   >
     <!-- Circled question mark — 14×14 viewBox (UI-SPEC §2) -->
     <svg
