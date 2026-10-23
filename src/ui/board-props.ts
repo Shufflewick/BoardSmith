@@ -134,7 +134,7 @@ export function worldBoardProps(
     isMyTurn: play.mayAct.value,
     availableActions: play.availableActions.value,
     actionController: seat.controller,
-    disabledActions: play.disabledActions.value,
+    disabledActions: seat.disabledActions.value,
     presence: host.presence.value,
     events: host.events.value,
     worldName: host.worldName.value,

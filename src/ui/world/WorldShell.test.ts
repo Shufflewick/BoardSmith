@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { defineComponent, h, nextTick, Teleport } from 'vue';
+import { defineComponent, h, nextTick, ref, Teleport } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
@@ -15,6 +15,7 @@ import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 import { definePlayerPreferences } from '../player-preferences.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { useMenuCommands } from '../composables/menuCommands.js';
+import { useActionHolds } from '../composables/actionHolds.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -1292,6 +1293,36 @@ describe('WorldShell — the controls menu (#1443)', () => {
     expect(searched).toBe(1);
     expect(document.body.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(trigger.element);
+    wrapper.unmount();
+  });
+
+  it("greys out the actions a world board holds, with the reason, until the hold lifts (#1450)", async () => {
+    const replaying = ref(false);
+    let boardSees: unknown;
+    const Hall = defineComponent({
+      props: { disabledActions: { type: Object, default: undefined } },
+      setup(props) {
+        useActionHolds(() => (replaying.value ? { move: 'Moving waits until the replay ends.' } : null));
+        return () => {
+          boardSees = props.disabledActions;
+          return h('div');
+        };
+      },
+    });
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame());
+    const move = () => wrapper.get('[data-bs-action="move"]');
+    expect(move().attributes('aria-disabled')).toBeUndefined();
+
+    replaying.value = true;
+    await nextTick();
+    expect(move().attributes('aria-disabled')).toBe('true');
+    expect(move().attributes('data-bs-disabled-reason')).toBe('Moving waits until the replay ends.');
+    expect(boardSees).toEqual({ move: 'Moving waits until the replay ends.' });
+
+    replaying.value = false;
+    await nextTick();
+    expect(move().attributes('aria-disabled')).toBeUndefined();
     wrapper.unmount();
   });
 

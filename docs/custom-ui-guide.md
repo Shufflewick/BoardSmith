@@ -1156,6 +1156,13 @@ A board can add its own one-shot commands, such as "Watch the last battle", to
 the shell's controls menu with `useMenuCommands`. See "Game commands" in
 `docs/ui-components.md`.
 
+## Holding Actions While the Screen Is Busy
+
+A board in a state only its own screen has, such as a battle replay, can grey
+out actions for now with `useActionHolds`, with a reason shown like a rule's
+`.disabled()` reason. See "Holding actions on this screen" in
+`docs/ui-components.md`.
+
 ## Board Sizing
 
 GameShell fits the board to the available screen space at startup by

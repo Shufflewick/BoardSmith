@@ -24,6 +24,7 @@ import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
 import { useMenuCommands } from '../ui/composables/menuCommands.js';
+import { useActionHolds } from '../ui/composables/actionHolds.js';
 import {
   enterIframe,
   leaveIframe,
@@ -166,6 +167,23 @@ const CommandBoard = defineComponent({
 describe('renderAsSeat provides the menu commands GameShell provides (#1448)', () => {
   it('mounts a board that adds a command to the menu, as the shell does', async () => {
     const wrapper = await render(renderAsSeat(moveGame(), 1, { component: CommandBoard }));
+
+    expect(wrapper.find('.board').exists()).toBe(true);
+  });
+});
+
+/** A board that holds an action back on its own screen, as a board replaying a battle does. */
+const HoldBoard = defineComponent({
+  name: 'HoldBoard',
+  setup() {
+    useActionHolds(() => ({ move: 'Moving waits until the battle playback ends.' }));
+    return () => h('div', { class: 'board' });
+  },
+});
+
+describe('renderAsSeat provides the action holds GameShell provides (#1450)', () => {
+  it('mounts a board that holds an action back, as the shell does', async () => {
+    const wrapper = await render(renderAsSeat(moveGame(), 1, { component: HoldBoard }));
 
     expect(wrapper.find('.board').exists()).toBe(true);
   });

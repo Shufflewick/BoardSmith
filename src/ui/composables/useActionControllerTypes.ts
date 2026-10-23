@@ -261,6 +261,12 @@ export interface UseActionControllerOptions {
    * availability check alone would let it through.
    */
   disabledActions?: Ref<Record<string, string> | undefined> | ComputedRef<Record<string, string> | undefined>;
+  /**
+   * Action name to why this screen holds it back for now (`useActionHolds`, #1450).
+   * Pass them in `disabledActions` too; this is only so an open draft of an action
+   * that becomes held is cancelled, with the reason as its error.
+   */
+  heldActions?: Readonly<Ref<Record<string, string>>>;
   /** Game view (for enriching validElements with full element data) */
   gameView?: Ref<GameViewElement | null | undefined>;
   /** Player seat (needed for fetching choices/repeating features) */

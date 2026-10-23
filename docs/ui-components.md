@@ -424,6 +424,36 @@ renders and in one `renderAsSeat` mounts; called anywhere else it throws.
 A command is for doing something once. A setting the player turns on or off
 belongs in [Player preferences](#player-preferences).
 
+#### Holding actions on this screen
+
+Some states exist only on one player's screen, such as watching a battle
+replay. While the board is in one, it can hold back the actions it cannot take
+part in yet, by name, with a reason, using `useActionHolds` in its `setup`:
+
+```ts
+// useActionHolds comes from 'boardsmith/ui'; call it in a board's setup
+useActionHolds(() => (replaying.value
+  ? { placePack: 'Placing packs waits until the battle playback ends. Skip to end to place now.' }
+  : null));
+```
+
+The function is read reactively and returns `null` when nothing is held. The shell adds the holds to the
+`disabledActions` the Action Panel, the board's `disabledActions` prop and the
+action controller already read, so a held action is greyed out with its reason
+exactly like a rule's own `.disabled()` reason, and neither the panel nor the
+board can start it. When the hold lifts, the action is back at once.
+
+- **It is this screen only.** Nothing is sent to the server and other seats
+  see no change. The rules still decide what the server accepts. When an
+  action is both disabled by its rule and held, the rule's reason shows.
+- **An open action that becomes held is cancelled**, and the hold's reason
+  shows the way a refused action's does. Left open, it would wait at a pick the
+  board will not answer until the hold lifts. An action whose submission is
+  already on its way to the server is left to finish.
+- **The holds lift when the board unmounts.** `useActionHolds` works in any
+  board GameShell or WorldShell renders and in one `renderAsSeat` mounts;
+  called anywhere else it throws.
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.

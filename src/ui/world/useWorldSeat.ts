@@ -25,6 +25,7 @@ import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
 import { playContextProvisions } from '../composables/useGameContext.js';
 import { useToast } from '../composables/useToast.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from '../composables/menuCommands.js';
+import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from '../composables/actionHolds.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
 import type { WorldSeatHost } from './useWorldHost.js';
 import { useWorldPlay, type WorldPlay } from './useWorldPlay.js';
@@ -47,6 +48,8 @@ export interface WorldSeat {
   playerSeat: ComputedRef<number>;
   /** The table's controller, unchanged, with a world's answers. */
   controller: UseActionControllerReturn;
+  /** The offer's disabled actions with the board's holds added (`useActionHolds`). Feed the Action Panel and the board this. */
+  disabledActions: ComputedRef<Record<string, string> | undefined>;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
   /** Everything the board can inject, by key. Publish with {@link provideWorldSeat} or a mount's `provide`. */
@@ -56,6 +59,8 @@ export interface WorldSeat {
 export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): WorldSeat {
   const play = useWorldPlay(host);
   const toast = useToast();
+  const actionHolds = createActionHolds();
+  const disabledActions = withHolds(play.disabledActions, actionHolds);
   const playerSeat = computed(() => host.seat.value ?? -1);
 
   /**
@@ -75,7 +80,8 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     availableActions: play.availableActions,
     actionMetadata: play.actionMetadata,
     isMyTurn: play.mayAct,
-    disabledActions: play.disabledActions,
+    disabledActions,
+    heldActions: actionHolds.held,
     gameView: play.gameView as never,
     playerSeat,
     fetchPickChoices: play.fetchPickChoices,
@@ -115,7 +121,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     autoEndTurn: computed(() => false),
     actionMetadata: play.actionMetadata,
     availableActions: play.availableActions,
-    disabledActions: play.disabledActions,
+    disabledActions,
     // A world checkpoints on dirty and keeps no per-action snapshot, so there is
     // no history to view and no table runner whose replacement invalidates a pick.
     isViewingHistory: computed(() => false),
@@ -155,6 +161,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
     [MENU_COMMANDS_KEY, menuCommands],
+    [ACTION_HOLDS_KEY, actionHolds],
     ...playContextProvisions({
       gameView: play.gameView,
       players: play.players,
@@ -186,7 +193,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     ],
   ];
 
-  return { play, playerSeat, controller, menuCommands, provisions };
+  return { play, playerSeat, controller, disabledActions, menuCommands, provisions };
 }
 
 /** Provide a seat's {@link WorldSeat.provisions} to the components below. Call it in `setup`. */

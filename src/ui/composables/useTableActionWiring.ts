@@ -32,6 +32,7 @@ import type {
 } from './useActionControllerTypes.js';
 import { useActionController } from './useActionController.js';
 import { useBoardActionBridge, type RunnerIdentity } from './useBoardActionBridge.js';
+import { createActionHolds, withHolds } from './actionHolds.js';
 
 /**
  * The fields of a seat's published state this wiring reads. Both
@@ -79,8 +80,10 @@ export interface TableActionWiring {
   controller: UseActionControllerReturn;
   /** Read off the seat state: an empty record until an action has metadata. Feed the Action Panel this. */
   actionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
-  /** Read off the seat state: action name to the reason it is disabled. Feed the Action Panel this. */
+  /** Read off the seat state, with the board's holds added: action name to the reason it is disabled. Feed the Action Panel this. */
   disabledActions: ComputedRef<Record<string, string> | undefined>;
+  /** The actions the board holds back on this client (`useActionHolds`). Provide it under `ACTION_HOLDS_KEY`. */
+  actionHolds: ReturnType<typeof createActionHolds>;
 }
 
 export function useTableActionWiring(opts: TableActionWiringOptions): TableActionWiring {
@@ -89,7 +92,8 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
   // "No metadata" is an EMPTY RECORD, never `undefined`: every consumer only
   // ever looks an action name up in it.
   const actionMetadata = computed<Record<string, EnrichedActionMetadata>>(() => seatState.value?.actionMetadata ?? {});
-  const disabledActions = computed(() => seatState.value?.disabledActions);
+  const actionHolds = createActionHolds();
+  const disabledActions = withHolds(computed(() => seatState.value?.disabledActions), actionHolds);
   const tutorialStep = computed(() => seatState.value?.tutorial);
   const heldFollowUp = computed(() => seatState.value?.followUp);
   // A change in either field means every element id the client holds is stale:
@@ -105,6 +109,7 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     actionMetadata,
     heldFollowUp,
     disabledActions,
+    heldActions: actionHolds.held,
     tutorialStep,
     availableActions,
     isMyTurn,
@@ -128,5 +133,5 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     runnerIdentity,
   });
 
-  return { controller, actionMetadata, disabledActions };
+  return { controller, actionMetadata, disabledActions, actionHolds };
 }

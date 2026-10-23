@@ -301,8 +301,9 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
     import('../ui/composables/useAnnouncer.js'),
     import('../ui/composables/useGameOverReveal.js'),
     import('../ui/composables/menuCommands.js'),
+    import('../ui/composables/actionHolds.js'),
     import('../ui/world/useWorld.js'),
-  ]).then(([interaction, context, animation, announcer, gameOver, menu, world]) => {
+  ]).then(([interaction, context, animation, announcer, gameOver, menu, holds, world]) => {
     const key = (k: unknown) => k as symbol;
     const allContext = Object.values(context.GAME_CONTEXT_KEYS).map(key);
     const playContext = context.PLAY_CONTEXT_KEY_NAMES.map((name) => key(context.GAME_CONTEXT_KEYS[name]));
@@ -313,9 +314,10 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
         key(announcer.ANNOUNCER_KEY),
         key(gameOver.GAME_OVER_HOLDS_KEY),
         key(menu.MENU_COMMANDS_KEY),
+        key(holds.ACTION_HOLDS_KEY),
         ...allContext,
       ]),
-      world: new Set([key(interaction.BOARD_INTERACTION_KEY), key(menu.MENU_COMMANDS_KEY), ...playContext, key(world.WORLD_CONTEXT_KEY)]),
+      world: new Set([key(interaction.BOARD_INTERACTION_KEY), key(menu.MENU_COMMANDS_KEY), key(holds.ACTION_HOLDS_KEY), ...playContext, key(world.WORLD_CONTEXT_KEY)]),
     };
   });
   return shellProvidedKeysPromise;
