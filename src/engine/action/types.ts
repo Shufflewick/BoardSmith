@@ -300,6 +300,8 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
   choices: unknown[] | ((context: ActionContext) => unknown[]);
   /** Display function for choices. Not shown for a choice that is or holds a card the player cannot see (#1293). */
   display?: (choice: T) => string;
+  /** The Action Panel category path for a choice, outermost first, as `.group()` places an action; `[]` for the top level (#1439). */
+  group?: (choice: T) => readonly string[];
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
   /** Keep the choices whose `key` equals an earlier pick's value; that pick must answer with one value, not a list. */
@@ -396,6 +398,8 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    * candidate or `args` holds a card the player cannot see (#1293).
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
+  /** The Action Panel category path for an element, outermost first, as `.group()` places an action; `[]` for the top level (#1439). */
+  group?: (element: T, context: ActionContext) => readonly string[];
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: ActionContext) => ElementRef;
   /**

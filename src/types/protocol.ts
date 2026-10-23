@@ -518,6 +518,8 @@ export interface ChoiceWithRefs {
   refs?: RefWithRole[];
   /** Disabled reason string, present only when choice is disabled */
   disabled?: string;
+  /** The Action Panel category path, outermost first; absent at the top level (#1439). */
+  group?: readonly string[];
 }
 
 /**
@@ -531,6 +533,8 @@ export interface ValidElement {
   refs?: RefWithRole[];
   /** Disabled reason string, present only when element is disabled */
   disabled?: string;
+  /** The Action Panel category path, outermost first; absent at the top level (#1439). */
+  group?: readonly string[];
 }
 
 /**
