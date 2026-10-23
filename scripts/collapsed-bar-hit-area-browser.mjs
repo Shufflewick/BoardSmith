@@ -23,7 +23,8 @@ import { assert, check, openTableSample, runBrowserRegression, summarise, waitUn
  * The line's top edge and the centres of the dots and toggle, in the frame's
  * coordinates, the frame's offset on the page, and whether the layout has
  * settled: the frame at the page's width, the line down at its foot, and no
- * transition running (the closed Debug drawer slides across a resize).
+ * transition running (the closed Debug drawer slides across a resize). A looping
+ * animation, such as the turn indicator's breathing dot, never ends, so it is not counted.
  */
 async function targets(page, frame) {
   const offset = await page.locator('.dev-host__frame').boundingBox();
@@ -38,7 +39,11 @@ async function targets(page, frame) {
       line,
       down: line >= doc.defaultView.innerHeight - 15,
       width: doc.defaultView.innerWidth,
-      moving: doc.getAnimations().length > 0,
+      // What is still moving, by name; a finished animation that holds its last frame is not.
+      moving: doc.getAnimations()
+        .filter((one) => one.playState === 'running' && one.effect?.getTiming().iterations !== Infinity)
+        .map((one) => `${one.animationName ?? one.transitionProperty} on .${one.effect?.target?.className}`)
+        .join(', '),
       dots: centre(doc.querySelector('[data-testid="bs-actionbar"] .menubtn')),
       toggle: centre(doc.querySelector('[data-testid="bs-actionbar-toggle"]')),
     };
@@ -83,11 +88,17 @@ await runBrowserRegression(
         // Down, whatever a failed check at the last width left it as.
         if (await barUp(frame) === 'true') await frame.locator('[data-testid="bs-actionbar-toggle"]').click();
         await waitUntil(() => barUp(frame), (up) => up === 'false', 5_000);
-        const { offset, line, dots, toggle } = await waitUntil(
+        const layout = await waitUntil(
           () => targets(page, frame),
           (seen) => seen.down && !seen.moving && Math.abs(seen.width - seen.offset.width) < 1,
           5_000,
         );
+        const { offset, line, dots, toggle } = layout;
+        await check(`${at}: the bar goes down and the page settles before anything is clicked`, () => {
+          assert(layout.down, `the bar's top is at ${line}px, not down at the foot of the frame`);
+          assert(!layout.moving, `still moving in the frame: ${layout.moving}`);
+          assert(Math.abs(layout.width - offset.width) < 1, `the frame is ${layout.width}px wide inside a ${offset.width}px iframe`);
+        });
 
         // The dots' hit area is 24px tall on a 14px line: it reaches 10px above it.
         await check(`${at}: a click 8px above the line opens the controls menu`, async () => {
