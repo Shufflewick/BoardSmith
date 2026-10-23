@@ -27,6 +27,7 @@ import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type Us
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
+import { ACTION_HOLDS_KEY } from './actionHolds.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
@@ -217,6 +218,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     [ANNOUNCER_KEY, announcer],
     [GAME_OVER_HOLDS_KEY, gameOver.holds],
     [MENU_COMMANDS_KEY, menuCommands],
+    [ACTION_HOLDS_KEY, wiring.actionHolds],
     ...gameContextProvisions({
       gameState: state,
       gameView,

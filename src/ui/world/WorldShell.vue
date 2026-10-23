@@ -52,7 +52,7 @@
       :may-act="play.mayAct.value"
       :available-actions="play.availableActions.value"
       :action-metadata="play.actionMetadata.value"
-      :disabled-actions="play.disabledActions.value"
+      :disabled-actions="disabledActions"
       :is-action-help-visible="isActionHelpVisible"
       :actions-pending="host.offersPending.value"
       :board-failed="boardFailed"
@@ -195,7 +195,7 @@ const toast = useToast();
  */
 const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
-const { play, controller: actionController, menuCommands } = seat;
+const { play, controller: actionController, disabledActions, menuCommands } = seat;
 
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
 const boardProps = computed(() => worldBoardProps(seat, host));
@@ -246,7 +246,7 @@ watch(host.recoveryNotice, (notice) => {
 const panelToken = computed(() => play.myPlayer.value ?? null);
 
 const isActionHelpVisible = actionHelpPreference().use('actionHelp');
-const hasHelpToShow = computed(() => hasActionHelp(play.availableActions.value, play.actionMetadata.value, play.disabledActions.value));
+const hasHelpToShow = computed(() => hasActionHelp(play.availableActions.value, play.actionMetadata.value, disabledActions.value));
 
 /**
  * THE ATTACHMENT LIFECYCLE, THROUGH ONE SHARED INDICATOR (#170 §2.5).

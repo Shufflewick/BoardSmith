@@ -252,6 +252,7 @@ export {
 // Holding the table's ending back until the board shows it (see docs/custom-ui-guide.md "The End of the Game")
 export { holdGameOverUntil } from './composables/useGameOverReveal.js';
 export { useMenuCommands, type MenuCommand } from './composables/menuCommands.js';
+export { useActionHolds } from './composables/actionHolds.js';
 
 export {
   useZoomPreview,

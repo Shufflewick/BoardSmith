@@ -1256,6 +1256,9 @@ touch, so on a phone the reason did not exist. Custom UIs get the map as a
 `v-disabled-reason` directive the panel uses, so board and panel dim, explain,
 and go inert identically. See the
 [Custom UI Guide](./custom-ui-guide.md#understanding-getchoices-return-values).
+A board can also hold an action back on its own screen only, such as during a
+replay, with `useActionHolds`; its reason arrives in the same map (see
+"Holding actions on this screen" in `docs/ui-components.md`).
 
 To skip a whole step of the flow, use the flow node's `skipIf` — it belongs to
 `actionStep`, not to the action:

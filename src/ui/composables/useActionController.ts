@@ -2750,6 +2750,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     abandonDraft();
   }
 
+  // A held draft would wait at a pick the board will not answer, so it is dropped with the reason; one already sent finishes.
+  watch(
+    () => (currentAction.value && !isExecuting.value ? options.heldActions?.value[currentAction.value] : undefined),
+    (reason) => {
+      if (!reason) return;
+      cancel();
+      setError(reason);
+    },
+  );
+
   /**
    * A DRAFT BELONGS TO THE SEAT THAT STARTED IT (#272).
    *
