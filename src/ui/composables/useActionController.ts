@@ -3033,6 +3033,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // State
     currentAction,
     currentArgs: exposedCurrentArgs,
+    currentActionMeta,
     currentPick,
     validElements,           // Reactive! Use this in custom UIs
     isReady,

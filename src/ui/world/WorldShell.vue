@@ -246,7 +246,7 @@ watch(host.recoveryNotice, (notice) => {
 const panelToken = computed(() => play.myPlayer.value ?? null);
 
 const isActionHelpVisible = actionHelpPreference().use('actionHelp');
-const hasHelpToShow = computed(() => hasActionHelp(play.availableActions.value, play.actionMetadata.value, disabledActions.value));
+const hasHelpToShow = computed(() => hasActionHelp(play.availableActions.value, play.actionMetadata.value, disabledActions.value, actionController.currentActionMeta.value?.help));
 
 /**
  * THE ATTACHMENT LIFECYCLE, THROUGH ONE SHARED INDICATOR (#170 §2.5).

@@ -133,6 +133,26 @@ describe('GameShell cancels the pick in progress while viewing history (#553)', 
     expect(controller.pendingOnServer.value).toBe(true);
     wrapper.unmount();
   });
+
+  /** The panel hides the held follow-up in history, so its help has no "?" to toggle there (#1455). */
+  it('offers Show action help for a server-held follow-up\'s help only while its "?" is drawn', async () => {
+    const { wrapper, debugPanel } = await mountWithHeldFollowUp();
+    const helpItem = async () => {
+      await wrapper.get('button[aria-label="Game controls"]').trigger('click');
+      const found = Array.from(document.body.querySelectorAll('[role="menuitemcheckbox"]'))
+        .some((el) => el.textContent?.includes('Show action help'));
+      await wrapper.get('button[aria-label="Game controls"]').trigger('click');
+      return found;
+    };
+    expect(wrapper.find('.config-header .action-help-btn').exists()).toBe(true);
+    expect(await helpItem()).toBe(true);
+
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await flushPromises();
+    expect(wrapper.find('.action-help-btn').exists()).toBe(false);
+    expect(await helpItem()).toBe(false);
+    wrapper.unmount();
+  });
 });
 
 /**
@@ -147,6 +167,7 @@ async function mountWithHeldFollowUp() {
       metadata: {
         name: 'loot',
         prompt: 'Loot',
+        help: 'Take the treasure from one site.',
         selections: [{
           name: 'site',
           type: 'choice',

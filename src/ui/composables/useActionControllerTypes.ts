@@ -397,6 +397,8 @@ export interface UseActionControllerReturn {
   currentAction: Ref<string | null>;
   /** Args collected so far for current action (read-only; use fill/start/clear to change) */
   currentArgs: Readonly<Ref<Readonly<Record<string, unknown>>>>;
+  /** The open action's metadata, including a followUp's that is not in availableActions (undefined with no action open) */
+  currentActionMeta: ComputedRef<EnrichedActionMetadata | undefined>;
   /** Current pick that needs user input (null if all filled or no action) */
   currentPick: ComputedRef<EnrichedPickMetadata | null>;
   /**

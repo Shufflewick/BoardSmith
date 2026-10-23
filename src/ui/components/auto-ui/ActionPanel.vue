@@ -1635,6 +1635,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       <div class="config-context">
         <div class="config-header">
           <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(shownAction) }}</span>
+          <!-- The open action's help: its button, and the "?" beside it, are not drawn while it is open (#1455). -->
+          <ActionHelpPopover
+            v-if="isActionHelpVisible && currentActionMeta?.help"
+            :action-name="shownAction"
+            :help-text="currentActionMeta.help"
+            :trigger-label="currentActionMeta.prompt || formatActionName(shownAction)"
+          />
           <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">
             <span aria-hidden="true">✕</span>
           </button>
@@ -2348,6 +2355,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   font-weight: bold;
   font-size: 1rem;
   white-space: nowrap;
+}
+
+/* The popover pins its "?" to a button's corner; beside the open action's title it takes its own place in the row. */
+.config-header :deep(.action-help-btn) {
+  position: static;
 }
 
 .cancel-btn {
