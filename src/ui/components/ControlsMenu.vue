@@ -140,6 +140,28 @@ const { open: openTrap, close: closeTrap, handleKeydown: trapKeydown } = useFocu
   onClose: close,
 });
 
+// Up/Down/Home/End move between the enabled items of every kind, wrapping (WAI-ARIA menu pattern, #1458).
+const ITEM_STEPS: Record<string, (at: number) => number> = {
+  ArrowDown: (at) => at + 1,
+  ArrowUp: (at) => (at === -1 ? 0 : at) - 1,
+  Home: () => 0,
+  End: () => -1,
+};
+
+function handleKeydown(e: KeyboardEvent) {
+  const menu = menuRef.value!;
+  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)'));
+  const at = items.indexOf(e.target as HTMLElement);
+  const step = ITEM_STEPS[e.key];
+  // The zoom slider is not an item and keeps its own arrow keys.
+  if (!step || !items.length || (at === -1 && e.target !== menu)) {
+    trapKeydown(e);
+    return;
+  }
+  e.preventDefault();
+  items.at(step(at) % items.length)!.focus();
+}
+
 function computePosition() {
   const el = triggerRef.value;
   if (!el) return;
@@ -221,7 +243,7 @@ function runCommand(command: MenuCommand) {
     </button>
 
     <Teleport to="body">
-    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" tabindex="-1" :style="menuStyle" @keydown="trapKeydown">
+    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" tabindex="-1" :style="menuStyle" @keydown="handleKeydown">
       <template v-if="play">
         <div class="grouplabel">Play</div>
 
@@ -255,7 +277,7 @@ function runCommand(command: MenuCommand) {
 
         <!-- Zoom: fitted once at game startup; the slider adjusts manually and
              "Fit" re-fits the board to the available space on demand. -->
-        <div v-if="play.zoomSupported" class="mi zoom-mi" role="menuitem">
+        <div v-if="play.zoomSupported" class="mi zoom-mi" role="group" aria-label="Zoom">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
           Zoom
           <span class="r">
@@ -273,6 +295,7 @@ function runCommand(command: MenuCommand) {
             <button
               type="button"
               class="zoom-fit"
+              role="menuitem"
               title="Fit board to available space"
               @click="emit('fit-zoom')"
             >
@@ -469,7 +492,7 @@ function runCommand(command: MenuCommand) {
   padding-left: 39px;
 }
 
-/* Zoom magnifier row — label semantics via <div role="menuitem">, not <button> */
+/* Zoom magnifier row: a group, since a menu item's children are hidden from screen readers. */
 .zoom-mi {
   cursor: default;
 }
