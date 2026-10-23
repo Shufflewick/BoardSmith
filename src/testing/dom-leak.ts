@@ -1005,6 +1005,8 @@ async function openSeatAction(
   // a macrotask is after every one of them has run.
   await new Promise((resolve) => setTimeout(resolve, 0));
   if (controller.currentAction.value !== name) {
+    const held = controller.holdNotice.value?.reason;
+    if (held) throw new Error(`"${name}" did not stay open for seat ${seat}: ${held}. The board holds it (useActionHolds), so open one it does not hold.`);
     const reason = controller.lastError.value ?? 'it completed or was cancelled as soon as it started';
     throw new Error(
       `"${name}" did not stay open for seat ${seat}: ${reason}. startAction holds an action open so the ` +

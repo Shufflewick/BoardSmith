@@ -1,7 +1,8 @@
 /**
  * An action the board holds while it is open is cancelled, and the player is
  * told why in the hold's own words (#1450). Left open it would sit at a pick
- * the board will not answer until the hold lifts.
+ * the board will not answer until the hold lifts. The hold is the screen's own
+ * state, not a failed action, so it is a notice and never an error (#1461).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { ref, nextTick } from 'vue';
@@ -24,7 +25,7 @@ function controllerWith(sendAction = createMockSendAction()) {
 }
 
 describe('a hold on the open action (#1450)', () => {
-  it('cancels it with the reason', async () => {
+  it('cancels it with the reason as a notice, not an error (#1461)', async () => {
     const { controller, heldActions } = controllerWith();
     await controller.start('playCard');
     expect(controller.currentAction.value).toBe('playCard');
@@ -33,8 +34,25 @@ describe('a hold on the open action (#1450)', () => {
     await nextTick();
 
     expect(controller.currentAction.value).toBeNull();
-    expect(controller.lastError.value).toBe(WAIT);
-    expect(controller.errorTick.value).toBe(1);
+    expect(controller.holdNotice.value).toEqual({ reason: WAIT });
+    expect(controller.lastError.value).toBeNull();
+    expect(controller.errorTick.value).toBe(0);
+  });
+
+  it('gives a new notice each time, so the same reason twice is told twice (#1461)', async () => {
+    const { controller, heldActions } = controllerWith();
+    await controller.start('playCard');
+    heldActions.value = { playCard: WAIT };
+    await nextTick();
+    const first = controller.holdNotice.value;
+
+    heldActions.value = {};
+    await controller.start('playCard');
+    heldActions.value = { playCard: WAIT };
+    await nextTick();
+
+    expect(controller.holdNotice.value).toEqual({ reason: WAIT });
+    expect(controller.holdNotice.value).not.toBe(first);
   });
 
   it('leaves an action that is not held open', async () => {
@@ -59,7 +77,7 @@ describe('a hold on the open action (#1450)', () => {
 
     heldActions.value = { playCard: WAIT };
     await nextTick();
-    expect(controller.errorTick.value).toBe(0);
+    expect(controller.holdNotice.value).toBeNull();
 
     reply({ success: true });
     await sent;

@@ -1273,6 +1273,13 @@ watch(actionController.errorTick, () => {
   announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
+// A hold cancelling the open action is this screen's own state, not a failure, so it is a notice (#1461).
+watch(actionController.holdNotice, (notice) => {
+  if (!notice) return;
+  toast.info(notice.reason, 4000);
+  announcer.announce(notice.reason);
+});
+
 // UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
 // to 0×0 inside the zoom container (`.game-shell__zoom-container { width:
 // max-content }` — DO NOT modify that CSS, the structural fix is rejected per

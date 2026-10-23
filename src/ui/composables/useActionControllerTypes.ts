@@ -432,6 +432,12 @@ export interface UseActionControllerReturn {
    * once; read the message from lastError inside the watcher.
    */
   errorTick: Readonly<Ref<number>>;
+  /**
+   * Why the open action was just cancelled by a hold on this screen
+   * (`useActionHolds`), a new object each time. Not a failure, so the shells
+   * show it as a notice, never through `lastError` (#1461).
+   */
+  holdNotice: Readonly<Ref<{ readonly reason: string } | null>>;
   /** Whether choices are being fetched from server */
   isLoadingChoices: Ref<boolean>;
   /** Repeating selection state (for repeating selections) */

@@ -1326,6 +1326,30 @@ describe('WorldShell — the controls menu (#1443)', () => {
     wrapper.unmount();
   });
 
+  it('cancels an open action a world board holds, and tells the player why without an error (#1461)', async () => {
+    const replaying = ref(false);
+    const Hall = defineComponent({
+      setup() {
+        useActionHolds(() => (replaying.value ? { move: 'Moving waits until the replay ends.' } : null));
+        return () => h('div');
+      },
+    });
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const move = { name: 'move', prompt: 'Move', selections: [{ name: 'room', type: 'choice', prompt: 'Which room?', choices: [{ value: 'hall', display: 'Hall' }, { value: 'cellar', display: 'Cellar' }] }] };
+    const wrapper = mount(WorldShell, { props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall' } });
+    await drawn(wrapper, stateFrame({ actions: [{ name: 'look', selections: [] }, move] }));
+    await wrapper.get('[data-bs-action="move"]').trigger('click');
+    await nextTick();
+    expect(wrapper.find('.cancel-btn').exists()).toBe(true);
+
+    replaying.value = true;
+    await nextTick();
+    expect(wrapper.find('.cancel-btn').exists()).toBe(false);
+    expect(toasts.value.slice(before).map((t) => [t.type, t.message])).toEqual([['info', 'Moving waits until the replay ends.']]);
+    wrapper.unmount();
+  });
+
   it('keeps the menu on the collapsed action bar', async () => {
     const wrapper = await mountWithPreferences({ actionBarStartsCollapsed: true });
     expect(wrapper.get('[data-testid="bs-actionbar"]').classes()).toContain('collapsed');

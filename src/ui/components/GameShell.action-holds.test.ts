@@ -64,7 +64,7 @@ describe('GameShell action holds (#1450)', () => {
     wrapper.unmount();
   });
 
-  it('cancels the held action when it is open, and tells the player why', async () => {
+  it('cancels the held action when it is open, and tells the player why without an error (#1461)', async () => {
     const { wrapper } = await mountTableWithDebugPanel(ReplayBoard, {
       ...seatState,
       actionMetadata: {
@@ -80,7 +80,12 @@ describe('GameShell action holds (#1450)', () => {
     await nextTick();
     expect(wrapper.find('.cancel-btn').exists()).toBe(false);
     expect(wrapper.get('[data-bs-action="move"]').attributes('data-bs-disabled-reason')).toBe(WAIT);
-    expect(document.body.textContent).toContain(WAIT);
+    // The hold is this screen's own state, not a failed action, so it is told as a notice (#1461).
+    expect(document.querySelector('.toast.info')?.textContent).toContain(WAIT);
+    expect(document.querySelector('.toast.error')).toBeNull();
+    // Spoken through the shell's polite live region too, since a toast inserted with its text is often not read.
+    await nextTick();
+    expect(wrapper.get('p.vh[role="status"]').text()).toBe(WAIT);
     wrapper.unmount();
   });
 

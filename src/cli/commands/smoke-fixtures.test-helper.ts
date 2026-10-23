@@ -1034,6 +1034,48 @@ onMounted(() => {
   };
 }
 
+/** Why {@link boardThatHoldsAnOpenAction} holds `play`. */
+export const PLAY_HOLD = 'Playing waits until the replay ends.';
+
+/** What {@link boardThatHoldsAnOpenAction} logs as it cancels the open `play`, so a test sees the hold happen. */
+export const HELD_OPEN_PLAY = 'the board held the open play';
+
+/**
+ * A BOARD THAT HOLDS AN OPEN ACTION (#1461), for the ace game: the first time `play` is opened, the
+ * board starts a one-second replay and holds `play` with `useActionHolds`, as a board that holds
+ * placing during a battle playback does, so the open `play` is cancelled with the hold's reason.
+ */
+export function boardThatHoldsAnOpenAction(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref, watch } from 'vue';
+import { useActionHolds, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const replaying = ref(false);
+let replayed = false;
+watch(() => board.currentAction, (action) => {
+  if (action !== 'play' || replayed) return;
+  replayed = true;
+  console.log(${JSON.stringify(HELD_OPEN_PLAY)});
+  replaying.value = true;
+  setTimeout(() => (replaying.value = false), 1000);
+});
+useActionHolds(() => (replaying.value ? { play: ${JSON.stringify(PLAY_HOLD)} } : null));
+</script>
+
+<template>
+  <div class="board">{{ replaying ? 'Replaying' : 'Ready' }}</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
 /**
  * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
  * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
