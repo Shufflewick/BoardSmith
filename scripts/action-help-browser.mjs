@@ -19,6 +19,11 @@
  * it sits clear of the "?", scrolls inside, and the mouse can move into it and
  * scroll it without closing it, and the keyboard can scroll it from the "?".
  *
+ * Once an action is open its button, and the "?" pinned to the button's
+ * corner, are gone (a step's only action opens on its own, as Go Fish's ask
+ * does). Its "?" then sits in the row after its prompt and before its cancel,
+ * over neither, and shows its help (#1455).
+ *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-help-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
@@ -92,6 +97,29 @@ async function helpShows(frame, expected) {
   });
   const seen = await waitUntil(read, (now) => now.expanded === String(expected) && now.visible === expected, 2_000);
   return { ...seen, text: seen.visible ? (await frame.locator(TIP).innerText()).trim() : '' };
+}
+
+/** Opens the play action and checks its "?" beside the prompt, then cancels it (#1455). */
+async function checkOpenActionHelp(frame, width) {
+  await frame.locator('.action-btn[data-bs-action="play"]').click();
+  const trigger = frame.locator(`.config-header ${TALL_TRIGGER}`);
+  await trigger.waitFor({ timeout: 10_000 });
+  const [title, help, cancel] = await Promise.all(
+    [frame.locator('.config-title'), trigger, frame.locator('.cancel-btn')].map((el) => el.boundingBox()),
+  );
+  await check(`at ${width}px, an open action's "?" sits between its prompt and its cancel (#1455)`, async () => {
+    assert(help.x >= title.x + title.width, `the "?" covers the prompt: "?" ${JSON.stringify(help)}, prompt ${JSON.stringify(title)}`);
+    assert(help.x + help.width <= cancel.x, `the "?" is not before the cancel: "?" ${JSON.stringify(help)}, cancel ${JSON.stringify(cancel)}`);
+    const middle = help.y + help.height / 2;
+    assert(middle > title.y && middle < title.y + title.height, `the "?" is off the prompt's line: "?" ${JSON.stringify(help)}, prompt ${JSON.stringify(title)}`);
+  });
+  await trigger.click();
+  const shown = await waitUntil(() => frame.locator(TALL_TIP).isVisible(), (now) => now, 2_000);
+  await check(`at ${width}px, clicking an open action's "?" shows its help (#1455)`, async () => {
+    assert(shown, 'the help did not show');
+  });
+  await trigger.press('Escape');
+  await frame.locator('.cancel-btn').click();
 }
 
 await runBrowserRegression(
@@ -172,6 +200,7 @@ await runBrowserRegression(
         assert(keyScrolled > 0, `Page Down did not scroll the help (scrollTop ${keyScrolled})`);
       });
       await tall.press('Escape');
+      await checkOpenActionHelp(mouse.frame, 1440);
 
       await page.setViewportSize({ width: 390, height: 844 });
       const touch = { frame: await openGame(page, hostUrl) };
@@ -185,6 +214,7 @@ await runBrowserRegression(
       await check('on a touch screen, a second tap on the "?" closes the help', async () => {
         assert(!tappedAgain.visible && tappedAgain.expanded === 'false', `the help stayed open: ${JSON.stringify(tappedAgain)}`);
       });
+      await checkOpenActionHelp(touch.frame, 390);
       await context.close();
     } finally {
       await browser.close();
