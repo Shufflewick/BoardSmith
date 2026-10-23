@@ -456,8 +456,9 @@ board can start it. When the hold lifts, the action is back at once.
   `holdNotice`. An action whose submission is already on its way to the
   server is left to finish.
 - **The holds lift when the board unmounts.** `useActionHolds` works in any
-  board GameShell or WorldShell renders and in one `renderAsSeat` mounts;
-  called anywhere else it throws.
+  board GameShell or WorldShell renders, in one `renderAsSeat` mounts, and
+  below a test harness's `provideTableActionWiring` (see
+  [useTableActionWiring](#usetableactionwiring)); called anywhere else it throws.
 
 ### AutoUI
 
@@ -1038,7 +1039,7 @@ import { computed, ref, type Ref } from 'vue';
 import type { PlayerGameState } from 'boardsmith/session';
 import {
   createBoardInteraction,
-  provideBoardInteraction,
+  provideTableActionWiring,
   useTableActionWiring,
   type TableActionWiringOptions,
 } from 'boardsmith/ui';
@@ -1050,21 +1051,37 @@ export function wireSeat(
   sendAction: TableActionWiringOptions['sendAction'],
   fetchPickChoices: TableActionWiringOptions['fetchPickChoices'],
 ) {
-  const board = createBoardInteraction();
-  provideBoardInteraction(board);
-  return useTableActionWiring({
+  const wiring = useTableActionWiring({
     seatState,
     availableActions: computed(() => seatState.value?.availableActions ?? []),
     isMyTurn: computed(() => seatState.value?.isMyTurn),
     playerSeat: ref(seat),
-    boardInteraction: board,
+    boardInteraction: createBoardInteraction(),
     autoEndTurn: ref(true),
     isViewingHistory: ref(false),
     sendAction,
     fetchPickChoices,
   });
+  // The board and the Action Panel below inject what they need from this wiring.
+  provideTableActionWiring(wiring);
+  return wiring;
 }
 ```
+
+`provideTableActionWiring(wiring)` provides, to the components below, the
+three things the board and the Action Panel inject from the wiring: the board
+interaction, the action controller and the register `useActionHolds` adds to.
+Call it in the `setup` of the component that renders your board and panel, and
+feed the panel `wiring.disabledActions`, which already carries the board's
+holds. So a board's holds grey out the harness's panel, and its controller
+cancels a held draft, with nothing else wired.
+
+A harness that puts its board inside a real GameShell (to give the board the
+rest of the table's context) still calls it, around the board: the nearest
+provide wins, so the board's holds and its board interaction go to the
+harness's wiring, and the shell's own panel does not see them. Commands a
+board lists with `useMenuCommands` belong to a controls menu, which only
+GameShell and WorldShell have, so they go to the shell's menu.
 
 It reads the action metadata, disabled reasons, tutorial step and which game
 tree the state came from (`gameInstanceId`, `restoreEpoch`) off `seatState`, so

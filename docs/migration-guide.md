@@ -1,5 +1,15 @@
 # Migration Guide
 
+## A test harness provides its wiring with `provideTableActionWiring` (#1462)
+
+`useTableActionWiring` now returns `provisions` in place of `actionHolds`, and
+`boardsmith/ui` exports `provideTableActionWiring(wiring)`, which provides them:
+the board interaction, the action controller and the register a board's
+`useActionHolds` adds to. In a harness, call it where you called
+`provideBoardInteraction(board)` and drop your own provide of
+`GAME_CONTEXT_KEYS.actionController`. Without it, a board's holds never reached
+the harness's Action Panel or controller.
+
 ## A callback handed a hidden card writes no text the player reads (#1293)
 
 A selection's `display`, `disabled` reason, `validate` message and `prompt`

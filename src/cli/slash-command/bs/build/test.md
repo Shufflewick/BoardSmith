@@ -416,8 +416,7 @@ above).
    // Inside the test host component's setup().
    const seatState = ref(session.playerState(seat));   // re-read after every move
    const board = createBoardInteraction();
-   provideBoardInteraction(board);
-   const { controller, actionMetadata, disabledActions } = useTableActionWiring({
+   const wiring = useTableActionWiring({
      seatState,
      availableActions: computed(() => seatState.value.availableActions ?? []),
      isMyTurn: computed(() => seatState.value.isMyTurn),
@@ -429,7 +428,14 @@ above).
      fetchPickChoices: (actionName, selectionName, player, args) =>
        session.send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
    });
+   // Gives the board and ActionPanel below the board interaction, the controller and the action holds.
+   provideTableActionWiring(wiring);
    ```
+
+   Feed the ActionPanel `wiring.actionMetadata` and `wiring.disabledActions`. Call
+   `provideTableActionWiring` in the component that renders the board, even when that board sits
+   inside a real GameShell: the nearest provide wins, so a board's `useActionHolds` then greys out
+   your panel and cancels your controller's held draft, not the shell's.
 
    Re-read `seatState` from the session after each move, the way a broadcast arrives. Read the
    game itself with `session.readGame()`, again after each move: it is a copy rebuilt from the

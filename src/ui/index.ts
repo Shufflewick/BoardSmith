@@ -132,6 +132,7 @@ export {
 // renamed (#378).
 export {
   useTableActionWiring,
+  provideTableActionWiring,
   type TableActionWiring,
   type TableActionWiringOptions,
   type TableSeatState,
