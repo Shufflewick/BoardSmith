@@ -13,8 +13,9 @@
  *
  * Phase 102 adds the Appearance and Debug panel items.
  */
-import { ref, nextTick, onMounted, onUnmounted } from 'vue';
+import { ref, computed, nextTick, onMounted, onUnmounted, useId } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import type { PlayerPreferences } from '../player-preferences.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
@@ -81,6 +82,8 @@ const props = withDefaults(defineProps<{
    * so it is always available (D-06).
    */
   teachingDisabled?: boolean;
+  /** The game's own player preferences (#1440), listed in their own group. */
+  preferences?: PlayerPreferences;
 }>(), {
   openUp: false,
   align: 'right',
@@ -166,6 +169,20 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleOutsideClick);
+});
+
+const idPrefix = `bs-pref-${useId()}`;
+const preferenceItems = computed(() => {
+  const prefs = props.preferences;
+  if (!prefs) return [];
+  return Object.entries(prefs.declarations).map(([key, d]) => ({
+    key,
+    label: d.label,
+    descriptionId: d.description ? `${idPrefix}-${key}` : undefined,
+    description: d.description,
+    options: 'options' in d ? d.options : undefined,
+    value: prefs.use(key),
+  }));
 });
 
 function handleZoomInput(event: Event) {
@@ -277,6 +294,46 @@ function handleUndo() {
           </button>
         </span>
       </div>
+
+      <!-- The game's own preferences (#1440): an on/off one is a checkbox item,
+           a pick-from-list one a group of radio items. -->
+      <template v-if="preferenceItems.length">
+        <div class="sep"></div>
+        <div class="grouplabel">Preferences</div>
+        <template v-for="item in preferenceItems" :key="item.key">
+          <div v-if="item.options" class="pref-choice" role="group" :aria-label="item.label" :aria-describedby="item.descriptionId">
+            <div class="pref-label">{{ item.label }}</div>
+            <div class="pref-options">
+              <button
+                v-for="option in item.options"
+                :key="option.value"
+                class="pref-option"
+                type="button"
+                role="menuitemradio"
+                :aria-checked="item.value.value === option.value"
+                @click="item.value.value = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+          <button
+            v-else
+            class="mi"
+            type="button"
+            role="menuitemcheckbox"
+            :aria-checked="item.value.value === true"
+            :aria-describedby="item.descriptionId"
+            @click="item.value.value = !item.value.value"
+          >
+            {{ item.label }}
+            <span class="r">
+              <span class="toggle" :class="{ on: item.value.value === true }"></span>
+            </span>
+          </button>
+          <div v-if="item.description" :id="item.descriptionId" class="pref-desc">{{ item.description }}</div>
+        </template>
+      </template>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
            has a bot player (showHint !== undefined) OR a tutorial (hasTutorial),
@@ -467,6 +524,40 @@ function handleUndo() {
 .zoom-fit:hover {
   border-color: var(--bsg-accent);
   color: var(--bsg-accent);
+}
+
+/* Player preferences (#1440): no icon, so the label starts at the item's padding. */
+.pref-choice {
+  padding: 10px 10px 4px;
+  font-size: var(--bsg-text-sm);
+  color: var(--bsg-ink);
+}
+.pref-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.pref-option {
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-pill);
+  background: none;
+  color: var(--bsg-ink-2);
+  font: inherit;
+  font-size: var(--bsg-text-xs);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+.pref-option[aria-checked="true"] {
+  background: var(--bsg-accent);
+  border-color: var(--bsg-accent);
+  color: var(--bsg-accent-ink);
+}
+.pref-desc {
+  padding: 0 10px 8px;
+  margin-top: -4px;
+  font-size: var(--bsg-text-xs);
+  color: var(--bsg-ink-3);
 }
 
 /* Section separator */

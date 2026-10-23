@@ -3,6 +3,7 @@ import { defineComponent, h, nextTick, type Component, type FunctionalComponent 
 import GameShell from './GameShell.vue';
 import DebugPanel from './DebugPanel.vue';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
+import type { PlayerPreferences } from '../player-preferences.js';
 
 /**
  * MOUNTING THE REAL `GameShell` THE WAY A PLATFORM HOST DOES.
@@ -80,9 +81,12 @@ interface PlatformShellOptions {
     'provides-own-game-over-ui'?: boolean;
     formatTurnDeadline?: (remainingMs: number) => string;
     actionBarStartsCollapsed?: boolean;
+    preferences?: PlayerPreferences;
   };
   /** GameShell slots, for a test about what a slot is handed. */
   slots?: Record<string, (slotProps: Record<string, unknown>) => unknown>;
+  /** Where to attach the shell, for a test that reads teleported content from the document. */
+  attachTo?: HTMLElement;
 }
 
 export function mountPlatformShell(options: PlatformShellOptions = {}) {
@@ -92,6 +96,7 @@ export function mountPlatformShell(options: PlatformShellOptions = {}) {
       ...options.props,
     },
     slots: options.slots,
+    attachTo: options.attachTo,
   });
 }
 

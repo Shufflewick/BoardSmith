@@ -30,6 +30,7 @@ import {
 - `GameHistory` - Action history display
 - `PlayersPanel` - Player list and scores
 - `Toast` - Toast notification component
+- `definePlayerPreferences(game, declarations)` - A game's own player preferences, listed in GameShell's controls menu via its `preferences` prop and read with `preferences.use('key')`; saved per game in the browser (see ui-components.md, Player preferences)
 
 ### Helper Components
 
