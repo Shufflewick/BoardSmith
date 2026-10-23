@@ -42,6 +42,7 @@ import type { ControllerActionResult } from '../composables/useActionController'
 import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
 import type { GameState, PlayerState } from '../../client/types.js';
 import type { GameRootView } from '../types.js';
+import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
@@ -154,6 +155,11 @@ interface GameShellProps {
    * player can still open and close it. Default: false (open).
    */
   actionBarStartsCollapsed?: boolean;
+  /**
+   * The game's own player preferences from `definePlayerPreferences` (#1440),
+   * listed in the controls menu. Saved in this browser only.
+   */
+  preferences?: PlayerPreferences;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -1628,6 +1634,7 @@ defineExpose({
           :has-tutorial="hasTutorialProp"
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
+          :preferences="preferences"
           @undo="handleUndo"
           @teaching-action="handleTeachingAction"
         />

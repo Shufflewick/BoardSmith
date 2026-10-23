@@ -300,6 +300,52 @@ A game whose board already offers most choices can start the bar collapsed:
 and it never goes away, so the controls menu and the button stay reachable by
 keyboard and screen reader.
 
+#### Player preferences
+
+A game can declare its own preferences, such as turning off battle effects, and
+GameShell lists them in the controls menu under "Preferences". Each one is an
+on/off switch (`default: true` or `false`) or a pick from a list (`options` and a
+`default` that is one of their values), with a label and an optional short
+description:
+
+<!-- typecheck: game src/ui/preferences.ts -->
+```ts
+import { definePlayerPreferences } from 'boardsmith/ui';
+
+export const preferences = definePlayerPreferences('my-game', {
+  battleEffects: { label: 'Battle effects', description: 'Bursts and explosions', default: true },
+  flicker: {
+    label: 'Flicker',
+    options: [{ value: 'full', label: 'Full' }, { value: 'slow', label: 'Slow' }],
+    default: 'full',
+  },
+});
+```
+
+Pass them to the shell:
+
+```vue
+<GameShell :uis="uis" :preferences="preferences" />
+```
+
+and read a value anywhere in the UI. `use` returns a ref that updates the moment
+the player changes the setting, typed from the declaration:
+
+```ts
+// preferences comes from './preferences'
+const battleEffects = preferences.use('battleEffects'); // Ref<boolean>
+const flicker = preferences.use('flicker'); // Ref<'full' | 'slow'>
+```
+
+Values are saved in this browser's localStorage under
+`boardsmith-preference:<game>:<key>`, so two games never share a setting, and
+they are never sent to the server or other players. A saved value the game no
+longer accepts (an option you removed, say) reads as the declared default.
+`definePlayerPreferences` throws if the game name is empty or a default is not
+one of its options, and `use` throws for a key that was not declared. On/off
+preferences are menu checkboxes and list picks are menu radio buttons, so both
+work by keyboard and screen reader. `WorldShell` has no controls menu yet (#1443).
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.

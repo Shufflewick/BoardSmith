@@ -15,6 +15,8 @@
  */
 import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
+import type { PlayerPreferences } from '../player-preferences.js';
+import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
 
 const props = withDefaults(defineProps<{
@@ -81,6 +83,8 @@ const props = withDefaults(defineProps<{
    * so it is always available (D-06).
    */
   teachingDisabled?: boolean;
+  /** The game's own player preferences (#1440), listed in their own group. */
+  preferences?: PlayerPreferences;
 }>(), {
   openUp: false,
   align: 'right',
@@ -277,6 +281,13 @@ function handleUndo() {
           </button>
         </span>
       </div>
+
+      <!-- The game's own preferences (#1440). -->
+      <template v-if="preferences">
+        <div class="sep"></div>
+        <div class="grouplabel">Preferences</div>
+        <PlayerPreferenceItems :preferences="preferences" />
+      </template>
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
            has a bot player (showHint !== undefined) OR a tutorial (hasTutorial),
@@ -476,8 +487,8 @@ function handleUndo() {
   margin: 6px 8px;
 }
 
-/* Toggle pill */
-.toggle {
+/* Toggle pill; :deep so PlayerPreferenceItems' toggles share it. */
+.menu :deep(.toggle) {
   width: 38px;
   height: 22px;
   border-radius: var(--bsg-r-pill);
@@ -486,7 +497,7 @@ function handleUndo() {
   transition: background var(--bsg-dur-fast);
   flex: none;
 }
-.toggle::after {
+.menu :deep(.toggle::after) {
   content: "";
   position: absolute;
   top: 2px;
@@ -498,10 +509,10 @@ function handleUndo() {
   transition: left var(--bsg-dur-fast);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
 }
-.toggle.on {
+.menu :deep(.toggle.on) {
   background: var(--bsg-accent);
 }
-.toggle.on::after {
+.menu :deep(.toggle.on::after) {
   left: 18px;
 }
 </style>
