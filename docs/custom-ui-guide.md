@@ -944,6 +944,13 @@ Rules that keep your board and the Action Panel telling the same story:
 - **The Action Panel shows it too.** While the panel is up it shows "Time left:
   0:30", and "Time is up. Waiting for the server…" at zero. Your countdown is in
   addition to that one, never instead of it.
+- **Choose how the Action Panel writes it.** Pass GameShell a
+  `format-turn-deadline` function. It gets the time left in milliseconds and
+  returns the whole line, so a game that counts in seconds writes
+  `` :format-turn-deadline="(ms) => `${Math.ceil(ms / 1000)}s left`" ``, and one
+  that holds its own number can show that instead. Without it the panel writes
+  "Time left: M:SS". At zero the panel still says it is waiting for the server,
+  whatever the function returns.
 - **Only a table has it.** A persistent world has no step deadline, and a world
   does not publish `turnDeadline`.
 

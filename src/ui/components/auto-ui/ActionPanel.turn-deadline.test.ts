@@ -14,7 +14,11 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import type { TurnDeadline } from '../../composables/useTurnDeadline.js';
 import { mountPanel as mountOver, stubActionController } from './action-panel-controller.test-helper.js';
 
-function mountPanel(deadline: TurnDeadline | null | 'unprovided', isMyTurn = true) {
+function mountPanel(
+  deadline: TurnDeadline | null | 'unprovided',
+  isMyTurn = true,
+  formatTurnDeadline?: (remainingMs: number) => string,
+) {
   const provide: Record<symbol, unknown> = {};
   if (deadline !== 'unprovided') {
     provide[GAME_CONTEXT_KEYS.turnDeadline as symbol] = computed(() => deadline);
@@ -25,6 +29,7 @@ function mountPanel(deadline: TurnDeadline | null | 'unprovided', isMyTurn = tru
       availableActions: ['pass'],
       actionMetadata: { pass: { name: 'pass', prompt: 'Pass', selections: [] } },
       isMyTurn,
+      formatTurnDeadline,
     },
     { provide },
   );
@@ -61,6 +66,16 @@ describe('ActionPanel turn deadline (#301)', () => {
     expect(pass).toBeDefined();
     expect(pass!.attributes('disabled')).toBeUndefined();
     expect(pass!.attributes('aria-disabled')).not.toBe('true');
+  });
+
+  it('writes the line with the game\'s formatter when it supplies one (#1437)', () => {
+    const wrapper = mountPanel({ deadlineAt: 1, remainingMs: 72_400 }, true, (ms) => `${Math.ceil(ms / 1000)}s`);
+    expect(countdown(wrapper).text()).toBe('73s');
+  });
+
+  it('keeps the waiting line at zero even with a formatter, because the host closes the step (#1437)', () => {
+    const wrapper = mountPanel({ deadlineAt: 1, remainingMs: 0 }, true, () => 'never shown');
+    expect(countdown(wrapper).text()).toBe('Time is up. Waiting for the server…');
   });
 
   it('is a timer, not a live region, so a screen reader is not told every second', () => {

@@ -51,9 +51,9 @@ function gameState(extra: Record<string, unknown>): Record<string, unknown> {
   };
 }
 
-async function mountAtTable() {
+async function mountAtTable(props: { formatTurnDeadline?: (remainingMs: number) => string } = {}) {
   enterIframe();
-  const wrapper = mountPlatformShell({ board: CountdownBoard });
+  const wrapper = mountPlatformShell({ board: CountdownBoard, props });
   await nextTick();
   post({ type: 'init', seat: 0 });
   await nextTick();
@@ -95,6 +95,15 @@ describe('GameShell turnDeadline (#301)', () => {
 
     expect(boardText(wrapper)).toBe('30000');
     expect(wrapper.find('[data-testid="bs-turn-deadline"]').text()).toContain('0:30');
+    wrapper.unmount();
+  });
+
+  it('hands the game\'s formatTurnDeadline to the Action Panel, given the host-clock time left (#1437)', async () => {
+    const wrapper = await mountAtTable({ formatTurnDeadline: (ms: number) => `${ms} ms to go` });
+    post(gameState({ deadlineAt: T0 + 40_000, serverNow: T0 + 10_000, receivedAt: T0 }));
+    await nextTick();
+
+    expect(wrapper.find('[data-testid="bs-turn-deadline"]').text()).toBe('30000 ms to go');
     wrapper.unmount();
   });
 

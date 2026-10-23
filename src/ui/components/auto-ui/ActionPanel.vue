@@ -72,6 +72,7 @@ const turnDeadlineText = computed((): string | null => {
   const deadline = turnDeadline?.value;
   if (!deadline) return null;
   if (deadline.remainingMs === 0) return 'Time is up. Waiting for the server\u2026';
+  if (props.formatTurnDeadline) return props.formatTurnDeadline(deadline.remainingMs);
   const seconds = Math.ceil(deadline.remainingMs / 1000);
   return `Time left: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
 });
@@ -148,6 +149,12 @@ const props = defineProps<{
    * Optional because games mount the panel in their own tests; both shells always pass it.
    */
   boardFailed?: boolean;
+  /**
+   * Writes the countdown line from the time left on the host's clock (#1437).
+   * Absent, the panel writes "Time left: M:SS". At zero the panel always says
+   * it is waiting for the server, because the host closes the step.
+   */
+  formatTurnDeadline?: (remainingMs: number) => string;
 }>();
 
 const emit = defineEmits<{
