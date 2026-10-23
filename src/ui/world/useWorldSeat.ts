@@ -24,6 +24,7 @@ import { BOARD_INTERACTION_KEY, type BoardInteraction } from '../composables/use
 import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
 import { playContextProvisions } from '../composables/useGameContext.js';
 import { useToast } from '../composables/useToast.js';
+import { MENU_COMMANDS_KEY, createMenuCommands } from '../composables/menuCommands.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
 import type { WorldSeatHost } from './useWorldHost.js';
 import { useWorldPlay, type WorldPlay } from './useWorldPlay.js';
@@ -46,6 +47,8 @@ export interface WorldSeat {
   playerSeat: ComputedRef<number>;
   /** The table's controller, unchanged, with a world's answers. */
   controller: UseActionControllerReturn;
+  /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
+  menuCommands: ReturnType<typeof createMenuCommands>;
   /** Everything the board can inject, by key. Publish with {@link provideWorldSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
 }
@@ -148,8 +151,10 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     return outcome;
   }
 
+  const menuCommands = createMenuCommands();
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
+    [MENU_COMMANDS_KEY, menuCommands],
     ...playContextProvisions({
       gameView: play.gameView,
       players: play.players,
@@ -181,7 +186,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     ],
   ];
 
-  return { play, playerSeat, controller, provisions };
+  return { play, playerSeat, controller, menuCommands, provisions };
 }
 
 /** Provide a seat's {@link WorldSeat.provisions} to the components below. Call it in `setup`. */

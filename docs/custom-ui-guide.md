@@ -1150,6 +1150,12 @@ already let the ending through.
 `renderAsSeat` mounts. Called anywhere else it throws, because only a table has
 a game over to hold back.
 
+## Commands in the Controls Menu
+
+A board can add its own one-shot commands, such as "Watch the last battle", to
+the shell's controls menu with `useMenuCommands`. See "Game commands" in
+`docs/ui-components.md`.
+
 ## Board Sizing
 
 GameShell fits the board to the available screen space at startup by

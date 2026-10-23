@@ -3,8 +3,9 @@
  * ControlsMenu — ⋯ controls popover anchored at the far-left of the action bar.
  *
  * Provides a single trigger button (aria-haspopup="menu") plus a role="menu" popover
- * containing a table's Play group (Auto end turn, Undo, zoom magnifier) and the
- * player's Preferences, which a world's menu holds alone (#1443).
+ * containing a table's Play group (Auto end turn, Undo, zoom magnifier), the
+ * game's own commands (#1448) and the player's Preferences. A world's menu has
+ * no Play group (#1443).
  * The popover is teleported to <body> with fixed positioning (openUp/align props) so
  * the action bar's overflow:auto can't clip it.
  *
@@ -18,6 +19,8 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
 import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
+import MenuCommandItems from './MenuCommandItems.vue';
+import type { MenuCommand } from '../composables/menuCommands.js';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
@@ -92,6 +95,8 @@ const props = withDefaults(defineProps<{
   teachingDisabled?: boolean;
   /** The game's own player preferences (#1440), listed in their own group. */
   preferences?: PlayerPreferences;
+  /** The game's own commands, registered by its board with `useMenuCommands` (#1448). */
+  commands?: readonly MenuCommand[];
 }>(), {
   openUp: false,
   align: 'right',
@@ -100,6 +105,7 @@ const props = withDefaults(defineProps<{
   hasActionHelp: true,
   heatmapSupported: true,
   teachingDisabled: false,
+  commands: () => [],
 });
 
 const emit = defineEmits<{
@@ -188,6 +194,12 @@ function handleUndo() {
   emit('undo');
   close();
 }
+
+function runCommand(command: MenuCommand) {
+  // Closed first, so a command that opens a dialog keeps the focus it moves there.
+  close();
+  command.run();
+}
 </script>
 
 <template>
@@ -268,6 +280,13 @@ function handleUndo() {
             </button>
           </span>
         </div>
+        <div class="sep"></div>
+      </template>
+
+      <!-- The game's own commands (#1448). -->
+      <template v-if="commands.length">
+        <div class="grouplabel">Game</div>
+        <MenuCommandItems :commands="commands" @run="runCommand" />
         <div class="sep"></div>
       </template>
 
@@ -402,8 +421,8 @@ function handleUndo() {
   padding: 10px 10px 5px;
 }
 
-/* Menu item button */
-.mi {
+/* Menu item button; :deep so MenuCommandItems' items share it. */
+.menu :deep(.mi) {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -418,10 +437,10 @@ function handleUndo() {
   cursor: pointer;
   text-align: left;
 }
-.mi:hover {
+.menu :deep(.mi:hover) {
   background: var(--bsg-surface-2);
 }
-.mi:disabled {
+.menu :deep(.mi:disabled) {
   background: var(--bsg-disabled-surface);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
@@ -443,6 +462,11 @@ function handleUndo() {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* No icon, so indent to line up with the labels of items that have one, as PlayerPreferenceItems does. */
+.menu :deep(.mi-command) {
+  padding-left: 39px;
 }
 
 /* Zoom magnifier row — label semantics via <div role="menuitem">, not <button> */

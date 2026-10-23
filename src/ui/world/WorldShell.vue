@@ -81,7 +81,7 @@
 
       <!-- A world has no turn, undo or zoom, so its menu holds only Preferences (#1443). -->
       <template #controls>
-        <ControlsMenu class="actionbar-controls" open-up align="left" :has-action-help="hasHelpToShow" :preferences="preferences" />
+        <ControlsMenu class="actionbar-controls" open-up align="left" :has-action-help="hasHelpToShow" :preferences="preferences" :commands="menuCommands.commands.value" />
       </template>
 
       <template #board>
@@ -195,7 +195,7 @@ const toast = useToast();
  */
 const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
-const { play, controller: actionController } = seat;
+const { play, controller: actionController, menuCommands } = seat;
 
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
 const boardProps = computed(() => worldBoardProps(seat, host));

@@ -14,6 +14,7 @@ import { worldAction } from '../../world/index.js';
 import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 import { definePlayerPreferences } from '../player-preferences.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
+import { useMenuCommands } from '../composables/menuCommands.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -1266,6 +1267,31 @@ describe('WorldShell — the controls menu (#1443)', () => {
     await wrapper.get('.action-help-btn').trigger('click');
     await nextTick();
     expect(document.body.querySelector('[role="tooltip"]')!.textContent).toContain('Look under the floorboards for anything hidden.');
+    wrapper.unmount();
+  });
+
+  it("runs a world board's own command from the menu and hands focus back (#1448)", async () => {
+    let searched = 0;
+    const Hall = defineComponent({
+      setup() {
+        useMenuCommands(() => [{ label: 'Search the hall', run: () => searched++ }]);
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall' },
+      attachTo: document.body,
+    });
+    await drawn(wrapper, stateFrame());
+    const trigger = wrapper.get<HTMLButtonElement>('button[aria-label="Game controls"]');
+    trigger.element.focus();
+    await trigger.trigger('click');
+    await nextTick();
+    menuItem('Search the hall')!.click();
+    await nextTick();
+    expect(searched).toBe(1);
+    expect(document.body.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger.element);
     wrapper.unmount();
   });
 

@@ -26,6 +26,7 @@ import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteract
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
+import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
@@ -113,6 +114,8 @@ export interface TableSeat extends TableActionWiring {
    * card and the game-over announcement both read this, never the flow alone (#419).
    */
   gameOverRevealed: ComputedRef<boolean>;
+  /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
+  menuCommands: ReturnType<typeof createMenuCommands>;
   /** Everything the board can inject, by key. Publish with {@link provideTableSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
 }
@@ -176,6 +179,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   });
 
   const gameOver = createGameOverReveal(() => flowState.value?.complete === true);
+  const menuCommands = createMenuCommands();
 
   const wiring = useTableActionWiring({
     ...transport,
@@ -212,6 +216,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     [ANIMATION_EVENTS_KEY, animationEvents],
     [ANNOUNCER_KEY, announcer],
     [GAME_OVER_HOLDS_KEY, gameOver.holds],
+    [MENU_COMMANDS_KEY, menuCommands],
     ...gameContextProvisions({
       gameState: state,
       gameView,
@@ -247,6 +252,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     announcer,
     liveRegion,
     gameOverRevealed: gameOver.revealed,
+    menuCommands,
     provisions,
   };
 }

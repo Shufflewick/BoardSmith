@@ -398,6 +398,32 @@ script that calls it (`drag-drop.css` by `useDragDrop`), so the rule works on a
 page with no shell. The call does its work once per page. A test refuses a
 component or stylesheet that skips it.
 
+#### Game commands
+
+A game can add its own one-shot commands to the controls menu, such as "Watch
+the last battle". They are listed under "Game", above "Preferences", in both
+GameShell and WorldShell. The board that owns the state a command acts on
+registers it with `useMenuCommands` in its `setup`:
+
+```ts
+// useMenuCommands comes from 'boardsmith/ui'; call it in a board's setup
+useMenuCommands(() => [
+  { label: 'Watch the last battle', enabled: lastBattle.value !== null, run: replayLastBattle },
+]);
+```
+
+Each command has a `label`, an optional `enabled` (default true) and a `run`
+function. The function you pass is read reactively, so a label or `enabled`
+that reads board state follows it. A command is a `role="menuitem"` button; a
+disabled one is greyed out and cannot be pressed. Pressing one closes the menu,
+returns focus to the menu button, and then calls `run`, so a command that opens
+a dialog keeps the focus it moves there. The commands leave the menu when the
+board unmounts. `useMenuCommands` works in any board GameShell or WorldShell
+renders and in one `renderAsSeat` mounts; called anywhere else it throws.
+
+A command is for doing something once. A setting the player turns on or off
+belongs in [Player preferences](#player-preferences).
+
 ### AutoUI
 
 Automatic UI generation from game state. A production-ready UI for any game — ideal for simple games or as a starting point before investing in a custom UI.
