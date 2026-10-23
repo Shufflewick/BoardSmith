@@ -262,59 +262,43 @@ for (const prototype of [GameElement.prototype, Game.prototype, ElementCollectio
   }
 }
 
-/** One projection per object, so repeated reads of the same element answer the
- *  same wrapper and a declaration can compare two of them. */
-const projections = new WeakMap<object, object>();
-
-/** The object a projection was minted FOR, so an argument handed back into a
- *  read door is the same object the live tree holds. Without it a finder keyed
- *  on an element read out of the projection would compare a wrapper against the
- *  element it wraps and answer no. */
-const sources = new WeakMap<object, object>();
-
-/**
- * EVERY PROJECTION THIS MODULE HAS MINTED (#374).
- *
- * `projections` answers "what is the wrapper for this object"; it cannot answer
- * "is this object already a wrapper", because a proxy is not a key anybody put
- * in it. Without that second question `readOnlyProjection` wrapped its own
- * output: a method runs with the projection as its receiver (see the header),
- * so what it RETURNS came back through these traps already projected, and the
- * `get` trap projected it again.
- *
- * That cost twice. It broke the identity guarantee one paragraph up -- the same
- * element read directly and read through a finder compared unequal, so a
- * declaration asking "is this the token in that room" got false from two reads
- * of one token. And it charged a trap hop per layer on every subsequent read,
- * which is how a finder over 500 roots came to cost seconds rather than
- * milliseconds.
- *
- * A projection is already read-only. Wrapping it again buys no enforcement.
- */
-const minted = new WeakSet<object>();
-
-/**
- * The wrapper for one function, per object it was read off (#374).
- *
- * Every read of a function property used to build a fresh closure, so a tree
- * walk allocated one per method per element VISITED -- garbage proportional to
- * the tree rather than to the question. Keyed by the underlying function and
- * not by the property name, so an object that swaps a method out is answered
- * with a new wrapper rather than a stale one.
- */
-const methodWrappers = new WeakMap<object, WeakMap<object, unknown>>();
-
-function cachedWrapper(target: object, call: object, build: () => unknown): unknown {
-  let forTarget = methodWrappers.get(target);
-  if (forTarget === undefined) {
-    forTarget = new WeakMap<object, unknown>();
-    methodWrappers.set(target, forTarget);
+/** A base whose constructor answers the object it is handed, so a subclass's
+ *  private field is stamped onto an object it did not build: the projection. */
+class Stamped {
+  constructor(held: object) {
+    return held as Stamped;
   }
-  const existing = forTarget.get(call);
-  if (existing !== undefined) return existing;
-  const built = build();
-  forTarget.set(call, built);
-  return built;
+}
+
+/**
+ * THE SOURCE A PROJECTION WAS MINTED FOR, kept on the projection itself (#374, #1438).
+ *
+ * A projection handed back into a read door has to go in as the object it
+ * wraps, and a projection projected again has to come back as itself. Keeping
+ * that on the projection, rather than in a table of every projection ever
+ * minted, is what lets a scope's table die with its call: module-wide weak
+ * tables reached millions of entries and slowed every later call 5-20x.
+ *
+ * A PRIVATE FIELD, because reading it runs no trap and no getter. A property
+ * key would be handed to any Proxy game code passes in, and that key would
+ * then open every projection's live object.
+ */
+class Projected extends Stamped {
+  readonly #source: object;
+
+  private constructor(projection: object, source: object) {
+    super(projection);
+    this.#source = source;
+  }
+
+  static stamp(projection: object, source: object): void {
+    new Projected(projection, source);
+  }
+
+  /** The object a projection was minted for, or undefined for anything else. */
+  static sourceOf(value: object): object | undefined {
+    return #source in value ? (value as Projected).#source : undefined;
+  }
 }
 
 function refuseWrite(property: string | symbol): never {
@@ -352,22 +336,22 @@ function takesProjectionAsReceiver(value: object): boolean {
  * A finder OBJECT (`{ player }`) is rebuilt with its values unwrapped for the
  * same reason its element form is. The caller's own object is never touched.
  */
-function throughTheDoor(args: unknown[]): unknown[] {
+function throughTheDoor(args: unknown[], table: Table): unknown[] {
   for (let index = 0; index < args.length; index++) {
-    args[index] = liveArgument(args[index]);
+    args[index] = liveArgument(args[index], table);
   }
   return args;
 }
 
-function liveArgument(argument: unknown): unknown {
+function liveArgument(argument: unknown, table: Table): unknown {
   if (argument === null || (typeof argument !== "object" && typeof argument !== "function")) {
     return argument;
   }
-  const held = sources.get(argument as object);
+  const held = Projected.sourceOf(argument);
   if (held !== undefined) return held;
-  if (typeof argument === "function") return projectingCallback(argument);
+  if (typeof argument === "function") return projectingCallback(argument, table);
   if (Object.prototype.toString.call(argument) !== "[object Object]") return argument;
-  return liveFinderObject(argument as Record<string, unknown>);
+  return liveFinderObject(argument as Record<string, unknown>, table);
 }
 
 /**
@@ -393,25 +377,25 @@ function isClass(value: object): boolean {
 }
 
 /** A finder's own predicate, handed projected elements. */
-function projectingCallback(argument: object): unknown {
+function projectingCallback(argument: object, table: Table): unknown {
   // A CLASS IS A FINDER'S SUBJECT AND NOT ITS CALLBACK. Wrapping one would hand
   // the door an arrow function where it expects a constructor.
   if (isClass(argument)) return argument;
   const call = argument as (this: unknown, ...a: unknown[]) => unknown;
   // A function, not an arrow, so a caller's thisArg (as forEach takes) reaches the predicate, projected too.
   return function (this: unknown, ...inner: unknown[]) {
-    return call.apply(readOnlyProjection(this), inner.map((one) => readOnlyProjection(one)));
+    return call.apply(project(this, table), inner.map((one) => project(one, table)));
   };
 }
 
 /** A finder written as `{ player }` or `{ name }`, with anything projected in
  *  it put back as the object it wraps. The caller's own object is never
  *  touched: it is answered unchanged when nothing in it was projected. */
-function liveFinderObject(argument: Record<string, unknown>): unknown {
+function liveFinderObject(argument: Record<string, unknown>, table: Table): unknown {
   const unwrapped: Record<string, unknown> = {};
   let differs = false;
   for (const [key, value] of Object.entries(argument)) {
-    const live = liveArgument(value);
+    const live = liveArgument(value, table);
     if (live !== value) differs = true;
     unwrapped[key] = live;
   }
@@ -434,9 +418,11 @@ function projectedProperty(
   receiver: unknown,
   projection: object,
   safeReceiver: boolean,
+  table: Table,
+  cached: (call: object, build: () => unknown) => unknown,
 ): unknown {
   const held = readProperty(target, property, receiver, safeReceiver);
-  if (typeof held !== "function" || isClass(held)) return readOnlyProjection(held);
+  if (typeof held !== "function" || isClass(held)) return project(held, table);
   const call = held as (...a: unknown[]) => unknown;
 
   // THE ENGINE'S OWN READ, ON THE REAL OBJECT (#409). Only its answer is
@@ -445,8 +431,8 @@ function projectedProperty(
   // live tree and costing the live tree.
   if (ENGINE_READ_DOORS.has(call)) {
     const open = () => (...args: unknown[]) =>
-      readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));
-    return receiver === projection ? cachedWrapper(target, call, open) : open();
+      project(Reflect.apply(call, target, throughTheDoor(args, table)), table);
+    return receiver === projection ? cached(call, open) : open();
   }
 
   // ANYTHING BUT A KNOWN READ IS REFUSED BEFORE IT IS CACHED, so the refusal
@@ -465,12 +451,12 @@ function projectedProperty(
         FRESH_ARRAY_BUILDERS.has(call)
           ? (...args: unknown[]) => Reflect.apply(call, projection, args)
           : function (this: unknown, ...args: unknown[]) {
-              return readOnlyProjection(Reflect.apply(call, projection, args));
+              return project(Reflect.apply(call, projection, args), table);
             }
     : // The real collection is keyed by real objects, and its forEach hands back live entries (#978).
       // shortcut: a plain function used as a key is wrapped as a callback and misses; name the key methods if a game needs one.
-      () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));
-  return receiver === projection ? cachedWrapper(target, call, build) : build();
+      () => (...args: unknown[]) => project(Reflect.apply(call, target, throughTheDoor(args, table)), table);
+  return receiver === projection ? cached(call, build) : build();
 }
 
 /** The write traps, which are the same whatever the subject is. Shared rather
@@ -547,11 +533,12 @@ function cloakedDescriptor(
   subject: object,
   cloak: object,
   property: string | symbol,
+  table: Table,
 ): PropertyDescriptor | undefined {
   const subjectHeld = Reflect.getOwnPropertyDescriptor(subject, property);
   if (subjectHeld === undefined) return undefined;
   // A descriptor's value is a way to the live object too, so it is projected like a read (#800).
-  const held = "value" in subjectHeld ? { ...subjectHeld, value: readOnlyProjection(subjectHeld.value) } : subjectHeld;
+  const held = "value" in subjectHeld ? { ...subjectHeld, value: project(subjectHeld.value, table) } : subjectHeld;
   const onCloak = Reflect.getOwnPropertyDescriptor(cloak, property);
   if (onCloak !== undefined && !onCloak.configurable) {
     return { ...held, writable: onCloak.writable, configurable: false };
@@ -559,17 +546,47 @@ function cloakedDescriptor(
   return { ...held, configurable: true };
 }
 
-export function readOnlyProjection<T>(value: T): T {
+/**
+ * ONE READ'S PROJECTIONS (#1438): the function a call projects through.
+ *
+ * Within a scope one object answers one projection, so a declaration can
+ * compare two reads of the same element. The scope's table is dropped with the
+ * scope and with any projection it minted, so a call's cost is its own work
+ * and not the number of projections earlier calls in the process minted.
+ */
+export function readOnlyScope(): <T>(value: T) => T {
+  const table: Table = new Map();
+  return (value) => project(value, table);
+}
+
+/** Source to projection, for one scope. A strong map: it lives only as long as its scope. */
+type Table = Map<object, object>;
+
+function project<T>(value: T, table: Table): T {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     return value;
   }
   const subject = value as unknown as object;
-  // ALREADY READ-ONLY, SO ALREADY DONE (#374). This is the branch that keeps a
-  // method's projected return value from being projected a second time.
-  if (minted.has(subject)) return value;
-  const existing = projections.get(subject);
+  // ALREADY READ-ONLY, SO ALREADY DONE (#374), whichever scope minted it. This
+  // is the branch that keeps a method's projected return value from being
+  // projected a second time.
+  if (Projected.sourceOf(subject) !== undefined) return value;
+  const existing = table.get(subject);
   if (existing !== undefined) return existing as T;
   if (typeof subject === "function" && isClass(subject)) return value;
+
+  // ONE WRAPPER PER FUNCTION, not one per read (#374), kept on this projection
+  // so it dies with it.
+  let wrappers: Map<object, unknown> | undefined;
+  const cached = (call: object, build: () => unknown): unknown => {
+    wrappers ??= new Map();
+    let wrapper = wrappers.get(call);
+    if (wrapper === undefined) {
+      wrapper = build();
+      wrappers.set(call, wrapper);
+    }
+    return wrapper;
+  };
 
   const cloak = cloakFor(subject);
   const safeReceiver = takesProjectionAsReceiver(subject);
@@ -580,7 +597,7 @@ export function readOnlyProjection<T>(value: T): T {
   const projection: object = new Proxy(cloak, {
     ...REFUSALS,
     get(_target, property, receiver) {
-      return projectedProperty(subject, property, receiver, projection, safeReceiver);
+      return projectedProperty(subject, property, receiver, projection, safeReceiver, table, cached);
     },
     has(_target, property) {
       return Reflect.has(subject, property);
@@ -589,7 +606,7 @@ export function readOnlyProjection<T>(value: T): T {
       return Reflect.ownKeys(subject);
     },
     getOwnPropertyDescriptor(target, property) {
-      return cloakedDescriptor(subject, target, property);
+      return cloakedDescriptor(subject, target, property, table);
     },
     getPrototypeOf() {
       return Reflect.getPrototypeOf(subject);
@@ -601,13 +618,12 @@ export function readOnlyProjection<T>(value: T): T {
       // A CONSTRUCTOR BUILDS FROM THE SUBJECT, never from the cloak, which
       // would answer with an instance of nothing. What it builds is projected
       // for the same reason a method's answer is.
-      return readOnlyProjection(Reflect.construct(subject as new (...a: unknown[]) => object, args));
+      return project(Reflect.construct(subject as new (...a: unknown[]) => object, args), table);
     },
   });
 
-  projections.set(subject, projection);
-  sources.set(projection, subject);
-  minted.add(projection);
+  Projected.stamp(projection, subject);
+  table.set(subject, projection);
   return projection as T;
 }
 
@@ -644,7 +660,7 @@ function copyPlain(value: unknown, path: string[], within: Set<object>): unknown
 
 /** The real object behind a value, refused unless it is a plain object or array not already being copied. */
 function plainSubject(value: object, path: string[], within: Set<object>): object {
-  const subject = sources.get(value) ?? value;
+  const subject = Projected.sourceOf(value) ?? value;
   if (typeof subject === "function") refuseCopy(path, "is a function");
   if (within.has(subject)) refuseCopy(path, "refers back to an object that contains it");
   const prototype = Object.getPrototypeOf(subject) as object | null;

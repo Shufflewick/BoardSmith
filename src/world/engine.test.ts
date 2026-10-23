@@ -31,7 +31,7 @@ import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
-import { readOnlyProjection } from "./readonly.js";
+import { readOnlyScope } from "./readonly.js";
 import {
   Holding,
   VillageFixture,
@@ -1178,6 +1178,30 @@ describe("#285 — a declaration reads an element's class as that class", () => 
 
     expect(seen.length).toBeGreaterThan(0);
     expect(seen).toEqual(seen.map(() => ({ same: true, name: "Room", found: true })));
+  });
+});
+
+describe("#1438 — each declaration reads through projections of its own", () => {
+  it("answers one projection per element inside a declaration, and new ones for the next", async () => {
+    // Projections shared by every call kept millions of table entries alive and slowed later calls.
+    const seen: { game: object; same: boolean }[] = [];
+    const comparing = worldAction<WorldFixtureGame>("comparing")
+      .needs(({ game, player, world }) => {
+        seen.push({
+          game,
+          same: world.partition(ROOM_ONE) === game.first(Room, "room-one") && player === game.players[0],
+        });
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+    const engine = await engineWithRoomOneResident(comparing);
+
+    await engine.applyCommand("player-a", { name: "comparing", args: {} }, STAMP);
+    await engine.applyCommand("player-a", { name: "comparing", args: {} }, STAMP);
+
+    expect(seen.length).toBeGreaterThanOrEqual(2);
+    expect(seen.map(({ same }) => same)).toEqual(seen.map(() => true));
+    expect(new Set(seen.map(({ game }) => game)).size).toBe(seen.length);
   });
 });
 
@@ -3068,6 +3092,6 @@ describe("#1221: finding an element's partition reaches nothing", () => {
     const engine = genesisEngine();
     const game = (engine as unknown as { game: Game }).game;
 
-    expect(partitionOf(engine, readOnlyProjection(game.first(Token, "token-one")!))).toBe(ROOM_ONE);
+    expect(partitionOf(engine, readOnlyScope()(game.first(Token, "token-one")!))).toBe(ROOM_ONE);
   });
 });
