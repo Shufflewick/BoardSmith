@@ -50,12 +50,14 @@ const CARET_INSET = 12;
  * @param height      - The popover's RENDERED height. Measure it (after the
  *                      element mounts) rather than guessing: flip detection on a
  *                      guessed height is what lets a tall popover run off-screen.
- * @param maxWidth    - The popover's max width, used for the right-edge clamp.
+ * @param width       - The popover's RENDERED width, for the right-edge clamp. A
+ *                      narrower guess than the real one would leave a short popover
+ *                      clear of a trigger near the right edge, with no path into it.
  */
 export function computePopoverPosition(
   triggerRect: DOMRect,
   height: number,
-  maxWidth: number,
+  width: number,
 ): PopoverPosition {
   const roomBelow = window.innerHeight - FLIP_THRESHOLD - triggerRect.bottom - OFFSET;
   const roomAbove = triggerRect.top - OFFSET - EDGE_MARGIN;
@@ -66,15 +68,15 @@ export function computePopoverPosition(
 
   let left = triggerRect.left;
 
-  if (left + maxWidth > window.innerWidth - EDGE_MARGIN) {
-    left = window.innerWidth - maxWidth - EDGE_MARGIN;
+  if (left + width > window.innerWidth - EDGE_MARGIN) {
+    left = window.innerWidth - width - EDGE_MARGIN;
   }
   if (left < EDGE_MARGIN) {
     left = EDGE_MARGIN;
   }
 
   const triggerMidX = triggerRect.left + triggerRect.width / 2;
-  const caretLeft = Math.min(maxWidth - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
+  const caretLeft = Math.min(width - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
 
   return { top, left, caretSide, caretLeft, maxHeight };
 }

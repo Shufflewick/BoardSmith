@@ -65,6 +65,19 @@ describe('DisabledReasonTooltip', () => {
     wrapper.unmount();
   });
 
+  it('clamps against the right edge by its rendered width, so a short reason still sits over its control (#1454)', async () => {
+    Object.defineProperty(window, 'innerWidth', { value: 1000, configurable: true });
+    const wrapper = mount(DisabledReasonTooltip);
+
+    showDisabledReason(anchorAt({ top: 100, left: 960, width: 30, height: 30, bottom: 130 }), 'Blocked.');
+    await nextTick(); // the provisional pass renders the box
+    Object.defineProperty(document.getElementById(DISABLED_TOOLTIP_ID)!, 'offsetWidth', { value: 100, configurable: true });
+    await flushPromises(); // the measured second pass
+
+    expect(document.getElementById(DISABLED_TOOLTIP_ID)!.style.left).toBe(`${1000 - 100 - 8}px`);
+    wrapper.unmount();
+  });
+
   it('renders the reason as TEXT, never as markup', async () => {
     const wrapper = mount(DisabledReasonTooltip);
     const xss = '<img src=x onerror="window.__pwned = true">';

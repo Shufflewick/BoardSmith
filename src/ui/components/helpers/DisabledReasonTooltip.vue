@@ -61,7 +61,7 @@ watch([showCount, anchor], async () => {
   position.value = computePopoverPosition(
     el.getBoundingClientRect(),
     box.value?.offsetHeight ?? FALLBACK_HEIGHT,
-    DISABLED_TOOLTIP_MAX_WIDTH,
+    box.value?.offsetWidth ?? DISABLED_TOOLTIP_MAX_WIDTH,
   );
 });
 

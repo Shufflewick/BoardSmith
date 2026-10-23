@@ -312,6 +312,18 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
+    it('scroll keys on the trigger keep their usual job when the help has nothing to scroll (#1454)', async () => {
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const btn = wrapper.find('.action-help-btn');
+      await btn.trigger('click');
+      await nextTick();
+
+      const key = new KeyboardEvent('keydown', { key: 'PageDown', bubbles: true, cancelable: true });
+      btn.element.dispatchEvent(key);
+      expect(key.defaultPrevented).toBe(false);
+      wrapper.unmount();
+    });
+
     it('a click after a mouse hover leaves the popover open, and a second click closes it (#1451)', async () => {
       const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
       const btn = wrapper.find('.action-help-btn');
@@ -639,6 +651,24 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
+    it('a narrow popover by a "?" near the right edge still spans the "?", so the mouse can move straight into it (#1454)', async () => {
+      Object.defineProperty(window, 'innerWidth', { value: 1000, configurable: true, writable: true });
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const triggerEl = wrapper.find('.action-help-btn').element as HTMLButtonElement;
+      vi.spyOn(triggerEl, 'getBoundingClientRect').mockReturnValue({
+        top: 100, bottom: 124, left: 970, right: 994, width: 24, height: 24, x: 970, y: 100, toJSON: () => ({}),
+      } as DOMRect);
+
+      const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(130);
+      await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
+      await nextTick();
+      await nextTick(); // Phase 2 measures
+      width.mockRestore();
+
+      expect((wrapper.find('.action-help-popover').element as HTMLElement).style.left).toBe(`${1000 - 130 - 8}px`);
+      wrapper.unmount();
+    });
+
     it('WR-02: caret --ahp-caret-left style is set on the caret span', async () => {
       const wrapper = mountPopover({
         actionName: 'defend',
@@ -646,9 +676,12 @@ describe('ActionHelpPopover', () => {
         helpText: 'Reduce incoming damage.',
       });
 
+      // jsdom lays nothing out, so give the popover its real width.
+      const width = vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(240);
       await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       await nextTick(); // Phase 2
+      width.mockRestore();
 
       const caret = wrapper.find('.ahp-caret');
       expect(caret.exists()).toBe(true);

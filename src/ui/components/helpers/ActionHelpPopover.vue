@@ -63,19 +63,6 @@ const POPOVER_MAX_WIDTH = 240;
 
 const position = ref<PopoverPosition>({ top: 0, left: 0, caretSide: 'top', caretLeft: POPOVER_MAX_WIDTH / 2, maxHeight: 0 });
 
-/**
- * Placement delegates to the shared `computePopoverPosition` — the same maths
- * the disabled-reason tooltip uses, so the two anchored popovers flip and clamp
- * identically. Stale position on scroll is accepted (RESEARCH.md Pitfall 4).
- *
- * @param actualHeight - The RENDERED height, so a tall dual-section popover
- *   flips at the right moment (WR-01). Pass POPOVER_FALLBACK_HEIGHT before the
- *   element exists.
- */
-function computePosition(el: HTMLButtonElement, actualHeight: number): PopoverPosition {
-  return computePopoverPosition(el.getBoundingClientRect(), actualHeight, POPOVER_MAX_WIDTH);
-}
-
 const popoverStyle = computed(() => ({
   position: 'fixed' as const,
   top: `${position.value.top}px`,
@@ -94,12 +81,17 @@ async function show() {
   const rect = el.getBoundingClientRect();
   position.value = { top: rect.bottom + 4, left: rect.left, caretSide: 'top', caretLeft: rect.width / 2, maxHeight: window.innerHeight };
   isOpen.value = true;
-  // Phase 2: after Vue renders the teleported element, measure its actual rendered height
-  // and recompute — this prevents viewport overflow for tall dual-section popovers (WR-01).
+  // Phase 2: after Vue renders the teleported element, measure its actual rendered size and
+  // place it with the shared maths the disabled-reason tooltip uses, so the two flip and clamp
+  // identically (WR-01). Stale position on scroll is accepted (RESEARCH.md Pitfall 4).
   await nextTick();
   if (!isOpen.value) return; // hide() was called during the async tick
-  const actualHeight = popoverRef.value?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT;
-  position.value = computePosition(el, actualHeight);
+  const box = popoverRef.value;
+  position.value = computePopoverPosition(
+    el.getBoundingClientRect(),
+    box?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT,
+    box?.offsetWidth ?? POPOVER_MAX_WIDTH,
+  );
 }
 
 function hide() {
@@ -143,7 +135,7 @@ const SCROLL_KEYS: Record<string, (page: number) => number> = {
 function scrollPopover(event: KeyboardEvent) {
   const scroller = scrollRef.value;
   const step = SCROLL_KEYS[event.key];
-  if (!scroller || !step) return;
+  if (!scroller || !step || scroller.scrollHeight <= scroller.clientHeight) return;
   event.preventDefault();
   scroller.scrollBy({ top: step(scroller.clientHeight) });
 }
