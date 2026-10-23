@@ -287,7 +287,7 @@ function runCommand(command: MenuCommand) {
         <button
           v-for="(command, index) in commands"
           :key="index"
-          class="mi"
+          class="mi mi-command"
           type="button"
           role="menuitem"
           :disabled="command.enabled === false"
@@ -471,6 +471,11 @@ function runCommand(command: MenuCommand) {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+/* No icon, so indent to line up with the labels of items that have one, as PlayerPreferenceItems does. */
+.mi-command {
+  padding-left: 39px;
 }
 
 /* Zoom magnifier row — label semantics via <div role="menuitem">, not <button> */
