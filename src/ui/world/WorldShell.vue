@@ -156,6 +156,8 @@ const props = defineProps<{
   displayName: string;
   /** Origins allowed to talk to this frame. See `GameShellInit.isOriginAllowed`. */
   trustedOrigins?: string[];
+  /** Start with the action bar collapsed to its thin line; the player can still open it (#1439). */
+  actionBarStartsCollapsed?: boolean;
 }>();
 
 /**
@@ -250,7 +252,7 @@ const connectionIndicator = computed<PlayConnection | null>(() => {
 const sidebarRail = ref(false);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is, and not persisted for the same reason.
-const actionBarMinimized = ref(false);
+const actionBarMinimized = ref(props.actionBarStartsCollapsed);
 const mobileExpanded = ref(false);
 const isCompact = ref(false);
 let compactQuery: MediaQueryList | null = null;

@@ -392,8 +392,8 @@ describe.each([
 ])('%s owns the bar preference, exactly as it owns the sidebar rail', (_name, path) => {
   const source = readFileSync(path, 'utf8');
 
-  it('holds it in its own ref', () => {
-    expect(source).toMatch(/const actionBarMinimized = ref(?:<boolean>)?\(false\)/);
+  it('holds it in its own ref, seeded from the game\'s starting choice (#1439)', () => {
+    expect(source).toContain('const actionBarMinimized = ref(props.actionBarStartsCollapsed)');
   });
 
   it('relays it to the shared chrome with v-model', () => {

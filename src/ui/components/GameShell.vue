@@ -148,6 +148,12 @@ interface GameShellProps {
    * from `turnDeadline` on the game context.
    */
   formatTurnDeadline?: (remainingMs: number) => string;
+  /**
+   * Start with the action bar collapsed to its thin line (#1439), for a game
+   * whose own board already offers most choices. Only the starting state: the
+   * player can still open and close it. Default: false (open).
+   */
+  actionBarStartsCollapsed?: boolean;
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
@@ -248,7 +254,7 @@ const sidebarRail = ref<boolean>(false);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is. Not persisted, for the same reason the rail is not: two answers to
 // "does a collapse survive a reload" would be two idioms for one idea.
-const actionBarMinimized = ref<boolean>(false);
+const actionBarMinimized = ref(props.actionBarStartsCollapsed);
 // Mobile only: the sidebar defaults to a compact one-line player strip; this opens
 // the full players + log as an overlay over the board (board stays the hero).
 const mobileExpanded = ref<boolean>(false);
