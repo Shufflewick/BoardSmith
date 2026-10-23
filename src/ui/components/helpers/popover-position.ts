@@ -20,6 +20,8 @@ export interface PopoverPosition {
   caretSide: 'top' | 'bottom';
   /** Caret centre, relative to the popover's left edge, after edge-clamping. */
   caretLeft: number;
+  /** The room on the popover's side of the trigger: a taller popover scrolls inside this height. */
+  maxHeight: number;
 }
 
 /**
@@ -39,7 +41,8 @@ const CARET_INSET = 12;
 
 /**
  * Place a popover below its trigger, flipping above when the bottom edge would
- * crowd the viewport, and clamping horizontally so it never overflows the right
+ * crowd the viewport. One that fits neither side goes on the roomier side,
+ * capped to that room, so it never covers its trigger (#1454). Clamps horizontally so it never overflows the right
  * edge. The caret tracks the trigger's centre through that clamping, so it keeps
  * pointing at the control it describes.
  *
@@ -54,14 +57,14 @@ export function computePopoverPosition(
   height: number,
   maxWidth: number,
 ): PopoverPosition {
-  let top = triggerRect.bottom + OFFSET;
-  let left = triggerRect.left;
-  let caretSide: 'top' | 'bottom' = 'top';
+  const roomBelow = window.innerHeight - FLIP_THRESHOLD - triggerRect.bottom - OFFSET;
+  const roomAbove = triggerRect.top - OFFSET - EDGE_MARGIN;
+  const below = height <= roomBelow || (height > roomAbove && roomBelow >= roomAbove);
+  const maxHeight = below ? roomBelow : roomAbove;
+  const top = below ? triggerRect.bottom + OFFSET : triggerRect.top - OFFSET - Math.min(height, maxHeight);
+  const caretSide = below ? 'top' : 'bottom';
 
-  if (top + height > window.innerHeight - FLIP_THRESHOLD) {
-    top = Math.max(EDGE_MARGIN, triggerRect.top - height - OFFSET);
-    caretSide = 'bottom';
-  }
+  let left = triggerRect.left;
 
   if (left + maxWidth > window.innerWidth - EDGE_MARGIN) {
     left = window.innerWidth - maxWidth - EDGE_MARGIN;
@@ -73,5 +76,5 @@ export function computePopoverPosition(
   const triggerMidX = triggerRect.left + triggerRect.width / 2;
   const caretLeft = Math.min(maxWidth - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
 
-  return { top, left, caretSide, caretLeft };
+  return { top, left, caretSide, caretLeft, maxHeight };
 }

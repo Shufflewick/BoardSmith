@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { mount, flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import DisabledReasonTooltip from './DisabledReasonTooltip.vue';
 import {
@@ -51,6 +51,17 @@ describe('DisabledReasonTooltip', () => {
     expect(tip).not.toBe(null);
     expect(tip.getAttribute('role')).toBe('tooltip');
     expect(tip.textContent).toContain('A sheer cliff blocks your way.');
+    wrapper.unmount();
+  });
+
+  it('caps its height to the room beside the control, so a long reason never covers the control (#1454)', async () => {
+    Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true });
+    const wrapper = mount(DisabledReasonTooltip);
+
+    showDisabledReason(anchorAt({ top: 100, left: 40, width: 80, height: 30, bottom: 130 }), 'Blocked.');
+    await flushPromises(); // the measured second pass
+
+    expect(document.getElementById(DISABLED_TOOLTIP_ID)!.style.maxHeight).toBe(`${768 - 16 - 134}px`);
     wrapper.unmount();
   });
 
@@ -112,10 +123,36 @@ describe('computePopoverPosition', () => {
   });
 
   it('never flips above the top of the viewport (#907)', () => {
-    const p = computePopoverPosition(rect({ top: 30, bottom: 60, left: 200, width: 80 }), 760, 260);
+    const p = computePopoverPosition(rect({ top: 650, bottom: 680, left: 200, width: 80 }), 640, 260);
 
     expect(p.caretSide).toBe('bottom');
     expect(p.top).toBe(8);
+  });
+
+  it('caps a popover that fits neither side to the room below when that is larger, and starts below the trigger (#1454)', () => {
+    const p = computePopoverPosition(rect({ top: 30, bottom: 60, left: 200, width: 80 }), 900, 260);
+
+    expect(p.caretSide).toBe('top');
+    expect(p.top).toBe(64);
+    expect(p.maxHeight).toBe(800 - 16 - 64);
+  });
+
+  it('caps a popover that fits neither side to the room above when that is larger, and ends above the trigger (#1454)', () => {
+    const p = computePopoverPosition(rect({ top: 700, bottom: 730, left: 200, width: 80 }), 900, 260);
+
+    expect(p.caretSide).toBe('bottom');
+    expect(p.top).toBe(8);
+    expect(p.maxHeight).toBe(700 - 4 - 8);
+  });
+
+  it('never covers its own trigger, whatever its height and wherever the trigger sits (#1454)', () => {
+    for (let triggerTop = 0; triggerTop <= 770; triggerTop += 10) {
+      for (let height = 10; height <= 1200; height += 10) {
+        const p = computePopoverPosition(rect({ top: triggerTop, bottom: triggerTop + 30, left: 200, width: 80 }), height, 260);
+        const bottom = p.top + Math.min(height, p.maxHeight);
+        expect(bottom <= triggerTop || p.top >= triggerTop + 30, `trigger at ${triggerTop}, height ${height}`).toBe(true);
+      }
+    }
   });
 
   it('clamps against the right edge instead of overflowing', () => {

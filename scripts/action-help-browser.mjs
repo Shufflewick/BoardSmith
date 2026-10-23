@@ -13,6 +13,12 @@
  * it. With touch at 390px: a tap opens, a second tap closes. With the keyboard:
  * Enter opens, Escape closes.
  *
+ * The play action's help is taller than the window, so it fits neither above
+ * nor below its "?". It must not be clamped down over the "?" (the pointer
+ * would leave the "?", close it, land on the "?" again and reopen it, #1454):
+ * it sits clear of the "?", scrolls inside, and the mouse can move into it and
+ * scroll it without closing it, and the keyboard can scroll it from the "?".
+ *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-help-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
@@ -20,6 +26,7 @@
 import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const HELP = 'Take the top card of the deck into your hand.';
+const TALL_HELP = 'Score a card from your hand, adding its points to your total. '.repeat(40).trim();
 
 const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
 import type { TableFixtureGame } from './game.js';
@@ -38,7 +45,7 @@ export function createDrawAction(): ActionDefinition {
 export function createPlayAction(): ActionDefinition {
   return Action.create<TableFixtureGame>('play')
     .prompt('Play a card from your hand')
-    .help('Score a card from your hand.')
+    .help(${JSON.stringify(TALL_HELP)})
     .chooseFrom('card', { prompt: 'Select a card to play', choices: (ctx) => [...ctx.player.hand.all(Card)] })
     .execute(({ card }, ctx) => {
       ctx.player.score += card.points;
@@ -65,6 +72,8 @@ export function createGameFlow(): FlowDefinition<TableFixtureGame> {
 
 const TRIGGER = 'button[aria-label="Help for Draw a card from the deck"]';
 const TIP = '#draw-help-tip';
+const TALL_TRIGGER = 'button[aria-label="Help for Play a card from your hand"]';
+const TALL_TIP = '#play-help-tip';
 
 /** The game frame, once the draw action's "?" is drawn. */
 async function openGame(page, hostUrl) {
@@ -120,6 +129,49 @@ await runBrowserRegression(
       await check('with the keyboard, Escape closes the help', async () => {
         assert(!escaped.visible, `Escape left the help open: ${JSON.stringify(escaped)}`);
       });
+
+      const tall = mouse.frame.locator(TALL_TRIGGER);
+      const tallTip = mouse.frame.locator(TALL_TIP);
+      const scroller = mouse.frame.locator(`${TALL_TIP} .ahp-scroll`);
+      const tallShows = (expected) => waitUntil(() => tallTip.isVisible(), (now) => now === expected, 2_000);
+      const scrollTop = () => scroller.evaluate((el) => el.scrollTop);
+      // A plain move, not hover(): hover() retries while the help covers the "?", which is the bug under test.
+      const triggerBox = await tall.boundingBox();
+      await page.mouse.move(triggerBox.x + triggerBox.width / 2, triggerBox.y + triggerBox.height / 2);
+      const tallOpen = await tallShows(true);
+      const tipBox = tallOpen ? await tallTip.boundingBox() : null;
+      await check('help taller than the window opens clear of its "?", inside the window, and scrolls inside (#1454)', async () => {
+        assert(tipBox, 'hovering the "?" did not leave the tall help open');
+        const clear = tipBox.y + tipBox.height <= triggerBox.y || tipBox.y >= triggerBox.y + triggerBox.height;
+        assert(clear, `the help covers its "?": help ${JSON.stringify(tipBox)}, "?" ${JSON.stringify(triggerBox)}`);
+        assert(tipBox.y >= 0 && tipBox.y + tipBox.height <= 900, `the help runs off the window: ${JSON.stringify(tipBox)}`);
+        const overflow = await scroller.evaluate((el) => el.scrollHeight - el.clientHeight);
+        assert(overflow > 0, 'the help is not scrollable, so the end of the text is out of reach');
+      });
+      if (tipBox) {
+        await page.mouse.move(tipBox.x + tipBox.width / 2, tipBox.y + tipBox.height / 2, { steps: 10 });
+        await page.mouse.wheel(0, 200);
+        const scrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
+        const stillOpen = await tallShows(true);
+        await check('with a mouse, the tall help stays open while the pointer moves into it and scrolls it (#1454)', async () => {
+          assert(stillOpen, 'the help closed when the pointer moved from the "?" into it');
+          assert(scrolled > 0, `the wheel did not scroll the help (scrollTop ${scrolled})`);
+        });
+        await page.mouse.move(2, 2, { steps: 5 });
+        const left = await tallShows(false);
+        await check('with a mouse, leaving the tall help closes it (#1454)', async () => {
+          assert(left === false, 'the help stayed open after the pointer left it');
+        });
+      }
+      await tall.focus();
+      await tall.press('Enter');
+      await tallShows(true);
+      await tall.press('PageDown');
+      const keyScrolled = await waitUntil(scrollTop, (top) => top > 0, 2_000);
+      await check('with the keyboard, Page Down on the "?" scrolls the tall help (#1454)', async () => {
+        assert(keyScrolled > 0, `Page Down did not scroll the help (scrollTop ${keyScrolled})`);
+      });
+      await tall.press('Escape');
 
       await page.setViewportSize({ width: 390, height: 844 });
       const touch = { frame: await openGame(page, hostUrl) };

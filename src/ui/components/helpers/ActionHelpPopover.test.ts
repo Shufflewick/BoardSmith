@@ -286,6 +286,32 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
+    it('the mouse can move from the trigger into the popover to scroll it, and leaving the popover hides it (#1454)', async () => {
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const btn = wrapper.find('.action-help-btn');
+
+      await btn.trigger('pointerenter', { pointerType: 'mouse' });
+      await nextTick();
+      const popover = wrapper.find('[role="tooltip"]');
+      btn.element.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse', relatedTarget: popover.element }));
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+
+      popover.element.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse', relatedTarget: btn.element }));
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+
+      // Dragging the popover's scrollbar presses the mouse inside it.
+      popover.element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
+
+      popover.element.dispatchEvent(new PointerEvent('pointerleave', { pointerType: 'mouse', relatedTarget: document.body }));
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
     it('a click after a mouse hover leaves the popover open, and a second click closes it (#1451)', async () => {
       const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
       const btn = wrapper.find('.action-help-btn');
@@ -596,6 +622,20 @@ describe('ActionHelpPopover', () => {
 
       // Restore
       Object.defineProperty(window, 'innerHeight', { value: originalInnerHeight, configurable: true, writable: true });
+      wrapper.unmount();
+    });
+
+    it('caps the popover to the room on its side, so help taller than the room scrolls instead of covering the "?" (#1454)', async () => {
+      Object.defineProperty(window, 'innerHeight', { value: 768, configurable: true, writable: true });
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+
+      await wrapper.find('.action-help-btn').trigger('pointerenter', { pointerType: 'mouse' });
+      await nextTick();
+      await nextTick(); // Phase 2
+
+      // jsdom's trigger rect is all zeros, so the popover sits below it with 768 - 16 - 4 px of room.
+      const popover = wrapper.find('[role="tooltip"]').element as HTMLElement;
+      expect(popover.style.maxHeight).toBe('748px');
       wrapper.unmount();
     });
 
