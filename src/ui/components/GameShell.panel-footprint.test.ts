@@ -208,18 +208,38 @@ describe('#13 / #444: the Action Panel stays inside a constant, token-derived fo
  * The bar's cap is that same token, so nothing can be covered by construction.
  */
 describe('#230, #1439: minimizing the bar reserves a thin line and gives the rest back', () => {
-  it.each(ENVIRONMENTS)('reserves a thin line, not a control row (#1439, safe-area $safeArea)', (env) => {
-    // The line holds the controls menu at the WCAG 2.5.8 minimum target of
-    // 24px, so it is at least that tall and well under one 44px control row.
+  it.each(ENVIRONMENTS)('reserves a line thinner than #1439\'s 28px, that still holds the toggle (#1444, safe-area $safeArea)', (env) => {
+    // The toggle rides the line's top edge, half on the board, so the line must
+    // hold its lower half or the toggle would hang off the bottom of the screen.
     const tokens = tokensFor('base');
     const line = px('var(--bsg-action-bar-collapsed)', tokens, env) - env.safeArea;
-    expect(line).toBeGreaterThanOrEqual(24);
-    expect(line).toBeLessThan(px('var(--bsg-panel-row)', tokens, env) / 2 + 8);
+    expect(line).toBeLessThan(28);
+    expect(line).toBeGreaterThanOrEqual(parseFloat(declaration('.bar-edge', 'height')) / 2);
   });
 
-  it('draws the controls menu as a horizontal line of dots, at the 24px target floor (#1439)', () => {
-    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'height')).toBe('24px');
+  it('draws the controls menu as bare dots along the line, with no outline or padding (#1439, #1444)', () => {
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'height')).toBe('var(--bsg-action-bar-line)');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'border')).toBe('none');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'padding')).toBe('0');
+    // The 20px icon is taller than the line; without this its track starts at the top and the dots sit low.
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'align-content')).toBe('center');
     expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'transform')).toBe('rotate(90deg)');
+  });
+
+  it('draws the dots\' and the toggle\'s focus rings inside them, where the screen edge cannot cut them off (#1444)', () => {
+    expect(declaration('.actionbar.collapsed :deep(.menubtn):focus-visible', 'box-shadow')).toBe('inset 0 0 0 2px var(--bsg-accent)');
+    expect(declaration('.action-bar-collapsed .bar-edge:focus-visible', 'box-shadow')).toBe('inset 0 0 0 2px var(--bsg-accent)');
+  });
+
+  it('keeps 24px hit areas on the line by extending the dots invisibly upward (#1444, WCAG 2.5.8)', () => {
+    // The dots' hit area is a 24px box on the line's bottom edge, reaching up
+    // over the board; the bar must not clip it or the extension would not take clicks.
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'position')).toBe('relative');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)::before', 'height')).toBe('24px');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)::before', 'bottom')).toBe('0');
+    expect(declaration('.actionbar.collapsed', 'overflow')).toBe('visible');
+    expect(parseFloat(declaration('.bar-edge', 'width'))).toBeGreaterThanOrEqual(24);
+    expect(parseFloat(declaration('.bar-edge', 'height'))).toBeGreaterThanOrEqual(24);
   });
 
   it('overrides the reservation, and only that, while the bar is down', () => {

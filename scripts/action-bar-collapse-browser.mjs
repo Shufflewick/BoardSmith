@@ -23,7 +23,7 @@
  *      board under the bar at all, rather than board hidden under an empty bar.
  *   3. The board's usable area grows by what the bar gave up. That is the whole
  *      ask: get the screen back.
- *   4. Down, the bar is a thin line (#1439): no taller than 28px plus the safe
+ *   4. Down, the bar is a thin line (#1439, #1444): no taller than 14px plus the safe
  *      area, with the seat token and the panel's own controls gone. (The
  *      controls menu is the adapter's slot content and a world fills none; that
  *      it survives where there IS one is asserted against a real slot in the
@@ -306,8 +306,8 @@ async function drive({ launch, hostUrl }) {
       // The controls menu is the ADAPTER's slot content and a world fills none.
       // That it survives where there IS one is asserted against a real slot in
       // `PlayShell.action-bar.test.ts`.
-      await check(`${name}: down, the bar is a thin line (#1439)`, () => {
-        assert(down.bar.height <= 28.5, `the collapsed bar is ${down.bar.height}px tall, not a thin line`);
+      await check(`${name}: down, the bar is a thin line (#1439, #1444)`, () => {
+        assert(down.bar.height <= 14.5, `the collapsed bar is ${down.bar.height}px tall, not a thin line`);
         assert(down.token === null, 'the seat token is still drawn on the line');
         assert(down.start === null, 'the panel is still offering its start buttons');
       });
