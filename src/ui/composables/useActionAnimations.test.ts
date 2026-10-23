@@ -64,6 +64,7 @@ type GameElement = import('../types.js').GameViewElement;
 type ControllerActionResult = import('./useActionControllerTypes.js').ControllerActionResult;
 type AfterAutoExecuteListener = import('./useActionControllerTypes.js').AfterAutoExecuteListener;
 const { useActionController } = await import('./useActionController.js');
+const { reduceMotionPreference } = await import('./reducedMotion.js');
 const { createMockSendAction, createTestMetadata } = await import('./useActionController.test-helper.js');
 
 function makeElement(attr: string, value: string): HTMLElement {
@@ -252,6 +253,38 @@ describe('useActionAnimations', () => {
         expect(getAnimationTrace()).toHaveLength(0);
         expect(destEl.hasAttribute('data-action-animating')).toBe(false);
       } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('Reduce motion (#1447)', () => {
+    it('shows the destination at once, with no crossfade', async () => {
+      vi.useFakeTimers();
+      const reduceMotion = reduceMotionPreference().use('reduceMotion');
+      reduceMotion.value = true;
+      try {
+        const sourceEl = makeElement('data-card-id', '42');
+        const destEl = makeElement('data-zone', 'hand');
+        vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 60, 84));
+        vi.spyOn(destEl, 'getBoundingClientRect').mockReturnValue(new DOMRect(200, 200, 60, 84));
+        const transitionsSet: string[] = [];
+        const setProperty = destEl.style.setProperty.bind(destEl.style);
+        vi.spyOn(destEl.style, 'setProperty').mockImplementation((name, value, priority) => {
+          if (name === 'transition') transitionsSet.push(value ?? '');
+          setProperty(name, value, priority);
+        });
+        const { gameViewRef, onBeforeAutoExecute } = animate({ ...moveConfig, hideDestination: true });
+
+        await onBeforeAutoExecute('moveCard', { cardId: '42', zone: 'hand' }, 1);
+        const flight = reply(gameViewRef, fake);
+        await vi.advanceTimersByTimeAsync(0);
+
+        expect(destEl.style.opacity).toBe('');
+        await flight;
+        expect(transitionsSet.filter((t) => t !== 'none')).toEqual([]);
+      } finally {
+        reduceMotion.value = false;
         vi.useRealTimers();
       }
     });

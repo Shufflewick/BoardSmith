@@ -105,6 +105,7 @@
 import { watch, onScopeDispose, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
+import { prefersReducedMotion } from './reducedMotion.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { escapeCssString } from '../utils/css-string.js';
 import type { GameViewElement } from '../types.js';
@@ -304,6 +305,15 @@ function hideElement(el: HTMLElement, saved?: Map<HTMLElement, HiddenLook>): voi
   el.style.setProperty('transition', 'none', 'important');
   el.style.setProperty('opacity', '0', 'important');
   el.style.pointerEvents = 'none';
+}
+
+/** Clear the hiding styles once any CSS transition has run; with motion reduced there is none to wait for. */
+async function revealAfter(el: HTMLElement, waitMs: number): Promise<void> {
+  if (!prefersReducedMotion.value) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  el.removeAttribute('data-action-animating');
+  el.style.removeProperty('opacity');
+  el.style.removeProperty('transition');
+  el.style.pointerEvents = '';
 }
 
 /** Put every hidden element back exactly as it was. */
@@ -679,18 +689,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
         } : undefined,
       });
     } finally {
-      // Clean up inline styles after animation completes
-      if (shouldHideDestination) {
-        // Wait for any CSS transition to complete
-        const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
-        await new Promise((resolve) => setTimeout(resolve, waitTime));
-
-        // Clear inline styles and data attribute
-        destHtmlElement.removeAttribute('data-action-animating');
-        destHtmlElement.style.removeProperty('opacity');
-        destHtmlElement.style.removeProperty('transition');
-        destHtmlElement.style.pointerEvents = '';
-      }
+      if (shouldHideDestination) await revealAfter(destHtmlElement, shouldFlip ? 50 : crossfadeDuration + 50);
     }
   }
 
