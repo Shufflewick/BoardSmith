@@ -344,7 +344,15 @@ longer accepts (an option you removed, say) reads as the declared default.
 `definePlayerPreferences` throws if the game name is empty or a default is not
 one of its options, and `use` throws for a key that was not declared. On/off
 preferences are menu checkboxes and list picks are menu radio buttons, so both
-work by keyboard and screen reader. `WorldShell` has no controls menu yet (#1443).
+work by keyboard and screen reader.
+
+`WorldShell` takes the same prop. A world has no turn, undo or zoom, so its
+controls menu holds only "Preferences": Reduce motion, then the world's own.
+Pass them where the world entry mounts the shell, in `src/world-main.ts`:
+
+```ts
+render: () => h(WorldShell, { uis, displayName: 'My World', preferences }),
+```
 
 #### Reduce motion
 

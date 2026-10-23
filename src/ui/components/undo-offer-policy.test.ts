@@ -51,7 +51,7 @@ function undoMenuItem(): HTMLButtonElement {
 async function mountMenu(state: PlayerGameState) {
   document.body.innerHTML = '';
   const wrapper = mount(ControlsMenu, {
-    props: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: state.canUndo ?? false },
+    props: { play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: state.canUndo ?? false } },
     attachTo: document.body,
   });
   await wrapper.find('button.menubtn').trigger('click');

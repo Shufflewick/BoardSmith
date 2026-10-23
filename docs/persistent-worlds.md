@@ -63,6 +63,11 @@ Read this before you plan your week.
   that failed to deploy (ShufflewickPub #128).
 - **A world's verbs are Actions** (#169), so a world is enumerated, clickable
   from the board and drawn by the shared action panel. See the next section.
+- **A world's controls menu holds the player's preferences.** The three dots on
+  the action bar open "Preferences": the built-in Reduce motion item and any
+  your game declares with `definePlayerPreferences`, passed to `WorldShell` as
+  `preferences` (see "Player preferences" in `docs/ui-components.md`). A table's
+  turn, undo and zoom controls are not there, since a world has none of them.
 
 So the loop for writing a world is the loop for writing anything else: write the
 rules, drive them from a test file against `createWorld`, open them in a browser

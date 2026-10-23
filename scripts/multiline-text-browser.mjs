@@ -135,8 +135,9 @@ const setNickname = worldAction<Colony>('setNickname')
  * refusal were the text editor's fixed defects still standing, and a check that
  * runs beside the text one is what makes the next divergence loud.
  */
+// A one-word prompt, so the four actions and the controls menu (#1443) fit the two-row strip at 375px.
 const recycle = worldAction<Colony>('recycle')
-  .prompt('Recycle waste')
+  .prompt('Recycle')
   .needs(() => [COLONY])
   .enterNumber('waste', { prompt: 'Waste to recycle', min: 3, max: 9, integer: true })
   .execute(({ waste }, ctx) => {

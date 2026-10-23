@@ -12,6 +12,7 @@ import { useDebugBridge, type DebugBridge } from '../composables/useDebugBridge.
 import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
 import { worldAction } from '../../world/index.js';
 import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
+import { definePlayerPreferences } from '../player-preferences.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -1199,6 +1200,59 @@ describe('WorldShell — the page\'s singletons are mounted at its root (#308)',
     await drawn(wrapper, stateFrame());
     expect(countPageSingletons(wrapper)).toEqual({ toast: 1, tooltip: 1 });
     expect(unresolvedComponents(warnings)).toEqual([]);
+    wrapper.unmount();
+  });
+});
+
+describe('WorldShell — the controls menu (#1443)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '';
+  });
+
+  const menuItems = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'));
+  const menuItem = (text: string) => menuItems().find((el) => el.textContent?.includes(text));
+
+  async function mountWithPreferences(over: Record<string, unknown> = {}) {
+    const preferences = definePlayerPreferences('gloamhall', {
+      torchlight: { label: 'Torchlight', description: 'Flickering light in the halls', default: true },
+    });
+    const Hall = defineComponent({
+      setup() {
+        const torchlight = preferences.use('torchlight');
+        return () => h('div', { 'data-testid': 'hall' }, `torchlight:${torchlight.value}`);
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall', preferences, ...over },
+      attachTo: document.body,
+    });
+    await drawn(wrapper, stateFrame());
+    await wrapper.get('button[aria-label="Game controls"]').trigger('click');
+    return wrapper;
+  }
+
+  it('lists Reduce motion and then the world\'s own preferences, and none of a table\'s controls', async () => {
+    const wrapper = await mountWithPreferences();
+    expect(menuItems().map((el) => el.textContent?.trim())).toEqual(['Reduce motion', 'Torchlight']);
+    expect(document.body.querySelector('[role="menu"]')!.textContent).not.toMatch(/Auto end turn|Undo|Zoom/);
+    wrapper.unmount();
+  });
+
+  it('changes what the board reads the moment the player flips a preference', async () => {
+    const wrapper = await mountWithPreferences();
+    expect(wrapper.get('[data-testid="hall"]').text()).toBe('torchlight:true');
+    menuItem('Torchlight')!.click();
+    await nextTick();
+    expect(wrapper.get('[data-testid="hall"]').text()).toBe('torchlight:false');
+    expect(localStorage.getItem('boardsmith-preference:gloamhall:torchlight')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it('keeps the menu on the collapsed action bar', async () => {
+    const wrapper = await mountWithPreferences({ actionBarStartsCollapsed: true });
+    expect(wrapper.get('[data-testid="bs-actionbar"]').classes()).toContain('collapsed');
+    expect(menuItem('Torchlight')).toBeDefined();
     wrapper.unmount();
   });
 });
