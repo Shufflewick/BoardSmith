@@ -307,6 +307,15 @@ function hideElement(el: HTMLElement, saved?: Map<HTMLElement, HiddenLook>): voi
   el.style.pointerEvents = 'none';
 }
 
+/** Clear the hiding styles once any CSS transition has run; with motion reduced there is none to wait for. */
+async function revealAfter(el: HTMLElement, waitMs: number): Promise<void> {
+  if (!prefersReducedMotion.value) await new Promise((resolve) => setTimeout(resolve, waitMs));
+  el.removeAttribute('data-action-animating');
+  el.style.removeProperty('opacity');
+  el.style.removeProperty('transition');
+  el.style.pointerEvents = '';
+}
+
 /** Put every hidden element back exactly as it was. */
 function restoreHidden(saved: Map<HTMLElement, HiddenLook>): void {
   for (const [el, look] of saved) {
@@ -680,20 +689,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
         } : undefined,
       });
     } finally {
-      // Clean up inline styles after animation completes
-      if (shouldHideDestination) {
-        // Wait for any CSS transition to complete; with motion reduced there is none to wait for
-        if (!prefersReducedMotion.value) {
-          const waitTime = shouldFlip ? 50 : crossfadeDuration + 50;
-          await new Promise((resolve) => setTimeout(resolve, waitTime));
-        }
-
-        // Clear inline styles and data attribute
-        destHtmlElement.removeAttribute('data-action-animating');
-        destHtmlElement.style.removeProperty('opacity');
-        destHtmlElement.style.removeProperty('transition');
-        destHtmlElement.style.pointerEvents = '';
-      }
+      if (shouldHideDestination) await revealAfter(destHtmlElement, shouldFlip ? 50 : crossfadeDuration + 50);
     }
   }
 
