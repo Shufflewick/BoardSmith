@@ -20,6 +20,7 @@ import type { VueWrapper } from '@vue/test-utils';
 import { Card } from '../engine/index.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import { useBoardInteraction } from '../ui/composables/useBoardInteraction.js';
+import { useActionHolds } from '../ui/composables/actionHolds.js';
 import { makeSecretHandGame, TargetBoard, type ViewNode } from './dom-leak.test-helper.js';
 import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
 
@@ -41,6 +42,19 @@ const PositionalTargetBoard = defineComponent({
           h('button', { class: 'target', 'data-element-id': String(target.id), 'aria-label': `card ${index + 1}` }),
         ),
       );
+  },
+});
+
+const REPLAY_HOLD = 'Guessing waits until the replay ends.';
+
+/** A board that starts a replay, holding `guess`, the moment `guess` opens (#1461). */
+const ReplayOnGuessBoard = defineComponent({
+  name: 'ReplayOnGuessBoard',
+  props: { gameView: { type: Object as PropType<ViewNode | null>, default: null } },
+  setup() {
+    const interaction = useBoardInteraction();
+    useActionHolds(() => (interaction.currentAction === 'guess' ? { guess: REPLAY_HOLD } : null));
+    return () => h('div', { class: 'board' });
   },
 });
 
@@ -81,6 +95,12 @@ describe('assertNoHiddenInfoLeak with an action open (#405)', () => {
     await expect(
       assertNoHiddenInfoLeak(makeGame(), 2, { component: TargetBoard, startAction: { name: 'peek' } }),
     ).rejects.toThrow(/could not open "peek" for seat 2/);
+  });
+
+  it("says a hold cancelled the open action, in the hold's own words (#1461)", async () => {
+    await expect(
+      assertNoHiddenInfoLeak(makeGame(), 1, { component: ReplayOnGuessBoard, startAction: { name: 'guess' } }),
+    ).rejects.toThrow(`"guess" did not stay open for seat 1: ${REPLAY_HOLD}.`);
   });
 
   it('refuses an action with nothing to choose, which completes rather than staying open', async () => {
