@@ -5,7 +5,7 @@
  * Reduce motion in GameShell's controls menu (#1442). Import it from
  * `boardsmith/ui` to skip or shorten a game's own animations. `useFLIP` and
  * `useFlyingElements` already honour it, and CSS follows it through the
- * `bs-reduce-motion` class the shells keep on `<html>`.
+ * `bs-reduce-motion` class kept on `<html>` by `syncReducedMotionClass()`.
  */
 import { customRef, effectScope, watchEffect, type Ref } from 'vue';
 import { definePlayerPreferences } from '../player-preferences.js';
@@ -87,8 +87,10 @@ let classSynced = false;
  * Keep the `bs-reduce-motion` class on `<html>` while motion is reduced, and
  * install the rule that halts every CSS animation and transition under it, so
  * all CSS (teleported overlays included) follows the same setting as script.
- * Called by the shells; it runs once per page and lives as long as the page,
- * since the setting it mirrors belongs to the page, not to one shell.
+ * Called by the shells and by every component whose CSS keys on the class,
+ * so that CSS works with no shell on the page (#1446). It runs once per page
+ * and lives as long as the page, since the setting it mirrors belongs to the
+ * page, not to one shell.
  */
 export function syncReducedMotionClass(): void {
   if (classSynced) return;

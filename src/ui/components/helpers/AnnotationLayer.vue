@@ -33,6 +33,9 @@ import BoardMessage from './BoardMessage.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
 import { buildSelector } from './overlay-utils.js';
 import { useOverlayTracking } from '../../composables/useOverlayTracking.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 const props = defineProps<{
   annotations: readonly Annotation[];

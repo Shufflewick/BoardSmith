@@ -24,6 +24,9 @@
  * ```
  */
 import { ref, watch } from 'vue';
+import { syncReducedMotionClass } from '../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 const props = withDefaults(
   defineProps<{

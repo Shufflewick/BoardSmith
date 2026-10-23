@@ -45,6 +45,10 @@
  * so screen readers announce it when it appears. The fade transition is
  * disabled under reduced motion (`.bs-reduce-motion`).
  */
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
+
 withDefaults(
   defineProps<{
     /**

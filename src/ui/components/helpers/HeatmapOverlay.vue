@@ -30,6 +30,9 @@ import type { HeatmapEntry } from '../../../session/types.js';
 import { buildSelector, NOTHING_TO_SHOW } from './overlay-utils.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { useOverlayTracking } from '../../composables/useOverlayTracking.js';
+import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 // ── Inject ────────────────────────────────────────────────────────────────────
 
