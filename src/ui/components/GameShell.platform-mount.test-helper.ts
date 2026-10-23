@@ -75,7 +75,11 @@ interface PlatformShellOptions {
    * Further GameShell props, for a test about what a prop changes, in either
    * form a template writes them (#433).
    */
-  props?: { providesOwnGameOverUi?: boolean; 'provides-own-game-over-ui'?: boolean };
+  props?: {
+    providesOwnGameOverUi?: boolean;
+    'provides-own-game-over-ui'?: boolean;
+    formatTurnDeadline?: (remainingMs: number) => string;
+  };
   /** GameShell slots, for a test about what a slot is handed. */
   slots?: Record<string, (slotProps: Record<string, unknown>) => unknown>;
 }
