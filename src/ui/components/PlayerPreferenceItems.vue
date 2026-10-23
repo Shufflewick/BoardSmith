@@ -2,7 +2,7 @@
 /**
  * A game's own player preferences (#1440) as controls menu items: an on/off
  * one is a checkbox item, a pick-from-list one a group of radio items. The
- * `.mi`, `.r` and `.toggle` styles come from ControlsMenu.
+ * `.toggle` pill style comes from ControlsMenu.
  */
 import { computed, useId } from 'vue';
 import type { PlayerPreferences } from '../player-preferences.js';
@@ -10,10 +10,11 @@ import type { PlayerPreferences } from '../player-preferences.js';
 const props = defineProps<{ preferences: PlayerPreferences }>();
 
 const idPrefix = `bs-pref-${useId()}`;
-const preferenceItems = computed(() => Object.entries(props.preferences.declarations).map(([key, d]) => ({
+// Ids use the position, not the key: a key may hold spaces, which split an aria-describedby list.
+const preferenceItems = computed(() => Object.entries(props.preferences.declarations).map(([key, d], index) => ({
   key,
   label: d.label,
-  descriptionId: d.description ? `${idPrefix}-${key}` : undefined,
+  descriptionId: d.description ? `${idPrefix}-${index}` : undefined,
   description: d.description,
   options: 'options' in d ? d.options : undefined,
   value: props.preferences.use(key),
@@ -40,7 +41,7 @@ const preferenceItems = computed(() => Object.entries(props.preferences.declarat
     </div>
     <button
       v-else
-      class="mi pref-toggle"
+      class="pref-toggle"
       type="button"
       role="menuitemcheckbox"
       :aria-checked="item.value.value === true"
@@ -48,9 +49,7 @@ const preferenceItems = computed(() => Object.entries(props.preferences.declarat
       @click="item.value.value = !item.value.value"
     >
       {{ item.label }}
-      <span class="r">
-        <span class="toggle" :class="{ on: item.value.value === true }"></span>
-      </span>
+      <span class="toggle" :class="{ on: item.value.value === true }"></span>
     </button>
     <div v-if="item.description" :id="item.descriptionId" class="pref-desc">{{ item.description }}</div>
   </template>
@@ -58,7 +57,25 @@ const preferenceItems = computed(() => Object.entries(props.preferences.declarat
 
 <style scoped>
 /* No icon, so indent to line up with the labels of items that have one
-   (10px padding + 18px icon + 11px gap); ControlsMenu indents .pref-toggle. */
+   (10px padding + 18px icon + 11px gap). */
+.pref-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 10px 10px 39px;
+  border: none;
+  border-radius: var(--bsg-r-sm);
+  background: none;
+  color: var(--bsg-ink);
+  font: inherit;
+  font-size: var(--bsg-text-sm);
+  text-align: left;
+  cursor: pointer;
+}
+.pref-toggle:hover {
+  background: var(--bsg-surface-2);
+}
 .pref-choice {
   padding: 10px 10px 4px 39px;
   font-size: var(--bsg-text-sm);

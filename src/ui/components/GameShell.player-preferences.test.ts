@@ -24,6 +24,7 @@ afterEach(leaveIframe);
 async function mountWithPreferences() {
   const preferences = definePlayerPreferences('windup', {
     battleEffects: { label: 'Battle effects', description: 'Bursts and explosions', default: true },
+    'screen shake': { label: 'Screen shake', description: 'Shake on hits', default: false },
     flicker: { label: 'Flicker', options: [{ value: 'full', label: 'Full' }, { value: 'slow', label: 'Slow' }], default: 'full' },
   });
   const Board = defineComponent({
@@ -54,13 +55,17 @@ async function mountWithPreferences() {
 const menuItem = (role: string, text: string) =>
   Array.from(document.body.querySelectorAll<HTMLElement>(`[role="${role}"]`)).find((el) => el.textContent?.includes(text));
 
+/** The text aria-describedby points at, read as the space-separated id list it is. */
+const describedBy = (el: Element) => (el.getAttribute('aria-describedby') ?? '').split(/\s+/)
+  .map((id) => document.getElementById(id)?.textContent ?? '').join(' ');
+
 describe('GameShell player preferences (#1440)', () => {
   it('lists each preference in the controls menu with its state and description', async () => {
     const { wrapper } = await mountWithPreferences();
     const toggle = menuItem('menuitemcheckbox', 'Battle effects')!;
     expect(toggle.getAttribute('aria-checked')).toBe('true');
-    const description = document.getElementById(toggle.getAttribute('aria-describedby')!);
-    expect(description?.textContent).toContain('Bursts and explosions');
+    expect(describedBy(toggle)).toContain('Bursts and explosions');
+    expect(describedBy(menuItem('menuitemcheckbox', 'Screen shake')!)).toContain('Shake on hits');
     expect(menuItem('menuitemradio', 'Full')!.getAttribute('aria-checked')).toBe('true');
     expect(menuItem('menuitemradio', 'Slow')!.getAttribute('aria-checked')).toBe('false');
     wrapper.unmount();

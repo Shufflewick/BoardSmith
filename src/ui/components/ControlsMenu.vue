@@ -413,8 +413,8 @@ function handleUndo() {
   padding: 10px 10px 5px;
 }
 
-/* Menu item button; :deep so PlayerPreferenceItems' items share it. */
-.menu :deep(.mi) {
+/* Menu item button */
+.mi {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -429,11 +429,7 @@ function handleUndo() {
   cursor: pointer;
   text-align: left;
 }
-/* A player preference toggle has no icon; line its label up with the others. */
-.menu :deep(.pref-toggle) {
-  padding-left: 39px;
-}
-.menu :deep(.mi:hover) {
+.mi:hover {
   background: var(--bsg-surface-2);
 }
 .mi:disabled {
@@ -451,7 +447,7 @@ function handleUndo() {
   flex: none;
 }
 /* Right-aligned slot (toggle, zoom input) */
-.menu :deep(.mi .r) {
+.mi .r {
   margin-left: auto;
   color: var(--bsg-ink-3);
   font-size: var(--bsg-text-xs);
@@ -491,7 +487,7 @@ function handleUndo() {
   margin: 6px 8px;
 }
 
-/* Toggle pill */
+/* Toggle pill; :deep so PlayerPreferenceItems' toggles share it. */
 .menu :deep(.toggle) {
   width: 38px;
   height: 22px;
