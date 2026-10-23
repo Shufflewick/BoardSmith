@@ -293,11 +293,24 @@ describe('ActionHelpPopover', () => {
       await btn.trigger('pointerenter', { pointerType: 'mouse' });
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
-      await btn.trigger('click');
+      btn.element.dispatchEvent(new MouseEvent('click', { detail: 1, bubbles: true }));
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
 
-      await btn.trigger('click');
+      btn.element.dispatchEvent(new MouseEvent('click', { detail: 1, bubbles: true }));
+      await nextTick();
+      expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
+      wrapper.unmount();
+    });
+
+    it('Enter or Space closes help a hover opened, with the mouse still on the trigger (#1451)', async () => {
+      const wrapper = mountPopover({ actionName: 'move', triggerLabel: 'Move', helpText: 'Move.' });
+      const btn = wrapper.find('.action-help-btn');
+
+      await btn.trigger('pointerenter', { pointerType: 'mouse' });
+      await nextTick();
+      // A keyboard press activates a button as a click with no pointer presses (detail 0).
+      btn.element.dispatchEvent(new MouseEvent('click', { detail: 0, bubbles: true }));
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
       wrapper.unmount();

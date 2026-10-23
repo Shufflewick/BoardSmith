@@ -104,8 +104,9 @@ function hide() {
   openedByHover = false;
 }
 
-function toggle() {
-  if (openedByHover) {
+function toggle(event: MouseEvent) {
+  // detail 0 is Enter or Space: the key toggles even while the mouse rests on the trigger.
+  if (openedByHover && event.detail > 0) {
     openedByHover = false;
   } else if (isOpen.value) {
     hide();
