@@ -42,6 +42,61 @@ describe('useFocusTrap', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Escape after focus fell out of the dialog (#1453)
+  // -------------------------------------------------------------------------
+
+  describe('Escape while focus has fallen to <body> (a focused item turned disabled, #1453)', () => {
+    const escapeOnBody = () => document.body.dispatchEvent(makeKeyEvent('Escape'));
+
+    it('closes the open trap', () => {
+      const onClose = vi.fn();
+      trap(ref(appendDialog('<button>Undo</button>')), { onClose }).open();
+
+      escapeOnBody();
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+
+    it('closes only the top trap of a stack', () => {
+      const menuClose = vi.fn();
+      const cardClose = vi.fn();
+      trap(ref(appendDialog('<button>Menu</button>')), { onClose: menuClose }).open();
+      trap(ref(appendDialog('<button>Card</button>')), { onClose: cardClose }).open();
+
+      escapeOnBody();
+
+      expect(cardClose).toHaveBeenCalledTimes(1);
+      expect(menuClose).not.toHaveBeenCalled();
+    });
+
+    it('does nothing once the trap is closed, or when escapeToClose is false', () => {
+      const closed = vi.fn();
+      const kept = vi.fn();
+      const a = trap(ref(appendDialog('<button>A</button>')), { onClose: closed });
+      a.open();
+      a.close();
+      trap(ref(appendDialog('<button>B</button>')), { escapeToClose: false, onClose: kept }).open();
+
+      escapeOnBody();
+
+      expect(closed).not.toHaveBeenCalled();
+      expect(kept).not.toHaveBeenCalled();
+    });
+
+    it('leaves an Escape from inside the dialog to handleKeydown alone', () => {
+      const onClose = vi.fn();
+      const dialog = appendDialog('<button>Undo</button>');
+      const { open, handleKeydown } = trap(ref(dialog), { onClose });
+      open();
+      dialog.addEventListener('keydown', handleKeydown);
+
+      dialog.querySelector('button')!.dispatchEvent(makeKeyEvent('Escape'));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // -------------------------------------------------------------------------
   // open() — focus move
   // -------------------------------------------------------------------------
 
