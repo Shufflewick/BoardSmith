@@ -392,10 +392,12 @@ component or stylesheet that skips it.
 Every game also gets a built-in "Show action help" item in "Preferences", just
 after Reduce motion, in both GameShell and WorldShell. While it is on, the
 action panel puts a "?" beside each action that has `.help(text)` or a disabled
-reason, and the "?" shows that text. It is on by default and saved once for all
+reason, and the "?" shows that text. While an action is open, including one the
+panel started because it was the step's only action, its "?" sits beside its
+prompt. It is on by default and saved once for all
 BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`).
-The item is hidden while no available action has help text or a disabled
-reason, so it never shows a switch that does nothing. Host teaching lockout
+The item is hidden while neither the open action nor any available action has
+help text or a disabled reason, so it never shows a switch that does nothing. Host teaching lockout
 (`teachingDisabled`) does not hide it: help explains the rules, not a good move.
 
 #### Game commands
@@ -2078,6 +2080,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 |----------|------|-------------|
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
 | `currentArgs` | `Readonly<Ref<Readonly<Record<string, unknown>>>>` | Args collected so far for the current action. Read-only; change them with `start`, `fill`, `skip` or `clear` |
+| `currentActionMeta` | `ComputedRef<EnrichedActionMetadata \| undefined>` | Metadata of the open action (prompt, help, picks), including a followUp's that is not in `availableActions`. `undefined` with no action open |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `currentChoices` | `ComputedRef<ChoiceWithRefs[]>` | **Reactive** choices for the current pick; updates when fetched choices arrive |

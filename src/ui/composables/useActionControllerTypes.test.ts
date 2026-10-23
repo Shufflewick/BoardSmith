@@ -23,6 +23,7 @@ const MEMBERS: {
 } = {
   currentAction: 'Controller State',
   currentArgs: 'Controller State',
+  currentActionMeta: 'Controller State',
   currentPick: 'Controller State',
   validElements: 'Controller State',
   currentChoices: 'Controller State',
