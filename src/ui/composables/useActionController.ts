@@ -2750,13 +2750,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     abandonDraft();
   }
 
+  // A new object per hold, so the same reason twice is told twice.
+  const holdNotice = ref<{ reason: string } | null>(null);
   // A held draft would wait at a pick the board will not answer, so it is dropped with the reason; one already sent finishes.
+  // The hold is this screen's own state, not a failed action, so its reason is a notice, never an error (#1461).
   watch(
     () => (currentAction.value && !isExecuting.value ? options.heldActions?.value[currentAction.value] : undefined),
     (reason) => {
       if (!reason) return;
       cancel();
-      setError(reason);
+      holdNotice.value = { reason };
     },
   );
 
@@ -3056,6 +3059,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // identical error message, which a plain watch on lastError would miss.
     // GameShell's UIX-01 toast chokepoint watches this, not lastError.
     errorTick: readonly(errorTick),
+    holdNotice: readonly(holdNotice),
     isLoadingChoices,
     repeatingState,
     pendingFollowUp,         // Use to prevent starting new actions during followUp transition

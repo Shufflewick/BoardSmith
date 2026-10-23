@@ -32,6 +32,7 @@ const MEMBERS: {
   isExecuting: 'Controller State',
   lastError: 'Controller State',
   errorTick: 'Controller State',
+  holdNotice: 'Controller State',
   isLoadingChoices: 'Controller State',
   repeatingState: 'Controller State',
   pendingFollowUp: 'Controller State',

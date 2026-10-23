@@ -1273,6 +1273,11 @@ watch(actionController.errorTick, () => {
   announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
+// A hold cancelling the open action is this screen's own state, not a failure (#1461); the toast's role=status speaks it.
+watch(actionController.holdNotice, (notice) => {
+  if (notice) toast.info(notice.reason, 4000);
+});
+
 // UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
 // to 0×0 inside the zoom container (`.game-shell__zoom-container { width:
 // max-content }` — DO NOT modify that CSS, the structural fix is rejected per

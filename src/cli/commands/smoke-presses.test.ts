@@ -13,6 +13,9 @@ import {
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
   boardThatRedrawsThePanel,
+  boardThatHoldsAnOpenAction,
+  HELD_OPEN_PLAY,
+  PLAY_HOLD,
   panelThatHangsOnThePointer,
   HUNG,
   smokeSpec,
@@ -70,6 +73,20 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain('- The panel showed its "draw", and it was still gone 5s later, when the walk went to press it.');
     expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
+  });
+
+  it('#1461: an open action the board holds is cancelled with a notice, not reported as an error', async () => {
+    const { outcome, said } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatHoldsAnOpenAction(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12, echo: HELD_OPEN_PLAY }),
+    });
+
+    expect(said).toContain(HELD_OPEN_PLAY);
+
+    expect(outcome.summary).not.toContain(PLAY_HOLD);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
+    expect(outcome.passed).toBe(true);
   });
 
   it('#562: presses a panel button the panel redrew as a new element just as the walk went to press it', async () => {

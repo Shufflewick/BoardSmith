@@ -449,9 +449,12 @@ board can start it. When the hold lifts, the action is back at once.
   see no change. The rules still decide what the server accepts. When an
   action is both disabled by its rule and held, the rule's reason shows.
 - **An open action that becomes held is cancelled**, and the hold's reason
-  shows the way a refused action's does. Left open, it would wait at a pick the
-  board will not answer until the hold lifts. An action whose submission is
-  already on its way to the server is left to finish.
+  shows as a notice (`toast.info`, which screen readers hear politely), not
+  as an error. Left open, it would wait at a pick the board will not answer
+  until the hold lifts. The player did nothing wrong, so `boardsmith smoke`
+  does not report it either. The controller exposes the reason as
+  `holdNotice`. An action whose submission is already on its way to the
+  server is left to finish.
 - **The holds lift when the board unmounts.** `useActionHolds` works in any
   board GameShell or WorldShell renders and in one `renderAsSeat` mounts;
   called anywhere else it throws.
@@ -2089,6 +2092,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 | `errorTick` | `Readonly<Ref<number>>` | Goes up on every failure that sets `lastError`, even a repeat of the same message. Watch it to show each failure once |
+| `holdNotice` | `Readonly<Ref<{ reason: string } \| null>>` | Why the open action was just cancelled by a hold on this screen (`useActionHolds`), a new object each time. Not a failure, so the shells show it as a notice, not through `lastError` |
 | `isLoadingChoices` | `Ref<boolean>` | Whether choices are being fetched from the server |
 | `repeatingState` | `Ref<RepeatingState \| null>` | Progress of a repeating selection: `{ selectionName, accumulated, awaitingServer, currentChoices? }` |
 | `pendingFollowUp` | `Ref<boolean>` | True between the server handing back a follow-up and it starting. Don't start another action meanwhile |

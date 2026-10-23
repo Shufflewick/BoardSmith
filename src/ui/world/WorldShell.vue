@@ -227,6 +227,11 @@ watch(actionController.errorTick, () => {
   toast.show(refusal, { type: 'error', duration: 5000 });
 });
 
+// A hold cancelling the open action is this screen's own state, not a refusal (#1461).
+watch(actionController.holdNotice, (notice) => {
+  if (notice) toast.info(notice.reason, 5000);
+});
+
 /**
  * WHAT BECAME OF AN ORDER THIS PAGE CAME BACK HOLDING (#195).
  *
