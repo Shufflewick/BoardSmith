@@ -704,10 +704,10 @@ const mobileToggleLabel = computed(() => {
   --bsg-editor-text-rest: calc(6 * 1.4 * 0.9rem + 18px);
   --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
-  /* The bar put down (#230, #1439): a thin line carrying the ⋯ menu, the
-     player's only control surface, at the 24px WCAG 2.5.8 target minimum
-     with 2px above and below. */
-  --bsg-action-bar-line: 28px;
+  /* The bar put down (#230, #1439, #1444): a thin line carrying the ⋯ menu as
+     bare dots and the lower half of the 26px edge toggle. The dots' 24px
+     WCAG 2.5.8 target reaches up over the board instead of widening the line. */
+  --bsg-action-bar-line: 14px;
   --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + env(safe-area-inset-bottom));
 }
 
@@ -944,13 +944,31 @@ const mobileToggleLabel = computed(() => {
   flex-wrap: nowrap;
   /* The full line even when the adapter fills no controls menu, so it fills what the board reserved. */
   height: var(--bsg-action-bar-collapsed);
-  padding-top: 2px;
-  padding-bottom: calc(2px + env(safe-area-inset-bottom));
+  padding-top: 0;
+  padding-bottom: env(safe-area-inset-bottom);
+  /* Nothing to scroll on one row, and clipping would cut off the dots' hit area. */
+  overflow: visible;
 }
 
-/* The ⋯ menu lies along the line: the dots run horizontally, at the target floor. */
+/* The ⋯ menu lies along the line as bare dots, running horizontally. */
 .actionbar.collapsed :deep(.menubtn) {
+  position: relative;
+  height: var(--bsg-action-bar-line);
+  border: none;
+  padding: 0;
+}
+/* The dots' 24px target, drawn nowhere: it rises from the line over the board. */
+.actionbar.collapsed :deep(.menubtn)::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
   height: 24px;
+}
+/* The shell's outer ring would hang below the line, off the bottom of the screen. */
+.actionbar.collapsed :deep(.menubtn):focus-visible {
+  box-shadow: inset 0 0 0 2px var(--bsg-accent);
 }
 .actionbar.collapsed :deep(.menubtn svg) {
   transform: rotate(90deg);
