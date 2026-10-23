@@ -331,15 +331,13 @@ const previewCardStyle = computed(() => ({
 }
 
 /* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .zoom-preview-enter-active,
-  .zoom-preview-leave-active {
-    transition: opacity 0.1s ease;
-  }
+.bs-reduce-motion .zoom-preview-enter-active,
+.bs-reduce-motion .zoom-preview-leave-active {
+  transition: opacity 0.1s ease;
+}
 
-  .zoom-preview-enter-from,
-  .zoom-preview-leave-to {
-    transform: none;
-  }
+.bs-reduce-motion .zoom-preview-enter-from,
+.bs-reduce-motion .zoom-preview-leave-to {
+  transform: none;
 }
 </style>

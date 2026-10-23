@@ -115,7 +115,7 @@ marks the *transition* — a static highlight alone is easy to miss in a tall
 column of near-identical cards, which is exactly when a player misses their own
 turn starting. It does not loop: a permanently animating border becomes noise,
 and a seat that acts for a long time would never stop. Under
-`prefers-reduced-motion: reduce` the pulse is removed and the standing
+reduced motion (see "Reduce motion" below) the pulse is removed and the standing
 high-contrast border carries the cue instead.
 
 The engine helpers behind this are exported if a custom UI wants the same
@@ -345,6 +345,31 @@ longer accepts (an option you removed, say) reads as the declared default.
 one of its options, and `use` throws for a key that was not declared. On/off
 preferences are menu checkboxes and list picks are menu radio buttons, so both
 work by keyboard and screen reader. `WorldShell` has no controls menu yet (#1443).
+
+#### Reduce motion
+
+Every game also gets a built-in "Reduce motion" item at the top of
+"Preferences". It is saved once for all BoardSmith games in this browser
+(`boardsmith-preference:boardsmith:reduceMotion`), like the device setting it
+stands beside: needing less motion belongs to the player, not to one game.
+Motion is reduced while either the device asks for less motion or the item is
+on, and both script and CSS follow that one setting:
+
+- `prefersReducedMotion` (from `boardsmith/ui`) reads `true`. `useFLIP` and
+  `useFlyingElements` skip their animations.
+- GameShell and WorldShell keep the class `bs-reduce-motion` on `<html>`. Key a
+  reduced-motion CSS rule on it, never on the `prefers-reduced-motion` media
+  query, which sees only the device and would keep animating for a player who
+  turned the item on:
+
+```css
+.bs-reduce-motion .my-spinner {
+  animation: none;
+}
+```
+
+A test refuses any `prefers-reduced-motion` in BoardSmith's own source outside
+`src/ui/composables/reducedMotion.ts`, the one place that reads the device setting.
 
 ### AutoUI
 
@@ -767,7 +792,7 @@ primitive for short-lived board indicators** (e.g. "Select a target cell",
 `position: relative` ancestor (your board wrapper), so showing/hiding it never
 changes layout. It is themed entirely with `--bsg-*` tokens, exposes a
 `role="status"` `aria-live="polite"` region for screen readers, and disables its
-fade transition under `prefers-reduced-motion`. (Distinct from `Toast`, which is
+fade transition under reduced motion (`.bs-reduce-motion`). (Distinct from `Toast`, which is
 for global, viewport-edge notifications.)
 
 <!-- typecheck: board -->

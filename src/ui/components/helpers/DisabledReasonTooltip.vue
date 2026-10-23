@@ -169,10 +169,8 @@ const style = computed(() => ({
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bs-disabled-tip-enter-active,
-  .bs-disabled-tip-leave-active {
-    transition: none;
-  }
+.bs-reduce-motion .bs-disabled-tip-enter-active,
+.bs-reduce-motion .bs-disabled-tip-leave-active {
+  transition: none;
 }
 </style>

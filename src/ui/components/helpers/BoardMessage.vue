@@ -43,7 +43,7 @@
  *
  * Accessibility: the message is a `role="status"` `aria-live="polite"` region
  * so screen readers announce it when it appears. The fade transition is
- * disabled under `prefers-reduced-motion: reduce`.
+ * disabled under reduced motion (`.bs-reduce-motion`).
  */
 withDefaults(
   defineProps<{
@@ -352,10 +352,8 @@ withDefaults(
   opacity: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bsg-board-message-fade-enter-active,
-  .bsg-board-message-fade-leave-active {
-    transition: none;
-  }
+.bs-reduce-motion .bsg-board-message-fade-enter-active,
+.bs-reduce-motion .bsg-board-message-fade-leave-active {
+  transition: none;
 }
 </style>

@@ -129,9 +129,7 @@ function onError() {
 
 /* Reduced motion: the state change (fallback to real art) still happens, it just
    arrives without the cross-fade. */
-@media (prefers-reduced-motion: reduce) {
-  .asset-image-img {
-    transition: none;
-  }
+.bs-reduce-motion .asset-image-img {
+  transition: none;
 }
 </style>

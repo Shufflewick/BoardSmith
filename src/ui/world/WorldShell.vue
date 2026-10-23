@@ -118,6 +118,7 @@ import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
+import { useReducedMotionClass } from '../composables/reducedMotion.js';
 
 /**
  * A BUNDLE'S OWN SURFACE FOR A RESIDENT WORLD (ShufflewickPub #128, #170).
@@ -295,6 +296,8 @@ watch(
   },
   { immediate: true },
 );
+
+useReducedMotionClass();
 
 onMounted(() => {
   // THE CHROME HAS TO HAVE TOKENS TO BE DRAWN IN. `PlayShell` is written in

@@ -290,13 +290,11 @@ function getPieceStyle(cardData: Record<string, unknown>): CSSProperties {
 }
 
 /* Reduced motion: instant transitions */
-@media (prefers-reduced-motion: reduce) {
-  .card-inner {
-    transition: none;
-  }
+.bs-reduce-motion .card-inner {
+  transition: none;
+}
 
-  .flying-card {
-    transition: none !important;
-  }
+.bs-reduce-motion .flying-card {
+  transition: none !important;
 }
 </style>

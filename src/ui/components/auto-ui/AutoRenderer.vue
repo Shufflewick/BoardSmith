@@ -246,10 +246,8 @@ useAutoRendererAnimations(animationEvents, { fly });
   50%  { opacity: 0.4; }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .skeleton-bar {
-    animation: none;
-  }
+.bs-reduce-motion .skeleton-bar {
+  animation: none;
 }
 
 /* Retry affordance */

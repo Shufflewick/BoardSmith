@@ -263,9 +263,7 @@ useOverlayTracking({
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .bsg-tutorial-ring {
-    animation: none;
-  }
+.bs-reduce-motion .bsg-tutorial-ring {
+  animation: none;
 }
 </style>

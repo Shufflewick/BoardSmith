@@ -481,8 +481,10 @@ above).
 5. **Focus management + `prefers-reduced-motion` honored.** Confirm focus is never stranded —
    after a control triggers a state change (a dialog opens/closes, a panel appears/disappears),
    focus lands somewhere sensible, never lost to `document.body` or left on a now-detached
-   element. Confirm any animation this chunk adds respects the `prefers-reduced-motion` media
-   query — reduced-motion users get the state change without the animated transition, not a
+   element. Confirm any animation this chunk adds respects reduced motion — in CSS under the
+   `.bs-reduce-motion` class BoardSmith keeps on `<html>` (set by the device's
+   `prefers-reduced-motion` or the player's Reduce motion item), in script through
+   `prefersReducedMotion` — reduced-motion users get the state change without the animated transition, not a
    forced motion sequence they can't opt out of. Pin reduced motion by behaviour, never by scanning
    the source for animation: with `prefers-reduced-motion: reduce` matched, one action puts the
    final state on screen at once and nothing on screen changes afterwards. A chunk that adds no
