@@ -545,29 +545,14 @@ const mobileToggleLabel = computed(() => {
              CONTENTS are the adapter's — a table's carries undo, hints, heatmap
              and the tutorial, none of which a world has.
 
-             It is deliberately OUTSIDE the collapsed branch below: a minimized
-             bar that took the player's only control surface with it would be a
-             trap, not a preference. -->
+             It deliberately stays when the bar is down: a minimized bar is a thin
+             line holding only this menu and the toggle (#1439), and one that took
+             the player's only control surface with it would be a trap. -->
         <slot name="controls"></slot>
-
-        <!-- Down: one row carrying WHO and WHAT, and nothing operable the panel
-             owns. The same anchor the sidebar's rail keeps when it collapses —
-             tokens and the turn sentence, minus everything that takes room. -->
-        <template v-if="actionBarCollapsed">
-          <PlayerToken
-            v-if="panelToken"
-            class="turn-token"
-            :name="panelToken.name"
-            :seat="panelToken.seat"
-            :color="panelToken.color"
-            :size="30"
-          />
-          <span v-if="prompt" class="actionbar-summary" data-testid="bs-actionbar-summary">{{ prompt }}</span>
-        </template>
 
         <!-- The bar is up when the viewer may act, or when a simultaneous step is
              still waiting on somebody. -->
-        <template v-else-if="mayAct || (awaitingPlayers?.length ?? 0) > 0">
+        <template v-if="!actionBarCollapsed && (mayAct || (awaitingPlayers?.length ?? 0) > 0)">
           <!-- Identity token at the head of the bar, so it always carries WHO
                (IA-02) regardless of whether the panel or the prompt strip renders
                the WHAT. -->
@@ -719,12 +704,11 @@ const mobileToggleLabel = computed(() => {
   --bsg-editor-text-rest: calc(6 * 1.4 * 0.9rem + 18px);
   --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
-  /* The bar put down (#230): ONE control row, because the row it keeps carries
-     the ⋯ menu, and that menu is the player's only control
-     surface. Derived from the same row and padding tokens as everything above,
-     so the stylesheet still has one definition of a control row. */
-  --bsg-action-bar-collapsed: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
-                             + env(safe-area-inset-bottom));
+  /* The bar put down (#230, #1439): a thin line carrying the ⋯ menu, the
+     player's only control surface, at the 24px WCAG 2.5.8 target minimum
+     with 2px above and below. */
+  --bsg-action-bar-line: 28px;
+  --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + env(safe-area-inset-bottom));
 }
 
 /* Down, the reservation is one row. The bar's cap is the reservation, so the
@@ -953,25 +937,23 @@ const mobileToggleLabel = computed(() => {
   max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-field-max));
 }
 
-/* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller
-   than the single row the board reserved for it, and would cover the board again
-   while every DOM assertion still passed. */
+/* Down: the thin line, which must NOT wrap. A wrapped "collapsed" bar would be
+   taller than the line the board reserved for it, and would cover the board
+   again while every DOM assertion still passed. */
 .actionbar.collapsed {
   flex-wrap: nowrap;
+  /* The full line even when the adapter fills no controls menu, so it fills what the board reserved. */
+  height: var(--bsg-action-bar-collapsed);
+  padding-top: 2px;
+  padding-bottom: calc(2px + env(safe-area-inset-bottom));
 }
 
-/* What is being asked, on the one row: the sentence, ellipsised, never a second
-   row. The parallel is the phone strip's turn-status text — identity plus what
-   is wanted, with everything operable left out. */
-.actionbar-summary {
-  flex: 1;
-  min-width: 0;
-  font-size: 13.5px;
-  font-weight: 600;
-  color: var(--bsg-ink);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+/* The ⋯ menu lies along the line: the dots run horizontally, at the target floor. */
+.actionbar.collapsed :deep(.menubtn) {
+  height: 24px;
+}
+.actionbar.collapsed :deep(.menubtn svg) {
+  transform: rotate(90deg);
 }
 
 /* The bar's edge toggle: the sidebar rail's control, on the other edge. Same

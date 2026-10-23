@@ -30,10 +30,10 @@
  *      again mid-action, and the NEXT action start brings it back. There is no
  *      state in which the control is dead and no state in which the bar is
  *      stuck down while the game needs something.
- *   4. Collapsed is not empty. It keeps the controls menu (in the hosted shell that
- *      is the player's ONLY control surface), the seat token, and the sentence
- *      saying what is wanted -- plus an attention mark on the toggle when it is
- *      this seat's move.
+ *   4. Collapsed is a thin line, not nothing (#1439). It keeps the controls menu
+ *      (in the hosted shell that is the player's ONLY control surface) and the
+ *      toggle, with an attention mark on it when it is this seat's move, which
+ *      is then the hint that the game is waiting.
  *
  * These assertions drive the REAL `PlayShell` over a REAL `useActionController`,
  * because rule 2 is a controller transition and a stubbed controller never makes
@@ -202,14 +202,14 @@ describe('the bar carries the sidebar rail\'s own gesture', () => {
     expect(wrapper.find('[data-testid="bs-action-panel"]').exists()).toBe(true);
   });
 
-  it('keeps the controls menu, the seat token and what is wanted', async () => {
+  it('keeps the controls menu and nothing else on the thin line (#1439)', async () => {
     const { wrapper } = mountDock({ actionBarMinimized: true, prompt: 'Walk one sector' });
     await flush();
     // In the hosted shell the controls menu is the player's ONLY control surface, so
     // minimizing the bar must never take it away.
     expect(wrapper.find('.my-controls').exists()).toBe(true);
-    expect(wrapper.find('[data-testid="bs-actionbar"] .turn-token').exists()).toBe(true);
-    expect(wrapper.get('[data-testid="bs-actionbar-summary"]').text()).toBe('Walk one sector');
+    expect(wrapper.find('[data-testid="bs-actionbar"] .turn-token').exists()).toBe(false);
+    expect(wrapper.get('[data-testid="bs-actionbar"]').text()).not.toContain('Walk one sector');
   });
 
   it('marks the toggle when the game is waiting on this seat, and not otherwise', async () => {

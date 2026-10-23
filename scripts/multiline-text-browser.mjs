@@ -438,10 +438,9 @@ async function driveThrough({ launch, hostUrl }) {
     });
 
     await check('collapsing the bar mid-draft, then re-opening it', async () => {
-      // NEW SINCE THIS WAS FIRST MEASURED (#230). A collapsed bar renders one
-      // row -- token and summary -- and the whole panel branch is `v-else-if`,
-      // so the editor is UNMOUNTED rather than hidden, and the bar's cap is a
-      // single row's height while it is down.
+      // NEW SINCE THIS WAS FIRST MEASURED (#230). A collapsed bar is a thin
+      // line (#1439) and the panel branch is not rendered, so the editor is
+      // UNMOUNTED rather than hidden.
       //
       // What is asserted is what a player can still do: the action survives
       // the round trip and the box comes back, at a usable size, inside the
@@ -460,10 +459,6 @@ async function driveThrough({ launch, hostUrl }) {
         (count) => count === 0,
         5_000,
       );
-      assert(
-        (await surface.locator('[data-testid="bs-actionbar-summary"]').count()) === 1,
-        'a collapsed bar drew no summary row',
-      );
 
       await toggle.click();
       const restored = surface.locator('.text-input textarea');
@@ -481,10 +476,9 @@ async function driveThrough({ launch, hostUrl }) {
         'after restoring, the submit button laid out below the bottom of the bar',
       );
       // THE DRAFT SURVIVES, and this is the inversion #235 was filed to make.
-      // The collapsed bar is still a `v-if` branch and the panel still the
-      // `v-else-if`, so the editor is still UNMOUNTED -- what changed is that
-      // the value is no longer inside it. It lives in `useActionController`
-      // beside `multiSelectDraft`, which outlives the panel, so the round trip
+      // The panel is still not rendered while the bar is down, so the editor
+      // is still UNMOUNTED -- what changed is that the value is no longer
+      // inside it. It lives in `useActionController` beside `multiSelectDraft`, which outlives the panel, so the round trip
       // has nothing to throw away.
       assert(
         (await restored.inputValue()) === typed,

@@ -23,13 +23,14 @@
  *      board under the bar at all, rather than board hidden under an empty bar.
  *   3. The board's usable area grows by what the bar gave up. That is the whole
  *      ask: get the screen back.
- *   4. What survives the collapse is what must: the seat token, with a real box.
- *      What goes is the panel's own controls. (The controls menu is the
- *      adapter's slot content and a world fills none; that it survives where
- *      there IS one is asserted against a real slot in the unit suite.)
+ *   4. Down, the bar is a thin line (#1439): no taller than 28px plus the safe
+ *      area, with the seat token and the panel's own controls gone. (The
+ *      controls menu is the adapter's slot content and a world fills none; that
+ *      it survives where there IS one is asserted against a real slot in the
+ *      unit suite.)
  *   5. Mid-question the bar comes back up even though the preference says down,
- *      and pushing it down again mid-question leaves the prompt readable on the
- *      one remaining row.
+ *      and pushing it down again mid-question leaves the attention mark on the
+ *      toggle, which says the game is waiting on this seat.
  *   6. And it comes up for a QUESTION, not for any click: a board click that
  *      asks nothing leaves the bar where the player put it.
  *   7. Issue 444's headline case (#486): an element pick after an earlier
@@ -212,7 +213,7 @@ async function measure(page) {
       bar: box('[data-testid="bs-actionbar"]'),
       toggle: box('[data-testid="bs-actionbar-toggle"]'),
       token: box('[data-testid="bs-actionbar"] .turn-token'),
-      summary: box('[data-testid="bs-actionbar-summary"]'),
+      attention: box('[data-testid="bs-actionbar-attention"]'),
       // The panel's own start button: present and boxed while the bar is up,
       // absent while it is down.
       start: box('[data-bs-action="tend"]'),
@@ -302,12 +303,12 @@ async function drive({ launch, hostUrl }) {
           `${reservationGaveUp}px, so that difference is board reserved for nothing`);
       });
 
-      // The controls menu is the ADAPTER's slot content and a world fills none,
-      // so what a world's collapsed bar has to keep is the seat token and the
-      // prompt. That the menu survives where there IS one is asserted against a
-      // real slot in `PlayShell.action-bar.test.ts`.
-      await check(`${name}: what has to survive the collapse is still drawn`, () => {
-        assert(down.token !== null && down.token.height > 0, 'the seat token went with the panel');
+      // The controls menu is the ADAPTER's slot content and a world fills none.
+      // That it survives where there IS one is asserted against a real slot in
+      // `PlayShell.action-bar.test.ts`.
+      await check(`${name}: down, the bar is a thin line (#1439)`, () => {
+        assert(down.bar.height <= 28.5, `the collapsed bar is ${down.bar.height}px tall, not a thin line`);
+        assert(down.token === null, 'the seat token is still drawn on the line');
         assert(down.start === null, 'the panel is still offering its start buttons');
       });
 
@@ -319,9 +320,9 @@ async function drive({ launch, hostUrl }) {
       await page.waitForTimeout(200);
       const midQuestionDown = await measure(page);
 
-      await check(`${name}: a bar put down mid-question still says what is wanted`, () => {
-        assert(midQuestionDown.summary !== null && midQuestionDown.summary.height > 0,
-          'the prompt went down with the bar, so the player is asked nothing visible');
+      await check(`${name}: a bar put down mid-question still says the game is waiting`, () => {
+        assert(midQuestionDown.attention !== null && midQuestionDown.attention.height > 0,
+          'the toggle carries no attention mark, so nothing says the game is waiting');
         assert(midQuestionDown.choice === null, 'the choice controls are still on screen');
         assertToggleReachable(midQuestionDown, name);
       });
