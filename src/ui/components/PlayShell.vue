@@ -956,6 +956,8 @@ const mobileToggleLabel = computed(() => {
   height: var(--bsg-action-bar-line);
   border: none;
   padding: 0;
+  /* The 20px icon is taller than the line: centre its track, not just the icon in it. */
+  align-content: center;
 }
 /* The dots' 24px target, drawn nowhere: it rises from the line over the board. */
 .actionbar.collapsed :deep(.menubtn)::before {
@@ -1008,6 +1010,10 @@ const mobileToggleLabel = computed(() => {
 /* Chevron down while the bar is up (push it away), up while it is down. */
 .action-bar-collapsed .bar-edge svg {
   transform: rotate(180deg);
+}
+/* Down, the line is too thin to hold the shell's outer ring below the toggle. */
+.action-bar-collapsed .bar-edge:focus-visible {
+  box-shadow: inset 0 0 0 2px var(--bsg-accent);
 }
 
 /* The game is waiting on this seat and the panel that would say so is down.

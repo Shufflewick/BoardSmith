@@ -221,11 +221,14 @@ describe('#230, #1439: minimizing the bar reserves a thin line and gives the res
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'height')).toBe('var(--bsg-action-bar-line)');
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'border')).toBe('none');
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'padding')).toBe('0');
+    // The 20px icon is taller than the line; without this its track starts at the top and the dots sit low.
+    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'align-content')).toBe('center');
     expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'transform')).toBe('rotate(90deg)');
   });
 
-  it('draws the dots\' focus ring inside the line, where the screen edge cannot cut it off (#1444)', () => {
+  it('draws the dots\' and the toggle\'s focus rings inside them, where the screen edge cannot cut them off (#1444)', () => {
     expect(declaration('.actionbar.collapsed :deep(.menubtn):focus-visible', 'box-shadow')).toBe('inset 0 0 0 2px var(--bsg-accent)');
+    expect(declaration('.action-bar-collapsed .bar-edge:focus-visible', 'box-shadow')).toBe('inset 0 0 0 2px var(--bsg-accent)');
   });
 
   it('keeps 24px hit areas on the line by extending the dots invisibly upward (#1444, WCAG 2.5.8)', () => {
