@@ -19,6 +19,7 @@ import { ref, nextTick, onMounted, onUnmounted } from 'vue';
 import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
 import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
+import MenuCommandItems from './MenuCommandItems.vue';
 import type { MenuCommand } from '../composables/menuCommands.js';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
@@ -104,6 +105,7 @@ const props = withDefaults(defineProps<{
   hasActionHelp: true,
   heatmapSupported: true,
   teachingDisabled: false,
+  commands: () => [],
 });
 
 const emit = defineEmits<{
@@ -282,20 +284,9 @@ function runCommand(command: MenuCommand) {
       </template>
 
       <!-- The game's own commands (#1448). -->
-      <template v-if="commands?.length">
+      <template v-if="commands.length">
         <div class="grouplabel">Game</div>
-        <button
-          v-for="(command, index) in commands"
-          :key="index"
-          class="mi mi-command"
-          type="button"
-          role="menuitem"
-          :disabled="command.enabled === false"
-          :aria-disabled="command.enabled === false"
-          @click="runCommand(command)"
-        >
-          {{ command.label }}
-        </button>
+        <MenuCommandItems :commands="commands" @run="runCommand" />
         <div class="sep"></div>
       </template>
 
@@ -430,8 +421,8 @@ function runCommand(command: MenuCommand) {
   padding: 10px 10px 5px;
 }
 
-/* Menu item button */
-.mi {
+/* Menu item button; :deep so MenuCommandItems' items share it. */
+.menu :deep(.mi) {
   display: flex;
   align-items: center;
   gap: 11px;
@@ -446,10 +437,10 @@ function runCommand(command: MenuCommand) {
   cursor: pointer;
   text-align: left;
 }
-.mi:hover {
+.menu :deep(.mi:hover) {
   background: var(--bsg-surface-2);
 }
-.mi:disabled {
+.menu :deep(.mi:disabled) {
   background: var(--bsg-disabled-surface);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
@@ -474,7 +465,7 @@ function runCommand(command: MenuCommand) {
 }
 
 /* No icon, so indent to line up with the labels of items that have one, as PlayerPreferenceItems does. */
-.mi-command {
+.menu :deep(.mi-command) {
   padding-left: 39px;
 }
 
