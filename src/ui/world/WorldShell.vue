@@ -53,6 +53,7 @@
       :available-actions="play.availableActions.value"
       :action-metadata="play.actionMetadata.value"
       :disabled-actions="play.disabledActions.value"
+      :is-action-help-visible="isActionHelpVisible"
       :actions-pending="host.offersPending.value"
       :board-failed="boardFailed"
       :panel-token="panelToken"
@@ -80,7 +81,7 @@
 
       <!-- A world has no turn, undo or zoom, so its menu holds only Preferences (#1443). -->
       <template #controls>
-        <ControlsMenu class="actionbar-controls" open-up align="left" :preferences="preferences" />
+        <ControlsMenu class="actionbar-controls" open-up align="left" :has-action-help="hasHelpToShow" :preferences="preferences" />
       </template>
 
       <template #board>
@@ -126,6 +127,7 @@ import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
+import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 
 /**
  * A BUNDLE'S OWN SURFACE FOR A RESIDENT WORLD (ShufflewickPub #128, #170).
@@ -242,6 +244,9 @@ watch(host.recoveryNotice, (notice) => {
 /** The identity token at the head of the action bar: always the VIEWER's own
  *  seat. A world has no turn, so there is no other claim it could make. */
 const panelToken = computed(() => play.myPlayer.value ?? null);
+
+const isActionHelpVisible = actionHelpPreference().use('actionHelp');
+const hasHelpToShow = computed(() => hasActionHelp(play.availableActions.value, play.actionMetadata.value, play.disabledActions.value));
 
 /**
  * THE ATTACHMENT LIFECYCLE, THROUGH ONE SHARED INDICATOR (#170 §2.5).

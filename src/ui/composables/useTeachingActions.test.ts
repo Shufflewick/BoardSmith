@@ -17,7 +17,6 @@ function harness(overrides: Partial<TeachingActionsOptions> = {}) {
   const errors: string[] = [];
   const shown: string[] = [];
   const removed: number[] = [];
-  const setActionHelpEnabled = vi.fn();
 
   const options: TeachingActionsOptions = {
     platformRequest,
@@ -26,8 +25,6 @@ function harness(overrides: Partial<TeachingActionsOptions> = {}) {
     isHeatmapVisible: () => false,
     heatmapPending: ref(null),
     heatmapToggling: ref(false),
-    isActionHelpVisible: ref(false),
-    setActionHelpEnabled,
     toast: {
       // The REAL `useToast` shape, now that the option is typed from it:
       // `show` and `error` both answer the new toast's numeric id.
@@ -38,7 +35,7 @@ function harness(overrides: Partial<TeachingActionsOptions> = {}) {
     ...overrides,
   };
 
-  return { ...useTeachingActions(options), options, platformRequest, errors, shown, removed, setActionHelpEnabled };
+  return { ...useTeachingActions(options), options, platformRequest, errors, shown, removed };
 }
 
 describe('hint', () => {
@@ -132,26 +129,6 @@ describe('heatmap toggle', () => {
   });
 });
 
-describe('help toggle', () => {
-  it('is a client preference — no host round-trip', async () => {
-    const isActionHelpVisible = ref(false);
-    const h = harness({ isActionHelpVisible });
-    await h.handleTeachingAction('help-toggle');
-
-    expect(isActionHelpVisible.value).toBe(true);
-    expect(h.setActionHelpEnabled).toHaveBeenCalledWith(true);
-    expect(h.platformRequest).not.toHaveBeenCalled();
-  });
-
-  it('toggles back', async () => {
-    const isActionHelpVisible = ref(true);
-    const h = harness({ isActionHelpVisible });
-    await h.handleTeachingAction('help-toggle');
-    expect(isActionHelpVisible.value).toBe(false);
-    expect(h.setActionHelpEnabled).toHaveBeenCalledWith(false);
-  });
-});
-
 describe('tutorial', () => {
   it.each([
     ['start-tutorial', 'start-tutorial', /start tutorial/i],
@@ -169,7 +146,7 @@ describe('tutorial', () => {
 
 describe('every control', () => {
   it.each([
-    'hint', 'demo-toggle', 'heatmap-toggle', 'help-toggle', 'start-tutorial', 'exit-tutorial',
+    'hint', 'demo-toggle', 'heatmap-toggle', 'start-tutorial', 'exit-tutorial',
   ] as const)('%s never throws, whatever the host does', async (action) => {
     const h = harness({ platformRequest: vi.fn().mockResolvedValue({ success: false, error: 'The table did not answer in time. Try again.' }) });
     await expect(h.handleTeachingAction(action)).resolves.toBeUndefined();

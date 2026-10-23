@@ -13,6 +13,7 @@ import { countPageSingletons, unresolvedComponents } from '../components/page-si
 import { worldAction } from '../../world/index.js';
 import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 import { definePlayerPreferences } from '../player-preferences.js';
+import { actionHelpPreference } from '../composables/actionHelp.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -1213,7 +1214,7 @@ describe('WorldShell — the controls menu (#1443)', () => {
   const menuItems = () => Array.from(document.body.querySelectorAll<HTMLElement>('[role="menu"] [role^="menuitem"]'));
   const menuItem = (text: string) => menuItems().find((el) => el.textContent?.includes(text));
 
-  async function mountWithPreferences(over: Record<string, unknown> = {}) {
+  async function mountWithPreferences(over: Record<string, unknown> = {}, frame: Record<string, unknown> = {}) {
     const preferences = definePlayerPreferences('gloamhall', {
       torchlight: { label: 'Torchlight', description: 'Flickering light in the halls', default: true },
     });
@@ -1227,7 +1228,7 @@ describe('WorldShell — the controls menu (#1443)', () => {
       props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall', preferences, ...over },
       attachTo: document.body,
     });
-    await drawn(wrapper, stateFrame());
+    await drawn(wrapper, stateFrame(frame));
     await wrapper.get('button[aria-label="Game controls"]').trigger('click');
     return wrapper;
   }
@@ -1246,6 +1247,25 @@ describe('WorldShell — the controls menu (#1443)', () => {
     await nextTick();
     expect(wrapper.get('[data-testid="hall"]').text()).toBe('torchlight:false');
     expect(localStorage.getItem('boardsmith-preference:gloamhall:torchlight')).toBe('false');
+    wrapper.unmount();
+  });
+
+  it("shows a world verb's help in the panel once the player turns on action help in the menu (#1449)", async () => {
+    const search = worldAction('search')
+      .needs(() => [PARTITION])
+      .help('Look under the floorboards for anything hidden.')
+      .execute(() => {});
+    // Through JSON, as the host relays the offer frame.
+    const actions = JSON.parse(JSON.stringify(await offersFor([search], 'shell-help')));
+    actionHelpPreference().use('actionHelp').value = false;
+    const wrapper = await mountWithPreferences({}, { actions });
+    expect(wrapper.find('.action-help-btn').exists()).toBe(false);
+
+    menuItem('Show action help')!.click();
+    await nextTick();
+    await wrapper.get('.action-help-btn').trigger('click');
+    await nextTick();
+    expect(document.body.querySelector('[role="tooltip"]')!.textContent).toContain('Look under the floorboards for anything hidden.');
     wrapper.unmount();
   });
 

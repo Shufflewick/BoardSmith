@@ -47,25 +47,8 @@ import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
+import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
-
-// Get or set the global "Show action help" preference.
-// Key: boardsmith_action_help; default ON (true) when absent.
-// Wrapped in try/catch for graceful degradation in private browsing / SSR.
-function getActionHelpEnabled(): boolean {
-  try {
-    const stored = localStorage.getItem('boardsmith_action_help');
-    return stored === null ? true : stored === 'true';
-  } catch {
-    return true;
-  }
-}
-
-function setActionHelpEnabled(value: boolean): void {
-  try {
-    localStorage.setItem('boardsmith_action_help', String(value));
-  } catch { /* ignore — private browsing or storage full */ }
-}
 
 interface GameShellProps {
   /** Enable debug panel (default: true in dev) */
@@ -386,10 +369,7 @@ watch(turnIsMine, (now, before) => {
   if (now === true && before === false) audioService.playTurnSound();
 });
 
-// Global "Show action help" preference — persisted to localStorage.
-// Initialized from localStorage on mount (default ON when key is absent).
-// Mutated only by handleTeachingAction('help-toggle'); no server round-trip.
-const isActionHelpVisible = ref(getActionHelpEnabled());
+const isActionHelpVisible = actionHelpPreference().use('actionHelp');
 
 // LIBX-01 / A11Y C-2: GameShell no longer unmounts ActionPanel when every
 // available action is `.suppressFromActionPanel()`. It used to, with a mid-pick escape
@@ -413,18 +393,7 @@ const isSimultaneous = computed(() => {
   return (flowState?.awaitingPlayers?.length ?? 0) > 0;
 });
 
-// Whether the "Show action help" toggle has anything to reveal: true when any
-// currently-available action carries help text or a disabled reason — mirrors
-// the exact condition ActionPanel uses to render the per-action "?" affordance
-// (`action.help || disabledActions[name]`). Drives ControlsMenu's `hasActionHelp`
-// so a game that authored no help text never shows a present-but-inert toggle.
-const hasActionHelp = computed(() => {
-  const meta = actionMetadata.value;
-  const disabled = disabledActions.value;
-  return (availableActions.value as string[]).some(
-    (name) => !!meta?.[name]?.help || !!disabled?.[name]
-  );
-});
+const hasHelpToShow = computed(() => hasActionHelp(availableActions.value, actionMetadata.value, disabledActions.value));
 
 // Game view - computed here so actionController can use it for element enrichment
 // When viewing historical state (time travel), use that instead of live state.
@@ -961,8 +930,6 @@ const { handleTeachingAction } = useTeachingActions({
   isHeatmapVisible: () => isHeatmapVisibleProp.value,
   heatmapPending,
   heatmapToggling,
-  isActionHelpVisible,
-  setActionHelpEnabled,
   toast,
 });
 
@@ -1630,8 +1597,7 @@ defineExpose({
           :is-demo-running="isDemoRunning"
           :is-heatmap-visible="isHeatmapVisibleProp"
           :heatmap-supported="heatmapSupportedProp"
-          :is-action-help-visible="isActionHelpVisible"
-          :has-action-help="hasActionHelp"
+          :has-action-help="hasHelpToShow"
           :has-tutorial="hasTutorialProp"
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
