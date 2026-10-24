@@ -563,6 +563,19 @@ for a king"). A one- or two-character hidden value,
 such as a rank "7", is therefore never caught in an announcement; check it
 with `assertHidden` or by reading the region with `watchLiveRegion`.
 
+A hidden value that is also a common word, or whose plural is one, fails a
+clean board this way: a hidden "Will" in "you will draw", a hidden "Her" in
+"hers" (#1472). The failure message prints the `allow` entry that accepts that
+one announcement. `allow` is asked about each announcement that says a marker,
+with `ctx.announcement` set to its text, so the entry exempts the value in that
+sentence only, and the same value said anywhere else still fails:
+
+```typescript
+await assertNoHiddenInfoLeak(testGame, 1, {
+  allow: (marker, ctx) => marker === 'Will' && ctx.elementId === card.id && ctx.announcement === 'you will draw',
+});
+```
+
 **A table seat is given everything GameShell gives its board** (#406): board
 interaction, the game context (`useGameContext()`), the announcer
 (`useAnnouncer()`) and animation events (`useAnimationEvents()`). GameShell and

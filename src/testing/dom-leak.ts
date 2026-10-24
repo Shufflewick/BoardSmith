@@ -1139,10 +1139,16 @@ function retainDeclaredProps(
  * regression test that injects a bare-field-only leak (no `allow` predicate)
  * to prove that gap is covered too. See go-fish's
  * `tests/no-hidden-info-dom-leak.test.ts` for a worked example of both.
+ *
+ * Each marker is asked about once with no `announcement`, which exempts it
+ * everywhere, and again with `announcement` set for each announcement that
+ * says it, which exempts it in that announcement only (#1472). A hidden value
+ * that is also an ordinary word ("Will" in "you will draw") is accepted that
+ * way; the failure message prints the exact entry.
  */
 export type HiddenInfoLeakAllowPredicate = (
   marker: string,
-  context: { attribute?: string; elementId: number; elementLabel: string },
+  context: { attribute?: string; elementId: number; elementLabel: string; announcement?: string },
 ) => boolean;
 
 export interface AssertNoHiddenInfoLeakOptions extends RenderAsSeatOptions {
@@ -1602,17 +1608,24 @@ function refuseSpokenLeak(
   markers: readonly ForbiddenMarker[],
   ownValuesById: LeakDetectionData['ownValuesById'],
   seat: number,
+  allow: HiddenInfoLeakAllowPredicate = () => false,
 ): void {
   const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values].map((value) => value.toLowerCase())));
   for (const marker of markers) {
     if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || spokenForms(marker.value).some((form) => shown.has(form))) continue;
-    const leak = spoken.find(({ text }) => saysWord(text, marker.value));
+    const { value, attribute, elementId, elementLabel } = marker;
+    const leak = spoken.find(
+      ({ text }) => saysWord(text, value) && !allow(value, { attribute, elementId, elementLabel, announcement: text }),
+    );
     if (leak) {
+      const quote = JSON.stringify;
       throw new Error(
-        `Hidden-info leak: "${marker.value}"` +
-          `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
-          `from ${marker.elementLabel} is announced to seat ${seat}. ` +
-          `Leaked via the ${leak.level} live region (announce): ${leak.text.slice(0, 200)}`,
+        `Hidden-info leak: "${value}"` +
+          `${attribute ? ` (attribute "${attribute}")` : ''} ` +
+          `from ${elementLabel} is announced to seat ${seat}. ` +
+          `Leaked via the ${leak.level} live region (announce): ${leak.text.slice(0, 200)}\n` +
+          `If the word here is ordinary speech and not the hidden value, accept this one announcement with ` +
+          `allow: (marker, ctx) => marker === ${quote(value)} && ctx.elementId === ${elementId} && ctx.announcement === ${quote(leak.text)}`,
       );
     }
   }
@@ -1664,7 +1677,8 @@ function refuseSpokenLeak(
  *   owning element, the seat, and the DOM surface.
  * @throws If the board announces a marker to the seat's live regions (#1470):
  *   as a whole word in any case or as its s/es plural (#1471), three or more
- *   characters long, that the seat is not shown on any element it can see.
+ *   characters long, that the seat is not shown on any element it can see,
+ *   naming the `allow` entry that accepts that one announcement (#1472).
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
  */
@@ -1761,7 +1775,7 @@ export async function assertNoHiddenInfoLeak(
         }
       }
     }
-    refuseSpokenLeak(spoken, activeMarkers, ownValuesById, seat);
+    refuseSpokenLeak(spoken, activeMarkers, ownValuesById, seat, allow);
   } finally {
     wrapper.unmount();
   }

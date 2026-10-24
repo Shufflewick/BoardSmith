@@ -121,4 +121,43 @@ describe('assertNoHiddenInfoLeak checks what the board announces (#1470)', () =>
 
     await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
   });
+
+  describe('a hidden value that is also an ordinary word (#1472)', () => {
+    const willEntry = (tg: TestGame<SecretHandGame>) =>
+      `allow: (marker, ctx) => marker === "Will" && ctx.elementId === ${tg.game.first(Card, '2-secret-card')!.id} && ctx.announcement === "you will draw"`;
+
+    it('fails naming the allow entry that accepts the announcement', async () => {
+      const tg = makeSecretHandGame('announce-ordinary-word');
+      setRank(tg, 2, 'Will');
+      const board = announcingBoard({ text: 'you will draw' });
+
+      await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).rejects.toThrow(
+        expect.objectContaining({ message: expect.stringContaining(willEntry(tg)) }),
+      );
+    });
+
+    it('passes with that allow entry, while the hidden value said elsewhere still fails', async () => {
+      const tg = makeSecretHandGame('announce-ordinary-word-allowed');
+      setRank(tg, 2, 'Will');
+      const card = tg.game.first(Card, '2-secret-card')!;
+      const allow = (marker: string, ctx: { elementId: number; announcement?: string }) =>
+        marker === 'Will' && ctx.elementId === card.id && ctx.announcement === 'you will draw';
+
+      await expect(
+        assertNoHiddenInfoLeak(tg, 1, { component: announcingBoard({ text: 'you will draw' }), allow }),
+      ).resolves.not.toThrow();
+      await expect(
+        assertNoHiddenInfoLeak(tg, 1, {
+          component: announcingBoard({ text: 'you will draw' }, { text: 'Opponent drew a Will' }),
+          allow,
+        }),
+      ).rejects.toThrow(/Hidden-info leak: "Will".*Opponent drew a Will/s);
+      await expect(
+        assertNoHiddenInfoLeak(tg, 1, {
+          component: announcingBoard({ text: 'you will draw' }, { text: 'Opponent holds 2-secret-card' }),
+          allow,
+        }),
+      ).rejects.toThrow(/Hidden-info leak: "2-secret-card"/);
+    });
+  });
 });
