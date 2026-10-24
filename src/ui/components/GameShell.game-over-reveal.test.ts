@@ -20,8 +20,8 @@ import {
   enterIframe,
   leaveIframe,
   mountPlatformShell,
-  watchLiveRegion,
 } from './GameShell.platform-mount.test-helper.js';
+import { watchLiveRegion } from '../../testing/live-region.js';
 
 const PLAYERS = [
   { seat: 0, name: 'Alice' },

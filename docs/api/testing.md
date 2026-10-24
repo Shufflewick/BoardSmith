@@ -554,11 +554,25 @@ interaction, the game context (`useGameContext()`), the announcer
 this utility build them with the same function, `useTableSeat`, so a board that
 runs inside the shell mounts here with no wiring from you, and a test that
 mounts the real shell fails if it ever provides something this does not. The
-seat's pending animation events play to the handlers your board registers. The
-announcer writes the seat's live regions as the shell's does, but this utility
-does not draw them; to check what a board announces, mount the real shell and
-read its live regions, `[data-bs-live-region="polite"]` and
-`[data-bs-live-region="assertive"]`.
+seat's pending animation events play to the handlers your board registers.
+
+**What the board announces is drawn as the shell draws it** (#1468), for a
+table seat and a world seat alike: the announcer writes the seat's live regions
+and this utility renders them beside the board with the shells' own
+`LiveRegions` component, so a test hears what a screen reader would.
+`watchLiveRegion(wrapper, 'polite' | 'assertive')`, from `boardsmith/testing`, records every text the region
+is given from the moment it is called, in order, a repeated message included,
+and returns a reader that lets pending announcements render first:
+
+```ts
+const wrapper = await renderAsSeat(testGame, 1, { component: GameTable });
+const said = watchLiveRegion(wrapper, 'assertive');
+await wrapper.find('[data-space="3"]').trigger('click');
+expect(await said()).toEqual(['That space is taken']);
+```
+
+It reads a mounted `GameShell` or `WorldShell` the same way, and throws, saying
+so, for a board mounted on its own with `mount()`, which draws no live regions.
 
 **A world seat is given everything WorldShell gives its board** (#413): board
 interaction, the shared half of the game context (a world has no `gameState`,
