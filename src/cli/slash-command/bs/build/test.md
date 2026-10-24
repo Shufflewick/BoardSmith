@@ -90,8 +90,7 @@ here.
          what to do, and add a test that reaches it and asserts that message.
        - **No test hand-builds a shell's context.** A test file the chunk wrote or changed that
          provides, by hand, a key only one of the two shells provides (`GAME_CONTEXT_KEYS.gameState`,
-         `dueSeats`, `timeTravelDiff`, `turnDeadline`, `ANNOUNCER_KEY`, `ANIMATION_EVENTS_KEY`,
-         `WORLD_CONTEXT_KEY`) is a finding: a board reading it passes the test and throws in the
+         `dueSeats`, `timeTravelDiff`, `turnDeadline`, `ANIMATION_EVENTS_KEY`, `WORLD_CONTEXT_KEY`) is a finding: a board reading it passes the test and throws in the
          other shell. Mount with `renderAsSeat`, `tableShellContext` or `worldShellContext`.
        - **Mutation: every claim and every test can fail.** The command makes one small change at a
          time to the lines this chunk added (a flipped comparison, a negated condition, a removed

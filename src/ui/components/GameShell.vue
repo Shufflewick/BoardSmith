@@ -30,6 +30,7 @@ import HeatmapOverlay from './helpers/HeatmapOverlay.vue';
 import BoardMessage from './helpers/BoardMessage.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import Toast from './Toast.vue';
+import LiveRegions from './LiveRegions.vue';
 import { createBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useTableSeat, provideTableSeat } from '../composables/useTableSeat.js';
@@ -1355,11 +1356,9 @@ defineExpose({
     <!-- Visually-hidden page title for AT landmarks -->
     <h1 class="vh">BoardSmith — game board</h1>
 
-    <!-- Visually-hidden live regions — always mounted, never v-if (Pitfall 2).
-         Written only from watchers with immediate:false so ATs register the
-         regions before any content appears. -->
-    <p class="vh" role="status" aria-live="polite">{{ politeMessage }}</p>
-    <p class="vh" role="alert" aria-live="assertive">{{ assertiveMessage }}</p>
+    <!-- Written only from watchers with immediate:false so ATs register the
+         regions before any content appears (Pitfall 2). -->
+    <LiveRegions :polite="politeMessage" :assertive="assertiveMessage" />
     <!-- Always-mounted prompt region: value is empty when not the player's turn.
          Replaces the conditionally-mounted duplicate that was inside the actionbar
          v-if block (WR-04). Mounting the region before writing content is required

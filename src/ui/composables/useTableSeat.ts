@@ -18,13 +18,13 @@
  * Call it inside a component's `setup` or an `effectScope`: it registers
  * watchers (the controller's, the board bridge's and the animation queue's).
  */
-import { computed, provide, ref, type ComputedRef, type Ref } from 'vue';
+import { computed, provide, type ComputedRef, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
 import type { GameRootView } from '../types.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
-import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
+import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
@@ -104,7 +104,7 @@ export interface TableSeat extends TableActionWiring {
   /** Writes to the two live regions below and relays each message to the host page. */
   announcer: UseAnnouncerReturn;
   /** The live-region text the announcer writes: render each in an `aria-live` node. */
-  liveRegion: { polite: Ref<string>; assertive: Ref<string> };
+  liveRegion: LiveRegion;
   /**
    * Whether the table's ending is on screen: the flow is complete and every board
    * that holds its result back (`holdGameOverUntil`) has shown it. The game-over
@@ -115,14 +115,6 @@ export interface TableSeat extends TableActionWiring {
   menuCommands: ReturnType<typeof createMenuCommands>;
   /** Everything the board can inject, by key. Publish with {@link provideTableSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
-}
-
-/**
- * Relay an announcement to the page hosting this frame, so a host can speak it
- * from its own accessible DOM as well.
- */
-function relayAnnouncement(level: 'polite' | 'assertive', text: string): void {
-  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
 }
 
 export function useTableSeat(opts: TableSeatOptions): TableSeat {
@@ -168,12 +160,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     timeline: () => animationTimeline(state.value?.state),
   });
 
-  const liveRegion = { polite: ref(''), assertive: ref('') };
-  const announcer = createAnnouncer({
-    politeMessage: liveRegion.polite,
-    assertiveMessage: liveRegion.assertive,
-    emitAnnounce: relayAnnouncement,
-  });
+  const { liveRegion, announcer } = createLiveRegion();
 
   const gameOver = createGameOverReveal(() => flowState.value?.complete === true);
   const menuCommands = createMenuCommands();

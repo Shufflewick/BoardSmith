@@ -559,8 +559,8 @@ the announcer relays what it says to `window.postMessage` as the shell's does.
 
 **A world seat is given everything WorldShell gives its board** (#413): board
 interaction, the shared half of the game context (a world has no `gameState`,
-`dueSeats`, `timeTravelDiff` or `turnDeadline`) and the world itself
-(`useWorld()`). WorldShell and this utility build them with the same function,
+`dueSeats`, `timeTravelDiff` or `turnDeadline`), the announcer
+(`useAnnouncer()`) and the world itself (`useWorld()`). WorldShell and this utility build them with the same function,
 `useWorldSeat`, from the frame a host would send the seat, and a test that
 mounts the real shell fails if it ever provides something this does not. The
 seat's `actionController` is the real one: a pick re-asked with answers bound

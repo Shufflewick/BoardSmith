@@ -449,8 +449,8 @@ board can start it. When the hold lifts, the action is back at once.
   see no change. The rules still decide what the server accepts. When an
   action is both disabled by its rule and held, the rule's reason shows.
 - **An open action that becomes held is cancelled**, and the hold's reason
-  shows as a notice (`toast.info`, which screen readers hear politely), not
-  as an error. Left open, it would wait at a pick the board will not answer
+  shows as a notice (`toast.info`, and the shell's polite live region, so a
+  screen reader hears it), not as an error. Left open, it would wait at a pick the board will not answer
   until the hold lifts. The player did nothing wrong, so `boardsmith smoke`
   does not report it either. The controller exposes the reason as
   `holdNotice`. An action whose submission is already on its way to the

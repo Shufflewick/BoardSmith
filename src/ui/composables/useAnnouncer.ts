@@ -2,8 +2,8 @@
  * Screen-reader announcer composable
  *
  * Lets any game component (custom UI or AutoUI) announce state changes to
- * screen readers by writing through GameShell's existing live-region refs
- * (`politeMessage`/`assertiveMessage`) — no new DOM nodes, no new architecture.
+ * screen readers by writing through the shell's live regions (GameShell's or
+ * WorldShell's, each built by `createLiveRegion` and drawn by `LiveRegions`).
  *
  * Uses provide/inject for component tree access (following the
  * useAnimationEvents/useBoardInteraction pattern).
@@ -20,7 +20,7 @@
  * announce('Invalid move', { assertive: true });
  * ```
  */
-import { nextTick, type Ref, type InjectionKey, inject } from 'vue';
+import { nextTick, ref, type Ref, type InjectionKey, inject } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 /**
@@ -82,6 +82,31 @@ export function createAnnouncer(options: CreateAnnouncerOptions): UseAnnouncerRe
   return { announce };
 }
 
+/** The text of a shell's two live regions: render them with `LiveRegions`. */
+export interface LiveRegion {
+  polite: Ref<string>;
+  assertive: Ref<string>;
+}
+
+/**
+ * Relay an announcement to the page hosting this frame, so a host can speak it
+ * from its own accessible DOM as well.
+ */
+function relayAnnouncement(level: 'polite' | 'assertive', text: string): void {
+  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
+}
+
+/** A seat's live regions and the announcer that writes them, one for a table and a world alike (#1464). */
+export function createLiveRegion(): { liveRegion: LiveRegion; announcer: UseAnnouncerReturn } {
+  const liveRegion = { polite: ref(''), assertive: ref('') };
+  const announcer = createAnnouncer({
+    politeMessage: liveRegion.polite,
+    assertiveMessage: liveRegion.assertive,
+    emitAnnounce: relayAnnouncement,
+  });
+  return { liveRegion, announcer };
+}
+
 /**
  * Use the announcer from an ancestor component (custom UI or AutoUI).
  *
@@ -95,9 +120,9 @@ export function useAnnouncer(): UseAnnouncerReturn {
 
   devWarn(
     'useAnnouncer-no-provider',
-    'useAnnouncer() was called with no ancestor GameShell providing an announcer. ' +
+    'useAnnouncer() was called with no ancestor GameShell or WorldShell providing an announcer. ' +
       'announce() calls will be no-ops. This composable only works inside a component ' +
-      'tree rendered by GameShell (custom UI or AutoUI descendants).'
+      'tree rendered by GameShell or WorldShell (custom UI or AutoUI descendants).'
   );
   return { announce: () => {} };
 }

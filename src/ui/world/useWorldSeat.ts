@@ -26,6 +26,7 @@ import { playContextProvisions } from '../composables/useGameContext.js';
 import { useToast } from '../composables/useToast.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from '../composables/menuCommands.js';
 import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from '../composables/actionHolds.js';
+import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerReturn } from '../composables/useAnnouncer.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
 import type { WorldSeatHost } from './useWorldHost.js';
 import { useWorldPlay, type WorldPlay } from './useWorldPlay.js';
@@ -52,6 +53,10 @@ export interface WorldSeat {
   disabledActions: ComputedRef<Record<string, string> | undefined>;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
+  /** Writes to the two live regions below and relays each message to the host page. */
+  announcer: UseAnnouncerReturn;
+  /** The live-region text the announcer writes: render it with `LiveRegions`. */
+  liveRegion: LiveRegion;
   /** Everything the board can inject, by key. Publish with {@link provideWorldSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
 }
@@ -62,6 +67,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
   const actionHolds = createActionHolds();
   const disabledActions = withHolds(play.disabledActions, actionHolds);
   const playerSeat = computed(() => host.seat.value ?? -1);
+  const { liveRegion, announcer } = createLiveRegion();
 
   /**
    * THE TABLE'S CONTROLLER, UNCHANGED, WITH A WORLD'S ANSWERS.
@@ -149,10 +155,9 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     // host that answered without saying anything, which the player still has to
     // be told about rather than left guessing at.
     if (!outcome.ok) {
-      toast.show(outcome.message ?? 'The world refused that, and did not say why.', {
-        type: 'error',
-        duration: 5000,
-      });
+      const refusal = outcome.message ?? 'The world refused that, and did not say why.';
+      toast.show(refusal, { type: 'error', duration: 5000 });
+      announcer.announce(refusal, { assertive: true });
     }
     return outcome;
   }
@@ -162,6 +167,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     [BOARD_INTERACTION_KEY, boardInteraction],
     [MENU_COMMANDS_KEY, menuCommands],
     [ACTION_HOLDS_KEY, actionHolds],
+    [ANNOUNCER_KEY, announcer],
     ...playContextProvisions({
       gameView: play.gameView,
       players: play.players,
@@ -193,7 +199,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     ],
   ];
 
-  return { play, playerSeat, controller, disabledActions, menuCommands, provisions };
+  return { play, playerSeat, controller, disabledActions, menuCommands, announcer, liveRegion, provisions };
 }
 
 /** Provide a seat's {@link WorldSeat.provisions} to the components below. Call it in `setup`. */

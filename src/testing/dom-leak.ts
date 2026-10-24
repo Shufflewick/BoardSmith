@@ -317,7 +317,14 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
         key(holds.ACTION_HOLDS_KEY),
         ...allContext,
       ]),
-      world: new Set([key(interaction.BOARD_INTERACTION_KEY), key(menu.MENU_COMMANDS_KEY), key(holds.ACTION_HOLDS_KEY), ...playContext, key(world.WORLD_CONTEXT_KEY)]),
+      world: new Set([
+        key(interaction.BOARD_INTERACTION_KEY),
+        key(announcer.ANNOUNCER_KEY),
+        key(menu.MENU_COMMANDS_KEY),
+        key(holds.ACTION_HOLDS_KEY),
+        ...playContext,
+        key(world.WORLD_CONTEXT_KEY),
+      ]),
     };
   });
   return shellProvidedKeysPromise;
