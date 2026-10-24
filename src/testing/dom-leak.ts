@@ -1587,6 +1587,28 @@ function saysWord(text: string, word: string): boolean {
   return false;
 }
 
+/** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
+function refuseSpokenLeak(
+  spoken: readonly Spoken[],
+  markers: readonly ForbiddenMarker[],
+  ownValuesById: LeakDetectionData['ownValuesById'],
+  seat: number,
+): void {
+  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values]));
+  for (const marker of markers) {
+    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value)) continue;
+    const leak = spoken.find(({ text }) => saysWord(text, marker.value));
+    if (leak) {
+      throw new Error(
+        `Hidden-info leak: "${marker.value}"` +
+          `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
+          `from ${marker.elementLabel} is announced to seat ${seat}. ` +
+          `Leaked via the ${leak.level} live region (announce): ${leak.text.slice(0, 200)}`,
+      );
+    }
+  }
+}
+
 /**
  * Render `testGame` as `seat` (headlessly, via `renderAsSeat`) and throw if
  * any hidden element's identity leaks into the rendered markup.
@@ -1730,19 +1752,7 @@ export async function assertNoHiddenInfoLeak(
         }
       }
     }
-    const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values]));
-    for (const marker of activeMarkers) {
-      if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value)) continue;
-      const leak = spoken.find(({ text }) => saysWord(text, marker.value));
-      if (leak) {
-        throw new Error(
-          `Hidden-info leak: "${marker.value}"` +
-            `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
-            `from ${marker.elementLabel} is announced to seat ${seat}. ` +
-            `Leaked via the ${leak.level} live region (announce): ${leak.text.slice(0, 200)}`,
-        );
-      }
-    }
+    refuseSpokenLeak(spoken, activeMarkers, ownValuesById, seat);
   } finally {
     wrapper.unmount();
   }
