@@ -72,6 +72,32 @@ describe('assertNoHiddenInfoLeak checks what the board announces (#1470)', () =>
     await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
   });
 
+  it('fails on a hidden value said in lowercase (#1471)', async () => {
+    const tg = makeSecretHandGame('announce-lowercase');
+    const board = announcingBoard({ text: 'Your opponent drew a king' });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).rejects.toThrow(/Hidden-info leak: "King".*drew a king/s);
+  });
+
+  it('fails on a hidden value said as a plural (#1471)', async () => {
+    const tg = makeSecretHandGame('announce-plural');
+    const board = announcingBoard({ text: 'Two Kings left' });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).rejects.toThrow(/Hidden-info leak: "King".*Two Kings left/s);
+    setRank(tg, 2, 'Glass');
+    await expect(
+      assertNoHiddenInfoLeak(tg, 1, { component: announcingBoard({ text: 'Two glasses broke' }) }),
+    ).rejects.toThrow(/Hidden-info leak: "Glass"/);
+  });
+
+  it('passes a word the seat is shown elsewhere in a different case (#1471)', async () => {
+    const tg = makeSecretHandGame('announce-shown-case');
+    setRank(tg, 1, 'king');
+    const board = announcingBoard({ text: 'Bob asked for a King' });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
+  });
+
   it('does not read a count as a short hidden rank', async () => {
     const tg = makeSecretHandGame('announce-short');
     setRank(tg, 2, '7');

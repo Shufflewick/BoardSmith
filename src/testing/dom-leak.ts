@@ -1578,11 +1578,18 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  */
 const MIN_SPOKEN_MARKER_LENGTH = 3;
 
-/** Whether `text` holds `word` with no letter or digit directly before or after it: "King" in "the King", not in "Kingdom". */
+/**
+ * Whether `text` says `word` as a whole word, in any case, or its plural in s or es:
+ * "King" in "the king" and "two Kings", not in "Kingdom".
+ */
 function saysWord(text: string, word: string): boolean {
+  const said = text.toLowerCase();
+  const sought = word.toLowerCase();
   const joined = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
-  for (let at = text.indexOf(word); at !== -1; at = text.indexOf(word, at + 1)) {
-    if (!joined(text[at - 1]) && !joined(text[at + word.length])) return true;
+  for (let at = said.indexOf(sought); at !== -1; at = said.indexOf(sought, at + 1)) {
+    if (joined(said[at - 1])) continue;
+    const end = at + sought.length;
+    if (['', 's', 'es'].some((ending) => said.startsWith(ending, end) && !joined(said[end + ending.length]))) return true;
   }
   return false;
 }
@@ -1594,9 +1601,9 @@ function refuseSpokenLeak(
   ownValuesById: LeakDetectionData['ownValuesById'],
   seat: number,
 ): void {
-  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values]));
+  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values].map((value) => value.toLowerCase())));
   for (const marker of markers) {
-    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value)) continue;
+    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value.toLowerCase())) continue;
     const leak = spoken.find(({ text }) => saysWord(text, marker.value));
     if (leak) {
       throw new Error(
@@ -1654,8 +1661,8 @@ function refuseSpokenLeak(
  *   set with `setBoardPrompt`, naming the leaked marker, the
  *   owning element, the seat, and the DOM surface.
  * @throws If the board announces a marker to the seat's live regions (#1470):
- *   as a whole word, three or more characters long, that the seat is not shown
- *   on any element it can see.
+ *   as a whole word in any case or as its s/es plural (#1471), three or more
+ *   characters long, that the seat is not shown on any element it can see.
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
  */
