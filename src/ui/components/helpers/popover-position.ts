@@ -16,8 +16,8 @@
 export interface PopoverPosition {
   top: number;
   left: number;
-  /** Which edge the caret sits on: 'top' = popover below trigger, caret points up. */
-  caretSide: 'top' | 'bottom';
+  /** Which edge the caret sits on: 'top' = popover below trigger, caret points up. Null when it covers its trigger, so no edge faces it. */
+  caretSide: 'top' | 'bottom' | null;
   /** Caret centre, relative to the popover's left edge, after edge-clamping. */
   caretLeft: number;
   /** The room on the popover's side of the trigger: a taller popover scrolls inside this height. */
@@ -74,11 +74,12 @@ export function computePopoverPosition(
   const below = height <= roomBelow || (height > roomAbove && roomBelow >= roomAbove);
   let maxHeight = below ? roomBelow : roomAbove;
   let top = below ? triggerRect.bottom + OFFSET : triggerRect.top - OFFSET - Math.min(height, maxHeight);
+  let caretSide: PopoverPosition['caretSide'] = below ? 'top' : 'bottom';
   if (tooTall === 'cover-trigger' && height > maxHeight) {
     maxHeight = window.innerHeight - FLIP_THRESHOLD - EDGE_MARGIN;
     top = below ? window.innerHeight - FLIP_THRESHOLD - Math.min(height, maxHeight) : EDGE_MARGIN;
+    caretSide = null;
   }
-  const caretSide = below ? 'top' : 'bottom';
 
   const left = Math.max(EDGE_MARGIN, Math.min(triggerRect.left, window.innerWidth - width - EDGE_MARGIN));
 

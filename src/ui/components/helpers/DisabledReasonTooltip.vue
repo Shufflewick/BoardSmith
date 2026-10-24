@@ -92,6 +92,7 @@ const style = computed(() => ({
         :style="style"
       >
         <span
+          v-if="position.caretSide"
           class="bs-disabled-tip__caret"
           :class="`bs-disabled-tip__caret--${position.caretSide}`"
           :style="{ '--tip-caret-left': `${position.caretLeft}px` }"

@@ -66,6 +66,7 @@ describe('DisabledReasonTooltip', () => {
     const tip = document.getElementById(DISABLED_TOOLTIP_ID)!;
     expect(tip.style.maxHeight).toBe(`${500 - 16 - 8}px`);
     expect(tip.style.top).toBe(`${500 - 16 - 400}px`);
+    expect(tip.querySelector('.bs-disabled-tip__caret'), 'a caret on a reason over its control points at nothing').toBe(null);
     wrapper.unmount();
   });
 
@@ -175,7 +176,7 @@ describe('computePopoverPosition', () => {
   it("with 'cover-trigger', one that fits neither side shows whole, slid up from below over its trigger to the window's bottom (#1459)", () => {
     const p = computePopoverPosition(rect({ top: 300, bottom: 330, left: 200, width: 80 }), 600, 260, 'cover-trigger');
 
-    expect(p.caretSide).toBe('top');
+    expect(p.caretSide).toBe(null);
     expect(p.top).toBe(800 - 16 - 600);
     expect(p.maxHeight).toBe(800 - 16 - 8);
   });
@@ -183,7 +184,7 @@ describe('computePopoverPosition', () => {
   it("with 'cover-trigger', one that fits neither side and has more room above shows whole from the window's top (#1459)", () => {
     const p = computePopoverPosition(rect({ top: 600, bottom: 630, left: 200, width: 80 }), 700, 260, 'cover-trigger');
 
-    expect(p.caretSide).toBe('bottom');
+    expect(p.caretSide).toBe(null);
     expect(p.top).toBe(8);
     expect(p.maxHeight).toBe(800 - 16 - 8);
   });
@@ -205,6 +206,7 @@ describe('computePopoverPosition', () => {
         expect(p.top >= 8 && p.top + Math.min(height, p.maxHeight) <= 800 - 16, at).toBe(true);
         if (height <= 800 - 16 - 8) expect(p.maxHeight >= height, at).toBe(true);
         if (height <= beside.maxHeight) expect(p, at).toEqual(beside);
+        else expect(p.caretSide, `${at}: a caret on a popover over its trigger points at nothing`).toBe(null);
       }
     }
   });

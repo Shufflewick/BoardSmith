@@ -152,6 +152,7 @@ async function checkTallDisabledReason(page) {
     assert(tipBox.height > Math.max(roomAbove, roomBelow), `the reason fits beside the card, so this checks nothing: reason ${JSON.stringify(tipBox)}, card ${JSON.stringify(cardBox)}`);
     assert(tipBox.y >= frameBox.y && tipBox.y + tipBox.height <= frameBox.y + frameBox.height, `the reason runs off the window: reason ${JSON.stringify(tipBox)}, window ${JSON.stringify(frameBox)}`);
     assert((await text.innerText()).trim() === TALL_REASON, 'the reason shown is not the whole reason');
+    assert((await tip.locator('.bs-disabled-tip__caret').count()) === 0, 'a caret shows on a reason over its card, pointing at nothing');
   });
   await check("a screen reader gets the whole reason from the control's aria-describedby (#1459)", async () => {
     const described = await card.evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent);
