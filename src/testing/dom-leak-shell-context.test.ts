@@ -12,7 +12,7 @@
  * real GameShell and fails if it provides its board anything a board mounted by
  * `renderAsSeat` is not given.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick, ref, type PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 import { MoveGame } from '../session/move-game.test-helper.js';
@@ -20,7 +20,6 @@ import { buildPlayerState } from '../session/utils.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import { GAME_CONTEXT_KEYS, useGameContext } from '../ui/composables/useGameContext.js';
 import { WORLD_CONTEXT_KEY } from '../ui/world/useWorld.js';
-import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
 import { useMenuCommands } from '../ui/composables/menuCommands.js';
@@ -40,7 +39,6 @@ await preloadSeatRenderer();
 const mounted: Array<{ unmount(): void }> = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
-  vi.restoreAllMocks();
   leaveIframe();
 });
 
@@ -112,29 +110,6 @@ describe('renderAsSeat provides the game context GameShell provides (#406)', () 
     const offMove = (await renderInsideGameShell(game, 2, ContextBoard)).find('.board');
     expect(offMove.attributes('data-my-turn')).toBe('false');
     expect(offMove.attributes('data-actions')).toBe('');
-  });
-});
-
-/** A board that announces on mount, as a board announcing its own changes does. */
-const AnnouncingBoard = defineComponent({
-  name: 'AnnouncingBoard',
-  setup() {
-    const { announce } = useAnnouncer();
-    announce('The pawn is on the bridge');
-    return () => h('div', { class: 'board' });
-  },
-});
-
-describe('renderAsSeat provides the announcer GameShell provides (#406)', () => {
-  it("gives the board the shell's announcer, which relays what it says", async () => {
-    const posted = vi.spyOn(window, 'postMessage');
-
-    await render(renderAsSeat(moveGame(), 1, { component: AnnouncingBoard }));
-
-    const relayed = posted.mock.calls
-      .map(([message]) => message as { source?: string; type?: string; text?: string })
-      .filter((message) => message?.source === 'boardsmith-a11y' && message.type === 'announce');
-    expect(relayed.map((message) => message.text)).toEqual(['The pawn is on the bridge']);
   });
 });
 

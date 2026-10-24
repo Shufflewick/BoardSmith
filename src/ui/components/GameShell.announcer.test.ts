@@ -4,8 +4,8 @@
  *  - parity: a custom-UI-style descendant and an AutoUI-style descendant
  *    mounted under the same provider both receive the same announcer and
  *    drive the same live-region ref.
- *  - relay: each announce() fires the existing boardsmith-a11y postMessage
- *    relay unchanged.
+ *  - live regions: the seat's announcer writes its own live regions and
+ *    posts nothing to any window (#1466).
  *
  * Does NOT mount the real GameShell.vue — see GameShell.live-region.test.ts
  * for the rationale (extensive client/session mocking required). Instead this
@@ -17,6 +17,7 @@ import { ref, defineComponent, h, nextTick, provide } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
   createAnnouncer,
+  createLiveRegion,
   useAnnouncer,
   ANNOUNCER_KEY,
   type UseAnnouncerReturn,
@@ -74,8 +75,7 @@ describe('GameShell announcer wiring — parity', () => {
   it('both descendants drive the same politeMessage ref through a real createAnnouncer', async () => {
     const politeMessage = ref('');
     const assertiveMessage = ref('');
-    const emitAnnounce = vi.fn();
-    const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+    const announcer = createAnnouncer({ politeMessage, assertiveMessage });
 
     const Host = defineComponent({
       components: { CustomUiDescendant, AutoUiDescendant },
@@ -101,31 +101,21 @@ describe('GameShell announcer wiring — parity', () => {
   });
 });
 
-describe('GameShell announcer wiring — relay', () => {
+describe('createLiveRegion (#1466)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('calling announce fires window.postMessage with the boardsmith-a11y shape', () => {
-    const politeMessage = ref('');
-    const assertiveMessage = ref('');
-    function emitAnnounce(level: 'polite' | 'assertive', text: string): void {
-      window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
-    }
+  it("writes each announcement to the seat's own live regions and posts nothing to any window", async () => {
     const postMessageSpy = vi.spyOn(window, 'postMessage');
+    const { liveRegion, announcer } = createLiveRegion();
 
-    const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
     announcer.announce('3 cards remain');
-
-    expect(postMessageSpy).toHaveBeenCalledWith(
-      { source: 'boardsmith-a11y', type: 'announce', level: 'polite', text: '3 cards remain' },
-      '*'
-    );
-
     announcer.announce('Invalid move', { assertive: true });
-    expect(postMessageSpy).toHaveBeenCalledWith(
-      { source: 'boardsmith-a11y', type: 'announce', level: 'assertive', text: 'Invalid move' },
-      '*'
-    );
+    await nextTick();
+
+    expect(liveRegion.polite.value).toBe('3 cards remain');
+    expect(liveRegion.assertive.value).toBe('Invalid move');
+    expect(postMessageSpy).not.toHaveBeenCalled();
   });
 });

@@ -11,7 +11,7 @@
  * @example
  * ```typescript
  * // In GameShell setup (root component)
- * const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+ * const announcer = createAnnouncer({ politeMessage, assertiveMessage });
  * provide(ANNOUNCER_KEY, announcer);
  *
  * // In any descendant component (custom UI or AutoUI)
@@ -45,8 +45,6 @@ export interface CreateAnnouncerOptions {
   politeMessage: Ref<string>;
   /** GameShell's existing assertive live-region ref (aria-live="assertive" / role="alert"). */
   assertiveMessage: Ref<string>;
-  /** GameShell's existing boardsmith-a11y postMessage relay. */
-  emitAnnounce: (level: 'polite' | 'assertive', text: string) => void;
 }
 
 /**
@@ -58,25 +56,22 @@ export const ANNOUNCER_KEY: InjectionKey<UseAnnouncerReturn> = Symbol('announcer
  * Create an announcer instance.
  *
  * Call this in a root component (e.g., GameShell) and provide it to descendants,
- * passing GameShell's EXISTING live-region refs and emitAnnounce function.
+ * passing GameShell's EXISTING live-region refs.
  *
  * @param options Configuration options
  * @returns Announcer controller
  */
 export function createAnnouncer(options: CreateAnnouncerOptions): UseAnnouncerReturn {
-  const { politeMessage, assertiveMessage, emitAnnounce } = options;
+  const { politeMessage, assertiveMessage } = options;
 
   function announce(message: string, announceOptions?: { assertive?: boolean }): void {
-    const level: 'polite' | 'assertive' = announceOptions?.assertive ? 'assertive' : 'polite';
-    const target = level === 'assertive' ? assertiveMessage : politeMessage;
+    const target = announceOptions?.assertive ? assertiveMessage : politeMessage;
 
     // Clear-then-set on every call so screen readers re-announce duplicate messages.
     target.value = '';
     void nextTick().then(() => {
       target.value = message;
     });
-
-    emitAnnounce(level, message);
   }
 
   return { announce };
@@ -88,21 +83,12 @@ export interface LiveRegion {
   assertive: Ref<string>;
 }
 
-/**
- * Relay an announcement to the page hosting this frame, so a host can speak it
- * from its own accessible DOM as well.
- */
-function relayAnnouncement(level: 'polite' | 'assertive', text: string): void {
-  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
-}
-
 /** A seat's live regions and the announcer that writes them, one for a table and a world alike (#1464). */
 export function createLiveRegion(): { liveRegion: LiveRegion; announcer: UseAnnouncerReturn } {
   const liveRegion = { polite: ref(''), assertive: ref('') };
   const announcer = createAnnouncer({
     politeMessage: liveRegion.polite,
     assertiveMessage: liveRegion.assertive,
-    emitAnnounce: relayAnnouncement,
   });
   return { liveRegion, announcer };
 }

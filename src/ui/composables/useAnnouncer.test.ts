@@ -49,9 +49,8 @@ describe('useAnnouncer', () => {
     it('announce(message) writes to politeMessage, not assertiveMessage', async () => {
       const politeMessage = ref('');
       const assertiveMessage = ref('');
-      const emitAnnounce = vi.fn();
 
-      const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+      const announcer = createAnnouncer({ politeMessage, assertiveMessage });
       announcer.announce('Card drawn');
       await nextTick();
 
@@ -62,9 +61,8 @@ describe('useAnnouncer', () => {
     it('announce(message, { assertive: true }) writes to assertiveMessage, not politeMessage', async () => {
       const politeMessage = ref('');
       const assertiveMessage = ref('');
-      const emitAnnounce = vi.fn();
 
-      const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+      const announcer = createAnnouncer({ politeMessage, assertiveMessage });
       announcer.announce('Invalid move', { assertive: true });
       await nextTick();
 
@@ -75,9 +73,8 @@ describe('useAnnouncer', () => {
     it('clear-then-set: repeated identical message passes through empty then re-sets', async () => {
       const politeMessage = ref('');
       const assertiveMessage = ref('');
-      const emitAnnounce = vi.fn();
 
-      const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
+      const announcer = createAnnouncer({ politeMessage, assertiveMessage });
 
       announcer.announce('same');
       await nextTick();
@@ -88,22 +85,6 @@ describe('useAnnouncer', () => {
       expect(politeMessage.value).toBe('');
       await nextTick();
       expect(politeMessage.value).toBe('same');
-    });
-
-    it('each announce() call invokes emitAnnounce with matching level and message', () => {
-      const politeMessage = ref('');
-      const assertiveMessage = ref('');
-      const emitAnnounce = vi.fn();
-
-      const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
-
-      announcer.announce('polite one');
-      expect(emitAnnounce).toHaveBeenCalledWith('polite', 'polite one');
-
-      announcer.announce('assertive one', { assertive: true });
-      expect(emitAnnounce).toHaveBeenCalledWith('assertive', 'assertive one');
-
-      expect(emitAnnounce).toHaveBeenCalledTimes(2);
     });
   });
 

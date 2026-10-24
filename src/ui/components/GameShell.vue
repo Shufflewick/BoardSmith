@@ -516,10 +516,9 @@ const boardInteraction = createBoardInteraction();
 // `completed` the seat's commit flag in one, which gates a re-submit (D27).
 // `dueSeats` is the LIVE table, like `isMyTurn`: time travel changes the board,
 // not whose move it is. The announcer writes the two live regions in the
-// template (only from watchers with immediate:false, never at mount) and
-// relays each message to the host page. `platformRequest` is how the debug
-// panel reaches the host; `presentation` is a reactive ref so the
-// AutoRenderer -> renderers chain re-reads it (D-04).
+// template (only from watchers with immediate:false, never at mount).
+// `platformRequest` is how the debug panel reaches the host; `presentation` is
+// a reactive ref so the AutoRenderer -> renderers chain re-reads it (D-04).
 const tableSeat = useTableSeat({
   state,
   gameView,
