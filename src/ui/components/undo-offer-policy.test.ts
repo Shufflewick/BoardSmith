@@ -77,7 +77,6 @@ describe('#373: the undo controls follow the game definition', () => {
 
     const menu = await mountMenu(state);
     expect(undoMenuItem().getAttribute('aria-disabled')).toBe('true');
-    expect(undoMenuItem().getAttribute('aria-disabled')).toBe('true');
     menu.unmount();
 
     const panel = mountPanel(state);
