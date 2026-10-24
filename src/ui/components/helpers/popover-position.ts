@@ -80,14 +80,7 @@ export function computePopoverPosition(
   }
   const caretSide = below ? 'top' : 'bottom';
 
-  let left = triggerRect.left;
-
-  if (left + width > window.innerWidth - EDGE_MARGIN) {
-    left = window.innerWidth - width - EDGE_MARGIN;
-  }
-  if (left < EDGE_MARGIN) {
-    left = EDGE_MARGIN;
-  }
+  const left = Math.max(EDGE_MARGIN, Math.min(triggerRect.left, window.innerWidth - width - EDGE_MARGIN));
 
   const triggerMidX = triggerRect.left + triggerRect.width / 2;
   const caretLeft = Math.min(width - CARET_INSET, Math.max(CARET_INSET, triggerMidX - left));
