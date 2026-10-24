@@ -13,12 +13,17 @@
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { ref, watch, nextTick } from 'vue';
+import { ref, watch, nextTick, defineComponent, h } from 'vue';
+import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import ControlsMenu from './ControlsMenu.vue';
+import { useToast } from '../composables/useToast.js';
+import { useGameContext } from '../composables/useGameContext.js';
 import {
   enterIframe,
   leaveIframe,
   mountPlatformShell,
+  mountTableWithDebugPanel,
+  watchLiveRegion,
 } from './GameShell.platform-mount.test-helper.js';
 
 function postState(state: Record<string, unknown>): void {
@@ -68,178 +73,86 @@ describe('GameShell — showHintProp', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// GameShell — actionController.lastError -> toast chokepoint (Plan 134-03,
-// Task 1, UIX-01 part 1)
-//
-// Production wiring under test (GameShell.vue, after actionController and
-// toast are both constructed):
-//
-//   watch(actionController.errorTick, () => {
-//     const err = actionController.lastError.value;
-//     if (!err) return;
-//     const text = typeof err === 'string' && err.length > 0
-//       ? err
-//       : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
-//     toast.error(text);
-//     assertiveMessage.value = text;
-//     emitAnnounce('assertive', text);
-//   }, { immediate: false });
-//
-// The watch source is errorTick, NOT lastError (CR-01): fill()-path failures
-// never null-clear lastError between attempts, so a retried IDENTICAL failure
-// leaves the string unchanged — a watch on lastError would drop that toast.
-// errorTick is bumped by the controller's setError() on EVERY failure.
-//
-// This is the SOLE toast-owning chokepoint for action failures — ActionPanel's
-// three direct toast.error call sites are removed (see ActionPanel.test.ts),
-// so a failed action (from ActionPanel OR a custom UI, both sharing the same
-// actionController instance) produces exactly ONE toast via this watch.
-//
-// Uses a minimal harness that mirrors the exact production watch body.
-// ─────────────────────────────────────────────────────────────────────────
+// A failed action is told once, as an error toast and in the assertive live
+// region, by the shell's one errorTick watch (UIX-01), whichever surface sent it.
+describe('GameShell — a failed action is told once (UIX-01)', () => {
+  // A custom board that sends Move to a destination the pick does not offer.
+  const Board = defineComponent({
+    name: 'Board',
+    setup() {
+      const { actionController } = useGameContext();
+      return () => h('button', { 'data-testid': 'bad-move', onClick: () => actionController.fill('to', 99) }, 'Move to 99');
+    },
+  });
+  const toast = useToast();
+  const shownToasts = () => toast.toasts.value.map((t) => [t.type, t.message]);
+  const seatState = {
+    availableActions: ['move', 'pass'],
+    actionMetadata: {
+      move: { name: 'move', prompt: 'Move', selections: [{ name: 'to', type: 'choice', prompt: 'Where to?', choices: [{ value: 1, display: 'North' }, { value: 2, display: 'South' }] }] },
+      pass: { name: 'pass', prompt: 'Pass', selections: [] },
+    },
+  };
 
-describe('GameShell — actionController.lastError -> toast chokepoint (UIX-01)', () => {
-  function buildToastHarness() {
-    const lastError = ref<string | null>(null);
-    // Mirrors useActionController's setError()/errorTick pair: every failure
-    // path calls setError(msg), which bumps the monotonic errorTick. Clears
-    // (lastError.value = null) do NOT tick.
-    const errorTick = ref(0);
-    const setError = (msg: string) => {
-      lastError.value = msg;
-      errorTick.value++;
-    };
-    const currentAction = ref<string | null>(null);
-    const assertiveMessage = ref('');
-    const toastErrorCalls: string[] = [];
-    const announceCalls: Array<{ level: string; text: string }> = [];
+  // Unmounted here, so a failed test cannot leave a shell that answers the next test's requests.
+  let mounted: VueWrapper | undefined;
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = undefined;
+    for (const t of [...toast.toasts.value]) toast.remove(t.id);
+    leaveIframe();
+  });
 
-    const toast = { error: (msg: string) => toastErrorCalls.push(msg) };
-    const emitAnnounce = (level: 'polite' | 'assertive', text: string) => {
-      announceCalls.push({ level, text });
-    };
-
-    // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
-    watch(errorTick, () => {
-      const err = lastError.value;
-      if (!err) return;
-      const text = typeof err === 'string' && err.length > 0
-        ? err
-        : `${currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
-      toast.error(text);
-      assertiveMessage.value = text;
-      emitAnnounce('assertive', text);
-    }, { immediate: false });
-
-    return { lastError, errorTick, setError, currentAction, assertiveMessage, toastErrorCalls, announceCalls };
+  /** Click Pass in the Action Panel and have the host refuse it with `result`. */
+  async function refusePass(wrapper: VueWrapper, posted: unknown[], result: Record<string, unknown>) {
+    await wrapper.get('[data-bs-action="pass"]').trigger('click');
+    await flushPromises();
+    const request = posted.find((m) => (m as { op?: string }).op === 'action') as { requestId: string } | undefined;
+    if (!request) throw new Error('the shell never sent the pass to the host');
+    window.dispatchEvent(new MessageEvent('message', {
+      source: window.parent,
+      data: { source: 'shufflewick', type: 'server_response', requestId: request.requestId, result: { success: false, ...result } },
+    }));
+    await flushPromises();
   }
 
-  it('fires exactly one toast.error and updates assertiveMessage when lastError transitions null -> a string', async () => {
-    const { setError, assertiveMessage, toastErrorCalls, announceCalls } = buildToastHarness();
+  async function mountRefusingTable() {
+    const { wrapper, posted } = await mountTableWithDebugPanel(Board, seatState);
+    mounted = wrapper;
+    return { wrapper, posted, assertive: watchLiveRegion(wrapper, 'assertive') };
+  }
 
-    setError('boom');
-    await Promise.resolve(); // flush watcher (default flush: 'pre', batched to next tick)
-    await Promise.resolve();
+  it('shows one error toast and says the reason assertively, and says nothing before', async () => {
+    const { wrapper, posted, assertive } = await mountRefusingTable();
+    expect(shownToasts()).toEqual([]);
+    expect(await assertive()).toEqual([]);
 
-    expect(toastErrorCalls).toEqual(['boom']);
-    expect(assertiveMessage.value).toBe('boom');
-    expect(announceCalls).toEqual([{ level: 'assertive', text: 'boom' }]);
+    await refusePass(wrapper, posted, { error: 'Not your turn.' });
+    expect(shownToasts()).toEqual([['error', 'Not your turn.']]);
+    expect(await assertive()).toEqual(['Not your turn.']);
   });
 
-  it('does NOT fire on mount (immediate: false) even if lastError starts non-null', async () => {
-    const lastError = ref<string | null>('pre-existing');
-    const errorTick = ref(0);
-    const assertiveMessage = ref('');
-    const toastErrorCalls: string[] = [];
-    const toast = { error: (msg: string) => toastErrorCalls.push(msg) };
-
-    watch(errorTick, () => {
-      const err = lastError.value;
-      if (!err) return;
-      toast.error(err);
-      assertiveMessage.value = err;
-    }, { immediate: false });
-
-    await Promise.resolve();
-    expect(toastErrorCalls).toEqual([]);
-  });
-
-  it('a single failed action that sets lastError multiple times within one tick produces exactly one toast (Vue batches; no flush:sync)', async () => {
-    const { lastError, setError, toastErrorCalls } = buildToastHarness();
-
-    // Simulate a failure path that clears then re-sets lastError synchronously
-    // within the same tick (mirrors execute()'s `lastError.value = null` at
-    // the start of a call, followed by a synchronous failure branch).
-    lastError.value = null;
-    setError('first');
-    setError('second');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    // Vue's default watch flush batches synchronous mutations within a tick;
-    // only the settled final value produces one toast.
-    expect(toastErrorCalls).toEqual(['second']);
-  });
-
-  it('never renders undefined/[object Object] — a falsy lastError (null or empty string) never toasts', async () => {
-    const { lastError, setError, toastErrorCalls } = buildToastHarness();
-
-    // fill()/execute() internally coalesce to a non-empty string via
-    // `result.error || 'Action failed'`, so lastError is always either null
-    // (no error) or a real message once set. The watch's `if (!err) return;`
-    // guard is the belt-and-suspenders proof that an empty/falsy value can
-    // never reach toast.error and render as undefined/[object Object] — even
-    // if a (hypothetical) failure path ticked with an empty message.
-    setError('');
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(toastErrorCalls).toEqual([]);
-
-    // A clear (direct null assignment, no tick) never fires the watch at all.
-    lastError.value = null;
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(toastErrorCalls).toEqual([]);
-  });
-
-  it('re-toasts when the SAME failure repeats across ticks (retry-identical-failure, CR-01)', async () => {
-    // A player clicks an invalid destination, gets the toast, then clicks the
-    // SAME invalid destination again. fill()-path failures never null-clear
-    // lastError between attempts, so the error STRING is identical both times —
-    // the retry must still produce a second toast (exactly one per failure).
-    // errorTick (bumped by setError on every failure) is what makes this fire.
-    const { setError, toastErrorCalls } = buildToastHarness();
-
-    setError('Invalid selection for "to"');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    setError('Invalid selection for "to"');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(toastErrorCalls).toEqual([
-      'Invalid selection for "to"',
-      'Invalid selection for "to"',
+  it('tells the SAME failure again when the board retries it (CR-01)', async () => {
+    // A refused fill() leaves lastError unchanged, so only errorTick shows the retry.
+    const { wrapper, assertive } = await mountRefusingTable();
+    await wrapper.get('[data-bs-action="move"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="bad-move"]').trigger('click');
+    await flushPromises();
+    await wrapper.get('[data-testid="bad-move"]').trigger('click');
+    await flushPromises();
+    expect(shownToasts()).toEqual([
+      ['error', 'Invalid selection for "to"'],
+      ['error', 'Invalid selection for "to"'],
     ]);
+    expect(await assertive()).toEqual(['Invalid selection for "to"', 'Invalid selection for "to"']);
   });
 
-  it('a failed action originating from ActionPanel produces exactly ONE toast via this watch, not from ActionPanel itself', async () => {
-    // ActionPanel.vue no longer calls toast.error directly (see
-    // ActionPanel.test.ts) — its fill()/execute() failure paths only set
-    // actionController.lastError on the SHARED controller instance. This test
-    // proves that shared-instance failure is fully covered by this one watch.
-    const { setError, toastErrorCalls } = buildToastHarness();
-
-    // ActionPanel's executeAction() calling actionController.execute() and
-    // getting {success:false} results in exactly this: setError() records the
-    // error string and bumps errorTick, nothing else.
-    setError('Not your turn.');
-    await Promise.resolve();
-    await Promise.resolve();
-
-    expect(toastErrorCalls).toEqual(['Not your turn.']);
+  it('tells a refusal that gives no reason in words, never undefined', async () => {
+    const { wrapper, posted, assertive } = await mountRefusingTable();
+    await refusePass(wrapper, posted, {});
+    expect(shownToasts()).toEqual([['error', 'Action failed']]);
+    expect(await assertive()).toEqual(['Action failed']);
   });
 });
 
