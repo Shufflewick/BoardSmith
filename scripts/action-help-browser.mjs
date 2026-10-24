@@ -19,6 +19,11 @@
  * it sits clear of the "?", scrolls inside, and the mouse can move into it and
  * scroll it without closing it, and the keyboard can scroll it from the "?".
  *
+ * A disabled card's reason is a pointer-transparent tooltip nothing can scroll,
+ * so one taller than the room on either side of the card shows whole, inside
+ * the window, over the card, at 390x500 (#1459). The reason is sized to fall
+ * between the room above the card and the window's height.
+ *
  * Once an action is open its button, and the "?" pinned to the button's
  * corner, are gone (a step's only action opens on its own, as Go Fish's ask
  * does). Its "?" then sits in the row after its prompt and before its cancel,
@@ -32,6 +37,7 @@ import { assert, check, onFreshPage, runBrowserRegression, summarise, waitUntil 
 
 const HELP = 'Take the top card of the deck into your hand.';
 const TALL_HELP = 'Score a card from your hand, adding its points to your total. '.repeat(40).trim();
+const TALL_REASON = `${'This card is bound to the moor and cannot leave your hand while the wind howls. '.repeat(7)}Wait for the calm, then try another card.`;
 
 const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
 import type { TableFixtureGame } from './game.js';
@@ -51,7 +57,11 @@ export function createPlayAction(): ActionDefinition {
   return Action.create<TableFixtureGame>('play')
     .prompt('Play a card from your hand')
     .help(${JSON.stringify(TALL_HELP)})
-    .chooseFrom('card', { prompt: 'Select a card to play', choices: (ctx) => [...ctx.player.hand.all(Card)] })
+    .chooseFrom('card', {
+      prompt: 'Select a card to play',
+      choices: (ctx) => [...ctx.player.hand.all(Card)],
+      disabled: (card, ctx) => (card === ctx.player.hand.first(Card) ? ${JSON.stringify(TALL_REASON)} : false),
+    })
     .execute(({ card }, ctx) => {
       ctx.player.score += card.points;
       card.remove();
@@ -117,6 +127,36 @@ async function checkOpenActionHelp(frame, width) {
   });
   await trigger.press('Escape');
   await frame.locator('.cancel-btn').click();
+}
+
+/** A disabled card's reason, taller than the room on either side of the card, shows whole inside the window (#1459). */
+async function checkTallDisabledReason(page) {
+  const frame = gameFrame(page);
+  await frame.locator('.action-btn[data-bs-action="play"]').click();
+  const card = frame.locator('[data-bs-disabled-reason]').first();
+  await card.waitFor({ timeout: 10_000 });
+  const cardBox = await card.boundingBox();
+  // A plain move, not hover(): hover() retries while the reason covers the card, which it may now do.
+  await page.mouse.move(cardBox.x + cardBox.width / 2, cardBox.y + cardBox.height / 2);
+  const tip = frame.locator('#bs-disabled-reason-tip');
+  const shown = await waitUntil(() => tip.isVisible(), (now) => now, 2_000);
+  const frameBox = await page.locator('.dev-host__frame').boundingBox();
+  const tipBox = shown ? await tip.boundingBox() : null;
+  const text = tip.locator('.bs-disabled-tip__text');
+  await check('a disabled reason taller than the room on either side of its control shows whole, inside the window (#1459)', async () => {
+    assert(tipBox, 'hovering the disabled card did not show its reason');
+    const roomAbove = cardBox.y - frameBox.y;
+    const roomBelow = frameBox.y + frameBox.height - (cardBox.y + cardBox.height);
+    const hidden = await text.evaluate((el) => el.scrollHeight - el.clientHeight);
+    assert(hidden <= 0, `${hidden}px of the reason is cut off, and nothing can scroll it`);
+    assert(tipBox.height > Math.max(roomAbove, roomBelow), `the reason fits beside the card, so this checks nothing: reason ${JSON.stringify(tipBox)}, card ${JSON.stringify(cardBox)}`);
+    assert(tipBox.y >= frameBox.y && tipBox.y + tipBox.height <= frameBox.y + frameBox.height, `the reason runs off the window: reason ${JSON.stringify(tipBox)}, window ${JSON.stringify(frameBox)}`);
+    assert((await text.innerText()).trim() === TALL_REASON, 'the reason shown is not the whole reason');
+  });
+  await check("a screen reader gets the whole reason from the control's aria-describedby (#1459)", async () => {
+    const described = await card.evaluate((el) => document.getElementById(el.getAttribute('aria-describedby') ?? '')?.textContent);
+    assert(described === TALL_REASON, `aria-describedby holds ${JSON.stringify(described)}`);
+  });
 }
 
 await runBrowserRegression(
@@ -215,6 +255,7 @@ await runBrowserRegression(
         });
         await checkOpenActionHelp(frame, 390);
       });
+      await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 500 }, storageState: player }, triggerDrawn, checkTallDisabledReason);
     } finally {
       await browser.close();
     }

@@ -95,6 +95,7 @@ async function show() {
     el.getBoundingClientRect(),
     box?.offsetHeight ?? POPOVER_FALLBACK_HEIGHT,
     box?.offsetWidth ?? POPOVER_MAX_WIDTH,
+    'scroll-beside',
   );
 }
 

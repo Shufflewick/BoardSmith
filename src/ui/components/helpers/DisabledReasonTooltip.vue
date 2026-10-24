@@ -55,13 +55,15 @@ watch([showCount, anchor], async () => {
   if (!el) return;
   const rect = el.getBoundingClientRect();
   // Capped only at the window, which is taller than the room on either side, so the measure decides the side.
-  position.value = { ...computePopoverPosition(rect, FALLBACK_HEIGHT, DISABLED_TOOLTIP_MAX_WIDTH), maxHeight: window.innerHeight };
+  position.value = { ...computePopoverPosition(rect, FALLBACK_HEIGHT, DISABLED_TOOLTIP_MAX_WIDTH, 'cover-trigger'), maxHeight: window.innerHeight };
   await nextTick();
   if (anchor.value !== el) return; // moved to another control mid-tick
   position.value = computePopoverPosition(
     el.getBoundingClientRect(),
     box.value?.offsetHeight ?? FALLBACK_HEIGHT,
     box.value?.offsetWidth ?? DISABLED_TOOLTIP_MAX_WIDTH,
+    // Pointer-transparent, so covering its control costs nothing, and nothing could scroll a cut-off reason (#1459).
+    'cover-trigger',
   );
 });
 
@@ -107,7 +109,7 @@ const style = computed(() => ({
   font-family: var(--bsg-font);
   width: max-content;
   min-width: 80px;
-  /* The inline max-height is the room beside the control; the text shrinks into it (#1454). */
+  /* The inline max-height is at most the window; only a reason taller than the window is cut (#1459). */
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
