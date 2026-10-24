@@ -31,6 +31,7 @@ import { PERSIST_KEY } from '../persistence/persistence.js';
 import { isSerializedReference } from '../engine/utils/serializer.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isHiddenPlaceholder } from '../engine/element/hidden-placeholder.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
+import type { LiveRegion } from '../ui/composables/useAnnouncer.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
 import type { WorldSeatHost } from '../ui/world/useWorldHost.js';
 import type { WorldSeat } from '../ui/world/useWorldSeat.js';
@@ -44,6 +45,7 @@ import { WorldRefusal } from '../world/index.js';
 import { messageOf } from '../world/host/index.js';
 import { TestGame } from './test-game.js';
 import { TestWorld, type WorldSeatView } from './test-world.js';
+import { mountContainer } from './live-region.js';
 import { importProjectTestUtils } from '#testing/project-test-utils';
 
 /**
@@ -390,6 +392,7 @@ export function preloadSeatRenderer(): Promise<void> {
     loadTableSeatModules(),
     loadWorldSeatModule(),
     shellProvidedKeys(),
+    import('../ui/components/LiveRegions.vue'),
   ]).then(() => undefined);
   return seatRendererPromise;
 }
@@ -492,7 +495,9 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
  * latter is how a game checks the surface its players actually look at. The
  * board is given the seat's own actions and a real action controller, wired as
  * its shell wires it (see `seatContextFor`); the controller refuses to take a
- * move, so rendering never changes the game or the world.
+ * move, so rendering never changes the game or the world. The seat's live
+ * regions are drawn beside the board, as its shell draws them; read what the
+ * board announces with `watchLiveRegion`.
  *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
@@ -682,6 +687,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   // handler is the whole of why a deferred failure can reach the caller at all.
   // The seat's wiring lives exactly as long as the app it was made for.
   const raised: unknown[] = [];
+  const regions = await drawLiveRegions(seatContext.liveRegion);
   let wrapper: VueWrapper<RenderedInstance<C>>;
   try {
     wrapper = mount<Component>(component, {
@@ -689,13 +695,23 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
       global: {
         provide,
         config: { errorHandler: (error: unknown) => raised.push(error) },
-        plugins: [{ install: (app) => app.onUnmount(seatContext.stop) }],
+        plugins: [
+          {
+            install: (app) =>
+              app.onUnmount(() => {
+                seatContext.stop();
+                regions.remove();
+              }),
+          },
+        ],
       },
     }) as VueWrapper<RenderedInstance<C>>;
   } catch (failure) {
     seatContext.stop();
+    regions.remove();
     throw failure;
   }
+  mountContainer(wrapper)?.appendChild(regions.element);
 
   try {
     await raiseWhatTheBoardDeferred(raised, seat);
@@ -708,6 +724,18 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     throw failure;
   }
   return { wrapper, raised, boardPrompt: seatContext.boardPrompt };
+}
+
+/** The seat's live regions drawn with `LiveRegions`, the shells' own component, into an element of their own. */
+async function drawLiveRegions(liveRegion: LiveRegion): Promise<{ element: HTMLElement; remove: () => void }> {
+  const [{ h, render }, { default: LiveRegions }] = await Promise.all([
+    import('vue'),
+    import('../ui/components/LiveRegions.vue'),
+  ]);
+  const element = document.createElement('div');
+  const Regions = { render: () => h(LiveRegions, { polite: liveRegion.polite.value, assertive: liveRegion.assertive.value }) };
+  render(h(Regions), element);
+  return { element, remove: () => render(null, element) };
 }
 
 /** What a seat's board is mounted with, and how to let go of it afterwards. */
@@ -724,6 +752,8 @@ interface SeatContext {
   readonly openAction: (request: NonNullable<RenderAsSeatOptions['startAction']>) => Promise<void>;
   /** The last prompt the board set with `setBoardPrompt`, or null. A world board has no setter, so always null. */
   readonly boardPrompt: () => string | null;
+  /** The text the seat's announcer writes, drawn beside the board as its shell draws it. */
+  readonly liveRegion: LiveRegion;
   /** Stops whatever was wired for this mount. */
   readonly stop: () => void;
 }
@@ -906,6 +936,7 @@ async function wireTableSeat(
     provide: Object.fromEntries(tableSeat.provisions),
     openAction: (request) => openSeatAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
     boardPrompt: () => boardPrompt,
+    liveRegion: tableSeat.liveRegion,
     stop: () => scope.stop(),
   };
 }
@@ -981,6 +1012,7 @@ async function wireWorldSeat(
     openAction: (request) =>
       openSeatAction(worldSeat.controller, request, seat, worldSeat.play.availableActions.value),
     boardPrompt: () => null,
+    liveRegion: worldSeat.liveRegion,
     stop: () => scope.stop(),
   };
 }

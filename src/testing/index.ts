@@ -92,6 +92,9 @@ export {
   type ShellContextOptions,
 } from './dom-leak.js';
 
+// What a rendered seat announces, read from its live regions (#1468)
+export { watchLiveRegion } from './live-region.js';
+
 // Debug utilities
 export {
   toDebugString,

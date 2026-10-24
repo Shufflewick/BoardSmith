@@ -23,8 +23,8 @@ import {
   leaveIframe,
   mountPlatformShell,
   mountTableWithDebugPanel,
-  watchLiveRegion,
 } from './GameShell.platform-mount.test-helper.js';
+import { watchLiveRegion } from '../../testing/live-region.js';
 
 function postState(state: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', {
