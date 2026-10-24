@@ -98,6 +98,22 @@ describe('assertNoHiddenInfoLeak checks what the board announces (#1470)', () =>
     await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
   });
 
+  it('does not read an es word as the plural of a hidden value that takes s (#1471 review F1)', async () => {
+    const tg = makeSecretHandGame('announce-not-es');
+    setRank(tg, 2, 'Not');
+    const board = announcingBoard({ text: 'Take notes' });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
+  });
+
+  it('passes a word the seat is shown elsewhere as a plural (#1471 review F8)', async () => {
+    const tg = makeSecretHandGame('announce-shown-plural');
+    setRank(tg, 1, 'Kings');
+    const board = announcingBoard({ text: 'Bob asked for a King' });
+
+    await expect(assertNoHiddenInfoLeak(tg, 1, { component: board })).resolves.not.toThrow();
+  });
+
   it('does not read a count as a short hidden rank', async () => {
     const tg = makeSecretHandGame('announce-short');
     setRank(tg, 2, '7');

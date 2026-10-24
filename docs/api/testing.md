@@ -554,11 +554,12 @@ every text the board's announcer writes to the seat's live regions, so
 `startAction`, a later announcement replacing it included, and fails if one
 names something the seat may not see. A spoken sentence is full of counts,
 seat numbers and ordinary words, so an announcement leaks a marker only when
-it says the marker as a whole word, in any case or as a plural ending in "s"
-or "es" (#1471: "King" in "drew the King", "drew a king" and "two Kings", not
-in "Kingdom"), the marker is three or more characters long, and the seat is
-not shown that same value, in any case, on any element it can see (seat 1
-holding a King of its own may hear "Bob asked for a king"). A one- or two-character hidden value,
+it says the marker as a whole word, in any case or as a plural in "s" (or in
+"es" after s, x, z, ch or sh) (#1471: "King" in "drew the King", "drew a king"
+and "two Kings", not in "Kingdom"), the marker is three or more characters
+long, and the seat is not shown that same value or its plural, in any case, on
+any element it can see (seat 1 holding a King of its own may hear "Bob asked
+for a king"). A one- or two-character hidden value,
 such as a rank "7", is therefore never caught in an announcement; check it
 with `assertHidden` or by reading the region with `watchLiveRegion`.
 

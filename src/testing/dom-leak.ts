@@ -1578,20 +1578,22 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  */
 const MIN_SPOKEN_MARKER_LENGTH = 3;
 
-/**
- * Whether `text` says `word` as a whole word, in any case, or its plural in s or es:
- * "King" in "the king" and "two Kings", not in "Kingdom".
- */
+/** `word` in lowercase, with its plural in s, or in es after s, x, z, ch or sh: "king" and "kings", "glass" and "glasses". */
+function spokenForms(word: string): string[] {
+  const base = word.toLowerCase();
+  return [base, `${base}s`, ...(/(s|x|z|ch|sh)$/.test(base) ? [`${base}es`] : [])];
+}
+
+/** Whether `text` says one of `word`'s {@link spokenForms} with no letter or digit directly before or after it: "King" in "the king" and "two Kings", not in "Kingdom". */
 function saysWord(text: string, word: string): boolean {
   const said = text.toLowerCase();
-  const sought = word.toLowerCase();
   const joined = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
-  for (let at = said.indexOf(sought); at !== -1; at = said.indexOf(sought, at + 1)) {
-    if (joined(said[at - 1])) continue;
-    const end = at + sought.length;
-    if (['', 's', 'es'].some((ending) => said.startsWith(ending, end) && !joined(said[end + ending.length]))) return true;
-  }
-  return false;
+  return spokenForms(word).some((form) => {
+    for (let at = said.indexOf(form); at !== -1; at = said.indexOf(form, at + 1)) {
+      if (!joined(said[at - 1]) && !joined(said[at + form.length])) return true;
+    }
+    return false;
+  });
 }
 
 /** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
@@ -1603,7 +1605,7 @@ function refuseSpokenLeak(
 ): void {
   const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values].map((value) => value.toLowerCase())));
   for (const marker of markers) {
-    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value.toLowerCase())) continue;
+    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || spokenForms(marker.value).some((form) => shown.has(form))) continue;
     const leak = spoken.find(({ text }) => saysWord(text, marker.value));
     if (leak) {
       throw new Error(
