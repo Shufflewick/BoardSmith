@@ -510,6 +510,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   a slow machine (#610). It never opens it again once the choice has taken
   effect, and closes it if it is open then: the walk's own presses stop the
   click outside that would otherwise close it.
+- The walk knows a game has ended when GameShell marks itself
+  `data-bs-game-over`, which it does once the ending is on screen, whether its
+  game-over card draws it or the board does (`providesOwnGameOverUi`, #1463).
 - When a game ends with listed actions still to take, it deals a new game from
   the next seed of the deal it is walking (`smoke/2`, `smoke/3`...), the same way,
   and goes on in it (#458, #460). An action whose taking has ended every game it
