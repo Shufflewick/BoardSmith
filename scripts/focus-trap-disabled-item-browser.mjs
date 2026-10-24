@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * FOCUS STAYS IN THE CONTROLS MENU AFTER ITS FOCUSED ITEM TURNS DISABLED (#1453, #1457).
+ * FOCUS STAYS IN THE CONTROLS MENU AFTER ITS FOCUSED ITEM TURNS DISABLED (#1453, #1457),
+ * AND THE ARROW KEYS MOVE BETWEEN ITS ITEMS (#1458).
  *
  * When a focused button turns disabled, the browser drops focus to `<body>`
  * (firing focusout with no relatedTarget), where no key reaches the menu while
@@ -29,6 +30,29 @@ await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', tab
     });
 
     for (const viewport of [{ width: 1440, height: 900 }, { width: 390, height: 844 }]) {
+      // Arrow keys move between the menu's items and wrap at either end (#1458).
+      await page.setViewportSize(viewport);
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await focusedItem.waitFor({ timeout: 5_000 });
+      const items = await menu.evaluate((el) => Array.from(el.querySelectorAll('[role^="menuitem"]:not(:disabled)'), (item) => item.getAttribute('aria-label') || item.textContent.trim()));
+      const firstItem = await focused();
+      await page.keyboard.press('ArrowDown');
+      const second = await focused();
+      await page.keyboard.press('ArrowUp');
+      await page.keyboard.press('ArrowUp');
+      const wrapped = await focused();
+      await page.keyboard.press('ArrowDown');
+      const back = await focused();
+      await check(`Down and Up move between the menu items and wrap at ${viewport.width}px`, async () => {
+        assert(firstItem === items[0], `the menu opened with focus on "${firstItem}", not its first item "${items[0]}"`);
+        assert(second === items[1], `Down moved focus to "${second}", not the next item "${items[1]}"`);
+        assert(wrapped === items.at(-1), `Up from the first item moved focus to "${wrapped}", not the last item "${items.at(-1)}"`);
+        assert(back === items[0], `Down from the last item moved focus to "${back}", not the first item "${items[0]}"`);
+      });
+      await page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'detached', timeout: 5_000 });
+
       // "removed" is a focused item a v-if unmounts, such as action help when no action has any.
       for (const how of ['disabled', 'removed']) {
         const at = `when ${how} at ${viewport.width}px`;
