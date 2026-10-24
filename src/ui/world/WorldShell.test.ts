@@ -799,6 +799,7 @@ describe('WorldShell — recovering an order left over from the last page (#195)
 
     const said = toasts.value.slice(before).map((t) => t.message);
     expect(said.join(' ')).toContain('had already gone through');
+    expect(wrapper.get('[data-bs-live-region="polite"]').text()).toContain('had already gone through');
     expect(wrapper.text()).not.toContain('Checking what became of something you sent');
     done();
   });

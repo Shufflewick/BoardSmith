@@ -250,6 +250,7 @@ watch(actionController.holdNotice, (notice) => {
 watch(host.recoveryNotice, (notice) => {
   if (notice === null) return;
   toast.show(notice, { type: 'info', duration: 8000 });
+  announcer.announce(notice);
 });
 
 /** The identity token at the head of the action bar: always the VIEWER's own
