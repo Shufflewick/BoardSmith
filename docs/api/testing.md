@@ -548,6 +548,19 @@ the board set, and `assertNoHiddenInfoLeak` fails if it names something the
 seat may not see. A prompt the board gave back with `setBoardPrompt(null)` is
 no longer shown, so it is not checked.
 
+**What the board announces is scanned too** (#1470). A screen reader speaks
+every text the board's announcer writes to the seat's live regions, so
+`assertNoHiddenInfoLeak` records each one from the mount on, through
+`startAction`, a later announcement replacing it included, and fails if one
+names something the seat may not see. A spoken sentence is full of counts,
+seat numbers and ordinary words, so an announcement leaks a marker only when
+it says the marker as a whole word ("King" in "drew the King", not in
+"Kingdom"), the marker is three or more characters long, and the seat is not
+shown that same value on any element it can see (seat 1 holding a King of its
+own may hear "Bob asked for a King"). A one- or two-character hidden value,
+such as a rank "7", is therefore never caught in an announcement; check it
+with `assertHidden` or by reading the region with `watchLiveRegion`.
+
 **A table seat is given everything GameShell gives its board** (#406): board
 interaction, the game context (`useGameContext()`), the announcer
 (`useAnnouncer()`) and animation events (`useAnimationEvents()`). GameShell and
