@@ -181,6 +181,18 @@ describe('the table ending (#419)', () => {
     expect(await after(shell, () => { shown.value = true; })).toEqual({ announced: [ALICE_WINS], card: false });
   });
 
+  it('marks the shell data-bs-game-over once the ending is on screen, card or not, so the smoke walk sees it (#1463)', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown), { providesOwnGameOverUi: true });
+    const marked = () => shell.wrapper.find('.game-shell').attributes('data-bs-game-over') !== undefined;
+
+    expect(marked()).toBe(false);
+    await after(shell, complete);
+    expect(marked()).toBe(false);
+    await after(shell, () => { shown.value = true; });
+    expect(marked()).toBe(true);
+  });
+
   it('for a board that draws its own ending, draws no shell card when the prop is written in kebab-case (#433)', async () => {
     const shell = await mountShell(PlainBoard, { 'provides-own-game-over-ui': true });
 

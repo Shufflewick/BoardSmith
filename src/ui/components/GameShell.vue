@@ -1348,7 +1348,8 @@ defineExpose({
   <div v-if="!inHost" class="game-shell game-shell--outside-host">
     <p class="outside-host">This game runs inside a host. Start it with <code>boardsmith dev</code> or play it on Shufflewick.</p>
   </div>
-  <div v-else class="game-shell">
+  <!-- data-bs-game-over marks the ending on screen whoever draws it, so the smoke walk sees a game a board ends itself (#1463). -->
+  <div v-else class="game-shell" :data-bs-game-over="gameOverRevealed || undefined">
     <!-- Skip link: visually hidden until focused; .sr-skip in global style block -->
     <a class="sr-skip" href="#main">Skip to game board</a>
 

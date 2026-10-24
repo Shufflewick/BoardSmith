@@ -9,6 +9,17 @@ import { QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
+/** The scaffold's App.vue for a game whose board draws the ending itself, so the shell shows no game-over card. */
+const OWN_GAME_OVER_APP = `<script setup lang="ts">
+import { GameShell } from 'boardsmith/ui';
+import uis from './uis.js';
+</script>
+
+<template>
+  <GameShell :uis="uis" provides-own-game-over-ui />
+</template>
+`;
+
 describe('boardsmith verify: the smoke check', () => {
   it(
     '#458, #459: takes a game-ending action once and starts a new game for the rest, then stops taking it so a game can go ' +
@@ -28,6 +39,19 @@ describe('boardsmith verify: the smoke check', () => {
       expect(outcome.passed).toBe(true);
     },
   );
+
+  it('#1463: sees the end of a game whose board draws its own ending, with no game-over card, and deals a new game rather than reporting a stall', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...truceGame(),
+      'src/ui/App.vue': OWN_GAME_OVER_APP,
+      'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
+        claimTruce: QUIET_CLAIM_REASON,
+      }),
+    });
+
+    expect(outcome.summary).toMatch(/with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)/);
+    expect(outcome.passed).toBe(true);
+  });
 
   it('#458: reports an action the spec declares out of reach that the walk took anyway, so the declaration can go', async () => {
     const { outcome } = await smokeOf(false, {

@@ -1606,13 +1606,16 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: R
   return least === undefined ? undefined : { take: least };
 }
 
+/** The shell's mark of a game whose ending is on screen, drawn by the shell's card or by the board itself (#1463). */
+const GAME_OVER = '[data-bs-game-over]';
+
 /**
  * Waits for the panel to offer a seat something, in any of `frames`: its turn at a table, its offers
  * in a world. Returns whether one was offered something within {@link TURN_WAIT_MS}.
  */
 async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
   const offered = (frame: Frame, timeout: number) =>
-    frame.locator('[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], .game-over-card').first().waitFor({ timeout });
+    frame.locator(`[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], ${GAME_OVER}`).first().waitFor({ timeout });
   // Counted on the first browser's clock: a world's browsers share the machine that starves them.
   return anyWithinPageTime(frames[0].page(), TURN_WAIT_MS, 'waiting for a turn', frames.map((frame) => (timeout: number) => offered(frame, timeout)));
 }
@@ -1826,7 +1829,7 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
   acting.now = play.seat;
   await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
-  if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator('.game-over-card').isVisible())) return afterTheGame(play.page, walk, memory, step);
+  if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator(GAME_OVER).isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
   const offers = await settledOffers(frame, walk);
