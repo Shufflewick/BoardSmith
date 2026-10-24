@@ -45,7 +45,6 @@ import { WorldRefusal } from '../world/index.js';
 import { messageOf } from '../world/host/index.js';
 import { TestGame } from './test-game.js';
 import { TestWorld, type WorldSeatView } from './test-world.js';
-import { mountContainer } from './live-region.js';
 import { importProjectTestUtils } from '#testing/project-test-utils';
 
 /**
@@ -687,11 +686,14 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   // handler is the whole of why a deferred failure can reach the caller at all.
   // The seat's wiring lives exactly as long as the app it was made for.
   const raised: unknown[] = [];
-  const regions = await drawLiveRegions(seatContext.liveRegion);
+  // The board's app and the live regions side by side, as a shell draws them beside its board, and never inside the board's element.
+  const frame = document.createElement('div');
+  const removeRegions = await drawLiveRegions(seatContext.liveRegion, frame);
   let wrapper: VueWrapper<RenderedInstance<C>>;
   try {
     wrapper = mount<Component>(component, {
       props,
+      attachTo: frame,
       global: {
         provide,
         config: { errorHandler: (error: unknown) => raised.push(error) },
@@ -700,7 +702,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
             install: (app) =>
               app.onUnmount(() => {
                 seatContext.stop();
-                regions.remove();
+                removeRegions();
               }),
           },
         ],
@@ -708,10 +710,9 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     }) as VueWrapper<RenderedInstance<C>>;
   } catch (failure) {
     seatContext.stop();
-    regions.remove();
+    removeRegions();
     throw failure;
   }
-  mountContainer(wrapper)?.appendChild(regions.element);
 
   try {
     await raiseWhatTheBoardDeferred(raised, seat);
@@ -726,8 +727,8 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   return { wrapper, raised, boardPrompt: seatContext.boardPrompt };
 }
 
-/** The seat's live regions drawn with `LiveRegions`, the shells' own component, into an element of their own. */
-async function drawLiveRegions(liveRegion: LiveRegion): Promise<{ element: HTMLElement; remove: () => void }> {
+/** The seat's live regions drawn into `frame` with `LiveRegions`, the shells' own component. */
+async function drawLiveRegions(liveRegion: LiveRegion, frame: HTMLElement): Promise<() => void> {
   const [{ h, render }, { default: LiveRegions }] = await Promise.all([
     import('vue'),
     import('../ui/components/LiveRegions.vue'),
@@ -735,7 +736,8 @@ async function drawLiveRegions(liveRegion: LiveRegion): Promise<{ element: HTMLE
   const element = document.createElement('div');
   const Regions = { render: () => h(LiveRegions, { polite: liveRegion.polite.value, assertive: liveRegion.assertive.value }) };
   render(h(Regions), element);
-  return { element, remove: () => render(null, element) };
+  frame.append(element);
+  return () => render(null, element);
 }
 
 /** What a seat's board is mounted with, and how to let go of it afterwards. */

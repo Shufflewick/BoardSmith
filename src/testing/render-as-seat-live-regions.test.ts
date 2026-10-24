@@ -56,6 +56,26 @@ describe('renderAsSeat draws the live regions the announcer writes (#1468)', () 
     wrapper.unmount();
   });
 
+  it("draws the regions outside the board's own element, whatever its root shape (#1468 review F2)", async () => {
+    const TwoRootBoard = defineComponent({
+      name: 'TwoRootBoard',
+      setup() {
+        const { announce } = useAnnouncer();
+        return () => [h('button', { class: 'urgent', onClick: () => announce('Two roots', { assertive: true }) }, 'urgent'), h('p', 'second root')];
+      },
+    });
+    for (const component of [AnnouncingBoard, TwoRootBoard]) {
+      const wrapper = await renderAsSeat(makeSecretHandGame('root-shape'), 1, { component });
+      expect(wrapper.element.querySelector('[data-bs-live-region]')).toBeNull();
+      wrapper.unmount();
+    }
+    const wrapper = await renderAsSeat(makeSecretHandGame('two-roots'), 1, { component: TwoRootBoard });
+    const assertive = watchLiveRegion(wrapper, 'assertive');
+    await wrapper.find('.urgent').trigger('click');
+    expect(await assertive()).toEqual(['Two roots']);
+    wrapper.unmount();
+  });
+
   it('refuses a board mounted with no live regions, saying how to get them', () => {
     const wrapper = mount(AnnouncingBoard);
     expect(() => watchLiveRegion(wrapper, 'polite')).toThrow(/found no polite live region.*renderAsSeat/);

@@ -7,14 +7,16 @@
 
 /** A mounted wrapper, as `renderAsSeat` or `mount()` returns it. */
 interface MountedWrapper {
-  readonly vm: { readonly $root: { readonly $el: unknown } | null };
+  readonly element: Element;
 }
 
-/** The element the wrapper's app is mounted in, which holds the whole mount: a shell, or a board and the regions renderAsSeat draws beside it. */
-export function mountContainer(wrapper: MountedWrapper): Element | null {
-  const root = wrapper.vm.$root?.$el;
-  const container = root instanceof Node ? root.parentNode : null;
-  return container instanceof Element ? container : null;
+/** The nearest `level` region around `element`: a shell's own, or the one renderAsSeat draws beside the board. */
+function regionAround(element: Element, level: 'polite' | 'assertive'): Element | null {
+  for (let node: Element | null = element; node; node = node.parentElement) {
+    const region = node.querySelector(`[data-bs-live-region="${level}"]`);
+    if (region) return region;
+  }
+  return null;
 }
 
 /**
@@ -37,7 +39,7 @@ export function mountContainer(wrapper: MountedWrapper): Element | null {
  *   `renderAsSeat`, or the shell itself.
  */
 export function watchLiveRegion(wrapper: MountedWrapper, level: 'polite' | 'assertive'): () => Promise<string[]> {
-  const region = mountContainer(wrapper)?.querySelector(`[data-bs-live-region="${level}"]`);
+  const region = regionAround(wrapper.element, level);
   if (!region) {
     throw new Error(
       `watchLiveRegion found no ${level} live region in this mount, so there is nothing announced to read. ` +
