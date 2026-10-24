@@ -53,7 +53,7 @@ export interface WorldSeat {
   disabledActions: ComputedRef<Record<string, string> | undefined>;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
-  /** Writes to the two live regions below and relays each message to the host page. */
+  /** Writes to the two live regions below. */
   announcer: UseAnnouncerReturn;
   /** The live-region text the announcer writes: render it with `LiveRegions`. */
   liveRegion: LiveRegion;

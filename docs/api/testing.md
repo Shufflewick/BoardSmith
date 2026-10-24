@@ -554,8 +554,11 @@ interaction, the game context (`useGameContext()`), the announcer
 this utility build them with the same function, `useTableSeat`, so a board that
 runs inside the shell mounts here with no wiring from you, and a test that
 mounts the real shell fails if it ever provides something this does not. The
-seat's pending animation events play to the handlers your board registers, and
-the announcer relays what it says to `window.postMessage` as the shell's does.
+seat's pending animation events play to the handlers your board registers. The
+announcer writes the seat's live regions as the shell's does, but this utility
+does not draw them; to check what a board announces, mount the real shell and
+read its live regions, `[data-bs-live-region="polite"]` and
+`[data-bs-live-region="assertive"]`.
 
 **A world seat is given everything WorldShell gives its board** (#413): board
 interaction, the shared half of the game context (a world has no `gameState`,

@@ -101,7 +101,7 @@ export interface TableSeat extends TableActionWiring {
   myPlayer: ComputedRef<GameContextPlayer | undefined>;
   /** Plays the frame's animation events to the handlers the board registers. */
   animationEvents: UseAnimationEventsReturn;
-  /** Writes to the two live regions below and relays each message to the host page. */
+  /** Writes to the two live regions below. */
   announcer: UseAnnouncerReturn;
   /** The live-region text the announcer writes: render each in an `aria-live` node. */
   liveRegion: LiveRegion;

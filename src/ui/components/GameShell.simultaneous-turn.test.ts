@@ -16,13 +16,14 @@
  * the compact seat strip, the Action Panel, and `useGameContext()` for a custom
  * UI. The screen-reader announcement is asserted in the same mount.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { useGameContext } from '../composables/useGameContext.js';
 import {
   enterIframe,
   leaveIframe,
   mountPlatformShell,
+  watchLiveRegion,
 } from './GameShell.platform-mount.test-helper.js';
 
 const PLAYERS = [
@@ -126,17 +127,8 @@ function currentCards(wrapper: Wrapper): string[] {
 const stripStatus = (wrapper: Wrapper) =>
   wrapper.find('.mobile-strip .strip-status').text();
 
-/** Every polite announcement the shell relayed, in order. */
-function announcements(spy: ReturnType<typeof vi.spyOn>): string[] {
-  return spy.mock.calls
-    .map(([message]) => message as { source?: string; type?: string; text?: string })
-    .filter((m) => m?.source === 'boardsmith-a11y' && m.type === 'announce')
-    .map((m) => m.text as string);
-}
-
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
-  vi.restoreAllMocks();
   leaveIframe();
 });
 
@@ -216,7 +208,7 @@ describe('GameShell in a simultaneous step (#337)', () => {
     const wrapper = await mountAsAlice();
     post(bobsTurnFrame());
     await nextTick();
-    const spy = vi.spyOn(window, 'postMessage');
+    const said = watchLiveRegion(wrapper, 'polite');
 
     post(simultaneousFrame());
     await nextTick();
@@ -226,14 +218,14 @@ describe('GameShell in a simultaneous step (#337)', () => {
     post(simultaneousFrame([1, 2]));
     await nextTick();
 
-    expect(announcements(spy)).toEqual(['Your move']);
+    expect(said()).toEqual(['Your move']);
   });
 
   it('announces who is still deciding once after the viewer commits, not on every frame', async () => {
     const wrapper = await mountAsAlice();
     post(simultaneousFrame());
     await nextTick();
-    const spy = vi.spyOn(window, 'postMessage');
+    const said = watchLiveRegion(wrapper, 'polite');
 
     post(simultaneousFrame([0]));
     await nextTick();
@@ -243,6 +235,6 @@ describe('GameShell in a simultaneous step (#337)', () => {
     post(simultaneousFrame([0]));
     await nextTick();
 
-    expect(announcements(spy)).toEqual(['Bob and Carol are playing']);
+    expect(said()).toEqual(['Bob and Carol are playing']);
   });
 });

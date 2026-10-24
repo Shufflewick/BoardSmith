@@ -12,7 +12,7 @@
  * Asserted on the REAL GameShell, driven by the `game_state` frames a platform
  * host sends.
  */
-import { describe, it, expect, afterEach, vi } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, effectScope, h, nextTick, ref, watch } from 'vue';
 import { useGameContext } from '../composables/useGameContext.js';
 import { holdGameOverUntil } from '../composables/useGameOverReveal.js';
@@ -20,6 +20,7 @@ import {
   enterIframe,
   leaveIframe,
   mountPlatformShell,
+  watchLiveRegion,
 } from './GameShell.platform-mount.test-helper.js';
 
 const PLAYERS = [
@@ -69,14 +70,6 @@ function completeFrameWinnersOnFrameOnly(): Record<string, unknown> {
   };
 }
 
-/** Every assertive announcement the shell relayed to the host page, in order. */
-function assertive(spy: ReturnType<typeof vi.spyOn>): string[] {
-  return spy.mock.calls
-    .map(([message]) => message as { source?: string; type?: string; level?: string; text?: string })
-    .filter((m) => m?.source === 'boardsmith-a11y' && m.type === 'announce' && m.level === 'assertive')
-    .map((m) => m.text as string);
-}
-
 /** Let the frame land, render, and every post-render watcher run. */
 async function settle(): Promise<void> {
   await nextTick();
@@ -96,13 +89,11 @@ async function mountShell(board: ReturnType<typeof defineComponent>, props?: She
   await settle();
   post(playingFrame());
   await settle();
-  const spy = vi.spyOn(window, 'postMessage');
-  return { wrapper, spy };
+  return { wrapper, assertive: watchLiveRegion(wrapper, 'assertive') };
 }
 
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
-  vi.restoreAllMocks();
   leaveIframe();
 });
 
@@ -150,10 +141,10 @@ const HELD = { announced: [], card: false };
 const REVEALED = { announced: [ALICE_WINS], card: true };
 
 /** What the shell has shown and said of the ending once `step` has run and settled. */
-async function after({ wrapper, spy }: Shell, step: () => void) {
+async function after({ wrapper, assertive }: Shell, step: () => void) {
   step();
   await settle();
-  return { announced: assertive(spy), card: wrapper.find('.game-over-card').exists() };
+  return { announced: assertive(), card: wrapper.find('.game-over-card').exists() };
 }
 
 const complete = () => post(completeFrame());
@@ -210,7 +201,7 @@ describe('the table ending (#419)', () => {
     await after(shell, complete);
     for (const value of [true, false, true]) await after(shell, () => { shown.value = value; });
 
-    expect(assertive(shell.spy)).toEqual([ALICE_WINS]);
+    expect(shell.assertive()).toEqual([ALICE_WINS]);
   });
 });
 
