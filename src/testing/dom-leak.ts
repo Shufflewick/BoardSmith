@@ -1578,13 +1578,22 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  */
 const MIN_SPOKEN_MARKER_LENGTH = 3;
 
-/** Whether `text` holds `word` with no letter or digit directly before or after it: "King" in "the King", not in "Kingdom". */
+/** `word` in lowercase, with its plural in s, or in es after s, x, z, ch or sh: "king" and "kings", "glass" and "glasses". */
+function spokenForms(word: string): string[] {
+  const base = word.toLowerCase();
+  return [base, `${base}s`, ...(/(s|x|z|ch|sh)$/.test(base) ? [`${base}es`] : [])];
+}
+
+/** Whether `text` says one of `word`'s {@link spokenForms} with no letter or digit directly before or after it: "King" in "the king" and "two Kings", not in "Kingdom". */
 function saysWord(text: string, word: string): boolean {
+  const said = text.toLowerCase();
   const joined = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
-  for (let at = text.indexOf(word); at !== -1; at = text.indexOf(word, at + 1)) {
-    if (!joined(text[at - 1]) && !joined(text[at + word.length])) return true;
-  }
-  return false;
+  return spokenForms(word).some((form) => {
+    for (let at = said.indexOf(form); at !== -1; at = said.indexOf(form, at + 1)) {
+      if (!joined(said[at - 1]) && !joined(said[at + form.length])) return true;
+    }
+    return false;
+  });
 }
 
 /** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
@@ -1594,9 +1603,9 @@ function refuseSpokenLeak(
   ownValuesById: LeakDetectionData['ownValuesById'],
   seat: number,
 ): void {
-  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values]));
+  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values].map((value) => value.toLowerCase())));
   for (const marker of markers) {
-    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value)) continue;
+    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || spokenForms(marker.value).some((form) => shown.has(form))) continue;
     const leak = spoken.find(({ text }) => saysWord(text, marker.value));
     if (leak) {
       throw new Error(
@@ -1654,8 +1663,8 @@ function refuseSpokenLeak(
  *   set with `setBoardPrompt`, naming the leaked marker, the
  *   owning element, the seat, and the DOM surface.
  * @throws If the board announces a marker to the seat's live regions (#1470):
- *   as a whole word, three or more characters long, that the seat is not shown
- *   on any element it can see.
+ *   as a whole word in any case or as its s/es plural (#1471), three or more
+ *   characters long, that the seat is not shown on any element it can see.
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
  */
