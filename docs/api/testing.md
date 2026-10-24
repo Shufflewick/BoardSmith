@@ -560,13 +560,11 @@ seat's pending animation events play to the handlers your board registers.
 table seat and a world seat alike: the announcer writes the seat's live regions
 and this utility renders them beside the board with the shells' own
 `LiveRegions` component, so a test hears what a screen reader would.
-`watchLiveRegion(wrapper, 'polite' | 'assertive')` records every text the region
+`watchLiveRegion(wrapper, 'polite' | 'assertive')`, from `boardsmith/testing`, records every text the region
 is given from the moment it is called, in order, a repeated message included,
 and returns a reader that lets pending announcements render first:
 
 ```ts
-import { renderAsSeat, watchLiveRegion } from 'boardsmith/testing';
-
 const wrapper = await renderAsSeat(testGame, 1, { component: GameTable });
 const said = watchLiveRegion(wrapper, 'assertive');
 await wrapper.find('[data-space="3"]').trigger('click');
