@@ -562,7 +562,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
   async function refusedAfter(
     press: (wrapper: ReturnType<typeof mountShell>) => Promise<void>,
     sentence: string,
-  ): Promise<{ messages: unknown[]; types: unknown[] }> {
+  ): Promise<{ messages: unknown[]; types: unknown[]; assertive: string }> {
     const { toasts } = useToast();
     const before = toasts.value.length;
     const { wrapper, posted, done } = await watching();
@@ -585,8 +585,9 @@ describe('WorldShell — the shared chrome (#170)', () => {
     await flushPromises();
 
     const said = toasts.value.slice(before);
+    const assertive = wrapper.get('[data-bs-live-region="assertive"]').text();
     done();
-    return { messages: said.map((t) => t.message), types: said.map((t) => t.type) };
+    return { messages: said.map((t) => t.message), types: said.map((t) => t.type), assertive };
   }
 
   it('speaks a post-hoc refusal through the toast a table refuses through', async () => {
@@ -597,6 +598,8 @@ describe('WorldShell — the shared chrome (#170)', () => {
     );
     expect(said.messages).toContain('Your holding is bare.');
     expect(said.types).toContain('error');
+    // A toast inserted with its text already in it is often not read, so a screen reader hears the live region (#1464).
+    expect(said.assertive).toBe('Your holding is bare.');
   });
 
   /**
@@ -622,6 +625,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
     }, 'It is too dark to see anything.');
     expect(said.messages).toContain('It is too dark to see anything.');
     expect(said.types).toContain('error');
+    expect(said.assertive).toBe('It is too dark to see anything.');
   });
 
   it('speaks a refusal execute() makes before sending, for a button that ignores the result (#1342)', async () => {
@@ -641,6 +645,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
     expect(posted.some((m) => m.type === 'world_command')).toBe(false);
     expect(said.map((t) => t.message)).toEqual(['the door is barred']);
     expect(said.map((t) => t.type)).toEqual(['error']);
+    expect(wrapper.get('[data-bs-live-region="assertive"]').text()).toBe('the door is barred');
     done();
   });
 
@@ -794,6 +799,7 @@ describe('WorldShell — recovering an order left over from the last page (#195)
 
     const said = toasts.value.slice(before).map((t) => t.message);
     expect(said.join(' ')).toContain('had already gone through');
+    expect(wrapper.get('[data-bs-live-region="polite"]').text()).toContain('had already gone through');
     expect(wrapper.text()).not.toContain('Checking what became of something you sent');
     done();
   });
@@ -1347,6 +1353,8 @@ describe('WorldShell — the controls menu (#1443)', () => {
     await nextTick();
     expect(wrapper.find('.cancel-btn').exists()).toBe(false);
     expect(toasts.value.slice(before).map((t) => [t.type, t.message])).toEqual([['info', 'Moving waits until the replay ends.']]);
+    await nextTick();
+    expect(wrapper.get('[data-bs-live-region="polite"]').text()).toBe('Moving waits until the replay ends.');
     wrapper.unmount();
   });
 

@@ -6,7 +6,7 @@
  * world's board, which a world's shell never provides, and the board threw the moment it rendered
  * in the real world. `renderAsSeat`, `tableShellContext` and `worldShellContext` give exactly what
  * the real shell gives and refuse a key it does not, so a key handed to one of them is left to
- * that check. A key both shells provide (board interaction, the shared half of the game context)
+ * that check. A key both shells provide (board interaction, the announcer, the shared half of the game context)
  * cannot make a board pass here and throw there, so it is not reported.
  */
 import { parseSource, walk, type AstNode } from './test-step-ast.js';
@@ -17,8 +17,8 @@ import { parseSource, walk, type AstNode } from './test-step-ast.js';
  */
 export const ONE_SHELL_CONTEXT_FIELDS = ['gameState', 'dueSeats', 'timeTravelDiff', 'platformRequest', 'turnDeadline'] as const;
 
-/** The other keys only one shell provides: the table's announcer and animations, and the world itself. */
-const ONE_SHELL_KEYS = new Set(['ANNOUNCER_KEY', 'ANIMATION_EVENTS_KEY', 'WORLD_CONTEXT_KEY']);
+/** The other keys only one shell provides: the table's animations, and the world itself. */
+const ONE_SHELL_KEYS = new Set(['ANIMATION_EVENTS_KEY', 'WORLD_CONTEXT_KEY']);
 
 /** The helper that provides one of those keys. */
 const ONE_SHELL_PROVIDERS = new Set(['provideAnimationEvents']);

@@ -108,6 +108,8 @@
          GameShell mounts its own pair the same way. -->
     <DisabledReasonTooltip />
     <Toast />
+    <!-- A toast inserted with its text already in it is often not read, so refusals and notices are also said here (#1464). -->
+    <LiveRegions :polite="liveRegion.polite.value" :assertive="liveRegion.assertive.value" />
   </div>
 </template>
 
@@ -117,6 +119,7 @@ import { useWorldHost } from './useWorldHost.js';
 import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
+import LiveRegions from '../components/LiveRegions.vue';
 import ControlsMenu from '../components/ControlsMenu.vue';
 import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
@@ -195,7 +198,7 @@ const toast = useToast();
  */
 const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
-const { play, controller: actionController, disabledActions, menuCommands } = seat;
+const { play, controller: actionController, disabledActions, menuCommands, announcer, liveRegion } = seat;
 
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
 const boardProps = computed(() => worldBoardProps(seat, host));
@@ -225,11 +228,14 @@ watch(actionController.errorTick, () => {
   const refusal = actionController.lastError.value;
   if (!refusal) return;
   toast.show(refusal, { type: 'error', duration: 5000 });
+  announcer.announce(refusal, { assertive: true });
 });
 
 // A hold cancelling the open action is this screen's own state, not a refusal (#1461).
 watch(actionController.holdNotice, (notice) => {
-  if (notice) toast.info(notice.reason, 5000);
+  if (!notice) return;
+  toast.info(notice.reason, 5000);
+  announcer.announce(notice.reason);
 });
 
 /**
@@ -244,6 +250,7 @@ watch(actionController.holdNotice, (notice) => {
 watch(host.recoveryNotice, (notice) => {
   if (notice === null) return;
   toast.show(notice, { type: 'info', duration: 8000 });
+  announcer.announce(notice);
 });
 
 /** The identity token at the head of the action bar: always the VIEWER's own
