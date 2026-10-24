@@ -12,19 +12,21 @@
  *   SH-2: state.hasBotPlayers = true -> true
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { ref, watch, nextTick, defineComponent, h } from 'vue';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { nextTick, defineComponent, h } from 'vue';
 import { flushPromises, type VueWrapper } from '@vue/test-utils';
 import ControlsMenu from './ControlsMenu.vue';
 import { useToast } from '../composables/useToast.js';
 import { useGameContext } from '../composables/useGameContext.js';
 import {
+  type BoardComponent,
   enterIframe,
   leaveIframe,
   mountPlatformShell,
   mountTableWithDebugPanel,
 } from './GameShell.platform-mount.test-helper.js';
 import { watchLiveRegion } from '../../testing/live-region.js';
+import { SETTLE_MS } from '../composables/useAutoZoom.js';
 
 function postState(state: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', {
@@ -156,195 +158,74 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────
-// GameShell — dev-mode 0×0 board console.error (Plan 134-03, Task 2, UIX-03)
-//
-// Production wiring under test (GameShell.vue, isDevBuild-gated):
-//
-//   watch(gameView, async (view) => {
-//     if (!view) return;
-//     await nextTick();
-//     setTimeout(() => {
-//       const el = zoomContainerEl.value;
-//       if (!el || el.children.length === 0) return;
-//       const rect = el.getBoundingClientRect();
-//       if (rect.width < 1 || rect.height < 1) {
-//         console.error(<UIX-03 copy>);
-//       }
-//     }, SETTLE_MS);
-//   }, { immediate: false });
-//
-// Gated on BOTH state-arrived (non-null gameView) AND slot-has-children, per
-// 134-RESEARCH.md Pitfall 2, so the normal startup transient 0×0 (before state
-// arrives / before children mount) never false-positives. Uses SETTLE_MS
-// imported from useAutoZoom.ts (no new timing constant).
-// ─────────────────────────────────────────────────────────────────────────
+// The dev build's one report of a custom board that collapsed to 0x0 (UIX-03),
+// on the REAL shell. jsdom has no layout, so the zoom container's size and
+// whether it is rendered (offsetParent) are set by the test.
+describe('GameShell — dev-mode board sizing 0x0 console.error (UIX-03)', () => {
+  const Board = defineComponent({ setup: () => () => h('div', 'board') });
+  const EmptyBoard = defineComponent({ setup: () => () => null });
+  const board = { width: 0, height: 0, rendered: true };
+  let mounted: VueWrapper | undefined;
 
-describe('GameShell — dev-mode board sizing 0×0 console.error (UIX-03)', () => {
-  const SETTLE_MS = 300; // mirrors useAutoZoom.ts's exported constant
+  beforeEach(() => {
+    Object.assign(board, { width: 0, height: 0, rendered: true });
+    vi.useFakeTimers();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
+      return (this.classList.contains('game-shell__zoom-container') ? board : { width: 0, height: 0 }) as DOMRect;
+    });
+    vi.spyOn(HTMLElement.prototype, 'offsetParent', 'get').mockImplementation(function (this: HTMLElement) {
+      return this.classList.contains('game-shell__zoom-container') && board.rendered ? document.body : null;
+    });
+  });
 
-  /** Minimal fake element exposing only what the production watch reads.
-   * offsetParent is non-null so the fake counts as RENDERED (the WR-01 hidden-
-   * board guard skips elements whose offsetParent is null — see the real-
-   * element hidden-board test below). */
-  function makeFakeZoomContainer(rect: { width: number; height: number }, childCount: number) {
-    return {
-      getBoundingClientRect: () => rect,
-      children: { length: childCount },
-      offsetParent: {},
-    } as unknown as HTMLElement;
+  afterEach(() => {
+    mounted?.unmount();
+    mounted = undefined;
+    leaveIframe();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  /** Mount the shell with `boardUi`, send `states` game states, wait out each settle check, and return the 0x0 reports. */
+  async function collapseReports(boardUi: BoardComponent, states: number) {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    enterIframe();
+    mounted = mountPlatformShell({ board: boardUi });
+    await nextTick();
+    for (let i = 0; i < states; i++) {
+      postState({ round: i });
+      await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    }
+    await vi.advanceTimersByTimeAsync(SETTLE_MS);
+    return consoleError.mock.calls.filter(([msg]) => String(msg).includes('measured 0×0'));
   }
 
-  function buildBoardSizingHarness(zoomContainerEl: { value: HTMLElement | null }) {
-    const gameView = ref<unknown>(null);
-    const errorCalls: string[] = [];
-    const consoleError = (msg: string) => errorCalls.push(msg);
-
-    // ── Production watch wiring (mirrors GameShell.vue exactly) ──────────
-    let warned0x0 = false;
-    let pending0x0Check: ReturnType<typeof setTimeout> | undefined;
-    watch(gameView, async (view) => {
-      if (!view || warned0x0) return;
-      await nextTick();
-      if (pending0x0Check !== undefined) clearTimeout(pending0x0Check);
-      pending0x0Check = setTimeout(() => {
-        pending0x0Check = undefined;
-        if (warned0x0) return;
-        const el = zoomContainerEl.value;
-        if (!el || el.children.length === 0) return;
-        if (el.offsetParent === null && getComputedStyle(el).position !== 'fixed') return;
-        const rect = el.getBoundingClientRect();
-        if (rect.width < 1 || rect.height < 1) {
-          warned0x0 = true;
-          consoleError(
-            "Custom board failed to render: the board measured 0×0 after game state arrived. " +
-            "This usually means a percentage-width or container-type board is collapsing inside GameShell's " +
-            "zoom container ('.game-shell__zoom-container { width: max-content }'). Give your board's root " +
-            'element a definite width (not 100%) or see the "Board Sizing" section of docs/custom-ui-guide.md.'
-          );
-        }
-      }, SETTLE_MS);
-    }, { immediate: false });
-
-    return { gameView, errorCalls };
-  }
-
-  it('fires once when the board measures 0x0 AFTER game state has arrived and the slot has children', async () => {
-    vi.useFakeTimers();
-    try {
-      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      gameView.value = { children: [] }; // state arrived
-      await nextTick();
-      await nextTick(); // flush the async watch callback's own nextTick()
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      expect(errorCalls).toHaveLength(1);
-      expect(errorCalls[0]).toContain('measured 0×0 after game state arrived');
-    } finally {
-      vi.useRealTimers();
-    }
+  it('reports once when the board measures 0x0 after game state arrived', async () => {
+    const reports = await collapseReports(Board, 1);
+    expect(reports).toHaveLength(1);
+    expect(reports[0]![0]).toContain('Board Sizing');
   });
 
-  it('does NOT fire on the normal startup transient (gameView still null)', async () => {
-    vi.useFakeTimers();
-    try {
-      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      // gameView never set (stays null) — watch callback never even fires.
-      void gameView;
-      await vi.advanceTimersByTimeAsync(SETTLE_MS + 50);
-
-      expect(errorCalls).toHaveLength(0);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('says nothing before game state arrives (the startup transient)', async () => {
+    expect(await collapseReports(Board, 0)).toHaveLength(0);
   });
 
-  it('does NOT fire when state has arrived but the slot has no children yet (pre-mount transient)', async () => {
-    vi.useFakeTimers();
-    try {
-      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 0) };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      gameView.value = { children: [] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      expect(errorCalls).toHaveLength(0);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('says nothing while the board has drawn nothing yet', async () => {
+    expect(await collapseReports(EmptyBoard, 1)).toHaveLength(0);
   });
 
-  it('fires only ONCE across repeated gameView broadcasts while the board stays collapsed (WR-01 latch)', async () => {
-    vi.useFakeTimers();
-    try {
-      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 0, height: 0 }, 1) };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      // First broadcast — genuine collapse, one report.
-      gameView.value = { children: [] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      // Two more broadcasts while still collapsed (e.g. a bot-vs-bot dev game)
-      // must NOT re-log — one report per session for a structural CSS bug.
-      gameView.value = { children: [1] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-      gameView.value = { children: [2] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      expect(errorCalls).toHaveLength(1);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('reports only once across repeated states while the board stays collapsed (WR-01)', async () => {
+    expect(await collapseReports(Board, 3)).toHaveLength(1);
   });
 
-  it('does NOT fire for a hidden board (display:none ancestor — offsetParent null), only for a genuinely collapsed one (WR-01)', async () => {
-    vi.useFakeTimers();
-    try {
-      // A real (detached) element: jsdom gives offsetParent === null and a 0×0
-      // rect — exactly what a display:none board reports in a real browser,
-      // even when its sizing CSS is correct. Must not false-positive.
-      const hiddenEl = document.createElement('div');
-      hiddenEl.appendChild(document.createElement('div')); // slot has children
-      const zoomContainerEl = { value: hiddenEl as HTMLElement };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      gameView.value = { children: [] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      expect(errorCalls).toHaveLength(0);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('says nothing for a hidden board (a display:none ancestor gives no offsetParent) (WR-01)', async () => {
+    board.rendered = false;
+    expect(await collapseReports(Board, 1)).toHaveLength(0);
   });
 
-  it('does NOT fire when the board measures a genuine non-zero size', async () => {
-    vi.useFakeTimers();
-    try {
-      const zoomContainerEl = { value: makeFakeZoomContainer({ width: 400, height: 300 }, 2) };
-      const { gameView, errorCalls } = buildBoardSizingHarness(zoomContainerEl);
-
-      gameView.value = { children: [] };
-      await nextTick();
-      await nextTick();
-      await vi.advanceTimersByTimeAsync(SETTLE_MS);
-
-      expect(errorCalls).toHaveLength(0);
-    } finally {
-      vi.useRealTimers();
-    }
+  it('says nothing when the board has a real size', async () => {
+    Object.assign(board, { width: 400, height: 300 });
+    expect(await collapseReports(Board, 1)).toHaveLength(0);
   });
 });
