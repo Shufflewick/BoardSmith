@@ -603,6 +603,14 @@ interface MountedForSeat<C extends Component> {
   readonly raised: unknown[];
   /** The last prompt the board set with `setBoardPrompt`, which the seat is shown; null when none is set. */
   readonly boardPrompt: () => string | null;
+  /** Every text the board's announcer wrote to the seat's live regions, a replaced one included. */
+  readonly spoken: readonly Spoken[];
+}
+
+/** One announcement, and which live region spoke it. */
+interface Spoken {
+  level: keyof LiveRegion;
+  text: string;
 }
 
 /**
@@ -689,6 +697,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   // The board's app and the live regions side by side, as a shell draws them beside its board, and never inside the board's element.
   const frame = document.createElement('div');
   const removeRegions = await drawLiveRegions(seatContext.liveRegion, frame);
+  const { spoken, stopRecording } = await recordAnnouncements(seatContext.liveRegion);
   let wrapper: VueWrapper<RenderedInstance<C>>;
   try {
     wrapper = mount<Component>(component, {
@@ -703,6 +712,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
               app.onUnmount(() => {
                 seatContext.stop();
                 removeRegions();
+                stopRecording();
               }),
           },
         ],
@@ -711,6 +721,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   } catch (failure) {
     seatContext.stop();
     removeRegions();
+    stopRecording();
     throw failure;
   }
 
@@ -724,7 +735,19 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     wrapper.unmount();
     throw failure;
   }
-  return { wrapper, raised, boardPrompt: seatContext.boardPrompt };
+  return { wrapper, raised, boardPrompt: seatContext.boardPrompt, spoken };
+}
+
+/** Records each text written to the seat's live regions as it is written, so a later announcement cannot hide an earlier one. */
+async function recordAnnouncements(liveRegion: LiveRegion): Promise<{ spoken: Spoken[]; stopRecording: () => void }> {
+  const { watch } = await import('vue');
+  const spoken: Spoken[] = [];
+  const stops = (['polite', 'assertive'] as const).map((level) =>
+    watch(liveRegion[level], (text) => {
+      if (text) spoken.push({ level, text });
+    }, { flush: 'sync' }),
+  );
+  return { spoken, stopRecording: () => stops.forEach((stop) => stop()) };
 }
 
 /** The seat's live regions drawn into `frame` with `LiveRegions`, the shells' own component. */
@@ -1549,6 +1572,44 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
 }
 
 /**
+ * The shortest marker an announcement is checked for. A spoken sentence is full
+ * of seat numbers, counts and short words, so a one- or two-character rank or
+ * suit in one says nothing about which card is meant (RESEARCH Pitfall 3).
+ */
+const MIN_SPOKEN_MARKER_LENGTH = 3;
+
+/** Whether `text` holds `word` with no letter or digit directly before or after it: "King" in "the King", not in "Kingdom". */
+function saysWord(text: string, word: string): boolean {
+  const joined = (char: string | undefined) => char !== undefined && /[\p{L}\p{N}]/u.test(char);
+  for (let at = text.indexOf(word); at !== -1; at = text.indexOf(word, at + 1)) {
+    if (!joined(text[at - 1]) && !joined(text[at + word.length])) return true;
+  }
+  return false;
+}
+
+/** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
+function refuseSpokenLeak(
+  spoken: readonly Spoken[],
+  markers: readonly ForbiddenMarker[],
+  ownValuesById: LeakDetectionData['ownValuesById'],
+  seat: number,
+): void {
+  const shown = new Set([...ownValuesById.values()].flatMap((values) => [...values]));
+  for (const marker of markers) {
+    if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || shown.has(marker.value)) continue;
+    const leak = spoken.find(({ text }) => saysWord(text, marker.value));
+    if (leak) {
+      throw new Error(
+        `Hidden-info leak: "${marker.value}"` +
+          `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +
+          `from ${marker.elementLabel} is announced to seat ${seat}. ` +
+          `Leaked via the ${leak.level} live region (announce): ${leak.text.slice(0, 200)}`,
+      );
+    }
+  }
+}
+
+/**
  * Render `testGame` as `seat` (headlessly, via `renderAsSeat`) and throw if
  * any hidden element's identity leaks into the rendered markup.
  *
@@ -1592,6 +1653,9 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  *   aria-description, aria-roledescription) or in the last prompt the board
  *   set with `setBoardPrompt`, naming the leaked marker, the
  *   owning element, the seat, and the DOM surface.
+ * @throws If the board announces a marker to the seat's live regions (#1470):
+ *   as a whole word, three or more characters long, that the seat is not shown
+ *   on any element it can see.
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
  */
@@ -1649,7 +1713,7 @@ export async function assertNoHiddenInfoLeak(
 
   // Every render option reaches the mount. Picking them out one by one is how
   // `provide` was accepted here and silently dropped (#405).
-  const { wrapper, raised, boardPrompt } = await mountForSeat(subject, seat, options);
+  const { wrapper, raised, boardPrompt, spoken } = await mountForSeat(subject, seat, options);
   try {
     const surfaces = collectScopedSurfaceStrings(wrapper);
     // The action bar shows the board's prompt to the seat, so it is checked
@@ -1688,6 +1752,7 @@ export async function assertNoHiddenInfoLeak(
         }
       }
     }
+    refuseSpokenLeak(spoken, activeMarkers, ownValuesById, seat);
   } finally {
     wrapper.unmount();
   }
