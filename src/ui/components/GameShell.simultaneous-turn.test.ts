@@ -218,7 +218,7 @@ describe('GameShell in a simultaneous step (#337)', () => {
     post(simultaneousFrame([1, 2]));
     await nextTick();
 
-    expect(said()).toEqual(['Your move']);
+    expect(await said()).toEqual(['Your move']);
   });
 
   it('announces who is still deciding once after the viewer commits, not on every frame', async () => {
@@ -235,6 +235,6 @@ describe('GameShell in a simultaneous step (#337)', () => {
     post(simultaneousFrame([0]));
     await nextTick();
 
-    expect(said()).toEqual(['Bob and Carol are playing']);
+    expect(await said()).toEqual(['Bob and Carol are playing']);
   });
 });

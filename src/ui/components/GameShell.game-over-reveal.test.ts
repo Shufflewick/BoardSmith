@@ -144,7 +144,7 @@ const REVEALED = { announced: [ALICE_WINS], card: true };
 async function after({ wrapper, assertive }: Shell, step: () => void) {
   step();
   await settle();
-  return { announced: assertive(), card: wrapper.find('.game-over-card').exists() };
+  return { announced: await assertive(), card: wrapper.find('.game-over-card').exists() };
 }
 
 const complete = () => post(completeFrame());
@@ -201,7 +201,7 @@ describe('the table ending (#419)', () => {
     await after(shell, complete);
     for (const value of [true, false, true]) await after(shell, () => { shown.value = value; });
 
-    expect(shell.assertive()).toEqual([ALICE_WINS]);
+    expect(await shell.assertive()).toEqual([ALICE_WINS]);
   });
 });
 

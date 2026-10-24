@@ -42,15 +42,17 @@ if (typeof window.matchMedia !== 'function') {
  * Reads every text the shell's `level` live region is given from now on, in
  * order. Vue sets the region's text whole, so each write adds a node.
  */
-export function watchLiveRegion(wrapper: { find(selector: string): { element: Element } }, level: 'polite' | 'assertive'): () => string[] {
+export function watchLiveRegion(wrapper: { find(selector: string): { element: Element } }, level: 'polite' | 'assertive'): () => Promise<string[]> {
   const said: string[] = [];
   const record = (records: MutationRecord[]) => {
     for (const { addedNodes } of records) for (const node of addedNodes) if (node.textContent) said.push(node.textContent);
   };
   const observer = new MutationObserver(record);
   observer.observe(wrapper.find(`[data-bs-live-region="${level}"]`).element, { childList: true });
-  // Records the observer has not delivered yet are taken here, so a read never misses the last write.
-  return () => {
+  // announce() clears the region and sets its text a tick later, so let both render, then take undelivered records.
+  return async () => {
+    await nextTick();
+    await nextTick();
     record(observer.takeRecords());
     return [...said];
   };
