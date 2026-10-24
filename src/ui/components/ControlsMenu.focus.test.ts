@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 /**
- * When every item in the open controls menu turns disabled, focus goes to the
+ * When every item in the open controls menu is removed, focus goes to the
  * menu itself, so its keydown still hears Escape (#1457). Up, Down, Home and
- * End move between the enabled items of every kind, wrapping (#1458).
+ * End move between the items of every kind, wrapping (#1458). A disabled item
+ * stays focusable and choosing it does nothing (#1465).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -16,7 +17,7 @@ vi.stubGlobal('matchMedia', vi.fn(() => ({
 })));
 
 describe('ControlsMenu focus', () => {
-  it('moves focus to the menu when its last enabled item turns disabled', async () => {
+  it('moves focus to the menu when its last item is removed', async () => {
     const wrapper = mount(ControlsMenu, { attachTo: document.body });
     await wrapper.find('button.menubtn').trigger('click');
     await wrapper.vm.$nextTick();
@@ -25,9 +26,9 @@ describe('ControlsMenu focus', () => {
     const focused = document.activeElement as HTMLButtonElement;
     expect(menu.contains(focused)).toBe(true);
 
-    // jsdom keeps focus on a disabled element; blur() stands in for the browser dropping it.
+    // jsdom keeps focus on a removed element; blur() stands in for the browser dropping it.
     focused.blur();
-    for (const el of menu.querySelectorAll<HTMLButtonElement | HTMLInputElement>('button, input')) el.disabled = true;
+    for (const el of menu.querySelectorAll('button, input')) el.remove();
     await Promise.resolve();
 
     expect(document.activeElement).toBe(menu);
@@ -35,7 +36,7 @@ describe('ControlsMenu focus', () => {
   });
 
   describe('arrow keys (#1458)', () => {
-    const ITEMS = ['Auto end turn', 'Fit', 'Deal', 'Reduce motion', 'Show action help', 'Full', 'Slow'];
+    const ITEMS = ['Auto end turn', 'Undo last action', 'Fit', 'Deal', 'Shuffle', 'Reduce motion', 'Show action help', 'Full', 'Slow'];
 
     async function openMenu() {
       localStorage.clear();
@@ -69,7 +70,7 @@ describe('ControlsMenu focus', () => {
       wrapper.unmount();
     });
 
-    it('Down visits every enabled item in order, skipping disabled ones, and wraps to the first', async () => {
+    it('Down visits every item in order, disabled ones too, and wraps to the first', async () => {
       const { wrapper, press, focusedLabel } = await openMenu();
       const visited = [focusedLabel()];
       for (let i = 0; i < ITEMS.length; i++) {
@@ -113,6 +114,47 @@ describe('ControlsMenu focus', () => {
       const slider = menu.querySelector('input.zoom-range')!;
       expect(slider.closest('[role^="menuitem"]')).toBeNull();
       expect(slider.closest('[role="group"]')?.getAttribute('aria-label')).toBe('Zoom');
+      wrapper.unmount();
+    });
+  });
+
+  describe('a disabled item (#1465)', () => {
+    async function openMenu() {
+      const run = vi.fn();
+      const wrapper = mount(ControlsMenu, {
+        props: {
+          play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+          showHint: true,
+          hintDisabled: true,
+          commands: [{ label: 'Shuffle', enabled: false, run }],
+        },
+        attachTo: document.body,
+      });
+      await wrapper.find('button.menubtn').trigger('click');
+      await wrapper.vm.$nextTick();
+      await wrapper.vm.$nextTick();
+      const item = (label: string) => Array.from(document.querySelectorAll<HTMLElement>('[role="menu"] [role="menuitem"]'))
+        .find((el) => el.textContent!.includes(label))!;
+      return { wrapper, run, item };
+    }
+
+    it.each(['Undo last action', 'Get a hint', 'Shuffle'])('"%s" is marked aria-disabled alone, so it keeps focus', async (label) => {
+      const { wrapper, item } = await openMenu();
+      expect(item(label).getAttribute('aria-disabled')).toBe('true');
+      expect(item(label).hasAttribute('disabled')).toBe(false);
+      item(label).focus();
+      expect(document.activeElement).toBe(item(label));
+      wrapper.unmount();
+    });
+
+    it.each(['Undo last action', 'Get a hint', 'Shuffle'])('choosing "%s" does nothing and leaves the menu open', async (label) => {
+      const { wrapper, run, item } = await openMenu();
+      item(label).click();
+      await wrapper.vm.$nextTick();
+      expect(wrapper.emitted('undo')).toBeUndefined();
+      expect(wrapper.emitted('teaching-action')).toBeUndefined();
+      expect(run).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="menu"]')).not.toBeNull();
       wrapper.unmount();
     });
   });

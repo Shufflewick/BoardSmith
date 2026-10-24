@@ -85,7 +85,7 @@ const CONTROLS: Control[] = [
     label: 'ControlsMenu item',
     file: resolvePath(__dir, 'components/ControlsMenu.vue'),
     base: '.menu :deep(.mi)',
-    disabled: '.menu :deep(.mi:disabled)',
+    disabled: ".menu :deep(.mi[aria-disabled='true'])",
     backdrop: 'var(--bsg-surface)',
   },
   {

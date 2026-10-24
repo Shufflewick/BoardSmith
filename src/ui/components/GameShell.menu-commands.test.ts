@@ -68,7 +68,6 @@ describe('GameShell game menu commands (#1448)', () => {
     const wrapper = await mountWithCommandBoard();
     await openMenu();
     const item = command('Watch the last battle')!;
-    expect(item.disabled).toBe(true);
     expect(item.getAttribute('aria-disabled')).toBe('true');
     expect(menu()!.textContent).toContain('Game');
 
@@ -76,7 +75,7 @@ describe('GameShell game menu commands (#1448)', () => {
     await nextTick();
     await wrapper.get('[data-testid="fight"]').trigger('click');
     await openMenu();
-    expect(command('Watch the last battle')!.disabled).toBe(false);
+    expect(command('Watch the last battle')!.getAttribute('aria-disabled')).toBe('false');
     wrapper.unmount();
   });
 

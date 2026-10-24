@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * FOCUS STAYS IN THE CONTROLS MENU AFTER ITS FOCUSED ITEM TURNS DISABLED (#1453, #1457),
- * AND THE ARROW KEYS MOVE BETWEEN ITS ITEMS (#1458).
+ * FOCUS STAYS IN THE CONTROLS MENU AFTER ITS FOCUSED ITEM IS DISABLED OR REMOVED (#1453, #1457),
+ * THE ARROW KEYS MOVE BETWEEN ITS ITEMS (#1458), AND A DISABLED ITEM TAKES
+ * FOCUS BUT DOES NOTHING WHEN CHOSEN (#1465).
  *
- * When a focused button turns disabled, the browser drops focus to `<body>`
- * (firing focusout with no relatedTarget), where no key reaches the menu while
- * the rest of the page stays inert. "Undo last action" does this when another
- * seat's move clears `canUndo`. The trap moves focus to the next item, so every
- * key keeps working. jsdom keeps the focus on the disabled button, so only a
- * real browser shows it.
+ * When a focused button turns natively disabled or is removed, the browser
+ * drops focus to `<body>` (firing focusout with no relatedTarget), where no key
+ * reaches the menu while the rest of the page stays inert. The menu's own items
+ * are only ever aria-disabled, so the natively disabled case stands for a
+ * game's own dialog built on the exported useFocusTrap. The trap moves focus to
+ * the next item, so every key keeps working. jsdom keeps the focus on the
+ * disabled button, and fires no click for Enter or Space, so only a real
+ * browser shows these.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/focus-trap-disabled-item-browser.mjs`; a missing Chromium says
@@ -35,7 +38,7 @@ await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', tab
       await trigger.focus();
       await page.keyboard.press('Enter');
       await focusedItem.waitFor({ timeout: 5_000 });
-      const items = await menu.evaluate((el) => Array.from(el.querySelectorAll('[role^="menuitem"]:not(:disabled)'), (item) => item.getAttribute('aria-label') || item.textContent.trim()));
+      const items = await menu.evaluate((el) => Array.from(el.querySelectorAll('[role^="menuitem"]'), (item) => item.getAttribute('aria-label') || item.textContent.trim()));
       const firstItem = await focused();
       await page.keyboard.press('ArrowDown');
       const second = await focused();
@@ -49,6 +52,32 @@ await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', tab
         assert(second === items[1], `Down moved focus to "${second}", not the next item "${items[1]}"`);
         assert(wrapped === items.at(-1), `Up from the first item moved focus to "${wrapped}", not the last item "${items.at(-1)}"`);
         assert(back === items[0], `Down from the last item moved focus to "${back}", not the first item "${items[0]}"`);
+      });
+      await page.keyboard.press('Escape');
+      await menu.waitFor({ state: 'detached', timeout: 5_000 });
+
+      // Down lands on a disabled item, and Enter and Space on it do nothing (#1465).
+      // The table sample can undo its opening draw, so Undo is disabled by hand as if there were nothing to undo.
+      await trigger.focus();
+      await page.keyboard.press('Enter');
+      await focusedItem.waitFor({ timeout: 5_000 });
+      const disabledAt = await menu.evaluate((el) => {
+        const all = Array.from(el.querySelectorAll('[role^="menuitem"]'));
+        const undo = all.find((item) => item.textContent.trim() === 'Undo last action');
+        undo?.setAttribute('aria-disabled', 'true');
+        return all.indexOf(undo);
+      });
+      for (let i = 0; i < disabledAt; i++) await page.keyboard.press('ArrowDown');
+      const onDisabled = await focused();
+      await page.keyboard.press('Enter');
+      await page.keyboard.press('Space');
+      const afterChoosing = await focused();
+      const openAfterChoosing = await menu.isVisible();
+      await check(`Down lands on a disabled item, and Enter and Space on it do nothing at ${viewport.width}px`, async () => {
+        assert(disabledAt > 0, 'the controls menu has no "Undo last action" item after its first, so this run cannot check a disabled one');
+        assert(onDisabled === items[disabledAt], `Down moved focus to "${onDisabled}", not the disabled "${items[disabledAt]}"`);
+        assert(openAfterChoosing, `Enter or Space on the disabled "${onDisabled}" closed the menu`);
+        assert(afterChoosing === onDisabled, `Enter or Space on the disabled "${onDisabled}" moved focus to "${afterChoosing}"`);
       });
       await page.keyboard.press('Escape');
       await menu.waitFor({ state: 'detached', timeout: 5_000 });

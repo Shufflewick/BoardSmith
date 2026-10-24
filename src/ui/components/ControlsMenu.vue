@@ -140,7 +140,7 @@ const { open: openTrap, close: closeTrap, handleKeydown: trapKeydown } = useFocu
   onClose: close,
 });
 
-// Up/Down/Home/End move between the enabled items of every kind, wrapping (WAI-ARIA menu pattern, #1458).
+// Up/Down/Home/End move between the items of every kind, disabled ones too, wrapping (WAI-ARIA menu pattern, #1458, #1465).
 const ITEM_STEPS: Record<string, (at: number) => number> = {
   ArrowDown: (at) => at + 1,
   ArrowUp: (at) => (at === -1 ? 0 : at) - 1,
@@ -150,7 +150,7 @@ const ITEM_STEPS: Record<string, (at: number) => number> = {
 
 function handleKeydown(e: KeyboardEvent) {
   const menu = menuRef.value!;
-  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]:not(:disabled)'));
+  const items = Array.from(menu.querySelectorAll<HTMLElement>('[role^="menuitem"]'));
   const at = items.indexOf(e.target as HTMLElement);
   const step = ITEM_STEPS[e.key];
   // The zoom slider is not an item and keeps its own arrow keys.
@@ -160,6 +160,11 @@ function handleKeydown(e: KeyboardEvent) {
   }
   e.preventDefault();
   items.at(step(at) % items.length)!.focus();
+}
+
+// Enter and Space on a button fire click too, so this one guard keeps every way of choosing a disabled item inert (#1465).
+function ignoreDisabledItem(e: MouseEvent) {
+  if ((e.target as Element).closest('[aria-disabled="true"]')) e.stopPropagation();
 }
 
 function computePosition() {
@@ -243,7 +248,7 @@ function runCommand(command: MenuCommand) {
     </button>
 
     <Teleport to="body">
-    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" tabindex="-1" :style="menuStyle" @keydown="handleKeydown">
+    <div v-if="isOpen" ref="menuRef" role="menu" aria-label="Game controls" class="menu" tabindex="-1" :style="menuStyle" @keydown="handleKeydown" @click.capture="ignoreDisabledItem">
       <template v-if="play">
         <div class="grouplabel">Play</div>
 
@@ -267,7 +272,6 @@ function runCommand(command: MenuCommand) {
           class="mi"
           type="button"
           role="menuitem"
-          :disabled="!play.canUndo"
           :aria-disabled="!play.canUndo"
           @click="handleUndo"
         >
@@ -335,7 +339,6 @@ function runCommand(command: MenuCommand) {
             class="mi"
             type="button"
             role="menuitem"
-            :disabled="hintDisabled"
             :aria-disabled="hintDisabled"
             @click="emit('teaching-action', 'hint'); close()"
           >
@@ -463,7 +466,7 @@ function runCommand(command: MenuCommand) {
 .menu :deep(.mi:hover) {
   background: var(--bsg-surface-2);
 }
-.menu :deep(.mi:disabled) {
+.menu :deep(.mi[aria-disabled='true']) {
   background: var(--bsg-disabled-surface);
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;

@@ -16,7 +16,6 @@ defineEmits<{ run: [command: MenuCommand] }>();
     class="mi mi-command"
     type="button"
     role="menuitem"
-    :disabled="command.enabled === false"
     :aria-disabled="command.enabled === false"
     @click="$emit('run', command)"
   >

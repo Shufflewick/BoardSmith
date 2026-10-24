@@ -76,7 +76,6 @@ describe('#373: the undo controls follow the game definition', () => {
     const state = await stateAfterOneMove(uncheckpointedScumDefinition);
 
     const menu = await mountMenu(state);
-    expect(undoMenuItem().disabled).toBe(true);
     expect(undoMenuItem().getAttribute('aria-disabled')).toBe('true');
     menu.unmount();
 
@@ -90,7 +89,7 @@ describe('#373: the undo controls follow the game definition', () => {
     const state = await stateAfterOneMove(unfencedScumDefinition);
 
     const menu = await mountMenu(state);
-    expect(undoMenuItem().disabled).toBe(false);
+    expect(undoMenuItem().getAttribute('aria-disabled')).toBe('false');
     menu.unmount();
 
     const panel = mountPanel(state);
