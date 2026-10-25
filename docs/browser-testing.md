@@ -428,7 +428,11 @@ markers this page documents, so it keeps up with any game without knowing it:
   holds for a toast in the page around the game too, such as the dev host's own
   "Game restarted" after a deal (#478). A
   control or panel button a redraw takes away for a moment is looked for again
-  until it comes back; one still gone after 5 seconds is reported. A control the
+  until it comes back; one still gone after 5 seconds is reported. A board
+  control the game took away by itself before the walk pointed at it, as a
+  real-time game's clock does, is not: the walk says so and presses it the next
+  time it shows. One that goes away by itself each of 3 times the walk goes to
+  press it is reported (#1475). A control the
   walk can only see by scrolling it out from under a bar fixed along the edge of
   the page (the action panel) is scrolled to the middle, the top or the bottom
   until it shows.
