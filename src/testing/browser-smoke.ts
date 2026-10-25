@@ -1073,6 +1073,8 @@ function unreachable(covers: ReadonlySet<Exclude<OnTop, 'it'>>): never {
  * centre. One that stands for whatever lies under the pointer (a placement surface whose
  * `data-bs-candidate` follows the pointer) may be refused (`aria-disabled`) at its centre, so the
  * walk aims at other points on it ({@link FINE_AIM_POINTS}) until one is accepted, and clicks there.
+ * None accepted while a toast covered some of them is an {@link UnderAToast}, which `press` waits
+ * out before aiming again (#1478).
  */
 async function aimAndClick(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
@@ -1091,7 +1093,7 @@ async function aimAndClick(control: Control): Promise<void> {
     );
     if (accepted) return clickAt(control, at, x, y);
   }
-  if (reached > 0) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
+  if (reached > 0 && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
   unreachable(covers);
 }
 

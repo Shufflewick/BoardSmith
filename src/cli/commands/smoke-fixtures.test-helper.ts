@@ -741,13 +741,17 @@ describe('the fields game', () => {
  * other cells, and the pointer aims at the nearest cell, so the walk's points land squarely on
  * cells: with 'evenCells' every cell on an odd row or column is refused, so the walk's first 25
  * points land on refused cells and only a finer search finds one the game accepts; with 'topRow'
- * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at.
+ * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at;
+ * with 'underAToast' (#1478) only the top-left quarter, which a toast covers from the moment the
+ * pointer first moves over the board until it has been still for two seconds.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
+    underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
   };
+  const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   return {
     ...fieldRules(options.accepts && refusals[options.accepts]),
@@ -770,11 +774,21 @@ function aim(event: PointerEvent) {
 }
 function claim() {
   if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
-}
+}${toast ? `
+const toastShown = ref(false);
+let toastShows = true;
+let toastGoes: ReturnType<typeof setTimeout> | undefined;
+function hover() {
+  if (!choosing.value) return;
+  if (toastShows) toastShown.value = true;
+  toastShows = false;
+  clearTimeout(toastGoes);
+  toastGoes = setTimeout(() => (toastShown.value = false), 2000);
+}` : ''}
 </script>
 
 <template>
-  <div class="board">
+  <div class="board"${toast ? ' @pointermove="hover"' : ''}>
     <div
       class="field"
       role="button"
@@ -787,13 +801,15 @@ function claim() {
       @keydown.enter="claim"
     >
       Aimed at row {{ cursor.row }}, column {{ cursor.col }}
-    </div>
+    </div>${toast ? `
+    <div v-if="toastShown" class="toast info">Claim a cell.</div>` : ''}
   </div>
 </template>
 
 <style scoped>
-.board { width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }
+.board { position: relative; width: 400px; height: 400px; }
+.field { width: 400px; height: 400px; background: #ddd; }${toast ? `
+.toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
