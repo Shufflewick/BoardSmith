@@ -406,7 +406,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   One candidate per choice accepts the click at its centre. A placement surface
   whose `data-bs-candidate` names whatever lies under the pointer may be
   refused (`aria-disabled`) at its centre, so the walk aims at other points on
-  it until one is accepted. A refused candidate that names a different choice at
+  it until one is accepted: a 5 x 5 grid first, then the points a 9 x 9 and a
+  17 x 17 grid add (#1476), and it reports the surface only when all 289 points
+  are refused. A refused candidate that names a different choice at
   two of its corners is such a surface, and is aimed at the same way. Nothing in
   the game needs to change for this: the hook already says which choice the
   surface stands for, and `aria-disabled` already says it is refused. An empty text

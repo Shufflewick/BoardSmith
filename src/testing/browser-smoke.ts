@@ -893,15 +893,24 @@ function pagesAround(frame: Frame): Frame[] {
   return around;
 }
 
+/** A grid of points from 10 to 90 percent across and down a control, `every` twentieths apart. */
+function aimGrid(every: number): Array<readonly [number, number]> {
+  const lines = Array.from({ length: 16 / every + 1 }, (_, i) => (2 + i * every) / 20);
+  return lines.flatMap((y) => lines.map((x) => [x, y] as const));
+}
+
 /**
  * Where on a board control the walk points (#468), as fractions of its width and height: its centre
- * first, then a grid over the rest of it, for a control partly covered or a candidate refused at its
- * centre.
+ * first, then a 5 x 5 grid over the rest of it, for a control partly covered or a candidate refused
+ * at its centre.
  */
-const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
-  [0.5, 0.5],
-  ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((y) => [0.1, 0.3, 0.5, 0.7, 0.9].map((x) => [x, y] as const)).filter(([x, y]) => x !== 0.5 || y !== 0.5),
-];
+const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [[0.5, 0.5], ...aimGrid(4).filter(([x, y]) => x !== 0.5 || y !== 0.5)];
+
+/**
+ * Where on a pick's candidate the walk points (#1476): {@link AIM_POINTS}, then the points a 9 x 9
+ * and a 17 x 17 grid add, for a placement surface that accepts only a few spaces away from them.
+ */
+const FINE_AIM_POINTS = [...new Map([...AIM_POINTS, ...aimGrid(2), ...aimGrid(1)].map((point) => [point.join(), point])).values()];
 
 /** What lies on top at a point of a control: the control itself, a toast, or something else. */
 type OnTop = 'it' | 'toast' | 'other';
@@ -1063,18 +1072,18 @@ function unreachable(covers: ReadonlySet<Exclude<OnTop, 'it'>>): never {
  * choice the game accepts (#468). A candidate that stands for one choice accepts the click at its
  * centre. One that stands for whatever lies under the pointer (a placement surface whose
  * `data-bs-candidate` follows the pointer) may be refused (`aria-disabled`) at its centre, so the
- * walk aims at other points on it until one is accepted, and clicks there.
+ * walk aims at other points on it ({@link FINE_AIM_POINTS}) until one is accepted, and clicks there.
  */
 async function aimAndClick(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
-  let reached = false;
-  for (const [x, y] of AIM_POINTS) {
+  let reached = 0;
+  for (const [x, y] of FINE_AIM_POINTS) {
     const at = await pointAt(control, x, y);
     if (typeof at === 'string') {
       covers.add(at);
       continue;
     }
-    reached = true;
+    reached++;
     const accepted = await withinPageTime(control.frame.page(), PRESS_MS, 'reading whether the control accepts the point aimed at', (timeout) =>
       control.target.evaluate((element) => element.getAttribute('aria-disabled') !== 'true' && element.hasAttribute('data-bs-candidate'), undefined, {
         timeout,
@@ -1082,7 +1091,7 @@ async function aimAndClick(control: Control): Promise<void> {
     );
     if (accepted) return clickAt(control, at, x, y);
   }
-  if (reached) throw new Error('wherever the pointer aims on it, it stands for a choice the game refuses');
+  if (reached > 0) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
   unreachable(covers);
 }
 

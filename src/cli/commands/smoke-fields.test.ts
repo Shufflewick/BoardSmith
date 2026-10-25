@@ -49,6 +49,28 @@ describe('boardsmith verify: the smoke check', () => {
     expect(steps.some((line) => /pressing "[^"]+" for "claim"/.test(line))).toBe(true);
   });
 
+  it('#1476: searches a pointer-aimed board more finely when it refuses every one of the first points the walk aims at', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'evenCells' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1476: reports a pointer-aimed board the game refuses at every point the walk aims at, saying how many that was', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'topRow' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /- Pressing "The field, aimed at row \d, column \d" while answering "claim" did not work: at each of the 289 points the walk aimed at on it, it stands for a choice the game refuses\./,
+    );
+  });
+
   it('#466: reports an action whose rules crash on the number the walk entered, rather than trying the next number', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...fieldsGame({ kindleCrashesAtOne: true }),
