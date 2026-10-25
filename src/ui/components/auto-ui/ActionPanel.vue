@@ -810,7 +810,7 @@ watch([stepIdentity, () => props.availableActions.join(','), isLoadingChoices], 
 // the body. A window focus with no put-off repair moves nothing.
 let repairPutOff = false;
 
-function repairStrandedFocus(): void {
+function repairStrandedFocus(options?: FocusOptions): void {
   if (!focusIsStranded() || isLoadingChoices.value) return;
   if (!document.hasFocus()) {
     repairPutOff = true;
@@ -821,13 +821,14 @@ function repairStrandedFocus(): void {
   const target = focusTargetFor(root);
   // Focusing the container itself would be worse than the body — it is not
   // operable and announces nothing. Better to leave the player where they are.
-  target?.focus();
+  target?.focus(options);
 }
 
 function repairPutOffFocus(): void {
   if (!repairPutOff) return;
   repairPutOff = false;
-  repairStrandedFocus();
+  // The focus may come from a mouse press in a scrolled bar; scrolling now moves the pressed button away (#1473).
+  repairStrandedFocus({ preventScroll: true });
 }
 
 onMounted(() => window.addEventListener('focus', repairPutOffFocus));
