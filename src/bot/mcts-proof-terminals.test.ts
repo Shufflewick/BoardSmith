@@ -181,7 +181,8 @@ describe('proof-number search and uncertain results', () => {
   it('weighs a hidden die across sampled worlds, not by the first world it saw', async () => {
     const seeds = Array.from({ length: 60 }, (_, i) => `hidden-${i}`);
     const strategy: BotStrategy = { ...lowStrategy, determinize: rollDie };
-    expect(await picks(HiddenDieGame, { useRAVE: false }, seeds, strategy)).toEqual(seeds.map(() => 'safe'));
+    // A wrong proof is set on a move's first visit, so 60 iterations catch it as surely as the default 300 (#1479).
+    expect(await picks(HiddenDieGame, { useRAVE: false, iterations: 60 }, seeds, strategy)).toEqual(seeds.map(() => 'safe'));
   });
 });
 
