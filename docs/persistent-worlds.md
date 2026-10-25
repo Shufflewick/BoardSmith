@@ -293,6 +293,11 @@ built on the game exactly as genesis builds one, and `undefined` for anything
 else -- which keeps a mistyped partition name the loud `partition-missing`
 refusal it has always been.
 
+Return the only element you create at the top level of the game. As with
+genesis, nothing stores one you do not return, so `createPartition` refuses it
+with `invalid-partition-root`, naming it, and refuses again each time it is
+asked. Build helpers inside the root you return, or do not create them.
+
 ```ts
 createPartition: (game, name) =>
   name.startsWith('empire:') ? game.create(Empire, name) : undefined,
@@ -2912,7 +2917,7 @@ thing next time.
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
-| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names, or genesis created a top-level element it did not return. Create each root with `game.create(...)` and answer it once. |
+| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names, or genesis or `createPartition` created a top-level element it did not return. Create each root with `game.create(...)` and answer it once. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |

@@ -886,6 +886,35 @@ describe("#795 — a partition root hangs from the game and has one name", () =>
     expect(refusal.message).toMatch(/"nook"/);
   });
 
+  it("refuses a top-level element createPartition created and did not return, every time it is asked (#1477)", async () => {
+    const runner = worldWith({
+      createPartition: (game, name) => {
+        game.create(Yard, "extra");
+        return game.create(Yard, name) as GameElement;
+      },
+    });
+    await runner.genesis();
+    for (const _ask of [1, 2]) {
+      const refusal = await refusalOf(runner.createPartition("nook"));
+      expect(refusal.code).toBe("invalid-partition-root");
+      expect(refusal.message).toMatch(/"extra" \(id \d+\)/);
+      expect(refusal.message).not.toMatch(/"nook" \(id/);
+    }
+  });
+
+  it("refuses a top-level element createPartition created before answering nothing (#1477)", async () => {
+    const runner = worldWith({
+      createPartition: (game) => {
+        game.create(Yard, "extra");
+        return undefined;
+      },
+    });
+    await runner.genesis();
+    const refusal = await refusalOf(runner.createPartition("nook"));
+    expect(refusal.code).toBe("invalid-partition-root");
+    expect(refusal.message).toMatch(/"extra" \(id \d+\)/);
+  });
+
   it("refuses one element registered under two names", async () => {
     const runner = worldWith({
       genesis: (game) => {
