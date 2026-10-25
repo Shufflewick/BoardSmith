@@ -176,15 +176,17 @@ type Projecting = ReturnType<typeof readOnlyScope>;
  */
 const WORLD_SCOPE = "world";
 
-/** What `run` answered, and the top-level elements it added that no partition claims, named for a refusal (#246, #1474). */
-export function unclaimedAllocations<T>(game: Game, run: () => T): { answer: T; unclaimed: string[] } {
+/** What `run` answered, and the top-level elements it added that no partition claims (#246, #1474). */
+export function unclaimedAllocations<T>(game: Game, run: () => T): { answer: T; unclaimed: GameElement[] } {
   const before = unclaimedTopLevel(game);
   const answer = run();
-  const unclaimed: string[] = [];
-  for (const [id, element] of unclaimedTopLevel(game)) {
-    if (!before.has(id)) unclaimed.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
-  }
-  return { answer, unclaimed: unclaimed.sort() };
+  const unclaimed = [...unclaimedTopLevel(game)].filter(([id]) => !before.has(id)).map(([, element]) => element);
+  return { answer, unclaimed };
+}
+
+/** Elements as a refusal names them, in a stable order. */
+export function namedForRefusal(elements: readonly GameElement[]): string[] {
+  return elements.map((element) => `"${element.name ?? element.constructor.name}" (id ${element.id})`).sort();
 }
 
 /** Every element hanging from the game root that is not a partition root. */
@@ -792,7 +794,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     run: () => T,
   ): T {
     const { answer, unclaimed } = unclaimedAllocations(this.game, run);
-    assertAnsweredAllocations(hook, unclaimed);
+    assertAnsweredAllocations(hook, namedForRefusal(unclaimed));
     return answer;
   }
 
@@ -977,7 +979,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
       const root = this.game.partitionRoot(resident);
       if (root) return { parentId: this.game.id, json: root.toJSON() };
     }
-    const built = this.buildOnFirstUse?.(this.game, name);
+    const { answer: built, unclaimed } = unclaimedAllocations(this.game, () =>
+      this.buildOnFirstUse?.(this.game, name),
+    );
+    const strays = namedForRefusal(unclaimed.filter((element) => element !== built));
+    if (strays.length > 0) {
+      // Taken back out of the tree, so nothing unstored stays readable and the
+      // next ask builds afresh and is refused again (#1477).
+      for (const element of unclaimed) this.game.evictSubtree(element.id);
+      const them = strays.length === 1 ? "it" : "them";
+      throw worldRefusal(
+        "invalid-partition-root",
+        `This world's createPartition created ${strays.join(", ")} at the top level of the ` +
+          `game while building partition "${name}" and did not return ${them}. Nothing stores ` +
+          "an element createPartition does not return, so it would be read while this world " +
+          `stays loaded and be gone after a restart. Build ${them} inside the root you return, ` +
+          `or do not create ${them}.`,
+      );
+    }
     if (built === undefined) return undefined;
     // The hook CREATED this in the live game, so it is already in the tree --
     // the same case genesis is in, and the same reason telling the engine
