@@ -771,14 +771,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     hook: "partition" | "derive" | "create" | "finalize",
     run: () => T,
   ): T {
+    const { answer, unclaimed } = this.unclaimedAllocations(run);
+    assertAnsweredAllocations(hook, unclaimed);
+    return answer;
+  }
+
+  /** What `run` answered, and the top-level elements it added that no partition claims, named for a refusal (#246, #1474). */
+  unclaimedAllocations<T>(run: () => T): { answer: T; unclaimed: string[] } {
     const before = this.unclaimedTopLevel();
     const answer = run();
-    const discarded: string[] = [];
+    const unclaimed: string[] = [];
     for (const [id, element] of this.unclaimedTopLevel()) {
-      if (!before.has(id)) discarded.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
+      if (!before.has(id)) unclaimed.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
     }
-    assertAnsweredAllocations(hook, discarded.sort());
-    return answer;
+    return { answer, unclaimed: unclaimed.sort() };
   }
 
   /** Every element hanging from the game root that is not a partition root. */

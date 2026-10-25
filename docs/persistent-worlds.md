@@ -262,6 +262,12 @@ bundle is the authority. Create your elements in the live game and return them
 parent id, because the parent is outside the subtree and so is not in the
 serialized bytes.
 
+Return every element you create at the top level of the game. Nothing stores an
+element genesis does not return, so it would stay readable while the world is
+loaded and be gone after a restart; genesis refuses one with
+`invalid-partition-root`, naming it. Build helpers inside a root you return, or
+do not create them.
+
 Genesis is optional. A world whose first command creates everything is a world,
 and refusing it would be the library having an opinion about game design.
 
@@ -2906,7 +2912,7 @@ thing next time.
 | `undecided-audience` | A seat's `world.view` could only say whether it names an event's scope by reading a partition the command did not declare. Declare it in the action, or narrow who can see the scope in the tree. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
-| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names. Create each root with `game.create(...)` and answer it once. |
+| `invalid-partition-root` | `genesis`, `createPartition` or a migration answered a partition root that is not a direct child of the game (it sits inside another element, so it would be stored twice), or answered one element under two names, or genesis created a top-level element it did not return. Create each root with `game.create(...)` and answer it once. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |

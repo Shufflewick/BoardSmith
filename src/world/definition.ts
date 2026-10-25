@@ -722,9 +722,32 @@ function buildGenesis(
   world: WorldDefinition,
   engine: BoardSmithWorldEngine,
 ): Record<string, StoredPartition> {
-  if (!world.genesis) return {};
+  const genesis = world.genesis;
+  if (!genesis) return {};
 
-  const built = world.genesis(game);
+  const { answer: partitions, unclaimed } = engine.unclaimedAllocations(() =>
+    registerGenesis(game, genesis(game), engine),
+  );
+  // An unreturned top-level element stays resident for the runner's life and
+  // is never stored, so a warm world would read what a cold one never has (#1474).
+  if (unclaimed.length > 0) {
+    throw worldRefusal(
+      "invalid-partition-root",
+      `This world's genesis created ${unclaimed.join(", ")} at the top level of the game and did ` +
+        `not return ${unclaimed.length === 1 ? "it" : "them"}. Nothing stores an element genesis ` +
+        "does not return, so it would be read while this world stays loaded and be gone after a " +
+        "restart. Return it as a partition (`name -> element`), build it inside an element you " +
+        "return, or do not create it.",
+    );
+  }
+  return partitions;
+}
+
+function registerGenesis(
+  game: Game,
+  built: Record<string, GameElement>,
+  engine: BoardSmithWorldEngine,
+): Record<string, StoredPartition> {
   // NULL PROTOTYPE: the names are the bundle's. `partitions["__proto__"] =
   // record` on a plain object replaces this record's prototype instead of
   // adding an entry, so the runner would believe the partition resident --
