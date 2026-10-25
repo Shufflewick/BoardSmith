@@ -813,10 +813,7 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     }
   } catch (error) {
     if (error instanceof PageFrozen) throw error;
-    if (wentByItself !== undefined && !pointed && error instanceof Error && error.message === GONE) {
-      wentByItself();
-      return false;
-    }
+    if (handedBack(error, pointed, wentByItself)) return false;
     noteIn(control.frame.page(), walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   } finally {
@@ -828,6 +825,16 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       noteIn(control.frame.page(), walk, replaced);
     });
   }
+}
+
+/**
+ * Hands a press that failed because its control was gone at the first look, before the walk pointed
+ * at it (`pointed`), to `wentByItself`, when there is one (#1475). Returns whether it did.
+ */
+function handedBack(error: unknown, pointed: boolean, wentByItself: (() => void) | undefined): boolean {
+  if (wentByItself === undefined || pointed || !(error instanceof Error) || error.message !== GONE) return false;
+  wentByItself();
+  return true;
 }
 
 /**
