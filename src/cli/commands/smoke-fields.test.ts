@@ -71,6 +71,16 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
+  it('#1478: waits out a toast over the part of a pointer-aimed board the game accepts, rather than reporting the board as refused', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'underAToast' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('#466: reports an action whose rules crash on the number the walk entered, rather than trying the next number', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...fieldsGame({ kindleCrashesAtOne: true }),
