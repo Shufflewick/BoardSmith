@@ -274,6 +274,23 @@ describe('a document that does not have focus (#649)', () => {
     wrapper.unmount();
   });
 
+  // A press places focus itself. Focusing the first button under it scrolled a
+  // scrolled action bar back to its top, and the press lost its click (#1473).
+  it('leaves focus to a pointer press that gives the window focus back', async () => {
+    const { wrapper, controller } = mountPanel();
+    await nextTick();
+    await controller.start('enterWorld');
+    await nextTick();
+    await nextTick();
+
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    window.dispatchEvent(new Event('focus'));
+
+    expect(focus).not.toHaveBeenCalled();
+    wrapper.unmount();
+  });
+
   it('does not move focus on a window focus when no repair was skipped', async () => {
     const { wrapper } = mountPanel();
     await nextTick();

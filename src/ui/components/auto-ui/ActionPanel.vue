@@ -830,8 +830,19 @@ function repairPutOffFocus(): void {
   repairStrandedFocus();
 }
 
-onMounted(() => window.addEventListener('focus', repairPutOffFocus));
-onBeforeUnmount(() => window.removeEventListener('focus', repairPutOffFocus));
+// A press places focus itself; repairing under it scrolled the bar away from the pressed button (#1473).
+function dropPutOffRepair(): void {
+  repairPutOff = false;
+}
+
+onMounted(() => {
+  window.addEventListener('focus', repairPutOffFocus);
+  window.addEventListener('pointerdown', dropPutOffRepair, true);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', repairPutOffFocus);
+  window.removeEventListener('pointerdown', dropPutOffRepair, true);
+});
 
 
 // Note: Auto-fill is handled by the controller's internal watch
