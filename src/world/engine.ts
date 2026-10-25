@@ -176,6 +176,26 @@ type Projecting = ReturnType<typeof readOnlyScope>;
  */
 const WORLD_SCOPE = "world";
 
+/** What `run` answered, and the top-level elements it added that no partition claims, named for a refusal (#246, #1474). */
+export function unclaimedAllocations<T>(game: Game, run: () => T): { answer: T; unclaimed: string[] } {
+  const before = unclaimedTopLevel(game);
+  const answer = run();
+  const unclaimed: string[] = [];
+  for (const [id, element] of unclaimedTopLevel(game)) {
+    if (!before.has(id)) unclaimed.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
+  }
+  return { answer, unclaimed: unclaimed.sort() };
+}
+
+/** Every element hanging from the game root that is not a partition root. */
+function unclaimedTopLevel(game: Game): Map<number, GameElement> {
+  const unclaimed = new Map<number, GameElement>();
+  for (const child of game.children) {
+    if (game.partitionRoot(child.id) === undefined) unclaimed.set(child.id, child);
+  }
+  return unclaimed;
+}
+
 /**
  * One declaration, each partition named once, in the order the bundle named it.
  *
@@ -771,29 +791,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     hook: "partition" | "derive" | "create" | "finalize",
     run: () => T,
   ): T {
-    const { answer, unclaimed } = this.unclaimedAllocations(run);
+    const { answer, unclaimed } = unclaimedAllocations(this.game, run);
     assertAnsweredAllocations(hook, unclaimed);
     return answer;
-  }
-
-  /** What `run` answered, and the top-level elements it added that no partition claims, named for a refusal (#246, #1474). */
-  unclaimedAllocations<T>(run: () => T): { answer: T; unclaimed: string[] } {
-    const before = this.unclaimedTopLevel();
-    const answer = run();
-    const unclaimed: string[] = [];
-    for (const [id, element] of this.unclaimedTopLevel()) {
-      if (!before.has(id)) unclaimed.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
-    }
-    return { answer, unclaimed: unclaimed.sort() };
-  }
-
-  /** Every element hanging from the game root that is not a partition root. */
-  private unclaimedTopLevel(): Map<number, GameElement> {
-    const unclaimed = new Map<number, GameElement>();
-    for (const child of this.game.children) {
-      if (this.game.partitionRoot(child.id) === undefined) unclaimed.set(child.id, child);
-    }
-    return unclaimed;
   }
 
   /**
