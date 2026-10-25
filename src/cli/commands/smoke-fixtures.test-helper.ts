@@ -737,11 +737,20 @@ describe('the fields game', () => {
  * that stands for "the cell under the pointer". Moving the pointer over it re-aims it, so its
  * `data-bs-candidate` names the cell under the pointer, refused (`aria-disabled`) on the middle row,
  * which belongs to nobody; a click or Enter claims the cell it is aimed at. It opens aimed at a cell
- * anyone may claim, and its centre is on the middle row.
+ * anyone may claim, and its centre is on the middle row. With `accepts` (#1476), the game refuses
+ * other cells, and the pointer aims at the nearest cell, so the walk's points land squarely on
+ * cells: with 'evenCells' every cell on an odd row or column is refused, so the walk's first 25
+ * points land on refused cells and only a finer search finds one the game accepts; with 'topRow'
+ * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at.
  */
-export function pointerAimedGame(): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' } = {}): Record<string, string> {
+  const refusals = {
+    evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
+    topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
+  };
+  const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   return {
-    ...fieldRules(),
+    ...fieldRules(options.accepts && refusals[options.accepts]),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
@@ -756,7 +765,7 @@ const refused = computed(() => target.value === undefined || target.value.disabl
 
 function aim(event: PointerEvent) {
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
+  const at = (offset: number, size: number) => Math.min(9, Math.max(0, ${toCell}((offset / size) * 10)));
   cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
 }
 function claim() {
@@ -793,10 +802,10 @@ function claim() {
 
 /**
  * THE FIELD GAME'S RULES (#468): `claim` picks one of a hundred cells (more than the panel lists,
- * so the panel hands the pick to the board), refused on the middle row, and `rest` passes. A board
- * for it is written by each fixture.
+ * so the panel hands the pick to the board), refused on the middle row unless `refusal`, the pick's `disabled`, says which
+ * cells are refused, and `rest` passes. A board for it is written by each fixture.
  */
-function fieldRules(): Record<string, string> {
+function fieldRules(refusal = "(cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false)"): Record<string, string> {
   return {
     'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
 import { createGameFlow } from './flow.js';
@@ -849,7 +858,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .chooseElement('cell', {
         prompt: 'Which cell?',
         elements: () => game.cells(),
-        disabled: (cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false),
+        disabled: ${refusal},
       })
       .execute((_args, ctx) => {
         (ctx.player as DevGamePlayer).claimed++;
