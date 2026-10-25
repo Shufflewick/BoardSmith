@@ -861,6 +861,20 @@ describe("#795 — a partition root hangs from the game and has one name", () =>
     expect(refusal.message).toMatch(/"closet"/);
   });
 
+  it("refuses a top-level element genesis created and did not return (#1474)", async () => {
+    // A copy left out of the answer stayed resident for the runner's life, so
+    // `game.first` read bytes the store never had.
+    const runner = worldWith({
+      genesis: (game) => {
+        game.create(Yard, "a");
+        return { a: game.create(Yard, "a") } as Record<string, GameElement>;
+      },
+    });
+    const refusal = await refusalOf(runner.genesis());
+    expect(refusal.code).toBe("invalid-partition-root");
+    expect(refusal.message).toMatch(/"a" \(id \d+\)/);
+  });
+
   it("refuses a root createPartition builds inside an existing root", async () => {
     const runner = worldWith({
       createPartition: (game, name) =>
