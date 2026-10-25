@@ -519,6 +519,47 @@ const gone = ref(false);
 }
 
 /**
+ * A BOARD CONTROL THE GAME'S OWN CLOCK TAKES AWAY (#1475): "Stop" goes the moment after the walk
+ * finds it, before the walk points at it, as a one-tick battle playback takes its speed button away.
+ * Reading its label stands in for that moment, so the race the walk loses only sometimes is lost
+ * every run. Each "Start round N" shows it again. It goes only the first time it is found, unless
+ * `everyTime`.
+ */
+export function boardWhoseClockTakesAControl(options: { everyTime?: boolean } = {}): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const shown = ref(true);
+let found = 0;
+function clock(element: unknown) {
+  if (!(element instanceof HTMLElement)) return;
+  Object.defineProperty(element, 'innerText', {
+    configurable: true,
+    get() {
+      if (++found === 1 || ${options.everyTime === true}) shown.value = false;
+      return 'Stop';
+    },
+  });
+}
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="shown" :ref="clock" type="button">Stop</button>
+    <button v-for="round in 3" :key="round" type="button" @click="shown = true">Start round {{ round }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * A BOARD CONTROL THAT IS DISABLED BY THE TIME IT IS PRESSED: "Timid button" is redrawn as a disabled
  * button, a new element with the same label, the moment the pointer is over it, so the control the walk
  * found enabled is disabled when the walk finds it again to press it, and stays so.

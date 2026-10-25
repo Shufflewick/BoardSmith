@@ -11,6 +11,7 @@ import {
   aceGame,
   boardWithATimidControl,
   boardWithAVanishingControl,
+  boardWhoseClockTakesAControl,
   boardThatHidesThePanelForAMoment,
   boardThatRedrawsThePanel,
   boardThatHoldsAnOpenAction,
@@ -31,6 +32,25 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toBe(
       'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
         'went away before the press landed.',
+    );
+  });
+
+  it('#1475: a board control the game takes away by itself before the walk points at it is said, not reported, and pressed when it shows again', async () => {
+    const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl());
+
+    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the walk could point at it, so the walk presses it when it shows again');
+    expect(steps.slice(3, 5)).toEqual(['smoke step 2: pressing the board\'s "Start round 1"', 'smoke step 3: pressing the board\'s "Stop"']);
+    expect(outcome.summary).toContain('pressed 4 board controls, with no error.');
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1475: a board control that goes away by itself each time the walk goes to press it is reported', async () => {
+    const { outcome } = await smokeOf(false, boardWhoseClockTakesAControl({ everyTime: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Stop" did not work: it went ' +
+        'away by itself each of the 3 times the walk went to press it.',
     );
   });
 
