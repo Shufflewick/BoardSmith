@@ -5,16 +5,15 @@
  * While the game frame has no focus, the Action Panel puts off its repair of
  * stranded focus until the window regains it (#649). A click inside the frame
  * is what gives it back, during `mousedown`, and the repair used to focus the
- * first button with the browser's default scroll-into-view: the bar jumped to
- * its top under the pressed mouse, the button came up under a different
- * button, and no click reached either. Only a real mouse, over a real iframe
- * that does not have focus, shows it; Playwright's `locator.click()` checks
- * its target before pressing and reports success.
+ * first button then: the bar scrolled to its top under the pressed mouse, the
+ * button came up under a different button, and no click reached either. A
+ * press now places focus itself. Only a real mouse, over a real iframe that
+ * does not have focus, shows it; Playwright's `locator.click()` checks its
+ * target before pressing and reports success.
  *
  * A world whose idle bar holds far more buttons than it shows. At 1440px and
  * 390px, in a frame that has never been focused, the bar is scrolled to its
- * last button, and one real click on that button must leave the bar where it
- * was and open the action.
+ * last button, and one real click on that button must open the action.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/scrolled-bar-first-click-browser.mjs`; a missing Chromium says

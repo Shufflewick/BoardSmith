@@ -810,7 +810,7 @@ watch([stepIdentity, () => props.availableActions.join(','), isLoadingChoices], 
 // the body. A window focus with no put-off repair moves nothing.
 let repairPutOff = false;
 
-function repairStrandedFocus(options?: FocusOptions): void {
+function repairStrandedFocus(): void {
   if (!focusIsStranded() || isLoadingChoices.value) return;
   if (!document.hasFocus()) {
     repairPutOff = true;
@@ -821,18 +821,28 @@ function repairStrandedFocus(options?: FocusOptions): void {
   const target = focusTargetFor(root);
   // Focusing the container itself would be worse than the body — it is not
   // operable and announces nothing. Better to leave the player where they are.
-  target?.focus(options);
+  target?.focus();
 }
 
 function repairPutOffFocus(): void {
   if (!repairPutOff) return;
   repairPutOff = false;
-  // The focus may come from a mouse press in a scrolled bar; scrolling now moves the pressed button away (#1473).
-  repairStrandedFocus({ preventScroll: true });
+  repairStrandedFocus();
 }
 
-onMounted(() => window.addEventListener('focus', repairPutOffFocus));
-onBeforeUnmount(() => window.removeEventListener('focus', repairPutOffFocus));
+// A press places focus itself; repairing under it scrolled the bar away from the pressed button (#1473).
+function dropPutOffRepair(): void {
+  repairPutOff = false;
+}
+
+onMounted(() => {
+  window.addEventListener('focus', repairPutOffFocus);
+  window.addEventListener('pointerdown', dropPutOffRepair, true);
+});
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', repairPutOffFocus);
+  window.removeEventListener('pointerdown', dropPutOffRepair, true);
+});
 
 
 // Note: Auto-fill is handled by the controller's internal watch

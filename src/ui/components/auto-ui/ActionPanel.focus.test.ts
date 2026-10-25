@@ -274,19 +274,20 @@ describe('a document that does not have focus (#649)', () => {
     wrapper.unmount();
   });
 
-  // The window focus can come from a mouse press inside the frame: scrolling the
-  // scrolled action bar back to its top under the pressed mouse loses the click (#1473).
-  it('makes the put-off repair without scrolling', async () => {
+  // A press places focus itself. Focusing the first button under it scrolled a
+  // scrolled action bar back to its top, and the press lost its click (#1473).
+  it('leaves focus to a pointer press that gives the window focus back', async () => {
     const { wrapper, controller } = mountPanel();
     await nextTick();
     await controller.start('enterWorld');
     await nextTick();
     await nextTick();
 
+    document.body.dispatchEvent(new Event('pointerdown', { bubbles: true }));
     vi.mocked(document.hasFocus).mockReturnValue(true);
     window.dispatchEvent(new Event('focus'));
 
-    expect(focus.mock.calls).toEqual([[{ preventScroll: true }]]);
+    expect(focus).not.toHaveBeenCalled();
     wrapper.unmount();
   });
 
