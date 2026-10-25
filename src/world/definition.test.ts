@@ -887,10 +887,14 @@ describe("#795 — a partition root hangs from the game and has one name", () =>
   });
 
   it("refuses a top-level element createPartition created and did not return, every time it is asked (#1477)", async () => {
+    // The hook reuses what a refused ask left behind, so the second ask is
+    // refused only if the first took its elements back out of the tree.
+    let live: Game | undefined;
     const runner = worldWith({
       createPartition: (game, name) => {
-        game.create(Yard, "extra");
-        return game.create(Yard, name) as GameElement;
+        live = game;
+        if (!game.first(Yard, "extra")) game.create(Yard, "extra");
+        return (game.first(Yard, name) ?? game.create(Yard, name)) as GameElement;
       },
     });
     await runner.genesis();
@@ -899,12 +903,16 @@ describe("#795 — a partition root hangs from the game and has one name", () =>
       expect(refusal.code).toBe("invalid-partition-root");
       expect(refusal.message).toMatch(/"extra" \(id \d+\)/);
       expect(refusal.message).not.toMatch(/"nook" \(id/);
+      expect(live!.first(Yard, "extra")).toBeUndefined();
+      expect(live!.first(Yard, "nook")).toBeUndefined();
     }
   });
 
   it("refuses a top-level element createPartition created before answering nothing (#1477)", async () => {
+    let live: Game | undefined;
     const runner = worldWith({
       createPartition: (game) => {
+        live = game;
         game.create(Yard, "extra");
         return undefined;
       },
@@ -913,6 +921,7 @@ describe("#795 — a partition root hangs from the game and has one name", () =>
     const refusal = await refusalOf(runner.createPartition("nook"));
     expect(refusal.code).toBe("invalid-partition-root");
     expect(refusal.message).toMatch(/"extra" \(id \d+\)/);
+    expect(live!.first(Yard, "extra")).toBeUndefined();
   });
 
   it("refuses one element registered under two names", async () => {

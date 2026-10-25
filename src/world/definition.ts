@@ -25,7 +25,7 @@ import { DEFAULT_COLOR_PALETTE, Game, WORLD_PARTITION_ID_FLOOR } from "../engine
 import type { ElementJSON, GameElement } from "../engine/index.js";
 import { constructGame } from "../engine/element/game.js";
 import { worldElementIds, type WorldElementIds } from "../engine/element/element-ids.js";
-import { BoardSmithWorldEngine, unclaimedAllocations } from "./engine.js";
+import { BoardSmithWorldEngine, namedForRefusal, unclaimedAllocations } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
@@ -725,9 +725,10 @@ function buildGenesis(
   const genesis = world.genesis;
   if (!genesis) return {};
 
-  const { answer: partitions, unclaimed } = unclaimedAllocations(game, () =>
+  const { answer: partitions, unclaimed: added } = unclaimedAllocations(game, () =>
     registerGenesis(game, genesis(game), engine),
   );
+  const unclaimed = namedForRefusal(added);
   // An unreturned top-level element stays resident for the runner's life and
   // is never stored, so a warm world would read what a cold one never has (#1474).
   if (unclaimed.length > 0) {

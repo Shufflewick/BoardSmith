@@ -295,8 +295,9 @@ refusal it has always been.
 
 Return the only element you create at the top level of the game. As with
 genesis, nothing stores one you do not return, so `createPartition` refuses it
-with `invalid-partition-root`, naming it, and refuses again each time it is
-asked. Build helpers inside the root you return, or do not create them.
+with `invalid-partition-root`, naming it. It first takes what the call created
+back out of the game, so nothing unstored stays readable and the next ask is
+refused again. Build helpers inside the root you return, or do not create them.
 
 ```ts
 createPartition: (game, name) =>
