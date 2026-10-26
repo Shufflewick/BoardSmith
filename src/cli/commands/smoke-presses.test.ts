@@ -46,6 +46,19 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
+  it.each(['setTimeout', 'requestAnimationFrame', 'MessageChannel', 'debounce', 'Transition'] as const)(
+    '#1484: a control a pointer handler takes away in a later task (%s) fails that press at once, saying so',
+    async (defers) => {
+      const { outcome } = await smokeOf(false, boardWithAVanishingControl({ defers }));
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toBe(
+        'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
+          'went away before the press landed.',
+      );
+    },
+  );
+
   it('#1475: a board control the game takes away by itself before the walk points at it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl());
 
@@ -55,11 +68,11 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
   });
 
-  it('#1483: a board control the game takes away by itself just after the pointer reached it is said, not reported, and pressed when it shows again', async () => {
+  it('#1483: a board control a clock an earlier press started takes away just after the pointer reached it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ afterPointing: true }));
 
-    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
-    expect(outcome.summary).toContain('pressed 4 board controls, with no error.');
+    expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(outcome.summary).toContain('pressed 5 board controls, with no error.');
     expect(outcome.passed).toBe(true);
   });
 
