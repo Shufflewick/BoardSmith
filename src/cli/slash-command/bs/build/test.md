@@ -100,7 +100,8 @@ here.
          `.vue` component that is its `<script>` blocks and the expressions of its template bindings,
          conditions and interpolations; event handlers and loops are not mutated. A test
          that survives every mutant asserts nothing the chunk's code controls, and a claim none of
-         whose tests fail under any mutant has no real test; both are findings. A test that reads
+         whose tests fail under any mutant has no real test; both are findings. A test file that loads a
+         changed file but none a sampled mutant is in is not judged, nor a claim only such files cite. A test that reads
          source as text (the a11y floor's scans below) can never fail under a mutant, so it is a
          guard (next rule). Mutants are served
          to vitest in memory, never written over the source. A mutant runs against only the test
