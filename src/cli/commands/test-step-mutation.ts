@@ -6,7 +6,8 @@
  * code it tests and watch. So this module makes small, single changes ("mutants") to the lines the
  * chunk added — flip a comparison, negate a condition, drop a statement, return `undefined` — and
  * runs the chunk's own test files against each one. Both checks try a sample of at most 30 of the
- * changed lines' mutants, picked by the HEAD commit (`sampleMutants`, #1486). A test that fails
+ * changed lines' mutants, picked by the HEAD commit (`sampleMutants`, #1486); the chunk check does not judge
+ * a test file that loads a changed file but none a sampled mutant is in (#1487). A test that fails
  * under at least one mutant has been shown able to catch a regression; a test that no mutant disturbs is asserting nothing
  * the chunk's code controls (the sotf#29 tautology), and a claim none of whose tests ever fail is
  * a claim with no real test.
@@ -928,14 +929,26 @@ export async function collectMutants(projectDir: string, added: ReadonlyMap<stri
 /**
  * The chunk check's sample of mutants of the lines the chunk added (`sampleMutants`), each with the test files it runs against:
  * every file that is not a pin (a pin is tried on the game code it runs, `killPinTests`). A mutant
- * two files share runs once, against both.
+ * two files share runs once, against both. `left` names the files with mutants none of which was sampled.
  */
-async function chunkMutants(projectDir: string, input: MutationCheckInput, files: Set<string>): Promise<TargetedMutant[]> {
+async function chunkMutants(projectDir: string, input: MutationCheckInput, files: Set<string>): Promise<{ mutants: TargetedMutant[]; left: string[] }> {
   const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
-  if (unpinned.size === 0) return [];
-  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed);
+  if (unpinned.size === 0) return { mutants: [], left: [] };
+  const all = await collectMutants(projectDir, input.added);
+  const mutants = sampleMutants(all, input.seed);
   for (const mutant of mutants) files.add(mutant.file);
-  return mutants.map((mutant) => ({ ...mutant, targets: unpinned }));
+  const left = [...new Set(all.map((m) => m.file))].filter((file) => !files.has(file));
+  return { mutants: mutants.map((mutant) => ({ ...mutant, targets: unpinned })), left };
+}
+
+/**
+ * The chunk test files the sample left out (#1487): each loads a changed file whose mutants were not
+ * sampled and no file a sampled mutant is in, so its passing every mutant shows nothing.
+ */
+async function leftOutFiles(reachDir: string, projectDir: string, testFiles: Iterable<string>, mutants: TargetedMutant[], left: string[]): Promise<Set<string>> {
+  const { testsLoading } = await readReach(reachDir, projectDir, testFiles);
+  const reached = new Set(mutants.flatMap((m) => testsLoading(m.file)));
+  return new Set(left.flatMap((file) => testsLoading(file)).filter((abs) => !reached.has(abs)).map((abs) => relative(projectDir, abs).split(sep).join('/')));
 }
 
 /** A module under `src/` a mutant can change: a script or component that is not a test. */
@@ -1143,13 +1156,14 @@ async function killTests(
   return killed;
 }
 
-/** Every claim none of whose tests ever failed, then every test that never failed. */
+/** Every claim none of whose tests ever failed, then every test that never failed, but for those in `leftOut` files (`leftOutFiles`). */
 function survivorFindings(
   input: MutationCheckInput,
   tracked: Outcome[],
   killed: ReadonlySet<string>,
   mutantCount: number,
   plans: ReadonlyMap<string, PinPlan>,
+  leftOut: ReadonlySet<string>,
 ): TestStepFinding[] {
   const blocksByPath = new Map(input.testFiles.map((f) => [f.path, findTestBlocks(f.source, f.path)]));
   const claimTests = new Map<number, Outcome[]>();
@@ -1160,6 +1174,7 @@ function survivorFindings(
   }
   const claimFindings = input.claims
     .filter((claim) => !claimTests.get(claim)?.some((o) => killed.has(testKey(o))))
+    .filter((claim) => !claimTests.get(claim)?.every((o) => leftOut.has(o.path)))
     .map((claim) => ({
       kind: 'claim-survives-mutation' as const,
       subject: `claim ${claim}`,
@@ -1173,7 +1188,7 @@ function survivorFindings(
     }));
   const pins = new Map(input.testFiles.filter(isPin).map((f) => [f.path, f]));
   const testFindings = tracked
-    .filter((o) => !killed.has(testKey(o)))
+    .filter((o) => !killed.has(testKey(o)) && !leftOut.has(o.path))
     .map((o) => ({
       kind: 'test-survives-mutation' as const,
       subject: testKey(o),
@@ -1239,7 +1254,9 @@ export async function runMutationCheck(
   let runner: Runner | undefined;
   return withCommandBuildDir(projectDir, 'test-step-check', async (workDir) => {
     runner = await createRunner(projectDir, input.testFiles, workDir);
-    const baseline = await runner.run(input.testFiles, null, 10 * 60_000);
+    const reachDir = join(workDir, 'reach');
+    await fs.mkdir(reachDir);
+    const baseline = await runner.run(input.testFiles, null, 10 * 60_000, { reach: reachDir });
     if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
     const notGreen = baselineFindings(input.testFiles, baseline);
     if (notGreen.length > 0) return { findings: notGreen, summary };
@@ -1254,8 +1271,10 @@ export async function runMutationCheck(
       apart: new Map(),
     };
     const files = new Set<string>();
-    const mutants = await chunkMutants(projectDir, input, files);
+    const { mutants, left } = await chunkMutants(projectDir, input, files);
     const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
+    const leftOut = await leftOutFiles(reachDir, projectDir, unpinned, mutants, left);
+    if (leftOut.size > 0) input.log(`Not judged, as no sampled mutant was in a changed file they load: ${[...leftOut].join(', ')}`);
     const killed = await killTests(run, input, tracked.filter((o) => unpinned.has(o.path)), mutants, summary);
     const pins = input.testFiles.filter(isPin);
     const coverage = await pinCoverage(runner, projectDir, pins);
@@ -1266,7 +1285,7 @@ export async function runMutationCheck(
       plans.set(pin.path, result.plan);
     }
     summary.files = files.size;
-    return { findings: survivorFindings(input, tracked, killed, mutants.length, plans), summary };
+    return { findings: survivorFindings(input, tracked, killed, mutants.length, plans, leftOut), summary };
   }, () => runner?.stop());
 }
 

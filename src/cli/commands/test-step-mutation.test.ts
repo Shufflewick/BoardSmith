@@ -2,6 +2,7 @@ import { describe, it, expect, vi, onTestFinished } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import {
+  collectMutants,
   generateMutants,
   isAssertionFailure,
   orderPinSites,
@@ -286,6 +287,34 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     expect(result.findings).toEqual([]);
     expect(logged[0]).toMatch(/^mutant 1\/30: src\/values\.ts:/);
   }, 60_000);
+
+  it('leaves out a test, and a claim only it cites, whose changed files no sampled mutant was in, and still reports one loading no changed file (#1487)', async () => {
+    // Thirty-one changed files of one mutant each, so the sample of thirty leaves exactly one out.
+    const files: Record<string, string> = { 'vitest.config.ts': VITEST_CONFIG };
+    for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
+    const project = await makeProject(files);
+    const added = new Map(Array.from({ length: 31 }, (_, i) => [`src/m${i}.ts`, lines(1)] as const));
+    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a').map((m) => m.file));
+    const left = [...added.keys()].find((f) => !sampled.has(f))!;
+    const all = Array.from({ length: 31 }, (_, i) => `import { v as v${i} } from '../src/m${i}';`).join('\n');
+    const sources: Record<string, string> = {
+      'tests/all.test.ts': `import { it, expect } from 'vitest';\n${all}\nit('claim 1 — every value', () => { expect([${Array.from({ length: 31 }, (_, i) => `v${i}`).join(', ')}]).toEqual([${Array.from({ length: 31 }, (_, i) => i).join(', ')}]); });\n`,
+      'tests/lone.test.ts': `import { it, expect } from 'vitest';\nimport { v } from '../${left.replace(/\.ts$/, '')}';\nit('claim 2 — the lone value', () => { expect(v).toBe(${left.match(/\d+/)![0]}); });\n`,
+      'tests/none.test.ts': `import { it, expect } from 'vitest';\nit('claim 3 — tautology', () => { expect(1).toBe(1); });\n`,
+    };
+    const testFiles = [];
+    for (const [path, source] of Object.entries(sources)) {
+      const absPath = join(project, path);
+      await fs.mkdir(dirname(absPath), { recursive: true });
+      await fs.writeFile(absPath, source);
+      testFiles.push({ path, absPath, source });
+    }
+    const result = await runMutationCheck({ projectDir: project, testFiles, added, claims: [1, 2, 3], seed: 'commit-a', log: () => {} });
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual([
+      'claim-survives-mutation claim 3',
+      'test-survives-mutation tests/none.test.ts > claim 3 — tautology',
+    ]);
+  }, 180_000);
 
   it('reports a tautological test and the claim it was the only test for', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
