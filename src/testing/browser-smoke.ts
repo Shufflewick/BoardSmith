@@ -62,6 +62,7 @@ import {
   pageDialogs,
   pointerTookIt,
   PRESS_MARK,
+  tracePointerWork,
   type PageControl,
   type Reached,
   watchThePointer,
@@ -187,6 +188,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
     await recordResolvedActions(page);
+    await page.addInitScript(tracePointerWork);
     startClock(page);
     try {
       await page.goto('/', { waitUntil: 'commit' });
@@ -538,6 +540,7 @@ async function seatTheWorld(
       browserNames.set(seated, `In seat ${seat}'s browser: `);
       watchForErrors(seated, walk);
       await recordResolvedActions(seated);
+      await seated.addInitScript(tracePointerWork);
       startClock(seated);
       await seated.goto('/', { waitUntil: 'commit' });
       await takeASeat(seated);

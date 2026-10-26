@@ -441,7 +441,14 @@ markers this page documents, so it keeps up with any game without knowing it:
   it: the walk says so and presses it the next time it shows. One that goes away
   by itself each of 3 times the walk goes to press it is reported (#1475,
   #1483). A board control taken away by the pointer reaching it, by the game's
-  own pointer handlers, is reported at once (#464). A control the
+  own pointer handlers, is reported at once (#464), also when the handler puts
+  the update off to a later task: a `setTimeout`, `requestAnimationFrame`,
+  `MessageChannel` message, debounce, `transitionend` or `animationend`
+  listener, or `<Transition>` leave started while the pointer's event is
+  handled, or by work that started, while the walk is pressing that control
+  (#1484). A clock started by an earlier press is the game's own. Not traced:
+  work that waits on a Promise, `setInterval`, and a `message` listener added
+  with `addEventListener`. A control the
   walk can only see by scrolling it out from under a bar fixed along the edge of
   the page (the action panel) is scrolled to the middle, the top or the bottom
   until it shows.

@@ -175,6 +175,117 @@ export function clickReached(): Reached {
   return guard.missed ?? (guard.hit ? 'it' : 'nothing');
 }
 
+/** What `tracePointerWork` keeps on a page's window for `watchThePointer` to set. */
+interface PointerTrace {
+  /** Whether work scheduled now is the pointer's: one of its events on the watched control is being dispatched. */
+  pointing: () => boolean;
+  /** Called as the pointer's work starts; what it returns is called once that work and the microtasks it queued have run. */
+  starts: () => () => void;
+}
+
+/** The window of a page `tracePointerWork` runs in. */
+type TracedWindow = Window & { __boardsmithSmokePointerTrace?: PointerTrace };
+
+/**
+ * Marks the work the pointer's events start as the pointer's, in a page the walk presses in (#1484),
+ * run before the page's own scripts, so a hover handler's update put off to a later task is still
+ * tied to the pointer. A callback given to `setTimeout` or `requestAnimationFrame`, a
+ * `transitionend` or `animationend` listener (which a `<Transition>` leave may end on), or a
+ * `MessageChannel` port's `onmessage` run by a `postMessage`, while the pointer's event is being
+ * dispatched or while marked work runs, runs marked, as long as the watch it was marked under is
+ * still on. A game's clock, started by an earlier press, stays unmarked (#1483).
+ */
+export function tracePointerWork(): void {
+  const view = window as TracedWindow;
+  const trace: PointerTrace = { pointing: () => false, starts: () => () => {} };
+  view.__boardsmithSmokePointerTrace = trace;
+  type Mark = PointerTrace['starts'];
+  let running: Mark | undefined;
+  const marking = () => running ?? (trace.pointing() ? trace.starts : undefined);
+  const marked = <A extends unknown[], R>(callback: (...args: A) => R, by: Mark) =>
+    function (this: unknown, ...args: A): R {
+      // Work marked under a watch that is over is not the pointer's on the control watched now.
+      if (by !== trace.starts) return callback.apply(this, args);
+      const done = by();
+      running = by;
+      try {
+        return callback.apply(this, args);
+      } finally {
+        // Queued last, so the updates the callback queued (a Vue render) run marked before it.
+        queueMicrotask(() => {
+          running = undefined;
+          done();
+        });
+      }
+    };
+  const traced = <A extends unknown[], R>(callback: (...args: A) => R) => {
+    const by = marking();
+    return by ? marked(callback, by) : callback;
+  };
+  const timeout = view.setTimeout;
+  view.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) =>
+    timeout(typeof handler === 'function' ? traced(handler as (...a: unknown[]) => unknown) : handler, ms, ...args)) as typeof setTimeout;
+  const frame = view.requestAnimationFrame;
+  view.requestAnimationFrame = (callback) => frame(traced(callback));
+  const ends = new Set(['transitionend', 'animationend']);
+  const wrappers = new WeakMap<object, EventListener>();
+  const add = EventTarget.prototype.addEventListener;
+  const remove = EventTarget.prototype.removeEventListener;
+  EventTarget.prototype.addEventListener = function (this: EventTarget, type, listener, options) {
+    const by = ends.has(type) && typeof listener === 'function' ? marking() : undefined;
+    if (by && typeof listener === 'function') {
+      const wrapper = marked(listener, by);
+      wrappers.set(listener, wrapper);
+      listener = wrapper;
+    }
+    add.call(this, type, listener, options);
+  };
+  EventTarget.prototype.removeEventListener = function (this: EventTarget, type, listener, options) {
+    remove.call(this, type, listener, options);
+    const wrapper = listener && wrappers.get(listener);
+    if (wrapper) remove.call(this, type, wrapper, options);
+  };
+  // A port's messages arrive in the order they were posted, so each port keeps, in order, which mark each was posted under.
+  const posted = new WeakMap<MessagePort, Array<Mark | undefined>>();
+  const partners = new WeakMap<MessagePort, MessagePort>();
+  const marks = new WeakMap<Event, Mark>();
+  const Channel = MessageChannel;
+  globalThis.MessageChannel = class extends Channel {
+    constructor() {
+      super();
+      for (const [port, partner] of [[this.port1, this.port2], [this.port2, this.port1]]) {
+        posted.set(port, []);
+        partners.set(port, partner);
+        // Added first, so it runs before the page's own handler, for every message the port is handed.
+        port.addEventListener('message', (event) => {
+          const by = posted.get(port)?.shift();
+          if (by) marks.set(event, by);
+        });
+      }
+    }
+  };
+  const post = MessagePort.prototype.postMessage as (this: MessagePort, ...args: unknown[]) => void;
+  MessagePort.prototype.postMessage = function (this: MessagePort, ...args: unknown[]) {
+    const to = partners.get(this);
+    if (to !== undefined) posted.get(to)?.push(marking());
+    post.apply(this, args);
+  } as typeof MessagePort.prototype.postMessage;
+  const onmessage = Object.getOwnPropertyDescriptor(MessagePort.prototype, 'onmessage')!;
+  Object.defineProperty(MessagePort.prototype, 'onmessage', {
+    ...onmessage,
+    set(this: MessagePort, handler: ((event: MessageEvent) => unknown) | null) {
+      onmessage.set!.call(
+        this,
+        handler &&
+          function (this: MessagePort, event: MessageEvent) {
+            const by = marks.get(event);
+            return (by ? marked(handler, by) : handler).call(this, event);
+          },
+      );
+    },
+  });
+}
+
 /** What `watchThePointer` keeps on a page's window for `pointerTookIt`. */
 interface PointerWatch {
   element: Element;
@@ -183,17 +294,20 @@ interface PointerWatch {
 }
 
 /** The window of a page `watchThePointer` watches. */
-type WatchedWindow = Window & { __boardsmithSmokePointerWatch?: PointerWatch };
+type WatchedWindow = TracedWindow & { __boardsmithSmokePointerWatch?: PointerWatch };
 
 /**
- * Watches whether the pointer moving over `element` takes it away (#464, #1483): whether it is hidden
- * or taken off the page while one of the pointer's events is still being dispatched, by a handler or
- * the updates it starts, which run before the dispatch goes on. A control a game's clock takes away
- * after the pointer arrived goes in a task of its own, once the dispatch is over, and is not counted.
- * Kept for `pointerTookIt`; what an earlier watch saw is kept for a control found again.
+ * Watches whether the pointer moving over `element` takes it away (#464, #1483, #1484): whether it is
+ * hidden or taken off the page while one of the pointer's events is still being dispatched, by a
+ * handler or the updates it starts, which run before the dispatch goes on, or by work the pointer's
+ * events put off to a later task (`tracePointerWork`). A control a game's clock takes away after the
+ * pointer arrived goes in work of the clock's own, and is not counted. Kept for `pointerTookIt`; what
+ * an earlier watch saw is kept for a control found again.
  */
 export function watchThePointer(element: Element): void {
   const view = element.ownerDocument.defaultView as WatchedWindow;
+  const trace = view.__boardsmithSmokePointerTrace;
+  if (trace === undefined) throw new Error("the walk cannot watch the pointer in this page: its pointer trace was not added before the page's scripts ran");
   const old = view.__boardsmithSmokePointerWatch;
   if (old?.element === element) return;
   old?.remove();
@@ -204,8 +318,9 @@ export function watchThePointer(element: Element): void {
     pointing = event;
     shown = element.checkVisibility();
   };
+  const dispatching = () => pointing !== undefined && pointing.eventPhase !== Event.NONE;
   const observer = new MutationObserver(() => {
-    if (pointing !== undefined && pointing.eventPhase !== Event.NONE && shown && !element.checkVisibility()) watch.took = true;
+    if (dispatching() && shown && !element.checkVisibility()) watch.took = true;
   });
   const watch: PointerWatch = {
     element,
@@ -213,7 +328,16 @@ export function watchThePointer(element: Element): void {
     remove: () => {
       types.forEach((type) => view.removeEventListener(type, pointed, true));
       observer.disconnect();
+      trace.pointing = () => false;
+      trace.starts = () => () => {};
     },
+  };
+  trace.pointing = dispatching;
+  trace.starts = () => {
+    const before = element.checkVisibility();
+    return () => {
+      if (before && !element.checkVisibility()) watch.took = true;
+    };
   };
   types.forEach((type) => view.addEventListener(type, pointed, true));
   observer.observe(element.ownerDocument, { subtree: true, childList: true, attributes: true });
