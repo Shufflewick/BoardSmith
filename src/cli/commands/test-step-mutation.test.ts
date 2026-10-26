@@ -318,6 +318,39 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     ]);
   }, 180_000);
 
+  // #1488: a mutant is served only to the test's own worker, so code the test runs in a child process
+  // loads the file from disk and never sees it; that test is rightly left out as #1487 leaves it out.
+  it('a mutant cannot reach a file a test runs in a child process, so a test loading only an unsampled file that way is left out (#1488)', async () => {
+    const files: Record<string, string> = { 'vitest.config.ts': VITEST_CONFIG };
+    for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
+    const project = await makeProject(files);
+    const added = new Map(Array.from({ length: 31 }, (_, i) => [`src/m${i}.ts`, lines(1)] as const));
+    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a').map((m) => m.file));
+    const b = [...added.keys()].find((f) => !sampled.has(f))!;
+    const a = [...sampled][0];
+    const path = 'tests/child.test.ts';
+    const source = `import { it, expect } from 'vitest';
+import { execFileSync } from 'node:child_process';
+import { v } from '../${b.replace(/\.ts$/, '')}';
+const url = new URL('../${a}', import.meta.url).href;
+it('claim 1 — both values', () => {
+  expect(v).toBe(${b.match(/\d+/)![0]});
+  const out = execFileSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', \`const { v } = await import('\${url}'); process.stdout.write(String(v));\`], { encoding: 'utf-8' });
+  expect(out).toBe('${a.match(/\d+/)![0]}');
+});
+`;
+    const absPath = join(project, path);
+    await fs.mkdir(dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, source);
+    const logged: string[] = [];
+    const result = await runMutationCheck({ projectDir: project, testFiles: [{ path, absPath, source }], added, claims: [1], seed: 'commit-a', log: (line) => logged.push(line) });
+    // Every sampled mutant ran and none failed the test, the mutant of the file it runs in the child among them.
+    expect(result.summary).toMatchObject({ mutants: 30, killed: 0, survived: 30 });
+    expect(logged.filter((line) => line.includes(`: ${a}:1 `))).toHaveLength(1);
+    expect(logged).toContain(`Not judged, as no sampled mutant was in a changed file they load: ${path}`);
+    expect(result.findings).toEqual([]);
+  }, 180_000);
+
   it('reports a tautological test and the claim it was the only test for', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await check(
