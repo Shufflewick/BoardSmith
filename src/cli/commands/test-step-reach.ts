@@ -18,8 +18,9 @@
  * project code outside every worker and hands values to the tests, so with one every test file runs
  * for every mutant (`GLOBAL_SETUP_MARK`, written by the run's reporter).
  *
- * What this cannot see is code a test runs outside its own worker through Vitest's Vite server, such
- * as a test that starts Vitest again in a child process.
+ * Code a test runs outside its own worker (a child process, a worker thread, a Vitest started again)
+ * is not in the record, and need not be: it loads files from disk, not through this run's Vite
+ * server, so it never sees the mutant (#1488).
  */
 import { promises as fs } from 'node:fs';
 import { join, relative, sep } from 'node:path';
