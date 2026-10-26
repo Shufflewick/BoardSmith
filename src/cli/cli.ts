@@ -190,8 +190,8 @@ export function createProgram(): Command {
   program
     .command('verify')
     .description(
-      'Run the full test suite, typecheck, build, validate, the in-browser smoke test and a mutation check of the code ' +
-        'changed since the base, and record the result for this commit; --check says whether HEAD has a passing result',
+      'Run the full test suite, typecheck, build, validate, the in-browser smoke test, a check that every verb is ' +
+        'dispatched through the engine by a test, and a sampled mutation check of the code changed since the base, and record the result for this commit; --check says whether HEAD has a passing result',
     )
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
     .option(

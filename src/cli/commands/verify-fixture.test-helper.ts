@@ -83,7 +83,7 @@ export async function gameOnBranch(breakBid: boolean): Promise<string> {
  * `build`, `validate` and `smoke` need a whole game (a UI, a bundle, a page to open); this fixture
  * is the rules of one. They stand in as passing here, so a refusal can only come from the checks
  * that really ran: the full suite, the type check and the mutation check. `verify-command.test.ts`
- * and `verify-whole-game.test.ts` run the real `boardsmith verify`, all six checks, as a user would.
+ * and `verify-whole-game.test.ts` run the real `boardsmith verify`, all seven checks, as a user would.
  */
 export const CHECKS = {
   ...VERIFY_CHECKS,
@@ -119,6 +119,7 @@ export function countingChecks() {
     build: stub('build'),
     validate: stub('validate'),
     smoke: stub('smoke'),
+    verbs: stub('verbs'),
     mutation: stub('mutation'),
   };
   return { ran, checks };

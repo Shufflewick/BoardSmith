@@ -16,13 +16,18 @@
  *                 fresh copy of the project (`smoke.ts`): a seated player takes every offered action
  *                 and presses every board control, and any page error, console error, failed
  *                 request or failed action fails it
- *   6. mutation   every code line under `src/` changed since the base, broken one small change at a
- *                 time; for each, a test that loads its file must fail, and a change in a file no
- *                 test loads fails the check too (`runDiffMutationCheck`, #981). An outcome from
+ *   6. verbs      every verb the game defines is dispatched through the engine by some test file
+ *                 (`undispatchedVerbs`, #1486): the chunk check's verb rule, asked of the whole game
+ *   7. mutation   a sample of at most 30 small breaks of the code lines under `src/` changed since
+ *                 the base, picked with the HEAD commit as seed, so a re-run of a commit tries the
+ *                 same ones (`sampleMutants`, #1486); for each, a test that loads its file must
+ *                 fail, and a change in a file no test loads fails the check too
+ *                 (`runDiffMutationCheck`, #981). A sample is enough to show the tests can fail,
+ *                 and keeps a first publish of a large game to minutes. An outcome from
  *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
- *                 re-verify after a bookkeeping-only commit runs no mutant again. The cache is shared
- *                 by every worktree, so a merge reuses what a worktree ran when the merged tree is
- *                 the one it verified (main has not moved, or the branch merged main and verified).
+ *                 re-verify of the same commit runs no mutant again, and a new commit runs only
+ *                 the mutants of its sample no earlier run tried. The cache is shared by every
+ *                 worktree.
  *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
@@ -70,7 +75,8 @@ import {
   verifiedProblem,
   writeVerifyResult,
 } from '../lib/verify-result.js';
-import { isChunkCode, isTestFile, parseSpecManifest } from './test-step-check.js';
+import { isChunkCode, isTestFile, parseSpecManifest, undispatchedVerbs } from './test-step-check.js';
+import { DISPATCH_FORMS } from './test-step-ast.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { mutationBudget } from '../lib/mutation-budget.js';
@@ -425,6 +431,23 @@ async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   }
 }
 
+/** 6. Every verb the game defines is dispatched through the engine by some test (`undispatchedVerbs`, #1486). */
+async function verbsCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
+  const { defined, undispatched } = await undispatchedVerbs(ctx.projectDir);
+  if (undispatched.length === 0) {
+    return { passed: true, summary: `Every one of the ${plural(defined, 'verb')} the game defines is dispatched through the engine by a test.` };
+  }
+  return {
+    passed: false,
+    summary:
+      `${undispatched.length} of ${plural(defined, 'verb')} the game defines ${undispatched.length === 1 ? 'is' : 'are'} not dispatched ` +
+      `through the engine by any test: ${undispatched.join(', ')}.`,
+    next:
+      "Calling a rules function directly skips the engine's selections, conditions and flow. For each, add a test that runs it with " +
+      `${DISPATCH_FORMS}, then run \`boardsmith verify\` again.`,
+  };
+}
+
 const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0, reused: 0 });
 
 /** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
@@ -511,7 +534,7 @@ function mutationVerdict(since: string, run: DiffMutationRun): VerifyCheckOutcom
   };
 }
 
-/** 6. Every mutant of a changed code line must make a test that loads its file fail. */
+/** 7. A sample of the mutants of the changed code lines (`sampleMutants`): each must make a test that loads its file fail. */
 async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
   const notTried = mutationNotTried(ctx, since);
@@ -520,6 +543,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
     projectDir: ctx.projectDir,
     added: ctx.changed.code,
     cache: await ctx.mutantCache(),
+    seed: ctx.head,
     log: ctx.log,
     contextChange: ctx.contextChange,
     saveProgress: ctx.saveMutantProgress,
@@ -563,6 +587,7 @@ export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Obj
   build: buildCheck,
   validate: validateCheck,
   smoke: smokeCheck,
+  verbs: verbsCheck,
   mutation: mutationCheck,
 });
 

@@ -33,7 +33,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
       await fs.writeFile(join(fixture.project, EQUIVALENCE_LEDGER), JSON.stringify({ format: 1, entries }));
       fixture.git('add', EQUIVALENCE_LEDGER);
       fixture.git('commit', '-S', '-q', '-m', 'invalid signed record');
-      await expect(runDiffMutationCheck({ projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} })).rejects.toThrow(/incomplete or duplicate entry/);
+      await expect(runDiffMutationCheck({ seed: 'fixture', projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} })).rejects.toThrow(/incomplete or duplicate entry/);
     }
   });
 
@@ -51,7 +51,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     await fs.writeFile(join(fixture.project, 'src/classify.ts'), `${CLASSIFIER}// source context changed\n`);
     fixture.git('add', 'src/classify.ts');
     fixture.git('commit', '-qm', 'change the reviewed source');
-    const result = await runDiffMutationCheck({ projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} });
     expect(result.summary).toMatchObject({ killed: 2, equivalent: 0, survived: 1 });
   });
 
@@ -110,7 +110,7 @@ it('finishes the full legal domain in the baseline', async () => {
       const cache = await openMutantCache(fixture.project);
       expect(cache.unavailable).toEqual(expect.stringMatching(/could not read/));
       expect(cache.fingerprint(equivalent)).toBeUndefined();
-      const run = await runDiffMutationCheck({ projectDir: fixture.project, added, cache, log: () => {} });
+      const run = await runDiffMutationCheck({ seed: 'fixture', projectDir: fixture.project, added, cache, log: () => {} });
       expect(run.summary).toMatchObject({ equivalent: 0, survived: 1 });
       await expect(mutationEquivalenceCommand(id, { project: fixture.project, base: fixture.base, contract: CONTRACT, proof: PROOF })).rejects.toThrow(/cannot be bound.*context/);
     } finally {

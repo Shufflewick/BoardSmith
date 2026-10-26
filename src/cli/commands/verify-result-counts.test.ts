@@ -23,13 +23,13 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     const { ran, checks } = countingChecks();
     const { result: earlier } = await runVerify({ projectDir: dir, checks, log: () => {} });
     expect(earlier.passed).toBe(true);
-    expect(ran).toHaveLength(6);
+    expect(ran).toHaveLength(7);
 
     await write(dir, { 'notes.md': 'uncommitted\n' });
     await expect(runVerify({ projectDir: dir, checks, log: () => {} })).rejects.toThrow(
       /uncommitted changes.*Commit.*then run `boardsmith verify`/s,
     );
-    expect(ran).toHaveLength(6);
+    expect(ran).toHaveLength(7);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
     expect(await readVerifyResult(dir, head)).toEqual(earlier);
   });

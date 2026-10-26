@@ -107,6 +107,7 @@ const memoryCache = (hints = new Map<string, KillerHint>()) => ({
 
 function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>, log: (line: string) => void = () => {}) {
   return runDiffMutationCheck({
+    seed: 'fixture',
     projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(hints), log,
     ...(budget ? { budget } : {}), ...(contextChange ? { contextChange } : {}),
   });

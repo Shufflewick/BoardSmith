@@ -739,6 +739,7 @@ export function createGameFlow(): FlowDefinition<${pascal}Game> {
 
 export function generateTestTs(pascal: string): string {
   return `import { describe, it, expect } from 'vitest';
+import { createTestGame } from 'boardsmith/testing';
 import { ${pascal}Game } from '../src/rules/game.js';
 import { Card } from '../src/rules/elements.js';
 
@@ -758,6 +759,20 @@ describe('${pascal}Game', () => {
       expect(player.hand.all(Card).length).toBe(5);
     }
     expect(game.deck.all(Card).length).toBe(52 - game.players.length * 5);
+  });
+
+  // doAction runs each verb through the engine, its selections and flow, the
+  // way a player's move runs; \`boardsmith verify\` asks that some test does so
+  // for every verb the game defines.
+  it('draws a card, then plays one for its points', () => {
+    const testGame = createTestGame(${pascal}Game, { playerCount: 2, seed: 'test' });
+    const player = testGame.game.getPlayer(1)!;
+    testGame.doAction(1, 'draw');
+    expect(player.hand.all(Card).length).toBe(6);
+    const card = player.hand.first(Card)!;
+    testGame.doAction(1, 'play', { card });
+    expect(player.score).toBe(card.points);
+    expect(player.hand.all(Card).length).toBe(5);
   });
 });
 `;

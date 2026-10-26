@@ -73,7 +73,7 @@ export const added = new Map([['src/classify.ts', new Set([1, 2, 3, 4])]]);
 export async function approveClassifier(fixture: Awaited<ReturnType<typeof equivalenceProject>>) {
   const { project, git } = fixture;
   const cache = await openMutantCache(project);
-  const before = await runDiffMutationCheck({ projectDir: project, added, cache, log: () => {} });
+  const before = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache, log: () => {} });
   expect(before.summary).toMatchObject({ mutants: 3, killed: 2, survived: 1, timedOut: 0 });
   expect(before.survivors[0]).toHaveProperty('id', expect.stringMatching(/^[a-f0-9]{64}$/));
   await cache.save();

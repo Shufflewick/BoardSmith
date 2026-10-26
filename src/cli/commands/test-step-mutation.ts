@@ -5,8 +5,9 @@
  * A test that cannot fail proves nothing. The only way to know a test can fail is to break the
  * code it tests and watch. So this module makes small, single changes ("mutants") to the lines the
  * chunk added — flip a comparison, negate a condition, drop a statement, return `undefined` — and
- * runs the chunk's own test files against each one. A test that fails under at least one mutant
- * has been shown able to catch a regression; a test that no mutant disturbs is asserting nothing
+ * runs the chunk's own test files against each one. Both checks try a sample of at most 30 of the
+ * changed lines' mutants, picked by the HEAD commit (`sampleMutants`, #1486). A test that fails
+ * under at least one mutant has been shown able to catch a regression; a test that no mutant disturbs is asserting nothing
  * the chunk's code controls (the sotf#29 tautology), and a claim none of whose tests ever fail is
  * a claim with no real test.
  *
@@ -55,6 +56,7 @@ import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 import { toolCommand } from '../lib/run-tool.js';
+import { SeededRandom } from '../../utils/random.js';
 
 // -------------------------------------------------------------------------------------------
 // generateMutants
@@ -225,6 +227,19 @@ const mutantAt = (file: string, source: string, { line, description, edit: [from
 /** Every mutant of `source` whose change starts on one of `addedLines`, in source order (`mutationSites`). */
 export function generateMutants(file: string, source: string, addedLines: ReadonlySet<number>): Mutant[] {
   return mutationSites(file, source, addedLines).map((site) => mutantAt(file, source, site));
+}
+
+/**
+ * The most mutants of the changed lines a run tries (#1486). The check exists to show the tests can
+ * fail, which a sample shows; trying every mutant made a first publish of a real game take hours.
+ */
+const MUTANT_SAMPLE_SIZE = 30;
+
+/** At most `MUTANT_SAMPLE_SIZE` of `mutants`, in their order, picked by `seed`: the same seed picks the same ones. */
+export function sampleMutants<T>(mutants: readonly T[], seed: string): T[] {
+  if (mutants.length <= MUTANT_SAMPLE_SIZE) return [...mutants];
+  const picked = new Set(new SeededRandom(seed).shuffle([...mutants.keys()]).slice(0, MUTANT_SAMPLE_SIZE));
+  return mutants.filter((_, i) => picked.has(i));
 }
 
 // -------------------------------------------------------------------------------------------
@@ -838,6 +853,8 @@ interface MutationCheckInput {
   added: ReadonlyMap<string, ReadonlySet<number>>;
   /** The chunk's live Interpretation claims. */
   claims: number[];
+  /** Picks the sample of mutants tried (`sampleMutants`): the HEAD commit, so a re-run of it tries the same ones. */
+  seed: string;
   log: (line: string) => void;
 }
 
@@ -887,38 +904,27 @@ const isPin = (file: ChunkTestFile) => file.pin === true;
 /** Every line number of `source`. */
 const allLines = (source: string) => new Set(source.split('\n').map((_, i) => i + 1));
 
-export async function collectMutants(
-  projectDir: string,
-  added: ReadonlyMap<string, ReadonlySet<number>>,
-  summary: Pick<MutationSummary, 'files'> = { files: 0 },
-): Promise<LocatedMutant[]> {
+/** Every mutant of `added`'s lines, in file order. */
+export async function collectMutants(projectDir: string, added: ReadonlyMap<string, ReadonlySet<number>>): Promise<LocatedMutant[]> {
   const mutants: LocatedMutant[] = [];
   for (const [file, lines] of added) {
     const absPath = join(projectDir, file);
-    const fileMutants = generateMutants(file, await fs.readFile(absPath, 'utf-8'), lines);
-    if (fileMutants.length > 0) summary.files++;
-    mutants.push(...fileMutants.map((m) => ({ ...m, absPath })));
+    mutants.push(...generateMutants(file, await fs.readFile(absPath, 'utf-8'), lines).map((m) => ({ ...m, absPath })));
   }
   return mutants;
 }
 
 /**
- * The chunk check's mutants of the lines the chunk added, each with the test files it runs against:
+ * The chunk check's sample of mutants of the lines the chunk added (`sampleMutants`), each with the test files it runs against:
  * every file that is not a pin (a pin is tried on the game code it runs, `killPinTests`). A mutant
  * two files share runs once, against both.
  */
 async function chunkMutants(projectDir: string, input: MutationCheckInput, files: Set<string>): Promise<TargetedMutant[]> {
   const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
   if (unpinned.size === 0) return [];
-  const mutants: TargetedMutant[] = [];
-  for (const [file, lines] of input.added) {
-    const absPath = join(projectDir, file);
-    for (const mutant of generateMutants(file, await fs.readFile(absPath, 'utf-8'), lines)) {
-      mutants.push({ ...mutant, absPath, targets: unpinned });
-      files.add(file);
-    }
-  }
-  return mutants;
+  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed);
+  for (const mutant of mutants) files.add(mutant.file);
+  return mutants.map((mutant) => ({ ...mutant, targets: unpinned }));
 }
 
 /** A module under `src/` a mutant can change: a script or component that is not a test. */
@@ -1271,6 +1277,8 @@ interface DiffMutationInput {
   added: ReadonlyMap<string, ReadonlySet<number>>;
   /** Outcomes of earlier runs, reused where nothing the mutant depends on changed (`lib/mutant-cache.ts`). */
   cache: MutantCache;
+  /** Picks the sample of mutants tried (`sampleMutants`): the HEAD commit, so a re-run of it tries the same ones. */
+  seed: string;
   log: (line: string) => void;
   /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
   contextChange?: () => Promise<string | undefined>;
@@ -1469,7 +1477,8 @@ export async function runDiffMutationCheck(
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 };
-  const mutants = await collectMutants(projectDir, input.added, summary);
+  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed);
+  summary.files = new Set(mutants.map((m) => m.file)).size;
   const review = mutants.length > 0 ? await readEquivalenceReview(projectDir) : undefined;
   const candidates = new Set(review?.records.map((r) => r.id));
   const known = mutants.map((m) => candidates.has(input.cache.fingerprint(m) ?? '') ? undefined : input.cache.get(m));

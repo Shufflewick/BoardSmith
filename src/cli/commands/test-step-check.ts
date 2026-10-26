@@ -466,26 +466,38 @@ function uncoveredClaimFindings(manifest: SpecManifest, claims: ChunkClaims): Te
     }));
 }
 
-/** The verbs defined on lines this chunk wrote. */
-async function chunkVerbs(projectDir: string, added: ReadonlyMap<string, ReadonlySet<number>>): Promise<string[]> {
+/** The verbs the game defines: all of them, or with `added`, only those on lines this chunk wrote. */
+async function definedVerbs(projectDir: string, added?: ReadonlyMap<string, ReadonlySet<number>>): Promise<string[]> {
   const implementation = await implementationNow(projectDir);
   const wrappers = findVerbWrappers(implementation);
   const names = [...VERB_FACTORY_NAMES, ...wrappers.keys()];
   const verbs = new Set<string>();
   for (const { path, text } of implementation) {
-    const lines = added.get(path);
-    if (lines && mentionsAny(text, names)) findDefinedVerbs(text, path, wrappers, lines).forEach((v) => verbs.add(v));
+    const lines = added?.get(path);
+    if ((added === undefined || lines) && mentionsAny(text, names)) findDefinedVerbs(text, path, wrappers, lines).forEach((v) => verbs.add(v));
   }
   return [...verbs];
 }
 
+/** Every verb one of `tests` dispatches through the engine, itself or through a helper under `tests/`. */
+async function dispatchedVerbs(projectDir: string, tests: readonly SourceFile[]): Promise<Set<string>> {
+  const wrappers = findDispatchWrappers([...(await testSupportSources(projectDir)), ...tests]);
+  return new Set(tests.flatMap((f) => findDispatchedVerbs(f.text, f.path, wrappers)));
+}
+
+/**
+ * Every verb the game defines that no test file in the project dispatches through the engine: what
+ * check 3 asks of a chunk, asked of the whole game by `boardsmith verify` (#1486).
+ */
+export async function undispatchedVerbs(projectDir: string): Promise<{ defined: number; undispatched: string[] }> {
+  const verbs = await definedVerbs(projectDir);
+  const dispatched = await dispatchedVerbs(projectDir, (await projectScripts(projectDir)).filter((f) => isTestFile(f.path)));
+  return { defined: verbs.length, undispatched: verbs.filter((verb) => !dispatched.has(verb)) };
+}
+
 /** Check 3: every verb the chunk added is dispatched through the engine by one of its tests. */
 async function verbFindings(projectDir: string, verbs: string[], testFiles: ChunkTestFile[]): Promise<TestStepFinding[]> {
-  const wrappers = findDispatchWrappers([
-    ...(await testSupportSources(projectDir)),
-    ...testFiles.map((f) => ({ path: f.path, text: f.source })),
-  ]);
-  const dispatched = new Set(testFiles.flatMap((f) => findDispatchedVerbs(f.source, f.path, wrappers)));
+  const dispatched = await dispatchedVerbs(projectDir, testFiles.map((f) => ({ path: f.path, text: f.source })));
   return verbs
     .filter((verb) => !dispatched.has(verb))
     .map((verb) => ({
@@ -716,7 +728,7 @@ export async function checkTestStep(
   const chunkCommits = await findChunkCommits(dir, slug);
   const added = await addedImplementationLines(dir, chunkCommits);
   const rows = await manifestRowFindings(dir, manifest, claims);
-  const verbs = await chunkVerbs(dir, added);
+  const verbs = await definedVerbs(dir, added);
   const findings = [
     ...manifestShapeFindings(manifest, claims),
     ...rows.findings,
@@ -757,6 +769,7 @@ export async function testStepCheckCommand(
       testFiles,
       added,
       claims: liveClaims,
+      seed: (await git(dir, ['rev-parse', 'HEAD'])).trim(),
       log: options.json ? () => {} : (line) => console.error(styleText('dim', line)),
     });
     result.mutation = mutation.summary;

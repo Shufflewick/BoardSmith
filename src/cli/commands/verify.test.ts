@@ -173,6 +173,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['build', true],
       ['validate', true],
       ['smoke', true],
+      ['verbs', true],
       ['mutation', false],
     ]);
     const test = check(result, 'test');
@@ -276,6 +277,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['build', true],
       ['validate', true],
       ['smoke', true],
+      ['verbs', true],
       ['mutation', false],
     ]);
     const mutation = check(result, 'mutation');
@@ -291,5 +293,23 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(nothing.passed).toBe(true);
     expect(nothing.base.ref).toBe('HEAD');
     expect(check(nothing, 'mutation').summary).toMatch(/^No code under src\/ changed since HEAD/);
+  });
+});
+
+describe('the verbs check: every verb the game defines is dispatched through the engine by a test (#1486)', () => {
+  const verbs = (projectDir: string) => VERIFY_CHECKS.verbs({ projectDir } as Parameters<typeof VERIFY_CHECKS.verbs>[0]);
+
+  it('names a verb no test dispatches, wherever the game defines it, and passes once one does', async () => {
+    const dir = await repo({
+      'src/actions.ts': "export const draw = Action.create('draw');\nexport const pass = Action.create('pass');\n",
+      'tests/draw.test.ts': "it('draws', () => { testGame.doAction(0, 'draw'); });\n",
+    });
+    const missing = await verbs(dir);
+    expect(missing.passed).toBe(false);
+    expect(missing.summary).toBe('1 of 2 verbs the game defines is not dispatched through the engine by any test: pass.');
+    expect(missing.next).toContain("testGame.doAction(seat, 'verb')");
+
+    await write(dir, { 'src/pass.test.ts': "it('passes', () => { testGame.doAction(0, 'pass'); });\n" });
+    expect(await verbs(dir)).toEqual({ passed: true, summary: 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.' });
   });
 });

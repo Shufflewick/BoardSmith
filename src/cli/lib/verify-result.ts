@@ -35,7 +35,7 @@ import { readIfExists } from './read-if-exists.js';
 export const VERIFY_RESULT_FORMAT = 1;
 
 /** Every full check, in execution order. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
-export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation'] as const;
+export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs', 'mutation'] as const;
 /** `verify --chunk`: the chunk's own tests and typecheck. The full checks run at publish (#985). */
 export const CHUNK_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 

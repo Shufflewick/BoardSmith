@@ -7,6 +7,7 @@ import {
   orderPinSites,
   runDiffMutationCheck,
   runMutationCheck,
+  sampleMutants,
   spreadOrder,
   writeRunConfig,
 } from './test-step-mutation.js';
@@ -144,6 +145,22 @@ describe('orderPinSites', () => {
   });
 });
 
+describe('sampleMutants (#1486)', () => {
+  const items = [...Array(100).keys()];
+
+  it('keeps every mutant when there are at most 30', () => {
+    expect(sampleMutants(items.slice(0, 30), 'commit-a')).toEqual(items.slice(0, 30));
+  });
+
+  it('picks 30, kept in their order, the same ones for the same seed and others for another', () => {
+    const picked = sampleMutants(items, 'commit-a');
+    expect(picked).toHaveLength(30);
+    expect(picked).toEqual([...picked].sort((a, b) => a - b));
+    expect(sampleMutants(items, 'commit-a')).toEqual(picked);
+    expect(sampleMutants(items, 'commit-b')).not.toEqual(picked);
+  });
+});
+
 /**
  * #485: a test that pins earlier behaviour runs all of the game's setup, so a mutant that makes
  * setup throw fails it without its assertions ever running. Such a failure is not credited: only
@@ -174,6 +191,10 @@ async function makeProject(files: Record<string, string>): Promise<string> {
   return project;
 }
 
+/** Forty changed lines of one mutant each, more than a run samples (#1486). */
+const MANY_VALUES = Array.from({ length: 40 }, (_, i) => `export const v${i} = ${i};`).join('\n') + '\n';
+const MANY_LINES = lines(...Array.from({ length: 40 }, (_, i) => i + 1));
+
 const RULES = `export function bid(high: number, offer: number): boolean {
   return offer > high;
 }
@@ -200,6 +221,7 @@ async function check(project: string, testSource: string, claims = [1, 2]) {
   await fs.mkdir(dirname(testPath), { recursive: true });
   await fs.writeFile(testPath, testSource);
   return runMutationCheck({
+    seed: 'fixture',
     projectDir: project,
     testFiles: [{ path: 'tests/auction.test.ts', absPath: testPath, source: testSource }],
     added: new Map([['src/rules.ts', lines(1, 2, 3)]]),
@@ -234,6 +256,28 @@ it('equal offer', () => { expect(bid(3, 3)).toBe(false); });
     // The check removes only the directory it made (#544), and never touches the source.
     expectOtherRunsKept();
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
+  }, 60_000);
+
+  it("tries a sample of at most 30 of the chunk's mutants, picked by the seed (#1486)", async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/values.ts': MANY_VALUES });
+    const testSource = `import { it, expect } from 'vitest';
+import * as values from '../src/values';
+it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) expect((values as Record<string, number>)[\`v\${i}\`]).toBe(i); });
+`;
+    const testPath = join(project, 'tests/values.test.ts');
+    await fs.mkdir(dirname(testPath), { recursive: true });
+    await fs.writeFile(testPath, testSource);
+    const logged: string[] = [];
+    const result = await runMutationCheck({
+      projectDir: project,
+      testFiles: [{ path: 'tests/values.test.ts', absPath: testPath, source: testSource }],
+      added: new Map([['src/values.ts', MANY_LINES]]),
+      claims: [1],
+      seed: 'commit-a',
+      log: (line) => logged.push(line),
+    });
+    expect(result.findings).toEqual([]);
+    expect(logged[0]).toMatch(/^mutant 1\/30: src\/values\.ts:/);
   }, 60_000);
 
   it('reports a tautological test and the claim it was the only test for', async () => {
@@ -372,6 +416,7 @@ it('claim 3 — the doubled score is shown', () => {
     await fs.writeFile(testPath, testSource);
 
     const result = await runMutationCheck({
+      seed: 'fixture',
       projectDir: project,
       testFiles: [{ path: 'tests/result.test.ts', absPath: testPath, source: testSource }],
       added: new Map([['src/ui/Result.vue', lines(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)]]),
@@ -402,6 +447,7 @@ it('claim 3 — the doubled score is shown', () => {
       await fs.writeFile(testPath, testSource);
       const logged: string[] = [];
       const result = await runMutationCheck({
+        seed: 'fixture',
         projectDir: project,
         testFiles: [{ path: 'tests/pin.test.ts', absPath: testPath, source: testSource, pin: true }],
         added: options.added ?? new Map(),
@@ -637,6 +683,7 @@ it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)
     async function chunkCheck(files: Record<string, string>, options: { pin?: string; added?: Map<string, Set<number>> }) {
       const project = await makeProject({ 'vitest.config.ts': IN_ORDER, 'src/rules.ts': RULES, ...files });
       return runMutationCheck({
+        seed: 'fixture',
         projectDir: project,
         testFiles: Object.entries(files).map(([path, source]) => ({ path, absPath: join(project, path), source, pin: path === options.pin })),
         added: options.added ?? new Map(),
@@ -698,6 +745,23 @@ export function fee(price: number): number {
     }
   }
 
+  it("tries a sample of at most 30 of the changed lines' mutants, the same ones for the same seed (#1486)", async () => {
+    const project = await makeProject({ 'src/values.ts': MANY_VALUES });
+    const cache = memoryCache();
+    for (const mutant of generateMutants('src/values.ts', MANY_VALUES, MANY_LINES)) cache.set(mutant, 'killed');
+    const tried = async (seed: string) => {
+      const logged: string[] = [];
+      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/values.ts', MANY_LINES]]), cache, seed, log: (line) => logged.push(line) });
+      expect(result.summary.mutants).toBe(30);
+      expect(result.reused).toBe(30);
+      return logged;
+    };
+    const first = await tried('commit-a');
+    expect(first[0]).toMatch(/^mutant 1\/30: /);
+    expect(await tried('commit-a')).toEqual(first);
+    expect(await tried('commit-b')).not.toEqual(first);
+  });
+
   it("names vitest's report when it cannot read it, rather than saying vitest wrote none (#1174)", async () => {
     const sandbox = fixtureSandbox('bs-mutant-report-');
     const project = await designProjectFixtures(() => sandbox.root).makeProject({
@@ -712,6 +776,7 @@ export function fee(price: number): number {
     for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
     try {
       await expect(runDiffMutationCheck({
+        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       })).rejects.toThrow(/Could not read .*report\.json \(EISDIR\)/);
     } finally {
@@ -758,6 +823,7 @@ it('catches the changed value after the other worker starts', async () => {
     vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
     try {
       const result = await runDiffMutationCheck({
+        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       });
       expect(await fs.readFile(join(project, 'tests/baseline-finished'), 'utf-8')).toBe('finished');
@@ -802,6 +868,7 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
     vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
     try {
       const result = await runDiffMutationCheck({
+        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
@@ -829,7 +896,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     });
 
     const expectOtherRunsKept = plantOtherRuns(project);
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), cache, log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), cache, log: () => {} });
 
     expect(result.notGreen).toBeUndefined();
     expect(result.summary.mutants).toBe(5);
@@ -848,6 +915,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     // Run again with every outcome held: no vitest run at all, and the same report.
     const logged: string[] = [];
     const again = await runDiffMutationCheck({
+      seed: 'fixture',
       projectDir: project,
       added: new Map([['src/rules.ts', lines(2, 5)]]),
       cache,
@@ -866,7 +934,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     await suite(project, {
       'tests/red.test.ts': "import { it, expect } from 'vitest';\nit('is red', () => { expect(1).toBe(2); });\n",
     });
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
     expect(result.summary.mutants).toBe(0);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
@@ -889,7 +957,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
 
     async function diffCheck(files: Record<string, string>) {
       const project = await makeProject({ 'src/rules.ts': RULES, 'project.config.mts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST, ...files });
-      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
     }
 
     it('runs each mutant in an inline project the config names', async () => {
@@ -958,7 +1026,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
         await fs.mkdir(join(modules, 'vitest'));
         await fs.writeFile(join(modules, 'vitest', 'package.json'), JSON.stringify({ name: 'vitest', version: vitest.version }));
       }
-      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
     }
 
     it('runs under a pnpm install, whose node_modules/.bin/vitest is a script', async () => {
@@ -1078,7 +1146,7 @@ it('loads a module by a path built at run time', async () => {
     async function selectionCheck(config: string, files: Record<string, string> = {}, added = CHANGED) {
       const project = await makeProject({ 'vitest.config.ts': config, ...SOURCES, ...files });
       const cache = memoryCache();
-      const result = await runDiffMutationCheck({ projectDir: project, added, cache, log: () => {} });
+      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache, log: () => {} });
       const ran = await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '');
       return { result, cache, ran: [...new Set(ran.split('\n').filter(Boolean))].sort() };
     }
@@ -1170,7 +1238,7 @@ describe('the rule', () => { it('is on', () => { note('is on'); expect(enabled).
       const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': 'export const enabled = true;\n', ...tests });
       const cache = memoryCache();
       if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
-      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
+      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
       const ran = (await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '')).split('\n').filter(Boolean);
       return { result, hints: [...cache.hints.values()], ran };
     }
@@ -1268,7 +1336,7 @@ it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).to
       });
       const cache = memoryCache();
       if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
-      const run = runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
+      const run = runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
       return { run, cache };
     }
 
@@ -1292,7 +1360,7 @@ it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).to
 
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
     expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 }, reused: 0, survivors: [], unreached: [], equivalents: [] });
   });
 });

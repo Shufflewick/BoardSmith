@@ -1,6 +1,6 @@
 /**
  * `boardsmith verify` on a whole game, as a user runs it (#453): a table and a world as
- * `boardsmith init` scaffolds them, through all six real checks, the smoke check against
+ * `boardsmith init` scaffolds them, through all seven real checks, the smoke check against
  * `boardsmith dev` in Chromium included.
  *
  * These are the slowest verify runs, each serving the game and walking it in a browser, so they
@@ -90,7 +90,7 @@ it('draws the board with the actions it is offered', () => {
 `;
 
 describe('boardsmith verify on a whole game, as a user runs it', () => {
-  it('passes all six real checks on the scaffolded table, the smoke test in Chromium included, and --check then accepts the commit', async () => {
+  it('passes all seven real checks on the scaffolded table, the smoke test in Chromium included, and --check then accepts the commit', async () => {
     const dir = await scaffoldedTableOnBranch();
     const { run, result } = await verifyAsAUser(dir);
     expect(result.checks.map((c) => [c.name, c.passed, c.summary])).toEqual([
@@ -100,6 +100,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['validate', true, '`boardsmith validate` passed.'],
       // #460: the verify result records the seed the walk dealt from, so the walk can be repeated exactly.
       ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/)],
+      ['verbs', true, 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.'],
       ['mutation', true, expect.stringMatching(/^3 mutants of the lines changed since (main|master)/)],
     ]);
     expect(result.checks.filter((c) => c.skipped)).toEqual([]);
@@ -109,7 +110,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     expect((await spawnCli(['verify', '--check', '--project', dir])).code).toBe(0);
   });
 
-  it('runs test, typecheck, validate and mutation on a game with no UI yet, skipping build and smoke and saying so (#556)', async () => {
+  it('runs test, typecheck, validate, verbs and mutation on a game with no UI yet, skipping build and smoke and saying so (#556)', async () => {
     const dir = await scaffoldedTableOnBranch({ sim: true });
     const { run, result } = await verifyAsAUser(dir);
     const skip = 'Skipped: this project has no UI yet (no index.html); run `boardsmith add-ui`.';
@@ -119,6 +120,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['build', true, true, skip],
       ['validate', true, undefined, '`boardsmith validate` passed.'],
       ['smoke', true, true, skip],
+      ['verbs', true, undefined, 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.'],
       ['mutation', true, undefined, expect.stringMatching(/^3 mutants of the lines changed since (main|master)/)],
     ]);
     expect(result.passed).toBe(true);

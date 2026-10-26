@@ -32,7 +32,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     const { id, equivalent } = await approveClassifier(fixture);
     const completed = await fs.readFile(join(project, '.boardsmith/completed'), 'utf8');
     const nextCache = await openMutantCache(project);
-    const result = await runDiffMutationCheck({ projectDir: project, added, cache: nextCache, log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache: nextCache, log: () => {} });
 
     expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 0, timedOut: 0, equivalent: 1, unreached: 0 });
     expect(result.survivors).toEqual([]);
@@ -57,13 +57,13 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     await writeVerifyResult(fixture.project, result);
     await fs.writeFile(fixture.allowed, '');
     expect(await verifiedProblem(fixture.project)).toEqual(expect.stringMatching(/trusted.*review|review.*trusted/i));
-    await expect(runDiffMutationCheck({ projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} })).rejects.toThrow(/trusted.*signed commit/);
+    await expect(runDiffMutationCheck({ seed: 'fixture', projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} })).rejects.toThrow(/trusted.*signed commit/);
   });
 
   it('prepares an exact reviewable mutation only after the real baseline and mutant both finish green', async () => {
     const fixture = await equivalenceProject();
     const { project, base } = fixture;
-    const result = await runDiffMutationCheck({ projectDir: project, added, cache: await openMutantCache(project), log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache: await openMutantCache(project), log: () => {} });
     const completed = await fs.readFile(join(project, '.boardsmith/completed'), 'utf8');
     const run = await spawnCli(['mutation-equivalence', result.survivors[0].id!, '--project', project, '--base', base, '--contract', CONTRACT, '--proof', PROOF], project);
     expect(run, run.stderr).toMatchObject({ code: 0 });
@@ -74,7 +74,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     })]);
     expect((await fs.readFile(join(project, '.boardsmith/completed'), 'utf8')).slice(completed.length)).toBe('1212');
     expect(run.stdout).toMatch(/review.*git commit -S/is);
-    await expect(runDiffMutationCheck({ projectDir: project, added, cache: await openMutantCache(project), log: () => {} })).rejects.toThrow(/trusted.*signed commit/);
+    await expect(runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache: await openMutantCache(project), log: () => {} })).rejects.toThrow(/trusted.*signed commit/);
   });
 
   it('still fails verification for meaningful survivors alongside a signed equivalent', async () => {
@@ -93,7 +93,7 @@ describe('signed equivalent-mutant dispositions (#713)', () => {
     const { ledger } = await approveClassifier(fixture);
     ledger.entries[0].proof += ' Reviewed additional context.';
     await fs.writeFile(join(fixture.project, EQUIVALENCE_LEDGER), JSON.stringify(ledger));
-    const run = async () => runDiffMutationCheck({ projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} });
+    const run = async () => runDiffMutationCheck({ seed: 'fixture', projectDir: fixture.project, added, cache: await openMutantCache(fixture.project), log: () => {} });
     await expect(run()).rejects.toThrow(/unchanged ledger.*trusted signed commit/);
     fixture.git('add', EQUIVALENCE_LEDGER);
     fixture.git('commit', '-qm', 'an unsigned review is insufficient');
