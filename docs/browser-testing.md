@@ -385,7 +385,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   read as offering nothing in between, and no step is spent waiting for them
   (#474). A panel found unsettled again by the time it is read (in a world,
   another seat's command pushes every page a new state at any moment) is
-  settled and read again.
+  settled and read again. A collapsed action bar holds the panel's buttons out
+  of the page, so the walk first opens it with its toggle
+  (`[data-testid="bs-actionbar-toggle"]`), as a player does (#1482).
 - Each step it presses a board control it has not pressed, answers the open
   action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
   `[data-bs-action]` button, preferring one whose `inputs` read a value off the

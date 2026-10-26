@@ -586,9 +586,14 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
  * Waits until the panel has sent the action in flight, if any, and has its offers, and the page has
  * painted what the last press changed. While an action is in flight the panel greys every button
  * (`data-bs-submitting`), and a world's offers arrive after it in a frame of their own: read in
- * between, the panel would seem to offer nothing (#474).
+ * between, the panel would seem to offer nothing (#474). A collapsed action bar holds the panel's
+ * buttons out of the page, so the walk opens it as a player does (#1482).
  */
 async function settle(frame: Frame): Promise<void> {
+  const collapsedBar = frame.locator('[data-testid="bs-actionbar-toggle"][aria-expanded="false"]');
+  if (await inPageTime(frame.page(), 'looking for a collapsed action bar', () => collapsedBar.isVisible())) {
+    await actWithinPageTime(frame.page(), PRESS_MS, 'opening the collapsed action bar', (timeout) => collapsedBar.click({ timeout }));
+  }
   await withinPageTime(frame.page(), TURN_WAIT_MS, 'waiting for the panel to send the last action', (timeout) => frame.locator('[data-bs-submitting]').waitFor({ state: 'detached', timeout })).catch(
     saying(`The panel was still sending the last action after ${TURN_WAIT_MS / 1000}s.`),
   );

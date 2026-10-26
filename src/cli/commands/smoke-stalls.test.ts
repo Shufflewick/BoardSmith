@@ -5,11 +5,35 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { smokeOf } from './smoke-walk.test-helper.js';
-import { kettleGame, smokeSpec } from './smoke-fixtures.test-helper.js';
+import { kettleGame, QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
+/** The scaffold's App.vue for a game whose action bar starts collapsed (#1439). */
+const COLLAPSED_BAR_APP = `<script setup lang="ts">
+import { GameShell } from 'boardsmith/ui';
+import uis from './uis.js';
+</script>
+
+<template>
+  <GameShell :uis="uis" action-bar-starts-collapsed />
+</template>
+`;
+
 describe('boardsmith verify: the smoke check', () => {
+  it('#1482: opens an action bar the game starts collapsed, as a player does, rather than reporting a stall', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...truceGame(),
+      'src/ui/App.vue': COLLAPSED_BAR_APP,
+      'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
+        claimTruce: QUIET_CLAIM_REASON,
+      }),
+    });
+
+    expect(outcome.summary).toMatch(/a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade"/);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('#460: says a walk that stopped because nothing was offered for a while stopped for that, not for want of steps', async () => {
     // A world's plot has two rows that each grow five times, so after ten tends nothing is offered
     // until the clock ripens them, ten minutes on. "harvest" is listed and the world never offers it.
