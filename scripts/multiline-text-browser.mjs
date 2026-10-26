@@ -94,7 +94,7 @@ const setDescription = worldAction<Colony>('setDescription')
 
 /** A field with a FLOOR, so the refusal and the floor hint are both reachable. */
 const setCreed = worldAction<Colony>('setCreed')
-  .prompt('Set your creed')
+  .prompt('Creed')
   .needs(() => [COLONY])
   .enterText('creed', {
     prompt: 'Your creed',
@@ -109,11 +109,10 @@ const setCreed = worldAction<Colony>('setCreed')
 
 /**
  * The single-line field, so a regression to it is visible here. Its refusal
- * wraps over several lines on a phone, taller than the one row a field may
- * grow the bar by (#1300).
+ * wraps over several lines on a phone, so the bar must grow to show it (#1481).
  */
 const setNickname = worldAction<Colony>('setNickname')
-  .prompt('Pick a nickname')
+  .prompt('Nickname')
   .needs(() => [COLONY])
   .enterText('nickname', {
     prompt: 'Colony nickname',
@@ -135,7 +134,7 @@ const setNickname = worldAction<Colony>('setNickname')
  * refusal were the text editor's fixed defects still standing, and a check that
  * runs beside the text one is what makes the next divergence loud.
  */
-// A one-word prompt, so the four actions and the controls menu (#1443) fit the two-row strip at 375px.
+// One-word action prompts, so the five actions and the controls menu (#1443) fit the two-row strip at 375px.
 const recycle = worldAction<Colony>('recycle')
   .prompt('Recycle')
   .needs(() => [COLONY])
@@ -143,6 +142,30 @@ const recycle = worldAction<Colony>('recycle')
   .execute(({ waste }, ctx) => {
     ctx.game.board().recycled = waste;
     ctx.world.emit(COLONY, { recycled: true }, 'The waste was recycled.');
+  });
+
+/**
+ * Typed fields after earlier choices, under prompts that wrap on a phone: the
+ * chips, the wrapped label, the hint and field + Done (and Skip) are more than
+ * any fixed number of rows past the strip (#1481).
+ */
+const nameShip = worldAction<Colony>('nameShip')
+  .prompt('Name')
+  .needs(() => [COLONY])
+  .chooseFrom('hull', { prompt: 'Which hull?', choices: ['Scout', 'Freighter'] })
+  .enterText('shipName', {
+    prompt: 'Name the ship that carries the colonists out to the new world',
+    maxLength: 24,
+  })
+  .enterNumber('crew', {
+    prompt: 'How many colonists sleep aboard for the long crossing',
+    min: 1,
+    max: 600,
+    integer: true,
+    optional: 'Leave the berths empty',
+  })
+  .execute(({ shipName }, ctx) => {
+    ctx.world.emit(COLONY, { named: shipName }, 'The ship was named.');
   });
 
 export const gameDefinition: GameDefinition = {
@@ -157,7 +180,7 @@ export const gameDefinition: GameDefinition = {
       return { [COLONY]: board as GameElement };
     },
     view: () => [COLONY],
-    actions: [setDescription, setCreed, setNickname, recycle],
+    actions: [setDescription, setCreed, setNickname, recycle, nameShip],
   },
 };
 `;
@@ -597,6 +620,39 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       });
     }
 
+    await check(`${size}: open fields after earlier choices show the chips, wrapped label, hint, field and submit without scrolling`, async () => {
+      await surface.locator('[data-bs-action="nameShip"]').click();
+      await surface.locator('.action-config .choice-btn', { hasText: 'Freighter' }).click();
+      await surface.locator('.text-input').waitFor({ timeout: 15_000 });
+      try {
+        const bar = await barGeometry(surface, [
+          '.selected-value',
+          '.text-input .selection-prompt',
+          '.text-input .input-hint',
+          '.text-input input',
+          '.text-input .done-button',
+        ]);
+        assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall): the editor is cut off`);
+        assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
+        await surface.locator('.text-input input').fill('Long Haul Endeavour');
+        await surface.locator('.text-input .done-button').click();
+        await surface.locator('.number-input').waitFor({ timeout: 15_000 });
+        const next = await barGeometry(surface, [
+          '.selected-values',
+          '.number-input .selection-prompt',
+          '.number-input .input-hint',
+          '.number-input input',
+          '.number-input .done-button',
+          '.number-input .skip-btn',
+        ]);
+        assert(!next.scrolls, `number: the bar scrolls (${next.height}px tall)`);
+        assert(next.outside.length === 0, `number: not in view inside the bar: ${next.outside.join(', ')}`);
+      } finally {
+        await surface.locator('.cancel-btn').click();
+        await surface.locator('.text-input, .number-input').first().waitFor({ state: 'detached', timeout: 10_000 });
+      }
+    });
+
     await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
       // The box may grow the bar past the strip, but it floats over the board:
       // the board stays exactly where it was fitted.
@@ -632,10 +688,10 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
 
     // A refusal the player cannot see is the silent Done of #229 again: the
     // bar caps its height, and the message used to land below that cap (#1159).
-    for (const [action, editor, value, kind] of [
-      ['setCreed', '.text-input', 'Too short.', 'box'],
-      ['recycle', '.number-input', '1', 'field'],
-      ['setNickname', '.text-input', 'NO', 'field'],
+    for (const [action, editor, value] of [
+      ['setCreed', '.text-input', 'Too short.'],
+      ['recycle', '.number-input', '1'],
+      ['setNickname', '.text-input', 'NO'],
     ]) {
       await check(`${size}: a refusal in ${editor} is in view inside the bar when it appears`, async () => {
         // Bringing the message into view must scroll only the bar, never the page or the board.
@@ -653,11 +709,6 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
         });
         assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
         assert(after.join() === before.join(), `page, frame and board scroll moved from ${before} to ${after}`);
-        if (kind === 'field') {
-          // The message scrolls inside the bar rather than growing it past its one row (#1300).
-          const allowed = bar.strip - (await fieldRow(surface)) - 1;
-          assert(bar.top >= allowed, `the bar's top is at ${bar.top}, above ${allowed} (the strip at ${bar.strip} less one row)`);
-        }
       });
     }
   });

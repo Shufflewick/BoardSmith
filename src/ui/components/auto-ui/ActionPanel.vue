@@ -693,7 +693,7 @@ const editorWrapperClass = computed(() => {
   return editorGrowth.value === 'box' ? ['text-input', 'text-input-multiline'] : 'text-input';
 });
 
-/** How far the editor may grow the bar: a multi-line box to what it needs, a one-line or number field by one row (#1300). */
+/** Which ceiling the editor grows the bar to: a multi-line box's own, or a one-line or number field's (#1300, #1481). */
 const editorGrowth = computed(() => {
   const pick = currentPick.value;
   return pick?.type === 'text' && pick.multiline ? 'box' : 'field';
@@ -2053,10 +2053,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              `data-bs-grows-panel` marks the editor as the one thing allowed to
              grow the action bar past the strip the board reserves for it (issue
              444), and by how much: six rows of text cannot be written in two, so
-             a "box" grows to what it needs, while a one-line "field" stacks
-             label, hint and field + Done in three on a phone (#1058) and grows
-             one row (#1300). The shell's bar reads the mark, so the exception
-             ends when this unmounts. -->
+             a "box" grows to the ceiling its box is sized from, while a
+             one-line "field" stacks label, hint and field + Done on a phone
+             (#1058), under any chips and however the prompt wraps, and grows to
+             what it needs (#1481). The shell's bar reads the mark, so the
+             exception ends when this unmounts. -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
           :class="editorWrapperClass"
