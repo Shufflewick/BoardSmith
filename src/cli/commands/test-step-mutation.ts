@@ -235,10 +235,21 @@ export function generateMutants(file: string, source: string, addedLines: Readon
  */
 const MUTANT_SAMPLE_SIZE = 30;
 
-/** At most `MUTANT_SAMPLE_SIZE` of `mutants`, in their order, picked by `seed`: the same seed picks the same ones. */
-export function sampleMutants<T>(mutants: readonly T[], seed: string): T[] {
+/**
+ * At most `MUTANT_SAMPLE_SIZE` of `mutants`, in their order, picked by `seed`: the same seed picks the
+ * same ones. Files take turns, one mutant each per round, so every changed file is tried (up to
+ * `MUTANT_SAMPLE_SIZE` of them) and a file no test loads is still found.
+ */
+export function sampleMutants<T extends { file: string }>(mutants: readonly T[], seed: string): T[] {
   if (mutants.length <= MUTANT_SAMPLE_SIZE) return [...mutants];
-  const picked = new Set(new SeededRandom(seed).shuffle([...mutants.keys()]).slice(0, MUTANT_SAMPLE_SIZE));
+  const random = new SeededRandom(seed);
+  const byFile = new Map<string, number[]>();
+  mutants.forEach((mutant, i) => byFile.set(mutant.file, [...(byFile.get(mutant.file) ?? []), i]));
+  const turns = random.shuffle([...byFile.values()]).map((indexes) => random.shuffle(indexes));
+  const picked = new Set<number>();
+  for (let round = 0; picked.size < MUTANT_SAMPLE_SIZE; round++) {
+    for (const indexes of turns) if (round < indexes.length && picked.size < MUTANT_SAMPLE_SIZE) picked.add(indexes[round]);
+  }
   return mutants.filter((_, i) => picked.has(i));
 }
 

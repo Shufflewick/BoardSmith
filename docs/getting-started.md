@@ -287,7 +287,8 @@ The mutation check
 makes small changes (mutants) to the lines of code under `src/` that changed
 since the main branch (or since `--base`) and tries a sample of at most 30 of
 them, one at a time, picked with the commit being verified as the seed, so
-verifying the same commit again tries the same ones. Against each it runs the
+verifying the same commit again tries the same ones. The changed files take
+turns, so each one (up to 30 of them) has a mutant tried. Against each it runs the
 test files that load the changed file: a change no test notices is reported by
 file and line, because the tests cannot distinguish that mutant from the
 original, and a change in a file no test loads is reported as such. A sample

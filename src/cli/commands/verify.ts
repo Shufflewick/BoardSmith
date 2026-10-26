@@ -20,9 +20,9 @@
  *                 (`undispatchedVerbs`, #1486): the chunk check's verb rule, asked of the whole game
  *   7. mutation   a sample of at most 30 small breaks of the code lines under `src/` changed since
  *                 the base, picked with the HEAD commit as seed, so a re-run of a commit tries the
- *                 same ones (`sampleMutants`, #1486); for each, a test that loads its file must
- *                 fail, and a change in a file no test loads fails the check too
- *                 (`runDiffMutationCheck`, #981). A sample is enough to show the tests can fail,
+ *                 same ones, one per changed file before a second of any (`sampleMutants`, #1486);
+ *                 for each, a test that loads its file must fail, and a change in a file no
+ *                 test loads fails the check too (`runDiffMutationCheck`, #981). A sample is enough to show the tests can fail,
  *                 and keeps a first publish of a large game to minutes. An outcome from
  *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
  *                 re-verify of the same commit runs no mutant again, and a new commit runs only

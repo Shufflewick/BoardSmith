@@ -146,7 +146,7 @@ describe('orderPinSites', () => {
 });
 
 describe('sampleMutants (#1486)', () => {
-  const items = [...Array(100).keys()];
+  const items = Array.from({ length: 100 }, (_, line) => ({ file: 'src/a.ts', line }));
 
   it('keeps every mutant when there are at most 30', () => {
     expect(sampleMutants(items.slice(0, 30), 'commit-a')).toEqual(items.slice(0, 30));
@@ -155,9 +155,16 @@ describe('sampleMutants (#1486)', () => {
   it('picks 30, kept in their order, the same ones for the same seed and others for another', () => {
     const picked = sampleMutants(items, 'commit-a');
     expect(picked).toHaveLength(30);
-    expect(picked).toEqual([...picked].sort((a, b) => a - b));
+    expect(picked).toEqual([...picked].sort((a, b) => a.line - b.line));
     expect(sampleMutants(items, 'commit-a')).toEqual(picked);
     expect(sampleMutants(items, 'commit-b')).not.toEqual(picked);
+  });
+
+  it('takes a mutant of every changed file before a second of any, so a file no test loads is still found', () => {
+    const small = [{ file: 'src/b.ts', line: 1 }, { file: 'src/c.ts', line: 1 }];
+    for (const seed of ['commit-a', 'commit-b', 'commit-c']) {
+      expect(sampleMutants([...items, ...small], seed)).toEqual(expect.arrayContaining(small));
+    }
   });
 });
 
