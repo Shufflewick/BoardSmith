@@ -46,7 +46,7 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
-  it.each(['setTimeout', 'requestAnimationFrame', 'MessageChannel', 'debounce', 'Transition'] as const)(
+  it.each(['setTimeout', 'requestAnimationFrame', 'MessageChannel', 'debounce', 'Transition', 'animationend'] as const)(
     '#1484: a control a pointer handler takes away in a later task (%s) fails that press at once, saying so',
     async (defers) => {
       const { outcome } = await smokeOf(false, boardWithAVanishingControl({ defers }));
@@ -69,7 +69,15 @@ describe('boardsmith verify: the smoke check', () => {
   });
 
   it('#1483: a board control a clock an earlier press started takes away just after the pointer reached it is said, not reported, and pressed when it shows again', async () => {
-    const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ afterPointing: true }));
+    const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ startedBy: 'click' }));
+
+    expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(outcome.summary).toContain('pressed 5 board controls, with no error.');
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1484 review: a board control a clock the pointer reaching an earlier control started takes away is said, not reported, and pressed when it shows again', async () => {
+    const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ startedBy: 'pointerenter' }));
 
     expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(outcome.summary).toContain('pressed 5 board controls, with no error.');

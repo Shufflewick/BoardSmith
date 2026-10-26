@@ -189,47 +189,79 @@ type TracedWindow = Window & { __boardsmithSmokePointerTrace?: PointerTrace };
 /**
  * Marks the work the pointer's events start as the pointer's, in a page the walk presses in (#1484),
  * run before the page's own scripts, so a hover handler's update put off to a later task is still
- * tied to the pointer. A callback given to `setTimeout`, `requestAnimationFrame`, or a
- * `MessageChannel` port's `onmessage` by a `postMessage`, while the pointer's event is being
- * dispatched or while marked work runs, runs marked; a game's clock, started by an earlier press,
- * stays unmarked (#1483).
+ * tied to the pointer. A callback given to `setTimeout` or `requestAnimationFrame`, a
+ * `transitionend` or `animationend` listener (which a `<Transition>` leave may end on), or a
+ * `MessageChannel` port's `onmessage` run by a `postMessage`, while the pointer's event is being
+ * dispatched or while marked work runs, runs marked, as long as the watch it was marked under is
+ * still on. A game's clock, started by an earlier press, stays unmarked (#1483).
  */
 export function tracePointerWork(): void {
   const view = window as TracedWindow;
   const trace: PointerTrace = { pointing: () => false, starts: () => () => {} };
   view.__boardsmithSmokePointerTrace = trace;
-  let running = false;
-  const marking = () => running || trace.pointing();
-  const marked = <A extends unknown[], R>(callback: (...args: A) => R) =>
+  type Mark = PointerTrace['starts'];
+  let running: Mark | undefined;
+  const marking = () => running ?? (trace.pointing() ? trace.starts : undefined);
+  const marked = <A extends unknown[], R>(callback: (...args: A) => R, by: Mark) =>
     function (this: unknown, ...args: A): R {
-      const done = trace.starts();
-      running = true;
+      // Work marked under a watch that is over is not the pointer's on the control watched now.
+      if (by !== trace.starts) return callback.apply(this, args);
+      const done = by();
+      running = by;
       try {
         return callback.apply(this, args);
       } finally {
         // Queued last, so the updates the callback queued (a Vue render) run marked before it.
         queueMicrotask(() => {
-          running = false;
+          running = undefined;
           done();
         });
       }
     };
+  const traced = <A extends unknown[], R>(callback: (...args: A) => R) => {
+    const by = marking();
+    return by ? marked(callback, by) : callback;
+  };
   const timeout = view.setTimeout;
   view.setTimeout = ((handler: TimerHandler, ms?: number, ...args: unknown[]) =>
-    timeout(typeof handler === 'function' && marking() ? marked(handler as (...a: unknown[]) => unknown) : handler, ms, ...args)) as typeof setTimeout;
+    timeout(typeof handler === 'function' ? traced(handler as (...a: unknown[]) => unknown) : handler, ms, ...args)) as typeof setTimeout;
   const frame = view.requestAnimationFrame;
-  view.requestAnimationFrame = (callback) => frame(marking() ? marked(callback) : callback);
-  // Each port's messages arrive in the order they were posted, so a port keeps, in order, whether each was the pointer's.
-  const posted = new WeakMap<MessagePort, boolean[]>();
+  view.requestAnimationFrame = (callback) => frame(traced(callback));
+  const ends = new Set(['transitionend', 'animationend']);
+  const wrappers = new WeakMap<object, EventListener>();
+  const add = EventTarget.prototype.addEventListener;
+  const remove = EventTarget.prototype.removeEventListener;
+  EventTarget.prototype.addEventListener = function (this: EventTarget, type, listener, options) {
+    const by = ends.has(type) && typeof listener === 'function' ? marking() : undefined;
+    if (by && typeof listener === 'function') {
+      const wrapper = marked(listener, by);
+      wrappers.set(listener, wrapper);
+      listener = wrapper;
+    }
+    add.call(this, type, listener, options);
+  };
+  EventTarget.prototype.removeEventListener = function (this: EventTarget, type, listener, options) {
+    remove.call(this, type, listener, options);
+    const wrapper = listener && wrappers.get(listener);
+    if (wrapper) remove.call(this, type, wrapper, options);
+  };
+  // A port's messages arrive in the order they were posted, so each port keeps, in order, which mark each was posted under.
+  const posted = new WeakMap<MessagePort, Array<Mark | undefined>>();
   const partners = new WeakMap<MessagePort, MessagePort>();
+  const marks = new WeakMap<Event, Mark>();
   const Channel = MessageChannel;
   globalThis.MessageChannel = class extends Channel {
     constructor() {
       super();
-      posted.set(this.port1, []);
-      posted.set(this.port2, []);
-      partners.set(this.port1, this.port2);
-      partners.set(this.port2, this.port1);
+      for (const [port, partner] of [[this.port1, this.port2], [this.port2, this.port1]]) {
+        posted.set(port, []);
+        partners.set(port, partner);
+        // Added first, so it runs before the page's own handler, for every message the port is handed.
+        port.addEventListener('message', (event) => {
+          const by = posted.get(port)?.shift();
+          if (by) marks.set(event, by);
+        });
+      }
     }
   };
   const post = MessagePort.prototype.postMessage as (this: MessagePort, ...args: unknown[]) => void;
@@ -242,9 +274,14 @@ export function tracePointerWork(): void {
   Object.defineProperty(MessagePort.prototype, 'onmessage', {
     ...onmessage,
     set(this: MessagePort, handler: ((event: MessageEvent) => unknown) | null) {
-      const port = this;
-      const handle = handler && marked(handler);
-      onmessage.set!.call(this, handler && ((event: MessageEvent) => (posted.get(port)?.shift() ? handle! : handler)(event)));
+      onmessage.set!.call(
+        this,
+        handler &&
+          function (this: MessagePort, event: MessageEvent) {
+            const by = marks.get(event);
+            return (by ? marked(handler, by) : handler).call(this, event);
+          },
+      );
     },
   });
 }

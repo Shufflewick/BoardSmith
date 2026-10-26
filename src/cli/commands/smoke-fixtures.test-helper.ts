@@ -493,7 +493,7 @@ onUnmounted(() => {
 }
 
 /** How a hover handler of `boardWithAVanishingControl` puts off taking its control away (#1484). */
-export type Deferral = 'setTimeout' | 'requestAnimationFrame' | 'MessageChannel' | 'debounce' | 'Transition';
+export type Deferral = 'setTimeout' | 'requestAnimationFrame' | 'MessageChannel' | 'debounce' | 'Transition' | 'animationend';
 
 /** Each {@link Deferral}'s pointer handler, which takes "Shy button" away in a later task. */
 const DEFERRED_GOING: Record<Deferral, string> = {
@@ -502,6 +502,7 @@ const DEFERRED_GOING: Record<Deferral, string> = {
   MessageChannel: '@pointerenter="message"',
   debounce: '@pointermove="debounce"',
   Transition: '@pointerenter="gone = true"',
+  animationend: `@pointerenter="fade" :class="{ fading }"`,
 };
 
 /**
@@ -528,6 +529,11 @@ const nextFrame = () => requestAnimationFrame(go);
 const channel = new MessageChannel();
 channel.port1.onmessage = go;
 const message = () => channel.port2.postMessage(null);
+const fading = ref(false);
+function fade(event: PointerEvent) {
+  (event.target as Element).addEventListener('animationend', go);
+  fading.value = true;
+}
 let waiting: ReturnType<typeof setTimeout> | undefined;
 function debounce() {
   clearTimeout(waiting);
@@ -545,6 +551,8 @@ function debounce() {
 .board { width: 320px; height: 200px; }
 .shy-leave-active { transition: opacity 1ms; }
 .shy-leave-to { opacity: 0; }
+.fading { animation: fade 1ms; }
+@keyframes fade { to { opacity: 0; } }
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
@@ -556,13 +564,13 @@ function debounce() {
  * finds it, before the walk points at it, as a one-tick battle playback takes its speed button away.
  * Reading its label stands in for that moment, so the race the walk loses only sometimes is lost
  * every run. Each "Start round N" shows it again. It goes only the first time it is found, unless
- * `everyTime`. With `afterPointing`, it goes instead on the tick of a clock that pressing "Watch the
- * battle" started, the first tick after the pointer reached it and before the click, as WindupWarfare's
- * playback takes its controls away (#1483, #1484).
+ * `everyTime`. With `startedBy`, it goes instead on the tick of a clock that "Watch the battle" starts
+ * on that event (a press, or the pointer reaching it), the first tick after the pointer reached "Stop"
+ * and before the click, as WindupWarfare's playback takes its controls away (#1483, #1484).
  */
-export function boardWhoseClockTakesAControl(options: { everyTime?: boolean; afterPointing?: boolean } = {}): Record<string, string> {
-  const afterPointing = options.afterPointing === true;
-  const watch = afterPointing ? '\n    <button type="button" @click="tick">Watch the battle</button>' : '';
+export function boardWhoseClockTakesAControl(options: { everyTime?: boolean; startedBy?: 'click' | 'pointerenter' } = {}): Record<string, string> {
+  const afterPointing = options.startedBy !== undefined;
+  const watch = afterPointing ? `\n    <button type="button" @${options.startedBy}="start">Watch the battle</button>` : '';
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { ref } from 'vue';
@@ -570,6 +578,7 @@ import { ref } from 'vue';
 const shown = ref(true);
 let found = 0;
 let pointed = false;
+let ticking = false;
 function goes() {
   if (++found === 1 || ${options.everyTime === true}) shown.value = false;
 }
@@ -582,6 +591,10 @@ function clock(element: unknown) {
       return 'Stop';
     },
   });
+}
+function start() {
+  if (!ticking) tick();
+  ticking = true;
 }
 function tick() {
   if (pointed) goes();
