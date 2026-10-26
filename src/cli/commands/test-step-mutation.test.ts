@@ -300,7 +300,7 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     const sources: Record<string, string> = {
       'tests/all.test.ts': `import { it, expect } from 'vitest';\n${all}\nit('claim 1 — every value', () => { expect([${Array.from({ length: 31 }, (_, i) => `v${i}`).join(', ')}]).toEqual([${Array.from({ length: 31 }, (_, i) => i).join(', ')}]); });\n`,
       'tests/lone.test.ts': `import { it, expect } from 'vitest';\nimport { v } from '../${left.replace(/\.ts$/, '')}';\nit('claim 2 — the lone value', () => { expect(v).toBe(${left.match(/\d+/)![0]}); });\n`,
-      'tests/none.test.ts': `import { it, expect } from 'vitest';\nit('claim 3 — tautology', () => { expect(1).toBe(1); });\n`,
+      'tests/none.test.ts': `import { it, expect } from 'vitest';\nit('claim 2 and claim 3 — tautology', () => { expect(1).toBe(1); });\n`,
     };
     const testFiles = [];
     for (const [path, source] of Object.entries(sources)) {
@@ -310,9 +310,11 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
       testFiles.push({ path, absPath, source });
     }
     const result = await runMutationCheck({ projectDir: project, testFiles, added, claims: [1, 2, 3], seed: 'commit-a', log: () => {} });
+    // Claim 2 is also cited by a judged file, so it is still reported.
     expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual([
+      'claim-survives-mutation claim 2',
       'claim-survives-mutation claim 3',
-      'test-survives-mutation tests/none.test.ts > claim 3 — tautology',
+      'test-survives-mutation tests/none.test.ts > claim 2 and claim 3 — tautology',
     ]);
   }, 180_000);
 
