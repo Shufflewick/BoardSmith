@@ -17,6 +17,7 @@ import {
   boardThatHoldsAnOpenAction,
   HELD_OPEN_PLAY,
   PLAY_HOLD,
+  panelThatGoesAwayAsItIsPressed,
   panelThatHangsOnThePointer,
   HUNG,
   smokeSpec,
@@ -38,9 +39,29 @@ describe('boardsmith verify: the smoke check', () => {
   it('#1475: a board control the game takes away by itself before the walk points at it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl());
 
-    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the walk could point at it, so the walk presses it when it shows again');
+    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(steps.slice(3, 5)).toEqual(['smoke step 2: pressing the board\'s "Start round 1"', 'smoke step 3: pressing the board\'s "Stop"']);
     expect(outcome.summary).toContain('pressed 4 board controls, with no error.');
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1483: a board control the game takes away by itself just after the pointer reached it is said, not reported, and pressed when it shows again', async () => {
+    const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ afterPointing: true }));
+
+    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(outcome.summary).toContain('pressed 4 board controls, with no error.');
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1483: a panel button the game takes away by itself as the walk presses it is said, not reported, and taken when it shows again', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...panelThatGoesAwayAsItIsPressed(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(steps).toContain('smoke step 1: the panel\'s "draw" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
   });
 

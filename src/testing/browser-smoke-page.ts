@@ -175,6 +175,60 @@ export function clickReached(): Reached {
   return guard.missed ?? (guard.hit ? 'it' : 'nothing');
 }
 
+/** What `watchThePointer` keeps on a page's window for `pointerTookIt`. */
+interface PointerWatch {
+  element: Element;
+  took: boolean;
+  remove: () => void;
+}
+
+/** The window of a page `watchThePointer` watches. */
+type WatchedWindow = Window & { __boardsmithSmokePointerWatch?: PointerWatch };
+
+/**
+ * Watches whether the pointer moving over `element` takes it away (#464, #1483): whether it is hidden
+ * or taken off the page while one of the pointer's events is still being dispatched, by a handler or
+ * the updates it starts, which run before the dispatch goes on. A control a game's clock takes away
+ * after the pointer arrived goes in a task of its own, once the dispatch is over, and is not counted.
+ * Kept for `pointerTookIt`; what an earlier watch saw is kept for a control found again.
+ */
+export function watchThePointer(element: Element): void {
+  const view = element.ownerDocument.defaultView as WatchedWindow;
+  const old = view.__boardsmithSmokePointerWatch;
+  if (old?.element === element) return;
+  old?.remove();
+  const types = ['pointerover', 'pointerenter', 'pointermove', 'mouseover', 'mouseenter', 'mousemove'];
+  let pointing: Event | undefined;
+  let shown = false;
+  const pointed = (event: Event) => {
+    pointing = event;
+    shown = element.checkVisibility();
+  };
+  const observer = new MutationObserver(() => {
+    if (pointing !== undefined && pointing.eventPhase !== Event.NONE && shown && !element.checkVisibility()) watch.took = true;
+  });
+  const watch: PointerWatch = {
+    element,
+    took: old?.took === true,
+    remove: () => {
+      types.forEach((type) => view.removeEventListener(type, pointed, true));
+      observer.disconnect();
+    },
+  };
+  types.forEach((type) => view.addEventListener(type, pointed, true));
+  observer.observe(element.ownerDocument, { subtree: true, childList: true, attributes: true });
+  view.__boardsmithSmokePointerWatch = watch;
+}
+
+/** Takes `watchThePointer`'s watch off this page and says whether the pointer took its control away. */
+export function pointerTookIt(): boolean {
+  const view = window as WatchedWindow;
+  const watch = view.__boardsmithSmokePointerWatch;
+  watch?.remove();
+  delete view.__boardsmithSmokePointerWatch;
+  return watch?.took === true;
+}
+
 /**
  * The value the walk enters in an empty number field (#465): the field's own least value, else 1,
  * whole when the field takes whole numbers (`step="1"`), plus one for each of the `refused` values
