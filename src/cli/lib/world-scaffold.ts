@@ -362,6 +362,7 @@ import {
   settleDeclaration,
   walkDeclaration,
 } from 'boardsmith/world';
+import { createTestWorld } from 'boardsmith/testing';
 import { gameDefinition } from '../src/rules/index.js';
 import { PLOT_ROWS, RIPEN_MS, plotPartition } from '../src/rules/world.js';
 
@@ -579,6 +580,22 @@ describe('the world', () => {
       attributes: { seat: 1 },
     });
     expect(checkpoint.nextElementId).toBeGreaterThan(0);
+  });
+
+  // \`take\` is the road a player's click takes, through the same host core
+  // \`boardsmith dev\` runs; \`boardsmith verify\` asks that some test takes
+  // every verb the world defines that way.
+  it('grows the row a seat tends, taken as a click takes it', async () => {
+    const world = await createTestWorld({ definition: gameDefinition });
+    try {
+      const [offer] = await world.offersFor(1);
+      const row = offer!.selections[0]!.validElements![0]!;
+      await world.take(1, 'tend', { row: row.id });
+      const grown = (await world.unredactedElements()).filter((element) => element.attributes?.growth === 1);
+      expect(grown.map((element) => element.name)).toEqual([PLOT_ROWS[0]]);
+    } finally {
+      await world.close();
+    }
   });
 
   it('REFUSES a player who reaches for the clock\\'s own action', async () => {

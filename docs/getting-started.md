@@ -105,8 +105,8 @@ That writes the same project without its UI: no `index.html`, `src/main.ts`,
 `boardsmith test`, `lint`, `typecheck`, `validate` and `simulate` work as
 usual (validate's Required Files check asks only for the rules). `dev`, `build`,
 `smoke` and `publish` stop with "This project has no UI yet. Run
-`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
-mutation, and records build and smoke as skipped for that reason; its closing
+`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate, verbs
+and mutation, and records build and smoke as skipped for that reason; its closing
 line and `verify --check` name the skipped checks. A table that loses
 `index.html` but keeps any other UI file is broken, not a simulator: those
 commands stop and name the files, and `verify` fails build and smoke. `--sim`
@@ -276,14 +276,24 @@ boardsmith verify --check --chunk deal   # ...or chunk deal's fast checks?
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
-build`, `boardsmith validate`, the in-browser smoke test and a mutation check,
-in that order, and keeps going after a failure so you see every problem at once.
+build`, `boardsmith validate`, the in-browser smoke test, a verbs check and a
+mutation check, in that order, and keeps going after a failure so you see every problem at once.
+Before the mutation check, the verbs check asks that every verb the game
+defines (`Action.create('<verb>')`, `worldAction('<verb>')` or a wrapper of
+the project's own) is dispatched through the engine by some test file, such as
+`testGame.doAction(seat, '<verb>')`; a test that calls the rules function
+directly does not count.
 The mutation check
-breaks each line of code under `src/` that changed since the main branch (or
-since `--base`), one small change at a time, and runs against each the test
-files that load the changed file: a change no test notices is reported by file
-and line, because the tests cannot distinguish that mutant from the original,
-and a change in a file no test loads is reported as such.
+makes small changes (mutants) to the lines of code under `src/` that changed
+since the main branch (or since `--base`) and tries a sample of at most 30 of
+them, one at a time, picked with the commit being verified as the seed, so
+verifying the same commit again tries the same ones. The changed files take
+turns, so each one (up to 30 of them) has a mutant tried. Against each it runs the
+test files that load the changed file: a change no test notices is reported by
+file and line, because the tests cannot distinguish that mutant from the
+original, and a change in a file no test loads is reported as such. A sample
+is enough to show the tests can fail, and keeps the first publish of a large
+game to minutes.
 Before trying a fresh mutant, it completes the unmodified suite and requires
 it to pass, noting which project files each test file loads, however it loads
 them (a static or dynamic import, `import.meta.glob`, a path built at run
@@ -338,8 +348,9 @@ The interrupted command still exits by the signal, so it cannot record a pass.
 On the main branch itself, the merge base with main is the current commit, so
 no change would be measured: there the mutation check fails unless you pass
 `--base <commit the work started from>`. A mutant whose code, tests, repository and installed
-packages have not changed since an earlier run is not run again, so verifying
-again after a commit that only touches the `bs-` skills' design records is quick.
+packages have not changed since an earlier run is not run again. A new commit
+picks a new sample, so it runs only the mutants of its sample no earlier run
+tried.
 A package installed as a link to a folder outside the repository, such as
 `"dep": "file:../dep"`, counts too, so editing it runs the mutants again. When
 that folder is the top of a git checkout, what counts is its commit, its
@@ -352,11 +363,7 @@ reused or kept for that run, and `boardsmith verify` says why.
 Those outcomes are kept in the repository's git directory, shared by the main
 checkout and every worktree. Each one is saved as soon as its mutant finishes, so
 a run that is interrupted, or stopped by a time limit, loses only the mutant it
-was running when it stopped, and the next run reuses the rest. A merge reuses
-them only when the merged tree is the tree the worktree verified: main has not
-moved since, or the branch merged main before its last verify. Otherwise every
-mutant runs again at the merge. So for a cheap merge, merge main into the branch
-first and verify there. Older
+was running when it stopped, and the next run reuses the rest. Older
 BoardSmith kept these outcomes in `.boardsmith/verify/mutants.json`; that file
 is no longer read and can be deleted.
 

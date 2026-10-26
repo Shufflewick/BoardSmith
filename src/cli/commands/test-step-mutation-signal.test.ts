@@ -45,7 +45,7 @@ if (process.env.CHECK_KIND === 'scopes') {
     writeFileSync(join(projectDir, 'proof.json'), JSON.stringify([existsSync(outer), existsSync(inner)]));
   }), () => writeFileSync(join(projectDir, 'sync-stopped'), 'stopped'));
 } else {
-  const input = { projectDir, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {} };
+  const input = { projectDir, seed: 'fixture', added: new Map([['src/rules.ts', new Set([1])]]), log: () => {} };
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
@@ -149,6 +149,7 @@ async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> 
   const guard = setTimeout(() => vi.runAllTimers(), 90_000);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   const running = runDiffMutationCheck({
+    seed: 'fixture',
     projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
     cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
   });

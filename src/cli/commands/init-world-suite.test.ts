@@ -26,7 +26,7 @@ describe('boardsmith init --world — the scaffolded suite (#456)', () => {
     const test = await spawnCli(['test', 'tests/world.test.ts'], dir);
     expect(test.stdout + test.stderr).not.toMatch(/×|FAIL/);
     // It ran the scaffold's tests rather than finding none to run.
-    expect(test.stdout).toMatch(/Tests\s+6 passed \(6\)/);
+    expect(test.stdout).toMatch(/Tests\s+7 passed \(7\)/);
     expect(test.code).toBe(0);
   });
 

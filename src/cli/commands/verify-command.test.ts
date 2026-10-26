@@ -28,7 +28,7 @@ describe('the boardsmith verify command, as a user runs it', () => {
     expect(after.stdout).toMatch(/passed `boardsmith verify` on a clean tree/);
   });
 
-  it('runs all six real checks, writes the result and exits non-zero when one fails', async () => {
+  it('runs all seven real checks, writes the result and exits non-zero when one fails', async () => {
     // The fixture has a page but no app, rules entry or smoke test, so the real build, validate and
     // smoke fail; the run still goes on through every check rather than stopping at the first
     // failure. (With none of the UI files, build and smoke would be skipped instead, #556.)
@@ -43,6 +43,7 @@ describe('the boardsmith verify command, as a user runs it', () => {
       ['build', false],
       ['validate', false],
       ['smoke', false],
+      ['verbs', true],
       ['mutation', true],
     ]);
     expect(check(result, 'build').next).toBe('Run `boardsmith build` to see why.');

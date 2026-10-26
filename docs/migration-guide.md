@@ -1,5 +1,17 @@
 # Migration Guide
 
+## `boardsmith verify` checks every verb, and samples its mutants (#1486)
+
+`boardsmith verify` has a new `verbs` check, before `mutation`: every verb the
+game defines must be dispatched through the engine by some test file, as the
+chunk test step already asked of each chunk's verbs. If it names a verb, add a
+test that runs it with `testGame.doAction(seat, '<verb>')` or another engine
+entry point. The mutation check now tries a sample of at most 30 mutants of the
+changed lines, picked by the commit, instead of every one; the chunk test
+step's mutation check does the same. A verify result recorded before this
+change has no `verbs` check, so `boardsmith publish` refuses it: run
+`boardsmith verify` again.
+
 ## A test harness provides its wiring with `provideTableActionWiring` (#1462)
 
 `useTableActionWiring` now returns `provisions` in place of `actionHolds`, and

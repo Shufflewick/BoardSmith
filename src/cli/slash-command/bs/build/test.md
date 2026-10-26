@@ -92,9 +92,11 @@ here.
          provides, by hand, a key only one of the two shells provides (`GAME_CONTEXT_KEYS.gameState`,
          `dueSeats`, `timeTravelDiff`, `turnDeadline`, `ANIMATION_EVENTS_KEY`, `WORLD_CONTEXT_KEY`) is a finding: a board reading it passes the test and throws in the
          other shell. Mount with `renderAsSeat`, `tableShellContext` or `worldShellContext`.
-       - **Mutation: every claim and every test can fail.** The command makes one small change at a
-         time to the lines this chunk added (a flipped comparison, a negated condition, a removed
-         statement, a return value replaced) and runs the chunk's test files against each. In a
+       - **Mutation: every claim and every test can fail.** The command makes small changes to the
+         lines this chunk added (a flipped comparison, a negated condition, a removed statement, a
+         return value replaced), tries a sample of at most 30 of them one at a time, picked with the
+         HEAD commit as seed so a re-run of it tries the same ones, and runs the chunk's test files
+         against each. In a
          `.vue` component that is its `<script>` blocks and the expressions of its template bindings,
          conditions and interpolations; event handlers and loops are not mutated. A test
          that survives every mutant asserts nothing the chunk's code controls, and a claim none of
