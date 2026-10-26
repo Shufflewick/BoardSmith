@@ -92,7 +92,8 @@ world has committed: `partitions` (`{ name, parentId, json }`, by name),
 `scheduled` (the pending events in due order), `seats` (`{ player, seat }`) and
 `meta` (the meta table as `{ key: value }`, `nextElementId` included). It reads
 saved rows, not a command still running, and it has no write path: anything but
-`GET` is refused with 405, and a request from another site's page with 403.
+`GET` is refused with 405, and a request whose `Origin` names another site with
+403.
 
 Updating BoardSmith does not erase it either. The local store stamps the layout
 it was written under, and an open that finds an older layout this BoardSmith

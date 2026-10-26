@@ -501,7 +501,12 @@ async function openWorld(
     seatCount: first.seatCount,
     storePath: first.storePath,
     launchedBefore: first.launchedBefore,
-    read: () => call<'read', WorldCommitted>(running, 'read', undefined),
+    // Through the queue, like a page's command, so a read during a reload waits for the reopened world.
+    read: async () => {
+      let committed: WorldCommitted | undefined;
+      await queue.admit({ run: async () => void (committed = await call<'read', WorldCommitted>(running, 'read', undefined)) });
+      return committed!;
+    },
     // Closing twice is closing once, as `LocalWorldHost.close` is (#197).
     close: () =>
       (closed ??= (async () => {
