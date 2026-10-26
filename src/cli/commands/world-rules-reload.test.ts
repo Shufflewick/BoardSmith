@@ -338,3 +338,31 @@ describe('#1040: a second run started during a reload', () => {
     takeWorldLock(worldStorePath(cwd)).release();
   }, 30_000);
 });
+
+type WorldRun = Awaited<ReturnType<typeof openWorldRun>>;
+
+describe('#1490: reading the world while its rules reload', () => {
+  it('waits for the reload and reads the reopened world, not the closed one', async () => {
+    let readDuringReload: ReturnType<WorldRun['read']> | undefined;
+    const run: WorldRun = await openWorldRun({
+      cwd: tempTree('bs-world-rules-reload-run-'),
+      displayName: 'Camp',
+      port: 5173,
+      runtime: await beforeEdit(),
+      reloadRules: async () => {
+        const rules = await afterEdit();
+        // Read the moment the new rules open the world, when the old rules have already closed it.
+        const call = <T,>(type: string, payload?: unknown): Promise<T> => {
+          if (type === 'open') readDuringReload = run.read();
+          return rules.worker.call<T>(type, payload);
+        };
+        return { ...rules, worker: Object.create(rules.worker, { call: { value: call } }) as typeof rules.worker };
+      },
+    });
+    closing.push(() => run.close());
+
+    await run.queue.saved('src/rules/index.ts');
+
+    expect((await readDuringReload!).partitions.map((partition) => partition.name)).toEqual(['fire']);
+  }, 30_000);
+});

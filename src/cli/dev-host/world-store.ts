@@ -243,6 +243,16 @@ export interface LocalWorldStore extends WorldStore {
   untellPresent(seat: number): void;
   /** Still told present, and this is when its last socket went. */
   stampPresenceClosedAt(seat: number, closedAt: number): void;
+  /** Every committed partition, the schedule in due order, the seats and the meta table, for `boardsmith dev`'s read endpoint (#1490). */
+  committed(): WorldCommitted;
+}
+
+/** What a world has committed, as a script outside the run reads it (#1490). */
+export interface WorldCommitted {
+  readonly partitions: readonly { readonly name: string; readonly parentId: number; readonly json: unknown }[];
+  readonly scheduled: readonly PlannedEvent[];
+  readonly seats: readonly WorldSeatRecord[];
+  readonly meta: Readonly<Record<string, string>>;
 }
 
 /**
@@ -300,6 +310,7 @@ export function openWorldStore(
     knownParent: db.prepare('SELECT parent_id FROM partitions WHERE name = ?'),
     listDirty: db.prepare('SELECT name FROM dirty ORDER BY name'),
     listPartitions: db.prepare('SELECT name FROM partitions ORDER BY name'),
+    listPartitionRows: db.prepare('SELECT name, parent_id, json FROM partitions ORDER BY name'),
     readReceipt: db.prepare(
       'SELECT player, order_id, at, message FROM receipts WHERE player = ? AND order_id = ?',
     ),
@@ -382,6 +393,7 @@ export function openWorldStore(
     ),
     deleteNoticeBox: db.prepare('DELETE FROM notice_boxes WHERE seat = ?'),
     readMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
+    listMeta: db.prepare('SELECT key, value FROM meta ORDER BY key'),
     writeMeta: db.prepare(
       'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
     ),
@@ -666,6 +678,17 @@ export function openWorldStore(
 
     partitionNames(): readonly string[] {
       return (stmt.listPartitions.all() as Array<{ name: string }>).map((row) => row.name);
+    },
+
+    committed(): WorldCommitted {
+      const rows = stmt.listPartitionRows.all() as Array<{ name: string; parent_id: number; json: string }>;
+      const metaRows = stmt.listMeta.all() as Array<{ key: string; value: string }>;
+      return {
+        partitions: rows.map((row) => ({ name: row.name, parentId: row.parent_id, json: JSON.parse(row.json) as unknown })),
+        scheduled: (stmt.listEvents.all() as EventRow[]).map(plannedEvent),
+        seats: stmt.listSeats.all() as WorldSeatRecord[],
+        meta: Object.fromEntries(metaRows.map((row) => [row.key, row.value])),
+      };
     },
 
     stateVersion(): number {
