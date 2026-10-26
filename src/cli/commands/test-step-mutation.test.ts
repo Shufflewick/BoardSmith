@@ -331,12 +331,11 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     const path = 'tests/child.test.ts';
     const source = `import { it, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
 import { v } from '../${b.replace(/\.ts$/, '')}';
-const url = pathToFileURL(new URL('../${a}', import.meta.url).pathname).href;
+const url = new URL('../${a}', import.meta.url).href;
 it('claim 1 — both values', () => {
   expect(v).toBe(${b.match(/\d+/)![0]});
-  const out = execFileSync(process.execPath, ['--input-type=module', '-e', \`const { v } = await import('\${url}'); process.stdout.write(String(v));\`], { encoding: 'utf-8' });
+  const out = execFileSync(process.execPath, ['--experimental-strip-types', '--input-type=module', '-e', \`const { v } = await import('\${url}'); process.stdout.write(String(v));\`], { encoding: 'utf-8' });
   expect(out).toBe('${a.match(/\d+/)![0]}');
 });
 `;
