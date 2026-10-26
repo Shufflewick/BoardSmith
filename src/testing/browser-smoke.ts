@@ -60,9 +60,11 @@ import {
   numberToEnter,
   pageControls,
   pageDialogs,
+  pointerTookIt,
   PRESS_MARK,
   type PageControl,
   type Reached,
+  watchThePointer,
 } from './browser-smoke-page.js';
 import {
   answered,
@@ -720,11 +722,12 @@ function visibleMatches(frame: Frame, selector: string, within?: Locator): Locat
 /** How many controls the walk has marked to press (`stillThere`), so each mark is its own. */
 let pressMarks = 0;
 
-/** Takes the walk's press marks off the page again, so the game's page is left as the game drew it. */
+/** Takes the walk's press marks and its pointer watch off the page again, so the game's page is left as the game drew it. */
 async function unmark(frame: Frame): Promise<void> {
   await inPageTime(frame.page(), "taking the walk's marks off the page", () =>
     frame.locator(`[${PRESS_MARK}]`).evaluateAll((marked, name) => marked.forEach((element) => element.removeAttribute(name)), PRESS_MARK),
   );
+  await inPageTime(frame.page(), "taking the walk's pointer watch off the page", () => frame.evaluate(pointerTookIt));
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -774,12 +777,12 @@ function toastOnTop(error: unknown): unknown {
  * that does not land, because the control went away, something covers it or it never becomes
  * pressable, is reported and the walk goes on. So is one that replaced the game's page, taking the
  * frame the walk pressed in away with whatever the press did: the walk goes on in the frame the
- * page shows next. With `wentByItself`, a control already gone at the first look, before the walk
- * pointed at it, is the caller's to handle (#1475), and is not reported. Returns whether the press landed.
+ * page shows next. With `wentByItself`, a control that went away by itself, not taken away by the
+ * pointer reaching it (`watchThePointer`, #464), is the caller's to handle (#1475, #1483), and is not
+ * reported. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<boolean> {
   const replaced = `Pressing ${what} replaced the game's page, so the walk could not see what the press did.`;
-  let pointed = false;
   // A page that redraws the control as a new element mid-press takes away the element marked for
   // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
   // the walk finds the control again and presses that, for PRESS_MS in all. What was on top when
@@ -788,7 +791,6 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     const over = stopwatch(control.frame.page());
     for (;;) {
       const now = await stillThere(control);
-      pointed = true;
       try {
         return await pressOnce(now);
       } catch (error) {
@@ -813,7 +815,7 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     }
   } catch (error) {
     if (error instanceof PageFrozen) throw error;
-    if (handedBack(error, pointed, wentByItself)) return false;
+    if (await handedBack(error, control.frame, wentByItself)) return false;
     noteIn(control.frame.page(), walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   } finally {
@@ -828,11 +830,12 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
 }
 
 /**
- * Hands a press that failed because its control was gone at the first look, before the walk pointed
- * at it (`pointed`), to `wentByItself`, when there is one (#1475). Returns whether it did.
+ * Hands a press that failed because its control went away, when the pointer reaching it did not take
+ * it away (`pointerTookIt`), to `wentByItself`, when there is one (#1475, #1483). Returns whether it did.
  */
-function handedBack(error: unknown, pointed: boolean, wentByItself: (() => void) | undefined): boolean {
-  if (wentByItself === undefined || pointed || !(error instanceof Error) || error.message !== GONE) return false;
+async function handedBack(error: unknown, frame: Frame, wentByItself: (() => void) | undefined): Promise<boolean> {
+  if (wentByItself === undefined || frame.isDetached() || !(error instanceof Error) || error.message !== GONE) return false;
+  if (await inPageTime(frame.page(), 'reading whether the pointer took the control away', () => frame.evaluate(pointerTookIt))) return false;
   wentByItself();
   return true;
 }
@@ -959,6 +962,7 @@ async function pointAt(control: Control, x: number, y: number): Promise<{ x: num
   if (top !== 'it') return top;
   const at = await placeOf(control, x, y);
   const page = control.frame.page();
+  await inPageTime(page, 'watching the pointer', () => control.target.evaluate(watchThePointer, undefined, { timeout: LOOK_MS }));
   await inPageTime(page, 'pointing at the control', () => page.mouse.move(at.x, at.y));
   return at;
 }
@@ -1101,13 +1105,13 @@ async function aimAndClick(control: Control): Promise<void> {
  * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
  * moment before. A panel redrawing its buttons has none for a moment, so one not there is looked for
  * again until it comes back; one still gone after {@link PRESS_MS} is reported, not skipped: the
- * panel took back what it offered.
+ * panel took back what it offered. `wentByItself` is `press`'s.
  */
-async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<boolean> {
   const over = stopwatch(frame.page());
   for (;;) {
     const [control] = await controlsOf(frame, selector);
-    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory);
+    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory, wentByItself);
     if (over(PRESS_MS)) break;
     await frame.waitForTimeout(100);
   }
@@ -1418,14 +1422,32 @@ async function pressABoardControl(
   return landed;
 }
 
-/** How many times a board control may go away by itself before the walk can point at it, before that is reported (#1475). */
+/** How many times a control may go away by itself as the walk goes to press it, before that is reported (#1475). */
 const WENT_AWAY_TIMES = 3;
 
 /**
- * Presses one board control the walk has not pressed yet, other than those in `leadsControls`.
- * One the game took away by itself before the walk could point at it, as a real-time game's clock
- * does, is said and left untried, so it is pressed when it shows again; one that goes so
- * {@link WENT_AWAY_TIMES} times is reported (#1475). Returns false when every one was pressed.
+ * `press`'s `wentByItself` for the control known as `key`, named `name`: a control the game took
+ * away by itself, as a real-time game's clock does, is said and left to `pressAgain`, so it is
+ * pressed when it shows again; one that goes so {@link WENT_AWAY_TIMES} times in a row, with no press
+ * of it landing in between, is reported (#1475, #1483).
+ */
+function goneByItself(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number, key: string, name: string, pressAgain: () => void): () => void {
+  return () => {
+    const times = (memory.wentAway.get(key) ?? 0) + 1;
+    memory.wentAway.set(key, times);
+    if (times >= WENT_AWAY_TIMES) {
+      noteIn(frame.page(), walk, `Pressing ${name} did not work: it went away by itself each of the ${WENT_AWAY_TIMES} times the walk went to press it.`);
+      return;
+    }
+    pressAgain();
+    narrate(step, `${name} went away by itself before the press landed, so the walk presses it when it shows again`);
+  };
+}
+
+/**
+ * Presses one board control the walk has not pressed yet, other than those in `leadsControls`. One
+ * the game took away by itself is pressed again when it shows (`goneByItself`). Returns false when
+ * every one was pressed.
  */
 async function pressAnUntriedControl(
   play: SeatPlay,
@@ -1440,17 +1462,8 @@ async function pressAnUntriedControl(
     memory.pressed.add(control.key);
     play.boardPress = control.key;
     const name = `the board's "${nameOf(control)}"`;
-    const wentByItself = () => {
-      const times = (memory.wentAway.get(control.key) ?? 0) + 1;
-      memory.wentAway.set(control.key, times);
-      if (times >= WENT_AWAY_TIMES) {
-        noteIn(frame.page(), walk, `Pressing ${name} did not work: it went away by itself each of the ${times} times the walk went to press it.`);
-        return;
-      }
-      memory.pressed.delete(control.key);
-      narrate(step, `${name} went away by itself before the walk could point at it, so the walk presses it when it shows again`);
-    };
-    await pressABoardControl(control, name, walk, memory, step, { wentByItself });
+    const wentByItself = goneByItself(frame, walk, memory, step, control.key, name, () => memory.pressed.delete(control.key));
+    if (await pressABoardControl(control, name, walk, memory, step, { wentByItself })) memory.wentAway.delete(control.key);
     return true;
   }
   return false;
@@ -1689,7 +1702,7 @@ interface WalkMemory extends ResolvedMemory {
   readonly closers: Set<string>;
   /** How many times the walk has opened a dialog again to reach each of its controls. */
   readonly reopened: Map<string, number>;
-  /** How many times each board control went away by itself before the walk could point at it (#1475). */
+  /** How many times in a row each board control, by key, and panel action button, by selector, went away by itself (#1475, #1483). */
   readonly wentAway: Map<string, number>;
   /** The actions put off for want of an input (#470), with how many actions had been taken then. */
   readonly putOff: Map<string, number>;
@@ -1747,7 +1760,11 @@ async function pressWhatThePanelOffers(
   return true;
 }
 
-/** Presses the panel's button for the action `name` in `play`'s browser, saying so (`said`, else "taking" it). */
+/**
+ * Presses the panel's button for the action `name` in `play`'s browser, saying so (`said`, else
+ * "taking" it). A button the game took away by itself leaves the action untaken, so it is taken at
+ * a later step (`goneByItself`, #1483).
+ */
 async function takeAction(
   play: SeatPlay,
   frame: Frame,
@@ -1760,7 +1777,9 @@ async function takeAction(
   memory.times.set(name, (memory.times.get(name) ?? 0) + 1);
   play.took = { name, step };
   narrate(step, said);
-  await pressThePanels(frame, `[data-bs-action=${JSON.stringify(name)}]`, `"${name}"`, walk, memory);
+  const selector = `[data-bs-action=${JSON.stringify(name)}]`;
+  const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
+  if (await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself)) memory.wentAway.delete(selector);
 }
 
 /**

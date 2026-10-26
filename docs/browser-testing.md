@@ -436,10 +436,12 @@ markers this page documents, so it keeps up with any game without knowing it:
   "Game restarted" after a deal (#478). A
   control or panel button a redraw takes away for a moment is looked for again
   until it comes back; one still gone after 5 seconds is reported. A board
-  control the game took away by itself before the walk pointed at it, as a
-  real-time game's clock does, is not: the walk says so and presses it the next
-  time it shows. One that goes away by itself each of 3 times the walk goes to
-  press it is reported (#1475). A control the
+  control or panel action button the game took away by itself, as a real-time
+  game's clock does, is not, even when it went just after the pointer reached
+  it: the walk says so and presses it the next time it shows. One that goes away
+  by itself each of 3 times the walk goes to press it is reported (#1475,
+  #1483). A board control taken away by the pointer reaching it, by the game's
+  own pointer handlers, is reported at once (#464). A control the
   walk can only see by scrolling it out from under a bar fixed along the edge of
   the page (the action panel) is scrolled to the middle, the top or the bottom
   until it shows.
