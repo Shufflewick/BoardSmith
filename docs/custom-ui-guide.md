@@ -1314,10 +1314,10 @@ board:
   rather than growing over the board. So a board that fits itself above the
   strip is never covered, at rest or mid-pick. The one exception is a typed
   editor (a text or number pick): while it is open the panel may grow over the
-  bottom of the board. A one-line or number field may grow it by one row and
-  no more, at every size: that is the row it needs on a phone, where its label
-  and hint stack above the field and submit, and anything taller, such as a
-  refusal message, scrolls inside the panel. A multi-line text box
+  bottom of the board. A one-line or number field may grow it to what the
+  field needs, bounded at 60% of the screen's height: on a phone its label and
+  hint stack above the field and submit, under any earlier choices, and a long
+  prompt or a refusal message adds lines. A multi-line text box
   (`multiline: true`) may grow it to what the box needs, bounded at 60% of the
   screen's height: six lines of text plus the action, the field's label, the
   count and the submit. On a short screen the
