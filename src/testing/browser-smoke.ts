@@ -586,14 +586,9 @@ async function takeWorldSeat(page: Page, seat: number): Promise<void> {
  * Waits until the panel has sent the action in flight, if any, and has its offers, and the page has
  * painted what the last press changed. While an action is in flight the panel greys every button
  * (`data-bs-submitting`), and a world's offers arrive after it in a frame of their own: read in
- * between, the panel would seem to offer nothing (#474). A collapsed action bar holds the panel's
- * buttons out of the page, so the walk opens it as a player does (#1482).
+ * between, the panel would seem to offer nothing (#474).
  */
 async function settle(frame: Frame): Promise<void> {
-  const collapsedBar = frame.locator('[data-testid="bs-actionbar-toggle"][aria-expanded="false"]');
-  if (await inPageTime(frame.page(), 'looking for a collapsed action bar', () => collapsedBar.isVisible())) {
-    await actWithinPageTime(frame.page(), PRESS_MS, 'opening the collapsed action bar', (timeout) => collapsedBar.click({ timeout }));
-  }
   await withinPageTime(frame.page(), TURN_WAIT_MS, 'waiting for the panel to send the last action', (timeout) => frame.locator('[data-bs-submitting]').waitFor({ state: 'detached', timeout })).catch(
     saying(`The panel was still sending the last action after ${TURN_WAIT_MS / 1000}s.`),
   );
@@ -1882,11 +1877,22 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
   if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator(GAME_OVER).isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
+  await openACollapsedBar(frame);
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
+}
+
+/**
+ * Opens the action bar with its toggle when it is collapsed, since that holds the panel's buttons out
+ * of the page (#1482). Read and pressed in one look: the bar also opens by itself when an action starts.
+ */
+async function openACollapsedBar(frame: Frame): Promise<void> {
+  await inPageTime(frame.page(), 'opening a collapsed action bar', () =>
+    frame.evaluate(() => document.querySelector<HTMLElement>('[data-testid="bs-actionbar-toggle"][aria-expanded="false"]')?.click()),
+  );
 }
 
 /** The board controls a world seat after the first leaves to the first seat (#471): one may take it away. None for the first seat. */
