@@ -1,5 +1,5 @@
 {
-  "revision": 273,
+  "revision": 274,
   "surfaceHash": "81dea030f8a62315",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2127,6 +2127,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "World createPartition now refuses with invalid-partition-root, naming it, a top-level element it created and did not return (including when it answers undefined), and takes what the call created back out of the game first, so nothing unstored stays readable and asking again refuses again, instead of keeping the element resident and unstored. A world bundle whose createPartition did this must build the element inside the root it returns or stop creating it."
+    },
+    {
+      "revision": 274,
+      "date": "2026-10-26",
+      "surfaceHash": "81dea030f8a62315",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "No contract change; this build carries code since r273. Action bar: a one-line or number field now grows the bar to what it needs, bounded at 60% of the screen's height, instead of by one row, so an earlier choice's chips or a wrapped prompt no longer push the field and Done off a phone screen (#1481). Browser smoke walk: it opens an action bar a game starts collapsed instead of reporting a stall (#1482), and it retries a board control or panel button a game's clock takes away, reporting at once only one the pointer itself took away (#1483)."
     }
   ]
 }
