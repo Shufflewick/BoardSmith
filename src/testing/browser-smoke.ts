@@ -1435,7 +1435,7 @@ function goneByItself(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: n
     const times = (memory.wentAway.get(key) ?? 0) + 1;
     memory.wentAway.set(key, times);
     if (times >= WENT_AWAY_TIMES) {
-      noteIn(frame.page(), walk, `Pressing ${name} did not work: it went away by itself each of the ${times} times the walk went to press it.`);
+      noteIn(frame.page(), walk, `Pressing ${name} did not work: it went away by itself each of the ${WENT_AWAY_TIMES} times the walk went to press it.`);
       return;
     }
     pressAgain();
