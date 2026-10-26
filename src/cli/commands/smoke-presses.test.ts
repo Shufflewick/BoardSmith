@@ -36,6 +36,16 @@ describe('boardsmith verify: the smoke check', () => {
     );
   });
 
+  it('#1483 review: a control the pointer hides when it reaches it, leaving it on the page, fails that press at once, saying so', async () => {
+    const { outcome } = await smokeOf(false, boardWithAVanishingControl({ hides: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
+        'went away before the press landed.',
+    );
+  });
+
   it('#1475: a board control the game takes away by itself before the walk points at it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl());
 
@@ -62,6 +72,19 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(steps).toContain('smoke step 1: the panel\'s "draw" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1483 review: a panel button the game takes away by itself now and then, with the action taken in between, is not reported', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...panelThatGoesAwayAsItIsPressed({ everyOther: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 22 }),
+    });
+
+    // Without the third time, this test would not reach the count that reports a button.
+    expect(steps.filter((line) => line.includes('the panel\'s "draw" went away by itself'))).toHaveLength(3);
+    expect(outcome.summary).not.toContain('went away');
     expect(outcome.passed).toBe(true);
   });
 

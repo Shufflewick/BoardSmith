@@ -1428,7 +1428,8 @@ const WENT_AWAY_TIMES = 3;
 /**
  * `press`'s `wentByItself` for the control known as `key`, named `name`: a control the game took
  * away by itself, as a real-time game's clock does, is said and left to `pressAgain`, so it is
- * pressed when it shows again; one that goes so {@link WENT_AWAY_TIMES} times is reported (#1475, #1483).
+ * pressed when it shows again; one that goes so {@link WENT_AWAY_TIMES} times in a row, with no press
+ * of it landing in between, is reported (#1475, #1483).
  */
 function goneByItself(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number, key: string, name: string, pressAgain: () => void): () => void {
   return () => {
@@ -1462,7 +1463,7 @@ async function pressAnUntriedControl(
     play.boardPress = control.key;
     const name = `the board's "${nameOf(control)}"`;
     const wentByItself = goneByItself(frame, walk, memory, step, control.key, name, () => memory.pressed.delete(control.key));
-    await pressABoardControl(control, name, walk, memory, step, { wentByItself });
+    if (await pressABoardControl(control, name, walk, memory, step, { wentByItself })) memory.wentAway.delete(control.key);
     return true;
   }
   return false;
@@ -1701,7 +1702,7 @@ interface WalkMemory extends ResolvedMemory {
   readonly closers: Set<string>;
   /** How many times the walk has opened a dialog again to reach each of its controls. */
   readonly reopened: Map<string, number>;
-  /** How many times each board control, by key, and panel action button, by selector, went away by itself (#1475, #1483). */
+  /** How many times in a row each board control, by key, and panel action button, by selector, went away by itself (#1475, #1483). */
   readonly wentAway: Map<string, number>;
   /** The actions put off for want of an input (#470), with how many actions had been taken then. */
   readonly putOff: Map<string, number>;
@@ -1778,7 +1779,7 @@ async function takeAction(
   narrate(step, said);
   const selector = `[data-bs-action=${JSON.stringify(name)}]`;
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
-  await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself);
+  if (await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself)) memory.wentAway.delete(selector);
 }
 
 /**

@@ -494,9 +494,13 @@ onUnmounted(() => {
 
 /**
  * A BOARD CONTROL THAT GOES AWAY WHEN THE POINTER REACHES IT (#464): "Shy button" leaves the board
- * the moment the pointer is over it, so a press never lands and the element is gone for good.
+ * the moment the pointer is over it, so a press never lands and the element is gone for good. With
+ * `hides`, it stays on the page as `visibility: hidden` instead (#1483 review).
  */
-export function boardWithAVanishingControl(): Record<string, string> {
+export function boardWithAVanishingControl(options: { hides?: boolean } = {}): Record<string, string> {
+  const button = options.hides
+    ? `<button type="button" :style="gone ? 'visibility: hidden' : ''" @pointerenter="gone = true">Shy button</button>`
+    : `<button v-if="!gone" type="button" @pointerenter="gone = true">Shy button</button>`;
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { ref } from 'vue';
@@ -506,7 +510,7 @@ const gone = ref(false);
 
 <template>
   <div class="board">
-    <button v-if="!gone" type="button" @pointerenter="gone = true">Shy button</button>
+    ${button}
   </div>
 </template>
 
@@ -1230,26 +1234,38 @@ onUnmounted(() => watcher.disconnect());
  * the panel's action buttons to press it, the page hides every action button for 7 seconds, longer
  * than a press looks for its control, as a game that swaps the panel's actions for an action it
  * opens by itself does. They come back by themselves, so the action can be taken at a later step.
+ * With `everyOther`, it does so the first, third and fifth time the walk marks the "draw" button, so
+ * "draw" is taken between each of those times, and each mark adds a board control ("Noted N"),
+ * which keeps the walk going until it has marked "draw" five times (#1483 review).
  */
-export function panelThatGoesAwayAsItIsPressed(): Record<string, string> {
+export function panelThatGoesAwayAsItIsPressed(options: { everyOther?: boolean } = {}): Record<string, string> {
+  const marked = options.everyOther ? `[data-bs-action="draw"]` : `[data-bs-action]`;
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue';
+import { onMounted, onUnmounted, ref } from 'vue';
 
-let hidden = false;
-const watcher = new MutationObserver(() => {
-  if (hidden || document.querySelector('[data-bs-action][${PRESS_MARK}]') === null) return;
-  hidden = true;
+const everyOther = ${options.everyOther === true};
+let marks = 0;
+const noted = ref(0);
+// A press marks its button once, and may mark it again while it looks for it, so only a button newly marked counts.
+const watcher = new MutationObserver((changes) => {
+  if (!changes.some((change) => change.oldValue === null && (change.target as Element).matches('${marked}[${PRESS_MARK}]'))) return;
+  marks++;
+  if (everyOther) noted.value++;
+  if (everyOther ? marks % 2 === 0 || marks > 5 : marks > 1) return;
   const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
   for (const button of buttons) button.style.display = 'none';
   setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 7000);
 });
-onMounted(() => watcher.observe(document.body, { subtree: true, attributes: true, attributeFilter: ['${PRESS_MARK}'] }));
+onMounted(() => watcher.observe(document.body, { subtree: true, attributes: true, attributeOldValue: true, attributeFilter: ['${PRESS_MARK}'] }));
 onUnmounted(() => watcher.disconnect());
 </script>
 
 <template>
-  <div class="board">A board</div>
+  <div class="board">
+    A board
+    <button v-for="n in noted" :key="n" type="button">Noted {{ n }}</button>
+  </div>
 </template>
 
 <style scoped>
