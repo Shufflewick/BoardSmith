@@ -12,7 +12,7 @@ import type { WorldMigrationOutcome } from '../../world/host/index.js';
 import { serveRules } from './rules-worker.js';
 import { LocalWorldHost, type WorldDevRequest } from './world-host.js';
 import { toWireJson } from './wire-json.js';
-import { openWorldStore } from './world-store.js';
+import { openWorldStore, type WorldCommitted } from './world-store.js';
 
 /** What the host reads of a world's `gameDefinition`. */
 export interface WorldFacts {
@@ -32,6 +32,8 @@ export interface WorldCalls {
   pages: readonly string[];
   /** Run the work held under `id`, which the host's reload queue has let through. */
   runHeld: number;
+  /** What the world has committed (#1490). */
+  read: undefined;
 }
 
 /** What an `open` answers. */
@@ -123,6 +125,7 @@ export function serveWorld(rules: GameDefinition | undefined): void {
       pages(pages) {
         open = new Set(pages);
       },
+      read: (): WorldCommitted => world().committed(),
       async runHeld(id) {
         const work = held.get(id);
         held.delete(id);

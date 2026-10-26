@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 
 import { styleText } from 'node:util';
 import open from 'open';
-import type { Plugin as VitePlugin } from 'vite';
+import type { Plugin as VitePlugin, ViteDevServer } from 'vite';
 
 import { worldBudgets } from '../../world/index.js';
 import type { WorldMigrationOutcome } from '../../world/host/index.js';
@@ -44,7 +44,7 @@ import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules
 import { startRulesWorker, type RulesWorker } from '../dev-host/rules-worker.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import type { OpenedWorld, WorldCalls, WorldEvent, WorldFacts } from '../dev-host/world-rules-worker.js';
-import { takeWorldLock, worldStorePath, type WorldLock } from '../dev-host/world-store.js';
+import { takeWorldLock, worldStorePath, type WorldCommitted, type WorldLock } from '../dev-host/world-store.js';
 import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
@@ -53,8 +53,10 @@ import {
   claimWebSocketPath,
   answerAlive,
   devNotFoundMiddleware,
+  fromOurOwnPage,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
+  requestPath,
   resolveDevHostDir,
   serveDevDocuments,
   serveVite,
@@ -77,6 +79,9 @@ export const WORLD_IFRAME_PATH = '/__boardsmith-world';
  *  table host's `/__boardsmith/ws`, so a table client and a world host can
  *  never half-consume each other's frames. */
 export const WORLD_WS_PATH = '/__boardsmith/world';
+
+/** Where a script reads the world's committed state, since the run holds `world.db` exclusively (#1490). */
+export const WORLD_READ_PATH = '/__boardsmith/world/read';
 
 /** The lines `boardsmith dev` prints before a world starts. Returned rather
  *  than printed so their wording is testable. */
@@ -111,6 +116,7 @@ function boardsmithWorldDevPlugin(args: {
   uiPath: string;
   surfacePath: string;
   config: WorldDevConfig;
+  read: () => Promise<WorldCommitted>;
 }): VitePlugin {
   const VIRTUAL_CONFIG = 'virtual:boardsmith-world-dev-config';
   const RESOLVED_CONFIG = '\0' + VIRTUAL_CONFIG;
@@ -152,15 +158,53 @@ function boardsmithWorldDevPlugin(args: {
         );
       });
 
-      return devNotFoundMiddleware(
+      const notFound = devNotFoundMiddleware(
         server,
         () =>
           `This is a persistent-world run. The world's own surface is ${WORLD_IFRAME_PATH}; ` +
           `game assets live in the project's public/ directory and are served from the site ` +
           `root, so public/cards/x.png is /cards/x.png.\n`,
       );
+      // After Vite's own middlewares, so its DNS-rebinding host check runs first.
+      return () => {
+        answerWorldRead(server, args.read);
+        notFound();
+      };
     },
   };
+}
+
+/**
+ * THE WORLD'S COMMITTED STATE, FOR A SCRIPT (#1490). The run holds `world.db`
+ * exclusively, so a script that opens it meets "database is locked"; it asks
+ * here instead. Read only: there is no write path, and nothing but GET is answered.
+ */
+export function answerWorldRead(server: ViteDevServer, read: () => Promise<WorldCommitted>): void {
+  server.middlewares.use(async (req, res, next) => {
+    if (requestPath(req) !== WORLD_READ_PATH) return next();
+    const answer = (status: number, type: string, body: string) => {
+      res.statusCode = status;
+      res.setHeader('Content-Type', type);
+      res.end(body);
+    };
+    if (req.method !== 'GET') {
+      res.setHeader('Allow', 'GET');
+      return answer(405, 'text/plain; charset=utf-8',
+        `boardsmith dev: ${WORLD_READ_PATH} only answers GET. It reads the world and never changes it; ` +
+          'change the world through its actions.\n');
+    }
+    if (!fromOurOwnPage(req)) {
+      return answer(403, 'text/plain; charset=utf-8',
+        `boardsmith dev: ${WORLD_READ_PATH} only answers pages served by this boardsmith dev, ` +
+          'and scripts that send no Origin header.\n');
+    }
+    try {
+      answer(200, 'application/json', JSON.stringify(await read()));
+    } catch (error) {
+      answer(503, 'text/plain; charset=utf-8',
+        `boardsmith dev could not read the world: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+  });
 }
 
 /**
@@ -269,6 +313,8 @@ interface WorldRun {
   readonly storePath: string;
   /** Whether this world had already run genesis before this run opened it. */
   readonly launchedBefore: boolean;
+  /** What the world has committed, read from the worker it runs in now. */
+  read(): Promise<WorldCommitted>;
   /**
    * Close the world. `close` drains the world lock before it touches the
    * store, so an in-flight disconnect or command is finished rather than
@@ -455,6 +501,7 @@ async function openWorld(
     seatCount: first.seatCount,
     storePath: first.storePath,
     launchedBefore: first.launchedBefore,
+    read: () => call<'read', WorldCommitted>(running, 'read', undefined),
     // Closing twice is closing once, as `LocalWorldHost.close` is (#197).
     close: () =>
       (closed ??= (async () => {
@@ -566,6 +613,7 @@ export async function startWorldDevServer(
       uiPath: options.uiPath,
       surfacePath,
       config,
+      read: () => run.read(),
     }),
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());

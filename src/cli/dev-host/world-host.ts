@@ -48,7 +48,7 @@ import {
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { heldClock } from './rules-reload-queue.js';
-import type { LocalWorldStore } from './world-store.js';
+import type { LocalWorldStore, WorldCommitted } from './world-store.js';
 
 /**
  * WHO A DEV SEAT IS. The durable roster's naming, which outlives this process
@@ -884,6 +884,11 @@ export class LocalWorldHost {
         events: mine.map(({ seats: _audience, ...narration }) => narration),
       });
     }
+  }
+
+  /** What this world's store has committed, for `boardsmith dev`'s read endpoint (#1490). */
+  committed(): WorldCommitted {
+    return this.#store.committed();
   }
 
   #notice(clientId: string, error: unknown): void {

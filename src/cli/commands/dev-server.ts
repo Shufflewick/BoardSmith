@@ -173,7 +173,7 @@ function namedHosts({ server, preview }: ResolvedConfig): string[] {
  * A browser page may open a socket to any host, so a page we did not serve must not reach ours
  * (#719). Browsers always send `Origin`; a client that sends none is not a web page.
  */
-function fromOurOwnPage(req: IncomingMessage): boolean {
+export function fromOurOwnPage(req: IncomingMessage): boolean {
   const origin = req.headers.origin;
   if (origin === undefined) return true;
   try {
@@ -184,7 +184,7 @@ function fromOurOwnPage(req: IncomingMessage): boolean {
 }
 
 /** The path part of a request, with any query string dropped. */
-function requestPath(req: Connect.IncomingMessage): string {
+export function requestPath(req: Connect.IncomingMessage): string {
   return (req.url ?? '/').split('?')[0]!;
 }
 
