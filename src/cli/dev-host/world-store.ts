@@ -682,12 +682,12 @@ export function openWorldStore(
 
     committed(): WorldCommitted {
       const rows = stmt.listPartitionRows.all() as Array<{ name: string; parent_id: number; json: string }>;
-      const meta = stmt.listMeta.all() as Array<{ key: string; value: string }>;
+      const metaRows = stmt.listMeta.all() as Array<{ key: string; value: string }>;
       return {
         partitions: rows.map((row) => ({ name: row.name, parentId: row.parent_id, json: JSON.parse(row.json) as unknown })),
         scheduled: (stmt.listEvents.all() as EventRow[]).map(plannedEvent),
         seats: stmt.listSeats.all() as WorldSeatRecord[],
-        meta: Object.fromEntries(meta.map((row) => [row.key, row.value])),
+        meta: Object.fromEntries(metaRows.map((row) => [row.key, row.value])),
       };
     },
 
