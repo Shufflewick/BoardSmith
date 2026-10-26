@@ -448,7 +448,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   handled, or by work that started, while the walk is pressing that control
   (#1484). A clock started by an earlier press is the game's own. Not traced:
   work that waits on a Promise, `setInterval`, and a `message` listener added
-  with `addEventListener`. A control the
+  with `addEventListener`. A scheduler the pointer and the clock share (React,
+  or a GSAP, anime or Pixi ticker) can make the walk blame the pointer for an
+  update the clock made (#1489). A control the
   walk can only see by scrolling it out from under a bar fixed along the edge of
   the page (the action panel) is scrolled to the middle, the top or the bottom
   until it shows.
