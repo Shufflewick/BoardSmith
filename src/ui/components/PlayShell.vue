@@ -686,10 +686,9 @@ const mobileToggleLabel = computed(() => {
      when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
 
      A one-line or number field stacks label, hint and field + Done in three
-     rows on a phone (#1058), one more than the strip, so it may grow the bar by
-     that one row, at every size; anything more, such as a refusal, scrolls
-     inside the bar (#1300). Bounded by the screen, as the box's ceiling is. */
-  --bsg-panel-field-max: min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh);
+     rows on a phone (#1058), and an earlier choice's chips or a prompt that
+     wraps add more, so no fixed row count holds it: it may grow the bar to
+     what it needs, bounded by the screen (#1481). */
 
   /* A multi-line box cannot be written in two rows, so it may grow the bar to
      what it needs: its box plus everything around it that must stay
@@ -924,7 +923,7 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* While a typed editor is open, and only then, the bar may grow past
-   the strip (see --bsg-panel-field-max and --bsg-panel-editor-max). Keyed on the
+   the strip (see --bsg-panel-editor-max). Keyed on the
    editor's own mark, so the exception lives exactly as long as the editor's DOM:
    submitting, cancelling or putting the bar down all unmount it and the strip
    cap is back. `max()` so a very short screen can never cap the bar below the
@@ -934,7 +933,7 @@ const mobileToggleLabel = computed(() => {
 }
 
 .actionbar:has([data-bs-grows-panel="field"]) {
-  max-height: max(var(--bsg-panel-reserved), var(--bsg-panel-field-max));
+  max-height: max(var(--bsg-panel-reserved), 60dvh);
 }
 
 /* Down: the thin line, which must NOT wrap. A wrapped "collapsed" bar would be

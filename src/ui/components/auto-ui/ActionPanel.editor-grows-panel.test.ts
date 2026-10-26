@@ -11,8 +11,8 @@
  * How far depends on the kind (#1300). A multi-line box needs six rows of text
  * plus its count and submit, so it may grow the bar to what it needs, bounded
  * by the screen. A one-line or number field stacks label, hint and field + Done
- * in three rows on a phone (#1058), one more than the strip holds, so it may
- * grow the bar by one row and no more, at every screen size.
+ * in three rows on a phone (#1058), and an earlier choice or a prompt that wraps
+ * adds more, so it may grow the bar to what it needs, bounded by the screen (#1481).
  *
  * The editor marks itself (`data-bs-grows-panel="box"` or `"field"`) and the
  * shell's bar lifts its cap for a bar that contains the mark (`:has(...)`). So
@@ -126,15 +126,12 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
     );
   });
 
-  it('caps a bar holding a one-line or number field one row past the strip, at every screen size (#1300)', () => {
+  it('caps a bar holding a one-line or number field at the screen bound, never below the strip (#1481)', () => {
+    // Not a fixed row count: an earlier choice's chips and a prompt that wraps
+    // add rows, and a fixed ceiling put the field and its Done below the bar's edge.
     expect(rule(`.actionbar:has(${FIELD})`)).toMatch(
-      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*var\(--bsg-panel-field-max\)\);/,
+      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*60dvh\);/,
     );
-    // Bounded by the screen, as the box's ceiling is.
-    const fieldMax = rule('.game-shell__game').match(/--bsg-panel-field-max\s*:\s*([^;]+);/)?.[1] ?? '';
-    expect(fieldMax.replace(/\s+/g, ' ')).toBe('min(calc(var(--bsg-panel-reserved) + var(--bsg-panel-row) + var(--bsg-panel-gap)), 60dvh)');
-    // One definition, for every tier: no media query restates it.
-    expect(style.match(/--bsg-panel-field-max\s*:/g)).toHaveLength(1);
     // No rule lifts the cap for an unvalued mark, which would give a field the box's ceiling.
     expect(style).not.toContain(`:has(${MARK})`);
   });
