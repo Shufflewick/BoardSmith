@@ -1,7 +1,7 @@
 /**
  * `boardsmith catalogue` — does this BoardSmith tree break a catalogue game? (#591)
  *
- * Run from the top of a BoardSmith checkout. It validates each game in the catalogue
+ * Run from the top of a BoardSmith checkout. It validates, and loads the test files of, each game in the catalogue
  * (`~/BoardSmithGames`, or `--catalogue <folder>`) on the game's committed `main`, or its branch
  * named as the checkout's branch (#1322), against the
  * checkout it is run in; `src/cli/lib/catalogue-check.ts` says how, without touching the games'
@@ -21,7 +21,7 @@ function passLine(result: CatalogueGameResult): string {
 function failureLines(failure: CatalogueGameResult): string[] {
   return [
     '',
-    `${failure.slug} FAILED boardsmith validate on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
+    `${failure.slug} FAILED on its ${failure.ref} (${failure.commit.slice(0, 8)}) against this BoardSmith tree:`,
     (failure.output ?? '').trimEnd(),
     `Either this BoardSmith change broke ${failure.slug}, or its ${failure.ref} was already broken. Fix the change, or fix the game in ${failure.dir} and push its ${failure.ref}.`,
     ...(failure.ref === 'main'
