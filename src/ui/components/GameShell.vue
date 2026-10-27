@@ -338,6 +338,11 @@ const turnDeadline = useTurnDeadline(turnDeadlineFrame);
 // the card and announces again.
 const gameOverDismissed = ref(false);
 let gameOverAnnounced = false;
+// Focus leaves the button before it goes away: the board keeps it, unless the card that appears takes it.
+function showResult(): void {
+  boardregionEl.value?.focus();
+  showGameOverResult();
+}
 function dismissGameOver(): void {
   gameOverDismissed.value = true;
   nextTick(() => boardregionEl.value?.focus());
@@ -572,6 +577,8 @@ const {
   announcer,
   liveRegion: { polite: politeMessage, assertive: assertiveMessage },
   gameOverRevealed,
+  gameOverHeld,
+  showGameOverResult,
   menuCommands,
 } = tableSeat;
 
@@ -1440,6 +1447,15 @@ defineExpose({
             @dismiss="dismissGameOver"
           />
         </template>
+        <!-- A board's hold keeps the finished game's result back; this lets the player
+             release it, so a hold that never releases cannot hide the result for good. -->
+        <button
+          v-if="gameOverHeld"
+          type="button"
+          class="bsg-show-result"
+          data-testid="bs-show-result"
+          @click="showResult"
+        >Show result</button>
         <!-- Tutorial annotation overlay: mounts once here so it appears over BOTH
              the registry's board component (default or dev-switcher selection)
              path. Its bubbles teleport to body (AnnotationLayer, position: fixed, z-index: 31).
@@ -1770,6 +1786,27 @@ defineExpose({
   text-align: center;
 }
 
+/* ── Show result: releases a finished game's held ending ────────────────────── */
+.bsg-show-result {
+  position: absolute;
+  bottom: calc(var(--bsg-bar-clearance) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 34; /* above a game modal (z-32), which a stuck replay may hold open, as the demo bar is */
+  min-height: 44px;
+  padding: 0 18px;
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line-2);
+  border-radius: var(--bsg-r-pill, 999px);
+  box-shadow: var(--bsg-shadow);
+  color: var(--bsg-ink);
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.bsg-show-result:hover {
+  border-color: var(--bsg-accent);
+  background: var(--bsg-selectable);
+}
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;

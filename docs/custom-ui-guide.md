@@ -1159,8 +1159,15 @@ is announced). A board that holds nothing sends it as soon as the flow
 completes, and so does a table whose first drawn state is already finished (a
 reload). A replay that hides and re-shows the result does not send it again.
 A board that throws is replaced by an error message, and a board that unmounts
-releases its hold, so an interrupted finale still sends it. A hold whose
-function never returns true keeps the host's overlay away for good.
+releases its hold, so an interrupted finale still sends it.
+
+A hold cannot hide the result for good. While a hold keeps a finished game's
+ending back, GameShell shows a "Show result" button over the board. Pressing
+it releases every hold for that game: the ending is revealed and announced,
+and `game_over_shown` is sent, still only once, so a hold whose function never
+turns true (a stuck replay) does not keep the result or the host's overlay
+away. The button is not shown during play or once the ending is revealed, and
+the next game's holds hold again.
 
 ## Commands in the Controls Menu
 

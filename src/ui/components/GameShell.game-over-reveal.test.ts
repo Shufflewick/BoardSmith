@@ -85,9 +85,10 @@ async function mountShell(
   props?: ShellOptions['props'],
   slots?: ShellOptions['slots'],
   firstFrame: Record<string, unknown> = playingFrame(),
+  attachTo?: HTMLElement,
 ) {
   const posted = enterIframe();
-  const wrapper = mountPlatformShell({ board, props, slots });
+  const wrapper = mountPlatformShell({ board, props, slots, attachTo });
   mounted.push(wrapper);
   await nextTick();
   post({ type: 'init', seat: 1 });
@@ -296,6 +297,80 @@ describe('telling the host page the ending is on screen (#1507)', () => {
     await after(shell, () => { playing.value = false; });
 
     expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+});
+
+describe('the player can show a held result themselves', () => {
+  const SHOWN = { source: 'shufflewick-game', type: 'game_over_shown' };
+  // A hold that never releases (a stuck replay) must not hide the result for good.
+  const showResult = (shell: Shell) => shell.wrapper.find('button[data-testid="bs-show-result"]');
+
+  it('offers Show result only while a hold is closed on a finished game', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+    expect(showResult(shell).exists()).toBe(false);
+
+    await after(shell, complete);
+    expect(showResult(shell).text()).toBe('Show result');
+
+    await after(shell, () => { shown.value = true; });
+    expect(showResult(shell).exists()).toBe(false);
+  });
+
+  it('is not offered again when a board hides its result after showing it (a replay of the final moment)', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+    await after(shell, complete);
+    await after(shell, () => { shown.value = true; });
+
+    await after(shell, () => { shown.value = false; });
+
+    expect(showResult(shell).exists()).toBe(false);
+  });
+
+  it('is not offered when no board holds the ending', async () => {
+    const shell = await mountShell(PlainBoard);
+    await after(shell, complete);
+
+    expect(showResult(shell).exists()).toBe(false);
+  });
+
+  it('reveals the result and tells the host once, and a later release of the hold says nothing more', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+    await after(shell, complete);
+
+    expect(await after(shell, () => { void showResult(shell).trigger('click'); })).toEqual(REVEALED);
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+    expect(showResult(shell).exists()).toBe(false);
+
+    expect(await after(shell, () => { shown.value = true; })).toEqual(REVEALED);
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+
+  it('moves keyboard focus to the board, since the button it was on goes away', async () => {
+    const host = document.body.appendChild(document.createElement('div'));
+    const shell = await mountShell(boardHeldBy(ref(false)), { providesOwnGameOverUi: true }, undefined, playingFrame(), host);
+    await after(shell, complete);
+    (showResult(shell).element as HTMLElement).focus();
+
+    await after(shell, () => { void showResult(shell).trigger('click'); });
+
+    expect(document.activeElement).toBe(shell.wrapper.find('[data-testid="bs-board"]').element);
+    host.remove();
+  });
+
+  it('holds the next game again after a restart', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+    await after(shell, complete);
+    await after(shell, () => { void showResult(shell).trigger('click'); });
+
+    await after(shell, () => post(playingFrame()));
+    await after(shell, complete);
+
+    expect(shell.wrapper.find('.game-over-card').exists()).toBe(false);
+    expect(showResult(shell).exists()).toBe(true);
   });
 });
 

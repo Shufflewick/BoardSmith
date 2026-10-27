@@ -22,12 +22,16 @@
  * ending and holds it back uses both, and the shell still announces the result,
  * at the moment the board shows it.
  *
+ * Once the flow is complete the player can release every hold with
+ * {@link GameOverReveal.showResult} (GameShell's "Show result" button), so a hold
+ * that never releases -- a stuck replay -- cannot hide the result for good.
+ *
  * `shown` is read after the board has rendered the frame that completed the
  * flow, so a hold that turns on in reaction to that frame (a watcher that starts
  * the replay) is in place in time. It must be false synchronously by then: a
  * hold that only turns on after an `await` has already let the ending through.
  */
-import { computed, inject, onScopeDispose, shallowReactive, type ComputedRef, type InjectionKey } from 'vue';
+import { computed, inject, onScopeDispose, ref, shallowReactive, watch, type ComputedRef, type InjectionKey } from 'vue';
 
 /** The table's register of boards holding the ending back. */
 interface GameOverHolds {
@@ -38,8 +42,12 @@ interface GameOverHolds {
 interface GameOverReveal {
   /** What a board below registers its hold with. */
   holds: GameOverHolds;
-  /** True when the flow is complete and every hold's ending is shown. The one answer the card and the announcement read. */
+  /** True when the flow is complete and every hold's ending is shown, or the player showed the result. The one answer the card and the announcement read. */
   revealed: ComputedRef<boolean>;
+  /** True when the flow is complete and a hold has kept the ending back since. */
+  held: ComputedRef<boolean>;
+  /** Reveal this game's result now, whatever the holds say. */
+  showResult(): void;
 }
 
 export const GAME_OVER_HOLDS_KEY: InjectionKey<GameOverHolds> = Symbol('boardsmith:game-over-holds');
@@ -55,12 +63,32 @@ export function createGameOverReveal(complete: () => boolean): GameOverReveal {
       return () => active.delete(entry);
     },
   };
+  const shownByPlayer = ref(false);
+  const shownOnce = ref(false);
+  // A restart clears both, so the next game's holds hold again.
+  watch(complete, (done) => {
+    if (!done) shownByPlayer.value = shownOnce.value = false;
+  });
   const revealed = computed(() => {
     if (!complete()) return false;
+    if (shownByPlayer.value) return true;
     for (const shown of active) if (!shown()) return false;
     return true;
   });
-  return { holds, revealed };
+  // After render, like the announcement, so a hold that starts on the completing frame is in place first.
+  watch(revealed, (now) => {
+    if (now) shownOnce.value = true;
+  }, { flush: 'post' });
+  // Once shown, a board hiding its result again (a replay) is the board's choice, not a stuck hold.
+  const held = computed(() => complete() && !revealed.value && !shownOnce.value);
+  return {
+    holds,
+    revealed,
+    held,
+    showResult: () => {
+      if (complete()) shownByPlayer.value = true;
+    },
+  };
 }
 
 /**
