@@ -111,6 +111,10 @@ export interface TableSeat extends TableActionWiring {
    * card and the game-over announcement both read this, never the flow alone (#419).
    */
   gameOverRevealed: ComputedRef<boolean>;
+  /** True when the flow is complete and a board's hold still keeps the ending back. */
+  gameOverHeld: ComputedRef<boolean>;
+  /** Reveal the ending now, releasing every hold: the player's way past a hold that never releases. */
+  showGameOverResult(): void;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
   /** Everything the board can inject, by key. Publish with {@link provideTableSeat} or a mount's `provide`. */
@@ -236,6 +240,8 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     announcer,
     liveRegion,
     gameOverRevealed: gameOver.revealed,
+    gameOverHeld: gameOver.held,
+    showGameOverResult: gameOver.showResult,
     menuCommands,
     provisions,
   };
