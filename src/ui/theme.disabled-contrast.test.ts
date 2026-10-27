@@ -28,6 +28,9 @@ import {
   PALETTES,
 } from './theme-contrast.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/ui/components/{ControlsMenu,GameHistory,GameShell,auto-ui/ActionPanel,auto-ui/DoneButton,debug/DebugButton,debug/DecksTab,debug/HistoryTab,helpers/Button}.vue');
+
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 /**

@@ -9,8 +9,8 @@
  * is listed as `untested`, so a change to it alone runs no tests. Markdown a test imports must not
  * be `untested`, or a change to it alone would skip that test.
  *
- * Scans that read every file of several kinds, code and Markdown alike (`check-no-control-bytes.test.mjs`,
- * `src/ui/theme.token-kinds.test.ts`), are linked to none of them and run in the merge's slices of the full suite.
+ * A scan that reads Markdown it finds by walking a folder links it with `import.meta.glob` too, as
+ * `src/ui/theme.token-kinds.test.ts` does; `scripts/reads-guard` fails a run that reads one it does not link (#1504).
  */
 import { describe, it, expect } from 'vitest';
 import { createVitest } from 'vitest/node';

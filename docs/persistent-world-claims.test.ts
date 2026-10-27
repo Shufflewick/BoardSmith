@@ -62,6 +62,9 @@ import {
   fireThroughWalk,
 } from '../src/world/village.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/world/*.ts', '/src/session/types.ts', '/src/cli/commands/validate.ts', '/src/cli/lib/world-project.ts', '/src/ui/components/auto-ui/ActionPanel.vue', '/src/ui/components/PlayShell.vue', '/src/ui/world/{WorldShell.vue,useWorldSeat.ts}']);
+
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
 const arrival = (now: number) => ({ kind: 'arrival', now }) as const;

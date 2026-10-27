@@ -27,6 +27,9 @@ import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, sep } from 'node:path';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*{ActionPanel,action-panel}*', '/src/engine/action/{action-builder,types}.ts', '/src/ui/types.ts', '/src/ui/components/{GameShell,PlayShell}.vue', '/src/ui/world/WorldShell.vue']);
+
 const DOCS = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(DOCS);
 

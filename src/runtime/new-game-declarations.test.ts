@@ -11,6 +11,9 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, relative } from 'node:path';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue}', '!**/*.test.ts']);
+
 const root = fileURLToPath(new URL('../..', import.meta.url));
 
 /** Each file allowed constructions without declarations: how many, and why it has none to pass. */

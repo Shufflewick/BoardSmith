@@ -24,6 +24,9 @@ import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative as relativeTo, resolve } from "node:path";
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/world/**/*.ts', '!**/*.test.ts']);
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /**

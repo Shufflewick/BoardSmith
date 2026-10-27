@@ -28,6 +28,9 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PROBE_MARKER } from './temp-tree.probe.test.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.test.ts', '/docs/**/*.test.ts', '/scripts/**/*.test.mjs']);
+
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../../vitest.config.ts');
 

@@ -31,6 +31,9 @@ import {
   PALETTES,
 } from './theme-contrast.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/ui/components/auto-ui/ActionPanel.vue');
+
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 const PANEL = resolvePath(__dir, 'components/auto-ui/ActionPanel.vue');

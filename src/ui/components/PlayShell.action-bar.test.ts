@@ -51,6 +51,9 @@ import { useActionController } from '../composables/useActionController.js';
 import type { EnrichedActionMetadata } from '../composables/useActionControllerTypes.js';
 import type { UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/ui/components/GameShell.vue', '/src/ui/world/WorldShell.vue']);
+
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 class PanelResizeObserver {

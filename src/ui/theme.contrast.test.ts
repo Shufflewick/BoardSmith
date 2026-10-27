@@ -20,6 +20,9 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { themeCSS } from './theme.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/ui/components/{GameHistory,auto-ui/ActionPanel,auto-ui/renderers/{GridBoardRenderer,DeckRenderer,DieRenderer,SpaceRenderer}}.vue', '/src/cli/dev-host/DevHost.vue']);
+
 const __dir = dirname(fileURLToPath(import.meta.url));
 
 // ---------------------------------------------------------------------------

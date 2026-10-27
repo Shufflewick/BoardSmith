@@ -7,6 +7,9 @@ import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/cli/commands/{dev,evolve-bot-weights,simulate,validate}.ts');
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**

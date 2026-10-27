@@ -15,6 +15,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue,css}', '!**/*.test.ts']);
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OWNER = 'src/ui/composables/reducedMotion.ts';
 const SYNC = /\bsyncReducedMotionClass\(\)/;

@@ -23,6 +23,9 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { themeCSS } from './theme.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/{src,docs}/**/*.{vue,ts,md,css}', '!**/*.test.ts']);
+
 type Kind = 'colour' | 'length' | 'other';
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..', '..');

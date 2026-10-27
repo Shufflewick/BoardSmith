@@ -8,6 +8,9 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/cli/**/*.ts', '!**/*.test.ts']);
+
 const CLI_DIR = join(dirname(fileURLToPath(import.meta.url)), '..');
 const GIT_OUTPUT = join(CLI_DIR, 'lib', 'git-output.ts');
 

@@ -8,6 +8,9 @@ import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { renderIndex } from './commands/ingest-archive.js';
 import { REPO_ROOT, spawnCli } from './spawn-cli.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/cli/**/*.{ts,mjs}', '!**/*.test.ts']);
+
 /**
  * `cli.test.ts` — registration-level proof that CHECK-04's dual-enumeration read/report and
  * write commands are actually reachable from the real CLI entry point (177.1-04's own stated
