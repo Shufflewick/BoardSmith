@@ -22,7 +22,7 @@ import { join } from 'node:path';
 
 /**
  * The CLI commands that bundle a project's rules into a build directory of their own, and the runs
- * that keep work files in one: `verify` for its suite's report, `verify-mutation` and
+ * that keep work files in one: `verify` for its suite's report, `mutate` and
  * `test-step-check` for the mutation checks' generated vitest config, mutants and reports.
  */
 type BuildingCommand =
@@ -33,7 +33,7 @@ type BuildingCommand =
   | 'validate'
   | 'evolve-bot-weights'
   | 'verify'
-  | 'verify-mutation'
+  | 'mutate'
   | 'test-step-check';
 
 /**

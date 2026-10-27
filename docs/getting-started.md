@@ -250,6 +250,66 @@ or `replayRandomGame` from `boardsmith/testing`, `playGame` from
 `benchmarkBot` or `WeightEvolver` from `boardsmith/bot-trainer`) fails when it
 loads, with a message telling you to rename it to `.sim.test.ts`.
 
+#### Showing the tests of a change can fail: `boardsmith mutate`
+
+```bash
+boardsmith mutate --base main    # 3 small breaks of the code changed since main
+```
+
+A test that cannot fail proves nothing. `boardsmith mutate` makes small changes
+(mutants) to the code lines under `src/` changed since the merge base of HEAD
+with `--base` (committed, staged, unstaged and untracked): it flips a
+comparison, negates a condition, drops a statement or returns `undefined`. It
+tries a sample of 3, picked with the current commit as the seed, so running it
+again on the same commit tries the same ones. The changed files take turns, so
+up to 3 files each get one. It is meant to run at every merge, on the ticket's
+own change, so it stays small and fast.
+
+It runs only unit tests, and only the test files that import a sampled mutant's
+file, directly or through other files (`vitest related`); a sim never runs. It
+runs those test files once unchanged first, recording which files each one
+loads, and they must pass; then it runs them against each mutant, all 3 at
+once, stopping a run at the first failing test. A mutant no test notices fails
+the run, named by file and line, and so does one in a file none of those tests
+loads. A mutant that makes its run go past the time limit (an infinite loop)
+counts as timed out, not as a survivor. When `--base` measures no change (its
+merge base is the current commit on a clean tree), `boardsmith mutate` refuses
+rather than pass on nothing.
+
+```
+FAIL  1 of 3 mutants of the lines changed since main (4f2a9c1e0b3d) survived: every test that loads its file still passed with the code changed.
+        src/rules/trade.ts:42 > -> >=: no test failed
+```
+
+Because only the test files that import the changed files run, a test that
+passes only after another test file has run (shared state under `isolate:
+false`, or the order files run in) fails the unchanged run, and the message
+says so: make each test file set up what it needs itself. A file that a test
+reaches only through a setup file or a global setup, not an import, counts as
+loaded by no test: add a test that imports it.
+
+A game with Vitest projects (`test.projects` in its config, or a workspace:
+`test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
+in every project defined inline, such as
+`{ extends: './vitest.browser.config.ts' }`. A project named only by a path or
+glob builds its own config, which `boardsmith mutate` cannot change, so it
+refuses to run, names the project, and says how to write it inline.
+
+By default all 3 mutants run at once and each Vitest run picks its own number
+of workers. To hold them to a budget, set one in `boardsmith.json`:
+
+```json
+"mutation": { "trials": 2, "workers": 8 }
+```
+
+Then `trials` mutants run at once, each with `workers / trials` test workers
+(rounded down), and the unchanged run gets all `workers`. With a budget, a
+Vitest config that would run workers outside it (`poolOptions` worker counts,
+`poolMatchGlobs`, typecheck or browser mode, a different pool per project, a
+custom pool, or under Vitest 4 a `maxWorkers` over the share) is refused,
+naming the setting. Stopping `boardsmith mutate` with Ctrl+C stops every Vitest
+it started before removing its temporary files.
+
 `boardsmith lint` runs BoardSmith's pitfall checks, plus ESLint and Stylelint
 when the project has a config for them. It finds a config wherever the linter
 would: in the project folder, any parent folder, and the folders under `src/`

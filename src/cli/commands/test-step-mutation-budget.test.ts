@@ -1,6 +1,6 @@
 /**
- * #955: `boardsmith verify` runs mutation trials side by side when boardsmith.json sets a
- * "mutation" budget. Each test records what a trial saw (`tests/trial.ts`): how many trials were
+ * #955, #1496: `boardsmith mutate` runs its mutants side by side, as many at once as boardsmith.json's
+ * "mutation" budget allows, or all of them with none. Each test records what a trial saw (`tests/trial.ts`): how many trials were
  * live at once, which mutant input it read, and which Vitest worker slot ran it. Nothing is timed.
  */
 import { describe, it, expect, vi } from 'vitest';
@@ -11,7 +11,6 @@ import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import type { MutationBudget } from '../lib/mutation-budget.js';
-import type { KillerHint } from '../lib/mutant-cache.js';
 
 vi.setConfig({ testTimeout: 180_000 });
 
@@ -23,10 +22,9 @@ export function fee(price: number): number {
 }
 `;
 
-/** The mutants of lines 2 and 5 no test catches, in the order they were made. */
+/** The sampled mutants of lines 2 and 5 no test catches, in the order they were made. */
 const SURVIVORS = [
   { file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' },
-  { file: 'src/rules.ts', line: 5, description: '* -> /' },
   { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
 ];
 
@@ -77,7 +75,7 @@ const trialsLive = (t: Seen) => new Set(t.live.map((l) => dirname(l.mutantPath))
 
 interface Seen { mutantPath: string; mutant: string; pool: string; live: Array<{ mutantPath: string; mutant: string }> }
 
-async function project(trials: number, poolSettings = '') {
+async function project(trials: number, poolSettings = '', tests: Record<string, string> = {}) {
   const sandbox = fixtureSandbox('bs-mutant-budget-');
   const dir = await designProjectFixtures(() => sandbox.root).makeProject({
     'src/rules.ts': RULES,
@@ -86,6 +84,7 @@ async function project(trials: number, poolSettings = '') {
     'tests/trial.ts': TRIAL,
     'tests/bid.test.ts': testFile('bid', "it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });\nit('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });"),
     'tests/fee.test.ts': testFile('fee', "it('a fee exists', () => { expect(typeof fee).toBe('function'); });"),
+    ...tests,
   });
   await fs.symlink(INSTALLED_MODULES, join(dir, 'node_modules'), 'dir');
   for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
@@ -98,27 +97,31 @@ async function seen(dir: string): Promise<Seen[]> {
   return Promise.all(names.filter((n) => n.endsWith('.json')).map(async (n) => JSON.parse(await fs.readFile(join(dir, 'trials/seen', n), 'utf8'))));
 }
 
-/** Holds no outcomes, so every mutant runs, and keeps killer hints (#954) by mutated text in `hints`. */
-const memoryCache = (hints = new Map<string, KillerHint>()) => ({
-  get: () => undefined, set: () => {}, save: async () => {},
-  killerHint: (m: { source: string }) => hints.get(m.source),
-  setKillerHint: (m: { source: string }, hint: KillerHint | undefined) => { if (hint) hints.set(m.source, hint); else hints.delete(m.source); },
-});
-
-function check(dir: string, budget: MutationBudget | undefined, contextChange?: () => Promise<string | undefined>, hints?: Map<string, KillerHint>, log: (line: string) => void = () => {}) {
+function check(dir: string, budget: MutationBudget | undefined, log: (line: string) => void = () => {}) {
   return runDiffMutationCheck({
     seed: 'fixture',
-    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), cache: memoryCache(hints), log,
-    ...(budget ? { budget } : {}), ...(contextChange ? { contextChange } : {}),
+    projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), log,
+    ...(budget ? { budget } : {}),
   });
 }
 
-describe('runDiffMutationCheck with a mutation budget (#955)', () => {
+/** Under a mutant, after the barrier: the first trial's test file kills its own Vitest, so its run leaves no report; any other trial's waits to be stopped. */
+const STOPS = `import { it } from 'vitest';
+import { enterTrial } from './trial';
+import '../src/rules';
+await enterTrial();
+const mutantPath = process.env.BOARDSMITH_MUTANT;
+if (mutantPath && !mutantPath.includes('/trial-')) process.kill(-process.ppid, 'SIGKILL');
+if (mutantPath) await new Promise(() => {});
+it('holds', () => {});
+`;
+
+describe('runDiffMutationCheck runs its mutants side by side (#955, #1496)', () => {
   it('runs as many trials at once as the budget allows, each on its own mutant input and its share of the workers', async () => {
     try {
       const dir = await project(2);
       const result = await check(dir, { trials: 2, workers: 2 });
-      expect(result.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, unreached: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 1, survived: 2, timedOut: 0, unreached: 0 });
       // Outcomes fold in the order the mutants were made, whichever trial finished first.
       expect(result.survivors).toEqual(SURVIVORS);
 
@@ -134,40 +137,23 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
     }
   });
 
-  it('keeps a killer hint for each killed mutant, whichever trial ran it, and a rerun killed by its hints keeps to the budget', async () => {
+  it('runs every sampled mutant at once with no budget (#1496)', async () => {
     try {
-      const dir = await project(2);
-      const hints = new Map<string, KillerHint>();
-      await check(dir, { trials: 2, workers: 2 }, undefined, hints);
-      // Both killed mutants are on line 2, and only bid.test.ts tests bid.
-      expect([...hints.values()].map((h) => h.file)).toEqual(['tests/bid.test.ts', 'tests/bid.test.ts']);
-
-      const rerun = await check(dir, { trials: 2, workers: 2 }, undefined, hints);
-      expect(rerun.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, unreached: 0 });
-      expect(new Set((await seen(dir)).map((t) => t.pool))).toEqual(new Set(['1']));
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
-  it('runs one trial at a time with no budget', async () => {
-    try {
-      const dir = await project(1);
-      const result = await check(dir, undefined);
+      const dir = await project(3);
+      const logged: string[] = [];
+      const result = await check(dir, undefined, (line) => logged.push(line));
       expect(result.survivors).toEqual(SURVIVORS);
-      expect(Math.max(...(await seen(dir)).map(trialsLive))).toBe(1);
+      expect(Math.max(...(await seen(dir)).map(trialsLive))).toBe(3);
+      expect(logged).toContain('Running 3 mutants at a time.');
     } finally {
       vi.unstubAllEnvs();
     }
   });
 
-  it('starts no trial after one fails, and stops and removes every trial it started', async () => {
+  it('starts no mutant after one fails, and stops and removes every one it started', async () => {
     try {
-      const dir = await project(2);
-      let calls = 0;
-      // Calls 1 and 2 start the two trials; call 3 is the first finished trial's check after its run.
-      const changed = async () => (++calls === 3 ? 'the linked package moved' : undefined);
-      await expect(check(dir, { trials: 2, workers: 2 }, changed)).rejects.toThrow(/what the tests run with changed .*: the linked package moved/);
+      const dir = await project(2, '', { 'tests/bid.test.ts': STOPS, 'tests/fee.test.ts': STOPS });
+      await expect(check(dir, { trials: 2, workers: 2 })).rejects.toThrow('vitest exited without writing its report');
       expect(new Set((await seen(dir)).map((t) => t.mutant)).size).toBe(2);
       expect(await fs.readdir(join(dir, '.boardsmith'))).toEqual([]);
     } finally {
@@ -175,41 +161,17 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
     }
   });
 
-  it('names how many mutants had finished when a context change stops a trial before its run', async () => {
-    try {
-      const dir = await project(2);
-      let calls = 0;
-      // Call 2 is the second trial's check before mutant 2 runs, while mutant 1 is still running.
-      const changed = async () => (++calls === 2 ? 'the linked package moved' : undefined);
-      await expect(check(dir, { trials: 2, workers: 2 }, changed)).rejects.toThrow(
-        'what the tests run with changed after 0 mutants had run or been reused: the linked package moved',
-      );
-    } finally {
-      vi.unstubAllEnvs();
-    }
-  });
-
   it('keeps the first failure when stopping the other trials fails too, and waits for every trial before removing them', async () => {
     try {
-      const dir = await project(2);
-      let calls = 0;
-      let changedYet = false;
-      // Call 2 is the second trial's check before its run; it waits until the first trial's test file is held at the barrier.
-      const changed = async () => {
-        if (++calls !== 2) return undefined;
-        while ((await fs.readdir(join(dir, 'trials/active')).catch(() => [])).length === 0) await new Promise((resolve) => setTimeout(resolve, 25));
-        changedYet = true;
-        return 'the linked package moved';
-      };
+      const dir = await project(2, '', { 'tests/bid.test.ts': STOPS, 'tests/fee.test.ts': STOPS });
       const kill = process.kill.bind(process);
-      // Once the context changes, the probe of a stopped trial's process group fails as no real system would.
+      // The probe of a stopped trial's process group fails as no real system would.
       vi.spyOn(process, 'kill').mockImplementation((pid, signal) => {
-        if (changedYet && pid < 0 && signal === 0) throw Object.assign(new Error('process group observation failed'), { code: 'EINVAL' });
+        if (pid < 0 && signal === 0) throw Object.assign(new Error('process group observation failed'), { code: 'EINVAL' });
         return kill(pid, signal);
       });
       const logged: string[] = [];
-      await expect(check(dir, { trials: 2, workers: 2 }, changed, undefined, (line) => logged.push(line)))
-        .rejects.toThrow(/^what the tests run with changed .*: the linked package moved$/);
+      await expect(check(dir, { trials: 2, workers: 2 }, (line) => logged.push(line))).rejects.toThrow('vitest exited without writing its report');
       expect(logged.some((line) => line.startsWith('Could not confirm that Vitest process group'))).toBe(true);
       expect(await fs.readdir(join(dir, '.boardsmith'))).toEqual([]);
     } finally {

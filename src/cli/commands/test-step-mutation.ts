@@ -1,12 +1,13 @@
 /**
- * `test-step-mutation.ts` — the mutation half of `boardsmith test-step-check` (#290), and the
- * mutation check of `boardsmith verify` (#452, `runDiffMutationCheck` at the end of this file).
+ * `test-step-mutation.ts` — the mutation half of `boardsmith test-step-check` (#290), and
+ * `boardsmith mutate` (#1496, `runDiffMutationCheck` at the end of this file).
  *
  * A test that cannot fail proves nothing. The only way to know a test can fail is to break the
  * code it tests and watch. So this module makes small, single changes ("mutants") to the lines the
  * chunk added — flip a comparison, negate a condition, drop a statement, return `undefined` — and
- * runs the chunk's own test files against each one. Both checks try a sample of at most 30 of the
- * changed lines' mutants, picked by the HEAD commit (`sampleMutants`, #1486); the chunk check does not judge
+ * runs the chunk's own test files against each one. Both checks try a sample of the changed lines'
+ * mutants, picked by the HEAD commit (`sampleMutants`, #1486): at most 30 for the chunk check, 3 for
+ * `boardsmith mutate`. The chunk check does not judge
  * a test file that loads a changed file but none a sampled mutant is in (#1487). A test that fails
  * under at least one mutant has been shown able to catch a regression; a test that no mutant disturbs is asserting nothing
  * the chunk's code controls (the sotf#29 tautology), and a claim none of whose tests ever fail is
@@ -49,7 +50,6 @@ import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage } from './test-step-coverage.js';
 import { GLOBAL_SETUP_MARK, REACH_SETUP, reachEnv, readReach } from './test-step-reach.js';
-import type { KillerHint, MutantCache } from '../lib/mutant-cache.js';
 import type { MutationBudget } from '../lib/mutation-budget.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { readIfExists } from '../lib/read-if-exists.js';
@@ -229,25 +229,27 @@ export function generateMutants(file: string, source: string, addedLines: Readon
 }
 
 /**
- * The most mutants of the changed lines a run tries (#1486). The check exists to show the tests can
- * fail, which a sample shows; trying every mutant made a first publish of a real game take hours.
+ * The most mutants of the changed lines a check tries (#1486, #1496). Each exists to show the tests
+ * can fail, which a sample shows; trying every mutant made a first publish of a real game take hours.
+ * `boardsmith mutate` runs at every merge, which must stay fast, so it tries 3.
  */
-const MUTANT_SAMPLE_SIZE = 30;
+const CHUNK_SAMPLE_SIZE = 30;
+const MUTATE_SAMPLE_SIZE = 3;
 
 /**
- * At most `MUTANT_SAMPLE_SIZE` of `mutants`, in their order, picked by `seed`: the same seed picks the
- * same ones. Files take turns, one mutant each per round, so every changed file is tried (up to
- * `MUTANT_SAMPLE_SIZE` of them) and a file no test loads is still found.
+ * At most `size` of `mutants`, in their order, picked by `seed`: the same seed picks the same ones.
+ * Files take turns, one mutant each per round, so every changed file is tried (up to `size` of them)
+ * and a file no test loads is still found.
  */
-export function sampleMutants<T extends { file: string }>(mutants: readonly T[], seed: string): T[] {
-  if (mutants.length <= MUTANT_SAMPLE_SIZE) return [...mutants];
+export function sampleMutants<T extends { file: string }>(mutants: readonly T[], seed: string, size: number): T[] {
+  if (mutants.length <= size) return [...mutants];
   const random = new SeededRandom(seed);
   const byFile = new Map<string, number[]>();
   mutants.forEach((mutant, i) => byFile.set(mutant.file, [...(byFile.get(mutant.file) ?? []), i]));
   const turns = random.shuffle([...byFile.values()]).map((indexes) => random.shuffle(indexes));
   const picked = new Set<number>();
-  for (let round = 0; picked.size < MUTANT_SAMPLE_SIZE; round++) {
-    for (const indexes of turns) if (round < indexes.length && picked.size < MUTANT_SAMPLE_SIZE) picked.add(indexes[round]);
+  for (let round = 0; picked.size < size; round++) {
+    for (const indexes of turns) if (round < indexes.length && picked.size < size) picked.add(indexes[round]);
   }
   return mutants.filter((_, i) => picked.has(i));
 }
@@ -572,8 +574,11 @@ interface FailedFile {
   reason: string | undefined;
 }
 
-/** Which tests a run runs: the named test files, or everything the project's config collects. */
-type RunScope = ReadonlyArray<Pick<ChunkTestFile, 'absPath'>> | 'whole-suite';
+/**
+ * Which tests a run runs: the named test files, or the test files the project's config collects that
+ * import one of the `related` project files, directly or through other files (`vitest related`).
+ */
+type RunScope = ReadonlyArray<Pick<ChunkTestFile, 'absPath'>> | { related: string[] };
 
 interface Runner {
   /** The run's own directory (`withCommandBuildDir`), which holds its generated files. */
@@ -763,9 +768,9 @@ export function limitWorkers(workers: number | undefined, vitestMajor: number, e
   return vitestMajor >= 4 ? [`--maxWorkers=${workers}`] : [`--maxWorkers=${workers}`, '--minWorkers=1'];
 }
 
-/** The real paths of the files a run asked for; undefined for the whole suite. */
+/** The real paths of the test files a run asked for; undefined for a `related` run, which picks its own. */
 function realPaths(scope: RunScope): string[] | undefined {
-  return scope === 'whole-suite' ? undefined : scope.map((f) => realpathSync(f.absPath));
+  return 'related' in scope ? undefined : scope.map((f) => realpathSync(f.absPath));
 }
 
 /** A reported file's manifest path, else its project path when the run asked for it; undefined for a file the run is not about. */
@@ -819,7 +824,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       }
       const scopePaths = realPaths(scope);
       const args = [
-        'run',
+        ...('related' in scope ? ['related', '--run', '--passWithNoTests', ...scope.related] : ['run']),
         '--root', projectDir,
         '--config', configPath,
         ...(options.bail ? ['--bail=1'] : []),
@@ -933,7 +938,7 @@ async function chunkMutants(projectDir: string, input: MutationCheckInput, files
   const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
   if (unpinned.size === 0) return { mutants: [], left: [] };
   const all = await collectMutants(projectDir, input.added);
-  const mutants = sampleMutants(all, input.seed);
+  const mutants = sampleMutants(all, input.seed, CHUNK_SAMPLE_SIZE);
   for (const mutant of mutants) files.add(mutant.file);
   const left = [...new Set(all.map((m) => m.file))].filter((file) => !files.has(file));
   return { mutants: mutants.map((mutant) => ({ ...mutant, targets: unpinned })), left };
@@ -1288,7 +1293,7 @@ export async function runMutationCheck(
 }
 
 // -------------------------------------------------------------------------------------------
-// runDiffMutationCheck: `boardsmith verify`'s mutation check (#452)
+// runDiffMutationCheck: `boardsmith mutate` (#452, #1496)
 // -------------------------------------------------------------------------------------------
 
 /** A mutant every test that loads its file passed under, or one in a file no test loads. */
@@ -1302,22 +1307,15 @@ interface DiffMutationInput {
   projectDir: string;
   /** Code files changed since the base, with the lines that changed (`changedSince` in verify.ts). */
   added: ReadonlyMap<string, ReadonlySet<number>>;
-  /** Outcomes of earlier runs, reused where nothing the mutant depends on changed (`lib/mutant-cache.ts`). */
-  cache: MutantCache;
   /** Picks the sample of mutants tried (`sampleMutants`): the HEAD commit, so a re-run of it tries the same ones. */
   seed: string;
   log: (line: string) => void;
-  /** What changed in the execution context since the run began, checked before each mutant runs, so a mixed run stops early (#932). */
-  contextChange?: () => Promise<string | undefined>;
-  /** Saves the outcomes found so far, called after each mutant that ran in an unchanged context, so an interrupted run keeps them (#940). */
-  saveProgress?: () => Promise<void>;
-  /** How many mutants run at once and the test workers they share (boardsmith.json "mutation", #955); one at a time without it. */
+  /** How many mutants run at once and the test workers they share (boardsmith.json "mutation", #955); every sampled mutant at once without it. */
   budget?: MutationBudget;
 }
 
 interface DiffMutationResult {
   summary: MutationSummary & { unreached: number };
-  reused: number;
   survivors: SurvivingMutant[];
   /** Mutants in a file no test loads, so no test could catch them: neither killed nor survived. */
   unreached: SurvivingMutant[];
@@ -1353,83 +1351,68 @@ interface ApartRunner {
   runner: Runner;
   projectDir: string;
   timeoutMs: number;
-  workers?: number;
   /** How many test files the unmutated run ran. */
   suiteSize: number;
-  /** What fails in an unmutated run of a set of test files without the rest of the suite (`redApart`), by their sorted paths; shared by every trial. */
+  /** What fails in an unmutated run of a set of test files without the rest of the suite (`redApart`), by their sorted paths. */
   apart: Map<string, Promise<string[]>>;
 }
 
-/** A runner whose unmutated run of the whole suite passed, and the time limit and test workers a mutant's run gets. */
-interface GreenRunner extends ApartRunner {
+/** A runner whose unmutated run of `scope` passed, and the time limit and test workers a mutant's run of it gets. */
+interface GreenRunner {
+  runner: Runner;
+  scope: RunScope;
+  timeoutMs: number;
+  workers?: number;
   /** The absolute paths of the test files that load the project file `file` (`readReach`). */
   testsLoading(file: string): string[];
-  /** Every test that passed in the unmutated run, by `testKey`. */
-  passed: ReadonlySet<string>;
 }
 
 /**
- * Runs the whole suite once unmutated, recording which project files each test file loads
- * (`test-step-reach.ts`). Returns the runner when it passed; otherwise names what failed, since a
- * mutant proves nothing on a red suite.
+ * Runs the test files that import a file of `mutants` once unmutated, recording which project files
+ * each loads (`test-step-reach.ts`). Only those test files: they are the ones a mutant can change,
+ * and the whole suite was most of the time a few mutants took. Returns the runner when they passed;
+ * otherwise names what failed, since a mutant proves nothing on a red run.
  */
-async function greenRunner(runner: Runner, projectDir: string, log: (line: string) => void, budget?: MutationBudget): Promise<GreenRunner | { notGreen: string[] }> {
+async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedMutant[], log: (line: string) => void, budget?: MutationBudget): Promise<GreenRunner | { notGreen: string[] }> {
   const reachDir = join(runner.workDir, 'reach');
   await fs.mkdir(reachDir);
-  const baseline = await runner.run('whole-suite', null, 10 * 60_000, { reach: reachDir, workers: budget?.workers });
+  const scope = { related: [...new Set(mutants.map((m) => m.file))] };
+  const baseline = await runner.run(scope, null, 10 * 60_000, { reach: reachDir, workers: budget?.workers });
   if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
   if (suiteNoticed(baseline)) return { notGreen: redParts(baseline) };
   const { testsLoading, unrecorded } = await readReach(reachDir, projectDir, baseline.filesRun);
   if (unrecorded.length > 0) {
-    log(`${unrecorded.length} of ${baseline.filesRun.size} test files run for every mutant, since what they load could not be told apart: ${unrecorded.join(', ')}`);
+    log(`${unrecorded.length} of ${baseline.filesRun.size} test files count as loading every file, since what they load could not be told apart: ${unrecorded.join(', ')}`);
   }
+  const trials = budget?.trials ?? mutants.length;
   // A trial has 1/trials of the workers the baseline had.
-  const trials = budget?.trials ?? 1;
   const workers = budget && Math.floor(budget.workers / trials);
-  const passed = new Set(baseline.outcomes.filter((o) => o.status === 'passed').map(testKey));
-  return {
-    runner, projectDir, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading, passed,
-    suiteSize: baseline.filesRun.size, apart: new Map(),
-  };
+  return { runner, scope, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading };
 }
 
 /**
- * Runs `mutant` against every test file that loads its file, stopping at the first failure; `unreached`
- * when none does. With a `hint` (#954) whose test passed in the unmutated run and is in one of those, its
- * file runs alone first, and a test of it that passed unmutated failing on its own assertion kills the mutant;
- * a time-out is the mutant's verdict (#1308), and anything else (a pass, a file that fails to load) goes on to
- * the full run, so a survivor still runs every test. `killer` is the test that failed on its own assertion,
- * for the next run's hint, and undefined when none did. A run of fewer files than the whole suite counts its
- * failures only when those files pass unmutated on their own (`redApart`, #1329): the full run's files are
- * refused otherwise, and a hinted file that fails alone is not tried.
+ * Runs `mutant` against the test files the unmutated run passed, stopping at the first failure;
+ * `unreached` when none of them loads its file. The same files, so a failure is the mutant's, not
+ * that of a test missing what a test file left out of the run would have set up.
  */
-async function runMutant(run: GreenRunner, mutant: LocatedMutant, hint?: KillerHint): Promise<{ outcome: DiffOutcome; killer?: KillerHint }> {
-  const tests = run.testsLoading(mutant.file);
-  if (tests.length === 0) return { outcome: 'unreached' };
-  const trial = hint && (await hintTrial(run, mutant, tests, hint));
-  if (trial === 'timed-out') return { outcome: 'timed-out' };
-  if (trial) return { outcome: 'killed', killer: trial };
-  const red = await redApart(run, tests);
-  if (red.length > 0) {
-    throw apartError(`The test files that load ${mutant.file} fail when run without the rest of the suite, though the whole suite passes`, red, '`boardsmith verify`');
-  }
-  const result = await run.runner.run(tests.map((absPath) => ({ absPath })), mutant, run.timeoutMs, { bail: true, workers: run.workers });
-  if (result.kind === 'timed-out') return { outcome: 'timed-out' };
-  const killer = result.outcomes.find((o) => o.failedOnAssertion);
-  return { outcome: suiteNoticed(result) ? 'killed' : 'survived', ...(killer ? { killer: { file: killer.path, test: killer.fullName } } : {}) };
+async function runMutant(run: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
+  if (run.testsLoading(mutant.file).length === 0) return 'unreached';
+  const result = await run.runner.run(run.scope, mutant, run.timeoutMs, { bail: true, workers: run.workers });
+  if (result.kind === 'timed-out') return 'timed-out';
+  return suiteNoticed(result) ? 'killed' : 'survived';
 }
 
 /**
- * What fails when `tests` run unmutated without the rest of the suite, as `redParts` names it: none for the whole
- * suite, whose unmutated run passed. Each set of files runs once per check, so a failure under a mutant there is
- * trusted only when the files pass on their own (#1329).
+ * What fails when `tests` run unmutated without the rest of the chunk's test files, as `redParts`
+ * names it: none for all of them, whose unmutated run passed. Each set of files runs once per check,
+ * so a failure under a mutant there is trusted only when the files pass on their own (#1329, #1340).
  */
 function redApart(run: ApartRunner, tests: string[]): Promise<string[]> {
   if (tests.length === run.suiteSize) return Promise.resolve([]);
   const key = [...tests].sort().join('\0');
   const known = run.apart.get(key);
   if (known) return known;
-  const red = run.runner.run(tests.map((absPath) => ({ absPath })), null, run.timeoutMs, { bail: true, workers: run.workers }).then((result) => {
+  const red = run.runner.run(tests.map((absPath) => ({ absPath })), null, run.timeoutMs, { bail: true }).then((result) => {
     if (result.kind === 'timed-out') {
       const names = tests.map((path) => relative(run.projectDir, path).split(sep).join('/')).join(', ');
       throw new Error(`The unmutated run of ${names} did not finish within ${Math.round(run.timeoutMs / 1000)} seconds, though the whole suite did. Run \`boardsmith test\` on those files to see why.`);
@@ -1451,59 +1434,52 @@ function apartError(what: string, red: string[], rerun: string): Error {
 }
 
 /**
- * Runs `hint`'s file alone under `mutant` when its test is one of `tests` that passed unmutated, and the file
- * passes unmutated on its own (`redApart`), and returns
- * the test of that file that passed unmutated and now fails on its own assertion; 'timed-out' when the file
- * ran past the limit. The whole file runs, since the hinted test passed only after the tests before it in its file.
- */
-async function hintTrial(run: GreenRunner, mutant: LocatedMutant, tests: string[], hint: KillerHint): Promise<KillerHint | 'timed-out' | undefined> {
-  const absPath = join(run.projectDir, hint.file);
-  if (!run.passed.has(testKey({ path: hint.file, fullName: hint.test })) || !tests.includes(absPath)) return undefined;
-  if ((await redApart(run, [absPath])).length > 0) return undefined;
-  const trial = await run.runner.run([{ absPath }], mutant, run.timeoutMs, { bail: true, workers: run.workers });
-  if (trial.kind === 'timed-out') return 'timed-out';
-  const killer = trial.outcomes.find((o) => o.path === hint.file && o.failedOnAssertion && run.passed.has(testKey(o)));
-  return killer && { file: killer.path, test: killer.fullName };
-}
-
-/**
- * Mutates the changed lines one change at a time and runs, against each mutant, every test file
- * that loaded its file in the unmutated run (`test-step-reach.ts`, #981), stopping a run at its first
- * failure. Unlike the chunk check, nothing here is scoped to a chunk's test files or claims: any test
- * anywhere may catch a mutant, and a mutant none catches is reported by file and line. A mutant in a
- * file no test loads is reported as unreached, since no test could catch it. A mutant that makes its
- * run go past its time limit (an infinite loop) is counted as timed out, not as a survivor, since the
- * tests did not pass.
+ * Mutates a sample of `MUTATE_SAMPLE_SIZE` of the changed lines' mutants, one change at a time, and
+ * runs against each the test files the project's config collects that import a sampled mutant's
+ * file (`vitest related`), stopping a run at its first failure. A sim is never one of them: the
+ * game's config leaves sims out of every run but `--sims` (#1494). Any of those tests may catch a
+ * mutant, and a mutant none catches is reported by file and line. A mutant in a file none of them
+ * loads (`test-step-reach.ts`, #981) is reported as unreached, since no test could catch it; that
+ * includes a file a test reaches only by a path built at run time, which `vitest related` cannot
+ * follow. A mutant that makes its run go past its time limit (an infinite loop) is counted as timed
+ * out, not as a survivor, since the tests did not pass.
  *
- * A mutant whose outcome `cache` holds is not run again (`reused` counts them). When any mutant
- * must run, the whole suite first runs once unmutated and must pass: `notGreen` then names what
- * failed, and no mutant is tried.
+ * Those test files first run once unmutated and must pass: `notGreen` then names what failed, and
+ * no mutant is tried. The mutants then run side by side, as many at once as `budget` allows, or all of them.
  */
 export async function runDiffMutationCheck(
   input: DiffMutationInput,
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
-  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed);
+  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed, MUTATE_SAMPLE_SIZE);
   summary.files = new Set(mutants.map((m) => m.file)).size;
-  const known = mutants.map((m) => input.cache.get(m));
-  if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary);
+  if (mutants.length === 0) return { summary, survivors: [], unreached: [] };
 
   const runners: Runner[] = [];
-  return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
+  return withCommandBuildDir(projectDir, 'mutate', async (workDir) => {
     // Each trial owns a runner, so its mutant input, report and process group are its own; all are made before any runs, for the stop below.
     runners.push(await createRunner(projectDir, [], workDir));
-    for (let trial = 2; trial <= (input.budget?.trials ?? 1); trial++) {
+    const trials = Math.min(input.budget?.trials ?? mutants.length, mutants.length);
+    for (let trial = 2; trial <= trials; trial++) {
       const trialDir = join(workDir, `trial-${trial}`);
       await fs.mkdir(trialDir);
       runners.push(await createRunner(projectDir, [], trialDir));
     }
-    const started = await greenRunner(runners[0], projectDir, input.log, input.budget);
-    if ('notGreen' in started) return { summary, reused: 0, survivors: [], unreached: [], notGreen: started.notGreen };
-    if (input.budget) {
-      input.log(`Running ${input.budget.trials} mutants at a time, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget.workers}.`);
+    const started = await greenRunner(runners[0], projectDir, mutants, input.log, input.budget);
+    if ('notGreen' in started) return { summary, survivors: [], unreached: [], notGreen: started.notGreen };
+    const share = started.workers === undefined ? '' : `, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget!.workers}`;
+    input.log(`Running ${trials} mutant${trials === 1 ? '' : 's'} at a time${share}.`);
+    const outcomes = await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner })));
+    const result: DiffMutationResult = { summary, survivors: [], unreached: [] };
+    for (const [i, mutant] of mutants.entries()) {
+      summary.mutants++;
+      summary[COUNTED[outcomes[i]]]++;
+      const where = { file: mutant.file, line: mutant.line, description: mutant.description };
+      if (outcomes[i] === 'survived') result.survivors.push(where);
+      if (outcomes[i] === 'unreached') result.unreached.push(where);
     }
-    return tallyMutants(input, mutants, known, runners.map((runner) => ({ ...started, runner })), summary);
+    return result;
   }, () => stopAll(runners));
 }
 
@@ -1512,87 +1488,28 @@ async function stopAll(runners: Runner[]): Promise<void> {
 }
 
 /**
- * Counts each mutant's outcome into `summary`, in the order the mutants were made: the one `known`
- * holds for it, or else the outcome of running it on one of `runs`, which every mutant `known` does
- * not hold needs. Returns the survivors and the mutants no test reaches.
+ * Each mutant's outcome, in the order the mutants were made. Each of `runs` takes the next mutant as
+ * it finishes one, so as many run at once as there are runs. The first failure starts no more, stops
+ * every run still going, waits for every run to end, and is thrown; a failure to stop is logged, not
+ * thrown in its place.
  */
-async function tallyMutants(
-  input: DiffMutationInput,
-  mutants: LocatedMutant[],
-  known: (DiffOutcome | undefined)[],
-  runs: GreenRunner[] | undefined,
-  summary: DiffMutationResult['summary'],
-): Promise<DiffMutationResult> {
-  const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], unreached: [] };
-  const outcomes = await outcomesOf(input, mutants, known, runs);
-  for (const [i, mutant] of mutants.entries()) {
-    const outcome = outcomes[i];
-    summary.mutants++;
-    summary[COUNTED[outcome]]++;
-    if (outcome === 'survived') result.survivors.push({ file: mutant.file, line: mutant.line, description: mutant.description });
-    if (outcome === 'unreached') result.unreached.push({ file: mutant.file, line: mutant.line, description: mutant.description });
-  }
-  return result;
-}
-
-/**
- * Each mutant's outcome: the one `known` holds, or the outcome of running it. Each of `runs` takes
- * the next mutant as it finishes one, so as many run at once as there are runs. The first failure
- * starts no more, stops every run still going, waits for every run to end, and is thrown; a failure
- * to stop is logged, not thrown in its place.
- */
-async function outcomesOf(
-  input: DiffMutationInput,
-  mutants: LocatedMutant[],
-  known: (DiffOutcome | undefined)[],
-  runs: GreenRunner[] | undefined,
-): Promise<DiffOutcome[]> {
+async function outcomesOf(input: DiffMutationInput, mutants: LocatedMutant[], runs: GreenRunner[]): Promise<DiffOutcome[]> {
   const outcomes: DiffOutcome[] = [];
   let next = 0;
-  let finished = 0;
   let failure: { error: unknown } | undefined;
-  // Saves one at a time: the cache writes one temporary file per process.
-  let saving = Promise.resolve();
-  const save = () => (saving = saving.then(() => input.saveProgress?.()));
-  const work = async (run: GreenRunner | undefined) => {
+  const work = async (run: GreenRunner) => {
     while (!failure && next < mutants.length) {
       const i = next++;
       const mutant = mutants[i];
-      const stored = known[i];
-      const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
-      input.log(stored === undefined ? label : `${label} (reused: ${stored})`);
-      outcomes[i] = stored ?? (await runUnlessContextChanged(input, run!, mutant, { index: i, finished }, save));
-      finished++;
+      input.log(`mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`);
+      outcomes[i] = await runMutant(run, mutant);
     }
   };
-  await Promise.all((runs ?? [undefined]).map((run) => work(run).catch(async (error: unknown) => {
+  await Promise.all(runs.map((run) => work(run).catch(async (error: unknown) => {
     if (failure) return;
     failure = { error };
-    await stopAll((runs ?? []).map((r) => r.runner)).catch((stopError: unknown) => input.log((stopError as Error).message));
+    await stopAll(runs.map((r) => r.runner)).catch((stopError: unknown) => input.log((stopError as Error).message));
   })));
   if (failure) throw failure.error;
   return outcomes;
-}
-
-/**
- * Runs `mutant` and keeps its outcome, unless what the tests run with changed since the run began,
- * before it ran or while it ran: then the run is mixed and stops here, keeping nothing of it (#932, #940).
- * A timed-out mutant is not kept, nor an unreached one, which no run decided.
- */
-async function runUnlessContextChanged(
-  input: DiffMutationInput, run: GreenRunner, mutant: LocatedMutant, at: { index: number; finished: number }, save: () => Promise<void>,
-): Promise<DiffOutcome> {
-  await requireSameContext(input, `after ${at.finished} mutants had run or been reused`);
-  const { outcome, killer } = await runMutant(run, mutant, input.cache.killerHint(mutant));
-  if (outcome === 'timed-out' || outcome === 'unreached') return outcome;
-  await requireSameContext(input, `while mutant ${at.index + 1} ran, so its outcome is not kept`);
-  input.cache.set(mutant, outcome);
-  input.cache.setKillerHint(mutant, killer);
-  await save();
-  return outcome;
-}
-
-async function requireSameContext(input: DiffMutationInput, when: string): Promise<void> {
-  const change = await input.contextChange?.();
-  if (change !== undefined) throw new Error(`what the tests run with changed ${when}: ${change}`);
 }

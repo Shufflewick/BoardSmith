@@ -30,17 +30,17 @@ export function plantOtherRuns(projectDir: string): () => void {
   const planted = [
     join(scratchDir(projectDir), 'verify', 'test-report.json'),
     join(scratchDir(projectDir), 'test-step-check', 'mutant.json'),
-    join(scratchDir(projectDir), 'verify-mutation', 'mutant.json'),
+    join(scratchDir(projectDir), 'mutate', 'mutant.json'),
     join(makeCommandBuildDir(projectDir, 'verify'), 'test-report.json'),
     join(makeCommandBuildDir(projectDir, 'test-step-check'), 'mutant.json'),
-    join(makeCommandBuildDir(projectDir, 'verify-mutation'), 'mutant.json'),
+    join(makeCommandBuildDir(projectDir, 'mutate'), 'mutant.json'),
   ];
   for (const path of planted) {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, OTHER_RUN);
   }
   const left = () => ({
-    runDirs: (['verify', 'test-step-check', 'verify-mutation'] as const).flatMap((c) => commandBuildDirs(projectDir, c)).sort(),
+    runDirs: (['verify', 'test-step-check', 'mutate'] as const).flatMap((c) => commandBuildDirs(projectDir, c)).sort(),
     scratch: readdirSync(scratchDir(projectDir)).sort(),
   });
   const before = left();

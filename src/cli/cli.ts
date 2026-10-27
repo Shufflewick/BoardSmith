@@ -69,6 +69,7 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyCommand } from './commands/verify.js';
+import { mutateCommand } from './commands/mutate.js';
 import { installBrowserCommand, smokeCommand } from './commands/smoke.js';
 import { reviewGateCommand } from './commands/review-gate.js';
 import { agentCommand } from './commands/agent.js';
@@ -202,6 +203,17 @@ export function createProgram(): Command {
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
+
+  // A sample of mutants of the change, for merge time (#1496).
+  program
+    .command('mutate')
+    .description(
+      'Break 3 sampled code lines under src/ changed since the merge base with --base, one at a time, and run the unit ' +
+        'tests that import the changed files against each: fail when no test notices one, or no test imports its file',
+    )
+    .requiredOption('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base, e.g. main')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((options: { base: string; project?: string }) => mutateCommand(options));
 
   // The in-browser smoke test alone (#453), and the browser it runs in.
   program

@@ -18,7 +18,6 @@ import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
-import type { KillerHint } from '../lib/mutant-cache.js';
 
 const lines = (...n: number[]) => new Set(n);
 
@@ -150,21 +149,21 @@ describe('sampleMutants (#1486)', () => {
   const items = Array.from({ length: 100 }, (_, line) => ({ file: 'src/a.ts', line }));
 
   it('keeps every mutant when there are at most 30', () => {
-    expect(sampleMutants(items.slice(0, 30), 'commit-a')).toEqual(items.slice(0, 30));
+    expect(sampleMutants(items.slice(0, 30), 'commit-a', 30)).toEqual(items.slice(0, 30));
   });
 
   it('picks 30, kept in their order, the same ones for the same seed and others for another', () => {
-    const picked = sampleMutants(items, 'commit-a');
+    const picked = sampleMutants(items, 'commit-a', 30);
     expect(picked).toHaveLength(30);
     expect(picked).toEqual([...picked].sort((a, b) => a.line - b.line));
-    expect(sampleMutants(items, 'commit-a')).toEqual(picked);
-    expect(sampleMutants(items, 'commit-b')).not.toEqual(picked);
+    expect(sampleMutants(items, 'commit-a', 30)).toEqual(picked);
+    expect(sampleMutants(items, 'commit-b', 30)).not.toEqual(picked);
   });
 
   it('takes a mutant of every changed file before a second of any, so a file no test loads is still found', () => {
     const small = [{ file: 'src/b.ts', line: 1 }, { file: 'src/c.ts', line: 1 }];
     for (const seed of ['commit-a', 'commit-b', 'commit-c']) {
-      expect(sampleMutants([...items, ...small], seed)).toEqual(expect.arrayContaining(small));
+      expect(sampleMutants([...items, ...small], seed, 30)).toEqual(expect.arrayContaining(small));
     }
   });
 });
@@ -294,7 +293,7 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
     const project = await makeProject(files);
     const added = new Map(Array.from({ length: 31 }, (_, i) => [`src/m${i}.ts`, lines(1)] as const));
-    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a').map((m) => m.file));
+    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a', 30).map((m) => m.file));
     const left = [...added.keys()].find((f) => !sampled.has(f))!;
     const all = Array.from({ length: 31 }, (_, i) => `import { v as v${i} } from '../src/m${i}';`).join('\n');
     const sources: Record<string, string> = {
@@ -325,7 +324,7 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
     const project = await makeProject(files);
     const added = new Map(Array.from({ length: 31 }, (_, i) => [`src/m${i}.ts`, lines(1)] as const));
-    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a').map((m) => m.file));
+    const sampled = new Set(sampleMutants(await collectMutants(project, added), 'commit-a', 30).map((m) => m.file));
     const b = [...added.keys()].find((f) => !sampled.has(f))!;
     const a = [...sampled][0];
     const path = 'tests/child.test.ts';
@@ -781,9 +780,9 @@ it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)
 });
 
 /**
- * #452: `boardsmith verify` mutates the lines changed since a base commit, with no chunk and no
- * Spec Manifest, and runs the whole suite against each mutant. What it reports is each mutant no
- * test caught, by file and line.
+ * #452, #1496: `boardsmith mutate` mutates the lines changed since a base commit, with no chunk and
+ * no Spec Manifest, and tries a sample of 3. The unmutated run, and each mutant's, is of the test
+ * files that import a sampled mutant's file. What it reports is each mutant no test caught, by file and line.
  */
 describe('runDiffMutationCheck', () => {
   const RULES_TWO = `export function bid(high: number, offer: number): boolean {
@@ -794,20 +793,6 @@ export function fee(price: number): number {
 }
 `;
 
-  /** A cache that holds nothing and keeps what it is given, standing in for `openMutantCache`. */
-  function memoryCache(held: Map<string, 'killed' | 'survived'> = new Map(), hints: Map<string, KillerHint> = new Map()) {
-    const key = (m: { file: string; source: string }) => `${m.file}\0${m.source}`;
-    return {
-      held,
-      hints,
-      get: (m: { file: string; source: string }) => held.get(key(m)),
-      set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
-      killerHint: (m: { file: string; source: string }) => hints.get(key(m)),
-      setKillerHint: (m: { file: string; source: string }, hint: KillerHint | undefined) => void (hint ? hints.set(key(m), hint) : hints.delete(key(m))),
-      save: async () => {},
-    };
-  }
-
   async function suite(project: string, files: Record<string, string>): Promise<void> {
     for (const [path, text] of Object.entries(files)) {
       await fs.mkdir(dirname(join(project, path)), { recursive: true });
@@ -815,22 +800,21 @@ export function fee(price: number): number {
     }
   }
 
-  it("tries a sample of at most 30 of the changed lines' mutants, the same ones for the same seed (#1486)", async () => {
-    const project = await makeProject({ 'src/values.ts': MANY_VALUES });
-    const cache = memoryCache();
-    for (const mutant of generateMutants('src/values.ts', MANY_VALUES, MANY_LINES)) cache.set(mutant, 'killed');
+  it("tries a sample of 3 of the changed lines' mutants, the same ones for the same seed (#1496)", async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/values.ts': MANY_VALUES });
     const tried = async (seed: string) => {
       const logged: string[] = [];
-      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/values.ts', MANY_LINES]]), cache, seed, log: (line) => logged.push(line) });
-      expect(result.summary.mutants).toBe(30);
-      expect(result.reused).toBe(30);
-      return logged;
+      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/values.ts', MANY_LINES]]), seed, log: (line) => logged.push(line) });
+      // No test imports src/values.ts, so no mutant runs, and each is reported as in a file no test loads.
+      expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 0, survived: 0, timedOut: 0, unreached: 3 });
+      return logged.filter((line) => line.startsWith('mutant '));
     };
     const first = await tried('commit-a');
-    expect(first[0]).toMatch(/^mutant 1\/30: /);
+    expect(first).toHaveLength(3);
+    expect(first[0]).toMatch(/^mutant 1\/3: src\/values\.ts:/);
     expect(await tried('commit-a')).toEqual(first);
     expect(await tried('commit-b')).not.toEqual(first);
-  });
+  }, 60_000);
 
   it("names vitest's report when it cannot read it, rather than saying vitest wrote none (#1174)", async () => {
     const sandbox = fixtureSandbox('bs-mutant-report-');
@@ -847,7 +831,7 @@ export function fee(price: number): number {
     try {
       await expect(runDiffMutationCheck({
         seed: 'fixture',
-        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       })).rejects.toThrow(/Could not read .*report\.json \(EISDIR\)/);
     } finally {
       vi.unstubAllEnvs();
@@ -867,6 +851,7 @@ export function fee(price: number): number {
     await suite(project, {
       'tests/busy.test.ts': `import { it } from 'vitest';
 import { existsSync, writeFileSync } from 'node:fs';
+import '../src/rules';
 const phase = process.env.BOARDSMITH_MUTANT ? 'mutant' : 'baseline';
 it('work already running in another worker', async () => {
   writeFileSync(new URL('./' + phase + '-busy', import.meta.url), 'started');
@@ -894,7 +879,7 @@ it('catches the changed value after the other worker starts', async () => {
     try {
       const result = await runDiffMutationCheck({
         seed: 'fixture',
-        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       });
       expect(await fs.readFile(join(project, 'tests/baseline-finished'), 'utf-8')).toBe('finished');
       expect(await fs.readFile(join(project, 'tests/mutant-busy'), 'utf-8')).toBe('started');
@@ -939,7 +924,7 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
     try {
       const result = await runDiffMutationCheck({
         seed: 'fixture',
-        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
+        projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
       expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, unreached: 0 });
@@ -949,9 +934,8 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
     }
   }, 120_000);
 
-  it('runs the whole suite against each mutant and reports every mutant no test caught, by file and line', async () => {
+  it('runs the test files that import the changed file against each mutant and reports every mutant no test caught, by file and line', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES_TWO });
-    const cache = memoryCache();
     // Two test files: the one that catches the bid mutants is not the one "near" the change.
     await suite(project, {
       'tests/bid.test.ts': `import { it, expect } from 'vitest';
@@ -966,48 +950,61 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     });
 
     const expectOtherRunsKept = plantOtherRuns(project);
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), cache, log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), log: () => {} });
 
     expect(result.notGreen).toBeUndefined();
-    expect(result.summary.mutants).toBe(5);
-    expect(result.summary.killed).toBe(2);
-    expect(result.summary.survived).toBe(3);
+    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 1, survived: 2, timedOut: 0, unreached: 0 });
     expect(result.survivors).toEqual([
       { file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' },
-      { file: 'src/rules.ts', line: 5, description: '* -> /' },
       { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
     ]);
-    expect(result.reused).toBe(0);
-    expect([...cache.held.values()].sort()).toEqual(['killed', 'killed', 'survived', 'survived', 'survived']);
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES_TWO);
-    expectOtherRunsKept();
-
-    // Run again with every outcome held: no vitest run at all, and the same report.
-    const logged: string[] = [];
-    const again = await runDiffMutationCheck({
-      seed: 'fixture',
-      projectDir: project,
-      added: new Map([['src/rules.ts', lines(2, 5)]]),
-      cache,
-      log: (line) => logged.push(line),
-    });
-    expect(again.reused).toBe(5);
-    expect(again.summary).toEqual(result.summary);
-    expect(again.survivors).toEqual(result.survivors);
-    expect(logged.every((line) => line.includes('(reused: '))).toBe(true);
-    expect(logged).toHaveLength(5);
     expectOtherRunsKept();
   }, 120_000);
 
-  it('tries no mutant on a red suite, and names the failing tests', async () => {
+  it('leaves out of every run a red test file that imports no changed file (#1496)', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES, 'src/other.ts': 'export const other = 1;\n' });
+    await suite(project, {
+      'tests/bid.test.ts': `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`,
+      'tests/other.test.ts': "import { it, expect } from 'vitest';\nimport { other } from '../src/other';\nit('is red', () => { expect(other).toBe(2); });\n",
+    });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toBeUndefined();
+    expect(result.summary).toEqual({ files: 1, mutants: 2, killed: 2, survived: 0, timedOut: 0, unreached: 0 });
+  }, 120_000);
+
+  it('tries no mutant when a test file that imports a changed file is red, and names the failing tests', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     await suite(project, {
-      'tests/red.test.ts': "import { it, expect } from 'vitest';\nit('is red', () => { expect(1).toBe(2); });\n",
+      'tests/red.test.ts': "import { it, expect } from 'vitest';\nimport { bid } from '../src/rules';\nit('is red', () => { expect(bid(1, 2)).toBe(false); });\n",
     });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
     expect(result.summary.mutants).toBe(0);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
+  }, 60_000);
+
+  it('names a test that fails without a test file that imports no changed file, since that file is left out of the run (#1496)', async () => {
+    // tests/a.test.ts never imports src/rules.ts, so it is left out, and tests/b.test.ts fails for want of its setup.
+    const project = await makeProject({
+      'vitest.config.ts': IN_ORDER,
+      'src/rules.ts': 'export const enabled = true;\n',
+      'tests/a.test.ts': SETS_UP,
+      'tests/b.test.ts': `import { existsSync, rmSync } from 'node:fs';
+import { it, expect } from 'vitest';
+import { enabled } from '../src/rules';
+const ready = existsSync(new URL('./ready', import.meta.url));
+rmSync(new URL('./ready', import.meta.url), { force: true });
+it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).toBe('boolean'); });
+`,
+    });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['tests/b.test.ts > reads the rule']);
+    expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
   // #937: a Vitest workspace project builds its own Vite server from its own config, so the
@@ -1027,7 +1024,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
 
     async function diffCheck(files: Record<string, string>) {
       const project = await makeProject({ 'src/rules.ts': RULES, 'project.config.mts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST, ...files });
-      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     }
 
     it('runs each mutant in an inline project the config names', async () => {
@@ -1096,7 +1093,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
         await fs.mkdir(join(modules, 'vitest'));
         await fs.writeFile(join(modules, 'vitest', 'package.json'), JSON.stringify({ name: 'vitest', version: vitest.version }));
       }
-      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
+      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     }
 
     it('runs under a pnpm install, whose node_modules/.bin/vitest is a script', async () => {
@@ -1182,9 +1179,10 @@ export default defineConfig({ test: { workspace: './config/projects.ts' } });
     });
   });
 
-  // #981: a mutant runs only against the test files that loaded its file in the unmutated run,
-  // and a mutant in a file no test loads is reported as such, neither killed nor survived.
-  describe('runs each mutant only against the test files that load its file (#981)', () => {
+
+  // #981, #1496: the runs are of the test files that import a sampled mutant's file, and a mutant in a
+  // file none of them loads is reported as such, neither killed nor survived.
+  describe('runs the test files that import the changed files, and finds a mutant no test loads (#981, #1496)', () => {
     /** A test file's first lines: under a mutant, it notes the mutated file's name and its own in tests/ran. */
     const notesRun = (name: string) => `import { appendFileSync, readFileSync } from 'node:fs';
 import { basename } from 'node:path';
@@ -1203,7 +1201,7 @@ it('doubles', () => { expect(double(2)).toBe(4); });
       'tests/b.test.ts': `${notesRun('b')}import { triple } from '../src/b';
 it('triples', () => { expect(triple(2)).toBe(6); });
 `,
-      // No static import names the plugin: the path is put together while the test runs.
+      // No import names the plugin: the path is put together while the test runs, from a template Vite reads as a glob of src/.
       'tests/dynamic.test.ts': `${notesRun('dynamic')}const which = ['plug', 'in'].join('');
 it('loads a module by a path built at run time', async () => {
   const { name } = await import(\`../src/\${which}.ts\`);
@@ -1215,47 +1213,49 @@ it('loads a module by a path built at run time', async () => {
 
     async function selectionCheck(config: string, files: Record<string, string> = {}, added = CHANGED) {
       const project = await makeProject({ 'vitest.config.ts': config, ...SOURCES, ...files });
-      const cache = memoryCache();
-      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, cache, log: () => {} });
+      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, log: () => {} });
       const ran = await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '');
-      return { result, cache, ran: [...new Set(ran.split('\n').filter(Boolean))].sort() };
+      return { result, ran: [...new Set(ran.split('\n').filter(Boolean))].sort() };
     }
 
-    it('runs a mutant only against the files that load it, finds a module loaded by a computed path, and reports a file no test loads', async () => {
-      const { result, cache, ran } = await selectionCheck(VITEST_CONFIG);
+    it('runs only the test files that import a changed file, finds one a dynamic import reaches, and reports a file none of them loads', async () => {
+      const { result, ran } = await selectionCheck(VITEST_CONFIG);
       expect(result.notGreen).toBeUndefined();
-      // a.ts is imported by a.test.ts alone; plugin.ts is reached only through the dynamic import.
-      expect(ran).toEqual(['a.ts a', 'plugin.ts dynamic']);
-      expect(result.summary).toEqual({ files: 3, mutants: 4, killed: 3, survived: 0, timedOut: 0, unreached: 1 });
-      expect(result.survivors).toEqual([]);
+      // b.test.ts imports no changed file, so it is left out of every run.
+      expect(ran.length).toBeGreaterThan(0);
+      expect(ran.filter((r) => r.endsWith(' b'))).toEqual([]);
+      expect(result.summary).toEqual({ files: 3, mutants: 3, killed: 2, survived: 0, timedOut: 0, unreached: 1 });
+      // dynamic.test.ts may load any file of src/, but in the unmutated run it loaded only the plugin.
       expect(result.unreached).toEqual([{ file: 'src/orphan.ts', line: 2, description: 'return value replaced with undefined' }]);
-      // A mutant no test runs is not an outcome of any run, so nothing is kept for it.
-      expect([...cache.held.values()]).toEqual(['killed', 'killed', 'killed']);
     }, 120_000);
 
-    it('runs every mutant against every file that shares a worker with another, since it may use what that file loaded', async () => {
+    it('runs every mutant when a test file shares a worker with another, since it may use what that file loaded', async () => {
       const { result, ran } = await selectionCheck(`import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { include: ['tests/**/*.test.ts'], isolate: false, fileParallelism: false } });
-`);
+`, {
+        'tests/a2.test.ts': `${notesRun('a2')}import { double } from '../src/a';
+it('doubles again', () => { expect(double(3)).toBe(6); });
+`,
+      }, new Map([['src/a.ts', lines(2)], ['src/orphan.ts', lines(2)]]));
       expect(result.notGreen).toBeUndefined();
-      // Whichever file ran second in the shared worker is run for the orphan's mutant too, which survives it.
+      // Whichever file ran second in the shared worker may have used the orphan, so its mutant runs, and survives.
       expect(result.unreached).toEqual([]);
       expect(result.survivors).toEqual([{ file: 'src/orphan.ts', line: 2, description: 'return value replaced with undefined' }]);
-      expect(ran.filter((r) => r.startsWith('orphan.ts '))).toHaveLength(2);
+      expect(ran).toEqual(expect.arrayContaining(['orphan.ts a', 'orphan.ts a2']));
     }, 120_000);
 
-    it('runs every mutant against every file when a global setup loads project code outside the test workers', async () => {
+    it('runs every mutant when a global setup loads project code outside the test workers', async () => {
       const { result } = await selectionCheck(`import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { include: ['tests/**/*.test.ts'], globalSetup: ['./global-setup.ts'] } });
 `, {
         'src/seed.ts': 'export function seed(): number {\n  return 7;\n}\n',
         'global-setup.ts': "import { seed } from './src/seed';\nexport default ({ provide }) => { provide('seed', seed()); };\n",
-        'tests/seed.test.ts': `${notesRun('seed')}it('starts from the seed', () => { expect(inject('seed')).toBe(7); });\n`,
-      }, new Map([['src/seed.ts', lines(2)]]));
+        'tests/seed.test.ts': `${notesRun('seed')}import { double } from '../src/a';\nit('starts from the seed', () => { expect(inject('seed')).toBe(7); expect(double(2)).toBe(4); });\n`,
+      }, new Map([['src/a.ts', lines(2)], ['src/seed.ts', lines(2)]]));
       expect(result.notGreen).toBeUndefined();
       // No test worker loads seed.ts; the global setup does, and hands its value to the tests.
       expect(result.unreached).toEqual([]);
-      expect(result.summary).toMatchObject({ mutants: 2, killed: 2 });
+      expect(result.survivors).toEqual([]);
     }, 120_000);
 
     it('runs a mutant against a test file that reaches its file only through another file', async () => {
@@ -1266,171 +1266,14 @@ it('quadruples', () => { expect(quadruple(2)).toBe(8); });
 `,
       }, new Map([['src/a.ts', lines(2)]]));
       expect(result.notGreen).toBeUndefined();
-      expect(ran).toEqual(['a.ts a']);
-      expect(result.summary).toMatchObject({ survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
-    }, 120_000);
-
-    it('runs a mutant against the test files whose project setup file loads its file', async () => {
-      const { result, ran } = await selectionCheck(`import { defineConfig } from 'vitest/config';
-export default defineConfig({ test: { include: ['tests/**/*.test.ts'], setupFiles: ['./setup.ts'] } });
-`, {
-        'src/seed.ts': 'export function seed(): number {\n  return 7;\n}\n',
-        'setup.ts': "import { seed } from './src/seed';\n(globalThis as { seed?: number }).seed = seed();\n",
-        'tests/seed.test.ts': `${notesRun('seed')}it('starts from the seed', () => { expect((globalThis as { seed?: number }).seed).toBe(7); });\n`,
-      }, new Map([['src/seed.ts', lines(2)], ['src/a.ts', lines(2)]]));
-      expect(result.notGreen).toBeUndefined();
-      // seed.ts is loaded before the recording setup file runs, which is merged after the project's own.
-      expect(result.unreached).toEqual([]);
-      expect(result.summary).toMatchObject({ files: 2, survived: 0, timedOut: 0, unreached: 0, killed: result.summary.mutants });
-      // The setup file did not turn selection off: a.ts's mutants still ran only against a.test.ts.
-      expect(ran.filter((r) => r.startsWith('a.ts '))).toEqual(['a.ts a']);
-      expect(ran).toContain('seed.ts seed');
-    }, 120_000);
-  });
-
-  // #954: a mutant run again (its outcome no longer reusable) first tries the one test that killed it last time.
-  describe('tries the test that killed a mutant before first, as advice, never as a verdict (#954)', () => {
-    /** A test file's first lines: under a mutant, it notes `<name> <what>` in tests/ran when it loads and as each test runs. */
-    const notes = (name: string) => `import { appendFileSync } from 'node:fs';
-import { describe, it, expect } from 'vitest';
-import { enabled } from '../src/rules';
-const note = (what: string) => { if (process.env.BOARDSMITH_MUTANT) appendFileSync(new URL('./ran', import.meta.url), '${name} ' + what + '\\n'); };
-note('loaded');
-`;
-    const BROAD = `${notes('broad')}it('reads the rule', () => { note('reads'); expect(typeof enabled).toBe('boolean'); });\n`;
-    const KILLER = `${notes('killer')}it('a neighbour', () => { note('neighbour'); expect(1).toBe(1); });
-describe('the rule', () => { it('is on', () => { note('is on'); expect(enabled).toBe(true); }); });
-`;
-    const KILLER_HINT: KillerHint = { file: 'tests/killer.test.ts', test: 'the rule is on' };
-
-    /** One mutant (`true -> false`), run with `hints` held for it; returns the result, the hints after, and what ran under it. */
-    async function hinted(tests: Record<string, string>, hint?: KillerHint) {
-      const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': 'export const enabled = true;\n', ...tests });
-      const cache = memoryCache();
-      if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
-      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
-      const ran = (await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '')).split('\n').filter(Boolean);
-      return { result, hints: [...cache.hints.values()], ran };
-    }
-
-    it('learns the test that killed a mutant, and next time runs only that test first, which kills it', async () => {
-      const first = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER });
-      expect(first.result.summary).toMatchObject({ mutants: 1, killed: 1 });
-      expect(first.hints).toEqual([KILLER_HINT]);
-
-      const again = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, KILLER_HINT);
-      expect(again.result.summary).toMatchObject({ mutants: 1, killed: 1, survived: 0 });
-      // The broad file never ran: the hinted test's own file decided it, run whole so its test sees the state it passed with.
-      expect(again.ran).toEqual(['killer loaded', 'killer neighbour', 'killer is on']);
-      expect(again.hints).toEqual([KILLER_HINT]);
-    }, 120_000);
-
-    it('does not count a hinted test that needs an earlier test in its file as killing a mutant it does not notice', async () => {
-      const STATEFUL = `${notes('stateful')}let ready = false;
-it('sets up', () => { note('sets up'); ready = typeof enabled === 'boolean'; expect(ready).toBe(true); });
-it('relies on the setup', () => { note('relies'); expect(ready).toBe(true); });
-`;
-      const { result, ran, hints } = await hinted({ 'tests/stateful.test.ts': STATEFUL }, { file: 'tests/stateful.test.ts', test: 'relies on the setup' });
-      // Nothing checks the rule's value, so the mutant survives; alone, the hinted test would fail for want of its setup.
-      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
-      expect(ran.slice(0, 3)).toEqual(['stateful loaded', 'stateful sets up', 'stateful relies']);
-      // The hint no longer kills, so it is dropped rather than tried again next time (#1308).
-      expect(hints).toEqual([]);
-    }, 120_000);
-
-    it('runs every required test when the hinted test passes, and learns the test that really killed it', async () => {
-      const broadHint = { file: 'tests/broad.test.ts', test: 'reads the rule' };
-      const { result, hints, ran } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, broadHint);
-      expect(result.summary).toMatchObject({ mutants: 1, killed: 1 });
-      // The hint was tried first, alone, then the full run reached the real killer.
-      expect(ran.slice(0, 2)).toEqual(['broad loaded', 'broad reads']);
-      expect(ran).toContain('killer is on');
-      expect(hints).toEqual([KILLER_HINT]);
-    }, 120_000);
-
-    it('completes the whole required suite for a survivor, even after its hinted test passes', async () => {
-      const OTHER = `${notes('other')}it('also reads it', () => { note('reads'); expect(enabled === true || enabled === false).toBe(true); });\n`;
-      const { result, ran, hints } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/other.test.ts': OTHER }, { file: 'tests/broad.test.ts', test: 'reads the rule' });
-      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
-      expect(ran.filter((r) => r === 'broad reads')).toHaveLength(2);
-      expect(ran).toContain('other reads');
-      expect(hints).toEqual([]);
-    }, 120_000);
-
-    it('counts an earlier test of the hinted file failing on its own assertion as the kill, and learns it (#1308)', async () => {
-      const EARLY = `${notes('early')}it('checks the rule', () => { note('checks'); expect(enabled).toBe(true); });
-it('reads it later', () => { note('later'); expect(typeof enabled).toBe('boolean'); });
-`;
-      const { result, ran, hints } = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/early.test.ts': EARLY }, { file: 'tests/early.test.ts', test: 'reads it later' });
-      expect(result.summary).toMatchObject({ mutants: 1, killed: 1 });
-      // The trial alone decided it: no full run followed.
-      expect(ran).toEqual(['early loaded', 'early checks']);
-      expect(hints).toEqual([{ file: 'tests/early.test.ts', test: 'checks the rule' }]);
-    }, 120_000);
-
-    it('skips a hint whose test no longer exists, and does not count a hinted file that breaks on load as a kill', async () => {
-      const gone = await hinted({ 'tests/broad.test.ts': BROAD, 'tests/killer.test.ts': KILLER }, { file: 'tests/killer.test.ts', test: 'a test since deleted' });
-      expect(gone.result.summary).toMatchObject({ mutants: 1, killed: 1 });
-      // No trial of the killer file: it loaded once, in the full run.
-      expect(gone.ran.filter((r) => r === 'killer loaded')).toHaveLength(1);
-      expect(gone.hints).toEqual([KILLER_HINT]);
-
-      const SETUP = `${notes('setup')}if (!enabled) throw new Error('setup needs the rule');
-it('needs setup', () => { note('needs setup'); expect(1).toBe(1); });
-`;
-      const broken = await hinted({ 'tests/setup.test.ts': SETUP, 'tests/killer.test.ts': KILLER }, { file: 'tests/setup.test.ts', test: 'needs setup' });
-      expect(broken.result.summary).toMatchObject({ mutants: 1, killed: 1 });
-      // The hinted file failed to load, which proves nothing about its test, so the full run went on to the killer.
-      expect(broken.ran[0]).toBe('setup loaded');
-      expect(broken.ran).toContain('killer is on');
-    }, 120_000);
-  });
-
-  // #1329: a mutant runs against a subset of the suite, so a failure there counts only if that subset passes unmutated.
-  describe('trusts a failure in a subset of the suite only when that subset passes unmutated (#1329)', () => {
-    // Nothing here checks the rule's value, so a mutant of it survives in an honest run.
-    const NEEDS_SETUP = `import { existsSync, rmSync } from 'node:fs';
-import { it, expect } from 'vitest';
-import { enabled } from '../src/rules';
-const ready = existsSync(new URL('./ready', import.meta.url));
-rmSync(new URL('./ready', import.meta.url), { force: true });
-it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).toBe('boolean'); });
-`;
-
-    async function sharedState(setUp: string, hint?: KillerHint) {
-      const project = await makeProject({
-        'vitest.config.ts': IN_ORDER,
-        'src/rules.ts': 'export const enabled = true;\n',
-        'tests/a.test.ts': setUp,
-        'tests/b.test.ts': NEEDS_SETUP,
-      });
-      const cache = memoryCache();
-      if (hint) cache.hints.set('src/rules.ts\0export const enabled = false;\n', hint);
-      const run = runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache, log: () => {} });
-      return { run, cache };
-    }
-
-    it('refuses to count a kill from the test files that load the mutated file when they fail unmutated without the rest of the suite', async () => {
-      // tests/a.test.ts never loads src/rules.ts, so the mutant's run leaves it out, and tests/b.test.ts fails for want of its setup.
-      const { run, cache } = await sharedState(SETS_UP);
-      await expect(run).rejects.toThrow(
-        'The test files that load src/rules.ts fail when run without the rest of the suite, though the whole suite passes: tests/b.test.ts > reads the rule.',
-      );
-      expect([...cache.held.values()]).toEqual([]);
-    }, 120_000);
-
-    it('skips a hint whose file fails unmutated when run alone, and lets the full run decide', async () => {
-      // tests/a.test.ts loads src/rules.ts too, so the full run holds both files and passes unmutated; tests/b.test.ts alone does not.
-      const { run, cache } = await sharedState(`import '../src/rules';\n${SETS_UP}`, { file: 'tests/b.test.ts', test: 'reads the rule' });
-      const result = await run;
-      expect(result.summary).toMatchObject({ mutants: 1, killed: 0, survived: 1 });
-      expect(cache.hints.size).toBe(0);
+      expect(ran).toContain('a.ts a');
+      expect(result.summary).toMatchObject({ survived: 0, timedOut: 0, unreached: 0, killed: 2 });
     }, 120_000);
   });
 
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, reused: 0, survivors: [], unreached: [] });
+    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, survivors: [], unreached: [] });
   });
 });

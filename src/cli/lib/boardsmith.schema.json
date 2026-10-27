@@ -160,7 +160,7 @@
     "mutation": {
       "x-convex-sink": false,
       "type": "object",
-      "description": "How many mutation trials `boardsmith verify` runs at once (trials), and the total Vitest test workers they share (workers, at least trials). The unmutated baseline runs with all the workers, each trial with workers / trials, rounded down. Without it, trials run one at a time. Read by verify.ts (`lib/mutation-budget.ts`); never published.",
+      "description": "An override of how many mutants `boardsmith mutate` runs at once (trials), and the total Vitest test workers they share (workers, at least trials). The unmutated run gets all the workers, each trial workers / trials, rounded down. Without it, every sampled mutant runs at once. Read by mutate.ts (`lib/mutation-budget.ts`); never published.",
       "additionalProperties": false,
       "required": ["trials", "workers"],
       "properties": {

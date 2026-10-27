@@ -1,5 +1,14 @@
 # Migration Guide
 
+## `boardsmith mutate`: a sample of 3 mutants of a change, for merge time (#1496)
+
+`boardsmith mutate --base <ref>` tries 3 mutants of the code lines changed
+since the merge base with `<ref>`, against the unit tests that import the
+changed files, all 3 at once. The `mutation` budget in `boardsmith.json` is now
+an optional override for it. Mutant outcomes are no longer cached: delete
+`.git/boardsmith/verify/mutants.json` and `.git/boardsmith/verify/killer-hints.json`
+if they exist.
+
 ## `boardsmith verify` runs its checks side by side, with no mutation check, and publish uploads its build (#1495)
 
 `boardsmith verify` no longer runs a mutation check: its checks are test,

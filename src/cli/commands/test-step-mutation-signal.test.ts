@@ -7,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { fixtureSandbox } from '../../testing/fixture-sandbox.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
-import type { KillerHint } from '../lib/mutant-cache.js';
 
 vi.setConfig({ testTimeout: 120_000 });
 
@@ -49,7 +48,7 @@ if (process.env.CHECK_KIND === 'scopes') {
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
-    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} } });
+    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {})});
   try {
     if (process.env.NESTED) await withCommandBuildDir(projectDir, 'verify', run);
     else await run();
@@ -140,8 +139,8 @@ async function waitForWorker(project: string, child: ChildProcess, output: () =>
   return owned;
 }
 
-/** Runs one mutant that loops, with `hint` naming its looping test, and checks it is timed out after one run, its group gone. */
-async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> {
+/** Runs one mutant that loops, and checks it is timed out after one run, its group gone. */
+async function keepsTimeoutVerdict(): Promise<void> {
   const { sandbox, project } = await mutationProject();
   for (const key of ['HOME', 'TMPDIR', 'PATH'] as const) vi.stubEnv(key, sandbox.env[key]!);
   vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
@@ -151,7 +150,6 @@ async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> 
   const running = runDiffMutationCheck({
     seed: 'fixture',
     projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-    cache: { get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
   });
   let finished = false;
   void running.then(() => { finished = true; }, () => { finished = true; });
@@ -288,10 +286,7 @@ it('holds each trial worker open', async () => {
     }
   });
 
-  it('keeps the timeout verdict and reaps the timed-out mutant group', () => keepsTimeoutVerdict(undefined));
-
-  it('keeps the timeout verdict of a hint trial, with no full run after it (#1308)', () =>
-    keepsTimeoutVerdict({ file: 'tests/busy.test.ts', test: 'holds an actual mutant worker open' }));
+  it('keeps the timeout verdict and reaps the timed-out mutant group', () => keepsTimeoutVerdict());
 
   for (const repeat of [false, true]) {
     it(`finishes asynchronous and synchronous nested cleanup before reraising the first signal${repeat ? ' when signalled again' : ''}`, async () => {
