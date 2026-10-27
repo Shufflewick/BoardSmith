@@ -1701,6 +1701,33 @@ describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actio
   });
 });
 
+// #1494 made `*.sim.test.ts` the only file that may play whole games, and no plain vitest run collects
+// one, so the random-sim playthrough is a sim the test step runs itself and never a Spec Manifest row (#1497).
+describe('the random-sim playthrough is a sim (#1497)', () => {
+  const flat = (file: string) => read(file).replace(/\s+/g, ' ');
+
+  it('build/test.md item 4 writes it as tests/<slug>.sim.test.ts and runs it with boardsmith test --sims', () => {
+    const item4 = flat('build/test.md').split('4. **Random-sim playthrough**')[1].split('```typescript')[0];
+    expect(item4).toContain('`tests/<slug>.sim.test.ts`');
+    expect(item4).toContain('`npx boardsmith test --sims <slug>`');
+    expect(item4).toMatch(/never a Spec Manifest row/);
+  });
+
+  it.each([
+    ['build/test.md', /The exemptions are .{0,300}every sim \(`\*\.sim\.test\.ts`/],
+    ['build/spec.md', /Six kinds of file are never rows: .{0,300}every sim \(`\*\.sim\.test\.ts`/],
+    ['templates/CHUNK.template.md', /Never rows: .{0,300}every sim \(\*\.sim\.test\.ts\)/],
+  ])('%s lists a sim among the files that are never rows', (file, pattern) => {
+    expect(flat(file)).toMatch(pattern);
+  });
+
+  it('build/final-acceptance.md counts only the unit tests, not the sims, as the automated suite', () => {
+    const count = flat('build/final-acceptance.md').split('**Test count**')[1].split('- **Deferred**')[0];
+    expect(count).toMatch(/sims[^.]*are not in it/);
+    expect(count).not.toMatch(/unit \+ sim/);
+  });
+});
+
 describe('PROC-02 — autonomy is how-not-what', () => {
   it('state-machine.md states explicitly that autonomy governs HOW to build, never WHAT the rules are', () => {
     const sm = read('state-machine.md');

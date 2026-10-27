@@ -19,8 +19,8 @@
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
  *   6. Every new test file the chunk wrote anywhere in the project that runs the game's code is a
  *      Spec Manifest row, so the mutation check runs it (#485). A file moved or rewritten from another
- *      counts as new. Exempt: files vitest never collects (the browser smoke test under
- *      `tests/browser/` among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
+ *      counts as new. Exempt: files a plain vitest run never collects (the browser smoke test under
+ *      `tests/browser/` and the sims among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
  *      measurement harnesses under `design/chunks/<slug>/evidence/`, guards (below), and earlier
  *      chunks' test files this chunk edits.
  *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`). An exempt
@@ -563,19 +563,21 @@ const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
 /**
- * Where vitest never collects a test file in a game project: its own default exclusions, and two of
- * the three `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees under
- * `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs. The third,
- * `.worktrees/`, holds other git checkouts, whose files git does not list.
+ * Where a plain vitest run never collects a test file in a game project: its own default exclusions,
+ * and three of the four `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees
+ * under `.boardsmith/`, the browser tests under `tests/browser/`, which only Playwright runs, and the
+ * sims (`*.sim.test.ts`), which only `boardsmith test --sims` runs (#1494). The fourth, `.worktrees/`,
+ * holds other git checkouts, whose files git does not list.
  */
 const NOT_COLLECTED = Object.freeze([
   /(^|\/)(node_modules|dist|cypress)\//,
   /(^|\/)\.(idea|git|cache|output|temp)\//,
   /^\.boardsmith\//,
   /(^|\/)tests\/browser\//,
+  /\.sim\.(test|spec)\.[cm]?[jt]sx?$/,
 ]);
 
-/** A file vitest collects as a test, by its default pattern and the exclusions above. */
+/** A file a plain vitest run collects as a test, by its default pattern and the exclusions above. */
 export const isTestFile = (path: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 

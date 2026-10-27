@@ -870,6 +870,15 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     expect(findings).toEqual([]);
   });
 
+  // #1497: a plain vitest run, the mutation check's included, never collects a sim (#1494), so a sim is never a row.
+  it('accepts a new sim, which only boardsmith test --sims runs (#1497)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/auction.sim.test.ts': `import { simulateRandomGames } from 'boardsmith/testing';\nimport { bid } from '../src/rules/auction';\nvoid simulateRandomGames(bid);\n`,
+    });
+    expect(findings).toEqual([]);
+  });
+
   // Ruling (2026-10-03): an exempt chunk that pins an earlier chunk's behaviour adds the test as its
   // own row marked `none (regression)`. It pins behaviour that already exists, so there is no red to
   // observe; it is still mutation-tested. Nothing broader is excused.

@@ -179,7 +179,7 @@ full
      That holds at any step: a new test file that runs the game's code, written by spec, build (a
      regression test) or repair (a measurement test), is a row, or test-step-check reports it. Never
      rows: every file under tests/browser/, which only Playwright runs (tests/browser/smoke.spec.ts
-     among them), the generated tests/examples/<slug>.examples.test.ts, a
+     among them), every sim (*.sim.test.ts), which only boardsmith test --sims runs, the generated tests/examples/<slug>.examples.test.ts, a
      measurement harness under design/chunks/<slug>/evidence/, a guard under tests/guards/, and an
      earlier chunk's test file this chunk edits in place (moving one makes a new file, which is a row). A row with no claims
      says so in Claims Covered, e.g. `none (regression)`. An exempt chunk that pins an earlier

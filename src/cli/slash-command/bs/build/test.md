@@ -129,7 +129,8 @@ here.
          (or deleting it and writing a similar one) counts as creating a new file: the new path is
          this chunk's. The exemptions are every file under `tests/browser/`, which only Playwright
          runs and vitest never collects, so no mutant can reach it (the smoke test
-         `tests/browser/smoke.spec.ts` among them), the generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
+         `tests/browser/smoke.spec.ts` among them), every sim (`*.sim.test.ts`, item 4 below),
+         which only `boardsmith test --sims` runs, the generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
          `design/chunks/<slug>/evidence/` (`state-machine.md` "Project Layout"), scan-only guards
          under `tests/guards/`, and an earlier chunk's test file this chunk edits in place. A file
          that only reads source as text is not a row: it belongs under `tests/guards/`. A row must
@@ -234,7 +235,12 @@ here.
 
 4. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
    against the accumulated game, proving it doesn't crash or get stuck with this chunk's rules
-   in place:
+   in place. It is a sim: write it in `tests/<slug>.sim.test.ts` and run it with
+   `npx boardsmith test --sims <slug>`. A test file with any other name that imports
+   `simulateRandomGames` fails when it loads, and no other run collects a sim (`boardsmith verify
+   --chunk`, its mutation check, `chunk-merge` and publish's `boardsmith verify` all leave it out).
+   So this step is the only run it gets, and it is never a Spec Manifest row or the chunk's own
+   test for the done gate (item 7): the chunk's claims still need their tests from item 2.
 
    ```typescript
    import { simulateRandomGames } from 'boardsmith/testing';

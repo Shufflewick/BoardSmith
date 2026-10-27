@@ -178,9 +178,10 @@ is a row, at any step: here, in `build` (a regression test, `build/build.md`) an
 measurement test, `build/audit.md`), because only Spec Manifest files are mutation-tested and
 `boardsmith test-step-check` reports a new test file left outside the table, wherever in the project
 it is. Moving an earlier chunk's test file (or deleting it and writing a similar one) counts as
-creating a new file, so the moved file needs a row here. Five kinds of file are never rows: every
+creating a new file, so the moved file needs a row here. Six kinds of file are never rows: every
 file under `tests/browser/`, which only Playwright runs and vitest never collects (the browser smoke
-test `tests/browser/smoke.spec.ts`, which every chunk that adds an action edits, among them), the
+test `tests/browser/smoke.spec.ts`, which every chunk that adds an action edits, among them), every
+sim (`*.sim.test.ts`, `build/test.md` item 4), which only `boardsmith test --sims` runs, the
 generated `tests/examples/<slug>.examples.test.ts`, a measurement harness under
 `design/chunks/<slug>/evidence/` (`state-machine.md` "Project Layout"), a scan-only guard under
 `tests/guards/`, and an earlier chunk's test file this chunk edits in place (which is that chunk's
