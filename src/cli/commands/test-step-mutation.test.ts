@@ -400,6 +400,58 @@ it('claim 1 — a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
+  it('refuses a suite whose unmutated run exits non-zero with no failing test, quoting the unhandled error', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('claim 1 — a higher offer wins', () => {
+  Promise.reject(new Error('stray failure\\nsecond line'));
+  expect(bid(3, 4)).toBe(true);
+});
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
+    expect(result.findings[0].detail).toContain('vitest exited with code 1 with no failing test, on an unhandled error: Error: stray failure');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('refuses a suite whose unmutated run has an unhandled error the project tells vitest to ignore', async () => {
+    const project = await makeProject({
+      'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], dangerouslyIgnoreUnhandledErrors: true } });
+`,
+      'src/rules.ts': RULES,
+    });
+    const result = await check(
+      project,
+      `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('claim 1 — a higher offer wins', () => {
+  Promise.reject(new Error('stray failure'));
+  expect(bid(3, 4)).toBe(true);
+});
+`,
+      [1],
+    );
+    expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
+    expect(result.findings[0].detail).toContain('vitest exited with code 0 with no failing test, on an unhandled error: Error: stray failure');
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('reports a chunk test file the config leaves out only as not run, not as an unhandled error', async () => {
+    const project = await makeProject({
+      'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['other/**/*.test.ts'] } });
+`,
+      'src/rules.ts': RULES,
+    });
+    const result = await check(project, "import { it } from 'vitest';\nit('claim 1', () => {});\n", [1]);
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['test-not-run tests/auction.test.ts']);
+  }, 60_000);
+
   it('refuses a test file whose import fails, naming paths only within the project', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await check(
@@ -1010,6 +1062,27 @@ it('passes', () => {
     });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toEqual(['vitest exited with code 1 with no failing test: look for "Unhandled Errors" in `boardsmith test`']);
+  }, 60_000);
+
+  it('tries no mutant when an unhandled error the project tells vitest to ignore happens unmutated', async () => {
+    const project = await makeProject({
+      'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+export default defineConfig({ test: { include: ['tests/**/*.test.ts'], dangerouslyIgnoreUnhandledErrors: true } });
+`,
+      'src/rules.ts': RULES,
+    });
+    await suite(project, {
+      'tests/stray.test.ts': `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('passes', () => {
+  Promise.reject(new Error('stray failure'));
+  expect(bid(1, 2)).toBe(true);
+});
+`,
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['vitest exited with code 0 with no failing test, on an unhandled error: Error: stray failure']);
+    expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
   it('names a test that fails without a test file that imports no changed file, since that file is left out of the run (#1496)', async () => {
