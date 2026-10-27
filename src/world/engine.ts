@@ -531,6 +531,22 @@ function failedResultError(action: string, result: ActionResult): Error {
 }
 
 /**
+ * One declaration callback, run read-only, its throw worded as a throw out of
+ * `execute` is (#1492): a `PlayerFacingError` or a game-owned `WorldRefusal`
+ * (the projection's `declaration-write`) travels as it is, anything else is the
+ * rules-error sentence with the original logged (#47).
+ */
+function declaring<T>(game: Game, action: string, read: () => T): T {
+  try {
+    return game.readingOnly(read);
+  } catch (error) {
+    // A platform-owned code the game threw itself would charge the platform's park ladder for a game bug.
+    if ((error instanceof WorldRefusal && error.owner === "game") || error instanceof PlayerFacingError) throw error;
+    throw failedResultError(action, gameCodeThrew(action, `A .needs() round of action '${action}'`, error));
+  }
+}
+
+/**
  * One seat waiting to be projected, and everything the projection needs.
  *
  * `at` is where the seat sits in the answer being assembled, so a batch can
@@ -1938,7 +1954,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): number | null {
     const player = seat === null ? null : this.playerFor(seat);
     const project = readOnlyScope();
-    const box = this.declaring(action, () =>
+    const box = declaring(this.game, action, () =>
       round.box({
         game: project(this.game),
         player: player === null ? null : project(player),
@@ -1965,22 +1981,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
-   * One declaration callback, run read-only, its throw worded as a throw out of
-   * `execute` is (#1492): a `PlayerFacingError` or a game-owned `WorldRefusal`
-   * (the projection's `declaration-write`) travels as it is, anything else is the
-   * rules-error sentence with the original logged (#47).
-   */
-  private declaring<T>(action: string, read: () => T): T {
-    try {
-      return this.game.readingOnly(read);
-    } catch (error) {
-      // A platform-owned code the game threw itself would charge the platform's park ladder for a game bug.
-      if ((error instanceof WorldRefusal && error.owner === "game") || error instanceof PlayerFacingError) throw error;
-      throw failedResultError(action, gameCodeThrew(action, `A .needs() round of action '${action}'`, error));
-    }
-  }
-
-  /**
    * One round of a declaration, answered read-only.
    *
    * READ-ONLY TWICE OVER, and both halves matter (#219, #295). The game is
@@ -2002,7 +2002,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const player = seat === null ? null : this.playerFor(seat);
     const project = readOnlyScope();
     return declaredOnce(
-      this.declaring(action, () =>
+      declaring(this.game, action, () =>
         round.declare({
           game: project(this.game),
           player: player === null ? null : project(player),
@@ -2038,7 +2038,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
   ): number | null {
     const project = readOnlyScope();
-    const about = this.declaring(action, () =>
+    const about = declaring(this.game, action, () =>
       round.about({
         game: project(this.game),
         seat: null,
