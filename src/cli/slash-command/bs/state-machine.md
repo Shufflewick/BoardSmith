@@ -397,7 +397,7 @@ even in a file the branch renamed, does not.
   `chunk-<slug>/step-<name>` convention first. `chunk-signoff <slug>`, `review-gate <slug>` and
   `verify --check --chunk <slug>` accept only the result `verify --chunk <slug>` made for that
   chunk, so a full result, such as a `npx boardsmith verify --base HEAD` run, satisfies no chunk's
-  sign-off. Mutant equivalences belong to the full verify, and are proven and checked at publish.
+  sign-off.
 
 ## Repair Loop Bound
 

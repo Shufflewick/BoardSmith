@@ -1,5 +1,13 @@
 # Migration Guide
 
+## A surviving mutant always fails `boardsmith verify` (#1493)
+
+`boardsmith mutation-equivalence` is removed, and `boardsmith verify` no longer
+reads `design/MUTATION-EQUIVALENCES.json`. A mutant every test passed under
+fails the mutation check, whatever that file says. Delete the file, and for each
+survivor verify names, add or tighten a test so it fails when that line is
+changed that way.
+
 ## `boardsmith verify` checks every verb, and samples its mutants (#1486)
 
 `boardsmith verify` has a new `verbs` check, before `mutation`: every verb the
@@ -341,7 +349,7 @@ In a game that still uses either:
 A run log's `Scope:` field and a MERGE-SIGNOFFS.md entry's `Scope:` and
 `Selection:` lines are no longer written or read. Leave old ones in place.
 Sign-offs no longer record an `Equivalence:` line, and chunk merges no longer
-check one: mutant equivalences are proven and checked at publish.
+check one.
 
 ## `game.currentPlayer` comes from the flow (#780)
 

@@ -68,8 +68,7 @@ import { readIfExists } from '../lib/read-if-exists.js';
  *   - A sign-off is a done claim, so it is refused unless the commit checked out, on a clean
  *     tree, passed the chunk's fast checks (#452, #985, `verifiedProblem`): the result
  *     `boardsmith verify --chunk <slug>` made, its tests and typecheck. Commit the chunk's work,
- *     run `boardsmith verify --chunk <slug>`, then sign off. Mutant equivalences are proven and
- *     checked only at publish, so a sign-off records none.
+ *     run `boardsmith verify --chunk <slug>`, then sign off.
  *   - A chunk verified before this gate existed gets through it once, by `boardsmith
  *     chunk-gate-transition` (#397): the designer records it in `design/GATE-TRANSITION.md`, and
  *     the chunk's block reads `Basis: transition`. That basis counts only for a chunk the ledger

@@ -164,7 +164,6 @@ describe('every positional CLI argument is decided to be a name or a path', () =
    */
   const CHOICE_ARGUMENTS: Record<string, string> = {
     'agent <role>': 'lib/agent-roles.ts',
-    'mutation-equivalence <id>': 'commands/mutation-equivalence.ts',
   };
 
   const declared = [...cliText.matchAll(/\.command\('([a-z-]+ (?:<[a-z.]+>|\[[a-z.]+\]))'\)/g)].map((m) => m[1]);

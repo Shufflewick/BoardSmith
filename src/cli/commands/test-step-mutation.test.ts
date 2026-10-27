@@ -800,7 +800,6 @@ export function fee(price: number): number {
     return {
       held,
       hints,
-      fingerprint: () => undefined,
       get: (m: { file: string; source: string }) => held.get(key(m)),
       set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
       killerHint: (m: { file: string; source: string }) => hints.get(key(m)),
@@ -901,7 +900,7 @@ it('catches the changed value after the other worker starts', async () => {
       expect(await fs.readFile(join(project, 'tests/mutant-busy'), 'utf-8')).toBe('started');
       expect(await fs.readFile(join(project, 'tests/mutant-failed'), 'utf-8')).toBe('assertion failed');
       await expect(fs.access(join(project, 'tests/mutant-finished'))).rejects.toMatchObject({ code: 'ENOENT' });
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 1, survived: 0, timedOut: 0, unreached: 0 });
     } finally {
       vi.unstubAllEnvs();
     }
@@ -943,7 +942,7 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), cache: memoryCache(), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
-      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, equivalent: 0, unreached: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 1, timedOut: 0, unreached: 0 });
       expect(JSON.parse(await fs.readFile(join(project, 'tests/mutant-completed'), 'utf-8'))).toEqual({ attempts: 2, repetitions: 2 });
     } finally {
       vi.unstubAllEnvs();
@@ -1227,7 +1226,7 @@ it('loads a module by a path built at run time', async () => {
       expect(result.notGreen).toBeUndefined();
       // a.ts is imported by a.test.ts alone; plugin.ts is reached only through the dynamic import.
       expect(ran).toEqual(['a.ts a', 'plugin.ts dynamic']);
-      expect(result.summary).toEqual({ files: 3, mutants: 4, killed: 3, survived: 0, timedOut: 0, equivalent: 0, unreached: 1 });
+      expect(result.summary).toEqual({ files: 3, mutants: 4, killed: 3, survived: 0, timedOut: 0, unreached: 1 });
       expect(result.survivors).toEqual([]);
       expect(result.unreached).toEqual([{ file: 'src/orphan.ts', line: 2, description: 'return value replaced with undefined' }]);
       // A mutant no test runs is not an outcome of any run, so nothing is kept for it.
@@ -1432,6 +1431,6 @@ it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).to
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 }, reused: 0, survivors: [], unreached: [], equivalents: [] });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, reused: 0, survivors: [], unreached: [] });
   });
 });

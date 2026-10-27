@@ -69,7 +69,6 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyCommand } from './commands/verify.js';
-import { mutationEquivalenceCommand } from './commands/mutation-equivalence.js';
 import { installBrowserCommand, smokeCommand } from './commands/smoke.js';
 import { reviewGateCommand } from './commands/review-gate.js';
 import { agentCommand } from './commands/agent.js';
@@ -202,15 +201,6 @@ export function createProgram(): Command {
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
-
-  program
-    .command('mutation-equivalence <id>')
-    .description('Observe a surviving mutant and prepare its valid-input contract and proof for a trusted Git-signed review')
-    .requiredOption('--contract <text>', 'The explicit valid-input contract under which the mutation is equivalent')
-    .requiredOption('--proof <text>', 'The complete argument that every valid input has the same observable behavior')
-    .option('--base <git-ref>', 'Use the same mutation base as verify')
-    .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action(mutationEquivalenceCommand);
 
   // The in-browser smoke test alone (#453), and the browser it runs in.
   program

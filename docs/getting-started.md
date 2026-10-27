@@ -290,8 +290,8 @@ them, one at a time, picked with the commit being verified as the seed, so
 verifying the same commit again tries the same ones. The changed files take
 turns, so each one (up to 30 of them) has a mutant tried. Against each it runs the
 test files that load the changed file: a change no test notices is reported by
-file and line, because the tests cannot distinguish that mutant from the
-original, and a change in a file no test loads is reported as such. A sample
+file and line, because the tests would not catch that line going wrong, and a
+change in a file no test loads is reported as such. A sample
 is enough to show the tests can fail, and keeps the first publish of a large
 game to minutes.
 Before trying a fresh mutant, it completes the unmodified suite and requires
@@ -434,58 +434,6 @@ before the game is published, not per chunk. `boardsmith verify --check --chunk
 <slug>`, `boardsmith review-gate <slug>` and `boardsmith chunk-signoff <slug>`
 accept only that chunk's passing fast checks, and every other question accepts
 only the full verify, so neither stands in for the other.
-
-##### Reviewing an equivalent mutant
-
-A survivor can preserve every behavior its valid-input contract allows. For
-example, `isFirstSeat(seat: 1 | 2)` returning `seat < 1.5` has the same result
-as the generated `seat <= 1.5` mutant for both legal inputs. More valid-input
-tests cannot distinguish them. BoardSmith does not prove semantic equivalence
-automatically: a human reviewer must attest a complete argument covering the
-explicit contract, rather than a sample of passing cases.
-
-When `boardsmith verify` reports a survivor, it prints that exact mutant's ID.
-On a clean, committed tree, prepare its review record using the same `--base`
-as the failed verify. For the example above:
-
-```bash
-boardsmith mutation-equivalence <id> --base v1.2 \
-  --contract 'seat is 1 or 2; return true exactly for seat 1' \
-  --proof 'For seat 1 both comparisons return true; for seat 2 both return false. These exhaust the legal inputs.'
-```
-
-Preparation runs the full unmodified suite and the selected mutant to
-completion. It writes `design/MUTATION-EQUIVALENCES.json` only when both pass;
-a red baseline, a killed mutant or a timeout is refused. Preparing this tracked
-record is not approval. The reviewer inspects the exact mutation, contract and
-proof, then signs the commit that changes the ledger:
-
-```bash
-git add design/MUTATION-EQUIVALENCES.json
-git diff --cached -- design/MUTATION-EQUIVALENCES.json
-git commit -S -m 'Review equivalent mutant'
-boardsmith verify --base v1.2
-```
-
-Use the reviewer's existing trusted Git signing setup. See Git's official
-[commit signing options](https://git-scm.com/docs/git-commit/2.54.0)
-and [signature trust configuration](https://git-scm.com/docs/git-config/2.54.0).
-The review commit must have a valid, fully trusted signature: GPG trust or an
-SSH key already authorized by `gpg.ssh.allowedSignersFile`. Unsigned or
-untrusted records are refused; have the authorized reviewer sign the ledger
-commit, then rerun verify. Signing alone does not establish trust in a key.
-
-Verify executes a reviewed candidate again even when its previous outcome is
-cached. An exact, trusted review is counted separately as `equivalent`; any
-unresolved survivor still fails. The full baseline, timeout and error handling
-remain in force, with no lower threshold, test exclusion or unsigned override.
-
-Source, tests, configuration, dependencies, BoardSmith or Node changes make a
-review stale: prepare, review and sign it again for the new context. Changing
-the ledger also requires a new review commit. `verify --check` rechecks the
-current context and signature trust. Equivalences belong to the full verify, so
-they are proven and checked at publish; chunk sign-offs and chunk merges neither
-record nor check them.
 
 #### Who does the work when the `bs-` skills build a game
 

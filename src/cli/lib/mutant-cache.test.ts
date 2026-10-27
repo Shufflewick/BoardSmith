@@ -78,7 +78,6 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       'design/RUN.md': 'Run Status: running\n',
       'design/MERGE-SIGNOFFS.md': '# Merge sign-offs\n',
       'design/GATE-TRANSITION.md': '# Gate transition\n',
-      'design/MUTATION-EQUIVALENCES.json': '{"format":1,"entries":[]}\n',
       'design/run-log/deal.md': '### Dispatch 1\nOutcome: closed\n',
     });
     commitAll(dir, 'chunk-deal/step-close');
@@ -585,8 +584,6 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   it('leaves out exactly the design records the bs- skills write after the code is verified', () => {
     const left = (path: string) => BOOKKEEPING_RECORDS.some((re) => re.test(path));
     expect(left('design/SKETCH.md')).toBe(true);
-    expect(left('design/MUTATION-EQUIVALENCES.json')).toBe(true);
-    expect(left('design/MUTATION-EQUIVALENCES.json.bak')).toBe(false);
     expect(left('design/chunks/deal/CHUNK.md')).toBe(true);
     expect(left('design/run-log/deal.md')).toBe(true);
     expect(left('design/DESIGN.md')).toBe(false);
