@@ -133,13 +133,13 @@ import {
   type WorldNoticeWrite,
 } from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
-import { failedExecute } from "../engine/action/action.js";
+import { failedExecute, gameCodeThrew } from "../engine/action/action.js";
 import type { AnnotatedChoice } from "../engine/action/types.js";
 import { readOnlyScope } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
-import { StaleAllocationStampError } from "../engine/errors.js";
+import { PlayerFacingError, StaleAllocationStampError } from "../engine/errors.js";
 
 /** The function one call projects through, so its reads share one identity (#1438). */
 type Projecting = ReturnType<typeof readOnlyScope>;
@@ -1251,9 +1251,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number,
     args: Readonly<Record<string, unknown>>,
     now: number,
+    action: string,
   ): readonly string[] {
     if (round.kind !== "partitions") return [];
-    return this.declareRound(round, seat, args, arrivalAt(now)).filter(
+    return this.declareRound(round, seat, args, arrivalAt(now), action).filter(
       (name) => !this.residentIds.has(name),
     );
   }
@@ -1268,7 +1269,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // Only the first pick's place: the offer asks nothing past it (#1355).
     for (const round of definition.world!.needs) {
       if (round.before !== 0) continue;
-      const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
+      const unmet = this.unmetOnASeatsRead(round, seat, {}, now, definition.name);
       // ONE ROUND AT A TIME. A later round may read what an earlier one
       // loaded, so there is nothing to say about it until the host has
       // supplied this one.
@@ -1658,7 +1659,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        const unmet = this.unmetOnASeatsRead(round, seat, args, now);
+        const unmet = this.unmetOnASeatsRead(round, seat, args, now, definition.name);
         if (unmet.length > 0) return declaredOnce(unmet);
       }
     }
@@ -1881,7 +1882,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         if (outstanding !== null) return outstanding;
         continue;
       }
-      const missing = this.declareRound(round, seat, command.args, when).filter(
+      const missing = this.declareRound(round, seat, command.args, when, definition.name).filter(
         (name) => !this.residentIds.has(name),
       );
       if (missing.length > 0) {
@@ -1937,7 +1938,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): number | null {
     const player = seat === null ? null : this.playerFor(seat);
     const project = readOnlyScope();
-    const box = this.game.readingOnly(() =>
+    const box = this.declaring(action, () =>
       round.box({
         game: project(this.game),
         player: player === null ? null : project(player),
@@ -1964,6 +1965,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * One declaration callback, run read-only, its throw worded as a throw out of
+   * `execute` is (#1492): a `PlayerFacingError` or `WorldRefusal` travels as it
+   * is, anything else is the rules-error sentence with the original logged (#47).
+   */
+  private declaring<T>(action: string, read: () => T): T {
+    try {
+      return this.game.readingOnly(read);
+    } catch (error) {
+      if (error instanceof WorldRefusal || error instanceof PlayerFacingError) throw error;
+      throw failedResultError(action, gameCodeThrew(action, `A .needs() round of action '${action}'`, error));
+    }
+  }
+
+  /**
    * One round of a declaration, answered read-only.
    *
    * READ-ONLY TWICE OVER, and both halves matter (#219, #295). The game is
@@ -1980,11 +1995,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
     when: WorldDispatchWhen,
+    action: string,
   ): readonly string[] {
     const player = seat === null ? null : this.playerFor(seat);
     const project = readOnlyScope();
     return declaredOnce(
-      this.game.readingOnly(() =>
+      this.declaring(action, () =>
         round.declare({
           game: project(this.game),
           player: player === null ? null : project(player),
@@ -2020,7 +2036,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
   ): number | null {
     const project = readOnlyScope();
-    const about = this.game.readingOnly(() =>
+    const about = this.declaring(action, () =>
       round.about({
         game: project(this.game),
         seat: null,
@@ -2069,7 +2085,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         this.noteNamedSeat(round, seat, args, when, definition.name, { namedSeats, namedBoxes });
         continue;
       }
-      for (const name of this.declareRound(round, seat, args, when)) {
+      for (const name of this.declareRound(round, seat, args, when, definition.name)) {
         if (!named.includes(name)) named.push(name);
         if (!round.readOnly) writable?.add(name);
         await this.ensureResident(name);
