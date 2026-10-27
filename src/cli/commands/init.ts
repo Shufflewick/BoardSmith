@@ -177,7 +177,7 @@ function tableRulesFiles(config: ProjectConfig): GeneratedFile[] {
     { path: join('src', 'rules', 'data', 'cards.csv'), content: generateCardsCsv() },
     { path: join('src', 'sim', 'index.ts'), content: generateSimTs(pascal) },
     { path: join('tests', 'game.test.ts'), content: generateTestTs(pascal) },
-    { path: join('tests', 'sim.test.ts'), content: generateSimTestTs() },
+    { path: join('tests', 'greedy.sim.test.ts'), content: generateSimTestTs() },
   ];
 }
 

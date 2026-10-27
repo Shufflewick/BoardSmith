@@ -67,7 +67,7 @@ my-game/
 │       └── index.ts         # UI exports
 └── tests/
     ├── game.test.ts         # Game tests
-    ├── sim.test.ts          # Plays seeded games with the greedy policy
+    ├── greedy.sim.test.ts   # A sim: plays seeded games with the greedy policy
     ├── a11y.example.test.ts # An axe-core scan of GameTable.vue
     └── browser/smoke.spec.ts # The in-browser smoke test `boardsmith verify` runs
 ```
@@ -228,7 +228,27 @@ boardsmith dev --no-open
 ```bash
 boardsmith test           # Run once
 boardsmith test --watch   # Watch mode
+boardsmith test --sims    # Run only the sims
 ```
+
+A test file's name sets its class, and the class sets where it runs:
+
+| Class | File name | Merge (`agent-policy merge`) | `boardsmith verify` | Publish | On request |
+|---|---|---|---|---|---|
+| Unit | `*.test.ts` | Yes: the tests the change touches, then a slice of the suite | Yes, with the mutation check | Yes (publish needs a passing verify) | `boardsmith test` |
+| Sim | `*.sim.test.ts` | No | No | No | `boardsmith test --sims` |
+| Browser | `tests/browser/*.spec.ts` | No | Yes, as the smoke test | Yes (publish needs a passing verify) | `boardsmith smoke` |
+
+A sim is any test that plays whole games: random-game sims, whole matches, bot
+games, and pace or budget runs. Sims never run automatically. The game's
+`vite.config.ts` (`defineGameViteConfig`) leaves them out of every plain vitest
+run, so `boardsmith test`, `boardsmith verify` and a merge skip them, and
+`boardsmith test --sims` runs only them. A test file whose name does not end in
+`.sim.test.ts` and imports a tool that plays whole games (`simulateRandomGames`
+or `replayRandomGame` from `boardsmith/testing`, `playGame` from
+`boardsmith/sim`, `createBot` or `MCTSBot` from `boardsmith/bot`, or
+`benchmarkBot` or `WeightEvolver` from `boardsmith/bot-trainer`) fails when it
+loads, with a message telling you to rename it to `.sim.test.ts`.
 
 `boardsmith lint` runs BoardSmith's pitfall checks, plus ESLint and Stylelint
 when the project has a config for them. It finds a config wherever the linter

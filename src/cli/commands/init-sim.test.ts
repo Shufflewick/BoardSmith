@@ -37,7 +37,7 @@ const UI_FILES = [
 ];
 
 /** The simulator's sample files, which both scaffolds write. */
-const SIM_SAMPLE_FILES = ['src/rules/data/cards.csv', 'src/rules/metrics.ts', 'src/sim/index.ts', 'tests/sim.test.ts'];
+const SIM_SAMPLE_FILES = ['src/rules/data/cards.csv', 'src/rules/metrics.ts', 'src/sim/index.ts', 'tests/greedy.sim.test.ts'];
 
 const NO_UI = 'This project has no UI yet. Run `boardsmith add-ui`.';
 
@@ -77,6 +77,7 @@ const simDir = await scaffold('demo', { withoutRulebook: true, sim: true });
 // A simulator project installed the way a real game is, for the commands that run it.
 const sim = await smokeProject(false, {}, { sim: true });
 const simTest = await spawnCli(['test'], sim);
+const simSims = await spawnCli(['test', '--sims'], sim);
 const simulate = await spawnCli(['simulate', '--games', '3', '--policy', 'greedy', '--jobs', '1'], sim);
 const simLint = await spawnCli(['lint'], sim);
 const simValidate = await spawnCli(['validate'], sim);
@@ -133,10 +134,13 @@ describe('boardsmith init --sim (#556)', () => {
     expect(existsSync(join(parent, 'demo'))).toBe(false);
   });
 
-  it('passes its own tests, the greedy simulation included', () => {
+  it('passes its own tests, and the greedy simulation is a sim that runs only under --sims (#1494)', () => {
     expect(simTest.stdout + simTest.stderr).not.toMatch(/×|FAIL/);
-    expect(simTest.stdout).toMatch(/tests\/sim\.test\.ts/);
+    expect(simTest.stdout).not.toMatch(/greedy\.sim\.test\.ts/);
     expect(simTest.code).toBe(0);
+    expect(simSims.stdout + simSims.stderr).not.toMatch(/×|FAIL/);
+    expect(simSims.stdout).toMatch(/tests\/greedy\.sim\.test\.ts/);
+    expect(simSims.code).toBe(0);
   });
 
   it('runs boardsmith simulate with its greedy policy', () => {
@@ -235,9 +239,9 @@ describe('the table scaffold (#556)', () => {
     expect(specActions(table)).toEqual(['draw', 'play']);
   });
 
-  it('passes its own tests, the greedy simulation included', () => {
+  it('passes its own tests, which leave the greedy simulation out as a sim (#1494)', () => {
     expect(tableTest.stdout + tableTest.stderr).not.toMatch(/×|FAIL/);
-    expect(tableTest.stdout).toMatch(/tests\/sim\.test\.ts/);
+    expect(tableTest.stdout).not.toMatch(/greedy\.sim\.test\.ts/);
     expect(tableTest.code).toBe(0);
   });
 });

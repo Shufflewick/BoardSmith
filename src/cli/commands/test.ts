@@ -17,6 +17,8 @@ interface TestOptions {
   watch?: boolean;
   /** Run BoardSmith's browser regressions (`BROWSER_SUITE_CONFIG`) instead of the default suite. */
   browser?: boolean;
+  /** Run only a game's sims (`*.sim.test.ts`), which every other run leaves out (#1494). */
+  sims?: boolean;
   coverage?: boolean;
   /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
@@ -32,6 +34,9 @@ interface TestOptions {
  *
  * `patterns` are forwarded to vitest as filename filters, e.g.
  * `boardsmith test mcts` runs only test files matching "mcts".
+ *
+ * `--sims`, in a game project only, runs the game's sims (`*.sim.test.ts`) and nothing else, as
+ * vitest in the `sims` mode its config (`defineGameViteConfig`) reads (#1494).
  *
  * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
  * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
@@ -53,6 +58,8 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
 
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
+  } else if (options.sims) {
+    throw new Error("--sims runs a game's sims (*.sim.test.ts), and BoardSmith's own repository has none. Run it in a game project.");
   } else {
     await typecheckFirst(cwd, options);
   }
@@ -80,6 +87,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
 function vitestArgs(patterns: string[], options: TestOptions): string[] {
   const args: string[] = [];
   if (options.browser) args.push('--config', BROWSER_SUITE_CONFIG);
+  if (options.sims) args.push('--mode', 'sims');
   if (options.coverage) args.push('--coverage');
   return [...args, ...patterns];
 }

@@ -12,8 +12,10 @@ Import from `boardsmith/sim` in your project's `src/sim/index.ts` to give
 
 Every project `boardsmith init` scaffolds starts as a simulator: a greedy
 policy in `src/sim/index.ts`, metrics in `src/rules/metrics.ts`, card data in
-`src/rules/data/cards.csv`, and `tests/sim.test.ts`, which plays seeded games
-with the greedy policy through `playGame`. `boardsmith init <name> --sim`
+`src/rules/data/cards.csv`, and `tests/greedy.sim.test.ts`, a sim that plays
+seeded games with the greedy policy through `playGame`. Sims run only under
+`boardsmith test --sims`
+([Getting started](../getting-started.md#3-run-tests) has the test classes). `boardsmith init <name> --sim`
 writes the project with no UI at all, and `boardsmith add-ui` adds it later
 (see [Getting started](../getting-started.md#starting-as-a-simulator-with-no-ui-yet)).
 

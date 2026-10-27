@@ -43,6 +43,18 @@ describe('boardsmith test', () => {
     expect(run.code).toBe(0);
   });
 
+  it('leaves the sims out, and runs only them under --sims (#1494)', async () => {
+    const project = await gameProject({ 'tests/slow.sim.test.ts': "import { it } from 'vitest';\nit('plays', () => {});\n" });
+    const plain = await spawnCli(['test'], project);
+    const sims = await spawnCli(['test', '--sims'], project);
+    expect(plain.stdout).toContain('ok.test.ts');
+    expect(plain.stdout).not.toContain('slow.sim.test.ts');
+    expect(plain.code).toBe(0);
+    expect(sims.stdout).toContain('slow.sim.test.ts');
+    expect(sims.stdout).not.toContain('ok.test.ts');
+    expect(sims.code).toBe(0);
+  });
+
   it('refuses a project whose vitest config would collect the chunk worktrees, and says how to fix it', async () => {
     const project = await gameProject({ 'vite.config.ts': 'export default {};\n' });
     const run = await spawnCli(['test'], project);
@@ -66,6 +78,13 @@ describe('boardsmith test', () => {
     const run = await spawnCli(['test', '--browser', 'no-such-browser-regression']);
     expect(run.stdout).not.toContain('Type-checking');
     expect(run.stdout + run.stderr).toContain('scripts/browser-regressions.browser-test.mjs');
+  });
+
+  it("refuses --sims in BoardSmith's own repository, which has no sims, before the type check (#1494)", async () => {
+    const run = await spawnCli(['test', '--sims']);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/--sims runs a game's sims \(\*\.sim\.test\.ts\), and BoardSmith's own repository has none/);
+    expect(run.stdout).not.toContain('Type-checking');
   });
 
   it('refuses --browser in a game project, which has no browser regressions, and names the check that has', async () => {

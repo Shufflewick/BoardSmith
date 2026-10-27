@@ -288,8 +288,8 @@ export const policies = {
 };
 ```
 
-The scaffold's `tests/sim.test.ts` still works unchanged: it plays seeded games
-with `policies.greedy`, so `boardsmith test` checks the game can finish.
+The scaffold's `tests/greedy.sim.test.ts` still works unchanged: it plays seeded
+games with `policies.greedy`, so `boardsmith test --sims` checks the game can finish.
 
 ### Run it
 

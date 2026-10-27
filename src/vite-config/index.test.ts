@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configDefaults } from 'vitest/config';
-import { defineGameViteConfig } from './index.js';
+import { defineGameViteConfig, testClasses } from './index.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { commitAll, git, initRepo } from '../cli/lib/verify-result.test-helper.js';
@@ -32,7 +32,7 @@ function packedGame(prefix: string, within = ''): string {
 describe('defineGameViteConfig', () => {
   it('gives a game the Vue plugin, one Vue runtime, and a test run that covers only its own checkout', () => {
     const config = defineGameViteConfig();
-    expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue', 'boardsmith:rerun-triggers']);
+    expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue', 'boardsmith:rerun-triggers', 'boardsmith:test-classes']);
     expect(config.resolve?.dedupe).toEqual(['vue']);
     expect(config.test?.exclude).toEqual([...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
   });
@@ -70,6 +70,77 @@ describe('defineGameViteConfig', () => {
     expect(`${listed.stdout}${listed.stderr}`.trim()).toBe('tests/a.test.ts');
     expect(listed.status).toBe(0);
   }, 60_000);
+
+  /** A packed game holding `files`, each a passing test unless given its own text. */
+  function packedGameWith(prefix: string, files: Record<string, string>): string {
+    const game = packedGame(prefix);
+    for (const [file, text] of Object.entries(files)) {
+      mkdirSync(dirname(join(game, file)), { recursive: true });
+      writeFileSync(join(game, file), text);
+    }
+    return game;
+  }
+
+  const PASSING = "import { it } from 'vitest';\nit('holds', () => {});\n";
+
+  it.each([
+    [[], 'tests/a.test.ts'],
+    [['--mode', 'sims'], 'tests/b.sim.test.ts'],
+  ])('leaves the sims out of a run, and runs only them in vitest %j (#1494)', (args, expected) => {
+    // `boardsmith test --sims` is `vitest run --mode sims`; every other run (verify, mutation, agent-policy's --changed and slices) is plain.
+    const game = packedGameWith('bs-vite-config-classes-', { 'tests/a.test.ts': PASSING, 'tests/b.sim.test.ts': PASSING });
+
+    const listed = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['list', '--filesOnly', ...args], { cwd: game, encoding: 'utf-8' });
+
+    expect(`${listed.stdout}${listed.stderr}`.trim()).toBe(expected);
+    expect(listed.status).toBe(0);
+  }, 60_000);
+
+  it('refuses a plain test file that calls simulateRandomGames, telling them to rename it (#1494)', () => {
+    const game = packedGameWith('bs-vite-config-sim-tool-', {
+      'tests/a.test.ts': "import { it } from 'vitest';\nimport { simulateRandomGames } from 'boardsmith/testing';\nit('plays', () => simulateRandomGames);\n",
+    });
+
+    const run = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['run'], { cwd: game, encoding: 'utf-8' });
+
+    expect(`${run.stdout}${run.stderr}`).toContain(
+      'tests/a.test.ts uses simulateRandomGames from boardsmith/testing, which plays whole games. A test that does is a sim, and sims run only on request: rename it to tests/a.sim.test.ts and run it with `boardsmith test --sims`.',
+    );
+    expect(run.status).not.toBe(0);
+  }, 60_000);
+
+  /** What the test-classes plugin makes of `code` at `id`, in a project at /p/game: undefined, or the refusal. */
+  function refusal(code: string, id: string): string | undefined {
+    const plugin = testClasses() as unknown as { configResolved: (c: object) => void; transform: (code: string, id: string) => unknown };
+    plugin.configResolved({ root: '/p/game' });
+    try {
+      plugin.transform(code, id);
+      return undefined;
+    } catch (error) {
+      return (error as Error).message;
+    }
+  }
+
+  it.each([
+    ["import { simulateRandomGames as sim } from 'boardsmith/testing';", 'simulateRandomGames from boardsmith/testing'],
+    ["import { replayRandomGame } from 'boardsmith/testing';", 'replayRandomGame from boardsmith/testing'],
+    ["import { playGame } from 'boardsmith/sim';", 'playGame from boardsmith/sim'],
+    ["import { createBot, searchCopyForSeat } from 'boardsmith/bot';", 'createBot from boardsmith/bot'],
+    ["import { MCTSBot } from 'boardsmith/bot';", 'MCTSBot from boardsmith/bot'],
+    ["import { benchmarkBot, WeightEvolver } from 'boardsmith/bot-trainer';", 'benchmarkBot and WeightEvolver from boardsmith/bot-trainer'],
+  ])('names the sim tool a plain test file uses: %s (#1494)', (code, named) => {
+    expect(refusal(code, '/p/game/tests/x.spec.ts')).toContain(`tests/x.spec.ts uses ${named}, which plays whole games.`);
+    expect(refusal(code, '/p/game/tests/x.spec.ts')).toContain('rename it to tests/x.sim.test.ts');
+  });
+
+  it.each([
+    ["import { simulateRandomGames } from 'boardsmith/testing';", '/p/game/tests/x.sim.test.ts'],
+    ["import { playGame } from 'boardsmith/sim';", '/p/game/src/sim/run.ts'],
+    ["import { searchCopyForSeat, parseBotLevel } from 'boardsmith/bot';", '/p/game/tests/x.test.ts'],
+    ["import { createTestGame } from 'boardsmith/testing';", '/p/game/tests/x.test.ts'],
+  ])('lets a sim file, a non-test file, or a test using no sim tool through: %s at %s (#1494)', (code, id) => {
+    expect(refusal(code, id)).toBeUndefined();
+  });
 
   /** `vitest run --changed HEAD` in a packed game at `within` whose only uncommitted change is `changed`. */
   function changedRun(within: string, changed: string) {
