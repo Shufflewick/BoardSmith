@@ -238,20 +238,27 @@ describe('#793: ResidentWorld', () => {
   });
 
   describe('a view that throws', () => {
-    it('does not hand the game\'s raw error text to the player', async () => {
-      // Even in development: the world reads no environment (#165), so the detail is only ever logged (#982).
-      devThrow.enabled = true;
+    const failedViewMessage = async () => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const { world } = host();
       await world.start();
       world.seat(worldSeatPlayer(1), 1);
       viewThrows = new TypeError("Cannot read properties of undefined (reading 'secret')");
-
       const views = await world.run(() => world.viewsFor([worldSeatPlayer(1)]));
-      const failure = views.failed[worldSeatPlayer(1)];
-      expect(failure).toBeDefined();
-      expect(failure!.message).not.toContain('secret');
-      expect(failure!.message).toMatch(/error in the game's rules/);
+      return views.failed[worldSeatPlayer(1)]?.message;
+    };
+    const SENTENCE = "This view could not be shown because of an error in the game's rules.";
+
+    it('does not hand the game\'s raw error text to the player in production', async () => {
+      devThrow.enabled = false;
+      expect(await failedViewMessage()).toBe(SENTENCE);
+    });
+
+    it('adds the raw error text in brackets in a dev or test run, as an action does', async () => {
+      devThrow.enabled = true;
+      expect(await failedViewMessage()).toBe(
+        `${SENTENCE} (Cannot read properties of undefined (reading 'secret'))`,
+      );
     });
 
     it('logs once for the whole audience, with how many seats failed, not once per seat', async () => {
