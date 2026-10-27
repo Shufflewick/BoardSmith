@@ -51,8 +51,6 @@ import { COVERAGE_SETUP, coverageEnv, readCoverage, testKeyOf, type FileCoverage
 import { GLOBAL_SETUP_MARK, REACH_SETUP, reachEnv, readReach } from './test-step-reach.js';
 import type { KillerHint, MutantCache } from '../lib/mutant-cache.js';
 import type { MutationBudget } from '../lib/mutation-budget.js';
-import { readEquivalenceReview, type EquivalenceBasis, type EquivalenceReview, type EquivalentMutant } from '../lib/mutation-equivalences.js';
-import { sha256Hex } from '../lib/hash.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
@@ -68,7 +66,7 @@ interface Mutant {
   file: string;
   line: number;
   description: string;
-  change: EquivalentMutant['change'];
+  change: { offset: number; before: string; after: string };
   /** The whole file's text with this one change applied. */
   source: string;
 }
@@ -1295,7 +1293,6 @@ export async function runMutationCheck(
 
 /** A mutant every test that loads its file passed under, or one in a file no test loads. */
 interface SurvivingMutant {
-  id?: string;
   file: string;
   line: number;
   description: string;
@@ -1319,13 +1316,11 @@ interface DiffMutationInput {
 }
 
 interface DiffMutationResult {
-  summary: MutationSummary & { equivalent: number; unreached: number };
+  summary: MutationSummary & { unreached: number };
   reused: number;
   survivors: SurvivingMutant[];
   /** Mutants in a file no test loads, so no test could catch them: neither killed nor survived. */
   unreached: SurvivingMutant[];
-  equivalents: Array<SurvivingMutant & { id: string; reviewer: string; reviewCommit: string }>;
-  equivalence?: EquivalenceBasis;
   notGreen?: string[];
 }
 
@@ -1471,24 +1466,6 @@ async function hintTrial(run: GreenRunner, mutant: LocatedMutant, tests: string[
   return killer && { file: killer.path, test: killer.fullName };
 }
 
-/** The preparation command observes a real survivor, without accepting a cached or reviewed verdict. */
-export async function observeMutant(project: string, mutant: LocatedMutant): Promise<DiffOutcome> {
-  const projectDir = realpathSync(project);
-  let runner: Runner | undefined;
-  return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
-    runner = await createRunner(projectDir, [], workDir);
-    const started = await greenRunner(runner, projectDir, () => {});
-    if ('notGreen' in started) throw new Error(`The complete baseline is not green: ${started.notGreen.join('; ')}. Fix it before preparing equivalence.`);
-    return (await runMutant(started, mutant)).outcome;
-  }, () => runner?.stop());
-}
-
-function sameMutation(record: EquivalentMutant, mutant: LocatedMutant, original: Buffer): boolean {
-  return record.file === mutant.file && record.line === mutant.line && record.description === mutant.description &&
-    record.mutantSourceHash === sha256Hex(mutant.source) && record.originalSourceHash === sha256Hex(original) &&
-    record.change.offset === mutant.change.offset && record.change.before === mutant.change.before && record.change.after === mutant.change.after;
-}
-
 /**
  * Mutates the changed lines one change at a time and runs, against each mutant, every test file
  * that loaded its file in the unmutated run (`test-step-reach.ts`, #981), stopping a run at its first
@@ -1506,13 +1483,11 @@ export async function runDiffMutationCheck(
   input: DiffMutationInput,
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
-  const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0 };
+  const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
   const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed);
   summary.files = new Set(mutants.map((m) => m.file)).size;
-  const review = mutants.length > 0 ? await readEquivalenceReview(projectDir) : undefined;
-  const candidates = new Set(review?.records.map((r) => r.id));
-  const known = mutants.map((m) => candidates.has(input.cache.fingerprint(m) ?? '') ? undefined : input.cache.get(m));
-  if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary, review);
+  const known = mutants.map((m) => input.cache.get(m));
+  if (!known.includes(undefined)) return tallyMutants(input, mutants, known, undefined, summary);
 
   const runners: Runner[] = [];
   return withCommandBuildDir(projectDir, 'verify-mutation', async (workDir) => {
@@ -1524,11 +1499,11 @@ export async function runDiffMutationCheck(
       runners.push(await createRunner(projectDir, [], trialDir));
     }
     const started = await greenRunner(runners[0], projectDir, input.log, input.budget);
-    if ('notGreen' in started) return { summary, reused: 0, survivors: [], unreached: [], equivalents: [], notGreen: started.notGreen };
+    if ('notGreen' in started) return { summary, reused: 0, survivors: [], unreached: [], notGreen: started.notGreen };
     if (input.budget) {
       input.log(`Running ${input.budget.trials} mutants at a time, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget.workers}.`);
     }
-    return tallyMutants(input, mutants, known, runners.map((runner) => ({ ...started, runner })), summary, review);
+    return tallyMutants(input, mutants, known, runners.map((runner) => ({ ...started, runner })), summary);
   }, () => stopAll(runners));
 }
 
@@ -1547,18 +1522,16 @@ async function tallyMutants(
   known: (DiffOutcome | undefined)[],
   runs: GreenRunner[] | undefined,
   summary: DiffMutationResult['summary'],
-  review: EquivalenceReview | undefined,
 ): Promise<DiffMutationResult> {
-  const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], unreached: [], equivalents: [] };
+  const result: DiffMutationResult = { summary, reused: known.filter((k) => k !== undefined).length, survivors: [], unreached: [] };
   const outcomes = await outcomesOf(input, mutants, known, runs);
   for (const [i, mutant] of mutants.entries()) {
     const outcome = outcomes[i];
     summary.mutants++;
     summary[COUNTED[outcome]]++;
-    if (outcome === 'survived') await countSurvivor(input, mutant, review, result);
+    if (outcome === 'survived') result.survivors.push({ file: mutant.file, line: mutant.line, description: mutant.description });
     if (outcome === 'unreached') result.unreached.push({ file: mutant.file, line: mutant.line, description: mutant.description });
   }
-  if (result.equivalents.length > 0 && review) result.equivalence = { ...review.basis, ids: result.equivalents.map((m) => m.id) };
   return result;
 }
 
@@ -1622,16 +1595,4 @@ async function runUnlessContextChanged(
 async function requireSameContext(input: DiffMutationInput, when: string): Promise<void> {
   const change = await input.contextChange?.();
   if (change !== undefined) throw new Error(`what the tests run with changed ${when}: ${change}`);
-}
-
-/** A signed proof can classify only the exact generated change that actually survived. */
-async function countSurvivor(input: DiffMutationInput, mutant: LocatedMutant, review: EquivalenceReview | undefined, result: DiffMutationResult): Promise<void> {
-  const id = input.cache.fingerprint(mutant);
-  const location = { file: mutant.file, line: mutant.line, description: mutant.description };
-  const record = review?.records.find((r) => r.id === id);
-  if (record && review && sameMutation(record, mutant, await fs.readFile(mutant.absPath))) {
-    result.summary.survived--;
-    result.summary.equivalent++;
-    result.equivalents.push({ ...location, id: record.id, reviewer: review.basis.reviewer, reviewCommit: review.basis.reviewCommit });
-  } else result.survivors.push({ ...(id === undefined ? {} : { id }), ...location });
 }

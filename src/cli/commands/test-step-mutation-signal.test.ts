@@ -49,7 +49,7 @@ if (process.env.CHECK_KIND === 'scopes') {
   const run = () => process.env.CHECK_KIND === 'chunk'
     ? runMutationCheck({ ...input, claims: [], testFiles: [{ path: 'tests/busy.test.ts',
         absPath: join(projectDir, 'tests/busy.test.ts'), source: readFileSync(join(projectDir, 'tests/busy.test.ts'), 'utf8') }] })
-    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} } });
+    : runDiffMutationCheck({ ...input, ...(process.env.BUDGET ? { budget: { trials: 2, workers: 2 } } : {}), cache: { get: () => undefined, set: () => {}, killerHint: () => undefined, setKillerHint: () => {}, save: async () => {} } });
   try {
     if (process.env.NESTED) await withCommandBuildDir(projectDir, 'verify', run);
     else await run();
@@ -151,7 +151,7 @@ async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> 
   const running = runDiffMutationCheck({
     seed: 'fixture',
     projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
-    cache: { fingerprint: () => undefined, get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
+    cache: { get: () => undefined, set: () => {}, killerHint: () => hint, setKillerHint: () => {}, save: async () => {} },
   });
   let finished = false;
   void running.then(() => { finished = true; }, () => { finished = true; });
@@ -162,7 +162,7 @@ async function keepsTimeoutVerdict(hint: KillerHint | undefined): Promise<void> 
       await delay(10);
     }
     vi.advanceTimersByTime(30_000);
-    expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, equivalent: 0, unreached: 0 });
+    expect((await running).summary).toEqual({ files: 1, mutants: 1, killed: 0, survived: 0, timedOut: 1, unreached: 0 });
     // One run only: a second would have started a worker of its own.
     expect((await workerRecord(project))?.worker).toBe(owned.worker);
     expect(processGroup(owned.leader)).toEqual([]);

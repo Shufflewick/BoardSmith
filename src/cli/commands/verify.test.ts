@@ -201,7 +201,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(result.passed).toBe(true);
     expect(check(result, 'test').counts).toEqual({ files: 2, tests: 3, passed: 3, failed: 0, skipped: 0 });
     // `return price * 2`: return undefined, * -> /, 2 -> 3. The fee test catches each one.
-    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, equivalent: 0, unreached: 0, reused: 0 });
+    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, unreached: 0, reused: 0 });
     expect(await verifiedProblem(dir)).toBeUndefined();
   });
 
@@ -215,11 +215,32 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     const mutation = check(result, 'mutation');
     expect(mutation.passed).toBe(false);
     expect(mutation.findings).toEqual([
-      { file: 'src/rules.ts', line: 5, detail: 'return value replaced with undefined: no test failed', mutantId: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { file: 'src/rules.ts', line: 5, detail: '* -> /: no test failed', mutantId: expect.stringMatching(/^[a-f0-9]{64}$/) },
-      { file: 'src/rules.ts', line: 5, detail: '2 -> 3: no test failed', mutantId: expect.stringMatching(/^[a-f0-9]{64}$/) },
+      { file: 'src/rules.ts', line: 5, detail: 'return value replaced with undefined: no test failed' },
+      { file: 'src/rules.ts', line: 5, detail: '* -> /: no test failed' },
+      { file: 'src/rules.ts', line: 5, detail: '2 -> 3: no test failed' },
     ]);
     expect(mutation.next).toMatch(/test.*fails.*boardsmith verify/s);
+  });
+
+  it('ignores a leftover design/MUTATION-EQUIVALENCES.json: the survivor it lists still fails (#1493)', async () => {
+    const dir = await gameOnBranch(false);
+    const ledger = { format: 1, entries: [{
+      id: 'a'.repeat(64), file: 'src/rules.ts', line: 5, description: '* -> /',
+      originalSourceHash: 'b'.repeat(64), mutantSourceHash: 'c'.repeat(64),
+      contract: 'Any price.', proof: 'Doubling and halving agree.', change: { offset: 0, before: '*', after: '/' },
+    }] };
+    await write(dir, {
+      'tests/fee.test.ts': FEE_TEST.replace('expect(fee(3)).toBe(6)', 'expect(typeof fee).toBe(\'function\')'),
+      'design/MUTATION-EQUIVALENCES.json': JSON.stringify(ledger),
+    });
+    commitAll(dir, 'chunk-deal/weaker test and a leftover ledger');
+
+    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
+
+    expect(check(result, 'mutation')).toMatchObject({
+      passed: false,
+      findings: expect.arrayContaining([{ file: 'src/rules.ts', line: 5, detail: '* -> /: no test failed' }]),
+    });
   });
 
   it('reports each mutant in a file no test loads, neither killed nor survived (#981)', async () => {

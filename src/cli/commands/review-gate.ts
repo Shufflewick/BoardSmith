@@ -119,7 +119,7 @@ async function roundVerifyProblem(projectDir: string, slug: string, commit: stri
   const result = await readVerifyResult(projectDir, commit);
   if (result === undefined) return `No result is on file at ${relative(projectDir, verifyResultPath(projectDir, commit))}.`;
   if (result === 'unreadable') return `Its result (${relative(projectDir, verifyResultPath(projectDir, commit))}) could not be read.`;
-  return resultVouchProblem(projectDir, result, commit, slug);
+  return resultVouchProblem(result, commit, slug);
 }
 
 /** The chunk's run log, or empty when it has none yet. */

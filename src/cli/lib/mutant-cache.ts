@@ -109,8 +109,6 @@ interface MutantChange extends MutantText {
  * stays in the key: a test may read `DESIGN.md` or a rulebook slice, and evidence can be a script.
  */
 export const BOOKKEEPING_RECORDS: readonly RegExp[] = Object.freeze([
-  // The signed ledger is checked separately; its commit cannot invalidate the IDs it approves.
-  /^design\/MUTATION-EQUIVALENCES\.json$/,
   /^design\/(SKETCH|DECISIONS|RULINGS|QUESTIONS|FILINGS|ASSETS|RUN|MERGE-SIGNOFFS|GATE-TRANSITION)\.md$/,
   /^design\/chunks\/[^/]+\/CHUNK\.md$/,
   /^design\/run-log\/[^/]+\.md$/,
@@ -460,14 +458,14 @@ const isOutcome = (value: unknown): value is CachedOutcome => value === 'killed'
 const isKillerHint = (value: unknown): value is KillerHint =>
   typeof (value as KillerHint | null)?.file === 'string' && typeof (value as KillerHint).test === 'string';
 
-export interface MutationFingerprints {
+interface MutationFingerprints {
   /**
    * Why this run keeps no outcomes, when it does not: something the tests load could not be
    * fingerprinted, so no outcome may be trusted or stored. Undefined when the cache works.
    */
   readonly unavailable?: string;
   /** The exact mutant and execution context, unavailable when that context cannot be read. */
-  fingerprint(mutant: MutantText | { file: string; sourceHash: string }): string | undefined;
+  fingerprint(mutant: MutantText): string | undefined;
 }
 
 /** The test that last failed on an assertion of its own under a mutant: its test file in the project, and its full name. */
@@ -476,7 +474,9 @@ export interface KillerHint {
   test: string;
 }
 
-export interface MutantCache extends MutationFingerprints {
+export interface MutantCache {
+  /** Why this run keeps no outcomes, when it does not (`MutationFingerprints.unavailable`). */
+  readonly unavailable?: string;
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantChange): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
@@ -543,7 +543,7 @@ async function mutationFingerprints(projectDir: string, context: ExecutionContex
   if (context.unavailable !== undefined) return { unavailable: context.unavailable, fingerprint: () => undefined };
   const { boardsmith, installed, linked } = context.parts;
   const tree = await repositoryTreeHash(projectDir, 'HEAD');
-  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, 'source' in m ? sha256Hex(m.source) : m.sourceHash])) };
+  return { fingerprint: (m) => sha256Hex(JSON.stringify([CACHE_FORMAT, boardsmith, process.version, tree, installed, linked, prefix, m.file, sha256Hex(m.source)])) };
 }
 
 /**
@@ -577,7 +577,7 @@ export async function openMutantCache(projectDir: string, context?: ExecutionCon
   const usedHints = new Map<string, KillerHint | undefined>();
 
   return {
-    ...fingerprints,
+    unavailable: fingerprints.unavailable,
     get(mutant) {
       const key = fingerprints.fingerprint(mutant);
       const outcome = key === undefined ? undefined : stored.get(key);

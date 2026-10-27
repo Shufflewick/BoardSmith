@@ -127,7 +127,7 @@ export async function resolveBase(projectDir: string, ref: string | undefined): 
  * The base a run measures from: `--chunk`'s verify base, else `resolveBase`. `given` says whether
  * the caller named it, since a base that is HEAD by default measures nothing (`mutationNotTried`).
  */
-export async function runBase(projectDir: string, options: { base?: string; chunk?: string }): Promise<{ ref: string; commit: string; given: boolean }> {
+async function runBase(projectDir: string, options: { base?: string; chunk?: string }): Promise<{ ref: string; commit: string; given: boolean }> {
   if (options.chunk === undefined) return { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
   if (options.base !== undefined) {
     throw new Error(
@@ -448,7 +448,7 @@ async function verbsCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   };
 }
 
-const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, equivalent: 0, unreached: 0, reused: 0 });
+const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0, reused: 0 });
 
 /** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
 function mutationNotTried(ctx: VerifyContext, since: string): VerifyCheckOutcome | undefined {
@@ -487,8 +487,7 @@ function unresolvedMutants(of: string, survivors: DiffMutationRun['survivors'], 
   if (survivors.length > 0) {
     said.push(`${survivors.length} ${of} survived: every test that loads its file still passed with the code changed`);
     next.push(
-      'For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again. ' +
-        'For a demonstrated equivalent under an explicit valid-input contract, use `boardsmith mutation-equivalence <id> --contract <text> --proof <text>` with the same --base, review the ledger and commit it with `git commit -S`.',
+      'For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again.',
     );
   }
   if (unreached.length > 0) {
@@ -499,7 +498,7 @@ function unresolvedMutants(of: string, survivors: DiffMutationRun['survivors'], 
     summary: said.join('; '),
     next: next.join(' '),
     findings: [
-      ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed`, ...(s.id ? { mutantId: s.id } : {}) })),
+      ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
       ...unreached.map((u) => ({ file: u.file, line: u.line, detail: `${u.description}: no test loads ${u.file}` })),
     ],
   };
@@ -507,7 +506,7 @@ function unresolvedMutants(of: string, survivors: DiffMutationRun['survivors'], 
 
 /** What a finished mutation run says: a red suite under the runner, survivors or mutants no test loads, or every mutant caught. */
 function mutationVerdict(since: string, run: DiffMutationRun): VerifyCheckOutcome {
-  const { summary, reused, survivors, unreached, notGreen, equivalence } = run;
+  const { summary, reused, survivors, unreached, notGreen } = run;
   const counts = { ...summary, reused };
   const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
   if (notGreen) {
@@ -523,14 +522,12 @@ function mutationVerdict(since: string, run: DiffMutationRun): VerifyCheckOutcom
   }
   if (survivors.length > 0 || unreached.length > 0) {
     const unresolved = unresolvedMutants(`of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since}`, survivors, unreached);
-    return { passed: false, ...unresolved, summary: `${unresolved.summary}.${reuse}`, counts, ...(equivalence ? { equivalence } : {}) };
+    return { passed: false, ...unresolved, summary: `${unresolved.summary}.${reuse}`, counts };
   }
-  const dispositions = `${summary.killed} killed by tests, ${summary.equivalent} reviewed equivalent, ${summary.timedOut} timed out`;
   return {
     passed: true,
-    summary: `${plural(summary.mutants, 'mutant')} of the lines changed since ${since}: ${dispositions}; no unresolved survivors.${reuse}`,
+    summary: `${plural(summary.mutants, 'mutant')} of the lines changed since ${since}: ${summary.killed} killed by tests, ${summary.timedOut} timed out; none survived.${reuse}`,
     counts,
-    ...(equivalence ? { equivalence } : {}),
   };
 }
 
@@ -614,7 +611,7 @@ async function requireResultIgnored(projectDir: string): Promise<void> {
  * The commit checked out in `projectDir`, when it can be verified as it stands. A result is tied to
  * a commit, so uncommitted or untracked changes are refused here, before any check runs.
  */
-export async function verifiableCommit(projectDir: string): Promise<string> {
+async function verifiableCommit(projectDir: string): Promise<string> {
   const state = await checkoutState(projectDir);
   if ('problem' in state) throw new Error(state.problem);
   if (!state.clean) {
@@ -768,7 +765,6 @@ function printCheck(check: VerifyCheckResult): void {
   console.log(`  ${mark}  ${check.name.padEnd(10)} ${check.summary}`);
   for (const f of check.findings ?? []) {
     console.log(`          ${f.file}:${f.line}  ${f.detail}`);
-    if (f.mutantId) console.log(`          equivalence candidate ID: ${f.mutantId}`);
   }
   if (!check.passed && check.next) console.log(`          ${check.next}`);
 }

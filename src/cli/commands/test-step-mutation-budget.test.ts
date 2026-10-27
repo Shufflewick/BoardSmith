@@ -100,7 +100,7 @@ async function seen(dir: string): Promise<Seen[]> {
 
 /** Holds no outcomes, so every mutant runs, and keeps killer hints (#954) by mutated text in `hints`. */
 const memoryCache = (hints = new Map<string, KillerHint>()) => ({
-  fingerprint: () => undefined, get: () => undefined, set: () => {}, save: async () => {},
+  get: () => undefined, set: () => {}, save: async () => {},
   killerHint: (m: { source: string }) => hints.get(m.source),
   setKillerHint: (m: { source: string }, hint: KillerHint | undefined) => { if (hint) hints.set(m.source, hint); else hints.delete(m.source); },
 });
@@ -118,7 +118,7 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
     try {
       const dir = await project(2);
       const result = await check(dir, { trials: 2, workers: 2 });
-      expect(result.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, equivalent: 0, unreached: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, unreached: 0 });
       // Outcomes fold in the order the mutants were made, whichever trial finished first.
       expect(result.survivors).toEqual(SURVIVORS);
 
@@ -143,7 +143,7 @@ describe('runDiffMutationCheck with a mutation budget (#955)', () => {
       expect([...hints.values()].map((h) => h.file)).toEqual(['tests/bid.test.ts', 'tests/bid.test.ts']);
 
       const rerun = await check(dir, { trials: 2, workers: 2 }, undefined, hints);
-      expect(rerun.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, equivalent: 0, unreached: 0 });
+      expect(rerun.summary).toEqual({ files: 1, mutants: 5, killed: 2, survived: 3, timedOut: 0, unreached: 0 });
       expect(new Set((await seen(dir)).map((t) => t.pool))).toEqual(new Set(['1']));
     } finally {
       vi.unstubAllEnvs();

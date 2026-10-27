@@ -3,8 +3,6 @@ import { join } from 'node:path';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
-import { openMutantCache } from './mutant-cache.js';
-import { equivalenceBasisProblem, type EquivalenceBasis } from './mutation-equivalences.js';
 import { readIfExists } from './read-if-exists.js';
 
 /**
@@ -31,8 +29,8 @@ import { readIfExists } from './read-if-exists.js';
  * lacks it, and `resultProblem` refuses it, so the new check cannot be skipped by an old result.
  */
 
-/** The version of the file's shape. A result in any other format is made again. */
-export const VERIFY_RESULT_FORMAT = 1;
+/** The version of the file's shape. A result in any other format is made again. 2: a survivor always fails (#1493). */
+export const VERIFY_RESULT_FORMAT = 2;
 
 /** Every full check, in execution order. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
 export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs', 'mutation'] as const;
@@ -46,7 +44,6 @@ interface VerifyFinding {
   file: string;
   line: number;
   detail: string;
-  mutantId?: string;
 }
 
 /**
@@ -59,8 +56,6 @@ export type VerifyCheckOutcome = {
   /** What the check counted: tests run, passed and failed; mutants tried, killed and survived. */
   counts?: Record<string, number>;
   findings?: VerifyFinding[];
-  /** Trusted reviewed survivors used by the mutation check, revalidated for every done claim. */
-  equivalence?: EquivalenceBasis;
 } & (
   | { passed: boolean; skipped?: never }
   /**
@@ -171,14 +166,6 @@ const short = (commit: string) => commit.slice(0, 12);
 
 const RUN_AGAIN = 'Commit your work, then run `boardsmith verify`.';
 
-function missingEquivalenceBasis(result: VerifyResult): string | undefined {
-  const mutation = result.checks.find((c) => c.name === 'mutation');
-  if ((mutation?.counts?.equivalent ?? 0) > 0 && !mutation?.equivalence) {
-    return `The equivalent-mutant review basis is missing from this result. Run \`boardsmith verify\` again.`;
-  }
-  return undefined;
-}
-
 /** Why `result` does not vouch for `head`, or undefined when it does. */
 export function resultProblem(result: VerifyResult, head: string): string | undefined {
   if (result.format !== VERIFY_RESULT_FORMAT || !Array.isArray(result.checks)) {
@@ -210,7 +197,7 @@ export function resultProblem(result: VerifyResult, head: string): string | unde
       'Fix what it names, commit, and run `boardsmith verify` again.',
     ].join('\n');
   }
-  return missingEquivalenceBasis(result);
+  return undefined;
 }
 
 /** The commit checked out in `projectDir` and whether its tree is clean, or why that cannot be said. */
@@ -251,15 +238,6 @@ function kindProblem(result: VerifyResult, chunk: string | undefined): string | 
   return undefined;
 }
 
-/** Why the result on file does not vouch for HEAD: `resultProblem`, then a full run's equivalence review, rechecked now. */
-async function currentResultProblem(projectDir: string, result: VerifyResult, commit: string): Promise<string | undefined> {
-  const problem = resultProblem(result, commit);
-  if (problem !== undefined) return problem;
-  const basis = result.checks.find((c) => c.name === 'mutation')?.equivalence;
-  if (basis !== undefined) return equivalenceBasisProblem(projectDir, basis, await openMutantCache(projectDir));
-  return undefined;
-}
-
 /**
  * Why HEAD in `projectDir` is not verified, or undefined when it is: the tree is clean and a
  * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file. With `chunk`, it
@@ -281,10 +259,10 @@ export async function verifiedProblem(projectDir: string, chunk?: string): Promi
   if (result === 'unreadable') {
     return `The \`boardsmith verify\` result for ${short(state.commit)} could not be read. Run \`boardsmith verify\` again.`;
   }
-  return resultVouchProblem(projectDir, result, state.commit, chunk);
+  return resultVouchProblem(result, state.commit, chunk);
 }
 
 /** Why `result`, read for `commit`, is not a passing verify of the kind `chunk` asks for (`kindProblem`), or undefined when it is. */
-export async function resultVouchProblem(projectDir: string, result: VerifyResult, commit: string, chunk?: string): Promise<string | undefined> {
-  return kindProblem(result, chunk) ?? (await currentResultProblem(projectDir, result, commit));
+export function resultVouchProblem(result: VerifyResult, commit: string, chunk?: string): string | undefined {
+  return kindProblem(result, chunk) ?? resultProblem(result, commit);
 }
