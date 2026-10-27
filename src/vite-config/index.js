@@ -2,6 +2,7 @@ import { relative, resolve, sep } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import { parseAst } from 'vite';
 import { configDefaults, mergeConfig } from 'vitest/config';
+import { SIM_FILE, SIM_FILES, TEST_FILE } from './test-files.js';
 
 /**
  * A game's whole vite and vitest config. A game's `vite.config.ts` is
@@ -75,15 +76,8 @@ export function rerunTriggers() {
   };
 }
 
-/** A sim's file name, `*.sim.test.ts` or any other spelling vitest collects: a random-game sim, a whole match, a bot game or a pace or budget run. */
-const SIM_FILES = '**/*.sim.{test,spec}.?(c|m)[jt]s?(x)';
-const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
-
 /** The vite mode `boardsmith test --sims` runs vitest in. */
 const SIM_MODE = 'sims';
-
-/** A file vitest collects by default, and the suffix a rename to a sim puts `.sim` before. */
-const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 /** What makes a test a sim: the names it imports that play whole games, by module. */
 const SIM_TOOLS = {

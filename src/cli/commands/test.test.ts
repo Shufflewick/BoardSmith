@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
@@ -53,6 +54,72 @@ describe('boardsmith test', () => {
     expect(sims.stdout).toContain('slow.sim.test.ts');
     expect(sims.stdout).not.toContain('ok.test.ts');
     expect(sims.code).toBe(0);
+  });
+
+  /** A game project committed on `main`, then on a branch `work` with the change `edit` makes committed. */
+  async function changedGame(files: Record<string, string>, edit: (project: string, git: (...args: string[]) => void) => Promise<void>): Promise<string> {
+    const project = await gameProject({ '.gitignore': 'node_modules\n', ...files });
+    await fs.rm(join(project, '.boardsmith'), { recursive: true });
+    const git = (...args: string[]): void => {
+      execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: project, stdio: 'pipe' });
+    };
+    git('init', '-q', '-b', 'main');
+    git('add', '.');
+    git('commit', '-qm', 'start');
+    git('checkout', '-qb', 'work');
+    await edit(project, git);
+    git('add', '-A');
+    git('commit', '-qm', 'change');
+    return project;
+  }
+
+  it('runs under --changed only the unit tests related to the change (#1502)', async () => {
+    const project = await changedGame(
+      { 'src/rules.ts': 'export const n = 1;\n', 'tests/rules.test.ts': "import { it } from 'vitest';\nimport { n } from '../src/rules.js';\nit('reads', () => { void n; });\n" },
+      (project) => fs.writeFile(join(project, 'src/rules.ts'), 'export const n = 2;\n'),
+    );
+    const run = await spawnCli(['test', '--changed', 'main'], project);
+    expect(run.stdout).toContain('rules.test.ts');
+    expect(run.stdout).not.toContain('ok.test.ts');
+    expect(run.code).toBe(0);
+  });
+
+  it('passes under --changed a change that only renames a test into a sim, and says why no unit test applies (#1502)', async () => {
+    const project = await changedGame(
+      { 'tests/play.test.ts': "import { it } from 'vitest';\nit('plays', () => {});\n" },
+      async (_project, git) => git('mv', 'tests/play.test.ts', 'tests/play.sim.test.ts'),
+    );
+    const run = await spawnCli(['test', '--changed', 'main'], project);
+    expect(run.stdout).toContain('No unit test is related to this change, and none needs to be');
+    expect(run.stdout).toContain('  tests/play.sim.test.ts: a sim, which runs only under `boardsmith test --sims`');
+    expect(run.stdout).toContain('  tests/play.test.ts: deleted or renamed by this change');
+    expect(run.stdout).not.toContain('plays');
+    expect(run.code).toBe(0);
+  });
+
+  it('passes under --changed a change to files outside src/ and a deleted source file, and says why for each (#1502 review F1, F4)', async () => {
+    const project = await changedGame(
+      { 'README.md': '# Game\n', 'src/old.ts': 'export const old = 1;\n' },
+      async (project, git) => {
+        await fs.writeFile(join(project, 'README.md'), '# Game, again\n');
+        git('rm', '-q', 'src/old.ts');
+      },
+    );
+    const run = await spawnCli(['test', '--changed', 'main'], project);
+    expect(run.stdout).toContain('  README.md: outside src/, so no unit test has to import it');
+    expect(run.stdout).toContain('  src/old.ts: deleted or renamed by this change');
+    expect(run.code).toBe(0);
+  });
+
+  it('fails under --changed a src/ change no unit test imports, and names the file (#1502)', async () => {
+    const project = await changedGame(
+      { 'src/rules.ts': 'export const n = 1;\n' },
+      (project) => fs.writeFile(join(project, 'src/rules.ts'), 'export const n = 2;\n'),
+    );
+    const run = await spawnCli(['test', '--changed', 'main'], project);
+    expect(run.stderr).toContain('No unit test is related to this change since its merge base with main');
+    expect(run.stderr).toContain('  src/rules.ts');
+    expect(run.code).toBe(1);
   });
 
   it('refuses a project whose vitest config would collect the chunk worktrees, and says how to fix it', async () => {

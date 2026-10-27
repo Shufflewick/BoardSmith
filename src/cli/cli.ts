@@ -153,6 +153,7 @@ export function createProgram(): Command {
     .option('--coverage', 'Generate coverage report')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
     .option('--sims', "Run only this game's sims (*.sim.test.ts: random-game sims, whole matches, bot games, pace and budget runs), which every other run leaves out")
+    .option('--changed <base>', 'Run only the unit tests related to what changed since the merge base with <base>, never sims; a change with none fails if it edited a file under src/ that is not a sim, and otherwise passes saying why each file needs no test')
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
 

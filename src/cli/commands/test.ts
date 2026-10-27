@@ -1,4 +1,5 @@
-import { writeFileSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { styleText } from 'node:util';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
@@ -6,6 +7,8 @@ import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-
 import { requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
+import { projectGitOutput } from '../lib/git-output.js';
+import { SIM_FILE } from '../../vite-config/test-files.js';
 
 /**
  * The vitest config of BoardSmith's browser regressions (`scripts/*-browser.mjs`), which
@@ -20,6 +23,8 @@ interface TestOptions {
   /** Run only a game's sims (`*.sim.test.ts`), which every other run leaves out (#1494). */
   sims?: boolean;
   coverage?: boolean;
+  /** Run only the unit tests related to what changed since the merge base with this ref (#1502). */
+  changed?: string;
   /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
 }
@@ -38,6 +43,10 @@ interface TestOptions {
  * `--sims`, in a game project only, runs the game's sims (`*.sim.test.ts`) and nothing else, as
  * vitest in the `sims` mode its config (`defineGameViteConfig`) reads (#1494).
  *
+ * `--changed <base>` runs the unit tests related to what changed since the merge base with `<base>`,
+ * never sims (#1502). A change with no related unit test fails when it changed a file under src/
+ * that is still there and is not a sim, and otherwise passes saying why each file needs none.
+ *
  * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
  * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
  *
@@ -55,6 +64,7 @@ interface TestOptions {
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
   const context = getProjectContext(cwd);
+  refuseChangedWithAnotherSelection(patterns, options);
 
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
@@ -80,7 +90,70 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   }
 
   discardRecord(run);
-  console.log(styleText('green', '\nAll tests passed!\n'));
+  await reportPassed(cwd, run.progress.files, options);
+}
+
+/** Says why a passing run passed: its tests passed, or, under `--changed`, why it had none to run. */
+async function reportPassed(cwd: string, files: string[] | undefined, options: TestOptions): Promise<void> {
+  if (files?.length === 0 && options.changed !== undefined) {
+    explainNoRelatedTests(cwd, await changedFiles(cwd, options.changed), options.changed, options);
+  } else {
+    console.log(styleText('green', '\nAll tests passed!\n'));
+  }
+}
+
+/** `--changed` picks the tests itself, so it refuses every other way of picking them. */
+function refuseChangedWithAnotherSelection(patterns: string[], options: TestOptions): void {
+  if (options.changed !== undefined && (options.sims || options.browser || options.watch || patterns.length > 0)) {
+    throw new Error('--changed picks the tests to run from the change, so it cannot be combined with --sims, --browser, --watch or file patterns.');
+  }
+}
+
+/**
+ * The files changed since the merge base with `base`, as vitest's `--changed` lists them (committed,
+ * staged, then modified or untracked), relative to `cwd`. Renames are a delete and an add, so a test
+ * renamed into a sim shows as both.
+ */
+async function changedFiles(cwd: string, base: string): Promise<string[]> {
+  const lists = await Promise.all([
+    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', `${base}...HEAD`]),
+    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', '--cached']),
+    projectGitOutput(cwd, ['ls-files', '--others', '--modified', '--exclude-standard']),
+  ]);
+  return [...new Set(lists.flatMap((list) => list.split('\n').filter((file) => file !== '')))];
+}
+
+/** A run under `--changed` that ran no test: fails naming each changed file under src/ that is still there and not a sim, and otherwise passes saying why for each file. */
+function explainNoRelatedTests(cwd: string, changed: string[], base: string, options: TestOptions): void {
+  const why = (file: string): string | undefined => {
+    if (!existsSync(join(cwd, file))) return 'deleted or renamed by this change';
+    if (SIM_FILE.test(file)) return 'a sim, which runs only under `boardsmith test --sims`';
+    if (!file.startsWith('src/')) return 'outside src/, so no unit test has to import it';
+    return undefined;
+  };
+  const untested = changed.filter((file) => why(file) === undefined);
+  if (changed.length === 0 || untested.length > 0) {
+    const files = changed.length === 0 ? ['  (nothing changed)'] : untested.map((file) => `  ${file}`);
+    fail(
+      [
+        `No unit test is related to this change since its merge base with ${base}. No unit test imports these changed files under src/:`,
+        ...files,
+        'Add a unit test (*.test.ts, not *.sim.test.ts) that imports them.',
+      ].join('\n'),
+      1,
+      options,
+    );
+  }
+  console.log(
+    styleText(
+      'green',
+      [
+        `\nNo unit test is related to this change, and none needs to be. Every file it changed since its merge base with ${base} is a sim, removed, or outside src/:`,
+        ...changed.map((file) => `  ${file}: ${why(file)}`),
+        '',
+      ].join('\n'),
+    ),
+  );
 }
 
 /** What vitest is handed after its own subcommand: the options asked for, then the filename filters. */
@@ -89,6 +162,8 @@ function vitestArgs(patterns: string[], options: TestOptions): string[] {
   if (options.browser) args.push('--config', BROWSER_SUITE_CONFIG);
   if (options.sims) args.push('--mode', 'sims');
   if (options.coverage) args.push('--coverage');
+  // passWithNoTests: a run of no test is judged by explainNoRelatedTests, which names the files.
+  if (options.changed !== undefined) args.push('--changed', options.changed, '--passWithNoTests');
   return [...args, ...patterns];
 }
 
