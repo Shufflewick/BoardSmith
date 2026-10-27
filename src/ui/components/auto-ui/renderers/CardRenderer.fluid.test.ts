@@ -24,6 +24,9 @@ import { mount } from '@vue/test-utils';
 import CardRenderer from './CardRenderer.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/ui/components/auto-ui/renderers/{DeckRenderer,HandRenderer}.vue');
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------

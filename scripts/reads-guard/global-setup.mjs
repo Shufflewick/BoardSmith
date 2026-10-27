@@ -20,6 +20,8 @@ import { join, matchesGlob, relative } from 'node:path';
 // Reads no glob can link: this one reads every tracked file, and vite cannot load every kind (LICENSE, .gitignore,
 // *.sha256) as a module, so a glob over them breaks `vitest run --changed`. A change to only those waits for its merge slice.
 const UNLINKABLE = new Set(['scripts/check-no-control-bytes.test.mjs']);
+// Files vite cannot load as modules, so no glob can link them: tsconfig.json is JSON with comments.
+const UNLINKABLE_FILES = new Set(['tsconfig.json']);
 
 /** Whether a change to `file` reruns every test, as `forceRerunTriggers` does; picomatch's `dir/**` also matches `dir`. */
 const rerunsAll = (file, triggers) => triggers.some((glob) => matchesGlob(file, glob) || matchesGlob(file, glob.replace(/\/\*\*$/, '')));
@@ -41,13 +43,19 @@ export function setup(project) {
       execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0'),
     );
     const byTest = Map.groupBy(
-      reads.filter(({ test, file }) => files.has(file) && !UNLINKABLE.has(relative(root, test)) && !rerunsAll(join(root, file), project.config.forceRerunTriggers)),
+      reads.filter(({ test, file }) => files.has(file) && !UNLINKABLE_FILES.has(file) && !UNLINKABLE.has(relative(root, test)) && !rerunsAll(join(root, file), project.config.forceRerunTriggers)),
       ({ test }) => test,
     );
     const unlinked = new Map();
     for (const [test, read] of byTest) {
       // vitest's own walk for `--changed`: it loads modules no test loaded and drops `?raw` and other query imports.
-      const deps = await project.vitest.specifications.getTestDependencies(project.createSpecification(test));
+      const deps = await project.vitest.specifications.getTestDependencies(project.createSpecification(test)).catch((error) => {
+        throw new Error(
+          `${relative(root, test)} links a file vite cannot load as a module, so \`vitest run --changed\` fails for every change ` +
+            `(${error.id ? relative(root, error.id) : 'a linked file'}: ${error.message}). Take it out of the test's glob, and if the test ` +
+            'reads it, add it to UNLINKABLE_FILES in scripts/reads-guard/global-setup.mjs.',
+        );
+      });
       const missing = read.map(({ file }) => file).filter((file) => join(root, file) !== test && !deps.has(join(root, file)));
       if (missing.length > 0) unlinked.set(test, missing);
     }

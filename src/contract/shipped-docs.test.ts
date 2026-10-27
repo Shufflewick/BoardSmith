@@ -15,6 +15,9 @@ import { join, posix } from 'node:path';
 import { packedFiles } from './npm-pack.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue,js}', '!**/*.test.ts']);
+
 // Slow one-time setup lives here, where no test timeout applies.
 const SHIPPED = new Set(packedFiles(REPO_ROOT));
 

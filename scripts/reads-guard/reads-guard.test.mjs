@@ -98,6 +98,21 @@ describe('the reads guard in a real vitest run', () => {
     expect(run.output).toContain('spied.test.mjs reads 1 file it does not link: data/a.txt');
   }, 120_000);
 
+  it('names a test that links a file vite cannot load, which would break `--changed` for every change', () => {
+    const run = runGuardedVitest({
+      'data/commented.json': ['{ // vite cannot parse this', '}'],
+      'links.test.mjs': [
+        "import { it, expect } from 'vitest';",
+        "import { readFileSync } from 'node:fs';",
+        "import.meta.glob('/data/commented.json');",
+        "it('reads', () => expect(readFileSync('data/commented.json', 'utf8')).toContain('vite'));",
+      ],
+    });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toContain('links.test.mjs links a file vite cannot load as a module');
+  }, 120_000);
+
   it('leaves out reads of ignored and outside files, of its own file and of files whose change reruns every test, and by the code under test', () => {
     const run = runGuardedVitest({
       'reader.mjs': [
