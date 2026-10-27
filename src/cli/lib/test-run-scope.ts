@@ -1,6 +1,7 @@
 import { existsSync, promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript';
+import { GAME_EXCLUDES } from '../../vite-config/test-files.js';
 
 /**
  * WHAT A GAME PROJECT'S TEST RUN COVERS: the main checkout's tests, nothing under `.boardsmith/` or
@@ -106,7 +107,7 @@ export async function gameTestRunProblem(projectDir: string): Promise<string | u
 }
 
 /** The excludes `defineGameViteConfig` adds to vitest's defaults. */
-const SHIPPED_EXCLUDES = new Set(['.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
+const SHIPPED_EXCLUDES = new Set(GAME_EXCLUDES);
 
 /** What a config BoardSmith wrote imports: vite, vitest, the Vue plugin, and the project's own vite config. */
 const SHIPPED_IMPORT = /^(vite|vitest\/config|@vitejs\/plugin-vue|\.\/vite\.config(\.[cm]?[jt]s)?)$/;

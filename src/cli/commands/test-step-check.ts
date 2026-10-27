@@ -43,6 +43,7 @@ import { promises as fs } from 'node:fs';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import { styleText } from 'node:util';
+import picomatch from 'picomatch';
 import {
   claimsInForce,
   extractSection,
@@ -70,7 +71,7 @@ import { blameHeader, gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { mayBeSameOrInside } from '../lib/path-inside.js';
-import { SIM_FILE, TEST_FILE } from '../../vite-config/test-files.js';
+import { GAME_EXCLUDES, SIM_FILE, TEST_FILE, VITEST_EXCLUDES } from '../../vite-config/test-files.js';
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -578,24 +579,11 @@ const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
 /** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/test-files.js` (#1494, #1506). */
 export const isSimFile = (path: string) => SIM_FILE.test(path);
 
-/**
- * Where a plain vitest run never collects a test file in a game project: its own default exclusions,
- * and three of the four `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees
- * under `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs, from
- * its `exclude`, and the sims, from its `testClasses` plugin. The fourth, `.worktrees/`, holds other
- * git checkouts, whose files git does not list.
- */
-const NOT_COLLECTED = Object.freeze([
-  /(^|\/)(node_modules|dist|cypress)\//,
-  /(^|\/)\.(idea|git|cache|output|temp)\//,
-  /^\.boardsmith\//,
-  /(^|\/)tests\/browser\//,
-  SIM_FILE,
-]);
+/** vitest's and `defineGameViteConfig`'s excludes (`src/vite-config/test-files.js`), matched as vitest does: `**` enters dot folders. */
+const excluded = picomatch([...VITEST_EXCLUDES, ...GAME_EXCLUDES], { dot: true });
 
-/** A file a plain vitest run collects as a test, by its default pattern and the exclusions above. */
-export const isTestFile = (path: string) =>
-  TEST_FILE.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
+/** A file a plain vitest run in a game project collects as a test: not excluded, and not a sim, which its `testClasses` plugin leaves out. */
+export const isTestFile = (path: string) => TEST_FILE.test(path) && !SIM_FILE.test(path) && !excluded(path);
 
 /** Every script in the project outside `node_modules/`, with its text. */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
@@ -692,7 +680,7 @@ function guardRunsCodeFindings(scope: ChunkTestScope): TestStepFinding[] {
  * A test file a chunk writes outside its manifest that need not be a row (see the file comment): a
  * generated example test, and a measurement harness under the chunk's `evidence/`
  * (`state-machine.md` "Project Layout"). The smoke test is under `tests/browser/`, which vitest
- * never collects (`NOT_COLLECTED`).
+ * never collects (`GAME_EXCLUDES`).
  */
 const UNLISTED_TEST_EXEMPTIONS = Object.freeze([
   /^tests\/examples\/[^/]+\.examples\.test\.ts$/,
