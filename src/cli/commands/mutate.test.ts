@@ -2,7 +2,7 @@
  * #1496: `boardsmith mutate --base <ref>`, as a user (or a merge) runs it: a sample of 3 mutants of
  * the code lines changed since the merge base with <ref>, against the unit tests only.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, onTestFinished, vi } from 'vitest';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
@@ -68,6 +68,25 @@ describe('boardsmith mutate', () => {
     expect(run.stdout).toContain('3 of 3 mutants of the lines changed since main');
     expect(run.stdout).toContain('src/fee.ts:2 return value replaced with undefined: no test failed');
     expect(run.stdout).toContain('add or tighten a test so it fails when that line is changed that way');
+  });
+
+  it('tries the same sample on the branch tip and on the merge commit that lands it, since the change is the same (#1500)', async () => {
+    // Fixed dates make every commit sha, and so a sample seeded by one, the same on each run.
+    vi.stubEnv('GIT_AUTHOR_DATE', '2026-01-01T00:00:00Z');
+    vi.stubEnv('GIT_COMMITTER_DATE', '2026-01-01T00:00:00Z');
+    onTestFinished(() => { vi.unstubAllEnvs(); });
+    const dir = await gameWithBranch("import { it, expect } from 'vitest';\nimport { fee } from '../src/fee';\nit('a fee exists', () => { expect(typeof fee).toBe('function'); });\n", {
+      'src/fee.ts': 'export function fee(price: number, rush: boolean): number {\n  if (price > 100) return price * 2;\n  if (rush) return price + 5;\n  return price - 1;\n}\n',
+    });
+    const survivors = (stdout: string) => stdout.split('\n').filter((line) => line.includes('src/fee.ts:'));
+    const onBranch = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+    git(dir, 'checkout', '-q', 'main');
+    await write(dir, { 'README.md': 'main moved on\n' });
+    commitAll(dir, 'docs on main');
+    git(dir, 'merge', '-q', '--no-ff', '-m', 'merge work', 'work');
+    const onMerge = await spawnCli(['mutate', '--base', 'HEAD^1', '--project', dir]);
+    expect(survivors(onBranch.stdout)).toHaveLength(3);
+    expect(survivors(onMerge.stdout)).toEqual(survivors(onBranch.stdout));
   });
 
   it('fails when every mutant ran past its time limit and none was killed, since no test was shown to notice a change (#1499)', async () => {

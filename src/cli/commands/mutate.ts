@@ -2,9 +2,9 @@
  * `boardsmith mutate --base <ref>` (#1496): shows the tests of a change can fail, at merge time.
  *
  * It breaks a sample of 3 of the code lines under `src/` changed since the merge base of HEAD with
- * `<ref>` (committed, staged, unstaged and untracked), one small change at a time, picked with the
- * HEAD commit as seed so a re-run tries the same ones, and runs the unit tests that import the
- * changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
+ * `<ref>` (committed, staged, unstaged and untracked), one small change at a time, picked by what
+ * the mutants change, so the same change tries the same ones whichever commit holds it (#1500), and
+ * runs the unit tests that import the changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
  * test loads, fails the run, naming its file and line, and so does a sample whose mutants only timed
  * out, since none was shown caught (#1499). Sims never run here (#1494).
  */
@@ -104,7 +104,6 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
   const run = await runDiffMutationCheck({
     projectDir,
     added: changed.code,
-    seed: head,
     log: options.log ?? ((line) => console.error(styleText('dim', line))),
     budget,
   });
