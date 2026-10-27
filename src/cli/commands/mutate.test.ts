@@ -24,7 +24,8 @@ const FEE = `export function fee(price: number): number {
 
 /** A game on `main` with `bid` and its test, and a branch `work` that adds `fee` with `feeTest` and `extra`. */
 async function gameWithBranch(feeTest: string, extra: Record<string, string> = {}): Promise<string> {
-  const dir = join(tempTree('bs-mutate-'), 'game');
+  const tree = tempTree('bs-mutate-');
+  const dir = join(tree, 'game');
   await write(dir, {
     '.gitignore': '.boardsmith/\nnode_modules\n',
     'package.json': '{ "type": "module" }\n',
@@ -119,7 +120,8 @@ describe('boardsmith mutate', () => {
   });
 
   it('refuses a boardsmith.json that is not valid JSON, naming it, before any git work (#1499)', async () => {
-    const dir = join(tempTree('bs-mutate-'), 'game');
+    const tree = tempTree('bs-mutate-');
+    const dir = join(tree, 'game');
     // No git repository: reading the base first would fail on git, not on the file.
     await write(dir, { 'package.json': '{ "type": "module" }\n', 'boardsmith.json': '{ "name": "fixture", }\n', 'vite.config.ts': GAME_VITE_CONFIG, 'tests/a.test.ts': '' });
     linkGameModules(dir);
