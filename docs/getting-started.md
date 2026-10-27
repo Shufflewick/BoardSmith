@@ -251,6 +251,13 @@ or `replayRandomGame` from `boardsmith/testing`, `playGame` from
 `benchmarkBot` or `WeightEvolver` from `boardsmith/bot-trainer`) fails when it
 loads, with a message telling you to rename it to `.sim.test.ts`.
 
+A measurement named in `design/CONSTRAINTS.md` (a `- Test:` or `- Measured by:`
+line) must be a unit test, because `boardsmith constraint-check` and the
+`chunk-merge` gate run it, and no gate runs a sim. `boardsmith constraint-check`
+refuses a measurement named `*.sim.test.ts`. Keep a whole-match budget run as a
+sim, and measure the cap with a smaller unit test that builds the structure full
+at its cap.
+
 `boardsmith test --changed <base>` runs the unit tests that import something
 changed since the merge base with `<base>`, never sims. When no unit test
 imports anything the change touched, it fails if the change edited or added a
