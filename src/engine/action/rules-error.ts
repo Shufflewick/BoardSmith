@@ -18,5 +18,15 @@ export function rulesErrorSentence(actionName: string): string {
  * only where `isDevThrowEnabled` says the reader is the author (#47, #1045).
  */
 export function withDevDetail(sentence: string, error: unknown): string {
-  return isDevThrowEnabled() ? `${sentence} (${error instanceof Error ? error.message : String(error)})` : sentence;
+  return isDevThrowEnabled() ? `${sentence} (${thrownText(error)})` : sentence;
+}
+
+function thrownText(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  // A thrown value with no string form must not turn reporting the crash into a second one.
+  try {
+    return String(error);
+  } catch {
+    return Object.prototype.toString.call(error);
+  }
 }

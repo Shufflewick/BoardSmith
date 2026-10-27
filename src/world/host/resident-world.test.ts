@@ -37,7 +37,7 @@ class Ticker extends Game<Ticker, Player> {
 /** What the clock-issued `stamp` saw: its due and its `world.now`. */
 let stamped: { due: number; now: number } | undefined;
 /** What `world.view` throws, when it throws. */
-let viewThrows: Error | undefined;
+let viewThrows: unknown;
 
 const mark = (text: string) => (_args: unknown, { world }: { world: { partition(name: string): unknown } }) => {
   const log = world.partition(LOG) as Log;
@@ -238,20 +238,32 @@ describe('#793: ResidentWorld', () => {
   });
 
   describe('a view that throws', () => {
-    it('does not hand the game\'s raw error text to the player', async () => {
-      // Even in development: the world reads no environment (#165), so the detail is only ever logged (#982).
-      devThrow.enabled = true;
+    const failedViewMessage = async (thrown: unknown = new TypeError("Cannot read properties of undefined (reading 'secret')")) => {
       vi.spyOn(console, 'error').mockImplementation(() => {});
       const { world } = host();
       await world.start();
       world.seat(worldSeatPlayer(1), 1);
-      viewThrows = new TypeError("Cannot read properties of undefined (reading 'secret')");
-
+      viewThrows = thrown;
       const views = await world.run(() => world.viewsFor([worldSeatPlayer(1)]));
-      const failure = views.failed[worldSeatPlayer(1)];
-      expect(failure).toBeDefined();
-      expect(failure!.message).not.toContain('secret');
-      expect(failure!.message).toMatch(/error in the game's rules/);
+      return views.failed[worldSeatPlayer(1)]?.message;
+    };
+    const SENTENCE = "This view could not be shown because of an error in the game's rules.";
+
+    it('does not hand the game\'s raw error text to the player in production', async () => {
+      devThrow.enabled = false;
+      expect(await failedViewMessage()).toBe(SENTENCE);
+    });
+
+    it('adds the raw error text in brackets in a dev or test run, as an action does', async () => {
+      devThrow.enabled = true;
+      expect(await failedViewMessage()).toBe(
+        `${SENTENCE} (Cannot read properties of undefined (reading 'secret'))`,
+      );
+    });
+
+    it('still fails only that seat in a dev run when what the view threw has no string form', async () => {
+      devThrow.enabled = true;
+      expect(await failedViewMessage(Object.create(null))).toBe(`${SENTENCE} ([object Object])`);
     });
 
     it('logs once for the whole audience, with how many seats failed, not once per seat', async () => {
