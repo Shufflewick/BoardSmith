@@ -493,7 +493,7 @@ const reporter = {
         };
       }),
     }));
-    writeReport({ files: report, errors: errors.map((error) => [error?.name, String(error?.message ?? error).split('\\n')[0]].filter(Boolean).join(': ')) });
+    writeReport({ files: report, errors: errors.filter((error) => error?.message).map((error) => [error.name, String(error.message).split('\\n')[0]].filter(Boolean).join(': ')) });
   },
 };
 
