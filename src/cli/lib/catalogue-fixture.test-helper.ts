@@ -8,7 +8,7 @@
  * run that reached the shared checkouts' engine shows up as a failure.
  */
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, realpathSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
@@ -44,6 +44,19 @@ if (existsSync('HANG')) {
   spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'hanging-grandchild')], { stdio: 'ignore' });
   setInterval(() => {}, 1000);
 } else console.log('valid');
+`;
+
+/**
+ * The stand-in for the game's own vitest. `vitest list` writes the tests it collected to its `--json`
+ * path, unless the game has a `TESTS_DO_NOT_LOAD` file, when it prints that and exits 1, or a
+ * `TESTS_UNLISTED` file, when it exits 0 without writing the list, as vitest does on an error
+ * outside any test file.
+ */
+const STUB_VITEST = `#!/usr/bin/env node
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+if (process.argv[2] !== 'list') { console.error('expected list, got ' + process.argv.slice(2).join(' ')); process.exit(1); }
+if (existsSync('TESTS_DO_NOT_LOAD')) { console.error(readFileSync('TESTS_DO_NOT_LOAD', 'utf-8')); process.exit(1); }
+if (!existsSync('TESTS_UNLISTED')) writeFileSync(process.argv.find((a) => a.startsWith('--json=')).slice(7), '[]');
 `;
 
 export interface Fixture {
@@ -103,12 +116,16 @@ export async function makeGame(fx: Fixture, slug: string, spec: GameSpec = {}): 
       '.package-lock.json': JSON.stringify({ name: slug, packages: {} }),
       'tool/package.json': JSON.stringify({ name: 'tool', bin: 'run.js' }),
       'tool/run.js': '',
+      'vitest/package.json': JSON.stringify({ name: 'vitest', type: 'module', bin: 'vitest.mjs' }),
+      'vitest/vitest.mjs': STUB_VITEST,
       '.vite/deps/cache.json': '{}',
     });
     symlinkSync(fx.elsewhere, join(modules, 'boardsmith'));
     mkdirSync(join(modules, '.bin'));
     symlinkSync('../boardsmith/bin/boardsmith.js', join(modules, '.bin', 'boardsmith'));
     symlinkSync('../tool/run.js', join(modules, '.bin', 'tool'));
+    chmodSync(join(modules, 'vitest', 'vitest.mjs'), 0o755);
+    symlinkSync('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
     for (const link of spec.links ?? []) symlinkSync(`../../${link}`, join(modules, link));
   }
   initRepo(dir);

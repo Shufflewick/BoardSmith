@@ -34,7 +34,7 @@ describe('the catalogue report (#591)', () => {
       paired: [],
     });
     expect(report.ok).toBe(false);
-    expect(report.text).toContain('cribbage FAILED boardsmith validate on its main (a06bf140) against this BoardSmith tree');
+    expect(report.text).toContain('cribbage FAILED on its main (a06bf140) against this BoardSmith tree');
     expect(report.text).toContain('TS2322: TableBoardProps');
     expect(report.text).toContain('/games/cribbage');
     expect(report.text).toContain(
@@ -60,7 +60,7 @@ describe("the report of a game checked on its paired branch (#1322)", () => {
 
   it('names the branch a game failed on, without telling the reader to merge it or to make it (review F2, F3)', () => {
     const report = catalogueReport({ results: [{ ...mud, status: 'failed', output: 'TS2554\n' }], notChecked: [], paired: [mud] });
-    expect(report.text).toContain('example-mud FAILED boardsmith validate on its i975-notice-boxes (6f246020) against this BoardSmith tree');
+    expect(report.text).toContain('example-mud FAILED on its i975-notice-boxes (6f246020) against this BoardSmith tree');
     expect(report.text).not.toContain('Merge that branch');
     expect(report.text).not.toContain('on a branch with the same name');
   });

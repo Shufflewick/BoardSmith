@@ -9,11 +9,13 @@
  * For each game in the catalogue (`~/BoardSmithGames`, a plain folder of separate game
  * repositories) whose committed `main` (or paired branch, below) links `boardsmith` to a checkout,
  * it runs `boardsmith validate` (the publish bar, which includes the vue-tsc type check) on that
- * commit, against the tree it is given:
+ * commit, against the tree it is given, then has the game's vitest collect its test files (`vitest list`),
+ * which loads each one and runs no test, so a change a game's tests no longer load against fails here
+ * rather than in the game's next `boardsmith test` (#1498):
  *
- * - The game is exported from that commit with `git archive` into a temporary folder. The
- *   shared checkout is only read: no worktree is registered in it, nothing is written to it, and its
- *   uncommitted work is not what is checked.
+ * - The game is exported from that commit into a temporary folder, as a clone that borrows the
+ *   shared checkout's objects (`git clone --shared`). The shared checkout is only read: no worktree is
+ *   registered in it, nothing is written to it, and its uncommitted work is not what is checked.
  * - The export gets a `node_modules` of links into the shared checkout's install, so nothing is
  *   reinstalled, except `boardsmith`, which links to the tree under check, and any catalogue game
  *   the install links to (example-legacy-world's `example-legacy`), which links to that game's own
@@ -59,7 +61,8 @@ export const DEFAULT_CATALOGUE_ROOT = join(homedir(), 'BoardSmithGames');
 /** The command that clones every catalogue game, each its own repository, onto a machine without them. */
 export const CATALOGUE_CLONE_COMMAND = 'bash ~/ShufflewickPub/scripts/clone-game-catalogue.sh';
 
-const CACHE_FORMAT = 1;
+// 2: a pass also means every test file loaded (#1498).
+const CACHE_FORMAT = 2;
 
 /** How many passes the cache keeps: many runs' worth for every game, at about 70 bytes each. */
 const MAX_STORED_PASSES = 5_000;
@@ -355,15 +358,13 @@ class Children {
 }
 
 /**
- * Writes the files of `repo` at its commit into the empty folder `dest`, by way of a tar
- * file beside it: git writes the archive itself, so its bytes never pass through a string.
+ * Checks out `repo` at its commit into the empty folder `dest`, as a clone that borrows the shared
+ * checkout's objects, so it writes nothing there. A clone, not an archive: a game's test may read
+ * its own checkout when it loads, as WindupWarfare's does with `git ls-files` (#1498).
  */
-async function exportCommit(repo: CatalogueRepo, dest: string, children: Children): Promise<void> {
-  const archive = `${dest}.tar`;
-  await git(repo.dir, ['archive', '--format=tar', '-o', archive, repo.commit]);
-  const untar = await children.run('tar', ['-x', '-f', archive, '-C', dest], dest);
-  await fs.rm(archive);
-  if (untar.code !== 0) throw new Error(`could not unpack ${repo.slug} at ${repo.commit}: ${untar.output.trim()}`);
+async function exportCommit(repo: CatalogueRepo, dest: string): Promise<void> {
+  await git(dest, ['clone', '--quiet', '--shared', '--no-checkout', repo.dir, '.']);
+  await git(dest, ['checkout', '--quiet', '--detach', repo.commit]);
 }
 
 /**
@@ -434,6 +435,34 @@ function describeLimit(ms: number): string {
 }
 
 /**
+ * Runs `boardsmith validate` in the export of `slug` at `dir`, and has its vitest collect every test
+ * file, a plain run's and the sims', which loads each one and runs no test (#1498). Undefined when
+ * every step passes; otherwise what the first failing step, in that order, printed, and why it failed.
+ */
+async function checkGame(slug: string, tree: string, dir: string, children: Children, timeLimitMs: number): Promise<string | undefined> {
+  const stopped = (name: string) => `\n${slug} did not finish ${name} within ${describeLimit(timeLimitMs)}, so it was stopped. `
+    + 'Each step takes well under a minute; find what never ends, or skip the game with --skip and an issue.\n';
+  const collect = async (mode: string[], listed: string): Promise<string | undefined> => {
+    const name = ['vitest list', ...mode].join(' ');
+    // The game's own pool and isolation, so each file loads as its test run loads it (#1498 review F6).
+    const args = ['list', ...mode, '--passWithNoTests', `--json=${listed}`];
+    const run = await children.run(join(dir, 'node_modules', '.bin', 'vitest'), args, dir, timeLimitMs);
+    // vitest can exit 0 after an error outside any test file, and then it writes no list.
+    if (!run.timedOut && run.code === 0 && existsSync(listed)) return undefined;
+    return `${slug}'s test files do not load against this tree (${name} loads each one and runs none):\n${run.output}${run.timedOut ? stopped(name) : ''}`;
+  };
+  // Side by side: none of the three reads what another writes.
+  const [validate, ...collected] = await Promise.all([
+    children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs),
+    collect([], `${dir}.tests.json`),
+    collect(['--mode', 'sims'], `${dir}.sims.json`),
+  ]);
+  if (validate.timedOut) return `${validate.output}${stopped('boardsmith validate')}`;
+  if (validate.code !== 0) return validate.output;
+  return collected.find((failure) => failure !== undefined);
+}
+
+/**
  * Validates each of `games` in an export of its commit, in a work folder that is removed when the run
  * ends, and ends every process the run started if a signal stops it first.
  */
@@ -455,7 +484,7 @@ async function runGames(
         exports.set(r.slug, (async () => {
           const dest = join(work, r.slug);
           await fs.mkdir(dest);
-          await exportCommit(r, dest, children);
+          await exportCommit(r, dest);
           await linkInstall(r, dest, tree, await linksOf(r));
           return dest;
         })());
@@ -471,12 +500,8 @@ async function runGames(
         ran.set(game.slug, { ...named(game), status: 'failed', output: error instanceof Error ? error.message : String(error) });
         return;
       }
-      const validate = await children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs);
-      const output = validate.timedOut
-        ? `${validate.output}\n${game.slug} did not finish boardsmith validate within ${describeLimit(timeLimitMs)}, so it was stopped. `
-          + 'A game validates in well under a minute; find what never ends, or skip the game with --skip and an issue.\n'
-        : validate.output;
-      ran.set(game.slug, validate.code === 0 && !validate.timedOut ? { ...named(game), status: 'passed' } : { ...named(game), status: 'failed', output });
+      const failed = await checkGame(game.slug, tree, dir, children, timeLimitMs);
+      ran.set(game.slug, failed === undefined ? { ...named(game), status: 'passed' } : { ...named(game), status: 'failed', output: failed });
     });
   }, () => children.endAll());
   return ran;
