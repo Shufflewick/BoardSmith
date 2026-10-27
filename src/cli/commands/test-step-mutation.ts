@@ -1319,6 +1319,8 @@ interface DiffMutationResult {
   survivors: SurvivingMutant[];
   /** Mutants in a file no test loads, so no test could catch them: neither killed nor survived. */
   unreached: SurvivingMutant[];
+  /** Mutants whose run went past its time limit: not shown caught, since a busy machine looks the same. */
+  timedOut: SurvivingMutant[];
   notGreen?: string[];
 }
 
@@ -1440,8 +1442,8 @@ function apartError(what: string, red: string[], rerun: string): Error {
  * game's config leaves sims out of every run but `--sims` (#1494). Any of those tests may catch a
  * mutant, and a mutant none catches is reported by file and line. A mutant in a file none of them
  * loads (`test-step-reach.ts`, #981) is reported as unreached, since no test could catch it; that
- * includes a file a test reaches only by a path built at run time, which `vitest related` cannot
- * follow. A mutant that makes its run go past its time limit (an infinite loop) is counted as timed
+ * includes a file a test reaches only by a path built at run time or through a setup file, which
+ * `vitest related` cannot follow (it walks only each test file's own imports, #1499). A mutant that makes its run go past its time limit (an infinite loop) is counted as timed
  * out, not as a survivor, since the tests did not pass.
  *
  * Those test files first run once unmutated and must pass: `notGreen` then names what failed, and
@@ -1454,7 +1456,7 @@ export async function runDiffMutationCheck(
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
   const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed, MUTATE_SAMPLE_SIZE);
   summary.files = new Set(mutants.map((m) => m.file)).size;
-  if (mutants.length === 0) return { summary, survivors: [], unreached: [] };
+  if (mutants.length === 0) return { summary, survivors: [], unreached: [], timedOut: [] };
 
   const runners: Runner[] = [];
   return withCommandBuildDir(projectDir, 'mutate', async (workDir) => {
@@ -1467,22 +1469,23 @@ export async function runDiffMutationCheck(
       runners.push(await createRunner(projectDir, [], trialDir));
     }
     const started = await greenRunner(runners[0], projectDir, mutants, trials, input.log, input.budget);
-    if ('notGreen' in started) return { summary, survivors: [], unreached: [], notGreen: started.notGreen };
+    if ('notGreen' in started) return { summary, survivors: [], unreached: [], timedOut: [], notGreen: started.notGreen };
     const share = started.workers === undefined ? '' : `, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget!.workers}`;
     input.log(`Running ${trials} mutant${trials === 1 ? '' : 's'} at a time${share}.`);
     return tallyMutants(mutants, await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner }))), summary);
   }, () => stopAll(runners));
 }
 
-/** Counts each mutant's outcome into `summary`, in the order the mutants were made, and names the survivors and the mutants no test loads. */
+/** Counts each mutant's outcome into `summary`, in the order the mutants were made, and names the survivors, the mutants no test loads and those that timed out. */
 function tallyMutants(mutants: LocatedMutant[], outcomes: DiffOutcome[], summary: DiffMutationResult['summary']): DiffMutationResult {
-  const result: DiffMutationResult = { summary, survivors: [], unreached: [] };
+  const result: DiffMutationResult = { summary, survivors: [], unreached: [], timedOut: [] };
   for (const [i, mutant] of mutants.entries()) {
     summary.mutants++;
     summary[COUNTED[outcomes[i]]]++;
     const where = { file: mutant.file, line: mutant.line, description: mutant.description };
     if (outcomes[i] === 'survived') result.survivors.push(where);
     if (outcomes[i] === 'unreached') result.unreached.push(where);
+    if (outcomes[i] === 'timed-out') result.timedOut.push(where);
   }
   return result;
 }

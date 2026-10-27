@@ -271,8 +271,10 @@ runs those test files once unchanged first, recording which files each one
 loads, and they must pass; then it runs them against each mutant, all 3 at
 once, stopping a run at the first failing test. A mutant no test notices fails
 the run, named by file and line, and so does one in a file none of those tests
-loads. A mutant that makes its run go past the time limit (an infinite loop)
-counts as timed out, not as a survivor. When `--base` measures no change (its
+loads. A mutant that makes its run go past the time limit (an infinite loop,
+or a busy machine) counts as timed out, not as a survivor, and not as caught:
+when the mutants only time out and none is killed, the run fails, since no test
+was shown to notice a change. When `--base` measures no change (its
 merge base is the current commit on a clean tree), `boardsmith mutate` refuses
 rather than pass on nothing.
 
@@ -284,9 +286,12 @@ FAIL  1 of 3 mutants of the lines changed since main (4f2a9c1e0b3d) survived: ev
 Because only the test files that import the changed files run, a test that
 passes only after another test file has run (shared state under `isolate:
 false`, or the order files run in) fails the unchanged run, and the message
-says so: make each test file set up what it needs itself. A file that a test
-reaches only through a setup file or a global setup, not an import, counts as
-loaded by no test: add a test that imports it.
+says so: make each test file set up what it needs itself. Vitest picks those
+test files by their own imports, so a file that a test reaches only through a
+setup file or a global setup, not an import, has no test files of its own and
+counts as imported by no test: add a test that imports it. (When a game has a
+global setup, every test file that does run counts as loading every file,
+since what the global setup hands the tests cannot be traced.)
 
 A game with Vitest projects (`test.projects` in its config, or a workspace:
 `test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant

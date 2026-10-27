@@ -7,11 +7,10 @@
  * changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
  * test loads, fails the run, naming its file and line. Sims never run here (#1494).
  */
-import { readFileSync } from 'node:fs';
 import { resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
-import { requireGameProject } from '../lib/game-project.js';
+import { readProjectConfig } from '../lib/agent-roles.js';
 import { mutationBudget } from '../lib/mutation-budget.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
@@ -28,9 +27,9 @@ interface MutateVerdict {
 
 type DiffMutationRun = Awaited<ReturnType<typeof runDiffMutationCheck>>;
 
-/** What a finished run says: a red run before any mutant, survivors or mutants no test loads, or every mutant caught. */
+/** What a finished run says: a red run before any mutant, survivors, mutants no test loads, only timeouts, or every mutant caught. */
 function verdict(since: string, run: DiffMutationRun): MutateVerdict {
-  const { summary, survivors, unreached, notGreen } = run;
+  const { summary, survivors, unreached, timedOut, notGreen } = run;
   if (notGreen) {
     return {
       passed: false,
@@ -51,7 +50,20 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
   }
   if (unreached.length > 0) {
     said.push(`${unreached.length} ${of} were in a file no test imports, so no test could notice the change`);
-    next.push('For each file no test imports, add a test that imports it and checks what the changed lines do, then run `boardsmith mutate` again.');
+    next.push(
+      'Only the test files that import a changed file, directly or through other files, run here. ' +
+        'A file a test reaches only through a setup file counts as imported by none, since Vitest does not follow setup files to the tests. ' +
+        'For each file no test imports, add a test that imports it and checks what the changed lines do, then run `boardsmith mutate` again.',
+    );
+  }
+  // A timeout alone shows nothing: a busy machine and a never-ending loop look the same.
+  const onlyTimedOut = said.length === 0 && summary.killed === 0 && timedOut.length > 0;
+  if (onlyTimedOut) {
+    said.push(`${timedOut.length} ${of} made their tests run past the time limit, and none was killed, so no test was shown to notice a change`);
+    next.push(
+      'A run times out when the machine is busy or when the change makes a loop never end. Run `boardsmith mutate` again on a quieter machine, ' +
+        'or give it a budget in boardsmith.json, e.g. "mutation": { "trials": 1, "workers": 4 }, so the mutants do not compete for the CPU.',
+    );
   }
   if (said.length > 0) {
     return {
@@ -61,6 +73,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [
         ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
         ...unreached.map((u) => ({ file: u.file, line: u.line, detail: `${u.description}: no test imports ${u.file}` })),
+        ...(onlyTimedOut ? timedOut.map((t) => ({ file: t.file, line: t.line, detail: `${t.description}: its tests ran past the time limit` })) : []),
       ],
     };
   }
@@ -74,7 +87,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
 /** Runs the sample against the change since the merge base of HEAD with `base`. */
 async function runMutate(options: { projectDir: string; base: string; log?: (line: string) => void }): Promise<MutateVerdict> {
   const { projectDir } = options;
-  const configPath = requireGameProject(projectDir);
+  const budget = mutationBudget(await readProjectConfig(projectDir, { command: 'boardsmith mutate', purpose: 'find its "mutation" budget' }));
   const problem = await gameTestRunProblem(projectDir);
   if (problem) throw new Error(problem);
   const base = await resolveBase(projectDir, options.base);
@@ -93,7 +106,7 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
     added: changed.code,
     seed: head,
     log: options.log ?? ((line) => console.error(styleText('dim', line))),
-    budget: mutationBudget(JSON.parse(readFileSync(configPath, 'utf-8'))),
+    budget,
   });
   return verdict(since, run);
 }
