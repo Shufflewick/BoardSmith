@@ -1274,6 +1274,6 @@ it('quadruples', () => { expect(quadruple(2)).toBe(8); });
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, survivors: [], unreached: [] });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, survivors: [], unreached: [], timedOut: [] });
   });
 });

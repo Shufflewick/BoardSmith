@@ -37,7 +37,7 @@ function ancestors(dir: string): string[] {
  * folder or a folder above it, as Node resolves the import, with links followed. Undefined when
  * none is installed, as for a game whose tests import no BoardSmith.
  */
-export async function gameBoardsmithRoot(projectDir: string): Promise<string | undefined> {
+async function gameBoardsmithRoot(projectDir: string): Promise<string | undefined> {
   for (const dir of ancestors(await fs.realpath(projectDir))) {
     const candidate = join(dir, 'node_modules', 'boardsmith');
     if ((await readIfExists(join(candidate, 'package.json'), fs.readFile)) !== undefined) return fs.realpath(candidate);
@@ -170,7 +170,7 @@ async function ignoredEntryPointsHash(root: string): Promise<string> {
  * untracked changes, so editing BoardSmith is a new revision. An installed copy has no git of its
  * own, and a published version is immutable, so the version names it.
  */
-export async function toolRevision(root: string): Promise<string> {
+async function toolRevision(root: string): Promise<string> {
   const pkg = JSON.parse(await fs.readFile(join(root, 'package.json'), 'utf-8')) as { name: string; version: string };
   const release = `${pkg.name}@${pkg.version}`;
   const checkout = await checkoutRevision(root);

@@ -45,10 +45,13 @@ it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
   return dir;
 }
 
+/** A test of `fee` that catches each of its mutants. */
+const KILLS_FEE = "import { it, expect } from 'vitest';\nimport { fee } from '../src/fee';\nit('the fee is twice the price', () => { expect(fee(3)).toBe(6); });\n";
+
 describe('boardsmith mutate', () => {
   it('passes when a test catches each of the 3 sampled mutants of the change, and never runs a sim', async () => {
     const dir = await gameWithBranch(
-      "import { it, expect } from 'vitest';\nimport { fee } from '../src/fee';\nit('the fee is twice the price', () => { expect(fee(3)).toBe(6); });\n",
+      KILLS_FEE,
       // A sim that imports the changed file and fails: it would make the run red if it ran.
       { 'tests/fee.sim.test.ts': "import { it, expect } from 'vitest';\nimport { fee } from '../src/fee';\nit('never runs here', () => { expect(fee(3)).toBe(0); });\n" },
     );
@@ -65,6 +68,45 @@ describe('boardsmith mutate', () => {
     expect(run.stdout).toContain('3 of 3 mutants of the lines changed since main');
     expect(run.stdout).toContain('src/fee.ts:2 return value replaced with undefined: no test failed');
     expect(run.stdout).toContain('add or tighten a test so it fails when that line is changed that way');
+  });
+
+  it('fails when every mutant ran past its time limit and none was killed, since no test was shown to notice a change (#1499)', async () => {
+    const spin = (step: string) => `export function spin(n: number): number {\n  let i = 0;\n  while (i < n) {\n    ${step}\n  }\n  return i;\n}\n`;
+    const dir = await gameWithBranch(KILLS_FEE, {
+      'src/spin.ts': spin('i = i + 1;'),
+      'tests/spin.test.ts': "import { it, expect } from 'vitest';\nimport { spin } from '../src/spin';\nit('counts up to n', () => { expect(spin(3)).toBe(3); });\n",
+    });
+    // The one mutant of the changed line removes the step, so the loop never ends.
+    await write(dir, { 'src/spin.ts': spin('i++;') });
+    commitAll(dir, 'step with ++');
+    const run = await spawnCli(['mutate', '--base', 'HEAD~1', '--project', dir]);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain('1 of 1 mutant of the lines changed since HEAD~1');
+    expect(run.stdout).toContain('none was killed');
+    expect(run.stdout).toContain('src/spin.ts:4 statement removed: its tests ran past the time limit');
+    expect(run.stdout).toContain('Run `boardsmith mutate` again when the machine is less busy');
+  });
+
+  it('says a file loaded only by a setup file counts as imported by no test (#1499)', async () => {
+    const dir = await gameWithBranch(KILLS_FEE, {
+      'vite.config.ts': "import { defineGameViteConfig } from 'boardsmith/vite-config';\n\nexport default defineGameViteConfig({ test: { setupFiles: ['./setup.ts'] } });\n",
+      'setup.ts': "import { fee } from './src/fee';\n(globalThis as { fee?: typeof fee }).fee = fee;\n",
+      'tests/fee.test.ts': "import { it, expect } from 'vitest';\nit('the fee is twice the price', () => { expect((globalThis as { fee?: (p: number) => number }).fee!(3)).toBe(6); });\n",
+    });
+    const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+    expect(run.code).toBe(1);
+    expect(run.stdout).toContain('src/fee.ts:2');
+    expect(run.stdout).toContain('A file a test reaches only through a setup file counts as imported by none');
+  });
+
+  it('refuses a boardsmith.json that is not valid JSON, naming it, before any git work (#1499)', async () => {
+    const dir = join(tempTree('bs-mutate-'), 'game');
+    // No git repository: reading the base first would fail on git, not on the file.
+    await write(dir, { 'package.json': '{ "type": "module" }\n', 'boardsmith.json': '{ "name": "fixture", }\n', 'vite.config.ts': GAME_VITE_CONFIG, 'tests/a.test.ts': '' });
+    linkGameModules(dir);
+    const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toContain(`boardsmith.json in ${dir} is not valid JSON`);
   });
 
   it('refuses a base whose merge base is the current commit, since it measures no change', async () => {

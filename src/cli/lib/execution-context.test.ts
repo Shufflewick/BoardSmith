@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { captureExecutionContext, executionContextChange, gameBoardsmithRoot, toolRevision } from './execution-context.js';
+import { captureExecutionContext, executionContextChange } from './execution-context.js';
 import { commitAll, git, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 // Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
@@ -302,7 +302,10 @@ describe('the execution context: what the tests run with besides the repository 
   });
 });
 
-describe('gameBoardsmithRoot: the BoardSmith a game loads', () => {
+/** How the execution context of the game in `dir` names the BoardSmith it runs and loads. */
+const boardsmithPart = async (dir: string): Promise<string> => (await captureExecutionContext(dir)).parts.boardsmith;
+
+describe('the BoardSmith a game loads', () => {
   it('is resolved from the game folder upwards, the way Node resolves an import, following a link to a checkout', async () => {
     const tree = tempTree('bs-context-game-');
     const checkout = join(tree, 'boardsmith');
@@ -310,58 +313,67 @@ describe('gameBoardsmithRoot: the BoardSmith a game loads', () => {
     const root = join(tree, 'repo');
     await write(root, { ...installedBoardsmith('1.0.0'), 'games/bid/package.json': '{}\n' });
     const dir = join(root, 'games', 'bid');
-    expect(await gameBoardsmithRoot(dir)).toBe(await fs.realpath(join(root, 'node_modules', 'boardsmith')));
+    expect((await boardsmithPart(dir)).endsWith(`; game loads ${await fs.realpath(join(root, 'node_modules', 'boardsmith'))}`)).toBe(true);
 
     await fs.mkdir(join(dir, 'node_modules'), { recursive: true });
     await fs.symlink(checkout, join(dir, 'node_modules', 'boardsmith'), 'dir');
-    expect(await gameBoardsmithRoot(dir)).toBe(await fs.realpath(checkout));
+    expect((await boardsmithPart(dir)).endsWith(`; game loads ${await fs.realpath(checkout)}`)).toBe(true);
   });
 
-  it('is undefined for a game with no BoardSmith installed anywhere above it', async () => {
+  it('is none for a game with no BoardSmith installed anywhere above it', async () => {
     const tree = tempTree('bs-context-game-');
     const dir = join(tree, 'game');
     await write(dir, { 'package.json': '{}\n' });
-    expect(await gameBoardsmithRoot(dir)).toBeUndefined();
+    expect(await boardsmithPart(dir)).toMatch(/; game loads no boardsmith$/);
   });
 
   it('refuses a BoardSmith install whose package.json it cannot read, rather than looking past it', async () => {
     const tree = tempTree('bs-context-game-');
     const dir = join(tree, 'game');
     await fs.mkdir(join(dir, 'node_modules', 'boardsmith', 'package.json'), { recursive: true });
-    await expect(gameBoardsmithRoot(dir)).rejects.toThrow(/Could not read .*node_modules\/boardsmith\/package\.json \(EISDIR\)/);
+    await expect(boardsmithPart(dir)).rejects.toThrow(/Could not read .*node_modules\/boardsmith\/package\.json \(EISDIR\)/);
   });
 });
 
-describe('toolRevision: which BoardSmith runs or is loaded', () => {
+describe('which BoardSmith runs or is loaded', () => {
+  /** A game in `tree` whose `node_modules/boardsmith` links to `root`. */
+  async function gameLoading(tree: string, root: string): Promise<string> {
+    const dir = join(tree, 'game');
+    await fs.mkdir(join(dir, 'node_modules'), { recursive: true });
+    await fs.symlink(root, join(dir, 'node_modules', 'boardsmith'), 'dir');
+    return dir;
+  }
+
   it('names a checkout by its commit and its uncommitted changes, so an edit to BoardSmith is a new revision', async () => {
     const tree = tempTree('bs-context-tool-');
     const root = join(tree, 'boardsmith');
     await write(root, { 'package.json': JSON.stringify({ name: 'boardsmith', version: '0.0.0-dev' }), 'src/engine.ts': 'export const e = 1;\n' });
     initRepo(root);
     commitAll(root, 'engine');
-    const clean = await toolRevision(root);
-    expect(clean).toMatch(/^boardsmith@0\.0\.0-dev [0-9a-f]{40} [0-9a-f]{64}$/);
-    expect(await toolRevision(root)).toBe(clean);
+    const dir = await gameLoading(tree, root);
+    const clean = await boardsmithPart(dir);
+    expect(clean).toMatch(/ \+ boardsmith@0\.0\.0-dev [0-9a-f]{40} [0-9a-f]{64}; game loads /);
+    expect(await boardsmithPart(dir)).toBe(clean);
 
     await write(root, { 'src/engine.ts': 'export const e = 2;\n' });
-    const edited = await toolRevision(root);
+    const edited = await boardsmithPart(dir);
     expect(edited).not.toBe(clean);
 
     await write(root, { 'src/engine.ts': 'export const e = 1;\n', 'src/new.ts': 'export const n = 1;\n' });
-    const untracked = await toolRevision(root);
+    const untracked = await boardsmithPart(dir);
     expect(untracked).not.toBe(clean);
     expect(untracked).not.toBe(edited);
 
     await fs.rm(join(root, 'src/new.ts'));
-    expect(await toolRevision(root)).toBe(clean);
+    expect(await boardsmithPart(dir)).toBe(clean);
     commitAll(root, 'engine 2');
-    expect(await toolRevision(root)).not.toBe(clean);
+    expect(await boardsmithPart(dir)).not.toBe(clean);
   });
 
   it('names an installed copy, which has no git of its own, by its version', async () => {
     const tree = tempTree('bs-context-tool-');
     const root = join(tree, 'installed');
     await write(root, { 'package.json': JSON.stringify({ name: 'boardsmith', version: '3.1.4' }) });
-    expect(await toolRevision(root)).toBe('boardsmith@3.1.4');
+    expect(await boardsmithPart(await gameLoading(tree, root))).toMatch(/ \+ boardsmith@3\.1\.4; game loads /);
   });
 });
