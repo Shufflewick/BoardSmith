@@ -5,7 +5,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { createRequire } from 'node:module';
+import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
 import { CATALOGUE_CLONE_COMMAND, catalogueCachePath, checkCatalogue } from './catalogue-check.js';
@@ -206,6 +207,55 @@ const [afterLinkedGameMoves, afterTreeInstallChanges] = await (async () => {
   await writeFiles(fx.tree, { 'node_modules/.package-lock.json': '{"packages":{"vue":{}}}' });
   return [moved, statusOf(await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue }))];
 })();
+
+// #1498: two catalogue runs that start the real vitest, seconds on a busy machine, so they run
+// here, while the file is collected and no test timeout applies.
+const [loadsBefore, loadsAfter] = await (async () => {
+  const fx = fixture();
+  await makeTree(fx.tree);
+  await writeFiles(fx.tree, { 'index.js': 'export const playGame = () => {};\n' });
+  commitAll(fx.tree, 'boardsmith exports playGame');
+  const game = await makeGame(fx, 'chess', {
+    files: {
+      'tests/random-sim.test.ts': "import { it } from 'vitest';\nimport { playGame } from 'boardsmith';\nit('plays', () => playGame());\n",
+      // A game's test may read its own checkout when it loads, as WindupWarfare's source-names test does.
+      'tests/source-names.test.ts': "import { it } from 'vitest';\nimport { execFileSync } from 'node:child_process';\nconst files = execFileSync('git', ['ls-files']);\nit('lists', () => files);\n",
+    },
+  });
+  // The game's own vitest, as an install has it: BoardSmith's copy stands in.
+  rmSync(join(game, 'node_modules', 'vitest'), { recursive: true, force: true });
+  symlinkSync(dirname(createRequire(import.meta.url).resolve('vitest/package.json')), join(game, 'node_modules', 'vitest'));
+  const before = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+  // A BoardSmith change that a game's test file fails to load against, as #1494's sim check was.
+  await writeFiles(fx.tree, { 'index.js': "throw new Error('rename it to tests/random-sim.sim.test.ts');\n" });
+  commitAll(fx.tree, 'boardsmith refuses the test at load');
+  return [before, await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue })];
+})();
+
+describe("a game's test files are loaded, never run (#1498)", () => {
+  it('passes a game whose test files load against the tree', () => {
+    // The whole result, so a failure shows what vitest printed.
+    expect(loadsBefore.results).toEqual([expect.objectContaining({ slug: 'chess', status: 'passed' })]);
+  });
+
+  it('fails a game whose test file no longer loads against the tree, with what vitest said', () => {
+    expect(statusOf(loadsAfter)).toEqual({ chess: 'failed' });
+    expect(loadsAfter.results[0].output).toContain('rename it to tests/random-sim.sim.test.ts');
+    expect(loadsAfter.results[0].output).toContain('tests/random-sim.test.ts');
+  });
+
+  it('fails a game when vitest exits 0 without writing what it collected, as it does on an error outside any test file', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'hex', { files: { TESTS_UNLISTED: '' } });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(statusOf(run)).toEqual({ hex: 'failed' });
+    expect(run.results[0].output).toContain('test files do not load');
+  });
+});
 
 describe("a game's branch paired with the BoardSmith branch (#1322)", () => {
   const BRANCH = 'i975-notice-boxes';
