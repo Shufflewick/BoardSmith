@@ -474,7 +474,9 @@ export interface KillerHint {
   test: string;
 }
 
-export interface MutantCache extends Pick<MutationFingerprints, 'unavailable'> {
+export interface MutantCache {
+  /** Why this run keeps no outcomes, when it does not (`MutationFingerprints.unavailable`). */
+  readonly unavailable?: string;
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantChange): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;

@@ -682,7 +682,6 @@
     "src/bot-trainer/benchmark.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
     "src/engine/element/cell-index.ts:circular dependency",
-    "src/cli/lib/mutation-equivalences.ts:high impact",
     "src/cli/commands/verify-example-replay.ts:complexity",
     "src/testing/dom-leak.ts:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",

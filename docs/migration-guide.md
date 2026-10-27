@@ -6,7 +6,8 @@
 reads `design/MUTATION-EQUIVALENCES.json`. A mutant every test passed under
 fails the mutation check, whatever that file says. Delete the file, and for each
 survivor verify names, add or tighten a test so it fails when that line is
-changed that way.
+changed that way. A verify result recorded before this change is refused, since
+it may have passed with a survivor: run `boardsmith verify` again.
 
 ## `boardsmith verify` checks every verb, and samples its mutants (#1486)
 

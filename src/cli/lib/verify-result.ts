@@ -29,8 +29,8 @@ import { readIfExists } from './read-if-exists.js';
  * lacks it, and `resultProblem` refuses it, so the new check cannot be skipped by an old result.
  */
 
-/** The version of the file's shape. A result in any other format is made again. */
-export const VERIFY_RESULT_FORMAT = 1;
+/** The version of the file's shape. A result in any other format is made again. 2: a survivor always fails (#1493). */
+export const VERIFY_RESULT_FORMAT = 2;
 
 /** Every full check, in execution order. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
 export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs', 'mutation'] as const;

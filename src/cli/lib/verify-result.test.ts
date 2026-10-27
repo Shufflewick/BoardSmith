@@ -99,6 +99,10 @@ describe('resultProblem: which results vouch for HEAD', () => {
   it('refuses a result in a format this BoardSmith does not read', () => {
     expect(resultProblem({ ...result(), format: 0 } as unknown as VerifyResult, HEAD)).toMatch(/boardsmith verify/);
   });
+
+  it('refuses a format 1 result, which could pass with a surviving mutant (#1493)', () => {
+    expect(resultProblem({ ...result(), format: 1 } as unknown as VerifyResult, HEAD)).toMatch(/different version.*boardsmith verify/s);
+  });
 });
 
 describe('verifiedProblem: the one question every done claim asks', () => {
