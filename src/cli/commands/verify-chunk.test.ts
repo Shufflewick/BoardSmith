@@ -98,6 +98,7 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
 
     expect(check(result, 'test').summary).toMatch(/^Chunk "combat" added or changed no test file since its base/);
+    expect(check(result, 'test').next).toMatch(/^tests\/combat\.sim\.test\.ts is a sim, which no fast check runs/);
   });
 
   // #995 ruling: spec writes a chunk's tests, so the steps before it (investigate, redteam, ask) need none of their own.

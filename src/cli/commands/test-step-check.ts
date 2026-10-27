@@ -77,6 +77,7 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'red-not-observed',
   'test-file-missing',
   'guard-in-manifest',
+  'sim-in-manifest',
   'guard-runs-code',
   'test-not-in-manifest',
   'claim-not-live',
@@ -436,6 +437,17 @@ async function manifestRowFindings(
       });
       continue;
     }
+    if (isSimFile(row.testFile)) {
+      findings.push({
+        kind: 'sim-in-manifest',
+        subject: row.testFile,
+        detail:
+          `The Spec Manifest lists ${row.testFile}, a sim. Only \`boardsmith test --sims\` runs a sim, so the mutation ` +
+          "check never runs it and nothing shows it can fail. Remove the row, and pin the claims it lists in the chunk's " +
+          'own test file (build/test.md item 4).',
+      });
+      continue;
+    }
     const red = redFinding(manifest, row);
     if (red) findings.push(red);
     const file = await readRowFile(projectDir, row);
@@ -562,19 +574,24 @@ const lines = (output: string) => output.split('\n').filter(Boolean);
 const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
+/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/index.js` (#1494). */
+const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
+
+export const isSimFile = (path: string) => SIM_FILE.test(path);
+
 /**
  * Where a plain vitest run never collects a test file in a game project: its own default exclusions,
  * and three of the four `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees
- * under `.boardsmith/`, the browser tests under `tests/browser/`, which only Playwright runs, and the
- * sims (`*.sim.test.ts`), which only `boardsmith test --sims` runs (#1494). The fourth, `.worktrees/`,
- * holds other git checkouts, whose files git does not list.
+ * under `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs, from
+ * its `exclude`, and the sims, from its `testClasses` plugin. The fourth, `.worktrees/`, holds other
+ * git checkouts, whose files git does not list.
  */
 const NOT_COLLECTED = Object.freeze([
   /(^|\/)(node_modules|dist|cypress)\//,
   /(^|\/)\.(idea|git|cache|output|temp)\//,
   /^\.boardsmith\//,
   /(^|\/)tests\/browser\//,
-  /\.sim\.(test|spec)\.[cm]?[jt]sx?$/,
+  SIM_FILE,
 ]);
 
 /** A file a plain vitest run collects as a test, by its default pattern and the exclusions above. */

@@ -75,7 +75,7 @@ import {
   verifiedProblem,
   writeVerifyResult,
 } from '../lib/verify-result.js';
-import { isChunkCode, isTestFile, parseSpecManifest, undispatchedVerbs } from './test-step-check.js';
+import { isChunkCode, isSimFile, isTestFile, parseSpecManifest, undispatchedVerbs } from './test-step-check.js';
 import { DISPATCH_FORMS } from './test-step-ast.js';
 import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
@@ -342,15 +342,16 @@ export async function preSpecRefusal(projectDir: string, chunk: string, rerun: s
  */
 export async function chunkTests(projectDir: string, chunk: string, base: string, changed: readonly string[]): Promise<string[] | VerifyCheckOutcome> {
   const files = changed.filter((path) => isTestFile(path) && existsSync(join(projectDir, path)));
-  return files.length > 0 ? files : noChunkTests(projectDir, chunk, base);
+  const sims = changed.filter((path) => isSimFile(path) && existsSync(join(projectDir, path)));
+  return files.length > 0 ? files : noChunkTests(projectDir, chunk, base, sims);
 }
 
 /**
  * A chunk that added or changed no test file: it passes on typecheck alone while it has only reached
  * the steps before spec (#995), or when its Spec Manifest marks it exempt (`build/spec.md`
- * "Exemptions"); any other chunk must add or change a test.
+ * "Exemptions"); any other chunk must add or change a test. A sim it changed (`sims`) is not one.
  */
-async function noChunkTests(projectDir: string, chunk: string, base: string): Promise<VerifyCheckOutcome> {
+async function noChunkTests(projectDir: string, chunk: string, base: string, sims: readonly string[]): Promise<VerifyCheckOutcome> {
   if (await chunkBeforeSpec(projectDir, chunk)) {
     return {
       passed: true,
@@ -371,6 +372,7 @@ async function noChunkTests(projectDir: string, chunk: string, base: string): Pr
     passed: false,
     summary: `Chunk "${chunk}" added or changed no test file since its base (${short(base)}), so no test of its own ran.`,
     next:
+      (sims.length > 0 ? `${sims.join(', ')} ${sims.length === 1 ? 'is a sim' : 'are sims'}, which no fast check runs. ` : '') +
       `Write the chunk's tests (its spec step), or mark a chunk with no new game behavior exempt in its Spec Manifest ` +
       `(build/spec.md "Exemptions"), commit, then run \`boardsmith verify --chunk ${chunk}\` again.`,
   };

@@ -236,7 +236,7 @@ here.
 4. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
    against the accumulated game, proving it doesn't crash or get stuck with this chunk's rules
    in place. It is a sim: write it in `tests/<slug>.sim.test.ts` and run it with
-   `npx boardsmith test --sims <slug>`. A test file with any other name that imports
+   `npx boardsmith test --sims tests/<slug>.sim.test.ts`. A test file with any other name that imports
    `simulateRandomGames` fails when it loads, and no other run collects a sim (`boardsmith verify
    --chunk`, its mutation check, `chunk-merge` and publish's `boardsmith verify` all leave it out).
    So this step is the only run it gets, and it is never a Spec Manifest row or the chunk's own

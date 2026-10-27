@@ -585,6 +585,17 @@ it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).t
     expect(findings[0].detail).toContain('build/test.md');
   });
 
+  // #1497: the mutation check's plain vitest run never collects a sim, so a sim row would cover its claims with a test nothing runs.
+  it('reports a sim listed in the Spec Manifest, and says to take the row out (#1497)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/auction.sim.test.ts': DISPATCHES_BOTH },
+      '| tests/auction.test.ts | 1, 2 | yes |\n| tests/auction.sim.test.ts | 1, 2 | yes |\n',
+    );
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['sim-in-manifest tests/auction.sim.test.ts']);
+    expect(findings[0].detail).toMatch(/boardsmith test --sims[^]*Remove the row/);
+  });
+
   it.skipIf(!existsSync(process.cwd().toUpperCase()))('reports a guard file the Spec Manifest names in other letter case (#1053)', async () => {
     await build(
       { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },

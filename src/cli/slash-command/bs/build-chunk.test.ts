@@ -1709,7 +1709,7 @@ describe('the random-sim playthrough is a sim (#1497)', () => {
   it('build/test.md item 4 writes it as tests/<slug>.sim.test.ts and runs it with boardsmith test --sims', () => {
     const item4 = flat('build/test.md').split('4. **Random-sim playthrough**')[1].split('```typescript')[0];
     expect(item4).toContain('`tests/<slug>.sim.test.ts`');
-    expect(item4).toContain('`npx boardsmith test --sims <slug>`');
+    expect(item4).toContain('`npx boardsmith test --sims tests/<slug>.sim.test.ts`');
     expect(item4).toMatch(/never a Spec Manifest row/);
   });
 
