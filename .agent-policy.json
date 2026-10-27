@@ -14,7 +14,7 @@
     },
     {
       "name": "catalogue",
-      "run": "node bin/boardsmith.js catalogue"
+      "run": "node bin/boardsmith.js catalogue --skip 'chess=its random-sim test does not load since #1494; its rename waits on Shufflewick/agent-policy#180 (Shufflewick/chess#4)'"
     },
     {
       "name": "related-tests",

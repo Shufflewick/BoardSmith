@@ -435,31 +435,31 @@ function describeLimit(ms: number): string {
 }
 
 /**
- * Runs `boardsmith validate` in the export of `slug` at `dir`, then has its vitest collect every test
+ * Runs `boardsmith validate` in the export of `slug` at `dir`, and has its vitest collect every test
  * file, a plain run's and the sims', which loads each one and runs no test (#1498). Undefined when
- * every step passes; otherwise what the first failing step printed, and why it failed.
+ * every step passes; otherwise what the first failing step, in that order, printed, and why it failed.
  */
 async function checkGame(slug: string, tree: string, dir: string, children: Children, timeLimitMs: number): Promise<string | undefined> {
   const stopped = (name: string) => `\n${slug} did not finish ${name} within ${describeLimit(timeLimitMs)}, so it was stopped. `
     + 'Each step takes well under a minute; find what never ends, or skip the game with --skip and an issue.\n';
-  const validate = await children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs);
-  if (validate.timedOut) return `${validate.output}${stopped('boardsmith validate')}`;
-  if (validate.code !== 0) return validate.output;
-
-  const listed = `${dir}.tests.json`;
-  for (const mode of [[], ['--mode', 'sims']]) {
+  const collect = async (mode: string[], listed: string): Promise<string | undefined> => {
     const name = ['vitest list', ...mode].join(' ');
-    // --no-isolate reuses each fork for many files: about a quarter of the CPU, and every file still loads.
-    const args = ['list', ...mode, '--passWithNoTests', '--pool=forks', '--no-isolate', `--json=${listed}`];
+    // One fork loading every file: games already run side by side, and WindupWarfare collects in a fifth of the CPU.
+    const args = ['list', ...mode, '--passWithNoTests', '--pool=forks', '--no-isolate', '--maxWorkers=1', `--json=${listed}`];
     const run = await children.run(join(dir, 'node_modules', '.bin', 'vitest'), args, dir, timeLimitMs);
     // vitest can exit 0 after an error outside any test file, and then it writes no list.
-    const wroteList = existsSync(listed);
-    await fs.rm(listed, { force: true });
-    if (run.timedOut || run.code !== 0 || !wroteList) {
-      return `${slug}'s test files do not load against this tree (${name} loads each one and runs none):\n${run.output}${run.timedOut ? stopped(name) : ''}`;
-    }
-  }
-  return undefined;
+    if (!run.timedOut && run.code === 0 && existsSync(listed)) return undefined;
+    return `${slug}'s test files do not load against this tree (${name} loads each one and runs none):\n${run.output}${run.timedOut ? stopped(name) : ''}`;
+  };
+  // Side by side: none of the three reads what another writes.
+  const [validate, ...collected] = await Promise.all([
+    children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs),
+    collect([], `${dir}.tests.json`),
+    collect(['--mode', 'sims'], `${dir}.sims.json`),
+  ]);
+  if (validate.timedOut) return `${validate.output}${stopped('boardsmith validate')}`;
+  if (validate.code !== 0) return validate.output;
+  return collected.find((failure) => failure !== undefined);
 }
 
 /**
