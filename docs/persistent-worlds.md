@@ -1084,8 +1084,7 @@ The two leave the world differently. For a seated or a clock action, the replace
 error is a `WorldRefusal` with the game-owned code `rules-error`, so a host or a
 tool can tell a crash from a refusal without reading the sentence (#847, #1045).
 The same holds for a throw from a seated action's condition, `validate` or
-`choices` (#1015), and from any action's `.needs()` round, which runs before
-anything is loaded (#1492). A game's own
+`choices` (#1015), and from any action's `.needs()` round (#1492). A game's own
 refusal (a `PlayerFacingError`, or `{ success: false, error }`) is deliberately
 **not** a `WorldRefusal`: that table's codes drive a host's park ladder, and a
 refusal says nothing about the world's health (#169, #191). It travels

@@ -36,7 +36,13 @@ const throwing = (name: string, error: unknown): ActionDefinition =>
 const actions = [
   throwing("crash", new Error("internal detail")),
   throwing("refuseInWords", new PlayerFacingError("That room is closed until dawn.")),
-  throwing("refuseCoded", worldRefusal("undeclared-partition", "a coded refusal")),
+  throwing("forgePlatformCode", worldRefusal("partition-not-resident", "a platform code the game raised")),
+  worldAction<NeedsWorld>("writeWhileDeclaring")
+    .needs(({ game }) => {
+      game.name = "renamed";
+      return [];
+    })
+    .execute(() => {}),
 ];
 
 function declared(name: string): Promise<unknown> {
@@ -89,7 +95,16 @@ describe("#1492: a throw from a needs() round", () => {
     }
   });
 
-  it("passes a WorldRefusal through with its own code", async () => {
-    expect(await declared("refuseCoded")).toMatchObject({ code: "undeclared-partition" });
+  it("keeps the code of a game-owned refusal the read-only projection raises", async () => {
+    expect(await declared("writeWhileDeclaring")).toMatchObject({ code: "declaration-write", owner: "game" });
+  });
+
+  it("codes a platform-owned refusal the game threw itself rules-error, so the game cannot charge the platform", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      expect(await declared("forgePlatformCode")).toMatchObject({ code: "rules-error", owner: "game" });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 });

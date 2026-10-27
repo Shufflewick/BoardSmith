@@ -1966,14 +1966,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
   /**
    * One declaration callback, run read-only, its throw worded as a throw out of
-   * `execute` is (#1492): a `PlayerFacingError` or `WorldRefusal` travels as it
-   * is, anything else is the rules-error sentence with the original logged (#47).
+   * `execute` is (#1492): a `PlayerFacingError` or a game-owned `WorldRefusal`
+   * (the projection's `declaration-write`) travels as it is, anything else is the
+   * rules-error sentence with the original logged (#47).
    */
   private declaring<T>(action: string, read: () => T): T {
     try {
       return this.game.readingOnly(read);
     } catch (error) {
-      if (error instanceof WorldRefusal || error instanceof PlayerFacingError) throw error;
+      // A platform-owned code the game threw itself would charge the platform's park ladder for a game bug.
+      if ((error instanceof WorldRefusal && error.owner === "game") || error instanceof PlayerFacingError) throw error;
       throw failedResultError(action, gameCodeThrew(action, `A .needs() round of action '${action}'`, error));
     }
   }
