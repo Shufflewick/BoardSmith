@@ -34,17 +34,25 @@ if (guard !== undefined) {
   }
 }
 
-function record(path) {
-  const root = resolve(guard.root);
+/** The file a read names, when it is a file in the checkout outside `node_modules`. */
+function checkoutFile(path, root) {
   const file = typeof path === 'string' ? resolve(path) : path instanceof URL && path.protocol === 'file:' ? fileURLToPath(path) : undefined;
-  if (file === undefined || !file.startsWith(root + sep) || file.includes(`${sep}node_modules${sep}`)) return;
-  // The first frame in the checkout's own code past this guard decides, so a read through `Array.map` or a spy counts.
-  const reader = new Error().stack.split('\n').slice(3)
+  return file?.startsWith(root + sep) && !file.includes('node_modules') ? file : undefined;
+}
+
+/** Whether test code made the read: the first frame in the checkout's own code past this guard, so `Array.map` or a spy in between does not hide it. */
+function readByTestCode(root) {
+  const reader = new Error().stack.split('\n').slice(4)
     .map((frame) => FRAME_FILE.exec(frame)?.[1])
     .find((frameFile) => frameFile?.startsWith(root) && !frameFile.includes('node_modules'));
-  if (!reader || !TEST_CODE.test(reader)) return;
+  return reader !== undefined && TEST_CODE.test(reader);
+}
+
+function record(path) {
+  const root = resolve(guard.root);
+  const file = checkoutFile(path, root);
   const { test, seen } = globalThis[CURRENT];
-  if (seen.has(file)) return;
+  if (file === undefined || seen.has(file) || !readByTestCode(root)) return;
   seen.add(file);
   // git lists paths with forward slashes on every platform.
   appendFileSync(guard.log, `${JSON.stringify({ test, file: relative(root, file).split(sep).join('/') })}\n`);
