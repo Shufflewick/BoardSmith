@@ -106,6 +106,7 @@ export async function gameTestRunProblem(projectDir: string): Promise<string | u
   return testRunScopeProblem(projectDir);
 }
 
+/** The excludes `defineGameViteConfig` adds to vitest's defaults. */
 const SHIPPED_EXCLUDES = new Set(GAME_EXCLUDES);
 
 /** What a config BoardSmith wrote imports: vite, vitest, the Vue plugin, and the project's own vite config. */

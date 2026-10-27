@@ -8,7 +8,7 @@ vi.mock('../../vite-config/test-files.js', async (importOriginal) => ({
   SIM_FILE: /\.sim\.drift$/,
   SIM_FILES: '**/*.sim.drift',
   TEST_FILE: /\.drift$/,
-  GAME_EXCLUDES: ['drift/**'],
+  GAME_EXCLUDES: ['**/drift/**'],
   VITEST_EXCLUDES: ['vitest-drift/**'],
 }));
 
@@ -31,7 +31,11 @@ describe('test-step-check sorts test files by the shared rule in src/vite-config
     expect(isTestFile('node_modules/a.unit.drift')).toBe(true);
   });
 
+  it('leaves them out under a dot folder too, as vitest does', () => {
+    expect(isTestFile('.x/drift/a.unit.drift')).toBe(false);
+  });
+
   it("gives a game's vitest run the same GAME_EXCLUDES", () => {
-    expect(defineGameViteConfig().test?.exclude?.slice(-1)).toEqual(['drift/**']);
+    expect(defineGameViteConfig().test?.exclude?.slice(-1)).toEqual(['**/drift/**']);
   });
 });

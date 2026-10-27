@@ -41,8 +41,9 @@
  */
 import { promises as fs } from 'node:fs';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
-import { join, matchesGlob, relative, resolve as pathResolve, sep } from 'node:path';
+import { join, relative, resolve as pathResolve, sep } from 'node:path';
 import { styleText } from 'node:util';
+import picomatch from 'picomatch';
 import {
   claimsInForce,
   extractSection,
@@ -578,11 +579,11 @@ const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
 /** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/test-files.js` (#1494, #1506). */
 export const isSimFile = (path: string) => SIM_FILE.test(path);
 
-/** A file a plain vitest run in a game project collects as a test: vitest's and `defineGameViteConfig`'s excludes, and the sims its `testClasses` plugin leaves out (`src/vite-config/test-files.js`). */
-export const isTestFile = (path: string) =>
-  TEST_FILE.test(path) &&
-  !SIM_FILE.test(path) &&
-  ![...VITEST_EXCLUDES, ...GAME_EXCLUDES].some((excluded) => matchesGlob(path, excluded));
+/** vitest's and `defineGameViteConfig`'s excludes (`src/vite-config/test-files.js`), matched as vitest does: `**` enters dot folders. */
+const excluded = picomatch([...VITEST_EXCLUDES, ...GAME_EXCLUDES], { dot: true });
+
+/** A file a plain vitest run in a game project collects as a test: not excluded, and not a sim, which its `testClasses` plugin leaves out. */
+export const isTestFile = (path: string) => TEST_FILE.test(path) && !SIM_FILE.test(path) && !excluded(path);
 
 /** Every script in the project outside `node_modules/`, with its text. */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
