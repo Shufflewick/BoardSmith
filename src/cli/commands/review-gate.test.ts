@@ -121,7 +121,7 @@ describe('an open gate hands the reviewer the verify result', () => {
     expect(gate.brief).not.toMatch(/^- (build|validate|smoke|mutation):/m);
     expect(gate.brief).toContain(`.boardsmith/verify/${head}.json`);
     expect(gate.brief).toMatch(/Only the fast checks have run: the chunk's tests and typecheck\./);
-    expect(gate.brief).toMatch(/The full suite, build, validate, the smoke test and the mutation check run at publish/);
+    expect(gate.brief).toMatch(/The full suite, build, validate, the smoke test and the verbs check run at publish/);
     expect(gate.brief).toMatch(/Do not run any of them, or the fast checks again/);
   });
 

@@ -1,9 +1,8 @@
-import { readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
 import { styleText } from 'node:util';
 import ora from 'ora';
 import { getApiKey, saveApiKey } from '../lib/config.js';
-import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
+import { createZip, formatBytes } from '../lib/zip.js';
 import {
   getPlatformUrl,
   initiatePublish,
@@ -16,16 +15,14 @@ import {
   type TaxonomyAudience,
   type PlatformTarget,
 } from '../lib/publish-api.js';
-import { buildCommand } from './build.js';
-import { validateCommand, validateBundleSize, topLevelIdMessage } from './validate.js';
-import { resolveWorldMode } from '../lib/world-project.js';
+import { topLevelIdMessage } from './validate.js';
 import {
   requireGameProjectManifests,
   requireTableUi,
   type GameProjectConfig,
   type PlatformIds,
 } from '../lib/game-project.js';
-import { publishGate, recordPublished } from '../lib/publish-gate.js';
+import { publishGate } from '../lib/publish-gate.js';
 
 /**
  * END A FAILED PUBLISH.
@@ -208,7 +205,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   console.log(styleText('dim', `  API Key:   ${apiKey.slice(0, 12)}...`));
   console.log('');
 
-  // -- Preflight: check version availability before building --
+  // -- Preflight: check version availability before packaging --
   try {
     await checkVersionAvailable(platformUrl, apiKey, existingGameId ?? baseSlug, version);
   } catch (err: unknown) {
@@ -218,43 +215,14 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
       console.error(styleText('dim', 'Bump the version in package.json past it and try again.'));
       process.exit(1);
     }
-    // Network errors during preflight are non-fatal — continue with build
+    // Network errors during preflight are non-fatal — continue
     // and let the existing initiatePublish catch it later
   }
 
-  // -- Validate (throws, stopping publish, on failure) --
-  console.log(styleText('cyan', 'Running pre-publish validation...\n'));
-  await validateCommand();
-
-  // -- Build --
-  console.log(styleText('cyan', '\nBuilding for production...\n'));
-  await buildCommand({ outDir: 'dist' });
-
-  // -- Package --
+  // -- Package the bundle verify built, validated and measured for this commit (#1495) --
   const spinner = ora('Packaging build...').start();
-  const distDir = join(cwd, 'dist');
-  let fileMap: Map<string, Uint8Array>;
-  try {
-    fileMap = readDistDir(distDir);
-  } catch (err: unknown) {
-    spinner.fail('Packaging failed');
-    console.error(styleText('red', (err as Error).message));
-    process.exit(1);
-  }
-
+  const fileMap = verified.files;
   const zip = createZip(fileMap);
-
-  // WR-05/#221: gate the FRESHLY BUILT dist in the server's own units before
-  // any upload. `validateCommand` above ran before the build, so it measured
-  // the previous dist — this is the only check that sees what is about to be
-  // uploaded, and it must be the same check, not a subset of it.
-  const sizeCheck = await validateBundleSize(cwd, resolveWorldMode(config));
-  if (!sizeCheck.passed) {
-    spinner.fail('Packaging failed');
-    for (const issue of sizeCheck.details ?? []) console.error(styleText('red', issue));
-    process.exit(1);
-  }
-
   spinner.succeed(`Packaged ${fileMap.size} files (${formatBytes(zip.length)})`);
 
   if (options.dryRun) {
@@ -269,7 +237,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
   }
 
   // -- Read manifest for initiate --
-  const manifest = JSON.parse(readFileSync(join(distDir, 'manifest.json'), 'utf-8'));
+  const manifest = JSON.parse(new TextDecoder().decode(fileMap.get('boardsmith.json')));
 
   // -- Preflight: validate audience against the platform's canonical list --
   await preflightAudience(platformUrl, manifest.audience);
@@ -349,7 +317,6 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     await abortInFlightPublish(platformUrl, apiKey, initResult.versionId);
     reportPublishFailure(err);
   }
-  await recordPublished(cwd, verified);
 }
 
 /**

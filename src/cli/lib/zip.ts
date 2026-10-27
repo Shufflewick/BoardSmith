@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { crc32, deflateRawSync } from 'node:zlib';
 import { readFileSync, existsSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -108,6 +109,13 @@ export function readDistDir(distDir: string): Map<string, Uint8Array> {
   }
 
   return fileMap;
+}
+
+/** A sha256 of the files `readDistDir` read, by path, so the bundle verify built can be told from any other (#1495). */
+export function bundleDigest(files: Map<string, Uint8Array>): string {
+  const hash = createHash('sha256');
+  for (const path of [...files.keys()].sort()) hash.update(`${path}\0${files.get(path)!.length}\0`).update(files.get(path)!);
+  return hash.digest('hex');
 }
 
 function collectFiles(

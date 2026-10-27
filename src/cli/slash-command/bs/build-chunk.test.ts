@@ -2157,9 +2157,8 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(protocol).toContain(CHUNK_COMMAND);
     // #985: `--chunk` is the chunk's fast checks, the only verify chunk work runs.
     expect(protocol).toMatch(/fast checks, and the only verify chunk work runs: the test files the chunk added or changed since its verify base.{0,80}and typecheck/);
-    expect(protocol).toMatch(/full checks.{0,120}mutation check\) run once, before the game is published/);
+    expect(protocol).toMatch(/full checks.{0,120}verbs check\) run once, before the game is published/);
     expect(protocol).toMatch(/verify base.{0,200}commit before the chunk's first `chunk-<slug>\/` commit/);
-    expect(protocol).toMatch(/main branch.{0,300}merge base is the current commit/);
     expect(protocol).toMatch(/--base HEAD.{0,400}no chunk/);
     expect(protocol).not.toContain('--grep');
   });
@@ -2183,7 +2182,7 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     const test = flatRead('build/test.md');
     // #985: the chunk's gate is its fast checks; the full checks run at publish.
     expect(test).toMatch(/npx boardsmith verify --chunk <slug>`.{0,160} It runs the chunk's fast checks: the test files the chunk added or changed since it began, and typecheck/);
-    expect(test).toMatch(/full suite, build, validate, the smoke test and a mutation check run once, at publish/);
+    expect(test).toMatch(/full suite, build, validate, the smoke test and the verbs check run once, at publish/);
     expect(test).toMatch(/not done until it exits zero/);
     expect(test).not.toContain('npx vue-tsc --noEmit');
   });
@@ -2318,7 +2317,7 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
   it("puts the smoke test in the full verify's list of checks, with the commands to run it alone and to install its browser", () => {
     const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
     // #985: the smoke test is part of the full verify, which runs at publish, not per chunk.
-    expect(gate).toMatch(/full suite, build, validate, the smoke test and a mutation check run once, at publish, as `boardsmith verify`/);
+    expect(gate).toMatch(/full suite, build, validate, the smoke test and the verbs check run once, at publish, as `boardsmith verify`/);
     expect(gate).toContain('`npx boardsmith smoke`');
     expect(gate).toContain('`npx boardsmith install-browser`');
     expect(cliSource).toContain(".command('smoke')");

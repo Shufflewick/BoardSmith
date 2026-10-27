@@ -24,27 +24,20 @@ import { readIfExists } from './read-if-exists.js';
  *
  * ADDING A CHECK (the in-browser smoke test, #453, was added this way): add its name to
  * `VERIFY_CHECK_NAMES` and its runner to `VERIFY_CHECKS` in `commands/verify.ts`, which the compiler
- * then requires. Every check result has the same shape (`VerifyCheckResult`), with optional counts
- * and file-and-line findings, so nothing here changes. A result written before the check existed
+ * then requires. Every check result has the same shape (`VerifyCheckResult`), with optional counts,
+ * so nothing here changes. A result written before the check existed
  * lacks it, and `resultProblem` refuses it, so the new check cannot be skipped by an old result.
  */
 
-/** The version of the file's shape. A result in any other format is made again. 2: a survivor always fails (#1493). */
-export const VERIFY_RESULT_FORMAT = 2;
+/** The version of the file's shape. A result in any other format is made again. 3: build records its bundle, and no mutation check (#1495). */
+export const VERIFY_RESULT_FORMAT = 3;
 
-/** Every full check, in execution order. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
-export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs', 'mutation'] as const;
+/** Every full check, in reporting order; they run side by side. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
+export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs'] as const;
 /** `verify --chunk`: the chunk's own tests and typecheck. The full checks run at publish (#985). */
 export const CHUNK_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 
 export type VerifyCheckName = (typeof VERIFY_CHECK_NAMES)[number];
-
-/** A place in the project a check points at: for the mutation check, a mutant no test caught. */
-interface VerifyFinding {
-  file: string;
-  line: number;
-  detail: string;
-}
 
 /**
  * One check's outcome, without its name. `summary` says what happened; `next`, on a failure, says
@@ -53,9 +46,10 @@ interface VerifyFinding {
 export type VerifyCheckOutcome = {
   summary: string;
   next?: string;
-  /** What the check counted: tests run, passed and failed; mutants tried, killed and survived. */
+  /** What the check counted: tests run, passed and failed. */
   counts?: Record<string, number>;
-  findings?: VerifyFinding[];
+  /** The build check's `bundleDigest` of the dist/ it built, which publish uploads only while dist/ still matches (#1495). */
+  bundle?: string;
 } & (
   | { passed: boolean; skipped?: never }
   /**

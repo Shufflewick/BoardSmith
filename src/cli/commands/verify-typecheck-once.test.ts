@@ -58,7 +58,7 @@ const { result } = await runVerify({
   projectDir: project,
   base: 'HEAD',
   // The checks that never type-check stand in; typecheck, build and validate run for real.
-  checks: { ...VERIFY_CHECKS, test: standIn, smoke: standIn, mutation: standIn },
+  checks: { ...VERIFY_CHECKS, test: standIn, smoke: standIn },
   log: () => {},
 });
 log.mockRestore();

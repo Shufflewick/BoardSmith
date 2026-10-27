@@ -105,8 +105,8 @@ That writes the same project without its UI: no `index.html`, `src/main.ts`,
 `boardsmith test`, `lint`, `typecheck`, `validate` and `simulate` work as
 usual (validate's Required Files check asks only for the rules). `dev`, `build`,
 `smoke` and `publish` stop with "This project has no UI yet. Run
-`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate, verbs
-and mutation, and records build and smoke as skipped for that reason; its closing
+`boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
+verbs, and records build and smoke as skipped for that reason; its closing
 line and `verify --check` name the skipped checks. A table that loses
 `index.html` but keeps any other UI file is broken, not a simulator: those
 commands stop and name the files, and `verify` fails build and smoke. `--sim`
@@ -235,7 +235,7 @@ A test file's name sets its class, and the class sets where it runs:
 
 | Class | File name | Merge (`agent-policy merge`) | `boardsmith verify` | Publish | On request |
 |---|---|---|---|---|---|
-| Unit | `*.test.ts` | Yes: the tests the change touches, then a slice of the suite | Yes, with the mutation check | Yes (publish needs a passing verify) | `boardsmith test` |
+| Unit | `*.test.ts` | Yes: the tests the change touches, then a slice of the suite | Yes | Yes (publish needs a passing verify) | `boardsmith test` |
 | Sim | `*.sim.test.ts` | No | No | No | `boardsmith test --sims` |
 | Browser | `tests/browser/*.spec.ts` | No | Yes, as the smoke test | Yes (publish needs a passing verify) | `boardsmith smoke` |
 
@@ -289,103 +289,23 @@ headless batch simulation).
 
 ```bash
 boardsmith verify                    # every check, recorded for this commit
-boardsmith verify --base v1.2        # measure the change from somewhere other than main
+boardsmith verify --base v1.2        # say which failing tests are in files changed since v1.2, not main
 boardsmith verify --chunk deal       # a bs- chunk's fast checks: its own tests and typecheck
 boardsmith verify --check            # has this commit passed the full verify? (runs nothing)
 boardsmith verify --check --chunk deal   # ...or chunk deal's fast checks?
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
-build`, `boardsmith validate`, the in-browser smoke test, a verbs check and a
-mutation check, in that order, and keeps going after a failure so you see every problem at once.
-Before the mutation check, the verbs check asks that every verb the game
-defines (`Action.create('<verb>')`, `worldAction('<verb>')` or a wrapper of
-the project's own) is dispatched through the engine by some test file, such as
+build`, `boardsmith validate`, the in-browser smoke test and a verbs check side
+by side, and keeps going after a failure so you see every problem at once.
+Validate starts once build is done, since it measures the bundle build wrote in
+`dist/`. The result lists the checks in that order, whichever finished first.
+The verbs check asks that every verb the game defines
+(`Action.create('<verb>')`, `worldAction('<verb>')` or a wrapper of the
+project's own) is dispatched through the engine by some test file, such as
 `testGame.doAction(seat, '<verb>')`; a test that calls the rules function
-directly does not count.
-The mutation check
-makes small changes (mutants) to the lines of code under `src/` that changed
-since the main branch (or since `--base`) and tries a sample of at most 30 of
-them, one at a time, picked with the commit being verified as the seed, so
-verifying the same commit again tries the same ones. The changed files take
-turns, so each one (up to 30 of them) has a mutant tried. Against each it runs the
-test files that load the changed file: a change no test notices is reported by
-file and line, because the tests would not catch that line going wrong, and a
-change in a file no test loads is reported as such. A sample
-is enough to show the tests can fail, and keeps the first publish of a large
-game to minutes.
-Before trying a fresh mutant, it completes the unmodified suite and requires
-it to pass, noting which project files each test file loads, however it loads
-them (a static or dynamic import, `import.meta.glob`, a path built at run
-time). A test file whose loads cannot be told apart runs for every mutant: one
-that shares its worker with other test files (`isolate: false`), and every
-test file when the config has a `globalSetup`. Once Vitest confirms that a
-mutant made a test fail, the mutation check stops that run's workers,
-including tests already running. A surviving mutant still runs every test file
-that loads its file to completion. Those test files must pass on their own,
-without the rest of the suite: the check runs each such set once unmodified,
-and when a test there fails, because it needs something another test file left
-behind, the check stops and names it rather than count a failure the mutant
-may not have caused.
-
-A game with Vitest projects (`test.projects` in its config, or a workspace:
-`test.workspace`, or `vitest.workspace.ts` beside its config) gets each mutant
-in every project defined inline, such as
-`{ extends: './vitest.browser.config.ts' }`. A project named only by a path or
-glob builds its own config, which the mutation check cannot change, so the
-check refuses to run, names the project, and says how to write it inline. That
-includes a workspace that names the root config itself:
-
-```
-Vitest project "my-game" (vitest.config.ts) does not load the mutation check's mutant, so its tests would run against the original code. Name it in the workspace as an inline project, { extends: './vitest.config.ts' }, and run the check again.
-```
-
-Vitest's browser mode is not yet tested with the mutation check.
-
-Mutants run one at a time unless `boardsmith.json` sets a budget:
-
-```json
-"mutation": { "trials": 2, "workers": 8 }
-```
-
-Then `trials` mutants run at once, each in its own Vitest run with `workers / trials`
-test workers (rounded down), and the unmutated run first gets all `workers`.
-Outcomes are reported in the same order as a serial run. Vitest 3 sizes its pools
-from `poolOptions` (`maxForks`, `maxThreads`, `minForks`, `minThreads`) before
-the worker count, and runs files of different pools at the same time, so with a
-budget the mutation check refuses a config that sets those, `poolMatchGlobs`,
-typecheck mode (`typecheck.enabled`), browser mode (`browser.enabled`), a
-different pool per project or a custom pool, rather than run more workers than
-the budget says. Vitest 4 runs each project's files with that project's own
-`maxWorkers`, so under Vitest 4 it also refuses a `maxWorkers` over the run's share.
-A setting can come from the config file or from an environment
-variable Vitest reads, such as `VITEST_MAX_FORKS` or `VITEST_MAX_WORKERS`.
-
-Stopping mutation verification with Ctrl+C or SIGTERM stops every Vitest process
-group it started and waits for them to close before removing that run's temporary files.
-The interrupted command still exits by the signal, so it cannot record a pass.
-
-On the main branch itself, the merge base with main is the current commit, so
-no change would be measured: there the mutation check fails unless you pass
-`--base <commit the work started from>`. A mutant whose code, tests, repository and installed
-packages have not changed since an earlier run is not run again. A new commit
-picks a new sample, so it runs only the mutants of its sample no earlier run
-tried.
-A package installed as a link to a folder outside the repository, such as
-`"dep": "file:../dep"`, counts too, so editing it runs the mutants again. When
-that folder is the top of a git checkout, what counts is its commit, its
-uncommitted and untracked changes, and the git-ignored files that its
-`package.json` `main`, `module` and `exports` point into (such as a built
-`dist/`). Any other folder counts by every file in it except `node_modules` and
-`.git`. The folder's own installed packages count as well. If any of this
-cannot be read, or the exports reach every file in the package, nothing is
-reused or kept for that run, and `boardsmith verify` says why.
-Those outcomes are kept in the repository's git directory, shared by the main
-checkout and every worktree. Each one is saved as soon as its mutant finishes, so
-a run that is interrupted, or stopped by a time limit, loses only the mutant it
-was running when it stopped, and the next run reuses the rest. Older
-BoardSmith kept these outcomes in `.boardsmith/verify/mutants.json`; that file
-is no longer read and can be deleted.
+directly does not count. A failing test is named as in a file the change
+touched since the main branch (or since `--base`), or in one it did not.
 
 The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith
 init` writes:
@@ -434,14 +354,14 @@ skipped.
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
 commit, to the base it measured from, and to whether the tree stayed clean while
-the checks ran. The BoardSmith commit it names is the one the run started with.
+the checks ran, with a fingerprint of the bundle build wrote in `dist/`, which
+is what `boardsmith publish` uploads. The BoardSmith commit it names is the one the run started with.
 What the tests run with must also hold still for the whole run: the BoardSmith
 the command runs and the game loads (its commit and uncommitted changes), the
 installed packages, and the packages linked from outside the repository. If any
 of these changes, for example a linked BoardSmith checkout moves to a new
-commit, the run stops before its next mutant and ends with an error naming what
-changed. It records no result and keeps no mutant outcome found after the
-change, since checks after the change ran against different code. Run it again in a checkout nothing else
+commit, the run ends with an error naming what changed. It records no result,
+since checks after the change ran against different code. Run it again in a checkout nothing else
 edits while it runs, such as a separate BoardSmith worktree.
 `boardsmith verify --check` exits 0 only when the current commit,
 on a clean tree, has a passing full result, and otherwise says what to run.
@@ -484,7 +404,7 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 `boardsmith review-gate <slug>` refuses unless the current commit passed
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries: that only the chunk's tests and typecheck ran, and that
-the full suite, build, validate, the smoke test and the mutation check run at
+the full suite, build, validate, the smoke test and the verbs check run at
 publish, so no reviewer spends its time running checks. It reads what is under
 review from the chunk's run log: the change since the last review round, sized
 as mechanical only when every dispatch logged since was. That round's commit must
@@ -515,19 +435,11 @@ boardsmith publish --dev     # a local platform at http://localhost:3006
 
 Publish refuses unless a full `boardsmith verify` passed for the exact commit
 being published, on a clean tree. There is no flag to skip it. The result must
-not be a focused one, must not skip a check, and its mutation check must have
-measured the change since the last published commit, or since the repository's
-first commit before the first publish. When it refuses, it names the command to
-run, for example:
-
-```bash
-boardsmith verify --base 3f2a9c1e...   # the commit publish says to measure from
-```
-
-A successful publish records the commit it published, and the base its result
-measured from, in `.boardsmith/published.json`. Like the verify results, that
-file is local and ignored by git. On a machine without it, publish measures
-from the first commit again, which asks for more coverage, never less.
+not be a chunk's fast checks and must not skip a check. Publish then uploads the
+bundle that verify built in `dist/`, so it does not validate, type-check or
+build again. If `dist/` is missing, or is no longer exactly what verify built
+(a later `boardsmith build` or an edit changed it), publish refuses and says to
+run `boardsmith verify` again.
 
 The first publish to a platform needs `--publisher <slug>`, naming the publisher
 that owns the game there. Afterwards `boardsmith publish` saves the ids that

@@ -1,14 +1,14 @@
 /**
- * `boardsmith verify` runs build and validate in its own process (#532), so neither may depend on
- * what a shell would have given it, nor leave anything behind for the checks after it.
+ * `boardsmith verify` runs validate in its own process (#532), and tests call `buildProject` in
+ * theirs, so neither may depend on what a shell would have given it, nor leave anything behind.
  *
  * - The project path may run through a symlink (macOS's /var is /private/var; `--project` can be
  *   any link). A shell's working directory is always a real path, and Vite names each HTML entry,
  *   and validate compares vue-tsc's program to vitest's file list, by paths that only agree when
  *   both are real. The link here is explicit, so this holds on Linux too.
- * - Vite sets NODE_ENV to `production` when it is unset and never puts it back. The smoke check
- *   and the mutation check start `boardsmith dev`, Playwright and vitest with this process's
- *   environment, so a leaked NODE_ENV runs them against Vue's production build.
+ * - Vite sets NODE_ENV to `production` when it is unset and never puts it back. A process started
+ *   after it with this process's environment (`boardsmith dev`, Playwright, vitest) would run
+ *   against Vue's production build. verify runs build in a child process for this reason (#1495).
  *
  * NODE_ENV is unset for the run, as it is when a designer runs `boardsmith verify` (vitest sets it
  * to `test`). Both steps run while the file is collected, where no test timeout applies (#363).

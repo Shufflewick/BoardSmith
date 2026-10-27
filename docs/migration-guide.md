@@ -1,5 +1,17 @@
 # Migration Guide
 
+## `boardsmith verify` runs its checks side by side, with no mutation check, and publish uploads its build (#1495)
+
+`boardsmith verify` no longer runs a mutation check: its checks are test,
+typecheck, build, validate, smoke and verbs, run at the same time (validate
+waits for build) and reported in that order. The `mutation` budget in
+`boardsmith.json` is no longer read by verify. `boardsmith publish` no longer
+validates, type-checks or builds: it uploads the `dist/` that verify built for
+the commit, and refuses when `dist/` is missing or has changed since. It no
+longer asks for `verify --base <commit>` or keeps `.boardsmith/published.json`;
+delete that file. A verify result recorded before this change is refused: run
+`boardsmith verify` again.
+
 ## Sims run only under `boardsmith test --sims` (#1494)
 
 A test file whose name ends in `.sim.test.ts` is a sim, and every plain vitest

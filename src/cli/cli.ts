@@ -191,9 +191,9 @@ export function createProgram(): Command {
     .command('verify')
     .description(
       'Run the full test suite, typecheck, build, validate, the in-browser smoke test, a check that every verb is ' +
-        'dispatched through the engine by a test, and a sampled mutation check of the code changed since the base, and record the result for this commit; --check says whether HEAD has a passing result',
+        'dispatched through the engine by a test, side by side, and record the result for this commit, with the bundle build made for publish; --check says whether HEAD has a passing result',
     )
-    .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
+    .option('--base <git-ref>', 'Where the change started, so a failing test is named as in a file it changed or not: its merge base with HEAD is the base (default: the main branch)')
     .option(
       '--chunk <slug>',
       "Fast checks for a chunk: only the test files it added or changed since the commit before its first chunk-<slug>/ " +

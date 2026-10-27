@@ -1,7 +1,7 @@
 /**
  * A GAME `boardsmith verify` CAN RUN WHOLE, smoke check included (#453): a table or a world as
  * `boardsmith init` scaffolds it, installed the way a real game is (`devProject`), with the tools
- * the test, typecheck and mutation checks run through linked from this checkout's install.
+ * the test and typecheck checks run through linked from this checkout's install.
  *
  * The scaffold's `tests/a11y.example.test.ts` is left out: it runs axe-core, which this checkout
  * does not install. Everything else, a world's own `tests/world.test.ts` included (#456), is the

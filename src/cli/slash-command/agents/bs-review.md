@@ -13,7 +13,7 @@ Your prompt carries the brief `boardsmith review-gate` printed, starting `Fast c
 
 ## What is already done
 
-The brief names the commit and each fast check `boardsmith verify --chunk` passed for it: the chunk's tests and typecheck. The full suite, build, validate, the smoke test and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do not break code to see whether a test notices.
+The brief names the commit and each fast check `boardsmith verify --chunk` passed for it: the chunk's tests and typecheck. The full suite, build, validate, the smoke test and the verbs check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do not break code to see whether a test notices.
 
 ## What you check
 

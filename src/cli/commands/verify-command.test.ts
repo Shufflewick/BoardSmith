@@ -28,7 +28,7 @@ describe('the boardsmith verify command, as a user runs it', () => {
     expect(after.stdout).toMatch(/passed `boardsmith verify` on a clean tree/);
   });
 
-  it('runs all seven real checks, writes the result and exits non-zero when one fails', async () => {
+  it('runs all six real checks, writes the result and exits non-zero when one fails', async () => {
     // The fixture has a page but no app, rules entry or smoke test, so the real build, validate and
     // smoke fail; the run still goes on through every check rather than stopping at the first
     // failure. (With none of the UI files, build and smoke would be skipped instead, #556.)
@@ -44,12 +44,28 @@ describe('the boardsmith verify command, as a user runs it', () => {
       ['validate', false],
       ['smoke', false],
       ['verbs', true],
-      ['mutation', true],
     ]);
     expect(check(result, 'build').next).toBe('Run `boardsmith build` to see why.');
     expect(check(result, 'smoke').summary).toBe('This project has no tests/browser/smoke.spec.ts, so nothing opens the game in a browser.');
     expect(run.stdout).toContain('build');
     expect(run.stdout).toContain('Run `boardsmith build` to see why.');
+  });
+
+  it('runs the checks side by side, validate once build is done, and reports them in the usual order (#1495)', async () => {
+    const dir = await gameOnBranch(false);
+    const events: string[] = [];
+    const stub = (name: string) => async () => {
+      events.push(`start ${name}`);
+      await new Promise(setImmediate);
+      events.push(`end ${name}`);
+      return { passed: true, summary: `${name} stood in for` };
+    };
+    const checks = { test: stub('test'), typecheck: stub('typecheck'), build: stub('build'), validate: stub('validate'), smoke: stub('smoke'), verbs: stub('verbs') };
+    const { result } = await runVerify({ projectDir: dir, checks, log: () => {} });
+    const firstEnd = events.findIndex((e) => e.startsWith('end '));
+    expect(events.slice(0, firstEnd).sort()).toEqual(['start build', 'start smoke', 'start test', 'start typecheck', 'start verbs']);
+    expect(events.indexOf('start validate')).toBeGreaterThan(events.indexOf('end build'));
+    expect(result.checks.map((c) => c.name)).toEqual(['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs']);
   });
 
   it('refuses a project whose .gitignore does not leave .boardsmith/ out, since its own result would dirty the tree', async () => {
