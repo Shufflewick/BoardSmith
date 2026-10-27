@@ -64,9 +64,7 @@ interface TestOptions {
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
   const context = getProjectContext(cwd);
-  if (options.changed !== undefined && (options.sims || options.browser || options.watch || patterns.length > 0)) {
-    throw new Error('--changed picks the tests to run from the change, so it cannot be combined with --sims, --browser, --watch or file patterns.');
-  }
+  refuseChangedWithAnotherSelection(patterns, options);
 
   if (context === 'standalone') {
     await refuseGameProjectThatCannotRun(cwd, options);
@@ -79,7 +77,6 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(styleText('cyan', `\nRunning ${label} tests...\n`));
 
-  const changed = options.changed === undefined ? undefined : await changedFiles(cwd, options.changed);
   const args = vitestArgs(patterns, options);
 
   if (options.watch) {
@@ -93,11 +90,23 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   }
 
   discardRecord(run);
-  if (changed !== undefined && run.progress.files?.length === 0) {
-    explainNoRelatedTests(cwd, changed, options.changed!, options);
-    return;
+  await reportPassed(cwd, run.progress.files, options);
+}
+
+/** Says why a passing run passed: its tests passed, or, under `--changed`, why it had none to run. */
+async function reportPassed(cwd: string, files: string[] | undefined, options: TestOptions): Promise<void> {
+  if (files?.length === 0 && options.changed !== undefined) {
+    explainNoRelatedTests(cwd, await changedFiles(cwd, options.changed), options.changed, options);
+  } else {
+    console.log(styleText('green', '\nAll tests passed!\n'));
   }
-  console.log(styleText('green', '\nAll tests passed!\n'));
+}
+
+/** `--changed` picks the tests itself, so it refuses every other way of picking them. */
+function refuseChangedWithAnotherSelection(patterns: string[], options: TestOptions): void {
+  if (options.changed !== undefined && (options.sims || options.browser || options.watch || patterns.length > 0)) {
+    throw new Error('--changed picks the tests to run from the change, so it cannot be combined with --sims, --browser, --watch or file patterns.');
+  }
 }
 
 /**
