@@ -39,6 +39,8 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
+import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 import {
   fixedDeployDefinition,
@@ -1505,6 +1507,21 @@ describe('a project with no vitest is told to install it, never to run npx (#595
 });
 
 describe('listVitestFiles — only real test files, whatever else vitest prints (#846)', () => {
+  it("lists a game's sims beside its unit tests, though a plain run leaves the sims out (#1494)", async () => {
+    // Validate checks every file vitest runs is type-checked, and `boardsmith test --sims` runs the sims.
+    const dir = tempTree('boardsmith-vitest-list-sims-');
+    writeFileSync(join(dir, 'package.json'), '{"type":"module"}\n');
+    writeFileSync(join(dir, 'vite.config.ts'), GAME_VITE_CONFIG);
+    mkdirSync(join(dir, 'tests'));
+    for (const name of ['a.test.ts', 'b.sim.test.ts']) writeFileSync(join(dir, 'tests', name), "import { it } from 'vitest';\nit('a', () => {});\n");
+    linkGameModules(dir);
+
+    const listing = await listVitestFiles(dir);
+
+    expect(listing.ok).toBe(true);
+    expect(listing.files.map((file) => basename(file)).sort()).toEqual(['a.test.ts', 'b.sim.test.ts']);
+  }, 60_000);
+
   it('ignores a line a config prints to stdout', async () => {
     const dir = tempTree('boardsmith-vitest-list-');
     symlinkSync(fileURLToPath(new URL('../../../node_modules', import.meta.url)), join(dir, 'node_modules'), 'dir');

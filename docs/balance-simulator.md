@@ -24,7 +24,10 @@ npm install
 ```
 
 The scaffold's sample game is replaced below. Delete its test, which tests the
-sample:
+sample. That leaves the greedy sim, `tests/greedy.sim.test.ts`, as the
+project's only test: `boardsmith test --sims` runs it, and a plain
+`boardsmith test` or `boardsmith verify` finds nothing to run until you write
+unit tests for your own rules:
 
 <!-- doc-test: run -->
 ```bash
@@ -288,8 +291,8 @@ export const policies = {
 };
 ```
 
-The scaffold's `tests/sim.test.ts` still works unchanged: it plays seeded games
-with `policies.greedy`, so `boardsmith test` checks the game can finish.
+The scaffold's `tests/greedy.sim.test.ts` still works unchanged: it plays seeded
+games with `policies.greedy`, so `boardsmith test --sims` checks the game can finish.
 
 ### Run it
 

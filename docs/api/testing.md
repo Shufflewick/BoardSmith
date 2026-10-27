@@ -231,7 +231,11 @@ assertActionAvailable(testGame, 1, 'equipItem');
 
 ### Random Game Simulation
 
-<!-- typecheck: game tests/random.test.ts -->
+A test that plays whole games is a sim, so its file name ends in `.sim.test.ts`
+and it runs only under `boardsmith test --sims`
+([Getting started](../getting-started.md#3-run-tests) has the test classes).
+
+<!-- typecheck: game tests/random.sim.test.ts -->
 ```typescript
 import { expect, test } from 'vitest';
 import { simulateRandomGames } from 'boardsmith/testing';

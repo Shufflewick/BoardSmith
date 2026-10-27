@@ -1,5 +1,21 @@
 # Migration Guide
 
+## Sims run only under `boardsmith test --sims` (#1494)
+
+A test file whose name ends in `.sim.test.ts` is a sim, and every plain vitest
+run of a game leaves it out: `boardsmith test`, `boardsmith verify`, the
+mutation check and a merge. `boardsmith test --sims` runs only the sims. A test
+file with any other name that imports a tool that plays whole games
+(`simulateRandomGames` or `replayRandomGame` from `boardsmith/testing`,
+`playGame` from `boardsmith/sim`, `createBot` or `MCTSBot` from
+`boardsmith/bot`, `benchmarkBot` or `WeightEvolver` from
+`boardsmith/bot-trainer`) now fails when it loads, naming its new name. Rename
+each such file, for example `tests/random-sim.test.ts` to
+`tests/random-sim.sim.test.ts`, and the scaffold's `tests/sim.test.ts` to
+`tests/greedy.sim.test.ts`. A game whose only tests were sims has no unit tests
+left, so `boardsmith test` and `boardsmith verify` find nothing to run: write a
+unit test for its rules.
+
 ## A surviving mutant always fails `boardsmith verify` (#1493)
 
 `boardsmith mutation-equivalence` is removed, and `boardsmith verify` no longer

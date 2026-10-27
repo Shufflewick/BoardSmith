@@ -1,5 +1,6 @@
-import { resolve, sep } from 'node:path';
+import { relative, resolve, sep } from 'node:path';
 import vue from '@vitejs/plugin-vue';
+import { parseAst } from 'vite';
 import { configDefaults, mergeConfig } from 'vitest/config';
 
 /**
@@ -25,6 +26,7 @@ import { configDefaults, mergeConfig } from 'vitest/config';
  *   (`boardsmith verify`, `boardsmith smoke`), not vitest. `configDefaults.exclude` is spread in
  *   because setting `exclude` at all replaces vitest's defaults.
  * - The rerun triggers of `rerunTriggers` below.
+ * - The test classes of `testClasses` below: sims (`*.sim.test.ts`) run only under `--mode sims`.
  *
  * `boardsmith test`, `constraint-check`, `chunk-merge` and `verify` refuse a project whose config is
  * not built with this (`testRunScopeProblem`).
@@ -39,7 +41,7 @@ import { configDefaults, mergeConfig } from 'vitest/config';
 export function defineGameViteConfig(overrides = {}) {
   return mergeConfig(
     {
-      plugins: [vue(), rerunTriggers()],
+      plugins: [vue(), rerunTriggers(), testClasses()],
       resolve: { dedupe: ['vue'] },
       test: {
         exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'],
@@ -69,6 +71,67 @@ export function rerunTriggers() {
       // vitest compares forward-slash paths, so a Windows root is written with them before glob characters are escaped.
       const root = resolve(config.root || process.cwd()).split(sep).join('/').replace(/[\\*?[\]{}()!+@|]/g, '\\$&');
       return { test: { forceRerunTriggers: [...configDefaults.forceRerunTriggers, '{vitest,vite}.config.*', 'boardsmith.json'].map((trigger) => `${root}/${trigger}`) } };
+    },
+  };
+}
+
+/** A sim's file name, `*.sim.test.ts` or any other spelling vitest collects: a random-game sim, a whole match, a bot game or a pace or budget run. */
+const SIM_FILES = '**/*.sim.{test,spec}.?(c|m)[jt]s?(x)';
+const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
+
+/** The vite mode `boardsmith test --sims` runs vitest in. */
+const SIM_MODE = 'sims';
+
+/** A file vitest collects by default, and the suffix a rename to a sim puts `.sim` before. */
+const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+
+/** What makes a test a sim: the names it imports that play whole games, by module. */
+const SIM_TOOLS = {
+  'boardsmith/testing': ['simulateRandomGames', 'replayRandomGame'],
+  'boardsmith/sim': ['playGame'],
+  'boardsmith/bot': ['createBot', 'MCTSBot'],
+  'boardsmith/bot-trainer': ['benchmarkBot', 'WeightEvolver'],
+};
+
+/**
+ * A game's test classes by file name (#1494): a unit test is `*.test.ts`, a sim is `*.sim.test.ts`.
+ * Sims never run automatically: a plain run (`boardsmith test`, `verify`, the mutation runner,
+ * agent-policy's `vitest run --changed` and suite slices) leaves them out, and `vitest --mode sims`
+ * (`boardsmith test --sims`) runs only them.
+ *
+ * A test file outside `*.sim.test.ts` that imports a sim tool (`SIM_TOOLS`) fails as vitest loads
+ * it, naming the file and its new name, so a slow test cannot drift back into the automated suite.
+ * The check lives here because this config is the one thing every run of a game's tests loads.
+ * shortcut: it reads the test file's own imports only, so a helper module that wraps a sim tool passes; follow the imports if that happens.
+ *
+ * @returns {import('vite').Plugin}
+ */
+export function testClasses() {
+  let root = process.cwd();
+  return {
+    name: 'boardsmith:test-classes',
+    config(config, { mode }) {
+      if (mode !== SIM_MODE) return { test: { exclude: [SIM_FILES] } };
+      // Set, not returned: vite would add a game's own include beside it, and run its unit tests too.
+      config.test = { ...config.test, include: [SIM_FILES] };
+    },
+    configResolved(config) {
+      root = config.root;
+    },
+    transform(code, id) {
+      if (!TEST_FILE.test(id) || SIM_FILE.test(id)) return undefined;
+      const used = parseAst(code).body.flatMap((node) => {
+        const tools = node.type === 'ImportDeclaration' ? SIM_TOOLS[node.source.value] : undefined;
+        if (tools === undefined) return [];
+        const names = node.specifiers.flatMap((s) => (s.type === 'ImportSpecifier' && tools.includes(s.imported.name) ? [s.imported.name] : []));
+        return names.length === 0 ? [] : [`${names.join(' and ')} from ${node.source.value}`];
+      });
+      if (used.length === 0) return undefined;
+      const file = relative(root, id).split(sep).join('/');
+      throw new Error(
+        `${file} uses ${used.join(', ')}, which plays whole games. A test that does is a sim, and sims run only on request: ` +
+          `rename it to ${file.replace(TEST_FILE, (suffix) => `.sim${suffix}`)} and run it with \`boardsmith test --sims\`.`,
+      );
     },
   };
 }

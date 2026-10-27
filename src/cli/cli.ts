@@ -151,6 +151,7 @@ export function createProgram(): Command {
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
     .option('--browser', "BoardSmith's own repository only: run the browser regressions (scripts/*-browser.mjs) in Chromium instead of the default suite, without the type check the default run does first")
+    .option('--sims', "Run only this game's sims (*.sim.test.ts: random-game sims, whole matches, bot games, pace and budget runs), which every other run leaves out")
     .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (for a merge gate to repeat)')
     .action(testCommand);
 
