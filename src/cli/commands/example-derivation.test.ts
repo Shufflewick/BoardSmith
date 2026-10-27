@@ -23,6 +23,9 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
 import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/**/*.ts');
+
 /**
  * `example-derivation.ts` is the ONE shared module both TEST-01 (build-side) and CHECK-06
  * (verify-side) call to derive a runnable test from a worked example (SC-3). This suite proves

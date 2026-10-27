@@ -32,6 +32,9 @@ import { renderIndex } from './ingest-archive.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { archiveRulebookSource, designProjectFixtures } from './design-project.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.ts', '!**/*.test.ts']);
+
 /**
  * Writes the two subagent returns in the shapes the contracts give them (#319): the extractor's
  * `{ "examples": [...] }`, and the translator returns filed in one object under the exampleId

@@ -22,6 +22,9 @@ import { TestGame } from '../../testing/test-game.js';
 import { Action } from '../action/index.js';
 import { actionStep } from '../flow/index.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue}', '!**/*.test.ts']);
+
 class Zone extends Space {}
 
 class ShadowsPileGame extends Game<ShadowsPileGame> {

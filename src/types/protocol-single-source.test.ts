@@ -41,6 +41,9 @@ import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue}', '!**/*.test.ts']);
+
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('./protocol.ts');
 

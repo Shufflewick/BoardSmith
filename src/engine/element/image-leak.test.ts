@@ -21,6 +21,9 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { Game, Card, Deck, Hand, Space, Player, Action, loop, eachPlayer, actionStep, type ElementJSON, type GameOptions } from '../index.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/engine/element/*.ts', '!**/*.test.ts']);
+
 // ---------------------------------------------------------------------------
 // Test fixture types
 // ---------------------------------------------------------------------------

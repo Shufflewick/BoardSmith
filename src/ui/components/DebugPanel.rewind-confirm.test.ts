@@ -31,6 +31,9 @@ import { fileURLToPath } from 'node:url';
 import DebugPanel from './DebugPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/ui/**/*.{ts,vue}', '!**/*.test.ts']);
+
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 const ACTION_HISTORY = [

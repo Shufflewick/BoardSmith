@@ -13,6 +13,9 @@ import {
   resolveManifestPath,
 } from './build-manifest.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/cli/**/*.ts', '!**/*.test.ts']);
+
 /**
  * `build-manifest.ts` is Phase 172's "one parser, one authority" module (172-CONTEXT.md decision
  * 1): the Build Manifest is the claim-numbering authority for CHECK-03 and the file list for

@@ -32,6 +32,9 @@ import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/package-lock.json');
+
 /**
  * What a game installs alongside us to run `vue-tsc` at all. Anything NOT in
  * this list, not named by a gate's `alsoInstalled`, and not in our production

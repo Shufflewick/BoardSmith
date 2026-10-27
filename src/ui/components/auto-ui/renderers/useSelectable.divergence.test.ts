@@ -24,6 +24,9 @@ import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/ui/components/auto-ui/renderers/*.vue');
+
 const RENDERERS_DIR = dirname(fileURLToPath(import.meta.url));
 
 /** The eight interactive renderers that must use the shared composable for selection. */

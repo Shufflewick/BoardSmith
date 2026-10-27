@@ -18,6 +18,9 @@ import { useSelectable, useSelectableGrid } from './useSelectable.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/src/ui/components/auto-ui/renderers/*.vue');
+
 // The REAL substrate, not a hand-built stand-in: useSelectable now asks it what
 // a candidate is called, and a partial mock would answer for a shape the shell
 // no longer has (docs/TEST-FIXTURES.md).

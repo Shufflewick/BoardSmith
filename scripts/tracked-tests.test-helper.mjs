@@ -12,6 +12,9 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob('/{src,docs,scripts}/**/*.test.{ts,mjs}');
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 export function trackedTestFiles(dirs) {

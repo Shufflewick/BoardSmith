@@ -16,6 +16,9 @@ import { computeVerificationScope, renderVerifiedAgainst } from './chunk-provena
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/**/*.{ts,tsx}', '!/dist/**', '!**/*.test.ts']);
+
 /** The Verified Against block a chunk verified under `scope` would carry. */
 const renderScope = (scope: Awaited<ReturnType<typeof computeVerificationScope>>): string =>
   renderVerifiedAgainst({

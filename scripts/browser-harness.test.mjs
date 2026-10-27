@@ -35,6 +35,9 @@ import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 import browserConfig from '../vitest.browser.config.ts';
 import policy from '../.agent-policy.json';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/testing/installed-modules.test-helper.ts', '/src/cli/spawn-cli.test-helper.ts']);
+
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob(['../src/cli/commands/dev-world.ts', '../src/cli/commands/fixture-table.test-helper.ts', '../src/cli/commands/fixture-world.test-helper.ts']);
 // Links the browser suite's test file, which `vitest list` below collects, so `--changed` runs this file when it changes; nothing loads (#1409).

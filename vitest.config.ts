@@ -28,9 +28,10 @@ export default defineConfig({
       'dist',
     ],
     // A run fails when a test leaves a file in the checkout that git neither tracks nor
-    // ignores (#579): scripts/untracked-guard/guard.mjs says why and how to fix one.
-    globalSetup: ['scripts/untracked-guard/global-setup.mjs'],
-    setupFiles: ['scripts/untracked-guard/after-each-file.mjs'],
+    // ignores (#579): scripts/untracked-guard/guard.mjs says why and how to fix one. It also fails
+    // when a test reads a repository file it does not link (#1504): scripts/reads-guard/global-setup.mjs.
+    globalSetup: ['scripts/untracked-guard/global-setup.mjs', 'scripts/reads-guard/global-setup.mjs'],
+    setupFiles: ['scripts/untracked-guard/after-each-file.mjs', 'scripts/reads-guard/record-reads.mjs'],
   },
   resolve: {
     alias: {

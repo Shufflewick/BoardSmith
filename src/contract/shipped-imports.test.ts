@@ -32,6 +32,9 @@ import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { packedFiles } from './npm-pack.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/**/*.{ts,vue,js}', '!**/*.test.ts', '/bin/boardsmith.js']);
+
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../cli/lib/sim-workers.ts');
 

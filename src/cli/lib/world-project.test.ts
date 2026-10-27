@@ -21,6 +21,9 @@ import { dirname, join } from 'node:path';
 import { WORLD_AUTHORING_DOC, resolveWorldMode } from './world-project.js';
 import { worldDevBanner } from '../commands/dev-world.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/cli/**/*.{ts,vue}', '!**/*.test.ts']);
+
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 describe('resolveWorldMode (#171: the declared `backend` is the only way to say "this is a world")', () => {

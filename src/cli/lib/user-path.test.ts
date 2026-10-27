@@ -6,6 +6,9 @@ import { describe, it, expect } from 'vitest';
 
 import { resolveUserPath } from './user-path.js';
 
+// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
+import.meta.glob(['/src/cli/**/*.ts', '!**/*.test.ts']);
+
 describe('resolveUserPath', () => {
   it('honours an absolute path as given', () => {
     // The whole reason this function exists (#239): `join` would have produced
