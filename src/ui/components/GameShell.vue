@@ -983,7 +983,10 @@ onMounted(async () => {
     // Sent before anything else this branch could do, and sent unconditionally:
     // a hello a host has to wait for a game's own readiness to receive would
     // stop being a statement about the shell.
-    window.parent.postMessage({ source: 'shufflewick-game', type: 'game_ready' }, '*');
+    //
+    // `revealsGameOver` tells the host this shell posts `game_over_shown` (#1507),
+    // so it holds its own Game Over overlay until then.
+    window.parent.postMessage({ source: 'shufflewick-game', type: 'game_ready', revealsGameOver: true }, '*');
   }
 });
 
@@ -1226,12 +1229,14 @@ watch(
 // after render (`flush: 'post'`), so a board's hold that turns on in reaction to
 // the completing frame is already in place. Said once per completion; a board
 // that hides and re-shows its result (a replay of the final moment) does not
-// repeat it.
+// repeat it. The host page hears of it at the same moment, by `game_over_shown`
+// (#1507), so its own Game Over overlay never covers a board's ending.
 watch(
   gameOverRevealed,
   (revealed) => {
     if (!revealed || gameOverAnnounced) return;
     gameOverAnnounced = true;
+    if (inHost) window.parent.postMessage({ source: 'shufflewick-game', type: 'game_over_shown' }, '*');
     // Said from the same `winnerSeats`/`isDraw` the card draws, both read off
     // the host's validated frame, so the two can never name different results.
     const winnerNames = winnerSeats.value.map((seat) => seatDisplay(players.value, seat).name);

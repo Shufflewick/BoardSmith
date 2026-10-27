@@ -36,7 +36,7 @@ describe('GameShell platform boot announcement (#486)', () => {
     const wrapper = mountShell();
     await nextTick();
 
-    expect(posted).toContainEqual({ source: 'shufflewick-game', type: 'game_ready' });
+    expect(posted).toContainEqual({ source: 'shufflewick-game', type: 'game_ready', revealsGameOver: true });
     wrapper.unmount();
   });
 

@@ -12,7 +12,7 @@
  * Asserted on the REAL GameShell, driven by the `game_state` frames a platform
  * host sends.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, effectScope, h, nextTick, ref, watch } from 'vue';
 import { useGameContext } from '../composables/useGameContext.js';
 import { holdGameOverUntil } from '../composables/useGameOverReveal.js';
@@ -80,16 +80,22 @@ const mounted: Array<{ unmount(): void }> = [];
 
 type ShellOptions = NonNullable<Parameters<typeof mountPlatformShell>[0]>;
 
-async function mountShell(board: ReturnType<typeof defineComponent>, props?: ShellOptions['props'], slots?: ShellOptions['slots']) {
-  enterIframe();
+async function mountShell(
+  board: ReturnType<typeof defineComponent>,
+  props?: ShellOptions['props'],
+  slots?: ShellOptions['slots'],
+  firstFrame: Record<string, unknown> = playingFrame(),
+) {
+  const posted = enterIframe();
   const wrapper = mountPlatformShell({ board, props, slots });
   mounted.push(wrapper);
   await nextTick();
   post({ type: 'init', seat: 1 });
   await settle();
-  post(playingFrame());
+  post(firstFrame);
   await settle();
-  return { wrapper, assertive: watchLiveRegion(wrapper, 'assertive') };
+  const shownSignals = () => posted.filter((m) => (m as { type?: unknown }).type === 'game_over_shown');
+  return { wrapper, posted, shownSignals, assertive: watchLiveRegion(wrapper, 'assertive') };
 }
 
 afterEach(() => {
@@ -214,6 +220,82 @@ describe('the table ending (#419)', () => {
     for (const value of [true, false, true]) await after(shell, () => { shown.value = value; });
 
     expect(await shell.assertive()).toEqual([ALICE_WINS]);
+  });
+});
+
+describe('telling the host page the ending is on screen (#1507)', () => {
+  const SHOWN = { source: 'shufflewick-game', type: 'game_over_shown' };
+
+  it('game_ready says this shell sends game_over_shown, so the host waits for it', async () => {
+    const shell = await mountShell(PlainBoard);
+
+    expect(shell.posted).toContainEqual({ source: 'shufflewick-game', type: 'game_ready', revealsGameOver: true });
+  });
+
+  it('posts game_over_shown at once on completion when no board holds the ending', async () => {
+    const shell = await mountShell(PlainBoard);
+    await after(shell, complete);
+
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+
+  it('never posts it while a hold is closed, and posts it exactly once after the hold releases', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+
+    await after(shell, complete);
+    expect(shell.shownSignals()).toEqual([]);
+    for (const value of [true, false, true]) await after(shell, () => { shown.value = value; });
+
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+
+  it('posts it once the first frame the shell draws is already complete (a reload of a finished table)', async () => {
+    const shell = await mountShell(PlainBoard, undefined, undefined, completeFrame());
+
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+
+  it('posts it when the finale throws, since the shell replaces the broken board and its hold goes with it', async () => {
+    const broken = ref(false);
+    const FinaleBoard = defineComponent({
+      name: 'FinaleBoard',
+      setup() {
+        holdGameOverUntil(() => false);
+        return () => {
+          if (broken.value) throw new Error('finale failed');
+          return h('div', 'board');
+        };
+      },
+    });
+    const shell = await mountShell(FinaleBoard);
+    await after(shell, complete);
+    expect(shell.shownSignals()).toEqual([]);
+
+    const quiet = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await after(shell, () => { broken.value = true; });
+    quiet.mockRestore();
+
+    expect(shell.shownSignals()).toEqual([SHOWN]);
+  });
+
+  it('posts it when the finale is interrupted, since an unmounted finale releases its hold', async () => {
+    const playing = ref(true);
+    const Finale = defineComponent({
+      name: 'Finale',
+      setup() {
+        holdGameOverUntil(() => false);
+        return () => h('div', 'finale');
+      },
+    });
+    const board = defineComponent({ name: 'InterruptedBoard', setup: () => () => (playing.value ? h(Finale) : h('div', 'board')) });
+    const shell = await mountShell(board);
+    await after(shell, complete);
+    expect(shell.shownSignals()).toEqual([]);
+
+    await after(shell, () => { playing.value = false; });
+
+    expect(shell.shownSignals()).toEqual([SHOWN]);
   });
 });
 

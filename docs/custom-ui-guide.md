@@ -1150,6 +1150,18 @@ already let the ending through.
 `renderAsSeat` mounts. Called anywhere else it throws, because only a table has
 a game over to hold back.
 
+**Telling the host page.** A host page that frames the game (ShufflewickPub)
+draws its own Game Over overlay. So that the overlay never covers your ending,
+GameShell's `game_ready` message carries `revealsGameOver: true`, and the shell
+posts `{ source: 'shufflewick-game', type: 'game_over_shown' }` to the parent
+once, the moment the ending is revealed (when the card appears and the result
+is announced). A board that holds nothing sends it as soon as the flow
+completes, and so does a table whose first drawn state is already finished (a
+reload). A replay that hides and re-shows the result does not send it again.
+A board that throws is replaced by an error message, and a board that unmounts
+releases its hold, so an interrupted finale still sends it. A hold whose
+function never returns true keeps the host's overlay away for good.
+
 ## Commands in the Controls Menu
 
 A board can add its own one-shot commands, such as "Watch the last battle", to
