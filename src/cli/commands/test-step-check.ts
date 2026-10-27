@@ -575,7 +575,7 @@ const lines = (output: string) => output.split('\n').filter(Boolean);
 const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
-/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs (#1494). */
+/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/test-files.js` (#1494, #1506). */
 export const isSimFile = (path: string) => SIM_FILE.test(path);
 
 /**
