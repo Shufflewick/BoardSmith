@@ -800,20 +800,19 @@ export function fee(price: number): number {
     }
   }
 
-  it("tries a sample of 3 of the changed lines' mutants, the same ones for the same seed (#1496)", async () => {
+  it("tries a sample of 3 of the changed lines' mutants, the same ones for the same change (#1496, #1500)", async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/values.ts': MANY_VALUES });
-    const tried = async (seed: string) => {
+    const tried = async () => {
       const logged: string[] = [];
-      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/values.ts', MANY_LINES]]), seed, log: (line) => logged.push(line) });
+      const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/values.ts', MANY_LINES]]), log: (line) => logged.push(line) });
       // No test imports src/values.ts, so no mutant runs, and each is reported as in a file no test loads.
       expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 0, survived: 0, timedOut: 0, unreached: 3 });
       return logged.filter((line) => line.startsWith('mutant '));
     };
-    const first = await tried('commit-a');
+    const first = await tried();
     expect(first).toHaveLength(3);
     expect(first[0]).toMatch(/^mutant 1\/3: src\/values\.ts:/);
-    expect(await tried('commit-a')).toEqual(first);
-    expect(await tried('commit-b')).not.toEqual(first);
+    expect(await tried()).toEqual(first);
   }, 60_000);
 
   it("names vitest's report when it cannot read it, rather than saying vitest wrote none (#1174)", async () => {
@@ -830,7 +829,6 @@ export function fee(price: number): number {
     for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
     try {
       await expect(runDiffMutationCheck({
-        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       })).rejects.toThrow(/Could not read .*report\.json \(EISDIR\)/);
     } finally {
@@ -878,7 +876,6 @@ it('catches the changed value after the other worker starts', async () => {
     vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
     try {
       const result = await runDiffMutationCheck({
-        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       });
       expect(await fs.readFile(join(project, 'tests/baseline-finished'), 'utf-8')).toBe('finished');
@@ -923,7 +920,6 @@ afterAll(() => writeFileSync(new URL('./' + (process.env.BOARDSMITH_MUTANT ? 'mu
     vi.stubEnv('NODE_OPTIONS', sandbox.env.NODE_OPTIONS + ' --allow-child-process --allow-worker --allow-addons');
     try {
       const result = await runDiffMutationCheck({
-        seed: 'fixture',
         projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {},
       });
       expect(result.notGreen).toBeUndefined();
@@ -950,14 +946,11 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     });
 
     const expectOtherRunsKept = plantOtherRuns(project);
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), log: () => {} });
 
     expect(result.notGreen).toBeUndefined();
-    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 1, survived: 2, timedOut: 0, unreached: 0 });
-    expect(result.survivors).toEqual([
-      { file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' },
-      { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
-    ]);
+    expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 1, timedOut: 0, unreached: 0 });
+    expect(result.survivors).toEqual([{ file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' }]);
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES_TWO);
     expectOtherRunsKept();
   }, 120_000);
@@ -972,7 +965,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
 `,
       'tests/other.test.ts': "import { it, expect } from 'vitest';\nimport { other } from '../src/other';\nit('is red', () => { expect(other).toBe(2); });\n",
     });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toBeUndefined();
     expect(result.summary).toEqual({ files: 1, mutants: 2, killed: 2, survived: 0, timedOut: 0, unreached: 0 });
   }, 120_000);
@@ -982,7 +975,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
     await suite(project, {
       'tests/red.test.ts': "import { it, expect } from 'vitest';\nimport { bid } from '../src/rules';\nit('is red', () => { expect(bid(1, 2)).toBe(false); });\n",
     });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
     expect(result.summary.mutants).toBe(0);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
@@ -1002,7 +995,7 @@ rmSync(new URL('./ready', import.meta.url), { force: true });
 it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).toBe('boolean'); });
 `,
     });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {} });
     expect(result.notGreen).toEqual(['tests/b.test.ts > reads the rule']);
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
@@ -1024,7 +1017,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
 
     async function diffCheck(files: Record<string, string>) {
       const project = await makeProject({ 'src/rules.ts': RULES, 'project.config.mts': PROJECT_CONFIG, 'tests/bid.test.ts': BID_TEST, ...files });
-      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     }
 
     it('runs each mutant in an inline project the config names', async () => {
@@ -1093,7 +1086,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
         await fs.mkdir(join(modules, 'vitest'));
         await fs.writeFile(join(modules, 'vitest', 'package.json'), JSON.stringify({ name: 'vitest', version: vitest.version }));
       }
-      return runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+      return runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     }
 
     it('runs under a pnpm install, whose node_modules/.bin/vitest is a script', async () => {
@@ -1213,7 +1206,7 @@ it('loads a module by a path built at run time', async () => {
 
     async function selectionCheck(config: string, files: Record<string, string> = {}, added = CHANGED) {
       const project = await makeProject({ 'vitest.config.ts': config, ...SOURCES, ...files });
-      const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added, log: () => {} });
+      const result = await runDiffMutationCheck({ projectDir: project, added, log: () => {} });
       const ran = await fs.readFile(join(project, 'tests/ran'), 'utf-8').catch(() => '');
       return { result, ran: [...new Set(ran.split('\n').filter(Boolean))].sort() };
     }
@@ -1273,7 +1266,7 @@ it('quadruples', () => { expect(quadruple(2)).toBe(8); });
 
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
-    const result = await runDiffMutationCheck({ seed: 'fixture', projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
     expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 }, survivors: [], unreached: [], timedOut: [] });
   });
 });

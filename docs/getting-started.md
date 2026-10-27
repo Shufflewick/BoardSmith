@@ -260,8 +260,10 @@ A test that cannot fail proves nothing. `boardsmith mutate` makes small changes
 (mutants) to the code lines under `src/` changed since the merge base of HEAD
 with `--base` (committed, staged, unstaged and untracked): it flips a
 comparison, negates a condition, drops a statement or returns `undefined`. It
-tries a sample of 3, picked with the current commit as the seed, so running it
-again on the same commit tries the same ones. The changed files take turns, so
+tries a sample of 3, picked by what the mutants change, so the same change
+always tries the same ones, whichever commit holds it: the branch tip at
+`agent-policy verify`, the merge commit at `agent-policy merge`, or a retry of
+either. The changed files take turns, so
 up to 3 files each get one. It is meant to run at every merge, on the ticket's
 own change, so it stays small and fast.
 

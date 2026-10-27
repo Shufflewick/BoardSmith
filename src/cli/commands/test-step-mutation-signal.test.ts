@@ -148,7 +148,6 @@ async function keepsTimeoutVerdict(): Promise<void> {
   const guard = setTimeout(() => vi.runAllTimers(), 90_000);
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   const running = runDiffMutationCheck({
-    seed: 'fixture',
     projectDir: project, added: new Map([['src/rules.ts', new Set([1])]]), log: () => {},
   });
   let finished = false;

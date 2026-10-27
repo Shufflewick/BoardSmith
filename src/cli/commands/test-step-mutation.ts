@@ -1307,8 +1307,6 @@ interface DiffMutationInput {
   projectDir: string;
   /** Code files changed since the base, with the lines that changed (`changedSince` in verify.ts). */
   added: ReadonlyMap<string, ReadonlySet<number>>;
-  /** Picks the sample of mutants tried (`sampleMutants`): the HEAD commit, so a re-run of it tries the same ones. */
-  seed: string;
   log: (line: string) => void;
   /** How many mutants run at once and the test workers they share (boardsmith.json "mutation", #955); every sampled mutant at once without it. */
   budget?: MutationBudget;
@@ -1455,7 +1453,10 @@ export async function runDiffMutationCheck(
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
-  const mutants = sampleMutants(await collectMutants(projectDir, input.added), input.seed, MUTATE_SAMPLE_SIZE);
+  const all = await collectMutants(projectDir, input.added);
+  // Seeded by what the mutants change, not where or in which commit, so the branch tip and the merge commit that lands it try the same ones (#1500).
+  const seed = all.map((m) => [m.file, m.description, m.change.before, m.change.after].join('\0')).join('\n');
+  const mutants = sampleMutants(all, seed, MUTATE_SAMPLE_SIZE);
   summary.files = new Set(mutants.map((m) => m.file)).size;
   if (mutants.length === 0) return { summary, survivors: [], unreached: [], timedOut: [] };
 

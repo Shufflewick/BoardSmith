@@ -23,10 +23,7 @@ export function fee(price: number): number {
 `;
 
 /** The sampled mutants of lines 2 and 5 no test catches, in the order they were made. */
-const SURVIVORS = [
-  { file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' },
-  { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
-];
+const SURVIVORS = [{ file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' }];
 
 /**
  * Each test file enters the trial on load: it marks itself live, waits until `trials` trials are live
@@ -99,7 +96,6 @@ async function seen(dir: string): Promise<Seen[]> {
 
 function check(dir: string, budget: MutationBudget | undefined, log: (line: string) => void = () => {}) {
   return runDiffMutationCheck({
-    seed: 'fixture',
     projectDir: dir, added: new Map([['src/rules.ts', new Set([2, 5])]]), log,
     ...(budget ? { budget } : {}),
   });
@@ -121,7 +117,7 @@ describe('runDiffMutationCheck runs its mutants side by side (#955, #1496)', () 
     try {
       const dir = await project(2);
       const result = await check(dir, { trials: 2, workers: 2 });
-      expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 1, survived: 2, timedOut: 0, unreached: 0 });
+      expect(result.summary).toEqual({ files: 1, mutants: 3, killed: 2, survived: 1, timedOut: 0, unreached: 0 });
       // Outcomes fold in the order the mutants were made, whichever trial finished first.
       expect(result.survivors).toEqual(SURVIVORS);
 
