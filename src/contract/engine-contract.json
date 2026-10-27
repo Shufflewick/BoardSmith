@@ -1,5 +1,5 @@
 {
-  "revision": 276,
+  "revision": 277,
   "surfaceHash": "81dea030f8a62315",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2151,6 +2151,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "No contract change; this build carries code since r275. GameShell: game_ready now carries revealsGameOver: true, and the shell posts { source: 'shufflewick-game', type: 'game_over_shown' } to the host page once, the first time the game-over is on screen (after any holdGameOverUntil hold releases, or at once on completion with no hold), so a host can hold its own Game Over overlay until then (#1507). Published games need no rebuild; a game must be rebuilt on r276 to send the signal."
+    },
+    {
+      "revision": 277,
+      "date": "2026-10-27",
+      "surfaceHash": "81dea030f8a62315",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "No contract change; this build carries code since r276. GameShell: while a holdGameOverUntil hold keeps a finished game's result back, the shell shows a Show result button over the board (above any game modal); pressing it reveals the ending and posts game_over_shown, still once, so a stuck hold cannot keep the result or the signal away. World: in dev or test runs, a failed world view's player-facing rules-error sentence now carries the raw error text in brackets, as an action's does. CLI: boardsmith test's mutation step fails when its unmutated run exits non-zero or reports unhandled errors with no failing test. Published games need no rebuild; a game must be rebuilt on r277 to get the Show result button."
     }
   ]
 }
