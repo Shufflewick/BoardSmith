@@ -444,8 +444,8 @@ async function checkGame(slug: string, tree: string, dir: string, children: Chil
     + 'Each step takes well under a minute; find what never ends, or skip the game with --skip and an issue.\n';
   const collect = async (mode: string[], listed: string): Promise<string | undefined> => {
     const name = ['vitest list', ...mode].join(' ');
-    // One fork loading every file: games already run side by side, and WindupWarfare collects in a fifth of the CPU.
-    const args = ['list', ...mode, '--passWithNoTests', '--pool=forks', '--no-isolate', '--maxWorkers=1', `--json=${listed}`];
+    // The game's own pool and isolation, so each file loads as its test run loads it (#1498 review F6).
+    const args = ['list', ...mode, '--passWithNoTests', `--json=${listed}`];
     const run = await children.run(join(dir, 'node_modules', '.bin', 'vitest'), args, dir, timeLimitMs);
     // vitest can exit 0 after an error outside any test file, and then it writes no list.
     if (!run.timedOut && run.code === 0 && existsSync(listed)) return undefined;

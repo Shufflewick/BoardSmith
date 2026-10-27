@@ -218,6 +218,8 @@ const [loadsBefore, loadsAfter] = await (async () => {
   const game = await makeGame(fx, 'chess', {
     files: {
       'tests/random-sim.test.ts': "import { it } from 'vitest';\nimport { playGame } from 'boardsmith';\nit('plays', () => playGame());\n",
+      // Loaded first (vitest loads larger files first), and its mock must not reach another file (#1498 review F6).
+      'tests/mocked.test.ts': `import { it, vi } from 'vitest';\nvi.mock('boardsmith', () => ({ playGame: () => {} }));\nit('mocks', () => {});\n${'// padding\n'.repeat(500)}`,
       // A game's test may read its own checkout when it loads, as WindupWarfare's source-names test does.
       'tests/source-names.test.ts': "import { it } from 'vitest';\nimport { execFileSync } from 'node:child_process';\nconst files = execFileSync('git', ['ls-files']);\nit('lists', () => files);\n",
     },
