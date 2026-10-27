@@ -89,6 +89,18 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     expect(test.next).toMatch(/boardsmith verify --chunk combat/);
   });
 
+  // #1497: a plain vitest run never collects a sim (#1494), so a sim is not a test of the chunk's own.
+  it('fails a chunk whose only new test file is a sim, which no fast check runs', async () => {
+    const dir = await gameOnBranch(false);
+    await write(dir, { 'tests/combat.sim.test.ts': FEE_TEST });
+    await chunkWithoutTests(dir, '| tests/combat.test.ts | 1 | yes |');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'combat', log: () => {} });
+
+    expect(check(result, 'test').summary).toMatch(/^Chunk "combat" added or changed no test file since its base/);
+    expect(check(result, 'test').next).toMatch(/^tests\/combat\.sim\.test\.ts is a sim, which no fast check runs/);
+  });
+
   // #995 ruling: spec writes a chunk's tests, so the steps before it (investigate, redteam, ask) need none of their own.
   it('passes a chunk with no test of its own while it has only reached the steps before spec, and fails it from spec on', async () => {
     const dir = await gameOnBranch(false);

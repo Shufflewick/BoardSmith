@@ -585,6 +585,17 @@ it('no bare asset <img>', () => { expect(scanAssetReachability(process.cwd())).t
     expect(findings[0].detail).toContain('build/test.md');
   });
 
+  // #1497: the mutation check's plain vitest run never collects a sim, so a sim row would cover its claims with a test nothing runs.
+  it('reports a sim listed in the Spec Manifest, and says to take the row out (#1497)', async () => {
+    await build(
+      { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/auction.sim.test.ts': DISPATCHES_BOTH },
+      '| tests/auction.test.ts | 1, 2 | yes |\n| tests/auction.sim.test.ts | 1, 2 | yes |\n',
+    );
+    const findings = (await checkTestStep(project, 'auction')).findings;
+    expect(findings.map((f) => `${f.kind} ${f.subject}`)).toEqual(['sim-in-manifest tests/auction.sim.test.ts']);
+    expect(findings[0].detail).toMatch(/boardsmith test --sims[^]*Remove the row/);
+  });
+
   it.skipIf(!existsSync(process.cwd().toUpperCase()))('reports a guard file the Spec Manifest names in other letter case (#1053)', async () => {
     await build(
       { 'src/rules/auction.ts': RULES, 'tests/auction.test.ts': DISPATCHES_BOTH, 'tests/guards/a11y-floor.test.ts': GUARD },
@@ -866,6 +877,15 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
       'design/chunks/auction/evidence/budget.test.ts': `import { bid } from '../../../../src/rules/auction';\nvoid bid;\n`,
       'tests/browser/flow.spec.ts': `import { bid } from '../../src/rules/auction';\nvoid bid;\n`,
       'dist/auction.test.js': `import { bid } from '../src/rules/auction.js';\nvoid bid;\n`,
+    });
+    expect(findings).toEqual([]);
+  });
+
+  // #1497: a plain vitest run, the mutation check's included, never collects a sim (#1494), so a sim is never a row.
+  it('accepts a new sim, which only boardsmith test --sims runs (#1497)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/auction.sim.test.ts': `import { simulateRandomGames } from 'boardsmith/testing';\nimport { bid } from '../src/rules/auction';\nvoid simulateRandomGames(bid);\n`,
     });
     expect(findings).toEqual([]);
   });

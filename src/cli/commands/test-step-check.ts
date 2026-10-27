@@ -19,8 +19,8 @@
  *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
  *   6. Every new test file the chunk wrote anywhere in the project that runs the game's code is a
  *      Spec Manifest row, so the mutation check runs it (#485). A file moved or rewritten from another
- *      counts as new. Exempt: files vitest never collects (the browser smoke test under
- *      `tests/browser/` among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
+ *      counts as new. Exempt: files a plain vitest run never collects (the browser smoke test under
+ *      `tests/browser/` and the sims among them), generated example tests (`tests/examples/<slug>.examples.test.ts`),
  *      measurement harnesses under `design/chunks/<slug>/evidence/`, guards (below), and earlier
  *      chunks' test files this chunk edits.
  *   7. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`). An exempt
@@ -77,6 +77,7 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'red-not-observed',
   'test-file-missing',
   'guard-in-manifest',
+  'sim-in-manifest',
   'guard-runs-code',
   'test-not-in-manifest',
   'claim-not-live',
@@ -436,6 +437,17 @@ async function manifestRowFindings(
       });
       continue;
     }
+    if (isSimFile(row.testFile)) {
+      findings.push({
+        kind: 'sim-in-manifest',
+        subject: row.testFile,
+        detail:
+          `The Spec Manifest lists ${row.testFile}, a sim. Only \`boardsmith test --sims\` runs a sim, so the mutation ` +
+          "check never runs it and nothing shows it can fail. Remove the row, and pin the claims it lists in the chunk's " +
+          'own test file (build/test.md item 4).',
+      });
+      continue;
+    }
     const red = redFinding(manifest, row);
     if (red) findings.push(red);
     const file = await readRowFile(projectDir, row);
@@ -562,20 +574,27 @@ const lines = (output: string) => output.split('\n').filter(Boolean);
 const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
+/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/index.js` (#1494). */
+const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
+
+export const isSimFile = (path: string) => SIM_FILE.test(path);
+
 /**
- * Where vitest never collects a test file in a game project: its own default exclusions, and two of
- * the three `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees under
- * `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs. The third,
- * `.worktrees/`, holds other git checkouts, whose files git does not list.
+ * Where a plain vitest run never collects a test file in a game project: its own default exclusions,
+ * and three of the four `defineGameViteConfig` adds (`src/vite-config/index.js`): the chunk worktrees
+ * under `.boardsmith/` and the browser tests under `tests/browser/`, which only Playwright runs, from
+ * its `exclude`, and the sims, from its `testClasses` plugin. The fourth, `.worktrees/`, holds other
+ * git checkouts, whose files git does not list.
  */
 const NOT_COLLECTED = Object.freeze([
   /(^|\/)(node_modules|dist|cypress)\//,
   /(^|\/)\.(idea|git|cache|output|temp)\//,
   /^\.boardsmith\//,
   /(^|\/)tests\/browser\//,
+  SIM_FILE,
 ]);
 
-/** A file vitest collects as a test, by its default pattern and the exclusions above. */
+/** A file a plain vitest run collects as a test, by its default pattern and the exclusions above. */
 export const isTestFile = (path: string) =>
   /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 

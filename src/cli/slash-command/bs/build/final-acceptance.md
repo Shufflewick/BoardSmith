@@ -218,8 +218,9 @@ still reported, e.g. "Deferred: none"):
 
 - **Shipped** — the ordered list of chunks/behaviors that reached `verified` (or
   `verified (user-waived)`), read from SKETCH.md's `## Ordered Chunk List`.
-- **Test count** — the accumulated automated-suite total (unit + sim/self-playtest) across every
-  chunk, as last reported by `build/test.md`'s own run.
+- **Test count** — the accumulated automated-suite total across every chunk, as last reported by
+  `build/test.md`'s own run. The sims (`*.sim.test.ts`), which run only under
+  `boardsmith test --sims`, are not in it.
 - **Deferred** — every item any chunk's `## Revision Rounds` disposed as "future scope," every
   `## Findings Ledger` entry disposed as "deferred," and every waived
   (`verified (user-waived)`) chunk, named by slug — the ideas-backlog the human still owns.
