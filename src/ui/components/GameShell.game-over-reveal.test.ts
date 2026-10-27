@@ -317,6 +317,17 @@ describe('the player can show a held result themselves', () => {
     expect(showResult(shell).exists()).toBe(false);
   });
 
+  it('is not offered again when a board hides its result after showing it (a replay of the final moment)', async () => {
+    const shown = ref(false);
+    const shell = await mountShell(boardHeldBy(shown));
+    await after(shell, complete);
+    await after(shell, () => { shown.value = true; });
+
+    await after(shell, () => { shown.value = false; });
+
+    expect(showResult(shell).exists()).toBe(false);
+  });
+
   it('is not offered when no board holds the ending', async () => {
     const shell = await mountShell(PlainBoard);
     await after(shell, complete);

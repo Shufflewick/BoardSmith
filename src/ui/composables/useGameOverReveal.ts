@@ -44,7 +44,7 @@ interface GameOverReveal {
   holds: GameOverHolds;
   /** True when the flow is complete and every hold's ending is shown, or the player showed the result. The one answer the card and the announcement read. */
   revealed: ComputedRef<boolean>;
-  /** True when the flow is complete and a hold still keeps the ending back. */
+  /** True when the flow is complete and a hold has kept the ending back since. */
   held: ComputedRef<boolean>;
   /** Reveal this game's result now, whatever the holds say. */
   showResult(): void;
@@ -64,9 +64,10 @@ export function createGameOverReveal(complete: () => boolean): GameOverReveal {
     },
   };
   const shownByPlayer = ref(false);
-  // A restart clears it, so the next game's holds hold again.
+  const shownOnce = ref(false);
+  // A restart clears both, so the next game's holds hold again.
   watch(complete, (done) => {
-    if (!done) shownByPlayer.value = false;
+    if (!done) shownByPlayer.value = shownOnce.value = false;
   });
   const revealed = computed(() => {
     if (!complete()) return false;
@@ -74,7 +75,12 @@ export function createGameOverReveal(complete: () => boolean): GameOverReveal {
     for (const shown of active) if (!shown()) return false;
     return true;
   });
-  const held = computed(() => complete() && !revealed.value);
+  // After render, like the announcement, so a hold that starts on the completing frame is in place first.
+  watch(revealed, (now) => {
+    if (now) shownOnce.value = true;
+  }, { flush: 'post' });
+  // Once shown, a board hiding its result again (a replay) is the board's choice, not a stuck hold.
+  const held = computed(() => complete() && !revealed.value && !shownOnce.value);
   return {
     holds,
     revealed,

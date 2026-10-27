@@ -1786,12 +1786,13 @@ defineExpose({
   text-align: center;
 }
 
-/* ── bot demo playback control bar ─────────────────────────────────────────── */
+/* ── Show result: releases a finished game's held ending ────────────────────── */
 .bsg-show-result {
   position: absolute;
   bottom: calc(var(--bsg-bar-clearance) + 12px);
   left: 50%;
   transform: translateX(-50%);
+  z-index: 34; /* above a game modal (z-32), which a stuck replay may hold open, as the demo bar is */
   min-height: 44px;
   padding: 0 18px;
   background: var(--bsg-surface-2);
@@ -1806,6 +1807,7 @@ defineExpose({
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
+/* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
   /* Sits one row-gap above the Action Panel's reserved footprint — the same
