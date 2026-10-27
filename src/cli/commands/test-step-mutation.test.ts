@@ -981,6 +981,22 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
   }, 60_000);
 
+  it("quotes the first line of each unhandled error when vitest fails with no failing test (#1491)", async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/stray.test.ts': `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('passes', () => {
+  Promise.reject(new Error('stray failure\\nsecond line'));
+  expect(bid(1, 2)).toBe(true);
+});
+`,
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['vitest exited with code 1 with no failing test, on an unhandled error: Error: stray failure']);
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
   it('names a test that fails without a test file that imports no changed file, since that file is left out of the run (#1496)', async () => {
     // tests/a.test.ts never imports src/rules.ts, so it is left out, and tests/b.test.ts fails for want of its setup.
     const project = await makeProject({

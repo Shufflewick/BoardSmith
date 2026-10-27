@@ -474,7 +474,7 @@ const reporter = {
     this.stopped = true;
     process.send({ type: 'boardsmith-mutant-failed' });
   },
-  onFinished(files = []) {
+  onFinished(files = [], errors = []) {
     if (this.refused) return;
     const report = files.map((file) => ({
       path: file.filepath,
@@ -493,7 +493,7 @@ const reporter = {
         };
       }),
     }));
-    writeReport({ files: report });
+    writeReport({ files: report, errors: errors.map((error) => [error?.name, String(error?.message ?? error).split('\\n')[0]].filter(Boolean).join(': ')) });
   },
 };
 
@@ -563,6 +563,8 @@ type RunResult =
       filesRun: Set<string>;
       /** Test files that failed as a whole, such as one that could not be imported. */
       failedFiles: FailedFile[];
+      /** The first line of each error vitest reported outside any test file, such as an unhandled rejection. */
+      unhandled: string[];
       exitCode: number | null;
       ms: number;
     }
@@ -671,7 +673,7 @@ function runVitest(
 }
 
 /** The run's report as the reporter wrote it; throws when vitest left none, or one cut short. */
-async function reportOnFile(reportPath: string): Promise<{ files: ReportedFile[] } | { refused: string }> {
+async function reportOnFile(reportPath: string): Promise<{ files: ReportedFile[]; errors: string[] } | { refused: string }> {
   const text = await readIfExists(reportPath, (p) => fs.readFile(p, 'utf-8'));
   try {
     if (text !== undefined) return JSON.parse(text);
@@ -693,7 +695,7 @@ async function readReport(
   reportPath: string,
   projectDir: string,
   pathOf: (realPath: string) => string | undefined,
-): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[] }> {
+): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[]; unhandled: string[] }> {
   const report = await reportOnFile(reportPath);
   if ('refused' in report) throw new Error(report.refused);
   const outcomes: Outcome[] = [];
@@ -716,7 +718,7 @@ async function readReport(
       });
     }
   }
-  return { outcomes, filesRun, failedFiles };
+  return { outcomes, filesRun, failedFiles, unhandled: report.errors.map((error) => error.replaceAll(projectDir + sep, '')) };
 }
 
 /** Writes the generated vitest config of a run and the modules it loads; returns the config's path. */
@@ -1331,7 +1333,9 @@ function suiteNoticed(result: RunResult & { kind: 'ran' }): boolean {
 function redParts(result: RunResult & { kind: 'ran' }): string[] {
   const red = [...result.outcomes.filter((o) => o.status === 'failed').map(testKey), ...result.failedFiles.map((f) => f.path)];
   if (red.length === 0 && result.exitCode !== 0) {
-    red.push(`vitest exited with code ${result.exitCode} with no failing test: look for "Unhandled Errors" in \`boardsmith test\``);
+    red.push(result.unhandled.length > 0
+      ? `vitest exited with code ${result.exitCode} with no failing test, on an unhandled error: ${result.unhandled.join('; ')}`
+      : `vitest exited with code ${result.exitCode} with no failing test: look for "Unhandled Errors" in \`boardsmith test\``);
   }
   return red;
 }
