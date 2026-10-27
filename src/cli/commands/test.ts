@@ -7,8 +7,8 @@ import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-
 import { requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
-import { gitOutput } from '../lib/git-output.js';
-import { SIM_FILE, TEST_FILE } from '../../vite-config/test-files.js';
+import { projectGitOutput } from '../lib/git-output.js';
+import { SIM_FILE } from '../../vite-config/test-files.js';
 
 /**
  * The vitest config of BoardSmith's browser regressions (`scripts/*-browser.mjs`), which
@@ -44,8 +44,8 @@ interface TestOptions {
  * vitest in the `sims` mode its config (`defineGameViteConfig`) reads (#1494).
  *
  * `--changed <base>` runs the unit tests related to what changed since the merge base with `<base>`,
- * never sims (#1502). A change with no related unit test passes only when every changed file is a
- * sim or a test file it deleted or renamed, and says so; any other file with no related test fails.
+ * never sims (#1502). A change with no related unit test fails when it changed a file under src/
+ * that is still there and is not a sim, and otherwise passes saying why each file needs none.
  *
  * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
  * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
@@ -107,18 +107,19 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
  */
 async function changedFiles(cwd: string, base: string): Promise<string[]> {
   const lists = await Promise.all([
-    gitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', `${base}...HEAD`]),
-    gitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', '--cached']),
-    gitOutput(cwd, ['ls-files', '--others', '--modified', '--exclude-standard']),
+    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', `${base}...HEAD`]),
+    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', '--cached']),
+    projectGitOutput(cwd, ['ls-files', '--others', '--modified', '--exclude-standard']),
   ]);
   return [...new Set(lists.flatMap((list) => list.split('\n').filter((file) => file !== '')))];
 }
 
-/** A run under `--changed` that ran no test: passes when only sims and removed test files changed, and fails naming the rest. */
+/** A run under `--changed` that ran no test: fails naming each changed file under src/ that is still there and not a sim, and otherwise passes saying why for each file. */
 function explainNoRelatedTests(cwd: string, changed: string[], base: string, options: TestOptions): void {
   const why = (file: string): string | undefined => {
+    if (!existsSync(join(cwd, file))) return 'deleted or renamed by this change';
     if (SIM_FILE.test(file)) return 'a sim, which runs only under `boardsmith test --sims`';
-    if (TEST_FILE.test(file) && !existsSync(join(cwd, file))) return 'a test file this change deleted or renamed';
+    if (!file.startsWith('src/')) return 'outside src/, so no unit test has to import it';
     return undefined;
   };
   const untested = changed.filter((file) => why(file) === undefined);
@@ -126,7 +127,7 @@ function explainNoRelatedTests(cwd: string, changed: string[], base: string, opt
     const files = changed.length === 0 ? ['  (nothing changed)'] : untested.map((file) => `  ${file}`);
     fail(
       [
-        `No unit test is related to this change since its merge base with ${base}. No unit test imports these changed files:`,
+        `No unit test is related to this change since its merge base with ${base}. No unit test imports these changed files under src/:`,
         ...files,
         'Add a unit test (*.test.ts, not *.sim.test.ts) that imports them.',
       ].join('\n'),
@@ -138,7 +139,7 @@ function explainNoRelatedTests(cwd: string, changed: string[], base: string, opt
     styleText(
       'green',
       [
-        `\nNo unit test is related to this change, and none needs to be. Every file it changed since its merge base with ${base} is a sim or a removed test:`,
+        `\nNo unit test is related to this change, and none needs to be. Every file it changed since its merge base with ${base} is a sim, removed, or outside src/:`,
         ...changed.map((file) => `  ${file}: ${why(file)}`),
         '',
       ].join('\n'),

@@ -92,8 +92,22 @@ describe('boardsmith test', () => {
     const run = await spawnCli(['test', '--changed', 'main'], project);
     expect(run.stdout).toContain('No unit test is related to this change, and none needs to be');
     expect(run.stdout).toContain('  tests/play.sim.test.ts: a sim, which runs only under `boardsmith test --sims`');
-    expect(run.stdout).toContain('  tests/play.test.ts: a test file this change deleted or renamed');
+    expect(run.stdout).toContain('  tests/play.test.ts: deleted or renamed by this change');
     expect(run.stdout).not.toContain('plays');
+    expect(run.code).toBe(0);
+  });
+
+  it('passes under --changed a change to files outside src/ and a deleted source file, and says why for each (#1502 review F1, F4)', async () => {
+    const project = await changedGame(
+      { 'README.md': '# Game\n', 'src/old.ts': 'export const old = 1;\n' },
+      async (project, git) => {
+        await fs.writeFile(join(project, 'README.md'), '# Game, again\n');
+        git('rm', '-q', 'src/old.ts');
+      },
+    );
+    const run = await spawnCli(['test', '--changed', 'main'], project);
+    expect(run.stdout).toContain('  README.md: outside src/, so no unit test has to import it');
+    expect(run.stdout).toContain('  src/old.ts: deleted or renamed by this change');
     expect(run.code).toBe(0);
   });
 
