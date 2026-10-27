@@ -13,7 +13,7 @@ Run the following as ONE numbered sequence immediately after `build` completes. 
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
 one. The type check is not a step of its own: it is part of the last step, `boardsmith verify
 --chunk <slug>`, which runs it with the chunk's tests and records the result. The whole suite, the
-build, `boardsmith validate`, the in-browser smoke test and `boardsmith verify`'s mutation check
+build, `boardsmith validate`, the in-browser smoke test and `boardsmith verify`'s verbs check
 run once, at publish, not per chunk. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
 error, what to fix) — never proceed past a failing step assuming a later step will "catch it
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
@@ -367,7 +367,7 @@ here.
    `.boardsmith/verify/<commit>.json`. A chunk that added or changed no test file fails it,
    unless its Spec Manifest marks it exempt (`build/spec.md` "Exemptions"), which passes on
    typecheck alone. The
-   full suite, build, validate, the smoke test and a mutation check run once, at publish, as
+   full suite, build, validate, the smoke test and the verbs check run once, at publish, as
    `boardsmith verify`; the full suite is the regression check that a chunk did not break an
    earlier chunk's tests. `boardsmith chunk-merge` runs only the merged chunk's fast checks on the
    combined tree, not the full suite. The smoke

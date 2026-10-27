@@ -119,7 +119,7 @@
      - Dispatched at: 2026-08-07T14:40:05Z
      - Finished at: 2026-08-07T14:52:47Z
      - Outcome: failed
-     - Detail: verify failed: mutation, 2 survivors in src/rules/trade.ts
+     - Detail: verify failed: test, 2 tests failed in tests/trade.test.ts
 
      ### Dispatch 4
      - Work: build

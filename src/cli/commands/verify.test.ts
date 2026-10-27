@@ -13,7 +13,7 @@ import { commitAll, git, writeFiles as write } from '../lib/verify-result.test-h
 import { plantOtherRuns } from '../lib/command-build-dirs.test-helper.js';
 import { check } from './verify-cli.test-helper.js';
 import { VERIFY_CHECKS, changedSince, resolveBase, runVerify } from './verify.js';
-import { repo, FEE_TEST, gameOnBranch, CHECKS, signoff } from './verify-fixture.test-helper.js';
+import { repo, gameOnBranch, CHECKS, signoff } from './verify-fixture.test-helper.js';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
 
@@ -174,13 +174,11 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['validate', true],
       ['smoke', true],
       ['verbs', true],
-      ['mutation', false],
     ]);
     const test = check(result, 'test');
     expect(test.summary).toBe('1 test failed in the full suite, in a file you did not change: tests/bid.test.ts.');
     expect(test.next).toBe('Run `boardsmith test` to see it.');
     expect(test.counts).toEqual({ files: 2, tests: 3, passed: 2, failed: 1, skipped: 0 });
-    expect(check(result, 'mutation').summary).toMatch(/not run.*full suite/i);
 
     const problem = await verifiedProblem(dir);
     expect(problem).toContain('test: 1 test failed in the full suite, in a file you did not change: tests/bid.test.ts.');
@@ -189,131 +187,29 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(git(dir, 'status', '--porcelain')).toBe('');
   });
 
-  it('passes once the whole suite is green and every changed line is caught, and the claim is accepted', async () => {
+  it('passes once the whole suite is green, and the claim is accepted', async () => {
     const dir = await gameOnBranch(false);
     const expectOtherRunsKept = plantOtherRuns(dir);
 
     const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
 
-    // Its suite and mutation runs each worked in a directory of their own, and removed only that (#544).
+    // Its suite run worked in a directory of its own, and removed only that (#544).
     expectOtherRunsKept();
     expect(result.checks.filter((c) => !c.passed)).toEqual([]);
     expect(result.passed).toBe(true);
     expect(check(result, 'test').counts).toEqual({ files: 2, tests: 3, passed: 3, failed: 0, skipped: 0 });
-    // `return price * 2`: return undefined, * -> /, 2 -> 3. The fee test catches each one.
-    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, unreached: 0, reused: 0 });
     expect(await verifiedProblem(dir)).toBeUndefined();
   });
 
-  it('reports each mutant of a changed line no test catches, by file and line', async () => {
+  it('passes on the main branch with no --base, since no check needs a change to measure (#1495)', async () => {
     const dir = await gameOnBranch(false);
-    await write(dir, { 'tests/fee.test.ts': FEE_TEST.replace('expect(fee(3)).toBe(6)', 'expect(typeof fee).toBe(\'function\')') });
-    commitAll(dir, 'chunk-deal/weaker test');
-
-    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
-
-    const mutation = check(result, 'mutation');
-    expect(mutation.passed).toBe(false);
-    expect(mutation.findings).toEqual([
-      { file: 'src/rules.ts', line: 5, detail: 'return value replaced with undefined: no test failed' },
-      { file: 'src/rules.ts', line: 5, detail: '* -> /: no test failed' },
-      { file: 'src/rules.ts', line: 5, detail: '2 -> 3: no test failed' },
-    ]);
-    expect(mutation.next).toMatch(/test.*fails.*boardsmith verify/s);
-  });
-
-  it('ignores a leftover design/MUTATION-EQUIVALENCES.json: the survivor it lists still fails (#1493)', async () => {
-    const dir = await gameOnBranch(false);
-    const ledger = { format: 1, entries: [{
-      id: 'a'.repeat(64), file: 'src/rules.ts', line: 5, description: '* -> /',
-      originalSourceHash: 'b'.repeat(64), mutantSourceHash: 'c'.repeat(64),
-      contract: 'Any price.', proof: 'Doubling and halving agree.', change: { offset: 0, before: '*', after: '/' },
-    }] };
-    await write(dir, {
-      'tests/fee.test.ts': FEE_TEST.replace('expect(fee(3)).toBe(6)', 'expect(typeof fee).toBe(\'function\')'),
-      'design/MUTATION-EQUIVALENCES.json': JSON.stringify(ledger),
-    });
-    commitAll(dir, 'chunk-deal/weaker test and a leftover ledger');
-
-    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
-
-    expect(check(result, 'mutation')).toMatchObject({
-      passed: false,
-      findings: expect.arrayContaining([{ file: 'src/rules.ts', line: 5, detail: '* -> /: no test failed' }]),
-    });
-  });
-
-  it('reports each mutant in a file no test loads, neither killed nor survived (#981)', async () => {
-    const dir = await gameOnBranch(false);
-    await write(dir, { 'src/unused.ts': 'export function same(n: number): number {\n  return n;\n}\n' });
-    commitAll(dir, 'chunk-deal/a module no test loads');
-
-    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
-
-    const mutation = check(result, 'mutation');
-    expect(mutation.passed).toBe(false);
-    expect(mutation.counts).toMatchObject({ mutants: 4, killed: 3, survived: 0, unreached: 1 });
-    expect(mutation.findings).toEqual([
-      { file: 'src/unused.ts', line: 2, detail: 'return value replaced with undefined: no test loads src/unused.ts' },
-    ]);
-    expect(mutation.summary).toMatch(/1 of 4 mutants .* in a file no test loads/);
-    expect(mutation.next).toMatch(/test that imports/);
-  });
-
-  it('runs mutants side by side within the budget boardsmith.json sets (#955)', async () => {
-    const dir = await gameOnBranch(false);
-    await write(dir, { 'boardsmith.json': JSON.stringify({ name: 'fixture', backend: 'table', mutation: { trials: 2, workers: 2 } }) });
-    commitAll(dir, 'chunk-deal/mutation budget');
-    const lines: string[] = [];
-
-    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
-
-    expect(check(result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, survived: 0 });
-    expect(lines).toContain('Running 2 mutants at a time, each with 1 test worker, of a budget of 2.');
-  });
-
-  it('fails the mutation check, saying what to write, when the budget in boardsmith.json is wrong (#955)', async () => {
-    const dir = await gameOnBranch(false);
-    await write(dir, { 'boardsmith.json': JSON.stringify({ name: 'fixture', backend: 'table', mutation: { trials: 3, workers: 1 } }) });
-    commitAll(dir, 'chunk-deal/mutation budget');
-
-    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
-
-    expect(check(result, 'mutation').passed).toBe(false);
-    expect(check(result, 'mutation').summary).toMatch(/"mutation.workers" \(1\) must be at least "mutation.trials" \(3\)/);
-  });
-
-  it('fails the mutation check on the main branch with no --base, rather than passing with nothing covered', async () => {
-    const dir = await gameOnBranch(false);
-    const started = git(dir, 'rev-parse', 'main').trim();
     git(dir, 'checkout', '-q', 'main');
     git(dir, 'merge', '-q', '--ff-only', 'chunk/deal');
 
     const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
 
-    expect(result.passed).toBe(false);
-    expect(result.checks.map((c) => [c.name, c.passed])).toEqual([
-      ['test', true],
-      ['typecheck', true],
-      ['build', true],
-      ['validate', true],
-      ['smoke', true],
-      ['verbs', true],
-      ['mutation', false],
-    ]);
-    const mutation = check(result, 'mutation');
-    expect(mutation.summary).toMatch(/merge base with main is the current commit.*nothing/s);
-    expect(mutation.next).toMatch(/--base <commit the work started from>/);
-
-    const { result: based } = await runVerify({ projectDir: dir, base: started, checks: CHECKS, log: () => {} });
-    expect(based.passed).toBe(true);
-    expect(check(based, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3 });
-    // Asked for by name, a base at HEAD is a statement that nothing is being changed (the one-time
-    // gate transition builds nothing), and the result records it.
-    const { result: nothing } = await runVerify({ projectDir: dir, base: 'HEAD', checks: CHECKS, log: () => {} });
-    expect(nothing.passed).toBe(true);
-    expect(nothing.base.ref).toBe('HEAD');
-    expect(check(nothing, 'mutation').summary).toMatch(/^No code under src\/ changed since HEAD/);
+    expect(result.base).toEqual({ ref: 'main', commit: git(dir, 'rev-parse', 'HEAD').trim() });
+    expect(result.passed).toBe(true);
   });
 });
 

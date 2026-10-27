@@ -8,7 +8,6 @@ import { promises as fs, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { mutantCachePath } from '../lib/mutant-cache.js';
 import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { check } from './verify-cli.test-helper.js';
@@ -23,13 +22,13 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     const { ran, checks } = countingChecks();
     const { result: earlier } = await runVerify({ projectDir: dir, checks, log: () => {} });
     expect(earlier.passed).toBe(true);
-    expect(ran).toHaveLength(7);
+    expect(ran).toHaveLength(6);
 
     await write(dir, { 'notes.md': 'uncommitted\n' });
     await expect(runVerify({ projectDir: dir, checks, log: () => {} })).rejects.toThrow(
       /uncommitted changes.*Commit.*then run `boardsmith verify`/s,
     );
-    expect(ran).toHaveLength(7);
+    expect(ran).toHaveLength(6);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
     expect(await readVerifyResult(dir, head)).toEqual(earlier);
   });
@@ -115,64 +114,4 @@ describe('boardsmith verify: a run counts only when what the tests run with stay
     await expect(refusal).rejects.toThrow(/no result was recorded.*Run `boardsmith verify` again/s);
     expect(await readVerifyResult(dir, head)).toBeUndefined();
   });
-
-  /** A game on its branch with a package `dep` linked from outside the repository, at `rate = 2`. */
-  async function gameWithLinkedDep(): Promise<{ dir: string; dep: string }> {
-    const dir = await gameOnBranch(false);
-    const dep = join(dirname(dir), 'dep');
-    await write(dep, { 'index.js': 'export const rate = 2;\n' });
-    await fs.mkdir(join(dirname(dir), 'node_modules'));
-    await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
-    return { dir, dep };
-  }
-
-  const savedOutcomes = async (dir: string) =>
-    (JSON.parse(await fs.readFile(await mutantCachePath(dir), 'utf-8')) as { outcomes: unknown[] }).outcomes;
-
-  it('stops before the next mutant once a linked package changes, keeping only the outcome found before the change (#940)', async () => {
-    const { dir, dep } = await gameWithLinkedDep();
-    const head = git(dir, 'rev-parse', 'HEAD').trim();
-    const lines: string[] = [];
-    const log = (line: string) => {
-      lines.push(line);
-      if (line.startsWith('mutant 2/')) writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
-    };
-    await expect(runVerify({ projectDir: dir, checks: CHECKS, log })).rejects.toThrow(/the packages linked from outside the repository/);
-    expect(lines.filter((l) => /^mutant \d+\/\d+: /.test(l))).toHaveLength(2);
-    expect(await readVerifyResult(dir, head)).toBeUndefined();
-    expect(await savedOutcomes(dir)).toHaveLength(1);
-  });
-
-  for (const changesBack of [false, true]) {
-    it(`keeps no outcome of a mutant during whose run a linked package changed${changesBack ? ', even once it changes back' : ''} (#940)`, async () => {
-      const { dir, dep } = await gameWithLinkedDep();
-      const head = git(dir, 'rev-parse', 'HEAD').trim();
-      let step: 'before' | 'labelled' | 'changed' | 'done' = 'before';
-      const log = (line: string) => { if (line.startsWith('mutant 2/')) step = 'labelled'; };
-      const checks = {
-        ...CHECKS,
-        // The package changes just after mutant 2's own check found it unchanged, so it changes while mutant 2 runs.
-        mutation: (ctx: Parameters<typeof CHECKS.mutation>[0]) => CHECKS.mutation({ ...ctx, contextChange: async () => {
-          const change = await ctx.contextChange();
-          if (step === 'labelled') {
-            writeFileSync(join(dep, 'index.js'), 'export const rate = 3;\n');
-            step = 'changed';
-          } else if (step === 'changed' && changesBack) {
-            writeFileSync(join(dep, 'index.js'), 'export const rate = 2;\n');
-            step = 'done';
-          }
-          return change;
-        } }),
-      };
-      const run = runVerify({ projectDir: dir, checks, log });
-      if (changesBack) {
-        const { result } = await run;
-        expect(check(result, 'mutation').passed).toBe(false);
-      } else {
-        await expect(run).rejects.toThrow(/the packages linked from outside the repository/);
-        expect(await readVerifyResult(dir, head)).toBeUndefined();
-      }
-      expect(await savedOutcomes(dir)).toHaveLength(1);
-    });
-  }
 });

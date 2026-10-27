@@ -110,7 +110,7 @@ is cheap.
   change (below), and goes back with verify's own output, never to a reviewer.
 - **Open:** it prints `Review level: <none | light | full>` and then the verify brief: that only
   the fast checks ran (the chunk's tests and typecheck), each one's outcome, the result file, the
-  change under review, that the full suite, build, validate, the smoke test and the mutation check
+  change under review, that the full suite, build, validate, the smoke test and the verbs check
   run at publish, and not to run any of them. Every review prompt carries that brief verbatim in its
   `{verifyResult}` slot, and lists only judgement checks.
 

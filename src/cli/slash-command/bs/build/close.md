@@ -183,7 +183,7 @@ file. It runs before the chunk-complete line, which is a claim of done, and befo
    Protocol"). `git status --porcelain` must then print nothing.
 2. Run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
    measures from). It runs the chunk's fast checks again for this commit: its tests and
-   typecheck. The full suite, build, validate, the smoke test and the mutation check run once, at
+   typecheck. The full suite, build, validate, the smoke test and the verbs check run once, at
    publish, not at close.
 3. Run `npx boardsmith verify --check --chunk <slug>`. It is the last command close runs, and
    nothing is written or committed after it, so the commit it accepted is the commit the chunk is

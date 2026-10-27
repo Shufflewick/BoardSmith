@@ -387,13 +387,11 @@ even in a file the branch renamed, does not.
   fast checks and chunk-merge, naming the commit and file (#1201). Only commits not yet pushed to
   any remote are checked, since those are the ones still safe to rewrite; in a repository with no
   remote every commit is checked. The full checks (the whole suite, build, validate,
-  the smoke test and the mutation check) run once, before the game is published
+  the smoke test and the verbs check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 
-  Never run a bare `boardsmith verify` for chunk work. It runs the full checks, and its default
-  base is the merge base with the main branch: a chunk built in the main checkout is on the main
-  branch, where that merge base is the current commit, so no change is measured and the mutation
-  check fails. When `--chunk <slug>` says the chunk has no commit yet, commit its work under the
+  Never run a bare `boardsmith verify` for chunk work. It runs the full checks, which no chunk
+  gate accepts. When `--chunk <slug>` says the chunk has no commit yet, commit its work under the
   `chunk-<slug>/step-<name>` convention first. `chunk-signoff <slug>`, `review-gate <slug>` and
   `verify --check --chunk <slug>` accept only the result `verify --chunk <slug>` made for that
   chunk, so a full result, such as a `npx boardsmith verify --base HEAD` run, satisfies no chunk's

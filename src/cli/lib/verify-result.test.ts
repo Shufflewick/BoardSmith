@@ -92,16 +92,16 @@ describe('resultProblem: which results vouch for HEAD', () => {
 
   it('refuses a result that is missing a check this BoardSmith requires', () => {
     const r = result();
-    r.checks = r.checks.filter((c) => c.name !== 'mutation');
-    expect(resultProblem(r, HEAD)).toMatch(/mutation.*boardsmith verify/s);
+    r.checks = r.checks.filter((c) => c.name !== 'verbs');
+    expect(resultProblem(r, HEAD)).toMatch(/verbs.*boardsmith verify/s);
   });
 
   it('refuses a result in a format this BoardSmith does not read', () => {
     expect(resultProblem({ ...result(), format: 0 } as unknown as VerifyResult, HEAD)).toMatch(/boardsmith verify/);
   });
 
-  it('refuses a format 1 result, which could pass with a surviving mutant (#1493)', () => {
-    expect(resultProblem({ ...result(), format: 1 } as unknown as VerifyResult, HEAD)).toMatch(/different version.*boardsmith verify/s);
+  it('refuses a format 2 result, whose build recorded no bundle for publish (#1495)', () => {
+    expect(resultProblem({ ...result(), format: 2 } as unknown as VerifyResult, HEAD)).toMatch(/different version.*boardsmith verify/s);
   });
 });
 

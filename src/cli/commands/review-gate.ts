@@ -141,7 +141,7 @@ function reviewBrief(projectDir: string, slug: string, result: VerifyResult, fro
     ...result.checks.map((check) => `- ${check.name}: ${check.summary}`),
     `The change under review: \`git diff ${short(from)}..${short(result.commit)}\`.`,
     "Only the fast checks have run: the chunk's tests and typecheck. The full suite, build, validate, the smoke test " +
-      'and the mutation check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do ' +
+      'and the verbs check run at publish, not per chunk. Do not run any of them, or the fast checks again, and do ' +
       'not break code to see whether a test notices. Your review is the judgement checks listed in this prompt, and ' +
       'nothing a script can check.',
   ].join('\n');

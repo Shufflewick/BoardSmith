@@ -17,7 +17,7 @@ vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
 /**
  * `--chunk <slug>` runs only the fast checks (#985): the test files the chunk added or changed since
  * its verify base, the commit before its first `chunk-<slug>/` commit, and typecheck. The full
- * suite, build, validate, smoke and mutation checks run at publish. A chunk's gates take only such
+ * suite, build, validate, smoke and verbs checks run at publish. A chunk's gates take only such
  * a result, and nothing else takes it.
  */
 describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
@@ -37,23 +37,6 @@ describe('boardsmith verify --chunk <slug>: the chunk\'s fast checks', () => {
     expect(check(result, 'test').counts).toEqual({ files: 1, tests: 1, passed: 1, failed: 0, skipped: 0 });
     expect(check(result, 'test').summary).toBe('1 test passed in 1 file the chunk added or changed.');
     await expect(signoff(dir)).resolves.toMatchObject({ basis: 'designer' });
-  });
-
-  it('opens no mutant cache, since it runs no mutation check', async () => {
-    const dir = await gameOnBranch(false);
-    // A linked package the cache cannot read makes opening the cache say so (#484).
-    const dep = join(dirname(dir), 'dep');
-    await write(dep, { 'index.js': 'export const rate = 2;\n', 'secret/x.js': 'export {};\n' });
-    await fs.mkdir(join(dirname(dir), 'node_modules'));
-    await fs.symlink(dep, join(dirname(dir), 'node_modules', 'dep'), 'dir');
-    await fs.chmod(join(dep, 'secret'), 0o000);
-    const lines: string[] = [];
-    try {
-      await runVerify({ projectDir: dir, chunk: 'deal', log: (l) => lines.push(l) });
-    } finally {
-      await fs.chmod(join(dep, 'secret'), 0o755);
-    }
-    expect(lines.filter((l) => /mutant cache/.test(l))).toEqual([]);
   });
 
   it('fails a test the chunk changed, saying it is the chunk\'s', async () => {

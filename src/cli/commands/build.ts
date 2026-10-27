@@ -422,12 +422,12 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
 /**
  * Builds the project in `projectDir`. Throws, with a message saying what to fix, when it cannot, so
- * a caller (`publish`, `verify`) stops there and the CLI exits non-zero.
+ * the CLI exits non-zero.
  *
  * Leaves `process.env` as it found it. Vite sets NODE_ENV (to `production` when it is unset) and
- * copies keys from the project's `.env` files into it, and never puts them back; `verify` runs
- * this in its own process and then starts `boardsmith dev`, Playwright and vitest with that
- * environment (#532).
+ * copies keys from the project's `.env` files into it, and never puts them back, so a test that
+ * builds in its own process would start every later process with that environment (#532). `verify`
+ * runs `boardsmith build` as a child process, so its other checks never see it (#1495).
  */
 export async function buildProject(projectDir: string, options: BuildOptions): Promise<void> {
   const envBefore = { ...process.env };
