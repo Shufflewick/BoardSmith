@@ -284,6 +284,10 @@ putting it to the designer the way `build/ask.md` puts an open question. Their a
 growing structure through: `boardsmith chunk-signoff` runs the same check and refuses to sign
 the chunk off while it fails, so an uncapped structure cannot reach `verified`.
 
+The measurement test is a unit test, never a sim (`*.sim.test.ts`, `build/test.md` item 4): no
+gate runs a sim, so `boardsmith constraint-check` refuses one. A whole-match budget run stays a
+sim; the measurement builds the structure full at its cap directly and checks the budget.
+
 The measurement test lives in the Spec Manifest and is
 mutation-tested like the chunk's other tests. Write it before the cap and run it red (the
 structure overruns the budget), then add the cap. In a new test file it is a new Spec Manifest

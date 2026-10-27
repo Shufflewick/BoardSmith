@@ -21,7 +21,8 @@
        are ignored).
      - Source: the file it is quoted from, relative to the project root (usually CLAUDE.md).
      - Kind: measured (a test proves it) or reviewed (the constraints lens judges it).
-     - Test: for measured, the test file that proves it, relative to the project root.
+     - Test: for measured, the test file that proves it, relative to the project root. A
+       unit test, never a sim (*.sim.test.ts), which no gate runs.
 
      ### C1
      - Quote: A partition is refused past 512 KiB, in UTF-8 bytes, at genesis and at every checkpoint.
@@ -40,7 +41,9 @@
      - Cap: <CONSTANT> in <file>: the constant the code enforces, and the file enforcing it.
      - Measured by: the test that fills the structure to that cap at the declared maximum
        population (every per-seat list full) and checks the size budget. It must use the
-       cap constant, so the measurement is tied to the cap the code enforces.
+       cap constant, so the measurement is tied to the cap the code enforces. A unit test,
+       never a sim (*.sim.test.ts): keep a whole-match budget run as a sim and measure the
+       cap with a smaller test that builds the full structure directly.
      - Ruling: instead of Cap, "Ruling <n>": a RULINGS.md ruling where the designer
        allowed it to grow without a cap.
 

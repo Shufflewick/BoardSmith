@@ -286,6 +286,22 @@ describe('measured constraints run as code', () => {
     expect((await checkConstraints(project, { runTests: passingRunner })).refusals).toEqual([]);
   });
 
+  it('refuses a measurement named as a sim, which no constraint run includes (#1501)', async () => {
+    const refusals = await refusalsFor({
+      'CLAUDE.md': CLAUDE_MD,
+      'tests/world-budget.sim.test.ts': 'test\n',
+      'tests/mail-budget.sim.test.ts': 'MAILBOX_CAP\n',
+      'src/rules/mail.ts': 'export const MAILBOX_CAP = 20;\n',
+      'design/CONSTRAINTS.md': ledger(
+        `${C1.replace('world-budget.test.ts', 'world-budget.sim.test.ts')}\n\n${C2}\n`,
+        `${MAIL}\n- Cap: MAILBOX_CAP in src/rules/mail.ts\n- Measured by: tests/mail-budget.sim.test.ts\n`,
+      ),
+    });
+    expect(refusals).toHaveLength(2);
+    expect(refusals[0]).toMatch(/C1 is measured by tests\/world-budget\.sim\.test\.ts, a sim\. A measurement must be a unit test/);
+    expect(refusals[1]).toMatch(/G1 .* is measured by tests\/mail-budget\.sim\.test\.ts, a sim\. A measurement must be a unit test/);
+  });
+
   it('refuses a constraint whose test file did not run, or a run that cannot say which ran (#821)', async () => {
     const project = await makeProject({
       'CLAUDE.md': CLAUDE_MD,

@@ -19,6 +19,7 @@ import { escapeRegExp } from '../../utils/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { SIM_FILE } from '../../vite-config/test-files.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -194,12 +195,23 @@ function quoteRefusal(c: HardConstraint, source: string | undefined): string | u
   return `${c.id}'s quote "${c.quote}" is not in ${c.source}. Copy the constraint's exact words from ${c.source}.`;
 }
 
+/** A sim runs only on request (#1494), so a measurement named as one would never run in a gate (#1501). */
+function simMeasurementRefusal(name: string, file: string): string | undefined {
+  if (!SIM_FILE.test(file)) return undefined;
+  return (
+    `${name} is measured by ${file}, a sim. A measurement must be a unit test: keep the budget run as a sim ` +
+    'and measure the cap with a smaller test.'
+  );
+}
+
 async function kindRefusal(projectDir: string, c: HardConstraint): Promise<string | undefined> {
   if (c.kind === 'reviewed') return undefined;
   if (c.kind !== 'measured') {
     return `${c.id} has Kind "${c.kind}". Use "measured" (a test proves it) or "reviewed" (the constraints lens judges it).`;
   }
   if (!c.test) return `${c.id} is measured but names no "- Test:". Name the test file that proves it.`;
+  const sim = simMeasurementRefusal(c.id, c.test);
+  if (sim) return sim;
   if ((await readOptional(join(projectDir, c.test))) !== undefined) return undefined;
   return `${c.id} is measured by ${c.test}, which does not exist. Write the test, or fix the path.`;
 }
@@ -271,6 +283,8 @@ async function capRefusals(projectDir: string, g: GrowingStructure, name: string
     );
     return refusals;
   }
+  const sim = simMeasurementRefusal(name, g.measuredBy);
+  if (sim) return [...refusals, sim];
   const measured = await fileMentions(projectDir, g.measuredBy, identifier);
   if (measured === undefined) {
     refusals.push(`${name} is measured by ${g.measuredBy}, which does not exist. Write the test, or fix the path.`);
