@@ -137,6 +137,17 @@ describe('runDiffMutationCheck runs its mutants side by side (#955, #1496)', () 
     }
   });
 
+  it('shares the workers among the mutants that run when the budget allows more trials than there are mutants (#1496 review F2)', async () => {
+    try {
+      const dir = await project(3);
+      const logged: string[] = [];
+      await check(dir, { trials: 6, workers: 6 }, (line) => logged.push(line));
+      expect(logged).toContain('Running 3 mutants at a time, each with 2 test workers, of a budget of 6.');
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('runs every sampled mutant at once with no budget (#1496)', async () => {
     try {
       const dir = await project(3);

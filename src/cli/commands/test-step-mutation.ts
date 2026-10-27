@@ -1370,10 +1370,11 @@ interface GreenRunner {
 /**
  * Runs the test files that import a file of `mutants` once unmutated, recording which project files
  * each loads (`test-step-reach.ts`). Only those test files: they are the ones a mutant can change,
- * and the whole suite was most of the time a few mutants took. Returns the runner when they passed;
- * otherwise names what failed, since a mutant proves nothing on a red run.
+ * and the whole suite was most of the time a few mutants took. Returns the runner, with its share of
+ * the workers for each of `trials` mutants run at once, when they passed; otherwise names what
+ * failed, since a mutant proves nothing on a red run.
  */
-async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedMutant[], log: (line: string) => void, budget?: MutationBudget): Promise<GreenRunner | { notGreen: string[] }> {
+async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedMutant[], trials: number, log: (line: string) => void, budget?: MutationBudget): Promise<GreenRunner | { notGreen: string[] }> {
   const reachDir = join(runner.workDir, 'reach');
   await fs.mkdir(reachDir);
   const scope = { related: [...new Set(mutants.map((m) => m.file))] };
@@ -1384,7 +1385,6 @@ async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedM
   if (unrecorded.length > 0) {
     log(`${unrecorded.length} of ${baseline.filesRun.size} test files count as loading every file, since what they load could not be told apart: ${unrecorded.join(', ')}`);
   }
-  const trials = budget?.trials ?? mutants.length;
   // A trial has 1/trials of the workers the baseline had.
   const workers = budget && Math.floor(budget.workers / trials);
   return { runner, scope, timeoutMs: Math.max(30_000, baseline.ms * 10 * trials), workers, testsLoading };
@@ -1466,7 +1466,7 @@ export async function runDiffMutationCheck(
       await fs.mkdir(trialDir);
       runners.push(await createRunner(projectDir, [], trialDir));
     }
-    const started = await greenRunner(runners[0], projectDir, mutants, input.log, input.budget);
+    const started = await greenRunner(runners[0], projectDir, mutants, trials, input.log, input.budget);
     if ('notGreen' in started) return { summary, survivors: [], unreached: [], notGreen: started.notGreen };
     const share = started.workers === undefined ? '' : `, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget!.workers}`;
     input.log(`Running ${trials} mutant${trials === 1 ? '' : 's'} at a time${share}.`);
