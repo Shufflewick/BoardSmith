@@ -229,6 +229,7 @@ boardsmith dev --no-open
 boardsmith test           # Run once
 boardsmith test --watch   # Watch mode
 boardsmith test --sims    # Run only the sims
+boardsmith test --changed main   # Run only the unit tests related to your change
 ```
 
 A test file's name sets its class, and the class sets where it runs:
@@ -249,6 +250,11 @@ or `replayRandomGame` from `boardsmith/testing`, `playGame` from
 `boardsmith/sim`, `createBot` or `MCTSBot` from `boardsmith/bot`, or
 `benchmarkBot` or `WeightEvolver` from `boardsmith/bot-trainer`) fails when it
 loads, with a message telling you to rename it to `.sim.test.ts`.
+
+`boardsmith test --changed <base>` runs the unit tests that import something
+changed since the merge base with `<base>`. A change with no such test passes
+only when it touches nothing but sims and deleted or renamed test files, and it
+lists those files and why; any other changed file with no unit test fails it.
 
 #### Showing the tests of a change can fail: `boardsmith mutate`
 
