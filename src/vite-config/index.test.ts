@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { configDefaults } from 'vitest/config';
 import { defineGameViteConfig, testClasses } from './index.js';
+import { VITEST_EXCLUDES } from './test-files.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { commitAll, git, initRepo } from '../cli/lib/verify-result.test-helper.js';
@@ -35,6 +36,10 @@ describe('defineGameViteConfig', () => {
     expect(config.plugins?.flat().map((p) => (p && typeof p === 'object' && 'name' in p ? p.name : p))).toEqual(['vite:vue', 'boardsmith:rerun-triggers', 'boardsmith:test-classes']);
     expect(config.resolve?.dedupe).toEqual(['vue']);
     expect(config.test?.exclude).toEqual([...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**']);
+  });
+
+  it("copies vitest's default excludes for the CLI, which does not load vitest", () => {
+    expect(VITEST_EXCLUDES).toEqual(configDefaults.exclude);
   });
 
   it("anchors the rerun triggers at the project root, not a test root inside it (#1307)", () => {

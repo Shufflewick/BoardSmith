@@ -2,7 +2,7 @@ import { relative, resolve, sep } from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import { parseAst } from 'vite';
 import { configDefaults, mergeConfig } from 'vitest/config';
-import { SIM_FILE, SIM_FILES, TEST_FILE } from './test-files.js';
+import { GAME_EXCLUDES, SIM_FILE, SIM_FILES, TEST_FILE } from './test-files.js';
 
 /**
  * A game's whole vite and vitest config. A game's `vite.config.ts` is
@@ -45,7 +45,7 @@ export function defineGameViteConfig(overrides = {}) {
       plugins: [vue(), rerunTriggers(), testClasses()],
       resolve: { dedupe: ['vue'] },
       test: {
-        exclude: [...configDefaults.exclude, '.boardsmith/**', '.worktrees/**', '**/tests/browser/**'],
+        exclude: [...configDefaults.exclude, ...GAME_EXCLUDES],
       },
     },
     overrides,
