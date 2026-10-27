@@ -48,7 +48,7 @@ import { promisify, styleText } from 'node:util';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { chunkBeforeSpec, chunkVerifyBase, commitName, preSpecCodeChanges } from '../lib/chunk-commits.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
-import { captureExecutionContext, executionContextChange } from '../lib/mutant-cache.js';
+import { captureExecutionContext, executionContextChange } from '../lib/execution-context.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
 import { chunkMdPath } from '../lib/project-paths.js';
@@ -149,7 +149,7 @@ function addedLines(diff: string): Set<number> {
 
 /**
  * What the working tree changes relative to `baseCommit`: committed since, staged, unstaged and
- * untracked. `code` holds only the files `isChunkCode` accepts, the ones a mutant breaks (`runDiffMutationCheck`).
+ * untracked. `code` holds only the files `isChunkCode` accepts, the ones `boardsmith mutate` breaks.
  * Every path is relative to the project, and only the project's files count, so a game in a
  * subfolder of its repository is measured the same as one at the top.
  */

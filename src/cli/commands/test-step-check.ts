@@ -202,7 +202,7 @@ const isImplementation = (path: string) =>
   path.startsWith('src/') && IMPLEMENTATION_FILE.test(path) && !/\.(test|spec)\.[a-z]+$/.test(path);
 /**
  * Code a chunk writes: a script file, or a Vue component whose script and template are code too (#425).
- * `boardsmith verify` mutates the same kind of file.
+ * `boardsmith mutate` mutates the same kind of file.
  */
 export const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
 

@@ -1,11 +1,11 @@
 /**
- * The "mutation" block of boardsmith.json (#955): how many mutation trials `boardsmith verify` runs
- * at once, and the total Vitest workers they share.
+ * The "mutation" block of boardsmith.json (#955): an override of how many mutants `boardsmith mutate`
+ * runs at once, and the total Vitest workers they share.
  *
  *   "mutation": { "trials": 2, "workers": 8 }
  *
- * The unmutated baseline runs with all `workers`; each trial with `workers / trials`, rounded down.
- * With no block, trials run one at a time and Vitest picks its own worker count, as before.
+ * The unmutated run gets all `workers`; each trial `workers / trials`, rounded down. With no block,
+ * every sampled mutant runs at once and each Vitest picks its own worker count (#1496).
  */
 
 export interface MutationBudget {

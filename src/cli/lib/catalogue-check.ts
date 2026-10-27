@@ -49,7 +49,7 @@ import { cpus, homedir, tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
-import { uncommittedContentHash } from './mutant-cache.js';
+import { uncommittedContentHash } from './execution-context.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
 import { readIfExists, readIfExistsSync } from './read-if-exists.js';
 
