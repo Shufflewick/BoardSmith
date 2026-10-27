@@ -70,6 +70,7 @@ import { blameHeader, gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { mayBeSameOrInside } from '../lib/path-inside.js';
+import { SIM_FILE, TEST_FILE } from '../../vite-config/test-files.js';
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -574,9 +575,7 @@ const lines = (output: string) => output.split('\n').filter(Boolean);
 const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
 
-/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/index.js` (#1494). */
-const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
-
+/** A sim (`*.sim.test.ts`), which only `boardsmith test --sims` runs: `SIM_FILE` in `src/vite-config/test-files.js` (#1494, #1506). */
 export const isSimFile = (path: string) => SIM_FILE.test(path);
 
 /**
@@ -596,7 +595,7 @@ const NOT_COLLECTED = Object.freeze([
 
 /** A file a plain vitest run collects as a test, by its default pattern and the exclusions above. */
 export const isTestFile = (path: string) =>
-  /\.(test|spec)\.[cm]?[jt]sx?$/.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
+  TEST_FILE.test(path) && !NOT_COLLECTED.some((excluded) => excluded.test(path));
 
 /** Every script in the project outside `node_modules/`, with its text. */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {

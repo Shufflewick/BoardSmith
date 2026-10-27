@@ -1,6 +1,7 @@
 /**
  * A game's test classes by file name (#1494), the one copy of the rule: `index.js` sorts vitest's
- * runs by it, and `boardsmith test --changed` explains a change with no unit test by it (#1502).
+ * runs by it, `boardsmith test --changed` explains a change with no unit test by it (#1502), and
+ * `test-step-check` sorts a chunk's changed files by it, for itself and `boardsmith verify` (#1506).
  * A module of its own, importing nothing, so the CLI can read it without loading vite.
  */
 
