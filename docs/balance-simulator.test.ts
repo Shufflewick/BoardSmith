@@ -68,7 +68,8 @@ for (const step of steps) {
       // The a11y example runs axe-core, which this checkout does not install (see smokeProject).
       rmSync(join(project, 'tests/a11y.example.test.ts'), { force: true });
       typecheck = await spawnCli(['typecheck'], project);
-      projectTests = await spawnCli(['test'], project);
+      // The page deletes the scaffold's unit test, so its one test left is the greedy sim (#1494).
+      projectTests = await spawnCli(['test', '--sims'], project);
     } else {
       throw new Error(`docs/balance-simulator.md runs "${line}", which this test does not know how to run.`);
     }
@@ -146,7 +147,7 @@ describe('docs/balance-simulator.md, run block by block (#556)', () => {
     expect(merchantRate(simulates[3])).toBeGreaterThan(merchantRate(simulates[0]) + 0.1);
   });
 
-  it('becomes a playable game with add-ui, unchanged rules type-checking and passing their tests', () => {
+  it('becomes a playable game with add-ui, unchanged rules type-checking and passing their sim', () => {
     expect(addUi?.stderr).toBe('');
     expect(addUi?.code).toBe(0);
     expect(`${typecheck?.stdout}${typecheck?.stderr}`).not.toMatch(/error TS/);
