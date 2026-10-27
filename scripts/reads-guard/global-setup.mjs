@@ -7,8 +7,8 @@
  * the suite holds it. That is how #1496 and #1499 broke #236's check and still merged (#1503).
  *
  * `record-reads.mjs` logs each repository file a test's own code reads. After the run, every read
- * of a tracked file the test does not reach through its imports, the way `--changed` follows them,
- * fails the run, naming the test and the files. The test links them with `import.meta.glob`.
+ * of a tracked file that is not among the test's dependencies, as `--changed` computes them, fails
+ * the run, naming the test and the files. The test links them with `import.meta.glob`.
  *
  * Watch mode is left alone, as the untracked-file guard leaves it.
  */
@@ -24,22 +24,6 @@ const UNLINKABLE = new Set(['scripts/check-no-control-bytes.test.mjs']);
 /** Whether a change to `file` reruns every test, as `forceRerunTriggers` does; picomatch's `dir/**` also matches `dir`. */
 const rerunsAll = (file, triggers) => triggers.some((glob) => matchesGlob(file, glob) || matchesGlob(file, glob.replace(/\/\*\*$/, '')));
 
-/** Whether `test` reaches `file` through its imports, following importers up from the file. */
-function linked(moduleGraph, file, test) {
-  const queue = [...(moduleGraph.getModulesByFile(file) ?? [])];
-  const seen = new Set(queue);
-  for (const mod of queue) {
-    if (mod.file === test) return true;
-    for (const importer of mod.importers) {
-      if (!seen.has(importer)) {
-        seen.add(importer);
-        queue.push(importer);
-      }
-    }
-  }
-  return false;
-}
-
 export function setup(project) {
   if (project.config.watch) return undefined;
 
@@ -49,19 +33,23 @@ export function setup(project) {
   writeFileSync(log, '');
   project.provide('readsGuard', { root, log });
 
-  return () => {
+  return async () => {
     const reads = readFileSync(log, 'utf8').split('\n').filter(Boolean).map((line) => JSON.parse(line));
     rmSync(logDir, { recursive: true, force: true });
     // Untracked too, so a new file is checked before its first commit.
     const files = new Set(
       execFileSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 }).split('\0'),
     );
+    const byTest = Map.groupBy(
+      reads.filter(({ test, file }) => files.has(file) && !UNLINKABLE.has(relative(root, test)) && !rerunsAll(join(root, file), project.config.forceRerunTriggers)),
+      ({ test }) => test,
+    );
     const unlinked = new Map();
-    for (const { test, file } of reads) {
-      if (!files.has(file) || UNLINKABLE.has(relative(root, test))) continue;
-      if (rerunsAll(join(root, file), project.config.forceRerunTriggers) || linked(project.vite.moduleGraph, join(root, file), test)) continue;
-      if (!unlinked.has(test)) unlinked.set(test, []);
-      unlinked.get(test).push(file);
+    for (const [test, read] of byTest) {
+      // vitest's own walk for `--changed`: it loads modules no test loaded and drops `?raw` and other query imports.
+      const deps = await project.vitest.specifications.getTestDependencies(project.createSpecification(test));
+      const missing = read.map(({ file }) => file).filter((file) => join(root, file) !== test && !deps.has(join(root, file)));
+      if (missing.length > 0) unlinked.set(test, missing);
     }
     if (unlinked.size === 0) return;
 

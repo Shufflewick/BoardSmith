@@ -68,7 +68,37 @@ describe('the reads guard in a real vitest run', () => {
     expect(run.status, run.output).toBe(0);
   }, 120_000);
 
-  it('leaves out reads of ignored and outside files, of files whose change reruns every test, and by the code under test', () => {
+  it('does not count a glob with a query as a link, since `--changed` drops it', () => {
+    const run = runGuardedVitest({ 'walks.test.mjs': ["import.meta.glob('/data/*.txt', { query: '?raw' });", ...WALKS_DATA] });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toContain('walks.test.mjs reads 2 files it does not link');
+  }, 120_000);
+
+  it('follows a link through a module the run never loaded, as `--changed` does', () => {
+    const run = runGuardedVitest({
+      'links.mjs': ["import.meta.glob('/data/*.txt');"],
+      'walks.test.mjs': ["import.meta.glob('/links.mjs');", ...WALKS_DATA],
+    });
+
+    expect(run.status, run.output).toBe(0);
+  }, 120_000);
+
+  it('sees a read made through a spy the test put on fs', () => {
+    const run = runGuardedVitest({
+      'spied.test.mjs': [
+        "import { it, expect, vi } from 'vitest';",
+        "import fs from 'node:fs';",
+        "vi.spyOn(fs, 'readFileSync');",
+        "it('reads', () => expect(fs.readFileSync('data/a.txt', 'utf8')).toBe('a\\n'));",
+      ],
+    });
+
+    expect(run.status, run.output).not.toBe(0);
+    expect(run.output).toContain('spied.test.mjs reads 1 file it does not link: data/a.txt');
+  }, 120_000);
+
+  it('leaves out reads of ignored and outside files, of its own file and of files whose change reruns every test, and by the code under test', () => {
     const run = runGuardedVitest({
       'reader.mjs': [
         "import { readFileSync } from 'node:fs';",
@@ -85,6 +115,7 @@ describe('the reads guard in a real vitest run', () => {
         "  expect(readFileSync('out/x.txt', 'utf8') + readData()).toBe('xa\\n');",
         "  expect(outside).toContain('boardsmith');",
         "  expect(readFileSync('package.json', 'utf8')).toContain('private');",
+        "  expect(readFileSync('others.test.mjs', 'utf8')).toContain('reads');",
         '});',
       ],
     });
