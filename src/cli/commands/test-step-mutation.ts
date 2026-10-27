@@ -907,7 +907,14 @@ function baselineFindings(testFiles: ChunkTestFile[], baseline: RunResult & { ki
       'Something outside a test failed: a beforeAll or afterAll hook, an import, or a file with no test in it. ' +
       'Run `boardsmith test` to see the full error, fix it, and run this check again.',
   }));
-  return [...notRun, ...red, ...failedFiles];
+  // With no test or file failed, redParts holds only why vitest still failed the run.
+  const unexplained = red.length + failedFiles.length === 0 ? redParts(baseline) : [];
+  const errored = unexplained.map((reason) => ({
+    kind: 'suite-not-green' as const,
+    subject: 'vitest',
+    detail: `${reason}. Fix it so the unmutated run passes cleanly, then run this check again; mutation only means something on a green suite.`,
+  }));
+  return [...notRun, ...red, ...failedFiles, ...errored];
 }
 
 type LocatedMutant = Mutant & { absPath: string };
@@ -1329,10 +1336,10 @@ function suiteNoticed(result: RunResult & { kind: 'ran' }): boolean {
   return result.exitCode !== 0 || result.failedFiles.length > 0 || result.outcomes.some((o) => o.status === 'failed');
 }
 
-/** The tests and files of an unmutated run that failed, as `file > test` and `file`. */
+/** The tests and files of an unmutated run that failed, as `file > test` and `file`, or why vitest failed the run without one. */
 function redParts(result: RunResult & { kind: 'ran' }): string[] {
   const red = [...result.outcomes.filter((o) => o.status === 'failed').map(testKey), ...result.failedFiles.map((f) => f.path)];
-  if (red.length === 0 && result.exitCode !== 0) {
+  if (red.length === 0 && (result.exitCode !== 0 || result.unhandled.length > 0)) {
     red.push(result.unhandled.length > 0
       ? `vitest exited with code ${result.exitCode} with no failing test, on an unhandled error: ${result.unhandled.join('; ')}`
       : `vitest exited with code ${result.exitCode} with no failing test: look for "Unhandled Errors" in \`boardsmith test\``);
