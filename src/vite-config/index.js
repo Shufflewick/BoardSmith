@@ -75,13 +75,14 @@ export function rerunTriggers() {
   };
 }
 
-/** A sim's file name: a random-game sim, a whole match, a bot game or a pace or budget run. */
-const SIM_FILES = '**/*.sim.test.ts';
+/** A sim's file name, `*.sim.test.ts` or any other spelling vitest collects: a random-game sim, a whole match, a bot game or a pace or budget run. */
+const SIM_FILES = '**/*.sim.{test,spec}.?(c|m)[jt]s?(x)';
+const SIM_FILE = /\.sim\.(test|spec)\.[cm]?[jt]sx?$/;
 
 /** The vite mode `boardsmith test --sims` runs vitest in. */
 const SIM_MODE = 'sims';
 
-/** A file vitest collects by default, and the suffix a rename to a sim replaces. */
+/** A file vitest collects by default, and the suffix a rename to a sim puts `.sim` before. */
 const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
 
 /** What makes a test a sim: the names it imports that play whole games, by module. */
@@ -109,14 +110,16 @@ export function testClasses() {
   let root = process.cwd();
   return {
     name: 'boardsmith:test-classes',
-    config(_config, { mode }) {
-      return { test: mode === SIM_MODE ? { include: [SIM_FILES] } : { exclude: [SIM_FILES] } };
+    config(config, { mode }) {
+      if (mode !== SIM_MODE) return { test: { exclude: [SIM_FILES] } };
+      // Set, not returned: vite would add a game's own include beside it, and run its unit tests too.
+      config.test = { ...config.test, include: [SIM_FILES] };
     },
     configResolved(config) {
       root = config.root;
     },
     transform(code, id) {
-      if (!TEST_FILE.test(id) || id.endsWith('.sim.test.ts')) return undefined;
+      if (!TEST_FILE.test(id) || SIM_FILE.test(id)) return undefined;
       const used = parseAst(code).body.flatMap((node) => {
         const tools = node.type === 'ImportDeclaration' ? SIM_TOOLS[node.source.value] : undefined;
         if (tools === undefined) return [];
@@ -127,7 +130,7 @@ export function testClasses() {
       const file = relative(root, id).split(sep).join('/');
       throw new Error(
         `${file} uses ${used.join(', ')}, which plays whole games. A test that does is a sim, and sims run only on request: ` +
-          `rename it to ${file.replace(TEST_FILE, '.sim.test.ts')} and run it with \`boardsmith test --sims\`.`,
+          `rename it to ${file.replace(TEST_FILE, (suffix) => `.sim${suffix}`)} and run it with \`boardsmith test --sims\`.`,
       );
     },
   };

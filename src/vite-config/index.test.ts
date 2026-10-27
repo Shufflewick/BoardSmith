@@ -84,15 +84,29 @@ describe('defineGameViteConfig', () => {
   const PASSING = "import { it } from 'vitest';\nit('holds', () => {});\n";
 
   it.each([
-    [[], 'tests/a.test.ts'],
-    [['--mode', 'sims'], 'tests/b.sim.test.ts'],
+    [[], ['tests/a.test.ts', 'tests/e.spec.js']],
+    [['--mode', 'sims'], ['tests/b.sim.test.ts', 'tests/c.sim.spec.ts', 'tests/d.sim.test.js']],
   ])('leaves the sims out of a run, and runs only them in vitest %j (#1494)', (args, expected) => {
     // `boardsmith test --sims` is `vitest run --mode sims`; every other run (verify, mutation, agent-policy's --changed and slices) is plain.
-    const game = packedGameWith('bs-vite-config-classes-', { 'tests/a.test.ts': PASSING, 'tests/b.sim.test.ts': PASSING });
+    const files = ['tests/a.test.ts', 'tests/b.sim.test.ts', 'tests/c.sim.spec.ts', 'tests/d.sim.test.js', 'tests/e.spec.js'];
+    const game = packedGameWith('bs-vite-config-classes-', Object.fromEntries(files.map((file) => [file, PASSING])));
 
     const listed = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['list', '--filesOnly', ...args], { cwd: game, encoding: 'utf-8' });
 
-    expect(`${listed.stdout}${listed.stderr}`.trim()).toBe(expected);
+    expect(`${listed.stdout}${listed.stderr}`.trim().split('\n').sort()).toEqual(expected);
+    expect(listed.status).toBe(0);
+  }, 60_000);
+
+  it("runs only the sims under --mode sims, whatever include the game passes in (#1494)", () => {
+    const game = packedGameWith('bs-vite-config-classes-include-', {
+      'vite.config.ts': "import { defineGameViteConfig } from 'boardsmith/vite-config';\nexport default defineGameViteConfig({ test: { include: ['tests/**/*.test.ts'] } });\n",
+      'tests/a.test.ts': PASSING,
+      'tests/b.sim.test.ts': PASSING,
+    });
+
+    const listed = spawnSync(join(INSTALLED_MODULES, '.bin', 'vitest'), ['list', '--filesOnly', '--mode', 'sims'], { cwd: game, encoding: 'utf-8' });
+
+    expect(`${listed.stdout}${listed.stderr}`.trim()).toBe('tests/b.sim.test.ts');
     expect(listed.status).toBe(0);
   }, 60_000);
 
@@ -130,11 +144,12 @@ describe('defineGameViteConfig', () => {
     ["import { benchmarkBot, WeightEvolver } from 'boardsmith/bot-trainer';", 'benchmarkBot and WeightEvolver from boardsmith/bot-trainer'],
   ])('names the sim tool a plain test file uses: %s (#1494)', (code, named) => {
     expect(refusal(code, '/p/game/tests/x.spec.ts')).toContain(`tests/x.spec.ts uses ${named}, which plays whole games.`);
-    expect(refusal(code, '/p/game/tests/x.spec.ts')).toContain('rename it to tests/x.sim.test.ts');
+    expect(refusal(code, '/p/game/tests/x.spec.ts')).toContain('rename it to tests/x.sim.spec.ts');
   });
 
   it.each([
     ["import { simulateRandomGames } from 'boardsmith/testing';", '/p/game/tests/x.sim.test.ts'],
+    ["import { simulateRandomGames } from 'boardsmith/testing';", '/p/game/tests/x.sim.spec.js'],
     ["import { playGame } from 'boardsmith/sim';", '/p/game/src/sim/run.ts'],
     ["import { searchCopyForSeat, parseBotLevel } from 'boardsmith/bot';", '/p/game/tests/x.test.ts'],
     ["import { createTestGame } from 'boardsmith/testing';", '/p/game/tests/x.test.ts'],
