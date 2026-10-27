@@ -5,7 +5,8 @@
  * `<ref>` (committed, staged, unstaged and untracked), one small change at a time, picked with the
  * HEAD commit as seed so a re-run tries the same ones, and runs the unit tests that import the
  * changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
- * test loads, fails the run, naming its file and line. Sims never run here (#1494).
+ * test loads, fails the run, naming its file and line, and so does a sample whose mutants only timed
+ * out, since none was shown caught (#1499). Sims never run here (#1494).
  */
 import { resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
@@ -61,8 +62,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
   if (onlyTimedOut) {
     said.push(`${timedOut.length} ${of} made their tests run past the time limit, and none was killed, so no test was shown to notice a change`);
     next.push(
-      'A run times out when the machine is busy or when the change makes a loop never end. Run `boardsmith mutate` again on a quieter machine, ' +
-        'or give it a budget in boardsmith.json, e.g. "mutation": { "trials": 1, "workers": 4 }, so the mutants do not compete for the CPU.',
+      'A run times out when the machine is busy, or when the change makes a loop never end. Run `boardsmith mutate` again when the machine is less busy.',
     );
   }
   if (said.length > 0) {
@@ -73,7 +73,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [
         ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
         ...unreached.map((u) => ({ file: u.file, line: u.line, detail: `${u.description}: no test imports ${u.file}` })),
-        ...(onlyTimedOut ? timedOut.map((t) => ({ file: t.file, line: t.line, detail: `${t.description}: its tests ran past the time limit` })) : []),
+        ...timedOut.map((t) => ({ file: t.file, line: t.line, detail: `${t.description}: its tests ran past the time limit` })),
       ],
     };
   }

@@ -313,11 +313,11 @@ describe('the BoardSmith a game loads', () => {
     const root = join(tree, 'repo');
     await write(root, { ...installedBoardsmith('1.0.0'), 'games/bid/package.json': '{}\n' });
     const dir = join(root, 'games', 'bid');
-    expect(await boardsmithPart(dir)).toMatch(new RegExp(`; game loads ${await fs.realpath(join(root, 'node_modules', 'boardsmith'))}$`));
+    expect((await boardsmithPart(dir)).endsWith(`; game loads ${await fs.realpath(join(root, 'node_modules', 'boardsmith'))}`)).toBe(true);
 
     await fs.mkdir(join(dir, 'node_modules'), { recursive: true });
     await fs.symlink(checkout, join(dir, 'node_modules', 'boardsmith'), 'dir');
-    expect(await boardsmithPart(dir)).toMatch(new RegExp(`; game loads ${await fs.realpath(checkout)}$`));
+    expect((await boardsmithPart(dir)).endsWith(`; game loads ${await fs.realpath(checkout)}`)).toBe(true);
   });
 
   it('is none for a game with no BoardSmith installed anywhere above it', async () => {

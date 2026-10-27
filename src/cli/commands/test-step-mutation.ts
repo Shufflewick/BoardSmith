@@ -1443,8 +1443,9 @@ function apartError(what: string, red: string[], rerun: string): Error {
  * mutant, and a mutant none catches is reported by file and line. A mutant in a file none of them
  * loads (`test-step-reach.ts`, #981) is reported as unreached, since no test could catch it; that
  * includes a file a test reaches only by a path built at run time or through a setup file, which
- * `vitest related` cannot follow (it walks only each test file's own imports, #1499). A mutant that makes its run go past its time limit (an infinite loop) is counted as timed
- * out, not as a survivor, since the tests did not pass.
+ * `vitest related` cannot follow (it walks only each test file's own imports, #1499). A mutant that
+ * makes its run go past its time limit (an infinite loop, or a busy machine) is counted as timed
+ * out, neither survivor nor caught: `timedOut` names it, for the caller to judge.
  *
  * Those test files first run once unmutated and must pass: `notGreen` then names what failed, and
  * no mutant is tried. The mutants then run side by side, as many at once as `budget` allows, or all of them.

@@ -84,7 +84,7 @@ describe('boardsmith mutate', () => {
     expect(run.stdout).toContain('1 of 1 mutant of the lines changed since HEAD~1');
     expect(run.stdout).toContain('none was killed');
     expect(run.stdout).toContain('src/spin.ts:4 statement removed: its tests ran past the time limit');
-    expect(run.stdout).toContain('"trials": 1');
+    expect(run.stdout).toContain('Run `boardsmith mutate` again when the machine is less busy');
   });
 
   it('says a file loaded only by a setup file counts as imported by no test (#1499)', async () => {
