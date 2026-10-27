@@ -1470,17 +1470,21 @@ export async function runDiffMutationCheck(
     if ('notGreen' in started) return { summary, survivors: [], unreached: [], notGreen: started.notGreen };
     const share = started.workers === undefined ? '' : `, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget!.workers}`;
     input.log(`Running ${trials} mutant${trials === 1 ? '' : 's'} at a time${share}.`);
-    const outcomes = await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner })));
-    const result: DiffMutationResult = { summary, survivors: [], unreached: [] };
-    for (const [i, mutant] of mutants.entries()) {
-      summary.mutants++;
-      summary[COUNTED[outcomes[i]]]++;
-      const where = { file: mutant.file, line: mutant.line, description: mutant.description };
-      if (outcomes[i] === 'survived') result.survivors.push(where);
-      if (outcomes[i] === 'unreached') result.unreached.push(where);
-    }
-    return result;
+    return tallyMutants(mutants, await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner }))), summary);
   }, () => stopAll(runners));
+}
+
+/** Counts each mutant's outcome into `summary`, in the order the mutants were made, and names the survivors and the mutants no test loads. */
+function tallyMutants(mutants: LocatedMutant[], outcomes: DiffOutcome[], summary: DiffMutationResult['summary']): DiffMutationResult {
+  const result: DiffMutationResult = { summary, survivors: [], unreached: [] };
+  for (const [i, mutant] of mutants.entries()) {
+    summary.mutants++;
+    summary[COUNTED[outcomes[i]]]++;
+    const where = { file: mutant.file, line: mutant.line, description: mutant.description };
+    if (outcomes[i] === 'survived') result.survivors.push(where);
+    if (outcomes[i] === 'unreached') result.unreached.push(where);
+  }
+  return result;
 }
 
 async function stopAll(runners: Runner[]): Promise<void> {

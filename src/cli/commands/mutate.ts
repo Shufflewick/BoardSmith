@@ -72,7 +72,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
 }
 
 /** Runs the sample against the change since the merge base of HEAD with `base`. */
-export async function runMutate(options: { projectDir: string; base: string; log?: (line: string) => void }): Promise<MutateVerdict> {
+async function runMutate(options: { projectDir: string; base: string; log?: (line: string) => void }): Promise<MutateVerdict> {
   const { projectDir } = options;
   const configPath = requireGameProject(projectDir);
   const problem = await gameTestRunProblem(projectDir);
