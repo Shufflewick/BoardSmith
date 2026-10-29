@@ -99,6 +99,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
     '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
+    '--bsg-bar-edge': declaration('.game-shell__game', '--bsg-bar-edge'),
   };
   if (tier === 'base') return base;
   const overrides = Array.from(landscapeTokens().matchAll(/(--bsg-panel-[\w-]+)\s*:\s*([\s\S]*?);/g));
@@ -174,14 +175,14 @@ describe('#1520: --bsg-panel-overlap, how far the panel reaches above the reserv
   const overlap = (bar: number, reserved: string) => px(declaration('.board-viewport', '--bsg-panel-overlap'),
     { ...tokensFor('base'), '--bsg-bar-clearance': `${bar}px`, '--bsg-panel-reserved': reserved }, { safeArea: 0 });
 
-  it('is the bar\'s height above the reserve, and never below zero', () => {
+  it('is the bar\'s height above the reserve, plus the 13px its edge toggle rises above the bar (#1520 review F1)', () => {
     const up = declaration('.game-shell__game', '--bsg-panel-reserved');
     const down = declaration('.game-shell__game.action-bar-minimized', '--bsg-panel-reserved');
-    expect(overlap(62, up), 'a one-row bar sits in the reserved row').toBe(0);
-    expect(overlap(114, up), 'a two-row bar covers one row and its gap').toBe(52);
-    expect(overlap(14, down), 'the line sits in the line the region reserves').toBe(0);
-    expect(overlap(114, down), 'a question opening the bar over a put-down preference').toBe(100);
-    expect(overlap(0, up), 'before the bar is first measured').toBe(0);
+    expect(overlap(62, up), 'a one-row bar sits in the reserved row').toBe(13);
+    expect(overlap(114, up), 'a two-row bar covers one row and its gap').toBe(65);
+    expect(overlap(14, down), 'the line sits in the line the region reserves').toBe(13);
+    expect(overlap(114, down), 'a question opening the bar over a put-down preference').toBe(113);
+    expect(overlap(0, up), 'before the bar is first measured').toBe(13);
   });
 
   it('is documented in the custom UI guide, which the do-not-measure rule points to', () => {
@@ -252,7 +253,7 @@ describe('#230, #1439: the bar put down is a thin line', () => {
     const tokens = tokensFor('base');
     const line = px('var(--bsg-action-bar-collapsed)', tokens, env) - env.safeArea;
     expect(line).toBeLessThan(28);
-    expect(line).toBeGreaterThanOrEqual(parseFloat(declaration('.bar-edge', 'height')) / 2);
+    expect(line).toBeGreaterThanOrEqual(px(declaration('.bar-edge', 'height'), tokens, env) / 2);
   });
 
   it('draws the controls menu as bare dots along the line, with no outline or padding (#1439, #1444)', () => {
@@ -276,8 +277,9 @@ describe('#230, #1439: the bar put down is a thin line', () => {
     expect(declaration('.actionbar.collapsed :deep(.menubtn)::before', 'height')).toBe('24px');
     expect(declaration('.actionbar.collapsed :deep(.menubtn)::before', 'bottom')).toBe('0');
     expect(declaration('.actionbar.collapsed', 'overflow')).toBe('visible');
-    expect(parseFloat(declaration('.bar-edge', 'width'))).toBeGreaterThanOrEqual(24);
-    expect(parseFloat(declaration('.bar-edge', 'height'))).toBeGreaterThanOrEqual(24);
+    const tokens = tokensFor('base');
+    expect(px(declaration('.bar-edge', 'width'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
+    expect(px(declaration('.bar-edge', 'height'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
   });
 
   it('keeps the collapsed bar to a single un-wrapping row', () => {

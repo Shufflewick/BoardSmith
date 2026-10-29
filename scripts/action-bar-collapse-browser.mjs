@@ -217,8 +217,16 @@ async function measure(page) {
     region?.append(probe);
     const overlap = probe.getBoundingClientRect().height;
     probe.remove();
+    // The guide's rule for a zoomed board: divide by the board's zoom, set as --board-zoom.
+    // This fixture's board fits at zoom 1, so the probe carries a zoom of its own.
+    const zoomProbe = document.createElement('div');
+    zoomProbe.style.cssText = 'position: absolute; zoom: 0.5; --board-zoom: 0.5; height: calc(var(--bsg-panel-overlap) / var(--board-zoom));';
+    document.querySelector('.game-shell__zoom-container')?.append(zoomProbe);
+    const zoomedOverlap = zoomProbe.getBoundingClientRect().height;
+    zoomProbe.remove();
     return {
       overlap,
+      zoomedOverlap,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       bar: box('[data-testid="bs-actionbar"]'),
       toggle: box('[data-testid="bs-actionbar-toggle"]'),
@@ -253,11 +261,13 @@ function assertToggleReachable(shot, where) {
     `${where}: the toggle spans y ${toggle.top}..${toggle.bottom} in a ${viewport.height}px viewport`);
 }
 
-/** --bsg-panel-overlap is exactly how far the bar's top reaches above the region's content box (#1520). */
+/** --bsg-panel-overlap is exactly how far the bar and its edge toggle reach above the region's content box (#1520). */
 function assertOverlap(shot, where) {
-  const reach = Math.max(0, shot.region.bottom - shot.bar.top);
+  const reach = shot.region.bottom - Math.min(shot.bar.top, shot.toggle.top);
   assert(Math.abs(shot.overlap - reach) <= 0.5,
     `${where}: --bsg-panel-overlap is ${shot.overlap}px, but the bar reaches ${reach}px above the board region`);
+  assert(Math.abs(shot.zoomedOverlap - shot.overlap) <= 0.5,
+    `${where}: inside a board at zoom 0.5, --bsg-panel-overlap divided by the zoom renders ${shot.zoomedOverlap}px, not ${shot.overlap}px`);
 }
 
 /** A one-row bar: one 44px control row and the bar's 9px padding above and below it. */
@@ -376,7 +386,7 @@ async function drive({ launch, hostUrl }) {
         );
         assert(nextQuestion.choice !== null && nextQuestion.choice.height > 0,
           'a new question started with the bar down, and its choice controls stayed hidden');
-        assert(nextQuestion.overlap > 0, 'the bar opened over the put-down line and --bsg-panel-overlap stayed 0');
+        assert(nextQuestion.bar.top < nextQuestion.region.bottom, 'the bar opened over the put-down line without reaching over the board, so this proves nothing');
         assertOverlap(nextQuestion, `${name} opened over the put-down preference`);
         // The bar came up for the question, not by the player's toggle, so the board must not refit (#13, #1518).
         assert(nextQuestion.region.height === afterClick.region.height,
