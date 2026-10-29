@@ -375,6 +375,15 @@ async function drive({ launch, hostUrl }) {
   return summarise('measured on screen in a real browser at both widths.');
 }
 
+/** Take seat 2 and start its long-prompt pick (`muster`, see `packPick`) up to the board handoff. */
+async function musterAsSeat2(page, surface) {
+  await page.locator('[data-testid="world-seat-switcher"]').click();
+  await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
+  await surface.locator('[data-bs-action="muster"]').click();
+  await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
+  await surface.locator('.board-handoff-btn').waitFor({ timeout: 15_000 });
+}
+
 /**
  * ONE ROW OF BAR IS RESERVED UNDER THE BOARD, AND ONLY THE ROWS ABOVE IT FLOAT (#1517).
  *
@@ -396,12 +405,8 @@ async function oneRowReserve(browser, hostUrl, viewport) {
 
     // A short landscape screen caps the bar at one row, so nothing there grows it past the reserve.
     if (viewport.height > 600) await check(`${size}: the board keeps its size with a one-row bar, a taller bar and the bar down (#1517)`, async () => {
-      // Seat 2's action prompt is long enough to wrap the bar at this width (see `packPick`).
-      await page.locator('[data-testid="world-seat-switcher"]').click();
-      await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
-      await surface.locator('[data-bs-action="muster"]').click();
-      await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
-      await surface.locator('.board-handoff-btn').waitFor({ timeout: 15_000 });
+      // Seat 2's action prompt is long enough to wrap the bar at this width.
+      await musterAsSeat2(page, surface);
       const pick = await measure(page);
       assert(pick.bar.height > ONE_ROW + 1, `the bar during the pick is ${pick.bar.height}px tall, one row, so this proves nothing`);
       await surface.locator('.action-config .cancel-btn').click();
@@ -457,12 +462,8 @@ async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
       // Never cut short. It may cost the bar its fit, so the bar may scroll --
       // the last resort -- but it stays inside its cap and every part of the
       // pick can be scrolled into view. Offered to seat 2 (see \`packPick\`).
-      await page.locator('[data-testid="world-seat-switcher"]').click();
-      await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
-      await surface.locator('[data-bs-action="muster"]').click();
-      await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
+      await musterAsSeat2(page, surface);
       const handoff = surface.locator('.board-handoff-btn');
-      await handoff.waitFor({ timeout: 15_000 });
       const bar = await barGeometry(surface, PICK_PARTS);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
       assert(bar.clipped.length === 0, `cut off sideways: ${bar.clipped.join(', ')}`);
