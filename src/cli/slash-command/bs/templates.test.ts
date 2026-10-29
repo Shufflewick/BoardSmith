@@ -705,8 +705,9 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
   });
 
   it('each ledger whose citations ledger-check reads sanctions correcting a citation in place (#1522)', () => {
-    for (const path of [LEDGERS['RULINGS.md'], LEDGERS['DECISIONS.md']]) {
-      expect(flat(read(path)), path).toContain('The only sanctioned edits to a prior entry are the `- Superseded by:` line and correcting a cited file in place');
+    // Every numbered ledger but FILINGS.md, which ledger-check does not read citations in.
+    for (const path of [LEDGERS['RULINGS.md'], LEDGERS['DECISIONS.md'], LEDGERS['QUESTIONS.md']]) {
+      expect(flat(read(path)), path).toContain('correcting a cited file in place');
     }
   });
 
