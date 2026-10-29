@@ -27,6 +27,7 @@
 import { ref, computed, nextTick, onMounted, onUnmounted, useId } from 'vue';
 import { computePopoverPosition, type PopoverPosition } from './popover-position.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+import { handleEscape } from '../../utils/escape.js';
 
 syncReducedMotionClass();
 
@@ -161,9 +162,7 @@ function handleOutsideClick(event: MouseEvent) {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape' && isOpen.value) {
-    hide();
-  }
+  if (isOpen.value) handleEscape(event, hide);
 }
 
 onMounted(() => {

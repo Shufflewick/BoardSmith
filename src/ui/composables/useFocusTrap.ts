@@ -30,6 +30,7 @@
  *   → Tab stays trapped; Escape dismisses the card (same as the close button).
  */
 import { nextTick, onScopeDispose, type Ref } from 'vue';
+import { handleEscape } from '../utils/escape.js';
 
 export interface FocusTrapOptions {
   /** Whether pressing Escape calls onClose. Defaults to true. */
@@ -175,12 +176,7 @@ export function useFocusTrap(
   // --------------------------------------------------------------------------
 
   function handleKeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape') {
-      if (escapeToClose) {
-        options?.onClose?.();
-      }
-      return;
-    }
+    if (escapeToClose && options?.onClose) handleEscape(e, options.onClose);
 
     if (e.key !== 'Tab' || !dialogRef.value) return;
 

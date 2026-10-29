@@ -19,6 +19,7 @@ import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
+import { handleEscape } from '../../utils/escape.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -429,11 +430,9 @@ async function restoreFocusToGroup(label: string, attribute = 'data-bs-action-gr
  * action that nothing else in the panel agrees with.
  */
 function onPanelKeydown(event: KeyboardEvent): void {
-  if (event.key !== 'Escape') return;
   if (currentAction.value) return;
   if (!menuLevel.value.group) return;
-  event.preventDefault();
-  leaveGroup();
+  handleEscape(event, leaveGroup);
 }
 
 /**

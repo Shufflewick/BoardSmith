@@ -20,6 +20,7 @@ import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js'
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
+import { handleEscape } from '../../ui/utils/escape.js';
 import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
 import { getDisplayFromValue } from '../../ui/composables/actionControllerHelpers.js';
 
@@ -526,7 +527,7 @@ watch(overflowOpen, (open) => {
   if (!open) cancelRestartConfirm();
 });
 function handleChromeKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') tableSetupOpen.value = false;
+  if (tableSetupOpen.value) handleEscape(e, () => { tableSetupOpen.value = false; });
 }
 
 /**

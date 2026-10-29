@@ -191,11 +191,41 @@ await runBrowserRegression(
         await check('with the keyboard, Enter on the "?" opens the help', async () => {
           assert(keyed.visible && keyed.text === HELP, `Enter did not open the help: ${JSON.stringify(keyed)}`);
         });
+        await frame.locator('body').evaluate(() => {
+          window.escapesSeen = [];
+          window.addEventListener('keydown', (event) => { if (event.key === 'Escape') window.escapesSeen.push(event.defaultPrevented); });
+        });
         await frame.locator(TRIGGER).press('Escape');
         const escaped = await helpShows(frame, false);
         await check('with the keyboard, Escape closes the help', async () => {
           assert(!escaped.visible, `Escape left the help open: ${JSON.stringify(escaped)}`);
         });
+        await frame.locator(TRIGGER).press('Escape');
+        const seen = await frame.locator('body').evaluate(() => window.escapesSeen);
+        await check('a page-wide listener sees the Escape that closed the help as handled, and one with nothing open as not (#1524)', async () => {
+          assert(JSON.stringify(seen) === '[true,false]', `defaultPrevented of each Escape: ${JSON.stringify(seen)}`);
+        });
+
+        // The pointer off the "?", or the dialog making it inert would close the help by pointerleave.
+        await page.mouse.move(2, 2);
+        await frame.locator(TRIGGER).press('Enter');
+        await helpShows(frame, true);
+        await frame.locator('body').evaluate(() => {
+          const dialog = document.createElement('dialog');
+          dialog.id = 'game-dialog';
+          dialog.innerHTML = '<button type="button">OK</button>';
+          document.body.append(dialog);
+          dialog.showModal();
+        });
+        await page.keyboard.press('Escape');
+        const dialogOpen = await waitUntil(() => frame.locator('#game-dialog').evaluate((dialog) => dialog.open), (open) => !open, 2_000);
+        await check("Escape closes a game's own modal <dialog> while the help is open (#1524)", async () => {
+          assert(!dialogOpen, 'the help took the Escape, so the dialog stayed open');
+        });
+        await frame.locator('#game-dialog').evaluate((dialog) => dialog.remove());
+        await frame.locator(TRIGGER).focus();
+        await frame.locator(TRIGGER).press('Escape');
+        await helpShows(frame, false);
 
         const tall = frame.locator(TALL_TRIGGER);
         const tallTip = await tipOf(frame, tall);

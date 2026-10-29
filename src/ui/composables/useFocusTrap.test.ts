@@ -286,6 +286,17 @@ describe('useFocusTrap', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  // #1524: a game listening for Escape page-wide skips one a dialog already acted on.
+  it('marks an Escape it closes on as handled, and leaves one it ignores unmarked', () => {
+    const dialog = appendDialog('<button id="b1">OK</button>');
+    const closing = makeKeyEvent('Escape');
+    trap(ref(dialog), { onClose: vi.fn() }).handleKeydown(closing);
+    const ignored = makeKeyEvent('Escape');
+    trap(ref(dialog), { escapeToClose: false, onClose: vi.fn() }).handleKeydown(ignored);
+
+    expect([closing.defaultPrevented, ignored.defaultPrevented]).toEqual([true, false]);
+  });
+
   it('Escape does NOT call onClose when escapeToClose is false (GameOverCard case)', () => {
     const onClose = vi.fn();
     const dialog = appendDialog('<button id="b1">Rematch</button>');

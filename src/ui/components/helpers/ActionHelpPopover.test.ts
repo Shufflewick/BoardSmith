@@ -269,6 +269,23 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
+    // #1524: a game listening for Escape page-wide skips one a popover already acted on.
+    it('marks the Escape that closes it as handled, and leaves one with nothing open unmarked', async () => {
+      const wrapper = mountPopover({ actionName: 'flee', triggerLabel: 'Flee', helpText: 'Escape from combat.' });
+      const seen: boolean[] = [];
+      const listener = (event: KeyboardEvent) => seen.push(event.defaultPrevented);
+      window.addEventListener('keydown', listener);
+      await wrapper.find('.action-help-btn').trigger('click');
+      await nextTick();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await nextTick();
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      window.removeEventListener('keydown', listener);
+
+      expect(seen).toEqual([true, false]);
+      wrapper.unmount();
+    });
+
     it('mousedown outside the trigger closes the popover', async () => {
       const wrapper = mountPopover({
         actionName: 'flee',
