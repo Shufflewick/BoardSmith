@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 /**
- * #1514: the Action Panel floats over the board. The board region reserves
- * nothing for it, so the board's size never depends on the panel (#13 holds by
- * construction), and scroll room after the board lets the player see what the
- * bar covers.
+ * #1514, #1517: the board region reserves one constant row for the Action Panel
+ * and the rows above it float over the board, so the board's size never depends
+ * on the panel's live height (#13 holds by construction), and scroll room after
+ * the board lets the player see what those rows cover.
  *
  * These assertions are made against the shells' real `<style scoped>` blocks
  * (parsed here, not reproduced), because the layout IS the CSS: a test that
@@ -94,13 +94,15 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-panel-gap': declaration('.game-shell__game', '--bsg-panel-gap'),
     '--bsg-panel-pad': declaration('.game-shell__game', '--bsg-panel-pad'),
     '--bsg-panel-max': declaration('.game-shell__game', '--bsg-panel-max'),
+    '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
     '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
   };
   if (tier === 'base') return base;
-  const m = landscapeTokens().match(/--bsg-panel-max\s*:\s*([\s\S]*?);/);
-  expect(m, '--bsg-panel-max not overridden in the landscape-short tier').not.toBeNull();
-  base['--bsg-panel-max'] = m![1].trim();
+  const overrides = Array.from(landscapeTokens().matchAll(/(--bsg-panel-[\w-]+)\s*:\s*([\s\S]*?);/g));
+  expect(overrides.map(([, name]) => name), 'the landscape-short tier does not override the panel tokens')
+    .toEqual(['--bsg-panel-pad', '--bsg-panel-reserved', '--bsg-panel-max']);
+  for (const [, name, value] of overrides) base[name] = value.trim();
   return base;
 }
 
@@ -110,13 +112,19 @@ const ENVIRONMENTS: Env[] = [
   { safeArea: 21 },  // notched phone, landscape
 ];
 
-describe('#1514: the Action Panel floats over the board and never sizes it', () => {
-  it('reserves nothing for the panel in the board region', () => {
-    // The region's only padding is the shell's own hairline; the fit reads it,
-    // so a panel term here would size the board by the panel again.
+describe('#1514, #1517: the board region reserves one constant row and the rest of the panel floats', () => {
+  it('reserves the constant one-row token under the board, never a measured height', () => {
+    // The fit reads the region's content box, so this padding is what keeps a
+    // one-row bar off the board; a measured term here would refit on every pick.
     expect(declaration('.boardregion', 'padding')).toBe('var(--bsg-s1)');
-    expect(block('.boardregion')).not.toMatch(/^\s*padding-bottom\s*:/m);
-    expect(source).not.toContain('--bsg-panel-reserved');
+    expect(declaration('.boardregion', 'padding-bottom')).toBe('var(--bsg-panel-reserved)');
+  });
+
+  it.each(ENVIRONMENTS)('reserves exactly one control row (safe-area $safeArea)', (env) => {
+    const tokens = tokensFor('base');
+    const row = px('var(--bsg-panel-row)', tokens, env);
+    const pad = px('var(--bsg-panel-pad)', tokens, env);
+    expect(px('var(--bsg-panel-reserved)', tokens, env)).toBe(row + 2 * pad + env.safeArea);
   });
 
   it('leaves the board region alone when the bar is put down', () => {
@@ -124,10 +132,11 @@ describe('#1514: the Action Panel floats over the board and never sizes it', () 
   });
 
   it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {
-    // Scroll room after the board, as tall as the bar's cap. A constant: room that
-    // followed the bar's live height shrank as the bar re-wrapped, clamped the
-    // scroll and moved the board under the player's cursor (#1514 review F1).
-    expect(declaration('.boardregion::after', 'height')).toBe('var(--bsg-panel-max)');
+    // Scroll room after the board, as tall as what the bar's cap adds to the
+    // reserved row. A constant: room that followed the bar's live height shrank
+    // as the bar re-wrapped, clamped the scroll and moved the board under the
+    // player's cursor (#1514 review F1).
+    expect(declaration('.boardregion::after', 'height')).toBe('calc(var(--bsg-panel-max) - var(--bsg-panel-reserved))');
     expect(declaration('.boardregion::after', 'flex')).toBe('none');
     // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it.
     expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('var(--bsg-panel-max)');
@@ -162,11 +171,17 @@ describe('the Action Panel\'s own height cap', () => {
     expect(px('var(--bsg-panel-max)', tokens, env)).toBe(2 * row + gap + 2 * pad + env.safeArea);
   });
 
-  it.each(ENVIRONMENTS)('caps the bar at one control row on a short landscape screen (safe-area $safeArea)', (env) => {
+  it.each(ENVIRONMENTS)('caps the bar at the reserved row, the bar\'s own height, on a short landscape screen (safe-area $safeArea)', (env) => {
     const tokens = tokensFor('landscape-short');
     const row = px('var(--bsg-panel-row)', tokens, env);
     const pad = px('var(--bsg-panel-pad)', tokens, env);
-    expect(px('var(--bsg-panel-max)', tokens, env)).toBe(row + 2 * pad + env.safeArea);
+    // The bar's padding on this tier, read from its own declarations (#1517 review F3).
+    const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
+    const bar = source.slice(at).match(/\.actionbar \{([^}]*)\}/)![1];
+    expect(bar).toMatch(/padding-top:\s*var\(--bsg-panel-pad\);/);
+    expect(bar).toMatch(/padding-bottom:\s*max\(var\(--bsg-panel-pad\), env\(safe-area-inset-bottom\)\);/);
+    expect(px('var(--bsg-panel-reserved)', tokens, env)).toBe(row + pad + Math.max(pad, env.safeArea));
+    expect(px('var(--bsg-panel-max)', tokens, env)).toBe(px('var(--bsg-panel-reserved)', tokens, env));
   });
 
   it('keeps the board region inside the stage on a short landscape screen', () => {

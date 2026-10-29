@@ -10,8 +10,8 @@
  * session content arriving over the socket. Five reloads of one state fitted at
  * 0.83 / 0.98 / 0.90 / 0.83.
  *
- * Fix: nothing measures the panel. It floats over the board region, which
- * reserves nothing for it (#1514).
+ * Fix: nothing measures the panel. The board region reserves one constant row
+ * for it and the rest floats over the board (#1514, #1517).
  *
  * This file drives the real `useAutoZoom` through a harness with GameShell's
  * actual shape — a `.boardregion`, a zoom
