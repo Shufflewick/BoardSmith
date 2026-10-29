@@ -19,8 +19,9 @@
  *   1. The toggle's box is inside the viewport at both widths, collapsed and
  *      open. A restore control you cannot reach is not a restore control.
  *   2. Collapsing shrinks the bar's rendered box.
- *   3. The bar floats over the board (#1514): the board region runs under it,
- *      and its size is the same with the bar up, down, and grown to two rows.
+ *   3. The board is fitted above one row of bar, so a one-row bar sits under it
+ *      and only rows beyond the first float over it (#1514, #1517). Its size is
+ *      the same with the bar up, down, and grown to two rows.
  *   4. Down, the bar is a thin line (#1439, #1444): no taller than 14px plus the safe
  *      area, with the seat token and the panel's own controls gone. (The
  *      controls menu is the adapter's slot content and a world fills none; that
@@ -212,6 +213,7 @@ async function measure(page) {
       // The panel's own start button: present and boxed while the bar is up,
       // absent while it is down.
       start: box('[data-bs-action="tend"]'),
+      board: box('[data-fixture="garden"]'),
       // A choice control, which only exists mid-question.
       choice: box('.action-config .choice-btn'),
       // The content box: what the board is fitted to.
@@ -237,6 +239,9 @@ function assertToggleReachable(shot, where) {
   assert(toggle.top >= 0 && toggle.bottom <= viewport.height,
     `${where}: the toggle spans y ${toggle.top}..${toggle.bottom} in a ${viewport.height}px viewport`);
 }
+
+/** A one-row bar: one 44px control row and the bar's 9px padding above and below it. */
+const ONE_ROW = 44 + 2 * 9;
 
 const collapse = async (page) => {
   await surfaceOf(page).locator('[data-testid="bs-actionbar-toggle"]').click();
@@ -283,9 +288,7 @@ async function drive({ launch, hostUrl }) {
           `the bar measured ${down.bar.height}px down and ${open.bar.height}px up`);
       });
 
-      await check(`${name}: the bar floats over the board, which keeps its size up or down (#1514)`, () => {
-        assert(open.region.bottom > open.bar.top,
-          `the board region's content ends at ${open.region.bottom}, above the bar's top at ${open.bar.top}: it is still sized around the bar`);
+      await check(`${name}: the board keeps its size with the bar up or down (#1514)`, () => {
         assert(down.region.width === open.region.width && down.region.height === open.region.height,
           `the board region is ${down.region.width}x${down.region.height} with the bar down and ` +
           `${open.region.width}x${open.region.height} with it up`);
@@ -357,6 +360,8 @@ async function drive({ launch, hostUrl }) {
       await context.close();
     }
 
+    await oneRowReserve(browser, hostUrl);
+
     for (const viewport of [{ width: 375, height: 812 }, { width: 844, height: 390 }]) {
       for (const colorScheme of ['light', 'dark']) {
         await pickAfterAChoice(browser, hostUrl, viewport, colorScheme);
@@ -367,6 +372,45 @@ async function drive({ launch, hostUrl }) {
   }
 
   return summarise('measured on screen in a real browser at both widths.');
+}
+
+/**
+ * ONE ROW OF BAR IS RESERVED UNDER THE BOARD, AND ONLY THE ROWS ABOVE IT FLOAT (#1517).
+ *
+ * At a desktop width seat 1's bar at rest is one row: the board region's content box,
+ * which a fitted board fills, ends at or above its top. Seat 2's long prompt
+ * grows the bar past one row, and putting it down shrinks it to the line; the
+ * region keeps its size through both, so the board never refits.
+ */
+async function oneRowReserve(browser, hostUrl) {
+  await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 } }, (page) => waitForAction(page, 'tend'), async (page, surface) => {
+    const rest = await measure(page);
+    await check('1440x900: a one-row bar sits under the fitted board, not over it (#1517)', () => {
+      assert(rest.bar.height <= ONE_ROW + 1, `the bar at rest is ${rest.bar.height}px tall, more than one row, so this proves nothing`);
+      assert(rest.region.bottom <= rest.bar.top + 0.5,
+        `the board region's content box ends at ${rest.region.bottom}, below the one-row bar's top at ${rest.bar.top}`);
+    });
+
+    await check('1440x900: the board keeps its size with a one-row bar, a taller bar and the bar down (#1517)', async () => {
+      // Seat 2's action prompt is long enough to wrap the bar at this width (see `packPick`).
+      await page.locator('[data-testid="world-seat-switcher"]').click();
+      await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
+      await surface.locator('[data-bs-action="muster"]').click();
+      await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
+      await surface.locator('.board-handoff-btn').waitFor({ timeout: 15_000 });
+      const pick = await measure(page);
+      assert(pick.bar.height > ONE_ROW + 1, `the bar during the pick is ${pick.bar.height}px tall, one row, so this proves nothing`);
+      await surface.locator('.action-config .cancel-btn').click();
+      await surface.locator('.action-config').waitFor({ state: 'detached', timeout: 10_000 });
+      await collapse(page);
+      const down = await measure(page);
+      for (const [state, shot] of [['taller', pick], ['down', down]]) {
+        assert(shot.region.width === rest.region.width && shot.region.height === rest.region.height,
+          `the board region is ${shot.region.width}x${shot.region.height} with the bar ${state} and ` +
+          `${rest.region.width}x${rest.region.height} with one row`);
+      }
+    });
+  });
 }
 
 /**

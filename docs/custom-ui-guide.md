@@ -1309,11 +1309,12 @@ startup zoom-fit already handles it.
 
 ### The Action Panel floats over the board
 
-The Action Panel floats over the bottom of the board region. The region
-reserves nothing for it, so your board's size never depends on the panel: the
-startup fit is a pure function of the region box and your board's natural
-size, and the panel showing, growing, shrinking or being put down never moves
-or refits the board. For one game state on one viewport, two loads produce
+The board region reserves one row for the Action Panel under the board
+(`--bsg-panel-reserved`), so a one-row panel sits under your board, not over
+it. Rows beyond the first float over the bottom of the board. The reserve is a
+constant, so your board's size never depends on the panel: the startup fit is
+a pure function of the region box and your board's natural size, and the panel
+showing, growing, shrinking or being put down never moves or refits the board. For one game state on one viewport, two loads produce
 identical geometry. (It did not used to be: the fit once reserved the panel's
 *measured* height, frozen at whatever it happened to be ~300ms after the board
 stopped changing, so the same card measured 220px on one load and 202px on the
@@ -1321,12 +1322,13 @@ next.)
 
 What follows for a custom board:
 
-- **The panel covers the bottom of your board.** The region ends in scroll
-  room as tall as the panel's two-row cap, so the player can scroll what the
-  panel covers into view, and a control that takes keyboard focus is scrolled
-  to land above the panel. The scroll room is a constant, so the panel
-  re-wrapping never moves a scrolled board. The player can also put the panel
-  down to a thin line.
+- **A panel taller than one row covers the bottom of your board.** The region
+  ends in scroll room as tall as what the panel's cap adds to the reserved row,
+  so the player can scroll what the panel covers into view, and a control that
+  takes keyboard focus is scrolled to land above the panel. The scroll room is
+  a constant, so the panel re-wrapping never moves a scrolled board. The player
+  can also put the panel down to a thin line. On a short landscape screen the
+  cap is the one reserved row, so nothing floats.
 - **The panel is capped at two control rows** (one on a short landscape
   screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
   lays itself out to fit them (at phone width it stacks the action's name over
