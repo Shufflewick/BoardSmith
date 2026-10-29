@@ -726,7 +726,7 @@ BoardSmith's dialogs, popovers and menus call `event.preventDefault()` on an
 Escape they act on (closing a popover, the game-over card or the controls
 menu, or going back a level in the Action Panel), so `event.defaultPrevented`
 is `true` by the time it reaches the page. An Escape that closes nothing is
-left unmarked. So a board can listen on the whole page, and work no matter
+left unmarked, and so is one inside your own modal `<dialog>`, which closes it. So a board can listen on the whole page, and work no matter
 where focus is, as long as it skips handled Escapes:
 
 <!-- typecheck: board -->

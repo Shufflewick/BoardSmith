@@ -5,6 +5,9 @@
  */
 export function handleEscape(event: KeyboardEvent, act: () => void): void {
   if (event.key !== 'Escape') return;
+  // An Escape inside a game's modal <dialog> closes that dialog, which preventDefault would stop.
+  const modal = event.target instanceof Element ? event.target.closest('dialog:modal') : null;
+  if (modal && !modal.contains(event.currentTarget as Node)) return;
   event.preventDefault();
   act();
 }
