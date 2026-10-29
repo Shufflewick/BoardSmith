@@ -16,6 +16,7 @@ import { definePlayerPreferences } from '../player-preferences.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { useMenuCommands } from '../composables/menuCommands.js';
 import { useActionHolds } from '../composables/actionHolds.js';
+import { usePlayContext } from '../composables/useGameContext.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -1362,6 +1363,39 @@ describe('WorldShell — the controls menu (#1443)', () => {
     const wrapper = await mountWithPreferences({ actionBarStartsCollapsed: true });
     expect(wrapper.get('[data-testid="bs-actionbar"]').classes()).toContain('collapsed');
     expect(menuItem('Torchlight')).toBeDefined();
+    wrapper.unmount();
+  });
+});
+
+describe('WorldShell — a game may keep a put-down bar down when an action starts (#1519)', () => {
+  async function askFromTheBoard(over: Record<string, unknown>) {
+    const Hall = defineComponent({
+      setup() {
+        const { actionController } = usePlayContext();
+        return () => h('button', { 'data-testid': 'ask', onClick: () => actionController.start('move') }, 'Move');
+      },
+    });
+    const move = { name: 'move', prompt: 'Move', selections: [{ name: 'room', type: 'choice', prompt: 'Which room?', choices: [{ value: 'hall', display: 'Hall' }, { value: 'cellar', display: 'Cellar' }] }] };
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall', actionBarStartsCollapsed: true, ...over },
+    });
+    await drawn(wrapper, stateFrame({ actions: [{ name: 'look', selections: [] }, move] }));
+    await wrapper.get('[data-testid="ask"]').trigger('click');
+    await flushPromises();
+    return wrapper;
+  }
+  const barIsDown = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.get('[data-testid="bs-actionbar"]').classes().includes('collapsed');
+
+  it('opens the put-down bar for a question when the game says nothing', async () => {
+    const wrapper = await askFromTheBoard({});
+    expect(barIsDown(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps the put-down bar down for a question when the game opts out', async () => {
+    const wrapper = await askFromTheBoard({ actionBarOpensForActions: false });
+    expect(barIsDown(wrapper)).toBe(true);
     wrapper.unmount();
   });
 });
