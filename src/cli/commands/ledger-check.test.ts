@@ -742,7 +742,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4', 'line 6']);
     for (const f of found) expect(f.detail).toMatch(/does not exist/);
-    expect(found[0].detail).toMatch(/Correcting a citation in place is allowed even in an append-only ledger/);
+    expect(found[0].detail).toMatch(/Correcting a cited file in place is allowed in every ledger, append-only ones included; the rest of the entry stays as written\./);
   });
 
   it('reports a ~/ path in another checkout as outside the project, not as a missing project file (#398)', async () => {

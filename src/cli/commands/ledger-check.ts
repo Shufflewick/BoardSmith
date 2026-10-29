@@ -730,7 +730,7 @@ type EvidenceProblem = 'outside' | 'missing' | 'ignored' | 'untracked' | 'not-in
 
 const SCRATCH_DIR = '.boardsmith/scratch/';
 const CORRECT_IN_PLACE =
-  'Correcting a citation in place is allowed even in an append-only ledger: it is the one edit to a prior entry besides `- Superseded by:`.';
+  'Correcting a cited file in place is allowed in every ledger, append-only ones included; the rest of the entry stays as written.';
 const MOVE_TO_EVIDENCE =
   `Move it into ${CHUNK_EVIDENCE_DIR} for the chunk it proves, commit it, and cite that path.`;
 

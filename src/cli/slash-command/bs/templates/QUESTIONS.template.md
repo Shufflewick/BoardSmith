@@ -40,6 +40,10 @@
      ASSETS.md's `received` column uses). If the designer later changes their mind, that is a
      NEW entry that names the one it supersedes — never an edit of the original.
 
+     The one other sanctioned edit, to any entry, is correcting a cited file in place: a path
+     or line range that names the wrong file is fixed where it stands, since it points at the
+     evidence and is not the question or its answer. Both stay as written.
+
      Each entry is a numbered "### Question N" section with exactly these fields:
      - Question: the question in the designer's own terms, as it was actually put to them
        (reporting.md's voice — no step names, ids, or engine vocabulary)
