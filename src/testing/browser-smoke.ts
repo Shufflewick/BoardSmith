@@ -1231,9 +1231,10 @@ const BOARD_CANDIDATES = '[data-testid="bs-board"] [data-bs-candidate]';
 
 /**
  * A refused board candidate that stands for whatever lies under the pointer (#468), found by
- * pointing at two corners of it and seeing it name two different choices: aimed elsewhere, it may
- * stand for one the game accepts, so it is pressed (`aimAndClick` finds where). A refused candidate
- * that names the same choice wherever it is pointed at is refused, and is not looked at again while
+ * pointing at the {@link AIM_POINTS} on it until it names two different choices: aimed elsewhere, it
+ * may stand for one the game accepts, so it is pressed (`aimAndClick` finds where). A point the walk
+ * cannot point at, as one its board clips (#1521), or where it names no choice, says nothing. A refused candidate that names the
+ * same choice at every point the walk can point at is refused, and is not looked at again while
  * this action is answered. Each candidate is pinned to its element (`stillThere`) before the pointer
  * moves, since pointing at it changes what it stands for, which is how it was known.
  */
@@ -1247,8 +1248,12 @@ async function aimedElsewhere(answering: Answering): Promise<Control | undefined
         typeof (await pointAt(pinned, x, y)) === 'string'
           ? undefined
           : inPageTime(frame.page(), 'reading what the candidate stands for', () => pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS }));
-      const first = await named(0.1, 0.1);
-      if (first !== undefined && first !== (await named(0.9, 0.9))) return await asItStandsNow(pinned);
+      const names = new Set<string>();
+      for (const [x, y] of AIM_POINTS) {
+        const name = await named(x, y);
+        if (typeof name === 'string') names.add(name);
+        if (names.size > 1) return await asItStandsNow(pinned);
+      }
       refused.add(candidate.key);
     }
     return undefined;
