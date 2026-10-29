@@ -37,6 +37,9 @@
  *   7. Issue 444's headline case (#486): an element pick after an earlier
  *      choice, at 375x812 and 844x390, keeps the bar inside its two-row cap,
  *      with nothing scrolling inside the bar, and leaves the board's size alone.
+ *   8. --bsg-panel-overlap, which a game reads to keep an overlay above the bar,
+ *      is how far the bar's top reaches above the board region, at rest, put
+ *      down, wrapped and opened over a put-down preference (#1520).
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-bar-collapse-browser.mjs`; a missing Chromium says to run
@@ -198,7 +201,9 @@ export default defineComponent({
  * pass so no two of them can describe different layouts.
  */
 async function measure(page) {
-  return page.frameLocator('.world-dev__frame').locator('body').evaluate(() => {
+  return page.frameLocator('.world-dev__frame').locator('body').evaluate(async () => {
+    // Past the next rendering step, where the bar's ResizeObserver sets --bsg-bar-clearance.
+    await new Promise((frame) => requestAnimationFrame(() => requestAnimationFrame(frame)));
     const box = (selector) => {
       const el = document.querySelector(selector);
       if (!el) return null;
@@ -206,7 +211,14 @@ async function measure(page) {
       return { top, bottom, left, right, width, height };
     };
     const region = document.querySelector('[data-testid="bs-board"]');
+    // --bsg-panel-overlap as a game's board reads it, resolved to px (#1520).
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position: absolute; height: var(--bsg-panel-overlap);';
+    region?.append(probe);
+    const overlap = probe.getBoundingClientRect().height;
+    probe.remove();
     return {
+      overlap,
       viewport: { width: window.innerWidth, height: window.innerHeight },
       bar: box('[data-testid="bs-actionbar"]'),
       toggle: box('[data-testid="bs-actionbar-toggle"]'),
@@ -239,6 +251,13 @@ function assertToggleReachable(shot, where) {
     `${where}: the toggle spans x ${toggle.left}..${toggle.right} in a ${viewport.width}px viewport`);
   assert(toggle.top >= 0 && toggle.bottom <= viewport.height,
     `${where}: the toggle spans y ${toggle.top}..${toggle.bottom} in a ${viewport.height}px viewport`);
+}
+
+/** --bsg-panel-overlap is exactly how far the bar's top reaches above the region's content box (#1520). */
+function assertOverlap(shot, where) {
+  const reach = Math.max(0, shot.region.bottom - shot.bar.top);
+  assert(Math.abs(shot.overlap - reach) <= 0.5,
+    `${where}: --bsg-panel-overlap is ${shot.overlap}px, but the bar reaches ${reach}px above the board region`);
 }
 
 /** A one-row bar: one 44px control row and the bar's 9px padding above and below it. */
@@ -279,6 +298,11 @@ async function drive({ launch, hostUrl }) {
 
       await check(`${name}: the toggle is on screen with the bar down`, () => {
         assertToggleReachable(down, name);
+      });
+
+      await check(`${name}: --bsg-panel-overlap follows the bar up and put down (#1520)`, () => {
+        assertOverlap(open, `${name} up`);
+        assertOverlap(down, `${name} down`);
       });
 
       await check(`${name}: the bar's own box shrinks`, () => {
@@ -352,6 +376,8 @@ async function drive({ launch, hostUrl }) {
         );
         assert(nextQuestion.choice !== null && nextQuestion.choice.height > 0,
           'a new question started with the bar down, and its choice controls stayed hidden');
+        assert(nextQuestion.overlap > 0, 'the bar opened over the put-down line and --bsg-panel-overlap stayed 0');
+        assertOverlap(nextQuestion, `${name} opened over the put-down preference`);
         // The bar came up for the question, not by the player's toggle, so the board must not refit (#13, #1518).
         assert(nextQuestion.region.height === afterClick.region.height,
           `the board region is ${nextQuestion.region.height}px tall with the bar up for the question and ` +
@@ -404,6 +430,7 @@ async function oneRowReserve(browser, hostUrl, viewport) {
       assert(rest.bar.height <= ONE_ROW + 1, `the bar at rest is ${rest.bar.height}px tall, more than one row, so this proves nothing`);
       assert(Math.abs(rest.region.bottom - rest.bar.top) <= 0.5,
         `the board region's content box ends at ${rest.region.bottom} and the one-row bar's top is at ${rest.bar.top}`);
+      assertOverlap(rest, `${size} at rest`);
     });
 
     await check(`${size}: put down, the board region ends at the line's top (#1518)`, async () => {
@@ -424,6 +451,7 @@ async function oneRowReserve(browser, hostUrl, viewport) {
       await musterAsSeat2(page, surface);
       const pick = await measure(page);
       assert(pick.bar.height > ONE_ROW + 1, `the bar during the pick is ${pick.bar.height}px tall, one row, so this proves nothing`);
+      assertOverlap(pick, `${size} wrapped`);
       assert(pick.region.width === rest.region.width && pick.region.height === rest.region.height,
         `the board region is ${pick.region.width}x${pick.region.height} with the bar taller and ` +
         `${rest.region.width}x${rest.region.height} with one row`);

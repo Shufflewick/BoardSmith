@@ -19,6 +19,7 @@ import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import guide from '../../../docs/custom-ui-guide.md';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob(['./GameShell.vue', './PlayShell.vue', './helpers/AnnotationLayer.vue']);
@@ -165,6 +166,28 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
     expect(source).not.toContain('actionPanelResizeObserver');
     expect(source).not.toContain('actionbarEl');
     expect(source).not.toContain('--action-panel-h');
+  });
+});
+
+describe('#1520: --bsg-panel-overlap, how far the panel reaches above the reserved row', () => {
+  /** The overlap a game reads, for a bar `bar` px tall over the region's reserve. */
+  const overlap = (bar: number, reserved: string) => px(declaration('.board-viewport', '--bsg-panel-overlap'),
+    { ...tokensFor('base'), '--bsg-bar-clearance': `${bar}px`, '--bsg-panel-reserved': reserved }, { safeArea: 0 });
+
+  it('is the bar\'s height above the reserve, and never below zero', () => {
+    const up = declaration('.game-shell__game', '--bsg-panel-reserved');
+    const down = declaration('.game-shell__game.action-bar-minimized', '--bsg-panel-reserved');
+    expect(overlap(62, up), 'a one-row bar sits in the reserved row').toBe(0);
+    expect(overlap(114, up), 'a two-row bar covers one row and its gap').toBe(52);
+    expect(overlap(14, down), 'the line sits in the line the region reserves').toBe(0);
+    expect(overlap(114, down), 'a question opening the bar over a put-down preference').toBe(100);
+    expect(overlap(0, up), 'before the bar is first measured').toBe(0);
+  });
+
+  it('is documented in the custom UI guide, which the do-not-measure rule points to', () => {
+    expect(guide).toContain('bottom: calc(var(--bsg-panel-overlap) + var(--bsg-s2));');
+    expect(guide).toMatch(/Do \*\*not\*\* try to measure the Action Panel[^]*?\(#keep-an-overlay-above-the-action-panel\)/);
+    expect(guide).toContain('### Keep an overlay above the Action Panel');
   });
 });
 

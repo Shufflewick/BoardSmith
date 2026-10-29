@@ -865,6 +865,8 @@ const mobileToggleLabel = computed(() => {
   min-height: 0;
   position: relative;
   display: flex;
+  /* Public (#1520): how far the bar reaches above the reserved row, for a game overlay that must stay above it. */
+  --bsg-panel-overlap: max(0px, var(--bsg-bar-clearance) - var(--bsg-panel-reserved));
 }
 
 .boardregion {
