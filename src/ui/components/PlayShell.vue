@@ -387,7 +387,7 @@ const mobileToggleLabel = computed(() => {
             :present-seats="presentSeats"
             seat-strip
           >
-            <template #player-strip-extra="{ player }">
+            <template v-if="$slots['player-strip-extra']" #player-strip-extra="{ player }">
               <slot name="player-strip-extra" :player="player"></slot>
             </template>
           </PlayersPanel>
@@ -434,7 +434,7 @@ const mobileToggleLabel = computed(() => {
             <template #player-stats="{ player }">
               <slot name="player-stats" :player="player"></slot>
             </template>
-            <template #player-strip-extra="{ player }">
+            <template v-if="$slots['player-strip-extra']" #player-strip-extra="{ player }">
               <slot name="player-strip-extra" :player="player"></slot>
             </template>
           </PlayersPanel>

@@ -240,8 +240,9 @@ defineSlots<{
       </span>
     </div>
     <!-- Turn-status sentence naming every acting seat; the only live region, so
-         changing slot content beside it does not re-read the sentence. -->
-    <span v-if="stripStatus" class="strip-status" role="status">{{ stripStatus }}</span>
+         changing slot content beside it does not re-read the sentence. Always
+         mounted, even empty, because a live region inserted with its text is not read. -->
+    <span class="strip-status" role="status">{{ stripStatus }}</span>
     <span v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</span>
   </div>
 

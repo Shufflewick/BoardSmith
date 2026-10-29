@@ -150,6 +150,13 @@ describe('seat identity and presence', () => {
     expect(wrapper.findAll('.mobile-strip .hp').map((el) => el.text())).toEqual(['HP 0', 'HP 1']);
     expect(wrapper.findAll('.side-scroll .seat-strip .hp').map((el) => el.text())).toEqual(['HP 0', 'HP 1']);
   });
+
+  it('leaves both seat strips as they were when the game does not fill #player-strip-extra (#1513)', () => {
+    const seats = mountShell({ sidebarRail: true }).findAll('.seat-strip .pt');
+
+    expect(seats).toHaveLength(4);
+    for (const seat of seats) expect((seat.element as HTMLElement).style.gridTemplateRows).toBe('');
+  });
 });
 
 describe('the log', () => {

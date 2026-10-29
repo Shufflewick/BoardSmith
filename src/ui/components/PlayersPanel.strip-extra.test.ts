@@ -49,6 +49,14 @@ describe('the seat strip #player-strip-extra slot (#1513)', () => {
     expect(live[0]!.find('.hp').exists()).toBe(false);
   });
 
+  it('keeps the live region mounted while no seat acts, so the next turn\'s sentence is announced', () => {
+    const live = mount(PlayersPanel, { props: { players: PLAYERS, playerSeat: 0, dueSeats: [], seatStrip: true } })
+      .find('[role="status"]');
+
+    expect(live.exists()).toBe(true);
+    expect(live.text()).toBe('');
+  });
+
   it.each([[[1]], [[]]])('keeps the content at one height with acting seats %j, as the strip keeps one height (#431)', (dueSeats) => {
     const wrapper = mount(PlayersPanel, {
       props: { players: PLAYERS, playerSeat: 0, dueSeats, seatStrip: true },
