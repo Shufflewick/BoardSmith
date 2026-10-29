@@ -595,8 +595,8 @@ interface Runner {
    * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
    * with `reach`, which project files its worker loaded (`readReach`). With `workers`, vitest runs at
-   * most that many test workers, and the reporter refuses a config that would run more (#955). With
-   * no `timeoutMs`, the run has no kill timer, as `boardsmith test` has none, so it always runs to its end (#1512).
+   * most that many test workers, and the reporter refuses a config that would run more (#955). With a null
+   * `timeoutMs`, the run has no kill timer, as `boardsmith test` has none, so it always runs to its end (#1512).
    */
   run(scope: RunScope, mutant: null, timeoutMs: null, options?: RunOptions): Promise<RunResult & { kind: 'ran' }>;
   run(scope: RunScope, mutant: MutantSource | null, timeoutMs: number, options?: RunOptions): Promise<RunResult>;
