@@ -804,9 +804,11 @@ describe('the fields game', () => {
  * with 'underAToast' (#1478) only the top-left quarter, which a toast covers from the moment the
  * pointer first moves over the board until it has been still for two seconds. With `clipped` (#1521),
  * the field is twice as tall as the board, which clips it (`overflow: clip`) to its middle half, so
- * the walk cannot point at either of its corners, and it opens aimed at a refused cell.
+ * the walk cannot point at either of its corners, and it opens aimed at a refused cell. With
+ * `twoRows` (#1521 review), `claim` offers only rows 4 and 5, so the field names no cell (it has no
+ * `data-bs-candidate`) over the other rows, and it opens aimed at a refused cell.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast'; clipped?: boolean } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast'; clipped?: boolean; twoRows?: boolean } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
@@ -814,15 +816,15 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
   };
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
-  const { clipped = false } = options;
+  const { clipped = false, twoRows = false } = options;
   return {
-    ...fieldRules(options.accepts && refusals[options.accepts]),
+    ...fieldRules(options.accepts && refusals[options.accepts], twoRows ? 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)' : undefined),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: ${clipped ? 5 : 2}, col: 2 });
+const cursor = ref({ row: ${clipped || twoRows ? 5 : 2}, col: 2 });
 const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
 // The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
@@ -882,10 +884,10 @@ function hover() {
 
 /**
  * THE FIELD GAME'S RULES (#468): `claim` picks one of a hundred cells (more than the panel lists,
- * so the panel hands the pick to the board), refused on the middle row unless `refusal`, the pick's `disabled`, says which
- * cells are refused, and `rest` passes. A board for it is written by each fixture.
+ * so the panel hands the pick to the board, unless `elements` offers fewer), refused on the middle row unless `refusal`,
+ * the pick's `disabled`, says which cells are refused, and `rest` passes. A board for it is written by each fixture.
  */
-function fieldRules(refusal = "(cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false)"): Record<string, string> {
+function fieldRules(refusal = "(cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false)", elements = 'game.cells()'): Record<string, string> {
   return {
     'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
 import { createGameFlow } from './flow.js';
@@ -937,7 +939,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .prompt('Claim a cell')
       .chooseElement('cell', {
         prompt: 'Which cell?',
-        elements: () => game.cells(),
+        elements: () => ${elements},
         disabled: ${refusal},
       })
       .execute((_args, ctx) => {
