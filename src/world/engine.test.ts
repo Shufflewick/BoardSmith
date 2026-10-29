@@ -2321,17 +2321,14 @@ describe("#1516 — one offer pass hands every action's declaration the same pro
 
   it("lets a pass do shared read-only work once, memoized on the projected root", async () => {
     let checks = 0;
-    const memo = new WeakMap<object, string[]>();
+    const memo = new WeakMap<object, number>();
     const actions = Array.from({ length: 5 }, (_, index) =>
       worldAction<WorldFixtureGame>(`check${index}`)
         .needs(({ world }) => {
           const root = world.partition(ROOM_ONE);
-          if (root === undefined) return [ROOM_ONE];
-          let names = memo.get(root);
-          if (names === undefined) {
+          if (root !== undefined && !memo.has(root)) {
             checks += 1;
-            names = root.all(Token).map((token) => token.name);
-            memo.set(root, names);
+            memo.set(root, root.all(Token).length);
           }
           return [ROOM_ONE];
         })
