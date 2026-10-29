@@ -223,6 +223,13 @@ const SETS_UP = `${WRITES_READY}import { it, expect } from 'vitest';
 it('sets up', () => { expect(1).toBe(1); });
 `;
 
+/** The delays of the kill timers armed from now on: every mutant's limit is at least 30 seconds (#1512). */
+function killTimers(): () => number[] {
+  const armed = vi.spyOn(globalThis, 'setTimeout');
+  onTestFinished(() => armed.mockRestore());
+  return () => armed.mock.calls.map((call) => call[1] ?? 0).filter((ms) => ms >= 30_000);
+}
+
 async function check(project: string, testSource: string, claims = [1, 2]) {
   const testPath = join(project, 'tests/auction.test.ts');
   await fs.mkdir(dirname(testPath), { recursive: true });
@@ -372,6 +379,7 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
 
   it('refuses to mutate on top of a red suite', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const timers = killTimers();
     const result = await check(
       project,
       `import { it, expect } from 'vitest';
@@ -382,6 +390,7 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
     expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
     expect(result.findings[0].detail).toContain('This test fails before anything is mutated: expected 1 to be 2 // Object.is equality.');
     expect(result.summary.mutants).toBe(0);
+    expect(timers()).toEqual([]);
   }, 60_000);
 
   // #840: a file that fails as a whole, or runs no test of a claim, must not read as a pass.
@@ -582,6 +591,7 @@ it('claim 3 — the doubled score is shown', () => {
     const mutatedLines = (logged: string[]) => logged.map((l) => /: (src\/\S+:\d+) /.exec(l)![1]);
 
     it('mutates the game code it runs, which the chunk never touched, and credits a test that pins it', async () => {
+      const timers = killTimers();
       const { project, result } = await pinCheck(`import { it, expect } from 'vitest';
 import { bid } from '../src/rules';
 it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid(3, 3)).toBe(false); });
@@ -589,6 +599,8 @@ it('a higher offer still wins', () => { expect(bid(3, 4)).toBe(true); expect(bid
       expect(result.findings).toEqual([]);
       expect(result.summary).toMatchObject({ files: 1 });
       expect(result.summary.killed).toBeGreaterThan(0);
+      // One limit per mutant run; the unmutated run and the coverage run have none (#1512).
+      expect(timers()).toHaveLength(result.summary.mutants);
       expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES);
       await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
     }, 60_000);
@@ -1028,9 +1040,11 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
     await suite(project, {
       'tests/red.test.ts': "import { it, expect } from 'vitest';\nimport { bid } from '../src/rules';\nit('is red', () => { expect(bid(1, 2)).toBe(false); });\n",
     });
+    const timers = killTimers();
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red: expected true to be false // Object.is equality']);
     expect(result.summary.mutants).toBe(0);
+    expect(timers()).toEqual([]);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
   }, 60_000);
 

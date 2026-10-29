@@ -595,19 +595,19 @@ interface Runner {
    * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
    * with `reach`, which project files its worker loaded (`readReach`). With `workers`, vitest runs at
-   * most that many test workers, and the reporter refuses a config that would run more (#955).
+   * most that many test workers, and the reporter refuses a config that would run more (#955). With a null
+   * `timeoutMs`, the run has no kill timer, as `boardsmith test` has none, so it always runs to its end (#1512).
    */
-  run(
-    scope: RunScope,
-    mutant: { absPath: string; source: string } | null,
-    timeoutMs: number,
-    options?: { bail?: boolean; coverage?: string; reach?: string; workers?: number },
-  ): Promise<RunResult>;
+  run(scope: RunScope, mutant: null, timeoutMs: null, options?: RunOptions): Promise<RunResult & { kind: 'ran' }>;
+  run(scope: RunScope, mutant: MutantSource | null, timeoutMs: number, options?: RunOptions): Promise<RunResult>;
 }
 
+type MutantSource = { absPath: string; source: string };
+type RunOptions = { bail?: boolean; coverage?: string; reach?: string; workers?: number };
+
 /**
- * Runs vitest to its end, or kills it and every worker it started once `timeoutMs` passes (a mutant
- * can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
+ * Runs vitest to its end, or kills it and every worker it started once a given `timeoutMs` passes (a
+ * mutant can turn a loop infinite). Resolves with its exit code, or false when it was killed. Not
  * `runVitestRecorded` (lib/vitest-run.ts): a mutant run needs that timeout and the kill of the
  * whole process group, and prints nothing. A mutant run with `bail` also stops on the reporter's
  * confirmed failure, after its partial report is written, and waits for its process group to disappear.
@@ -615,7 +615,7 @@ interface Runner {
 function runVitest(
   bin: string,
   args: string[],
-  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number; stopOnFailure: boolean },
+  options: { cwd: string; env: NodeJS.ProcessEnv; timeoutMs: number | null; stopOnFailure: boolean },
 ): { finished: Promise<{ exitCode: number | null } | false>; stop: () => Promise<void> } {
   const child = spawn(bin, args, {
     cwd: options.cwd, env: options.env, detached: true,
@@ -652,7 +652,7 @@ function runVitest(
   });
   const finished = new Promise<{ exitCode: number | null } | false>((resolve, reject) => {
     let timedOut = false;
-    const timer = setTimeout(() => {
+    const timer = options.timeoutMs === null ? undefined : setTimeout(() => {
       timedOut = true;
       kill();
     }, options.timeoutMs);
@@ -806,52 +806,56 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
   let active: ReturnType<typeof runVitest> | undefined;
   let stopped = false;
 
+  function run(scope: RunScope, mutant: null, timeoutMs: null, options?: RunOptions): Promise<RunResult & { kind: 'ran' }>;
+  function run(scope: RunScope, mutant: MutantSource | null, timeoutMs: number, options?: RunOptions): Promise<RunResult>;
+  async function run(scope: RunScope, mutant: MutantSource | null, timeoutMs: number | null, options: RunOptions = {}): Promise<RunResult> {
+    const checkStopped = () => {
+      if (stopped) throw new Error('Mutation verification was interrupted. Run it again to finish the check.');
+    };
+    checkStopped();
+    await fs.rm(reportPath, { force: true });
+    const env = { ...process.env };
+    delete env.BOARDSMITH_MUTANT;
+    delete env.BOARDSMITH_COVERAGE;
+    delete env.BOARDSMITH_REACH;
+    delete env.BOARDSMITH_WORKERS;
+    const workerFlags = limitWorkers(options.workers, vitestMajor, env);
+    if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
+    if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
+    if (mutant) {
+      await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
+      env.BOARDSMITH_MUTANT = mutantPath;
+    }
+    const scopePaths = realPaths(scope);
+    const args = [
+      ...('related' in scope ? ['related', '--run', '--passWithNoTests', ...scope.related] : ['run']),
+      '--root', projectDir,
+      '--config', configPath,
+      ...(options.bail ? ['--bail=1'] : []),
+      ...workerFlags,
+      ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
+    ];
+    const started = Date.now();
+    checkStopped();
+    active = runVitest(vitestBin, args, {
+      cwd: projectDir, env, timeoutMs, stopOnFailure: mutant !== null && options.bail === true,
+    });
+    const finished = await active.finished;
+    active = undefined;
+    checkStopped();
+    if (!finished) return { kind: 'timed-out' };
+
+    const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths));
+    return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
+  }
+
   return {
     workDir,
     async stop() {
       stopped = true;
       await active?.stop();
     },
-    async run(scope, mutant, timeoutMs, options = {}) {
-      const checkStopped = () => {
-        if (stopped) throw new Error('Mutation verification was interrupted. Run it again to finish the check.');
-      };
-      checkStopped();
-      await fs.rm(reportPath, { force: true });
-      const env = { ...process.env };
-      delete env.BOARDSMITH_MUTANT;
-      delete env.BOARDSMITH_COVERAGE;
-      delete env.BOARDSMITH_REACH;
-      delete env.BOARDSMITH_WORKERS;
-      const workerFlags = limitWorkers(options.workers, vitestMajor, env);
-      if (options.coverage) Object.assign(env, coverageEnv(options.coverage, projectDir));
-      if (options.reach) Object.assign(env, reachEnv(options.reach, projectDir));
-      if (mutant) {
-        await fs.writeFile(mutantPath, JSON.stringify({ file: realpathSync(mutant.absPath), source: mutant.source }));
-        env.BOARDSMITH_MUTANT = mutantPath;
-      }
-      const scopePaths = realPaths(scope);
-      const args = [
-        ...('related' in scope ? ['related', '--run', '--passWithNoTests', ...scope.related] : ['run']),
-        '--root', projectDir,
-        '--config', configPath,
-        ...(options.bail ? ['--bail=1'] : []),
-        ...workerFlags,
-        ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
-      ];
-      const started = Date.now();
-      checkStopped();
-      active = runVitest(vitestBin, args, {
-        cwd: projectDir, env, timeoutMs, stopOnFailure: mutant !== null && options.bail === true,
-      });
-      const finished = await active.finished;
-      active = undefined;
-      checkStopped();
-      if (!finished) return { kind: 'timed-out' };
-
-      const read = await readReport(reportPath, projectDir, pathInRun(projectDir, byRealPath, scopePaths));
-      return { kind: 'ran', ...read, exitCode: finished.exitCode, ms: Date.now() - started };
-    },
+    run,
   };
 }
 
@@ -1253,8 +1257,7 @@ async function pinCoverage(runner: Runner, projectDir: string, pins: ChunkTestFi
   if (pins.length === 0) return coverage;
   const dir = join(runner.workDir, 'coverage');
   await fs.mkdir(dir);
-  const run = await runner.run(pins, null, 10 * 60_000, { coverage: dir });
-  if (run.kind !== 'ran') throw new Error('The run that records which game code the pinning tests run did not finish within 10 minutes.');
+  await runner.run(pins, null, null, { coverage: dir });
   for (const pin of pins) coverage.set(pin.path, await readCoverage(dir, projectDir, pin.absPath, pin.path));
   return coverage;
 }
@@ -1274,8 +1277,7 @@ export async function runMutationCheck(
     runner = await createRunner(projectDir, input.testFiles, workDir);
     const reachDir = join(workDir, 'reach');
     await fs.mkdir(reachDir);
-    const baseline = await runner.run(input.testFiles, null, 10 * 60_000, { reach: reachDir });
-    if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
+    const baseline = await runner.run(input.testFiles, null, null, { reach: reachDir });
     const notGreen = baselineFindings(input.testFiles, baseline);
     if (notGreen.length > 0) return { findings: notGreen, summary };
 
@@ -1395,8 +1397,7 @@ async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedM
   const reachDir = join(runner.workDir, 'reach');
   await fs.mkdir(reachDir);
   const scope = { related: [...new Set(mutants.map((m) => m.file))] };
-  const baseline = await runner.run(scope, null, 10 * 60_000, { reach: reachDir, workers: budget?.workers });
-  if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
+  const baseline = await runner.run(scope, null, null, { reach: reachDir, workers: budget?.workers });
   if (suiteNoticed(baseline)) return { notGreen: redParts(baseline) };
   const { testsLoading, unrecorded } = await readReach(reachDir, projectDir, baseline.filesRun);
   if (unrecorded.length > 0) {
