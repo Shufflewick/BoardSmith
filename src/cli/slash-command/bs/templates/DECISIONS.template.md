@@ -23,9 +23,13 @@
 
      SUPERSESSION TAKES TWO WRITES, one on each entry: the new entry says "Supersedes Decision M."
      in its Decision, and the old entry gets one line added in place, `- Superseded by: Decision N`.
-     That added line is the only sanctioned edit to a prior entry. A decision the code no longer
-     honours is superseded this way the moment the code changes; left unmarked, the next chunk
-     cites it as authority.
+     A decision the code no longer honours is superseded this way the moment the code changes;
+     left unmarked, the next chunk cites it as authority.
+
+     The only sanctioned edits to a prior entry are the `- Superseded by:` line and correcting a
+     cited file in place: a path or line range that names the wrong file is fixed where it
+     stands, since it points at the evidence and is not the decision. The decision and its
+     reasons stay as written.
 
      CHECKED AS CODE: `boardsmith ledger-check` fails on a decision number used twice (take the
      next unused number, never reuse one), on a "Supersedes Decision M" whose Decision M lacks the

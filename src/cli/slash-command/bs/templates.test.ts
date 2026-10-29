@@ -704,6 +704,12 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
     }
   });
 
+  it('each ledger whose citations ledger-check reads sanctions correcting a citation in place (#1522)', () => {
+    for (const path of [LEDGERS['RULINGS.md'], LEDGERS['DECISIONS.md']]) {
+      expect(flat(read(path)), path).toContain('The only sanctioned edits to a prior entry are the `- Superseded by:` line and correcting a cited file in place');
+    }
+  });
+
   it('a freshly scaffolded project, every ledger copied from its template, passes the check', async () => {
     const dir = tempTree('bs-ledger-templates-');
     mkdirSync(join(dir, 'design'));
