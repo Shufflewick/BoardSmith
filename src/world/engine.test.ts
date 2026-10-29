@@ -2304,7 +2304,8 @@ describe("#1516 — one offer pass hands every action's declaration the same pro
     expect(sameRoot(first)).toBe(true);
 
     engine.offerPartitions("player-a", STAMP.now);
-    expect(seen[0] === first[0]).toBe(false);
+    expect(seen).toHaveLength(3);
+    expect(sameRoot(seen) && seen[0] !== first[0]).toBe(true);
   });
 
   it("answers one projection per partition across every action of one offersFor pass", async () => {
@@ -2351,7 +2352,7 @@ describe("#1516 — one offer pass hands every action's declaration the same pro
   });
 });
 
-describe("#381— a resident-root lookup is asked of the root table, not of the tree", () => {
+describe("#381 — a resident-root lookup is asked of the root table, not of the tree", () => {
   // `residentIds` resolves a declared name to an id in one map read, and then
   // the accessor spent the saving it had just made: it handed the id to
   // `getElementById`, a depth-first walk of the whole resident world. So the
