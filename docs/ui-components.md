@@ -108,6 +108,27 @@ vertical room well before the panel's seat limit, so there are two levers:
   state for that seat — every other turn cue stays either way: the indicator
   dot, the active-card highlight, the turn-change pulse, and `aria-current`.
 
+#### The collapsed panel: `#player-strip-extra`
+
+When the sidebar is collapsed to the desktop rail, and on phones, the panel
+becomes the seat strip: one token per seat and no cards, so `#player-stats` and
+`#player-token-extra` do not show. For the one number a player needs at a
+glance there (HP, say), fill `#player-strip-extra`. It renders under every
+seat's token, in the rail and in the phone strip, and gets `player` (as the
+state on screen has it, like `#player-stats`), `gameView` and `playerSeat`.
+
+```vue
+<template #player-strip-extra="{ player, playerSeat }">
+  <PlayerHp :seat="player.seat" :viewer-seat="playerSeat" compact />
+</template>
+```
+
+Keep it small: the rail is about 64px wide and the phone strip is one row. The
+token is hidden from assistive tech but your content is not, so give it an
+accessible label. It sits outside the strip's live region, so a changing
+number does not re-announce the turn sentence. Leave the slot out and the strip
+is unchanged.
+
 #### Turn-change cue
 
 When the turn passes, the newly-active card plays a one-shot ring pulse. It

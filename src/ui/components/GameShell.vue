@@ -1591,6 +1591,16 @@ defineExpose({
         ></slot>
       </template>
 
+      <!-- Only when the game fills it: an unused slot must not read a snapshot's players. -->
+      <template v-if="$slots['player-strip-extra']" #player-strip-extra="{ player }">
+        <slot
+          name="player-strip-extra"
+          :player="displayedPlayerAt(player.seat)"
+          :game-view="gameView"
+          :player-seat="playerSeat"
+        ></slot>
+      </template>
+
       <!-- Expose interaction state so a game's player-stats can be actionable
            (e.g. tap your own special ability to use it), not just informational.
            `gameView` is the historical view while time-traveling, so turn and

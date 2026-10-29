@@ -210,19 +210,24 @@ defineSlots<{
    * down: content here sits beside the name row instead of stacking under it.
    */
   'player-token-extra'(props: { player: Player }): any;
+  /** Custom content under each seat's token in seat-strip mode (the collapsed
+   *  rail and the phone strip), for the one number a player needs at a glance. */
+  'player-strip-extra'(props: { player: Player }): any;
 }>();
 </script>
 
 <template>
   <!-- ── Seat Strip: compact one-line for phone compact tier (IA-06) ───────── -->
-  <div v-if="seatStrip" class="players-panel seat-strip" role="status" aria-label="Players">
-    <!-- All player tokens inline -->
-    <div class="strip-tokens" aria-hidden="true" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
+  <div v-if="seatStrip" class="players-panel seat-strip" role="group" aria-label="Players">
+    <!-- All player tokens inline, each over the game's #player-strip-extra content -->
+    <div class="strip-tokens" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
+      <!-- Content under a token sits at one height whether its seat acts or not (#431). -->
       <span
         v-for="player in visiblePlayers"
         :key="player.seat"
         class="pt"
         :class="{ 'strip-active': isPlayerActive(player.seat) }"
+        :style="$slots['player-strip-extra'] && { gridTemplateRows: `${STRIP_TOKEN_ACTING}px` }"
         :title="player.name"
       >
         <PlayerToken
@@ -231,10 +236,13 @@ defineSlots<{
           :color="player.color"
           :size="isPlayerActive(player.seat) ? STRIP_TOKEN_ACTING : STRIP_TOKEN_IDLE"
         />
+        <slot name="player-strip-extra" :player="player"></slot>
       </span>
     </div>
-    <!-- Turn-status sentence naming every acting seat -->
-    <span v-if="stripStatus" class="strip-status">{{ stripStatus }}</span>
+    <!-- Turn-status sentence naming every acting seat; the only live region, so
+         changing slot content beside it does not re-read the sentence. Always
+         mounted, even empty, because a live region inserted with its text is not read. -->
+    <span class="strip-status" role="status">{{ stripStatus }}</span>
     <span v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</span>
   </div>
 
@@ -487,11 +495,16 @@ defineSlots<{
 .strip-tokens .pt {
   display: grid;
   place-items: center;
+  gap: 2px;
+}
+
+/* Only the token dims: a game's #player-strip-extra content stays legible. */
+.strip-tokens .pt > .tok {
   opacity: 0.6;
   transition: opacity var(--bsg-dur-fast);
 }
 
-.strip-tokens .pt.strip-active {
+.strip-tokens .pt.strip-active > .tok {
   opacity: 1;
 }
 

@@ -210,6 +210,29 @@ describe('GameShell gates the #player-stats slot like the board (#554)', () => {
   });
 });
 
+describe('GameShell hands the #player-strip-extra slot the state on screen (#1513)', () => {
+  let stripProps: Record<string, unknown> = {};
+  const stripExtra = (slotProps: Record<string, unknown>) => {
+    if ((slotProps.player as { seat: number }).seat === 1) stripProps = slotProps;
+    return h('span', { class: 'hp' });
+  };
+
+  it('hands the slot its player as the state on screen has it, the game view and the viewer\'s seat', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(AttrsBoard, {}, { 'player-strip-extra': stripExtra });
+    expect(stripProps.player).toEqual(DEBUG_TABLE_PLAYERS[0]);
+    expect(stripProps.playerSeat).toBe(received.playerSeat);
+    expect(stripProps.gameView).toBe(received.gameView);
+
+    const historicalPlayers = DEBUG_TABLE_PLAYERS.map((player) => ({ ...player, score: player.seat * 10 }));
+    debugPanel.vm.$emit('time-travel', { view: {}, players: historicalPlayers }, 3, null);
+    await nextTick();
+    expect(received.isViewingHistory).toBe(true);
+    expect(stripProps.player).toEqual(historicalPlayers[0]);
+    expect(stripProps.gameView).toBe(received.gameView);
+    wrapper.unmount();
+  });
+});
+
 describe('GameShell hands the #sidebar-extra slot the state on screen (#582)', () => {
   it('hands the slot the players of the displayed state, live and in history', async () => {
     let sidebarProps: Record<string, unknown> = {};
