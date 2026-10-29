@@ -1040,8 +1040,17 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       'tests/slow.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nit('is slow', () => new Promise(() => { bid(1, 2); }), 50);\n",
     });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
-    expect(result.notGreen).toEqual(['tests/slow.test.ts > is slow: Test timed out in 50ms.']);
+    expect(result.notGreen).toEqual(['tests/slow.test.ts > is slow: Test timed out in 50ms']);
     expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('names a red test that threw a value with no message by the test alone (#1515 review F3)', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/odd.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nit('throws a code', () => { bid(1, 2); throw { code: 1 }; });\n",
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['tests/odd.test.ts > throws a code']);
   }, 60_000);
 
   it("quotes the first line of each unhandled error when vitest fails with no failing test (#1491)", async () => {

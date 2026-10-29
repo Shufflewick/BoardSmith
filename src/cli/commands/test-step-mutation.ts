@@ -489,7 +489,7 @@ const reporter = {
           status: STATUS[test.result?.state] ?? 'skipped',
           // What the mutation check needs of each error: its name, its first line, and whether vitest printed
           // an expected/actual diff for it, which it does only for an error that carried both values.
-          errors: (test.result?.errors ?? []).map((error) => ({ name: error.nameStr ?? error.name, message: String(error.message).split('\\n')[0], diff: error.diff !== undefined })),
+          errors: (test.result?.errors ?? []).map((error) => ({ name: error.nameStr ?? error.name, message: error.message?.split('\\n')[0], diff: error.diff !== undefined })),
         };
       }),
     }));
@@ -520,8 +520,8 @@ export default defineConfig(async (env) => {
 interface ReportedError {
   /** The error's name (`Error`, `AssertionError`, a game's own class); none for a thrown non-error. */
   name: string | undefined;
-  /** The first line of its message. */
-  message: string;
+  /** The first line of its message; none for a thrown value with no message. */
+  message: string | undefined;
   /** Whether vitest printed an expected/actual diff for it: the error carried both values. */
   diff: boolean;
 }
@@ -719,7 +719,8 @@ async function readReport(
         line: test.line,
         status: test.status,
         failedOnAssertion: test.status === 'failed' && test.errors.some(isAssertionFailure),
-        reason: test.errors[0]?.message.replaceAll(projectDir + sep, ''),
+        // The reason is quoted mid-sentence, so its own closing period would double the one after it.
+        reason: test.errors[0]?.message?.replaceAll(projectDir + sep, '').replace(/\.$/, ''),
       });
     }
   }
