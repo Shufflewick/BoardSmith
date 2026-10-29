@@ -362,6 +362,23 @@ describe('the keyboard keeps its place', () => {
   });
 });
 
+describe('the board region reserves the line only for the player\'s own toggle (#1518)', () => {
+  it('follows the preference, not a question opening the bar over it', async () => {
+    const { wrapper, controller } = mountDock({ actionBarMinimized: true });
+    await flush();
+    expect(wrapper.classes()).toContain('action-bar-minimized');
+    await controller.start('move');
+    await flush();
+    expect(collapsed(wrapper)).toBe(false);
+    expect(wrapper.classes(), 'a question opening the bar changed the reserve, which refits the board').toContain('action-bar-minimized');
+    await toggle(wrapper).trigger('click');
+    await flush();
+    await toggle(wrapper).trigger('click');
+    await flush();
+    expect(wrapper.classes()).not.toContain('action-bar-minimized');
+  });
+});
+
 describe('minimizing is a view preference and nothing more', () => {
   it('changes neither the enumerated actions nor the action in progress', async () => {
     const { wrapper, controller, enumerated } = mountDock();

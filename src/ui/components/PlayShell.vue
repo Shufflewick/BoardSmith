@@ -351,7 +351,7 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed }">
+  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
@@ -667,9 +667,10 @@ const mobileToggleLabel = computed(() => {
      shell inherits them by mounting this, and neither adapter has to know the
      numbers exist.
 
-     The board region reserves one CONSTANT row for the panel and the rows above
-     it float over the board (#1514, #1517), so the fitted board never depends on
-     the panel's live height (issue #13). These tokens are derived from the
+     The board region reserves one row for the panel, or only the line while the
+     player has it put down, and the rows above it float over the board (#1514,
+     #1517, #1518), so the fitted board never depends on the panel's live height
+     (issue #13). These tokens are derived from the
      panel's own control metrics, so there is one definition of a "row" for the
      reserve, the bar's cap and the collapsed bar. */
   --bsg-panel-row: 44px;   /* one control row: the WCAG 2.5.8 touch-target floor */
@@ -677,7 +678,8 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
 
   /* What the board region reserves under the board: ONE row of bar (#1517), so a
-     one-row bar sits under the fitted board and only rows beyond it cover it. */
+     one-row bar sits under the fitted board and only rows beyond it cover it.
+     The bar fills it (`min-height`), so a bar shorter than a row leaves no band. */
   --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
                              + env(safe-area-inset-bottom));
 
@@ -717,6 +719,13 @@ const mobileToggleLabel = computed(() => {
      WCAG 2.5.8 target reaches up over the board instead of widening the line. */
   --bsg-action-bar-line: 14px;
   --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + env(safe-area-inset-bottom));
+}
+
+/* Put down by the player (#1518): the region reserves only the line, so the board
+   refits once to reach it. Keyed on the preference, not on what is showing, so a
+   question opening the bar over it refits nothing (#13). */
+.game-shell__game.action-bar-minimized {
+  --bsg-panel-reserved: var(--bsg-action-bar-collapsed);
 }
 
 /* Stage: sidebar + boardregion side by side; fills remaining height */
@@ -870,8 +879,8 @@ const mobileToggleLabel = computed(() => {
   /* regionWidth reads the computed width as the content box, whatever a game sets globally (#1343). */
   box-sizing: content-box;
   padding: var(--bsg-s1);
-  /* The one row reserved for the bar (#1517). Constant, so the fit, which reads
-     this content box, never follows the bar. */
+  /* The row reserved for the bar (#1517, #1518). It changes only on the player's
+     own toggle, so the fit, which reads this content box, never follows a pick. */
   padding-bottom: var(--bsg-panel-reserved);
   /* WCAG 2.4.11: a control scrolled into view by focus lands above the floating bar. */
   scroll-padding-bottom: var(--bsg-panel-max);
@@ -930,6 +939,7 @@ const mobileToggleLabel = computed(() => {
      so overflow is safe. */
   box-sizing: border-box;
   max-height: var(--bsg-panel-max);
+  min-height: var(--bsg-panel-reserved);
   overflow-y: auto;
 }
 
@@ -1230,9 +1240,9 @@ const mobileToggleLabel = computed(() => {
     /* One row on a short screen: vertical space is the scarce axis here. The
        reserve follows the bar's thinner padding, so no board is lost under it. */
     --bsg-panel-pad: 6px;
-    --bsg-panel-reserved: calc(var(--bsg-panel-row) + var(--bsg-panel-pad)
-                               + max(var(--bsg-panel-pad), env(safe-area-inset-bottom)));
-    --bsg-panel-max: var(--bsg-panel-reserved);
+    --bsg-panel-max: calc(var(--bsg-panel-row) + var(--bsg-panel-pad)
+                          + max(var(--bsg-panel-pad), env(safe-area-inset-bottom)));
+    --bsg-panel-reserved: var(--bsg-panel-max);
   }
 
   .actionbar {

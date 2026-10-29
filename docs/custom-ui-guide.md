@@ -1311,11 +1311,16 @@ startup zoom-fit already handles it.
 
 The board region reserves one row for the Action Panel under the board
 (`--bsg-panel-reserved`), so a one-row panel sits under your board, not over
-it. Rows beyond the first float over the bottom of the board. The reserve is a
-constant, so your board's size never depends on the panel: the startup fit is
+it. Rows beyond the first float over the bottom of the board. While the player
+has the panel put down to its thin line, the reserve is only that line, so the
+board reaches it; a game that passes `action-bar-starts-collapsed` starts that
+way. The reserve changes only on the player's own toggle, never on a pick, so
+your board's size never depends on the panel's live height: the startup fit is
 a pure function of the region box and your board's natural size, and the panel
-showing, growing, shrinking or being put down never moves or refits the board.
-For one game state on one viewport, two loads produce identical geometry. (It did not used to be: the fit once reserved the panel's
+showing, growing or shrinking never moves or refits the board. Putting the
+panel down or bringing it back up refits it once, as resizing the window does.
+A question that brings the panel up by itself while it is put down floats over
+the board and refits nothing. For one game state on one viewport, two loads produce identical geometry. (It did not used to be: the fit once reserved the panel's
 *measured* height, frozen at whatever it happened to be ~300ms after the board
 stopped changing, so the same card measured 220px on one load and 202px on the
 next.)

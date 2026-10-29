@@ -28,9 +28,10 @@
  * value (every selection step re-wraps it), so reserving the measured height
  * made the fitted zoom depend on when the sample was taken (issue #13). The
  * panel floats over the board (#1514): it is out of flow (its `.actionbar-frame`
- * wrapper is `position: absolute`) and the region reserves one CONSTANT row for
- * it in its padding (#1517), so the region box is the single source of truth,
- * the panel never re-triggers the persistent region observer, and the old
+ * wrapper is `position: absolute`) and the region reserves one row for it in
+ * its padding (#1517), or only the thin line while the player has the bar put
+ * down (#1518), so the region box is the single source of truth, only the
+ * player's own toggle re-triggers the persistent region observer, and the old
  * "board shakes under the player's cursor on every click" regression is
  * structurally impossible. What rows beyond the reserved one cover is reached
  * by scrolling the region, which ends in scroll room as tall as those rows.
