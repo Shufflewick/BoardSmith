@@ -50,15 +50,11 @@ import { withoutCssZoom } from './css-zoom.test-helper.js';
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../components/GameShell.vue');
 
-/** The measured mobile case from the B20 report: a 375×812 viewport, a
- *  375×765 board region, and a board whose printed text cannot be truncated
- *  running 736px tall — taller than the region minus the Action Panel. */
+/** The mobile case from the B20 report: a 375×812 viewport, a 375×765 board
+ *  region, and a board whose printed text cannot be truncated running taller
+ *  than the region. */
 const REGION = { width: 375, height: 765 };
-const NATURAL = { width: 367, height: 736 };
-/** The Action Panel's CONSTANT reserved footprint, which GameShell applies as
- *  `.boardregion`'s padding-bottom (`--bsg-panel-reserved`). Nothing measures the
- *  panel; the fit only ever sees region padding. */
-const PANEL_RESERVED = 100;
+const NATURAL = { width: 367, height: 836 };
 
 /** Every live observer watching `el` — a real resize notifies all of them, and
  *  the region is watched by BOTH composables. */
@@ -134,7 +130,6 @@ function mountShell(board: Component | null) {
 function layOut(wrapper: ReturnType<typeof mountShell>['wrapper'], minContentWidth = 0) {
   const region = wrapper.find('main.boardregion').element as HTMLElement;
   const zoom = wrapper.find('.zoom-container').element as HTMLElement;
-  region.style.paddingBottom = `${PANEL_RESERVED}px`;
   region.style.width = `${REGION.width}px`;
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () => {
@@ -185,7 +180,7 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     // The pin took: the board is the region's width, and the board is really
     // taller than the space the both-axis fit would have measured against.
     expect(zoom.getBoundingClientRect().width).toBe(REGION.width);
-    expect(NATURAL.height).toBeGreaterThan(REGION.height - PANEL_RESERVED);
+    expect(NATURAL.height).toBeGreaterThan(REGION.height);
 
     expect(shell.api.zoomLevel.value).toBe(1);
     shell.wrapper.unmount();
@@ -195,8 +190,8 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     const shell = mountShell(PlainBoard);
     await settle(shell.wrapper);
 
-    // min(375/367, (765-100)/736) = height constrains.
-    const expected = (REGION.height - PANEL_RESERVED) / NATURAL.height;
+    // min(375/367, 765/836) = height constrains.
+    const expected = REGION.height / NATURAL.height;
     expect(shell.api.zoomLevel.value).toBeCloseTo(expected, 5);
     expect(shell.api.zoomLevel.value).toBeLessThan(1);
     shell.wrapper.unmount();
@@ -236,7 +231,7 @@ describe('B20: useBoardSize pins the board; useAutoZoom stops height-fitting it'
     shell.api.fitZoom(); // "Fit" — re-measures the new board
     await settle(shell.wrapper);
 
-    expect(shell.api.zoomLevel.value).toBeCloseTo((REGION.height - PANEL_RESERVED) / NATURAL.height, 5);
+    expect(shell.api.zoomLevel.value).toBeCloseTo(REGION.height / NATURAL.height, 5);
     shell.wrapper.unmount();
   });
 

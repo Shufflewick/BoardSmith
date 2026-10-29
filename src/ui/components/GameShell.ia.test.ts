@@ -16,20 +16,12 @@
  *      but action buttons are suppressed (buttons-only gate).
  *   3. (IA-04) When not actionable (not my turn, no awaiting), the entire
  *      Action Panel is absent.
- *   4. (IA-04) The Action Panel's footprint is a CSS constant the board region
- *      reserves — nothing measures the panel (#13).
  */
 
 import { describe, it, expect } from 'vitest';
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { mount } from '@vue/test-utils';
 import { defineComponent, ref, onUnmounted, nextTick } from 'vue';
 import type { PropType } from 'vue';
-
-// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
-import.meta.glob(['./GameShell.vue', './PlayShell.vue']);
 
 // ---------------------------------------------------------------------------
 // ActionbarHarness — isolated test component that mirrors GameShell.vue's
@@ -157,50 +149,6 @@ describe('GameShell actionbar — IA-02/IA-03/IA-04 template conditions', () => 
     await wrapper.setProps({ isMyTurn: true });
 
     expect(wrapper.find('.turn').exists()).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Suite 2: the Action Panel's footprint is a CONSTANT, not a measurement (#13)
-//
-// This suite used to prove a ResizeObserver publishing the panel's measured
-// height. That measurement is gone: it made the startup zoom fit depend on when
-// the sample was taken, so the same state fitted differently on every reload.
-// The panel's footprint is now declared in CSS, which is what is asserted here.
-// The arithmetic (reachability, the 2-row budget) lives in
-// GameShell.panel-footprint.test.ts.
-// ---------------------------------------------------------------------------
-describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
-  const gameShellSource = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
-    'utf-8',
-  );
-  // The action bar and the board region moved into the shared chrome in #170.
-  // The footprint decision did not move with them -- it is still one constant
-  // reserved in CSS, and it is now reserved for BOTH backends at once.
-  const shellSource = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'),
-    'utf-8',
-  );
-
-  it('caps the actionbar at the reserved footprint (#444)', () => {
-    expect(shellSource).toMatch(/\.actionbar \{[\s\S]*?max-height: var\(--bsg-panel-reserved\);/);
-  });
-
-  it('reserves the panel footprint as .boardregion padding, not as a measured value', () => {
-    expect(shellSource).toMatch(
-      /\.boardregion \{[\s\S]*?padding-bottom: var\(--bsg-panel-reserved\);/,
-    );
-  });
-
-  it('keeps measured modal clearance out of the board footprint', () => {
-    expect(shellSource).not.toContain('--action-panel-h');
-  });
-
-  it('keeps panel measurement out of the table adapter', () => {
-    expect(gameShellSource).not.toContain('actionbarEl');
-    expect(gameShellSource).not.toContain('actionPanelHeight');
-    expect(gameShellSource).not.toContain('--action-panel-h');
   });
 });
 

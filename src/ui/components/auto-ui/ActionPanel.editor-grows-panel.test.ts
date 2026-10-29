@@ -3,10 +3,10 @@
  * The one exception to the Action Panel's two-row cap (issue 444, ruled for
  * the #229 / #237 typed editors).
  *
- * The bar is capped at the strip the board region reserves, so it never covers
- * the board. A typed editor may grow the bar past the strip WHILE it is open,
- * and only then, covering part of the board; the board never refits (the
- * reservation does not change), and the cap comes back the moment it closes.
+ * The bar floats over the board and is capped at a two-row strip
+ * (`--bsg-panel-max`). A typed editor may grow the bar past the strip WHILE it
+ * is open, and only then, covering more of the board; the board never refits,
+ * and the cap comes back the moment it closes.
  *
  * How far depends on the kind (#1300). A multi-line box needs six rows of text
  * plus its count and submit, so it may grow the bar to what it needs, bounded
@@ -116,13 +116,13 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
   }
 
   it('keeps the strip as the cap everywhere else', () => {
-    expect(rule('.actionbar')).toMatch(/max-height:\s*var\(--bsg-panel-reserved\);/);
+    expect(rule('.actionbar')).toMatch(/max-height:\s*var\(--bsg-panel-max\);/);
   });
 
   it('caps a bar holding a multi-line box at the editor ceiling, never below the strip', () => {
     const lifted = rule(`.actionbar:has(${BOX})`);
     expect(lifted).toMatch(
-      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*var\(--bsg-panel-editor-max\)\);/,
+      /max-height:\s*max\(var\(--bsg-panel-max\),\s*var\(--bsg-panel-editor-max\)\);/,
     );
   });
 
@@ -130,7 +130,7 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
     // Not a fixed row count: an earlier choice's chips and a prompt that wraps
     // add rows, and a fixed ceiling put the field and its Done below the bar's edge.
     expect(rule(`.actionbar:has(${FIELD})`)).toMatch(
-      /max-height:\s*max\(var\(--bsg-panel-reserved\),\s*60dvh\);/,
+      /max-height:\s*max\(var\(--bsg-panel-max\),\s*60dvh\);/,
     );
     // No rule lifts the cap for an unvalued mark, which would give a field the box's ceiling.
     expect(style).not.toContain(`:has(${MARK})`);
@@ -153,9 +153,7 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
   });
 
   it('never moves the board: nothing about the region changes with the editor', () => {
-    // The reservation is the region's padding and nothing else sets it; no rule
-    // keyed on the mark reaches the board region or the reservation token.
-    for (const mark of [BOX, FIELD]) expect(rule(`.actionbar:has(${mark})`)).not.toMatch(/--bsg-panel-reserved\s*:/);
+    // No rule keyed on the mark reaches the board region.
     expect(style).not.toMatch(/boardregion[^{]*\[data-bs-grows-panel\]/);
     expect(style).not.toMatch(/:has\(\[data-bs-grows-panel\]\)[^{]*boardregion/);
   });

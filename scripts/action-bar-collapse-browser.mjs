@@ -18,11 +18,9 @@
  *
  *   1. The toggle's box is inside the viewport at both widths, collapsed and
  *      open. A restore control you cannot reach is not a restore control.
- *   2. Collapsing shrinks the bar's rendered box, and the collapsed box fits
- *      inside the footprint the board region reserved for it -- so there is no
- *      board under the bar at all, rather than board hidden under an empty bar.
- *   3. The board's usable area grows by what the bar gave up. That is the whole
- *      ask: get the screen back.
+ *   2. Collapsing shrinks the bar's rendered box.
+ *   3. The bar floats over the board (#1514): the board region runs under it,
+ *      and its size is the same with the bar up, down, and grown to two rows.
  *   4. Down, the bar is a thin line (#1439, #1444): no taller than 14px plus the safe
  *      area, with the seat token and the panel's own controls gone. (The
  *      controls menu is the adapter's slot content and a world fills none; that
@@ -34,8 +32,8 @@
  *   6. And it comes up for a QUESTION, not for any click: a board click that
  *      asks nothing leaves the bar where the player put it.
  *   7. Issue 444's headline case (#486): an element pick after an earlier
- *      choice, at 375x812 and 844x390, keeps the bar's top at or below the
- *      strip the board reserves, with nothing scrolling inside the bar.
+ *      choice, at 375x812 and 844x390, keeps the bar inside its two-row cap,
+ *      with nothing scrolling inside the bar, and leaves the board's size alone.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-bar-collapse-browser.mjs`; a missing Chromium says to run
@@ -205,9 +203,6 @@ async function measure(page) {
       return { top, bottom, left, right, width, height };
     };
     const region = document.querySelector('[data-testid="bs-board"]');
-    const reserved = region
-      ? parseFloat(getComputedStyle(region).paddingBottom)
-      : Number.NaN;
     return {
       viewport: { width: window.innerWidth, height: window.innerHeight },
       bar: box('[data-testid="bs-actionbar"]'),
@@ -219,11 +214,14 @@ async function measure(page) {
       start: box('[data-bs-action="tend"]'),
       // A choice control, which only exists mid-question.
       choice: box('.action-config .choice-btn'),
-      reserved,
-      regionHeight: region ? region.clientHeight : Number.NaN,
-      // What the player can actually see board in: the region minus the strip
-      // the bar reserved at its foot.
-      usableBoardHeight: region ? region.clientHeight - reserved : Number.NaN,
+      // The content box: what the board is fitted to.
+      region: region ? (() => {
+        const cs = getComputedStyle(region);
+        const top = region.getBoundingClientRect().top + region.clientTop + parseFloat(cs.paddingTop);
+        const height = region.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+        const width = region.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+        return { width, height, bottom: top + height };
+      })() : null,
     };
   });
 }
@@ -277,30 +275,18 @@ async function drive({ launch, hostUrl }) {
         assertToggleReachable(down, name);
       });
 
-      await check(`${name}: the bar's own box shrinks, and fits what the board reserved`, () => {
+      await check(`${name}: the bar's own box shrinks`, () => {
         assert(down.bar !== null, 'the bar left the document entirely');
         assert(down.bar.height < open.bar.height,
           `the bar measured ${down.bar.height}px down and ${open.bar.height}px up`);
-        // The failure this exists for: a bar that empties in the DOM and keeps
-        // its box, so the board is still hidden underneath it.
-        assert(down.bar.height <= down.reserved + 0.5,
-          `the collapsed bar is ${down.bar.height}px over a ${down.reserved}px reservation, ` +
-          'so it covers board the region never made room for');
       });
 
-      await check(`${name}: the board gets the space back, not an empty hole`, () => {
-        assert(down.usableBoardHeight > open.usableBoardHeight,
-          `the board's usable height stayed at ${down.usableBoardHeight}px ` +
-          `(it was ${open.usableBoardHeight}px with the bar up)`);
-        // The other half of it: the reservation has to give up at least what the
-        // bar gave up. A bar that shrinks while the region keeps reserving the
-        // old strip leaves a band of board reserved for nothing -- the panel is
-        // gone and the hole it sat in is still there.
-        const barGaveUp = open.bar.height - down.bar.height;
-        const reservationGaveUp = open.reserved - down.reserved;
-        assert(reservationGaveUp >= barGaveUp,
-          `the bar gave up ${barGaveUp}px but the region gave up only ` +
-          `${reservationGaveUp}px, so that difference is board reserved for nothing`);
+      await check(`${name}: the bar floats over the board, which keeps its size up or down (#1514)`, () => {
+        assert(open.region.bottom > open.bar.top,
+          `the board region's content ends at ${open.region.bottom}, above the bar's top at ${open.bar.top}: it is still sized around the bar`);
+        assert(down.region.width === open.region.width && down.region.height === open.region.height,
+          `the board region is ${down.region.width}x${down.region.height} with the bar down and ` +
+          `${open.region.width}x${open.region.height} with it up`);
       });
 
       // The controls menu is the ADAPTER's slot content and a world fills none.
@@ -382,10 +368,9 @@ async function drive({ launch, hostUrl }) {
  * ISSUE 444'S HEADLINE CASE, MEASURED (#486).
  *
  * An element pick made after an earlier choice, on a phone and on a short
- * landscape screen: the bar's top edge sits at or below the strip the board
- * region reserves (its padding-bottom), and nothing scrolls inside the bar.
- * Before #444 the bar grew up to five rows over a board that had fitted itself
- * above two, and covered the bottom of it. Run in both colour schemes, which
+ * landscape screen: the bar's top edge sits within its two-row cap, nothing
+ * scrolls inside the bar, and the board region keeps the size it had with the
+ * one-row bar at rest (#1514). Before #444 the bar grew up to five rows. Run in both colour schemes, which
  * proves the layout holds in each, not that either looks right.
  */
 /** What a pick after a choice shows, each of which must be whole and in view. */
@@ -399,13 +384,16 @@ const PICK_PARTS = [
 async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
   const size = `${viewport.width}x${viewport.height} ${colorScheme}`;
   await onFreshPage(browser, hostUrl, { viewport, colorScheme }, (page) => waitForAction(page, 'tend'), async (page, surface) => {
-    await check(`${size}: an element pick after an earlier choice sits inside the strip, without scrolling`, async () => {
+    await check(`${size}: an element pick after an earlier choice sits inside the cap, without scrolling or resizing the board`, async () => {
+      const atRest = await barGeometry(surface);
       await surface.locator('[data-bs-action="plant"]').click();
       await surface.locator('.action-config .choice-btn', { hasText: 'Scuttlers' }).click();
       await surface.locator('.board-handoff-btn').waitFor({ timeout: 15_000 });
       const bar = await barGeometry(surface, PICK_PARTS);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
       assert(!bar.scrolls, `the bar scrolls during the pick (${bar.height}px tall): it does not fit the strip`);
+      assert(bar.regionHeight === atRest.regionHeight,
+        `the board region is ${bar.regionHeight}px tall during the pick and ${atRest.regionHeight}px at rest`);
       assert(bar.outside.length === 0, `not in view inside the bar: ${bar.outside.join(', ')}`);
       assert(bar.clipped.length === 0, `cut off sideways: ${bar.clipped.join(', ')}`);
       await surface.locator('.action-config .cancel-btn').click();
@@ -414,7 +402,7 @@ async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
 
     await check(`${size}: a long action prompt wraps whole, and the handoff stays reachable`, async () => {
       // Never cut short. It may cost the bar its fit, so the bar may scroll --
-      // the last resort -- but it still covers no board and every part of the
+      // the last resort -- but it stays inside its cap and every part of the
       // pick can be scrolled into view. Offered to seat 2 (see \`packPick\`).
       await page.locator('[data-testid="world-seat-switcher"]').click();
       await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();

@@ -26,16 +26,14 @@
  * NOTHING HERE MEASURES THE ACTION PANEL — the options type does not even admit
  * a panel input, so the fit cannot read it. The panel's height has no single
  * value (every selection step re-wraps it), so reserving the measured height
- * made the fitted zoom depend on when the sample was taken (issue #13). Instead
- * GameShell reserves a CONSTANT footprint in CSS: `--bsg-panel-reserved` is
- * `.boardregion`'s padding-bottom, so the padding subtraction below already
- * excludes the panel's space and the region box is the single source of truth.
- * Being constant, it never re-triggers the persistent region observer — the old
- * "board shakes under the player's cursor on every click" regression is
- * structurally impossible. The panel is out of flow (its `.actionbar-frame`
- * wrapper is `position: absolute`) so it never moves the board by itself, and it
- * is capped at that same reserved footprint (#444), so it never covers the
- * board either: what does not fit scrolls inside the panel.
+ * made the fitted zoom depend on when the sample was taken (issue #13). The
+ * panel floats over the board (#1514): it is out of flow (its `.actionbar-frame`
+ * wrapper is `position: absolute`) and the region reserves nothing for it, so
+ * the region box is the single source of truth, the panel never re-triggers the
+ * persistent region observer, and the old "board shakes under the player's
+ * cursor on every click" regression is structurally impossible. What the panel
+ * covers is reached by scrolling the region, which ends in scroll room as tall
+ * as the panel.
  *
  * Fit axis: a board that has called `useBoardSize()` is pinned to the region's
  * width and documented to grow by VERTICAL SCROLL. Height-fitting such a board
@@ -50,9 +48,7 @@
  * - The board element carries CSS `zoom`, so its getBoundingClientRect() is
  *   scaled. Natural size = rect / the *applied* zoom read from computed style
  *   (not the ref, which may not have flushed to the DOM yet).
- * - Available space is the region's content box — and the region's
- *   padding-bottom is the Action Panel's reserved footprint, so a fitted board
- *   sits fully above that footprint with no panel term needed. Its width is
+ * - Available space is the region's content box. Its width is
  *   taken with the vertical scrollbar showing, the same width useBoardSize
  *   pins to, so the scrollbar coming or going never moves the fit (#1343).
  * - Re-fits triggered by the region observer are rAF-coalesced into a single

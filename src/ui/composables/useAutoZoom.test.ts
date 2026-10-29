@@ -6,8 +6,7 @@
  *   AZ-1: computeFitZoom returns the largest zoom where the board fits both
  *         axes, clamped to [FIT_ZOOM_MIN, ZOOM_MAX], and null for unmeasurable boxes.
  *   AZ-2: measureAndFit applies the fitted zoom from real element measurements
- *         (board rect ÷ applied zoom vs region client box minus padding and
- *         Action Panel height).
+ *         (board rect ÷ applied zoom vs region client box minus padding).
  *   AZ-3: startup fitting keeps following board resizes while content settles
  *         in (including waiting out an initial 0×0 board), then the STARTUP
  *         board observer stops once the size has been stable for SETTLE_MS —
@@ -19,8 +18,8 @@
  *   ZOOM-01: after the startup fit settles, a region resize re-fits the board
  *         (the persistent region observer), unless the user has taken manual
  *         control via setZoom.
- *   ZOOM-02: the Action Panel height is reserved during startup but frozen afterwards —
- *         a mid-game action-panel resize must NOT move the board. Re-fitting on
+ *   ZOOM-02: the Action Panel is never measured — a mid-game action-panel
+ *         resize must NOT move the board. Re-fitting on
  *         it made the board shake on every piece click and every move.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -72,8 +71,8 @@ describe('computeFitZoom (AZ-1)', () => {
   });
 
   it("B20: 'width' still fits when the height boxes are unmeasurable", () => {
-    // A tall board under a taller-than-region Action Panel allowance yields a
-    // non-positive avail height; that must not suppress the width fit.
+    // Region padding taller than the region yields a non-positive avail
+    // height; that must not suppress the width fit.
     expect(computeFitZoom({ width: 400, height: 900 }, { width: 400, height: 0 }, 'width')).toBe(1);
     // The width boxes are still required on both axis modes.
     expect(computeFitZoom({ width: 0, height: 900 }, { width: 400, height: 600 }, 'width')).toBeNull();
@@ -103,13 +102,11 @@ function fakeBoard(width: number, height: number, appliedZoom = 1) {
 
 /** Mutable fake region: its computed width (what the fit reads) and its
  *  clientHeight can change, so a test can drive a post-startup region resize. */
-function fakeRegion(width: number, clientHeight: number, reservedPanel = 0) {
+function fakeRegion(width: number, clientHeight: number, paddingBottom = 0) {
   const size = { height: clientHeight };
   const el = document.createElement('div');
-  // The Action Panel's CONSTANT reserved footprint is the region's padding-bottom
-  // (--bsg-panel-reserved in GameShell.vue). The fit subtracts region padding and
-  // knows nothing about a panel — see the module docblock (#13).
-  el.style.paddingBottom = `${reservedPanel}px`;
+  // The fit subtracts region padding and knows nothing about a panel (#13).
+  el.style.paddingBottom = `${paddingBottom}px`;
   el.style.width = `${width}px`;
   // jsdom recomputes a style change only for an element in the document.
   document.body.appendChild(el);
@@ -327,23 +324,21 @@ describe('useAutoZoom', () => {
   });
 
   describe('re-fit on available-space change (ZOOM-01)', () => {
-    it("reserves the panel's CONSTANT footprint from the region's padding, from the first fit (#13)", async () => {
+    it("subtracts the region's padding from the first fit (#13)", async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
-      // The region's padding-bottom IS the reserved panel footprint.
       const region = fakeRegion(800, 700, 400);
       const regionEl = ref<HTMLElement | null>(region.el);
       const { api, wrapper } = mountAutoZoom({ boardEl, regionEl });
       await nextTick();
       flushRaf();
 
-      // avail height 700-400=300 → min(800/400, 300/300) = 1.0, reserved from the
-      // very first fit: there is no "panel landing" instant to be early or late for.
+      // avail height 700-400=300 → min(800/400, 300/300) = 1.0 from the very first fit.
       expect(api.zoomLevel.value).toBe(1.0);
       wrapper.unmount();
     });
 
-    it('a post-startup region re-fit reserves the same constant footprint (ZOOM-02)', async () => {
+    it('a post-startup region re-fit reads the region box alone (ZOOM-02)', async () => {
       const board = fakeBoard(400, 300);
       const boardEl = ref<HTMLElement | null>(board.el);
       const region = fakeRegion(800, 700, 100);
@@ -353,8 +348,7 @@ describe('useAutoZoom', () => {
       flushRaf();
       vi.advanceTimersByTime(SETTLE_MS);
 
-      // The window resizes. The reservation is a CSS constant, so the re-fit
-      // reserves exactly what the startup fit did — no frozen sample involved:
+      // The window resizes. The re-fit reads the region box alone, no frozen sample:
       // avail 800 x (1000-100)=900 -> min(800/400, 900/300) = min(2, 3) = 2.0.
       region.setSize(800, 1000);
       observerFor(region.el)?.fire();
@@ -431,7 +425,7 @@ describe('useAutoZoom', () => {
       expect(api.zoomLevel.value).toBe(0.8);
 
       // Pressing Fit re-fits to the CURRENT space (400×700 region less its 100
-      // reserved footprint → avail 400×600) and clears the guard.
+      // padding → avail 400×600) and clears the guard.
       api.fitZoom();
       expect(api.zoomLevel.value).toBe(1.0); // min(400/400, 600/300) = 1.0
 

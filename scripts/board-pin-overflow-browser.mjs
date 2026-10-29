@@ -87,7 +87,9 @@ function crossTheOverflowPoint(frame) {
     await nextFrame();
 
     const cs = win.getComputedStyle(region);
-    const room = region.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+    // Less the scroll room after the board for the floating Action Panel (#1514).
+    const runway = parseFloat(win.getComputedStyle(region, '::after').height);
+    const room = region.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - runway;
     const width = region.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
     const steps = [
       { height: `${room - 4}px` },

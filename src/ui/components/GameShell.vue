@@ -262,14 +262,6 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
   if (!mql.matches) mobileExpanded.value = false;
 }
 
-// The floating Action Panel's footprint is a CONSTANT, declared in CSS
-// (--bsg-panel-reserved, applied as .boardregion's padding-bottom) and never
-// measured. Its height has no single value — it re-wraps on every selection
-// step — so a fit that reserved the measured height was not reproducible
-// between two loads of the same state (issue #13). The panel is capped at that
-// same footprint, so it never covers the board (#444); its content lays out
-// inside it and scrolls internally past it.
-
 // Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
 // the board region (clamped to the 0.5–2.0 slider range) and then left alone —
 // mid-game content growth and window resizes never move the zoom. The user
@@ -1820,9 +1812,8 @@ defineExpose({
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
-  /* Sits one row-gap above the Action Panel's reserved footprint — the same
-     quantity the board is fitted against, not a second magic number. */
-  bottom: calc(var(--bsg-panel-reserved) + var(--bsg-panel-gap));
+  /* Sits one row-gap above the Action Panel's cap, not a second magic number. */
+  bottom: calc(var(--bsg-panel-max) + var(--bsg-panel-gap));
   left: 50%;
   transform: translateX(-50%);
   z-index: 34; /* above game modals (z-32) and tutorial and hint bubbles (z-31, 33), below modals */

@@ -1,22 +1,18 @@
 // @vitest-environment jsdom
 /**
- * #13 / #444: the Action Panel's footprint is a CONSTANT declared in CSS, the
- * board region reserves it as layout, nothing measures the panel, and the panel
- * can never grow past it.
+ * #1514: the Action Panel floats over the board. The board region reserves
+ * nothing for it, so the board's size never depends on the panel (#13 holds by
+ * construction), and scroll room after the board lets the player see what the
+ * bar covers.
  *
  * These assertions are made against the shells' real `<style scoped>` blocks
- * (parsed here, not reproduced), because the reservation IS the CSS: a test that
- * restated the numbers would pass while the shell shipped different ones.
+ * (parsed here, not reproduced), because the layout IS the CSS: a test that
+ * restated the numbers would pass while the shell shipped different ones. The
+ * on-screen geometry is measured in `scripts/action-bar-collapse-browser.mjs`.
  *
- * What must hold, per tier:
- *   1. The token exists on `.game-shell__game` and every consumer reads it — no
- *      second magic number anywhere.
- *   2. The panel's ceiling IS the reservation (#444). The board is fitted above
- *      the reserved strip and never refits (#13), so a panel taller than the strip
- *      would cover the bottom of a board that fitted itself correctly. The panel
- *      lays out inside the strip and, only as a last resort, scrolls inside it.
- *      The one exception, a typed editor that may grow the bar while
- *      it is open, is held in ActionPanel.editor-grows-panel.test.ts.
+ * The bar keeps its own two-row cap (`--bsg-panel-max`); the one exception, a
+ * typed editor that may grow the bar while it is open, is held in
+ * ActionPanel.editor-grows-panel.test.ts.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -29,9 +25,9 @@ import.meta.glob(['./GameShell.vue', './PlayShell.vue', './helpers/AnnotationLay
 /**
  * BOTH HALVES OF THE SHELL, because since #170 the constraint spans the pair.
  *
- * The footprint token, the action bar and the board region live in the shared
- * chrome (`PlayShell`); the bot demo control bar, which reads the same reserved
- * quantity so it never sits over the panel, stays with the table adapter. One
+ * The panel tokens, the action bar and the board region live in the shared
+ * chrome (`PlayShell`); the bot demo control bar, which reads the same cap so
+ * it never sits over the panel, stays with the table adapter. One
  * definition of the token must serve both -- which is exactly what reading them
  * as one text proves. `PlayShell` comes first so its declarations are the ones
  * found.
@@ -97,14 +93,14 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-panel-row': declaration('.game-shell__game', '--bsg-panel-row'),
     '--bsg-panel-gap': declaration('.game-shell__game', '--bsg-panel-gap'),
     '--bsg-panel-pad': declaration('.game-shell__game', '--bsg-panel-pad'),
-    '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
+    '--bsg-panel-max': declaration('.game-shell__game', '--bsg-panel-max'),
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
     '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
   };
   if (tier === 'base') return base;
-  const m = landscapeTokens().match(/--bsg-panel-reserved\s*:\s*([\s\S]*?);/);
-  expect(m, '--bsg-panel-reserved not overridden in the landscape-short tier').not.toBeNull();
-  base['--bsg-panel-reserved'] = m![1].trim();
+  const m = landscapeTokens().match(/--bsg-panel-max\s*:\s*([\s\S]*?);/);
+  expect(m, '--bsg-panel-max not overridden in the landscape-short tier').not.toBeNull();
+  base['--bsg-panel-max'] = m![1].trim();
   return base;
 }
 
@@ -114,75 +110,71 @@ const ENVIRONMENTS: Env[] = [
   { safeArea: 21 },  // notched phone, landscape
 ];
 
-describe('#13 / #444: the Action Panel stays inside a constant, token-derived footprint', () => {
-  it('the shell declares the panel tokens and every consumer reads them', () => {
-    expect(declaration('.game-shell__game', '--bsg-panel-row')).toBe('44px'); // WCAG 2.5.8
-    expect(declaration('.game-shell__game', '--bsg-panel-gap')).toBe(declaration('.actionbar', 'gap'));
-
-    expect(declaration('.boardregion', 'padding-bottom')).toBe('var(--bsg-panel-reserved)');
-    // The demo control bar clears the SAME quantity — not a second magic number.
-    expect(declaration('.bsg-demo-controls', 'bottom')).toContain('var(--bsg-panel-reserved)');
+describe('#1514: the Action Panel floats over the board and never sizes it', () => {
+  it('reserves nothing for the panel in the board region', () => {
+    // The region's only padding is the shell's own hairline; the fit reads it,
+    // so a panel term here would size the board by the panel again.
+    expect(declaration('.boardregion', 'padding')).toBe('var(--bsg-s1)');
+    expect(block('.boardregion')).not.toMatch(/^\s*padding-bottom\s*:/m);
+    expect(source).not.toContain('--bsg-panel-reserved');
   });
 
-  it('caps the panel at the reservation itself, so it can never cover the board (#444)', () => {
-    // The same token, not an equal number: two tokens that happen to agree are
-    // two places to disagree later.
-    expect(declaration('.actionbar', 'max-height')).toBe('var(--bsg-panel-reserved)');
-    // The cap is on the border box. Under content-box the bar's padding and
-    // border would sit on top of the cap and cover the board by that much.
-    expect(declaration('.actionbar', 'box-sizing')).toBe('border-box');
+  it('leaves the board region alone when the bar is put down', () => {
+    expect(source).not.toContain('.game-shell__game.action-bar-collapsed {');
   });
 
-  it('has no separate ceiling and no scroll room under the board', () => {
-    // A ceiling above the reservation is what let the panel cover the board
-    // (#444), and the zoom container's bottom margin existed only to scroll
-    // clear of it.
-    expect(source).not.toContain('--bsg-panel-max');
-    expect(() => declaration('.game-shell__zoom-container', 'margin-bottom')).toThrow();
-    // The removed measured-height property must not survive anywhere.
-    expect(source).not.toContain('--action-panel-h');
-  });
-
-  it.each(ENVIRONMENTS)('reserves exactly two control rows at the base tier (safe-area $safeArea)', (env) => {
-    const tokens = tokensFor('base');
-    const row = px('var(--bsg-panel-row)', tokens, env);
-    const gap = px('var(--bsg-panel-gap)', tokens, env);
-    const pad = px('var(--bsg-panel-pad)', tokens, env);
-    expect(px(declaration('.boardregion', 'padding-bottom'), tokens, env))
-      .toBe(2 * row + gap + 2 * pad + env.safeArea);
-  });
-
-  it.each(ENVIRONMENTS)('reserves one control row on a short landscape screen (safe-area $safeArea)', (env) => {
-    const tokens = tokensFor('landscape-short');
-    const row = px('var(--bsg-panel-row)', tokens, env);
-    const pad = px('var(--bsg-panel-pad)', tokens, env);
-    expect(px(declaration('.boardregion', 'padding-bottom'), tokens, env))
-      .toBe(row + 2 * pad + env.safeArea);
-  });
-
-  it('keeps the strip on screen on a short landscape screen', () => {
-    // The tablet and desktop tiers give the board region a min-height (380px,
-    // 480px). On a landscape screen shorter than that, the region overflowed its
-    // stage, its reserved strip fell below the screen, and the bar -- anchored
-    // to the screen's bottom -- sat over the board's visible bottom instead.
-    const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
-    const blockEnd = source.indexOf('\n}\n', at);
-    const region = source.slice(at, blockEnd).match(/\.boardregion \{([^}]*)\}/);
-    expect(region, '.boardregion is not reset in the landscape-short tier').not.toBeNull();
-    expect(region![1]).toMatch(/min-height:\s*0;/);
-    // ...and that tier comes after the ones that set the min-height, so it wins.
-    expect(at).toBeGreaterThan(source.indexOf('min-height: 480px;'));
+  it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {
+    // Scroll room after the board, as tall as the bar, outside the content box the fit reads.
+    expect(declaration('.boardregion::after', 'height')).toBe('var(--bsg-bar-clearance)');
+    expect(declaration('.boardregion::after', 'flex')).toBe('none');
+    // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it.
+    expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('var(--bsg-bar-clearance)');
   });
 
   it('does not feed action-panel measurements into board fitting', () => {
     expect(source).not.toContain('actionPanelHeight');
     expect(source).not.toContain('attachActionPanelObserver');
-    // The suite has to catch this class of leftover on its own: `vue-tsc --noEmit`
-    // in this repo does NOT typecheck SFC scripts (verified by planting an
-    // undefined identifier in this file — no error), so a stale reference to a
-    // deleted binding compiles here and only explodes in a consuming game.
     expect(source).not.toContain('actionPanelResizeObserver');
     expect(source).not.toContain('actionbarEl');
+    expect(source).not.toContain('--action-panel-h');
+  });
+});
+
+describe('the Action Panel\'s own height cap', () => {
+  it('declares the panel tokens on the shell and caps the bar with them', () => {
+    expect(declaration('.game-shell__game', '--bsg-panel-row')).toBe('44px'); // WCAG 2.5.8
+    expect(declaration('.game-shell__game', '--bsg-panel-gap')).toBe(declaration('.actionbar', 'gap'));
+    expect(declaration('.actionbar', 'max-height')).toBe('var(--bsg-panel-max)');
+    // On the border box, or the bar's padding would sit on top of the cap.
+    expect(declaration('.actionbar', 'box-sizing')).toBe('border-box');
+    // The demo control bar clears the same cap, not a second magic number.
+    expect(declaration('.bsg-demo-controls', 'bottom')).toContain('var(--bsg-panel-max)');
+  });
+
+  it.each(ENVIRONMENTS)('caps the bar at two control rows at the base tier (safe-area $safeArea)', (env) => {
+    const tokens = tokensFor('base');
+    const row = px('var(--bsg-panel-row)', tokens, env);
+    const gap = px('var(--bsg-panel-gap)', tokens, env);
+    const pad = px('var(--bsg-panel-pad)', tokens, env);
+    expect(px('var(--bsg-panel-max)', tokens, env)).toBe(2 * row + gap + 2 * pad + env.safeArea);
+  });
+
+  it.each(ENVIRONMENTS)('caps the bar at one control row on a short landscape screen (safe-area $safeArea)', (env) => {
+    const tokens = tokensFor('landscape-short');
+    const row = px('var(--bsg-panel-row)', tokens, env);
+    const pad = px('var(--bsg-panel-pad)', tokens, env);
+    expect(px('var(--bsg-panel-max)', tokens, env)).toBe(row + 2 * pad + env.safeArea);
+  });
+
+  it('keeps the board region inside the stage on a short landscape screen', () => {
+    // The tablet and desktop tiers give the region a min-height taller than
+    // such a screen; kept, the region ran below the screen, out of scroll reach.
+    const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
+    const blockEnd = source.indexOf('\n}\n', at);
+    const region = source.slice(at, blockEnd).match(/\.boardregion \{([^}]*)\}/);
+    expect(region, '.boardregion is not reset in the landscape-short tier').not.toBeNull();
+    expect(region![1]).toMatch(/min-height:\s*0;/);
+    expect(at).toBeGreaterThan(source.indexOf('min-height: 480px;'));
   });
 
   it('leaves no hand-written panel heights in the stylesheet', () => {
@@ -195,20 +187,8 @@ describe('#13 / #444: the Action Panel stays inside a constant, token-derived fo
   });
 });
 
-/**
- * #230: A MINIMIZED ACTION BAR HAS TO ACTUALLY GIVE THE BOARD THE SPACE BACK.
- *
- * A collapse that only changed the DOM would leave the board fitted above the
- * same two reserved rows -- the panel would be gone and the hole where it used
- * to be would still be there. That is the exact failure a component test cannot
- * see, so the arithmetic is asserted here against the shell's real stylesheet,
- * the same way the open footprint is.
- *
- * The collapsed state overrides the one token to the collapsed-row quantity.
- * The bar's cap is that same token, so nothing can be covered by construction.
- */
-describe('#230, #1439: minimizing the bar reserves a thin line and gives the rest back', () => {
-  it.each(ENVIRONMENTS)('reserves a line thinner than #1439\'s 28px, that still holds the toggle (#1444, safe-area $safeArea)', (env) => {
+describe('#230, #1439: the bar put down is a thin line', () => {
+  it.each(ENVIRONMENTS)('is thinner than #1439\'s 28px, and still holds the toggle (#1444, safe-area $safeArea)', (env) => {
     // The toggle rides the line's top edge, half on the board, so the line must
     // hold its lower half or the toggle would hang off the bottom of the screen.
     const tokens = tokensFor('base');
@@ -242,32 +222,9 @@ describe('#230, #1439: minimizing the bar reserves a thin line and gives the res
     expect(parseFloat(declaration('.bar-edge', 'height'))).toBeGreaterThanOrEqual(24);
   });
 
-  it('overrides the reservation, and only that, while the bar is down', () => {
-    expect(declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-reserved'))
-      .toBe('var(--bsg-action-bar-collapsed)');
-  });
-
   it('keeps the collapsed bar to a single un-wrapping row', () => {
-    // Without this the one row could wrap into a two-row box, which the cap
-    // would then clip to one row and scroll.
     expect(declaration('.actionbar.collapsed', 'flex-wrap')).toBe('nowrap');
   });
-
-  it.each(ENVIRONMENTS)(
-    'costs no more board than the open bar, and less at the base tier (safe-area $safeArea)',
-    (env) => {
-      for (const tier of ['base', 'landscape-short'] as const) {
-        const open = tokensFor(tier);
-        const down = { ...open, '--bsg-panel-reserved': declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-reserved') };
-        const openReserved = px(declaration('.boardregion', 'padding-bottom'), open, env);
-        const downReserved = px(declaration('.boardregion', 'padding-bottom'), down, env);
-        expect(downReserved, `${tier}: minimizing cost the board space`).toBeLessThanOrEqual(openReserved);
-        // The landscape-short tier already budgets a single row, because height
-        // is the scarce axis there; everywhere else minimizing gives space back.
-        if (tier === 'base') expect(downReserved).toBeLessThan(openReserved);
-      }
-    },
-  );
 });
 
 describe('#1341, #1346: how the bubbles, the action bar, game modals and the demo controls stack', () => {
