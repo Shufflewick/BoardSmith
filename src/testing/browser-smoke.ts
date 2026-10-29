@@ -790,14 +790,19 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
   // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
   // the walk finds the control again and presses that, for PRESS_MS in all. What was on top when
   // the time ran out says whether a toast covered it.
+  let current = control;
   const pressIt = async () => {
     const over = stopwatch(control.frame.page());
     for (;;) {
-      const now = await stillThere(control);
+      const now = await stillThere(current);
       try {
         return await pressOnce(now);
       } catch (error) {
-        if (error instanceof UnderAToast || control.frame.isDetached()) throw error;
+        if (control.frame.isDetached()) throw error;
+        // Aiming at a candidate can change what it stands for, which is how the next try finds it (#1523).
+        const [stands] = now.candidate ? await inPageTime(now.target.page(), 'reading what the candidate stands for now', () => now.target.evaluateAll(pageControls)) : [];
+        if (stands !== undefined) current = { ...current, key: stands.key };
+        if (error instanceof UnderAToast) throw error;
         if (over(PRESS_MS)) throw toastOnTop(error);
         const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
         if (!lookRanOut && (await inPageTime(now.target.page(), 'looking for the control', () => now.target.count())) > 0) throw error;
