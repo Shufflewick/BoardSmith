@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 /**
- * #1514, #1517: the board region reserves one constant row for the Action Panel
- * and the rows above it float over the board, so the board's size never depends
- * on the panel's live height (#13 holds by construction), and scroll room after
- * the board lets the player see what those rows cover.
+ * #1514, #1517, #1518: the board region reserves one row for the Action Panel,
+ * or only the thin line while the player has it put down, and the rows above it
+ * float over the board, so the board's size never depends on the panel's live
+ * height (#13 holds by construction), and scroll room after the board lets the
+ * player see what those rows cover.
  *
  * These assertions are made against the shells' real `<style scoped>` blocks
  * (parsed here, not reproduced), because the layout IS the CSS: a test that
@@ -101,7 +102,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
   if (tier === 'base') return base;
   const overrides = Array.from(landscapeTokens().matchAll(/(--bsg-panel-[\w-]+)\s*:\s*([\s\S]*?);/g));
   expect(overrides.map(([, name]) => name), 'the landscape-short tier does not override the panel tokens')
-    .toEqual(['--bsg-panel-pad', '--bsg-panel-reserved', '--bsg-panel-max']);
+    .toEqual(['--bsg-panel-pad', '--bsg-panel-max', '--bsg-panel-reserved']);
   for (const [, name, value] of overrides) base[name] = value.trim();
   return base;
 }
@@ -127,8 +128,24 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
     expect(px('var(--bsg-panel-reserved)', tokens, env)).toBe(row + 2 * pad + env.safeArea);
   });
 
-  it('leaves the board region alone when the bar is put down', () => {
+  it('reserves only the thin line while the player has the bar put down (#1518)', () => {
+    // Keyed on the player's preference, not on what is showing, so a question
+    // opening the bar over it never refits the board (#13).
+    expect(declaration('.game-shell__game.action-bar-minimized', '--bsg-panel-reserved')).toBe('var(--bsg-action-bar-collapsed)');
     expect(source).not.toContain('.game-shell__game.action-bar-collapsed {');
+  });
+
+  it.each(ENVIRONMENTS)('keeps the bar\'s cap when the reserve drops to the line (safe-area $safeArea)', (env) => {
+    // A question opens the bar over the preference, and it must still get its full cap.
+    for (const tier of ['base', 'landscape-short'] as const) {
+      const up = tokensFor(tier);
+      const down = { ...up, '--bsg-panel-reserved': 'var(--bsg-action-bar-collapsed)' };
+      expect(px('var(--bsg-panel-max)', down, env), `${tier}: the cap followed the reserve`).toBe(px('var(--bsg-panel-max)', up, env));
+    }
+  });
+
+  it('makes the bar at least as tall as the row reserved for it, so no band shows under a short bar (#1518)', () => {
+    expect(declaration('.actionbar', 'min-height')).toBe('var(--bsg-panel-reserved)');
   });
 
   it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {

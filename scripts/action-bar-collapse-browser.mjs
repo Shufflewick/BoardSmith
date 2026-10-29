@@ -21,7 +21,9 @@
  *   2. Collapsing shrinks the bar's rendered box.
  *   3. The board is fitted above one row of bar, so a one-row bar sits under it
  *      and only rows beyond the first float over it (#1514, #1517). Its size is
- *      the same with the bar up, down, and grown to two rows.
+ *      the same with the bar up and grown to two rows. Put down by the player,
+ *      the board reaches the line (#1518), and a question bringing the bar up
+ *      over that preference leaves the board's size alone.
  *   4. Down, the bar is a thin line (#1439, #1444): no taller than 14px plus the safe
  *      area, with the seat token and the panel's own controls gone. (The
  *      controls menu is the adapter's slot content and a world fills none; that
@@ -267,8 +269,6 @@ async function drive({ launch, hostUrl }) {
       await waitForAction(page, 'tend');
       await page.waitForTimeout(300);
 
-      // Scrolled to the end, where a change in the scroll room would clamp the scroll and move the board.
-      await surfaceOf(page).locator('[data-testid="bs-board"]').evaluate((region) => { region.scrollTop = region.scrollHeight; });
       const open = await measure(page);
       await check(`${name}: the toggle is on screen with the bar up`, () => {
         assertToggleReachable(open, name);
@@ -287,13 +287,11 @@ async function drive({ launch, hostUrl }) {
           `the bar measured ${down.bar.height}px down and ${open.bar.height}px up`);
       });
 
-      await check(`${name}: the board keeps its size with the bar up or down (#1514)`, () => {
-        assert(down.region.width === open.region.width && down.region.height === open.region.height,
-          `the board region is ${down.region.width}x${down.region.height} with the bar down and ` +
-          `${open.region.width}x${open.region.height} with it up`);
-        assert(open.region.scrollTop > 0, 'the board region does not scroll, so the scroll check proves nothing');
-        assert(down.region.scrollTop === open.region.scrollTop,
-          `putting the bar down scrolled the board from ${open.region.scrollTop} to ${down.region.scrollTop}`);
+      await check(`${name}: put down, the board reaches the line, with no band above it (#1518)`, () => {
+        assert(down.region.width === open.region.width,
+          `the board region is ${down.region.width}px wide with the bar down and ${open.region.width}px with it up`);
+        assert(Math.abs(down.region.bottom - down.bar.top) <= 0.5,
+          `the board region's content box ends at ${down.region.bottom} and the line's top is at ${down.bar.top}`);
       });
 
       // The controls menu is the ADAPTER's slot content and a world fills none.
@@ -354,6 +352,10 @@ async function drive({ launch, hostUrl }) {
         );
         assert(nextQuestion.choice !== null && nextQuestion.choice.height > 0,
           'a new question started with the bar down, and its choice controls stayed hidden');
+        // The bar came up for the question, not by the player's toggle, so the board must not refit (#13, #1518).
+        assert(nextQuestion.region.height === afterClick.region.height,
+          `the board region is ${nextQuestion.region.height}px tall with the bar up for the question and ` +
+          `${afterClick.region.height}px with it put down`);
       });
 
       await context.close();
@@ -390,8 +392,9 @@ async function musterAsSeat2(page, surface) {
  * Seat 1's bar at rest is one row: the board region's content box, which a
  * fitted board fills, ends exactly at its top, on a desktop and on a short
  * landscape screen, where the bar's padding is smaller. Seat 2's long prompt
- * grows the bar past one row, and putting it down shrinks it to the line; the
- * region keeps its size through both, so the board never refits.
+ * grows the bar past one row and the region keeps its size, so the board never
+ * refits on a pick. Putting the bar down drops the reserve to the line, and the
+ * region ends at the line's top (#1518).
  */
 async function oneRowReserve(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
@@ -403,21 +406,27 @@ async function oneRowReserve(browser, hostUrl, viewport) {
         `the board region's content box ends at ${rest.region.bottom} and the one-row bar's top is at ${rest.bar.top}`);
     });
 
+    await check(`${size}: put down, the board region ends at the line's top (#1518)`, async () => {
+      await collapse(page);
+      const down = await measure(page);
+      assert(down.bar.height <= 14.5, `the collapsed bar is ${down.bar.height}px tall, not the line`);
+      assert(Math.abs(down.region.bottom - down.bar.top) <= 0.5,
+        `the board region's content box ends at ${down.region.bottom} and the line's top is at ${down.bar.top}`);
+      await collapse(page);
+      const up = await measure(page);
+      assert(up.region.height === rest.region.height,
+        `the board region is ${up.region.height}px tall after the bar comes back up and ${rest.region.height}px before`);
+    });
+
     // A short landscape screen caps the bar at one row, so nothing there grows it past the reserve.
-    if (viewport.height > 600) await check(`${size}: the board keeps its size with a one-row bar, a taller bar and the bar down (#1517)`, async () => {
+    if (viewport.height > 600) await check(`${size}: the board keeps its size with a one-row bar and a taller bar (#1517)`, async () => {
       // Seat 2's action prompt is long enough to wrap the bar at this width.
       await musterAsSeat2(page, surface);
       const pick = await measure(page);
       assert(pick.bar.height > ONE_ROW + 1, `the bar during the pick is ${pick.bar.height}px tall, one row, so this proves nothing`);
-      await surface.locator('.action-config .cancel-btn').click();
-      await surface.locator('.action-config').waitFor({ state: 'detached', timeout: 10_000 });
-      await collapse(page);
-      const down = await measure(page);
-      for (const [state, shot] of [['taller', pick], ['down', down]]) {
-        assert(shot.region.width === rest.region.width && shot.region.height === rest.region.height,
-          `the board region is ${shot.region.width}x${shot.region.height} with the bar ${state} and ` +
-          `${rest.region.width}x${rest.region.height} with one row`);
-      }
+      assert(pick.region.width === rest.region.width && pick.region.height === rest.region.height,
+        `the board region is ${pick.region.width}x${pick.region.height} with the bar taller and ` +
+        `${rest.region.width}x${rest.region.height} with one row`);
     });
   });
 }
