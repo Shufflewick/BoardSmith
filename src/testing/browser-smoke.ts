@@ -798,9 +798,8 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       try {
         return await pressOnce(now);
       } catch (error) {
-        if (control.frame.isDetached()) throw error;
         current = await standingNow(current, now);
-        if (error instanceof UnderAToast) throw error;
+        if (error instanceof UnderAToast || control.frame.isDetached()) throw error;
         if (over(PRESS_MS)) throw toastOnTop(error);
         const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
         if (!lookRanOut && (await inPageTime(now.target.page(), 'looking for the control', () => now.target.count())) > 0) throw error;
@@ -838,10 +837,10 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
 /**
  * `control` as the next try at pressing it finds it: a candidate the walk aimed at may stand for
  * another choice now, which is how it is found (#1523), so it takes the key its element `pinned`
- * has, while that element is on the page.
+ * has, while that element is on the page. One in a frame the press replaced is read no more.
  */
 async function standingNow(control: Control, pinned: Control): Promise<Control> {
-  if (!pinned.candidate) return control;
+  if (!pinned.candidate || pinned.frame.isDetached()) return control;
   const [stands] = await inPageTime(pinned.target.page(), 'reading what the candidate stands for now', () => pinned.target.evaluateAll(pageControls));
   return stands === undefined ? control : { ...control, key: stands.key };
 }
