@@ -380,6 +380,7 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
       [1],
     );
     expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
+    expect(result.findings[0].detail).toContain('This test fails before anything is mutated: expected 1 to be 2 // Object.is equality.');
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
@@ -787,7 +788,7 @@ rmSync(new URL('./ready', import.meta.url), { force: true });
 it('needs setup', () => { bid(3, 4); expect(ready).toBe(true); });
 `;
     const REFUSAL =
-      'The chunk test files tests/b.test.ts fail when run without the chunk\'s other test files, though together they pass: tests/b.test.ts > needs setup.';
+      'The chunk test files tests/b.test.ts fail when run without the chunk\'s other test files, though together they pass: tests/b.test.ts > needs setup: expected false to be true // Object.is equality.';
 
     // tests/a.test.ts fails under every mutant of bid, so after the first mutant runs both files, later ones run tests/b.test.ts alone.
     const killsFirst = (b: string) =>
@@ -1028,9 +1029,19 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
       'tests/red.test.ts': "import { it, expect } from 'vitest';\nimport { bid } from '../src/rules';\nit('is red', () => { expect(bid(1, 2)).toBe(false); });\n",
     });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
-    expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
+    expect(result.notGreen).toEqual(['tests/red.test.ts > is red: expected true to be false // Object.is equality']);
     expect(result.summary.mutants).toBe(0);
     await expect(fs.readdir(join(project, '.boardsmith'))).resolves.toEqual([]);
+  }, 60_000);
+
+  it('names why a red test failed when it timed out (#1515)', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/slow.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nit('is slow', () => new Promise(() => { bid(1, 2); }), 50);\n",
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['tests/slow.test.ts > is slow: Test timed out in 50ms.']);
+    expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
   it("quotes the first line of each unhandled error when vitest fails with no failing test (#1491)", async () => {
@@ -1100,7 +1111,7 @@ it('reads the rule', () => { expect(ready).toBe(true); expect(typeof enabled).to
 `,
     });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(1)]]), log: () => {} });
-    expect(result.notGreen).toEqual(['tests/b.test.ts > reads the rule']);
+    expect(result.notGreen).toEqual(['tests/b.test.ts > reads the rule: expected false to be true // Object.is equality']);
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
 

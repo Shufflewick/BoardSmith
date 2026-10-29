@@ -487,9 +487,9 @@ const reporter = {
           fullName: (test.name ? [...titles, test.name] : titles).join(' '),
           line: test.location?.line,
           status: STATUS[test.result?.state] ?? 'skipped',
-          // What the mutation check needs of each error: its name, and whether vitest printed an
-          // expected/actual diff for it, which it does only for an error that carried both values.
-          errors: (test.result?.errors ?? []).map((error) => ({ name: error.nameStr ?? error.name, diff: error.diff !== undefined })),
+          // What the mutation check needs of each error: its name, its first line, and whether vitest printed
+          // an expected/actual diff for it, which it does only for an error that carried both values.
+          errors: (test.result?.errors ?? []).map((error) => ({ name: error.nameStr ?? error.name, message: String(error.message).split('\\n')[0], diff: error.diff !== undefined })),
         };
       }),
     }));
@@ -520,6 +520,8 @@ export default defineConfig(async (env) => {
 interface ReportedError {
   /** The error's name (`Error`, `AssertionError`, a game's own class); none for a thrown non-error. */
   name: string | undefined;
+  /** The first line of its message. */
+  message: string;
   /** Whether vitest printed an expected/actual diff for it: the error carried both values. */
   diff: boolean;
 }
@@ -534,7 +536,7 @@ interface ReportedError {
  * a count of assertions (`expect.assertions`, `expect.hasAssertions`), which is not a check on an
  * outcome. Game code must never throw an `AssertionError` of its own; the engine does not.
  */
-export const isAssertionFailure = ({ name, diff }: ReportedError): boolean => name === 'AssertionError' || diff;
+export const isAssertionFailure = ({ name, diff }: Pick<ReportedError, 'name' | 'diff'>): boolean => name === 'AssertionError' || diff;
 
 /** One test file's entry in the report (`wrapperConfig`), with the project's absolute path of the file. */
 interface ReportedFile {
@@ -554,6 +556,8 @@ interface Outcome {
   status: 'passed' | 'failed' | 'skipped';
   /** Of a failed test: whether it failed on an assertion of its own (`isAssertionFailure`), not only on an error the code it ran threw. */
   failedOnAssertion: boolean;
+  /** Of a failed test: the first line of its first error. */
+  reason?: string;
 }
 
 type RunResult =
@@ -715,6 +719,7 @@ async function readReport(
         line: test.line,
         status: test.status,
         failedOnAssertion: test.status === 'failed' && test.errors.some(isAssertionFailure),
+        reason: test.errors[0]?.message.replaceAll(projectDir + sep, ''),
       });
     }
   }
@@ -897,7 +902,7 @@ function baselineFindings(testFiles: ChunkTestFile[], baseline: RunResult & { ki
     .map((o) => ({
       kind: 'suite-not-green' as const,
       subject: testKey(o),
-      detail: "This test fails before anything is mutated. Make the chunk's tests pass first; mutation only means something on a green suite.",
+      detail: `This test fails before anything is mutated${o.reason ? `: ${o.reason}` : ''}. Make the chunk's tests pass first; mutation only means something on a green suite.`,
     }));
   const failedFiles = baseline.failedFiles.map(({ path, reason }) => ({
     kind: 'suite-not-green' as const,
@@ -1336,9 +1341,9 @@ function suiteNoticed(result: RunResult & { kind: 'ran' }): boolean {
   return result.exitCode !== 0 || result.unhandled.length > 0 || result.failedFiles.length > 0 || result.outcomes.some((o) => o.status === 'failed');
 }
 
-/** The tests and files of an unmutated run that failed, as `file > test` and `file`, or why vitest failed the run without one. */
+/** The tests and files of an unmutated run that failed, as `file > test: reason` and `file`, or why vitest failed the run without one. */
 function redParts(result: RunResult & { kind: 'ran' }): string[] {
-  const red = [...result.outcomes.filter((o) => o.status === 'failed').map(testKey), ...result.failedFiles.map((f) => f.path)];
+  const red = [...result.outcomes.filter((o) => o.status === 'failed').map((o) => (o.reason ? `${testKey(o)}: ${o.reason}` : testKey(o))), ...result.failedFiles.map((f) => f.path)];
   if (red.length === 0 && (result.exitCode !== 0 || result.unhandled.length > 0)) {
     red.push(result.unhandled.length > 0
       ? `vitest exited with code ${result.exitCode} with no failing test, on an unhandled error: ${result.unhandled.join('; ')}`
