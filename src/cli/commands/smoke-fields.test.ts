@@ -83,7 +83,7 @@ describe('boardsmith verify: the smoke check', () => {
 
   it('#1521: aims at a refused pointer-aimed board whose corners its board clips, rather than giving up on it', async () => {
     const { outcome } = await smokeOf(false, {
-      ...pointerAimedGame({ clipped: true }),
+      ...pointerAimedGame({ shape: 'clipped' }),
       'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
     });
 
@@ -93,7 +93,7 @@ describe('boardsmith verify: the smoke check', () => {
 
   it('#1521 review: aims at a refused pointer-aimed board from a point where it names a cell, not one where it names none', async () => {
     const { outcome } = await smokeOf(false, {
-      ...pointerAimedGame({ twoRows: true }),
+      ...pointerAimedGame({ shape: 'twoRows' }),
       'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
     });
 
