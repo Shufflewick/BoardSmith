@@ -146,11 +146,13 @@ export async function onFreshPage(browser, hostUrl, contextOptions, ready, body)
 }
 
 /**
- * WHERE THE ACTION BAR SITS AGAINST THE STRIP THE BOARD RESERVES (#444).
+ * WHERE THE ACTION BAR SITS AGAINST ITS OWN CAP (#444, #1514).
  *
- * The board is fitted above the board region's padding-bottom and the bar is
- * capped at it, so "the bar covers no board" is `top >= strip` and "everything
- * fits" is `!scrolls`. `outside` names each of `selectors` (looked up inside the
+ * The bar floats over the board and is capped at `--bsg-panel-max` (two rows),
+ * so `strip` is the line that cap puts its top at: "the bar fits its cap" is
+ * `top >= strip` and "everything fits" is `!scrolls`. `regionHeight` is the
+ * height of the board region's content box, what the board is fitted to, which no state of the bar may change.
+ * `outside` names each of `selectors` (looked up inside the
  * bar) that is missing or not wholly in view inside the bar and the viewport;
  * `clipped` names each one whose own text is cut off sideways (wider than its
  * box), which an ellipsis or `overflow: hidden` does to a prompt.
@@ -162,7 +164,13 @@ export async function onFreshPage(browser, hostUrl, contextOptions, ready, body)
 export function barGeometry(surface, selectors = []) {
   return surface.locator('[data-testid="bs-actionbar"]').evaluate((bar, selectors) => {
     const region = document.querySelector('.boardregion');
-    const strip = region.getBoundingClientRect().bottom - parseFloat(getComputedStyle(region).paddingBottom);
+    const regionStyle = getComputedStyle(region);
+    const frame = bar.parentElement;
+    // The cap resolved to px; the bar's own max-height grows while an editor is open.
+    const probe = frame.appendChild(document.createElement('div'));
+    probe.style.height = 'var(--bsg-panel-max)';
+    const strip = frame.getBoundingClientRect().bottom - probe.getBoundingClientRect().height;
+    probe.remove();
     const box = bar.getBoundingClientRect();
     const outside = selectors.filter((selector) => {
       const el = bar.querySelector(selector);
@@ -176,6 +184,7 @@ export function barGeometry(surface, selectors = []) {
     });
     return {
       strip: Math.round(strip),
+      regionHeight: region.clientHeight - parseFloat(regionStyle.paddingTop) - parseFloat(regionStyle.paddingBottom),
       top: Math.round(box.top),
       height: Math.round(box.height),
       scrolls: bar.scrollHeight > bar.clientHeight + 1,

@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 /**
- * #444: at phone width the open Action Panel fits the two rows the shell
- * reserves for it.
+ * #444: at phone width the open Action Panel fits its two-row cap.
  *
  * The case from the issue: a pick handed to the board after an earlier choice.
  * The panel shows the action's name and its cancel, the chosen item's chip, the
@@ -88,7 +87,7 @@ function mountHandoffAfterChoice() {
   return mountPanel(controller);
 }
 
-describe('#444: the open Action Panel fits the reserved strip at phone width', () => {
+describe('#444: the open Action Panel fits its two-row cap at phone width', () => {
   it("groups the action's name, its cancel and the chosen items into one context, in reading order", () => {
     const wrapper = mountHandoffAfterChoice();
     const context = wrapper.find('.config-context');

@@ -2051,7 +2051,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              smoke walk finds the value a spec's `inputs` gives that field (#470).
 
              `data-bs-grows-panel` marks the editor as the one thing allowed to
-             grow the action bar past the strip the board reserves for it (issue
+             grow the action bar past its two-row cap (issue
              444), and by how much: six rows of text cannot be written in two, so
              a "box" grows to the ceiling its box is sized from, while a
              one-line "field" stacks label, hint and field + Done on a phone
@@ -2984,9 +2984,9 @@ button {
   border-color: var(--bsg-accent);
 }
 
-/* ── Phone width: fit the two rows the shell reserves (issue 444) ─────────────────
-   The bar is capped at two control rows (PlayShell, --bsg-panel-reserved) and
-   the board under it never refits, so an open pick has to fit them. As one
+/* ── Phone width: fit the bar's two-row cap (issue 444) ─────────────────
+   The bar is capped at two control rows (PlayShell, --bsg-panel-max), so an
+   open pick has to fit them. As one
    sentence, a pick handed to the board after an earlier choice took four rows at
    375px: the action's name, the chosen item, the prompt and the handoff each
    filled a row. Here the context (name, cancel, chosen items) stacks into one

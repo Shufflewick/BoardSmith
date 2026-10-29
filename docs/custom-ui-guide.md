@@ -1307,48 +1307,45 @@ Do not use `useBoardSize()` on a fixed-intrinsic board: pinning it to the
 region accomplishes nothing (its natural size doesn't change), and the
 startup zoom-fit already handles it.
 
-### The Action Panel's reserved footprint
+### The Action Panel floats over the board
 
-The board region reserves a **constant** strip at its bottom for the floating
-Action Panel — two control rows (one on a short landscape screen, where height
-is the scarce axis), declared in CSS as `--bsg-panel-reserved` and applied as
-`.boardregion`'s `padding-bottom`. The startup fit sits your board
-above that strip simply by subtracting the region's own padding; nothing
-measures the panel.
+The Action Panel floats over the bottom of the board region. The region
+reserves nothing for it, so your board's size never depends on the panel: the
+startup fit is a pure function of the region box and your board's natural
+size, and the panel showing, growing, shrinking or being put down never moves
+or refits the board. For one game state on one viewport, two loads produce
+identical geometry. (It did not used to be: the fit once reserved the panel's
+*measured* height, frozen at whatever it happened to be ~300ms after the board
+stopped changing, so the same card measured 220px on one load and 202px on the
+next.)
 
-That constancy is the contract, and two things follow from it for a custom
-board:
+What follows for a custom board:
 
-- **The fitted zoom is reproducible.** For one game state on one viewport the
-  fit is a pure function of the region box and your board's natural size, so
-  two loads produce byte-identical geometry. (It did not used to be: the fit
-  reserved the panel's *measured* height, frozen at whatever it happened to be
-  ~300ms after the board stopped changing — the same card measured 220px on one
-  load and 202px on the next.)
-- **The panel never covers your board.** The strip is also the panel's
-  ceiling: the panel lays itself out to fit it (at phone width, and on a short
-  landscape screen where the strip is one row, it stacks the action's name over
+- **The panel covers the bottom of your board.** The region ends in scroll
+  room as tall as the panel's two-row cap, so the player can scroll what the
+  panel covers into view, and a control that takes keyboard focus is scrolled
+  to land above the panel. The scroll room is a constant, so the panel
+  re-wrapping never moves a scrolled board. The player can also put the panel
+  down to a thin line.
+- **The panel is capped at two control rows** (one on a short landscape
+  screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
+  lays itself out to fit them (at phone width it stacks the action's name over
   the chosen items and wraps the prompt beside its control), and on a step with
-  more than fits, it scrolls inside the strip
-  rather than growing over the board. So a board that fits itself above the
-  strip is never covered, at rest or mid-pick. The one exception is a typed
-  editor (a text or number pick): while it is open the panel may grow over the
-  bottom of the board. A one-line or number field may grow it to what the
-  field needs, bounded at 60% of the screen's height: on a phone its label and
-  hint stack above the field and submit, under any earlier choices, and a long
-  prompt or a refusal message adds lines. A multi-line text box
-  (`multiline: true`) may grow it to what the box needs, bounded at 60% of the
-  screen's height: six lines of text plus the action, the field's label, the
-  count and the submit. On a short screen the
-  box gives way (down to a few lines) rather than the submit button leaving
-  the panel. Your board does not refit, and the part of it under the open
-  panel cannot be scrolled into view until the editor closes, when the panel
-  returns to the strip.
+  more than fits, it scrolls inside the cap. The one exception is a typed
+  editor (a text or number pick): while it is open the panel may grow past the
+  cap. A one-line or number field may grow it to what the field needs, bounded
+  at 60% of the screen's height: on a phone its label and hint stack above the
+  field and submit, under any earlier choices, and a long prompt or a refusal
+  message adds lines. A multi-line text box (`multiline: true`) may grow it to
+  what the box needs, bounded at 60% of the screen's height: six lines of text
+  plus the action, the field's label, the count and the submit. On a short
+  screen the box gives way (down to a few lines) rather than the submit button
+  leaving the panel. The part of the board under an editor taller than the
+  cap cannot be scrolled into view until the editor closes.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
-your board against a panel height — there is no such value to read. If your
-board needs to know how much room the shell reserves, read
-`--bsg-panel-reserved`, which is inherited by everything inside the shell.
+your board against a panel height. Keep anything the player must always see
+away from the board's bottom edge, or let it scroll.
 
 ## Debugging
 

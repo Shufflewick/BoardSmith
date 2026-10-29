@@ -549,11 +549,11 @@ async function driveThrough({ launch, hostUrl }) {
 /**
  * THE PANEL AND THE BOX ON EVERY KIND OF SCREEN (issue 444).
  *
- * The bar is capped at the strip the board reserves for it, so it never covers
- * the board; the one exception is a typed editor, which may grow the bar while
- * it is open. The checks above run at one desktop size. These hold the cap and the
+ * The bar floats over the board and is capped at two rows (`--bsg-panel-max`,
+ * "the strip"); the one exception is a typed editor, which may grow the bar
+ * while it is open. The checks above run at one desktop size. These hold the cap and the
  * exception where they are tightest: a phone, where the bar's width is the
- * scarce axis, and a short landscape screen, which reserves one row and has
+ * scarce axis, and a short landscape screen, which caps the bar at one row and has
  * little height to grow into.
  */
 function screens() {
@@ -592,7 +592,7 @@ async function withEditorOpen(page, action, editor, body) {
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
   await onFreshPage(browser, hostUrl, { viewport }, (page) => waitForAction(page, 'setDescription'), async (page, surface) => {
-    await check(`${size}: at rest the bar sits inside the strip the board reserves, without scrolling`, async () => {
+    await check(`${size}: at rest the bar sits inside its strip, without scrolling`, async () => {
       const bar = await barGeometry(surface);
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
       assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit the strip`);
@@ -654,8 +654,8 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
     });
 
     await check(`${size}: the open box keeps the action, its label, count and submit in view`, async () => {
-      // The box may grow the bar past the strip, but it floats over the board:
-      // the board stays exactly where it was fitted.
+      // The box may grow the bar past the strip; the bar floats over the board,
+      // so the board stays exactly where it was fitted.
       const board = surface.locator('.colony-board');
       const before = await board.boundingBox();
       await startAction(page, 'setDescription');

@@ -10,11 +10,11 @@
  * session content arriving over the socket. Five reloads of one state fitted at
  * 0.83 / 0.98 / 0.90 / 0.83.
  *
- * Fix: the panel's footprint is a CONSTANT reserved in CSS as `.boardregion`'s
- * padding-bottom (`--bsg-panel-reserved`), and nothing measures the panel.
+ * Fix: nothing measures the panel. It floats over the board region, which
+ * reserves nothing for it (#1514).
  *
  * This file drives the real `useAutoZoom` through a harness with GameShell's
- * actual shape — a `.boardregion` carrying the reserved padding, a zoom
+ * actual shape — a `.boardregion`, a zoom
  * container inside it, and a REAL `.actionbar` sibling element whose height
  * changes with its button count. The panel is present and changing throughout;
  * the point is that the zoom never notices.
@@ -26,9 +26,7 @@ import { useAutoZoom, SETTLE_MS } from './useAutoZoom';
 
 /** The 375x812 phone from the B20 report. */
 const REGION = { width: 375, height: 765 };
-const BOARD = { width: 367, height: 736 };
-/** `--bsg-panel-reserved` at the base tier: 2*44 + 8 + 2*9. */
-const PANEL_RESERVED = 114;
+const BOARD = { width: 367, height: 836 };
 /** One wrapped row of the Action Panel. */
 const PANEL_ROW = 52;
 
@@ -56,7 +54,7 @@ function flushRaf() {
 }
 
 /**
- * GameShell's shape: `.boardregion` (reserved padding) > `.game-shell__zoom-container`,
+ * GameShell's shape: `.boardregion` > `.game-shell__zoom-container`,
  * with `.actionbar` as an out-of-flow sibling. `buttonRows` drives the panel's
  * real element height, exactly as a selection step with more choices would.
  */
@@ -83,9 +81,7 @@ function mountShell() {
   const zoom = wrapper.find('.game-shell__zoom-container').element as HTMLElement;
   const actionbar = wrapper.find('.actionbar').element as HTMLElement;
 
-  // Layout jsdom does not compute. The region's padding-bottom is the panel's
-  // constant reserved footprint — the only channel the panel has into the fit.
-  region.style.paddingBottom = `${PANEL_RESERVED}px`;
+  // Layout jsdom does not compute.
   region.style.width = `${REGION.width}px`;
   Object.defineProperty(region, 'clientHeight', { get: () => REGION.height, configurable: true });
   zoom.getBoundingClientRect = () =>
@@ -150,7 +146,7 @@ describe('#13: the fitted zoom is reproducible — the Action Panel cannot reach
     }
     expect(zooms[0]).toBe(zooms[1]);
     // And it is the value the region box alone dictates.
-    expect(zooms[0]).toBeCloseTo((REGION.height - PANEL_RESERVED) / BOARD.height, 10);
+    expect(zooms[0]).toBeCloseTo(REGION.height / BOARD.height, 10);
   });
 
   it('fits identically whether the panel grows before or after the board settles', async () => {
@@ -202,7 +198,7 @@ describe('#13: the fitted zoom is reproducible — the Action Panel cannot reach
     }
 
     expect(new Set(zooms).size).toBe(1);
-    expect(zooms[0]).toBeCloseTo((REGION.height - PANEL_RESERVED) / BOARD.height, 10);
+    expect(zooms[0]).toBeCloseTo(REGION.height / BOARD.height, 10);
   });
 
   it('ZOOM-02 tripwire: panel growth/shrink mid-game moves nothing and schedules no re-fit', async () => {
