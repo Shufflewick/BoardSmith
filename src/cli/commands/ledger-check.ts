@@ -721,6 +721,8 @@ interface EvidenceSource {
 type EvidenceProblem = 'outside' | 'missing' | 'ignored' | 'untracked' | 'not-in-boardsmith';
 
 const SCRATCH_DIR = '.boardsmith/scratch/';
+const CORRECT_IN_PLACE =
+  'Correcting a citation in place is allowed even in an append-only ledger: it is the one edit to a prior entry besides `- Superseded by:`.';
 const MOVE_TO_EVIDENCE =
   `Move it into ${CHUNK_EVIDENCE_DIR} for the chunk it proves, commit it, and cite that path.`;
 
@@ -729,7 +731,7 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
     case 'outside':
       return `Cites ${path}, which is outside the project, so it is in no commit. ${MOVE_TO_EVIDENCE}`;
     case 'missing':
-      return `Cites ${path}, which does not exist and was not in git when this line was committed. Commit the file it names, or correct the citation to the file that was really used.`;
+      return `Cites ${path}, which does not exist and was not in git when this line was committed. Commit the file it names, or correct the citation to the file that was really used. ${CORRECT_IN_PLACE}`;
     case 'ignored':
       return `Cites ${path}, which is gitignored, so it was never committed (${SCRATCH_DIR} is for throwaway scripts only). ${MOVE_TO_EVIDENCE}`;
     case 'untracked':
@@ -738,7 +740,7 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
       return (
         `Cites ${path}, but the installed BoardSmith (${INSTALLED_BOARDSMITH_DIR}) has no ` +
         `${installedBoardSmithPath(rel ?? '')}. Correct the citation to the file as this project's ` +
-        'BoardSmith has it, or run `npm install` if the package is missing.'
+        `BoardSmith has it, or run \`npm install\` if the package is missing. ${CORRECT_IN_PLACE}`
       );
   }
 }
@@ -757,9 +759,21 @@ function trackedAt(projectDir: string, sha: string, rel: string): Promise<boolea
 }
 
 /**
+ * The commit whose copy of `rel` the citing line was written against: the commit that recorded
+ * the line, or its first parent when that commit deleted the file, as a line recording the
+ * file's retirement is (#1522). Null when the line is not committed yet or neither had the file.
+ */
+async function citedCommit(projectDir: string, rel: string, citingCommit: () => Promise<string | null>): Promise<string | null> {
+  const sha = await citingCommit();
+  if (sha === null || (await trackedAt(projectDir, sha, rel))) return sha;
+  return (await trackedAt(projectDir, `${sha}^`, rel)) ? `${sha}^` : null;
+}
+
+/**
  * What is wrong with one citation, if anything. A file that is gone now but was in git at the
- * commit that recorded the citing line is not a problem: the design records are append-only, so
- * an entry that cited a file deleted on purpose later stays as it was written (#398).
+ * commit that recorded the citing line (or just before it, #1522) is not a problem: the design
+ * records are append-only, so an entry that cited a file deleted on purpose later stays as it
+ * was written (#398).
  */
 async function problemOf(
   projectDir: string,
@@ -772,8 +786,7 @@ async function problemOf(
     return (await fileExists(pathJoin(projectDir, rel))) ? undefined : 'not-in-boardsmith';
   }
   if (!(await fileExists(pathJoin(projectDir, rel)))) {
-    const sha = await citingCommit();
-    return sha !== null && (await trackedAt(projectDir, sha, rel)) ? undefined : 'missing';
+    return (await citedCommit(projectDir, rel, citingCommit)) === null ? 'missing' : undefined;
   }
   if (tracked.has(rel)) return undefined;
   return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
@@ -788,9 +801,8 @@ interface CitedCopy {
 }
 
 /**
- * The copy of `rel` the citing line was written against: the file as it was in the commit that
- * recorded that line, or, when that line is not committed yet or its commit did not have the file
- * (it was committed later), the file as it is now, which is the copy the rest of this check
+ * The copy of `rel` the citing line was written against: the file as it was in `citedCommit`, or,
+ * when that has none (the file was committed later), the file as it is now, which is the copy the rest of this check
  * accepts. A file of the installed BoardSmith is in no commit of the game, so it is the package
  * as installed, the copy `claim-quote-check` reads (#432). A citation pinned to a commit of its
  * chunk (#426) is that commit's copy.
@@ -811,8 +823,8 @@ async function citedCopy(
   const now = { key: `:${rel}`, text: () => fs.readFile(pathJoin(projectDir, rel), 'utf-8') };
   const library = installedBoardSmithPath(rel);
   if (library !== undefined) return { ...now, hasLines: (n) => `the installed BoardSmith's ${library} has ${n} lines` };
-  const sha = await citingCommit();
-  if (sha !== null && (await trackedAt(projectDir, sha, rel))) {
+  const sha = await citedCommit(projectDir, rel, citingCommit);
+  if (sha !== null) {
     return {
       key: `${sha}:${rel}`,
       text: () => git(projectDir, ['show', `${sha}:./${rel}`]),
@@ -843,7 +855,7 @@ async function citedLinesProblem(
     case 'past-end':
       return (
         `Cites ${written}, line ${range[1]}, but ${copy.hasLines(count)}. ` +
-        'Correct the citation to the lines that were meant.'
+        `Correct the citation to the lines that were meant. ${CORRECT_IN_PLACE}`
       );
   }
 }

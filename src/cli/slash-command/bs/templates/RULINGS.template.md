@@ -27,8 +27,13 @@
 
      SUPERSESSION TAKES TWO WRITES, one on each entry: the new entry says "Supersedes Ruling M." in
      its Decision, and the old entry gets one line added in place, `- Superseded by: Ruling N`.
-     That added line is the only sanctioned edit to a prior entry. Without it a reader who lands
-     on the old ruling (a citation, a search) takes it as current.
+     Without that line a reader who lands on the old ruling (a citation, a search) takes it as
+     current.
+
+     The only sanctioned edits to a prior entry are the `- Superseded by:` line and correcting a
+     cited file in place: a path or line range that names the wrong file is fixed where it
+     stands, since it points at the evidence and is not the ruling. The ruling, its rulebook
+     citation and its reasons stay as written.
 
      CHECKED AS CODE: `boardsmith ledger-check` fails on a ruling number used twice (take the next
      unused number, never reuse one), on a "Supersedes Ruling M" whose Ruling M lacks the

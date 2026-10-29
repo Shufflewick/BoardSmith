@@ -704,6 +704,18 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
+  it('passes a line recording a file\'s retirement, committed in the commit that deletes the file (#1522)', async () => {
+    const dir = await tree({
+      'design/chunks/c/evidence/capture.mjs': '// capture\n',
+      'design/DECISIONS.md': '### Decision 1\n- Decision: shots come from a capture script.\n',
+    });
+    commitAt(dir, '2026-10-28T12:00:00Z');
+    await fs.rm(join(dir, 'design/chunks/c/evidence/capture.mjs'));
+    await fs.appendFile(join(dir, 'design/DECISIONS.md'), '- Correction (2026-10-29): design/chunks/c/evidence/capture.mjs no longer ran and was retired.\n');
+    commitAt(dir, '2026-10-29T12:00:00Z');
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
+  });
+
   it('still fails a citation of a file that was not in git when the citing line was committed (#398)', async () => {
     const dir = await tree({ 'src/rules/flow.ts': '// the old session flow\n' });
     commitAt(dir, '2026-09-20T12:00:00Z');
@@ -718,6 +730,7 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     const found = evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
     expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4', 'line 6']);
     for (const f of found) expect(f.detail).toMatch(/does not exist/);
+    expect(found[0].detail).toMatch(/Correcting a citation in place is allowed even in an append-only ledger/);
   });
 
   it('reports a ~/ path in another checkout as outside the project, not as a missing project file (#398)', async () => {
@@ -835,6 +848,17 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     await fs.rm(join(dir, 'src/rules/gone.ts'));
     commitAt(dir, '2026-09-22T12:00:00Z');
     await expectNoCitationFindings(dir);
+  });
+
+  it('reads the cited lines of a file the citing commit deleted in the file as its parent had it (#1522)', async () => {
+    const dir = await tree({ 'src/rules/gone.ts': fiveLines });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.rm(join(dir, 'src/rules/gone.ts'));
+    await fs.writeFile(join(dir, 'design/DECISIONS.md'), [decision('src/rules/gone.ts:5'), decision('src/rules/gone.ts:6')].join(''));
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    const found = citedLines((await ledgerCheck(dir, 'boardsmith ledger-check')).findings);
+    expect(found.map((f) => f.entry)).toEqual(['line 4']);
+    expect(found[0].detail).toMatch(/line 6, but src\/rules\/gone\.ts had 5 lines/);
   });
 
   it('reads a citation not committed yet, or one committed before its file was, against the file as it is now (#414)', async () => {
