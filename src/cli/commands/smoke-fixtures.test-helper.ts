@@ -802,9 +802,11 @@ describe('the fields game', () => {
  * points land on refused cells and only a finer search finds one the game accepts; with 'topRow'
  * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at;
  * with 'underAToast' (#1478) only the top-left quarter, which a toast covers from the moment the
- * pointer first moves over the board until it has been still for two seconds.
+ * pointer first moves over the board until it has been still for two seconds. With `clipped` (#1521),
+ * the field is twice as tall as the board, which clips it (`overflow: clip`) to its middle half, so
+ * the walk cannot point at either of its corners, and it opens aimed at a refused cell.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast'; clipped?: boolean } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
@@ -812,6 +814,7 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
   };
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
+  const { clipped = false } = options;
   return {
     ...fieldRules(options.accepts && refusals[options.accepts]),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
@@ -819,7 +822,7 @@ import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: 2, col: 2 });
+const cursor = ref({ row: ${clipped ? 5 : 2}, col: 2 });
 const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
 // The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
@@ -867,7 +870,9 @@ function hover() {
 
 <style scoped>
 .board { position: relative; width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }${toast ? `
+.field { width: 400px; height: 400px; background: #ddd; }${clipped ? `
+.board { overflow: clip; }
+.field { position: relative; top: -200px; height: 800px; }` : ''}${toast ? `
 .toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
 </style>
 `,

@@ -413,7 +413,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   17 x 17 grid add (#1476), 289 points in all, and it reports the surface as
   refused only when every one of them that is not covered is, and no toast
   covers any (one that does is waited out, and the walk aims again, #1478). A refused
-  candidate that names a different choice at two of its corners is such a
+  candidate that names two different choices among the 5 x 5 grid's points it
+  can be pointed at (a point its board clips says nothing, #1521) is such a
   surface, and is aimed at the same way. Nothing in
   the game needs to change for this: the hook already says which choice the
   surface stands for, and `aria-disabled` already says it is refused. An empty text
