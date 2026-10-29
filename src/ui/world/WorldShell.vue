@@ -61,6 +61,7 @@
       :connection="connectionIndicator"
       v-model:sidebar-rail="sidebarRail"
       v-model:action-bar-minimized="actionBarMinimized"
+      :action-bar-opens-for-actions="props.actionBarOpensForActions"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
     >
@@ -152,7 +153,7 @@ import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.j
  * OWNS: the BOARD, and only the board -- a custom UI is a board area inside the
  * shared shell, never a replacement for it.
  */
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   /**
    * The game's UI registry, from `src/ui/uis.ts` -- the same one a table
    * declares, and the reason `WorldShell` no longer takes a single `ui`
@@ -171,9 +172,13 @@ const props = defineProps<{
   trustedOrigins?: string[];
   /** Start with the action bar collapsed to its thin line; the player can still open it (#1439). */
   actionBarStartsCollapsed?: boolean;
+  /** Whether a question opens the bar the player put down (#1519). Default true; see GameShell's prop of the same name. */
+  actionBarOpensForActions?: boolean;
   /** The game's own player preferences from `definePlayerPreferences`, listed in the controls menu (#1443). */
   preferences?: PlayerPreferences;
-}>();
+}>(), {
+  actionBarOpensForActions: true,
+});
 
 /**
  * WHAT AN EMPTY WORLD LOG MEANS, which is not what an empty table log means.

@@ -141,6 +141,13 @@ interface GameShellProps {
    */
   actionBarStartsCollapsed?: boolean;
   /**
+   * Whether the action bar opens itself when an action starts while the player
+   * has it down (#1519). Default: true. Set `false` for a board that answers
+   * every question itself, so the bar stays where the player put it; the toggle's
+   * mark still says when it is their move.
+   */
+  actionBarOpensForActions?: boolean;
+  /**
    * The game's own player preferences from `definePlayerPreferences` (#1440),
    * listed in the controls menu. Saved in this browser only.
    */
@@ -153,6 +160,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   providesOwnGameOverUi: false,
   playerOrder: 'turn',
   showTurnStatus: true,
+  actionBarOpensForActions: true,
 });
 
 // A game runs only inside a host: ShufflewickPub in production, or the
@@ -1402,6 +1410,7 @@ defineExpose({
       :zoom-level="zoomLevel"
       v-model:sidebar-rail="sidebarRail"
       v-model:action-bar-minimized="actionBarMinimized"
+      :action-bar-opens-for-actions="props.actionBarOpensForActions"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
       @undo="handleUndo"

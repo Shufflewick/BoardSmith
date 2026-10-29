@@ -145,6 +145,8 @@ const props = withDefaults(defineProps<{
    * says what the player asked for and survives every interruption.
    */
   actionBarMinimized?: boolean;
+  /** Whether an action starting opens a put-down bar over the preference (#1519). */
+  actionBarOpensForActions?: boolean;
   /** Whether the mobile seat strip is expanded into the full overlay. `v-model`. */
   mobileExpanded?: boolean;
   /** Whether the viewport is at the compact tier. */
@@ -156,6 +158,7 @@ const props = withDefaults(defineProps<{
   sidebarRail: false,
   mobileExpanded: false,
   actionBarMinimized: false,
+  actionBarOpensForActions: true,
 });
 
 const emit = defineEmits<{
@@ -225,6 +228,9 @@ const expanded = computed({
  *   itself when the action resolves;
  * - the toggle stays live throughout, so a player may push it down again
  *   mid-action and the NEXT action start brings it back.
+ * - a game whose board answers every question itself passes
+ *   `actionBarOpensForActions: false` (#1519), and then the bar stays where the
+ *   player put it; the toggle's mark still says when it is their move.
  *
  * The controller is the ONE source for "an action is in progress" -- the same
  * `currentAction` the panel itself renders from -- so the bar's chrome and the
@@ -240,7 +246,8 @@ if (!actionController) {
 }
 
 /**
- * Set while the bar is open over the player's preference, for one action. Keyed
+ * Set while an action is open since it started, until the player's toggle; it
+ * holds the bar open over their preference unless the game opts out. Keyed
  * on the start as well as the name: the action that just finished can start
  * again inside one flush, and that is a new question too (#384).
  */
@@ -250,7 +257,8 @@ watch([actionController.currentAction, actionController.actionStartTick], ([acti
 });
 
 /** What the player actually sees, as opposed to what they asked for. */
-const actionBarCollapsed = computed(() => props.actionBarMinimized && !barOpenedForAction.value);
+const actionBarCollapsed = computed(() =>
+  props.actionBarMinimized && !(props.actionBarOpensForActions && barOpenedForAction.value));
 
 /** Whether the game is waiting on THIS seat, for the collapsed bar's mark. */
 const barWaitsOnMe = computed(() => props.mayAct && !props.completed);

@@ -81,6 +81,7 @@ interface PlatformShellOptions {
     'provides-own-game-over-ui'?: boolean;
     formatTurnDeadline?: (remainingMs: number) => string;
     actionBarStartsCollapsed?: boolean;
+    actionBarOpensForActions?: boolean;
     preferences?: PlayerPreferences;
   };
   /** GameShell slots, for a test about what a slot is handed. */

@@ -321,6 +321,18 @@ A game whose board already offers most choices can start the bar collapsed:
 and it never goes away, so the controls menu and the button stay reachable by
 keyboard and screen reader.
 
+A game whose board answers every question itself, so that it starts actions all
+the time, can keep the bar from opening itself:
+
+```vue
+<GameShell :uis="uis" action-bar-starts-collapsed :action-bar-opens-for-actions="false" />
+```
+
+With `actionBarOpensForActions` set to `false` (default `true`), a bar the player
+put down stays down until the player opens it, even while an action is asking a
+question; the dot on the button still says when it is their move. A bar the player
+left open stays open. `WorldShell` takes the same prop.
+
 #### Player preferences
 
 A game can declare its own preferences, such as turning off battle effects, and
