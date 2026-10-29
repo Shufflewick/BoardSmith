@@ -1333,7 +1333,8 @@ What follows for a custom board:
   takes keyboard focus is scrolled to land above the panel. The scroll room is
   a constant, so the panel re-wrapping never moves a scrolled board. The player
   can also put the panel down to a thin line. On a short landscape screen the
-  cap is the one reserved row, so only a typed editor (below) covers the board.
+  cap is the one reserved row, so only a typed editor (below), or a question
+  that brings a put-down panel up by itself, covers the board.
 - **The panel is capped at two control rows** (one on a short landscape
   screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
   lays itself out to fit them (at phone width it stacks the action's name over

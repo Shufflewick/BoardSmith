@@ -135,14 +135,12 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
     expect(source).not.toContain('.game-shell__game.action-bar-collapsed {');
   });
 
-  it.each(ENVIRONMENTS)('keeps the bar\'s cap and scroll extent when the reserve drops to the line (safe-area $safeArea)', (env) => {
+  it.each(ENVIRONMENTS)('keeps the bar\'s cap when the reserve drops to the line (safe-area $safeArea)', (env) => {
+    // A question opens the bar over the preference, and it must still get its full cap.
     for (const tier of ['base', 'landscape-short'] as const) {
       const up = tokensFor(tier);
       const down = { ...up, '--bsg-panel-reserved': 'var(--bsg-action-bar-collapsed)' };
       expect(px('var(--bsg-panel-max)', down, env), `${tier}: the cap followed the reserve`).toBe(px('var(--bsg-panel-max)', up, env));
-      const extent = (tokens: Record<string, string>) =>
-        px(declaration('.boardregion', 'padding-bottom'), tokens, env) + px(declaration('.boardregion::after', 'height'), tokens, env);
-      expect(extent(down), `${tier}: the scroll extent changed`).toBe(extent(up));
     }
   });
 

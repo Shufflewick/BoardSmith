@@ -373,6 +373,8 @@ describe('the board region reserves the line only for the player\'s own toggle (
     expect(wrapper.classes(), 'a question opening the bar changed the reserve, which refits the board').toContain('action-bar-minimized');
     await toggle(wrapper).trigger('click');
     await flush();
+    expect(collapsed(wrapper)).toBe(true);
+    expect(wrapper.classes(), 'pushing down a bar opened for a question lost the preference').toContain('action-bar-minimized');
     await toggle(wrapper).trigger('click');
     await flush();
     expect(wrapper.classes()).not.toContain('action-bar-minimized');

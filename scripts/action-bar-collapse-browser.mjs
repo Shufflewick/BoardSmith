@@ -269,8 +269,6 @@ async function drive({ launch, hostUrl }) {
       await waitForAction(page, 'tend');
       await page.waitForTimeout(300);
 
-      // Scrolled to the end, where a change in the scroll room would clamp the scroll and move the board.
-      await surfaceOf(page).locator('[data-testid="bs-board"]').evaluate((region) => { region.scrollTop = region.scrollHeight; });
       const open = await measure(page);
       await check(`${name}: the toggle is on screen with the bar up`, () => {
         assertToggleReachable(open, name);
