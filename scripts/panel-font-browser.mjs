@@ -23,8 +23,7 @@ const GAME_FONT = "'Courier New', monospace";
 await runBrowserRegression({ script: 'panel-font-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-    const frame = await openTableSample(page, hostUrl);
+    const frame = await openTableSample(await browser.newPage(), hostUrl);
 
     await check('every Action Panel button draws in the game font', async () => {
       const read = await frame.locator('body').evaluate((body, font) => {
