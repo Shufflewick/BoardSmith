@@ -716,6 +716,18 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
+  it('passes a citation of a file deleted later on a line whose other citation was then corrected in place (#1522)', async () => {
+    const dir = await tree({ 'src/rules/flow.ts': '// the old session flow\n', 'src/rules/turn.ts': '// turns\n' });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.writeFile(join(dir, 'design/DECISIONS.md'), '### Decision 12\n- Decision: see `src/rules/flow.ts` and `src/rules/trun.ts`.\n');
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    await fs.rm(join(dir, 'src/rules/flow.ts'));
+    commitAt(dir, '2026-09-22T12:00:00Z');
+    await fs.writeFile(join(dir, 'design/DECISIONS.md'), '### Decision 12\n- Decision: see `src/rules/flow.ts` and `src/rules/turn.ts`.\n');
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
+  });
+
   it('still fails a citation of a file that was not in git when the citing line was committed (#398)', async () => {
     const dir = await tree({ 'src/rules/flow.ts': '// the old session flow\n' });
     commitAt(dir, '2026-09-20T12:00:00Z');

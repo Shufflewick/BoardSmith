@@ -678,10 +678,15 @@ async function trackedFiles(projectDir: string, relPaths: string[]): Promise<Set
   return new Set(listed.split('\0').filter(Boolean));
 }
 
-/** The commit that recorded a line: its hash and its committer time in epoch seconds. */
+/**
+ * The commit that recorded a line: its hash, its committer time in epoch seconds, and where the
+ * line was in that commit (its number, and the file's path from the top of the repository).
+ */
 interface LineCommit {
   sha: string;
   time: number;
+  line: number;
+  path: string;
 }
 
 /**
@@ -692,17 +697,20 @@ async function lineCommits(projectDir: string, relPath: string): Promise<Array<L
   const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
   const commits: Array<LineCommit | null> = [];
   let sha: string | null = null;
+  let origLine = 0;
   let finalLine = 0;
   let time = 0;
+  let path = '';
   for (const line of porcelain.split('\n')) {
     const header = blameHeader(line);
     if (header) {
-      sha = header.commit;
-      finalLine = header.line;
+      ({ commit: sha, origLine, line: finalLine } = header);
     } else if (line.startsWith('committer-time ')) {
       time = Number(line.slice('committer-time '.length));
+    } else if (line.startsWith('filename ')) {
+      path = line.slice('filename '.length);
     } else if (line.startsWith('\t')) {
-      commits[finalLine] = sha === null ? null : { sha, time };
+      commits[finalLine] = sha === null ? null : { sha, time, line: origLine, path };
     }
   }
   return commits;
@@ -758,35 +766,47 @@ function trackedAt(projectDir: string, sha: string, rel: string): Promise<boolea
   return gitSucceeds(projectDir, ['cat-file', '-e', `${sha}:./${rel}`]);
 }
 
-/**
- * The commit whose copy of `rel` the citing line was written against: the commit that recorded
- * the line, or its first parent when that commit deleted the file, as a line recording the
- * file's retirement is (#1522). Null when the line is not committed yet or neither had the file.
- */
-async function citedCommit(projectDir: string, rel: string, citingCommit: () => Promise<string | null>): Promise<string | null> {
-  const sha = await citingCommit();
-  if (sha === null || (await trackedAt(projectDir, sha, rel))) return sha;
-  return (await trackedAt(projectDir, `${sha}^`, rel)) ? `${sha}^` : null;
+/** Every commit that wrote the line `at` names, newest first, following it back through its edits. */
+async function lineHistory(projectDir: string, at: LineCommit): Promise<string[]> {
+  const top = (await git(projectDir, ['rev-parse', '--show-cdup'])).trim() || '.';
+  const log = await git(projectDir, ['-C', top, 'log', `-L${at.line},${at.line}:${at.path}`, '--format=%H', '--no-patch', at.sha]);
+  return log.split('\n').filter(Boolean);
 }
 
 /**
- * What is wrong with one citation, if anything. A file that is gone now but was in git at the
- * commit that recorded the citing line (or just before it, #1522) is not a problem: the design
- * records are append-only, so an entry that cited a file deleted on purpose later stays as it
- * was written (#398).
+ * The commit whose copy of `rel` the citing line was written against: the commit that recorded
+ * the line or, when it did not have the file, the newest earlier version of the line that did
+ * (a citation beside it was corrected in place) or whose commit deleted it (the line records the
+ * file's retirement), read in that commit's first parent (#1522). Null when the line is not
+ * committed yet or no version of it was written while the file was in git.
+ */
+async function citedCommit(projectDir: string, rel: string, at: LineCommit | null): Promise<string | null> {
+  if (at === null || (await trackedAt(projectDir, at.sha, rel))) return at?.sha ?? null;
+  for (const sha of await lineHistory(projectDir, at)) {
+    if (await trackedAt(projectDir, sha, rel)) return sha;
+    if (await trackedAt(projectDir, `${sha}^`, rel)) return `${sha}^`;
+  }
+  return null;
+}
+
+/**
+ * What is wrong with one citation, if anything. `citedIn` is the commit `citedCommit` finds. A
+ * file that is gone now but was in git when the citing line was written (#398, #1522) is not a
+ * problem: the design records are append-only, so an entry that cited a file deleted on purpose
+ * later stays as it was written.
  */
 async function problemOf(
   projectDir: string,
   rel: string | undefined,
   tracked: Set<string>,
-  citingCommit: () => Promise<string | null>,
+  citedIn: () => Promise<string | null>,
 ): Promise<EvidenceProblem | undefined> {
   if (rel === undefined) return 'outside';
   if (installedBoardSmithPath(rel) !== undefined) {
     return (await fileExists(pathJoin(projectDir, rel))) ? undefined : 'not-in-boardsmith';
   }
   if (!(await fileExists(pathJoin(projectDir, rel)))) {
-    return (await citedCommit(projectDir, rel, citingCommit)) === null ? 'missing' : undefined;
+    return (await citedIn()) === null ? 'missing' : undefined;
   }
   if (tracked.has(rel)) return undefined;
   return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
@@ -810,7 +830,7 @@ interface CitedCopy {
 async function citedCopy(
   projectDir: string,
   rel: string,
-  citingCommit: () => Promise<string | null>,
+  citedIn: () => Promise<string | null>,
   pinned: ChunkCommit | undefined,
 ): Promise<CitedCopy> {
   if (pinned !== undefined) {
@@ -823,7 +843,7 @@ async function citedCopy(
   const now = { key: `:${rel}`, text: () => fs.readFile(pathJoin(projectDir, rel), 'utf-8') };
   const library = installedBoardSmithPath(rel);
   if (library !== undefined) return { ...now, hasLines: (n) => `the installed BoardSmith's ${library} has ${n} lines` };
-  const sha = await citedCommit(projectDir, rel, citingCommit);
+  const sha = await citedIn();
   if (sha !== null) {
     return {
       key: `${sha}:${rel}`,
@@ -840,11 +860,11 @@ async function citedLinesProblem(
   written: string,
   rel: string,
   range: LineRange,
-  citingCommit: () => Promise<string | null>,
+  citedIn: () => Promise<string | null>,
   lineCounts: Map<string, Promise<number>>,
   pinned: ChunkCommit | undefined,
 ): Promise<string | undefined> {
-  const copy = await citedCopy(projectDir, rel, citingCommit, pinned);
+  const copy = await citedCopy(projectDir, rel, citedIn, pinned);
   if (!lineCounts.has(copy.key)) lineCounts.set(copy.key, copy.text().then((t) => fileLines(t).length));
   const count = await lineCounts.get(copy.key)!;
   switch (lineRangeProblem(range, count)) {
@@ -907,9 +927,9 @@ async function unpinnedCitation(
   projectDir: string,
   c: Citation,
   tracked: Set<string>,
-  citingCommit: () => Promise<string | null>,
+  citedIn: () => Promise<string | null>,
 ): Promise<{ commit: undefined } | { problem: string }> {
-  const problem = await problemOf(projectDir, c.rel, tracked, citingCommit);
+  const problem = await problemOf(projectDir, c.rel, tracked, citedIn);
   return problem ? { problem: evidenceDetail(c.path, c.rel, problem) } : { commit: undefined };
 }
 
@@ -929,21 +949,21 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
   // Blamed only when a cited file is missing or lines of it are cited, and at most once per design record.
   const trackedSources = await trackedFiles(projectDir, sources.map((source) => `${DESIGN_DIR}/${source.file}`));
   const blames = new Map<string, Promise<Array<LineCommit | null>>>();
-  const commitOfLine = async (file: string, line: number): Promise<string | null> => {
+  const commitOfLine = async (file: string, line: number): Promise<LineCommit | null> => {
     const rel = `${DESIGN_DIR}/${file}`;
     if (!trackedSources.has(rel)) return null;
     if (!blames.has(rel)) blames.set(rel, lineCommits(projectDir, rel));
-    return (await blames.get(rel)!)[line]?.sha ?? null;
+    return (await blames.get(rel)!)[line] ?? null;
   };
 
   const lineCounts = new Map<string, Promise<number>>();
   const pins = new Map<string, (ref: string) => Promise<PinnedCommit>>();
   const findings: LedgerFinding[] = [];
   for (const c of cited) {
-    const citingCommit = () => commitOfLine(c.file, c.line);
+    const citedIn = async () => (c.rel === undefined ? null : citedCommit(projectDir, c.rel, await commitOfLine(c.file, c.line)));
     const read =
       c.commit === undefined
-        ? await unpinnedCitation(projectDir, c, tracked, citingCommit)
+        ? await unpinnedCitation(projectDir, c, tracked, citedIn)
         : await pinnedCommitOf(projectDir, { ...c, commit: c.commit }, pins);
     if ('problem' in read) {
       findings.push({ ledger: c.file, entry: `line ${c.line}`, kind: 'evidence-not-committed', detail: read.problem });
@@ -951,7 +971,7 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
     }
     if (!c.lines || c.rel === undefined) continue;
     const written = writtenLocation(c.commit === undefined ? c.path : `${c.path}@${c.commit}`, c.lines);
-    const detail = await citedLinesProblem(projectDir, written, c.rel, c.lines, citingCommit, lineCounts, read.commit);
+    const detail = await citedLinesProblem(projectDir, written, c.rel, c.lines, citedIn, lineCounts, read.commit);
     if (detail) findings.push({ ledger: c.file, entry: `line ${c.line}`, kind: 'cited-lines-missing', detail });
   }
   return findings;
