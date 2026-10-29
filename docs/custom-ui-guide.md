@@ -720,6 +720,36 @@ const { currentIdx, handleGridKeydown, handleGridFocusIn, registerCell, cellAttr
 </template>
 ```
 
+### Listening for Escape Page-Wide
+
+BoardSmith's dialogs, popovers and menus call `event.preventDefault()` on an
+Escape they act on (closing a popover, the game-over card or the controls
+menu, or going back a level in the Action Panel), so `event.defaultPrevented`
+is `true` by the time it reaches the page. An Escape that closes nothing is
+left unmarked. So a board can listen on the whole page, and work no matter
+where focus is, as long as it skips handled Escapes:
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue';
+
+const picked = ref<number | null>(null);
+
+function cancelPickOnEscape(event: KeyboardEvent) {
+  if (event.key !== 'Escape' || event.defaultPrevented) return;
+  picked.value = null;
+}
+
+onMounted(() => window.addEventListener('keydown', cancelPickOnEscape));
+onUnmounted(() => window.removeEventListener('keydown', cancelPickOnEscape));
+</script>
+```
+
+Listen on `window`, without `{ capture: true }`. Some of BoardSmith's
+handlers listen on `document`, so a `document` listener added before them, or
+any capturing listener, runs before they have marked the event.
+
 ## Step 6: Handling Dependent Selections
 
 When selection B depends on selection A (e.g., "select merc, then select their equipment"):

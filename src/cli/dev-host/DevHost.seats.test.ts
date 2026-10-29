@@ -194,6 +194,15 @@ describe.each([
     wrapper.unmount();
   });
 
+  // #1524: the Escape that closes a menu is marked handled.
+  it('marks the Escape that closes it as handled', async () => {
+    const wrapper = await openMenu();
+    const escape = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+    document.dispatchEvent(escape);
+    expect(escape.defaultPrevented).toBe(true);
+    wrapper.unmount();
+  });
+
   it('closes on a click outside it', async () => {
     const wrapper = await openMenu();
     await wrapper.find('.dev-chrome__brand').trigger('click');
@@ -450,6 +459,20 @@ it('an Escape with no menu open leaves focus where it is', async () => {
   await wrapper.vm.$nextTick();
   expect(toggle.attributes('aria-expanded')).toBe('false');
   expect(document.activeElement).toBe(toggle.element);
+  wrapper.unmount();
+});
+
+// #1524: Escape is marked handled only when it closed Table setup.
+it('marks the Escape that closes Table setup as handled, and one with nothing open not', async () => {
+  const wrapper = await mountDevHost();
+  await activateSeat(wrapper);
+  await wrapper.find('.dev-chrome__bar-wide [data-testid="table-setup-toggle"]').trigger('click');
+  const closing = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+  document.dispatchEvent(closing);
+  await wrapper.vm.$nextTick();
+  const idle = new KeyboardEvent('keydown', { key: 'Escape', cancelable: true });
+  document.dispatchEvent(idle);
+  expect([closing.defaultPrevented, idle.defaultPrevented]).toEqual([true, false]);
   wrapper.unmount();
 });
 

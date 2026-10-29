@@ -21,6 +21,7 @@
  * component does.
  */
 import { nextTick, onMounted, onUnmounted, watch, type Ref } from 'vue';
+import { handleEscape } from '../../ui/utils/escape.js';
 
 export function useMenuDismiss(
   open: Ref<boolean>,
@@ -39,9 +40,11 @@ export function useMenuDismiss(
   }
   watch(trigger, placeFocus, { flush: 'post' });
   function onKeydown(event: KeyboardEvent): void {
-    if (event.key !== 'Escape' || !open.value) return;
-    close();
-    trigger.value?.focus();
+    if (!open.value) return;
+    handleEscape(event, () => {
+      close();
+      trigger.value?.focus();
+    });
   }
   function onClick(event: MouseEvent): void {
     if (open.value && !container.value?.contains(event.target as Node)) close();
