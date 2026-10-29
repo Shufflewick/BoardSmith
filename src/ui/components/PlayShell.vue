@@ -181,6 +181,8 @@ defineSlots<{
   'player-stats'(props: { player: Player }): unknown;
   /** The game's per-seat content, under the identity token. */
   'player-token-extra'(props: { player: Player }): unknown;
+  /** The game's per-seat content, under each token in the rail and the phone strip. */
+  'player-strip-extra'(props: { player: Player }): unknown;
   /** The controls menu, at the far left of the action bar. Its contents are the
    *  adapter's: a table's carries undo, hints and the tutorial. */
   controls(): unknown;
@@ -384,7 +386,11 @@ const mobileToggleLabel = computed(() => {
             :due-seats="dueSeats"
             :present-seats="presentSeats"
             seat-strip
-          />
+          >
+            <template #player-strip-extra="{ player }">
+              <slot name="player-strip-extra" :player="player"></slot>
+            </template>
+          </PlayersPanel>
           <button
             class="mobile-strip__toggle"
             type="button"
@@ -427,6 +433,9 @@ const mobileToggleLabel = computed(() => {
             </template>
             <template #player-stats="{ player }">
               <slot name="player-stats" :player="player"></slot>
+            </template>
+            <template #player-strip-extra="{ player }">
+              <slot name="player-strip-extra" :player="player"></slot>
             </template>
           </PlayersPanel>
 

@@ -142,6 +142,14 @@ describe('seat identity and presence', () => {
   it('marks nobody when it has none', () => {
     expect(mountShell().findAll('.conn-status')).toHaveLength(0);
   });
+
+  it('hands #player-strip-extra to both seat strips, the phone bar and the rail (#1513)', () => {
+    const extra = ({ player }: { player: { seat: number } }) => h('span', { class: 'hp' }, `HP ${player.seat}`);
+    const wrapper = mountShell({ sidebarRail: true }, { 'player-strip-extra': extra });
+
+    expect(wrapper.findAll('.mobile-strip .hp').map((el) => el.text())).toEqual(['HP 0', 'HP 1']);
+    expect(wrapper.findAll('.side-scroll .seat-strip .hp').map((el) => el.text())).toEqual(['HP 0', 'HP 1']);
+  });
 });
 
 describe('the log', () => {
