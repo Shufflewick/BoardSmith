@@ -246,17 +246,19 @@ if (!actionController) {
 }
 
 /**
- * Set while the bar is open over the player's preference, for one action. Keyed
+ * Set while an action is open since it started, until the player's toggle; it
+ * holds the bar open over their preference unless the game opts out. Keyed
  * on the start as well as the name: the action that just finished can start
  * again inside one flush, and that is a new question too (#384).
  */
 const barOpenedForAction = ref(false);
 watch([actionController.currentAction, actionController.actionStartTick], ([action]) => {
-  barOpenedForAction.value = props.actionBarOpensForActions && action !== null;
+  barOpenedForAction.value = action !== null;
 });
 
 /** What the player actually sees, as opposed to what they asked for. */
-const actionBarCollapsed = computed(() => props.actionBarMinimized && !barOpenedForAction.value);
+const actionBarCollapsed = computed(() =>
+  props.actionBarMinimized && !(props.actionBarOpensForActions && barOpenedForAction.value));
 
 /** Whether the game is waiting on THIS seat, for the collapsed bar's mark. */
 const barWaitsOnMe = computed(() => props.mayAct && !props.completed);

@@ -1396,6 +1396,7 @@ describe('WorldShell — a game may keep a put-down bar down when an action star
   it('keeps the put-down bar down for a question when the game opts out', async () => {
     const wrapper = await askFromTheBoard({ actionBarOpensForActions: false });
     expect(barIsDown(wrapper)).toBe(true);
+    expect(wrapper.find('[data-testid="bs-actionbar-attention"]').exists()).toBe(true);
     wrapper.unmount();
   });
 });

@@ -326,6 +326,19 @@ describe('a game may keep a put-down bar down when an action starts (#1519)', ()
     expect(controller.currentAction.value).toBe('move');
   });
 
+  it('follows the game changing its mind with a question already open', async () => {
+    const { wrapper, controller } = mountDock({ actionBarMinimized: true, actionBarOpensForActions: false });
+    await flush();
+    await controller.start('move');
+    await flush();
+    await wrapper.setProps({ actionBarOpensForActions: true });
+    await flush();
+    expect(collapsed(wrapper), 'the open question stayed hidden after the game let the bar open').toBe(false);
+    await wrapper.setProps({ actionBarOpensForActions: false });
+    await flush();
+    expect(collapsed(wrapper), 'the bar stayed up after the game asked it to stay down').toBe(true);
+  });
+
   it('opens when the player opens it, and stays down once they put it down again', async () => {
     const { wrapper, controller } = mountDock({ actionBarMinimized: true, actionBarOpensForActions: false });
     await flush();
