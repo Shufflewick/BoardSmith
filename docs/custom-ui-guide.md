@@ -1353,7 +1353,34 @@ What follows for a custom board:
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height. Keep anything the player must always see
-away from the board's bottom edge, or let it scroll.
+away from the board's bottom edge, or let it scroll, or lift it above the panel
+with `--bsg-panel-overlap` ([below](#keep-an-overlay-above-the-action-panel)).
+
+### Keep an overlay above the Action Panel
+
+`--bsg-panel-overlap` is how far the Action Panel reaches above the row the
+board region reserves for it, in pixels, at the panel's current height,
+counting the half of its edge toggle that rises above its top. It is that half
+toggle (13px) while the panel fits its reserved row (a one-row panel, or the
+thin line while the player has it put down), and grows as the panel wraps to a
+second row, opens over a put-down preference, or an editor grows it. Every
+element inside the board region inherits it; one you teleport out of the board
+(to `body`, say) does not.
+
+An overlay pinned to the bottom of a board that fills the region (a buy panel,
+a hand tray) stays just above the panel and its toggle in every state with:
+
+```css
+.buy-panel {
+  position: absolute;
+  bottom: calc(var(--bsg-panel-overlap) + var(--bsg-s2));
+}
+```
+
+The value is in the region's pixels, and your board is zoomed. At a zoom other
+than 1, divide by the `zoom` that `useBoardSize()` returns (see above), for
+example by setting it on your board as `--board-zoom` and writing
+`calc((var(--bsg-panel-overlap) + var(--bsg-s2)) / var(--board-zoom))`.
 
 ## Debugging
 

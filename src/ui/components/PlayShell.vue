@@ -727,6 +727,8 @@ const mobileToggleLabel = computed(() => {
      WCAG 2.5.8 target reaches up over the board instead of widening the line. */
   --bsg-action-bar-line: 14px;
   --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + env(safe-area-inset-bottom));
+  /* The edge toggle, centred on the bar's top edge, so half of it rises above the bar. */
+  --bsg-bar-edge: 26px;
 }
 
 /* Put down by the player (#1518): the region reserves only the line, so the board
@@ -865,6 +867,8 @@ const mobileToggleLabel = computed(() => {
   min-height: 0;
   position: relative;
   display: flex;
+  /* Public (#1520): how far the bar and its edge toggle reach above the reserved row, for a game overlay that must stay clear of them. */
+  --bsg-panel-overlap: calc(max(0px, var(--bsg-bar-clearance) - var(--bsg-panel-reserved)) + var(--bsg-bar-edge) / 2);
 }
 
 .boardregion {
@@ -1015,8 +1019,8 @@ const mobileToggleLabel = computed(() => {
   transform: translateY(-50%);
   /* Ties the game modal host and game-over scrim, and wins as the later element (#1346). */
   z-index: 32;
-  width: 26px;
-  height: 26px;
+  width: var(--bsg-bar-edge);
+  height: var(--bsg-bar-edge);
   border-radius: 50%;
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line);
