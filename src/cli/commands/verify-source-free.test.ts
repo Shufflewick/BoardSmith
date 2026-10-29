@@ -127,7 +127,8 @@ describe('decision 7 — VERIFY_PIPELINE_STEPS coverage of the real pipeline', (
   );
 
   it('VERIFY_PIPELINE_STEPS is declared in exactly one file under src/ (single-definition guard)', () => {
-    const srcDir = join(__dirname, '../../..');
+    // src/, as named: the repo root holds Vite's transient config bundles, which another run deletes mid-walk.
+    const srcDir = join(__dirname, '../..');
     const matches: string[] = [];
     const walk = (dir: string): void => {
       for (const entry of readdirSync(dir)) {
