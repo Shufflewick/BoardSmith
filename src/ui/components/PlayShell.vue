@@ -1227,13 +1227,17 @@ const mobileToggleLabel = computed(() => {
    lowers the bar's cap, so the bar covers less of the board. */
 @media (orientation: landscape) and (max-height: 600px) {
   .game-shell__game {
-    /* One row on a short screen: vertical space is the scarce axis here. */
+    /* One row on a short screen: vertical space is the scarce axis here. The
+       reserve follows the bar's thinner padding, so no board is lost under it. */
+    --bsg-panel-pad: 6px;
+    --bsg-panel-reserved: calc(var(--bsg-panel-row) + var(--bsg-panel-pad)
+                               + max(var(--bsg-panel-pad), env(safe-area-inset-bottom)));
     --bsg-panel-max: var(--bsg-panel-reserved);
   }
 
   .actionbar {
-    padding-top: 6px;
-    padding-bottom: max(6px, env(safe-area-inset-bottom));
+    padding-top: var(--bsg-panel-pad);
+    padding-bottom: max(var(--bsg-panel-pad), env(safe-area-inset-bottom));
   }
 
   /* The wider tiers' region min-height is taller than this screen. Kept, it

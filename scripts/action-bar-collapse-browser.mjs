@@ -213,7 +213,6 @@ async function measure(page) {
       // The panel's own start button: present and boxed while the bar is up,
       // absent while it is down.
       start: box('[data-bs-action="tend"]'),
-      board: box('[data-fixture="garden"]'),
       // A choice control, which only exists mid-question.
       choice: box('.action-config .choice-btn'),
       // The content box: what the board is fitted to.
@@ -360,7 +359,9 @@ async function drive({ launch, hostUrl }) {
       await context.close();
     }
 
-    await oneRowReserve(browser, hostUrl);
+    for (const viewport of [{ width: 1440, height: 900 }, { width: 844, height: 390 }]) {
+      await oneRowReserve(browser, hostUrl, viewport);
+    }
 
     for (const viewport of [{ width: 375, height: 812 }, { width: 844, height: 390 }]) {
       for (const colorScheme of ['light', 'dark']) {
@@ -377,21 +378,24 @@ async function drive({ launch, hostUrl }) {
 /**
  * ONE ROW OF BAR IS RESERVED UNDER THE BOARD, AND ONLY THE ROWS ABOVE IT FLOAT (#1517).
  *
- * At a desktop width seat 1's bar at rest is one row: the board region's content box,
- * which a fitted board fills, ends at or above its top. Seat 2's long prompt
+ * Seat 1's bar at rest is one row: the board region's content box, which a
+ * fitted board fills, ends exactly at its top, on a desktop and on a short
+ * landscape screen, where the bar's padding is smaller. Seat 2's long prompt
  * grows the bar past one row, and putting it down shrinks it to the line; the
  * region keeps its size through both, so the board never refits.
  */
-async function oneRowReserve(browser, hostUrl) {
-  await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 } }, (page) => waitForAction(page, 'tend'), async (page, surface) => {
+async function oneRowReserve(browser, hostUrl, viewport) {
+  const size = `${viewport.width}x${viewport.height}`;
+  await onFreshPage(browser, hostUrl, { viewport }, (page) => waitForAction(page, 'tend'), async (page, surface) => {
     const rest = await measure(page);
-    await check('1440x900: a one-row bar sits under the fitted board, not over it (#1517)', () => {
+    await check(`${size}: the board is fitted exactly above a one-row bar, not under it and not short of it (#1517)`, () => {
       assert(rest.bar.height <= ONE_ROW + 1, `the bar at rest is ${rest.bar.height}px tall, more than one row, so this proves nothing`);
-      assert(rest.region.bottom <= rest.bar.top + 0.5,
-        `the board region's content box ends at ${rest.region.bottom}, below the one-row bar's top at ${rest.bar.top}`);
+      assert(Math.abs(rest.region.bottom - rest.bar.top) <= 0.5,
+        `the board region's content box ends at ${rest.region.bottom} and the one-row bar's top is at ${rest.bar.top}`);
     });
 
-    await check('1440x900: the board keeps its size with a one-row bar, a taller bar and the bar down (#1517)', async () => {
+    // A short landscape screen caps the bar at one row, so nothing there grows it past the reserve.
+    if (viewport.height > 600) await check(`${size}: the board keeps its size with a one-row bar, a taller bar and the bar down (#1517)`, async () => {
       // Seat 2's action prompt is long enough to wrap the bar at this width (see `packPick`).
       await page.locator('[data-testid="world-seat-switcher"]').click();
       await page.locator('[data-testid="world-take-seat"][data-seat="2"]').click();
