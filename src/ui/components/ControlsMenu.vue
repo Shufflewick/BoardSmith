@@ -409,6 +409,7 @@ function runCommand(command: MenuCommand) {
   background: transparent;
   border: 1px solid var(--bsg-line);
   color: var(--bsg-ink-2);
+  font-family: inherit;
   cursor: pointer;
 }
 .menubtn:hover {

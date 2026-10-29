@@ -2218,6 +2218,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 <style scoped src="../sr-only.css"></style>
 
 <style scoped>
+/* Browsers do not let a button inherit the page's font, so it would draw in the user agent's (#1511). */
+button {
+  font-family: inherit;
+}
+
 .action-panel {
   /* Flattened into the action bar's flex flow: ActionPanel's own box disappears so its
      children (action title, cancel, prompt, option buttons) flow INLINE alongside the

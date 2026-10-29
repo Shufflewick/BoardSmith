@@ -285,6 +285,7 @@ onUnmounted(() => {
   border: none;
   cursor: pointer;
   color: var(--bsg-ink-3);
+  font-family: inherit;
   line-height: 1;
   z-index: 1;
 }
