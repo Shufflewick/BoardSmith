@@ -646,6 +646,16 @@ one-colony refresh of seven actions came to cost seconds (#374).
 answer round one gets for everything, because nothing is resident yet. A later
 round that names a root an earlier round declared can read it straight.
 
+**One offer pass answers one projection of a root (#1516).** Within one
+`offerPartitions` or `offersFor` pass, every action's declaration gets the same
+object back from `world.partition(name)`, so read-only work every action shares
+(validating one roster, opening one store) can be done once per pass by keying a
+`WeakMap` on that root. A new pass answers a new projection, so nothing memoized
+on it outlives the pass. Key on `world.partition(name)`, not on `game`: an
+`offersFor` pass may make more partitions resident between actions, which a
+memo of `game` would not see, while a root's contents cannot change during a
+read-only pass.
+
 ### And `world.now`: the instant the dispatch is happening at
 
 The declaration's `world` also carries the clock (#375):

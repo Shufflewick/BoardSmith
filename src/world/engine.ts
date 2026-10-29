@@ -1247,10 +1247,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   offerPartitions(player: string, now: number): readonly string[] {
     const seat = this.seatFor(player);
+    // ONE SCOPE FOR THE PASS (#1516), so every action sees one projection of a root and can memoize on it.
+    const project = readOnlyScope();
     const missing: string[] = [];
     for (const definition of this.actions.values()) {
       if (definition.world?.seatless === true) continue;
-      missing.push(...this.offerPartitionsOf(definition, seat, now));
+      missing.push(...this.offerPartitionsOf(definition, seat, now, project));
     }
     return declaredOnce(missing);
   }
@@ -1268,9 +1270,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     now: number,
     action: string,
+    project: Projecting,
   ): readonly string[] {
     if (round.kind !== "partitions") return [];
-    return this.declareRound(round, seat, args, arrivalAt(now), action).filter(
+    return this.declareRound(round, seat, args, arrivalAt(now), action, project).filter(
       (name) => !this.residentIds.has(name),
     );
   }
@@ -1281,11 +1284,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
     definition: ActionDefinition,
     seat: number,
     now: number,
+    project: Projecting,
   ): readonly string[] {
     // Only the first pick's place: the offer asks nothing past it (#1355).
     for (const round of definition.world!.needs) {
       if (round.before !== 0) continue;
-      const unmet = this.unmetOnASeatsRead(round, seat, {}, now, definition.name);
+      const unmet = this.unmetOnASeatsRead(round, seat, {}, now, definition.name, project);
       // ONE ROUND AT A TIME. A later round may read what an earlier one
       // loaded, so there is nothing to say about it until the host has
       // supplied this one.
@@ -1312,7 +1316,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       // ROUND ONE (and any round that shares its place), before anything is
       // asked of the player.
-      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
+      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, null, arrivalAt(stamp.now), project);
 
       // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
       // whose condition is false is not offered and no further round runs, so a
@@ -1460,7 +1464,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp, project));
     try {
       for (let step = 0; step <= through; step++) {
-        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now));
+        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now), project);
         // AFTER ROUND ZERO, as offerOf: a read answers only what the offer shows (#798).
         if (step === 0 && !this.conditionHolds(definition, acting, project)) {
           throw worldRefusal(
@@ -1672,10 +1676,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): readonly string[] {
     this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
+    const project = readOnlyScope();
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        const unmet = this.unmetOnASeatsRead(round, seat, args, now, definition.name);
+        const unmet = this.unmetOnASeatsRead(round, seat, args, now, definition.name, project);
         if (unmet.length > 0) return declaredOnce(unmet);
       }
     }
@@ -1890,6 +1895,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     //
     // AND WHICH NOTICE BOXES, on exactly the same ordered terms (#521).
     const cursor = { activity: 0, notices: 0 };
+    const project = readOnlyScope();
     for (const round of definition.world!.needs) {
       if (round.kind !== "partitions") {
         const asked = this.namedSeatOf(round, seat, command.args, when, definition.name);
@@ -1898,7 +1904,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         if (outstanding !== null) return outstanding;
         continue;
       }
-      const missing = this.declareRound(round, seat, command.args, when, definition.name).filter(
+      const missing = this.declareRound(round, seat, command.args, when, definition.name, project).filter(
         (name) => !this.residentIds.has(name),
       );
       if (missing.length > 0) {
@@ -1998,9 +2004,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     when: WorldDispatchWhen,
     action: string,
+    project: Projecting,
   ): readonly string[] {
     const player = seat === null ? null : this.playerFor(seat);
-    const project = readOnlyScope();
     return declaredOnce(
       declaring(this.game, action, () =>
         round.declare({
@@ -2071,6 +2077,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
      *  notice box, so their notice rounds are not even asked (#521). */
     namedBoxes: number[] | null,
     when: WorldDispatchWhen,
+    project: Projecting,
     /** The names a `.needs()` round gave, on the write path only (#1334). */
     writable?: Set<string>,
   ): Promise<void> {
@@ -2087,7 +2094,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         this.noteNamedSeat(round, seat, args, when, definition.name, { namedSeats, namedBoxes });
         continue;
       }
-      for (const name of this.declareRound(round, seat, args, when, definition.name)) {
+      for (const name of this.declareRound(round, seat, args, when, definition.name, project)) {
         if (!named.includes(name)) named.push(name);
         if (!round.readOnly) writable?.add(name);
         await this.ensureResident(name);
@@ -2590,6 +2597,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const namedBoxes: number[] = [];
     // AND WHICH OF `named` IT MAY WRITE: the rest came only from `.reads()` (#1334).
     const writable = new Set<string>();
+    const project = readOnlyScope();
     for (let step = 0; step <= definition.selections.length; step++) {
       await this.hydrateRounds(
         definition,
@@ -2600,6 +2608,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         namedSeats,
         namedBoxes,
         when,
+        project,
         writable,
       );
     }

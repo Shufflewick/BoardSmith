@@ -2263,7 +2263,95 @@ describe("#375 — a declaration is stamped with the instant it is being made at
   });
 });
 
-describe("#381 — a resident-root lookup is asked of the root table, not of the tree", () => {
+describe("#1516 — one offer pass hands every action's declaration the same projection", () => {
+  // A world's offer runs every seat action's round-one declaration, and read-only
+  // work the actions share (opening one store, validating one roster) could only
+  // be done once per pass if a declaration had something stable to key a memo
+  // on. Each `declareRound` minted its own read-only scope, so each action saw a
+  // different projection of the same partition root and nothing could be shared.
+
+  // Compared by identity here, not by `toBe`: printing a projection on failure is itself a refused read.
+  const sameRoot = (seen: readonly unknown[]) => seen[0] !== undefined && seen.every((root) => root === seen[0]);
+
+  /** `count` seat actions whose round one records what `world.partition(ROOM_ONE)` answered. */
+  function recordingEngine(count: number, seen: unknown[]): BoardSmithWorldEngine {
+    const actions = Array.from({ length: count }, (_, index) =>
+      worldAction<WorldFixtureGame>(`look${index}`)
+        .needs(({ world }) => {
+          seen.push(world.partition(ROOM_ONE));
+          return [ROOM_ONE];
+        })
+        .execute(() => {}),
+    );
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions,
+      view: () => [],
+    });
+  }
+
+  it("answers one projection per partition across every action of one offerPartitions pass, and a new one per pass", async () => {
+    const seen: unknown[] = [];
+    const engine = recordingEngine(3, seen);
+    await engine.hydrate([ROOM_ONE]);
+
+    seen.length = 0;
+    expect(engine.offerPartitions("player-a", STAMP.now)).toEqual([]);
+    const first = seen.splice(0);
+    expect(first).toHaveLength(3);
+    expect(sameRoot(first)).toBe(true);
+
+    engine.offerPartitions("player-a", STAMP.now);
+    expect(seen[0] === first[0]).toBe(false);
+  });
+
+  it("answers one projection per partition across every action of one offersFor pass", async () => {
+    const seen: unknown[] = [];
+    const engine = recordingEngine(3, seen);
+    await engine.hydrate([ROOM_ONE]);
+
+    seen.length = 0;
+    await engine.offersFor("player-a", STAMP);
+    expect(seen).toHaveLength(3);
+    expect(sameRoot(seen)).toBe(true);
+  });
+
+  it("lets a pass do shared read-only work once, memoized on the projected root", async () => {
+    let checks = 0;
+    const memo = new WeakMap<object, string[]>();
+    const actions = Array.from({ length: 5 }, (_, index) =>
+      worldAction<WorldFixtureGame>(`check${index}`)
+        .needs(({ world }) => {
+          const root = world.partition(ROOM_ONE);
+          if (root === undefined) return [ROOM_ONE];
+          let names = memo.get(root);
+          if (names === undefined) {
+            checks += 1;
+            names = root.all(Token).map((token) => token.name);
+            memo.set(root, names);
+          }
+          return [ROOM_ONE];
+        })
+        .execute(() => {}),
+    );
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions,
+      view: () => [],
+    });
+    await engine.hydrate([ROOM_ONE]);
+
+    engine.offerPartitions("player-a", STAMP.now);
+
+    expect(checks).toBe(1);
+  });
+});
+
+describe("#381— a resident-root lookup is asked of the root table, not of the tree", () => {
   // `residentIds` resolves a declared name to an id in one map read, and then
   // the accessor spent the saving it had just made: it handed the id to
   // `getElementById`, a depth-first walk of the whole resident world. So the
