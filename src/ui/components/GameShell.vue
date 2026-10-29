@@ -1812,8 +1812,8 @@ defineExpose({
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
   position: fixed;
-  /* Sits one row-gap above the Action Panel's cap, not a second magic number. */
-  bottom: calc(var(--bsg-panel-max) + var(--bsg-panel-gap));
+  /* One row-gap above the Action Panel's measured top, whatever its height. */
+  bottom: calc(var(--bsg-bar-clearance) + var(--bsg-panel-gap));
   left: 50%;
   transform: translateX(-50%);
   z-index: 34; /* above game modals (z-32) and tutorial and hint bubbles (z-31, 33), below modals */

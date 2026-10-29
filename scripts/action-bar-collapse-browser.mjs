@@ -220,7 +220,7 @@ async function measure(page) {
         const top = region.getBoundingClientRect().top + region.clientTop + parseFloat(cs.paddingTop);
         const height = region.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
         const width = region.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
-        return { width, height, bottom: top + height };
+        return { width, height, bottom: top + height, scrollTop: region.scrollTop };
       })() : null,
     };
   });
@@ -263,6 +263,8 @@ async function drive({ launch, hostUrl }) {
       await waitForAction(page, 'tend');
       await page.waitForTimeout(300);
 
+      // Scrolled to the end, where a change in the scroll room would clamp the scroll and move the board.
+      await surfaceOf(page).locator('[data-testid="bs-board"]').evaluate((region) => { region.scrollTop = region.scrollHeight; });
       const open = await measure(page);
       await check(`${name}: the toggle is on screen with the bar up`, () => {
         assertToggleReachable(open, name);
@@ -287,6 +289,9 @@ async function drive({ launch, hostUrl }) {
         assert(down.region.width === open.region.width && down.region.height === open.region.height,
           `the board region is ${down.region.width}x${down.region.height} with the bar down and ` +
           `${open.region.width}x${open.region.height} with it up`);
+        assert(open.region.scrollTop > 0, 'the board region does not scroll, so the scroll check proves nothing');
+        assert(down.region.scrollTop === open.region.scrollTop,
+          `putting the bar down scrolled the board from ${open.region.scrollTop} to ${down.region.scrollTop}`);
       });
 
       // The controls menu is the ADAPTER's slot content and a world fills none.

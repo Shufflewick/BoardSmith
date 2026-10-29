@@ -124,11 +124,13 @@ describe('#1514: the Action Panel floats over the board and never sizes it', () 
   });
 
   it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {
-    // Scroll room after the board, as tall as the bar, outside the content box the fit reads.
-    expect(declaration('.boardregion::after', 'height')).toBe('var(--bsg-bar-clearance)');
+    // Scroll room after the board, as tall as the bar's cap. A constant: room that
+    // followed the bar's live height shrank as the bar re-wrapped, clamped the
+    // scroll and moved the board under the player's cursor (#1514 review F1).
+    expect(declaration('.boardregion::after', 'height')).toBe('var(--bsg-panel-max)');
     expect(declaration('.boardregion::after', 'flex')).toBe('none');
     // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it.
-    expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('var(--bsg-bar-clearance)');
+    expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('var(--bsg-panel-max)');
   });
 
   it('does not feed action-panel measurements into board fitting', () => {
@@ -147,8 +149,9 @@ describe('the Action Panel\'s own height cap', () => {
     expect(declaration('.actionbar', 'max-height')).toBe('var(--bsg-panel-max)');
     // On the border box, or the bar's padding would sit on top of the cap.
     expect(declaration('.actionbar', 'box-sizing')).toBe('border-box');
-    // The demo control bar clears the same cap, not a second magic number.
-    expect(declaration('.bsg-demo-controls', 'bottom')).toContain('var(--bsg-panel-max)');
+    // The demo control bar follows the bar's measured top, so it rides down with
+    // a bar put down and up with one an editor grows (#1514 review F2).
+    expect(declaration('.bsg-demo-controls', 'bottom')).toBe('calc(var(--bsg-bar-clearance) + var(--bsg-panel-gap))');
   });
 
   it.each(ENVIRONMENTS)('caps the bar at two control rows at the base tier (safe-area $safeArea)', (env) => {

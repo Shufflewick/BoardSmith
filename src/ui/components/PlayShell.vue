@@ -315,7 +315,7 @@ watch(actionBarCollapsed, async (down) => {
  */
 const actionBarEl = ref<HTMLElement | null>(null);
 const barClearance = ref(0);
-// Read by the board's scroll room and the overlays that stop at the bar; board fitting never reads it.
+// Only the overlays that stop at the bar follow its height; board fitting and scroll layout never read it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
   const measure = () => { barClearance.value = bar.getBoundingClientRect().height; };
@@ -828,7 +828,7 @@ const mobileToggleLabel = computed(() => {
 
 /* Board region: hero; container-query-sized; ~zero chrome padding (IA-05).
    The board renders at its NATURAL size, pinned top-left; at startup a
-   one-shot fit (useAutoZoom) zooms it to fill this region without scrolling,
+   one-shot fit (useAutoZoom) zooms it to fill this region's visible height,
    clamped to the 0.5–2.0 slider range, then leaves it alone. Whenever the
    board — grown mid-game, clamped, or manually zoomed — is larger than the
    region, this region scrolls (both axes): scroll is the contract after
@@ -863,15 +863,17 @@ const mobileToggleLabel = computed(() => {
   box-sizing: content-box;
   padding: var(--bsg-s1);
   /* WCAG 2.4.11: a control scrolled into view by focus lands above the floating bar. */
-  scroll-padding-bottom: var(--bsg-bar-clearance);
+  scroll-padding-bottom: var(--bsg-panel-max);
 }
 
-/* Scroll room after the board as tall as the bar, so the player can scroll what
-   the bar covers into view. Outside the content box, so the fit never sees it. */
+/* Scroll room after the board, so the player can scroll what the bar covers into
+   view. The fit reads the region's clientHeight, never its scroll height, so this
+   never sizes the board. The bar's cap, not its live height: room that changed as
+   the bar re-wrapped would clamp the scroll and move the board under the cursor. */
 .boardregion::after {
   content: '';
   flex: none;
-  height: var(--bsg-bar-clearance);
+  height: var(--bsg-panel-max);
 }
 
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under

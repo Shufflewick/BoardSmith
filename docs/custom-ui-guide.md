@@ -1322,9 +1322,11 @@ next.)
 What follows for a custom board:
 
 - **The panel covers the bottom of your board.** The region ends in scroll
-  room as tall as the panel, so the player can always scroll what it covers
-  into view, and a control that takes keyboard focus is scrolled to land above
-  the panel. The player can also put the panel down to a thin line.
+  room as tall as the panel's two-row cap, so the player can scroll what the
+  panel covers into view, and a control that takes keyboard focus is scrolled
+  to land above the panel. The scroll room is a constant, so the panel
+  re-wrapping never moves a scrolled board. The player can also put the panel
+  down to a thin line.
 - **The panel is capped at two control rows** (one on a short landscape
   screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
   lays itself out to fit them (at phone width it stacks the action's name over
@@ -1338,7 +1340,8 @@ What follows for a custom board:
   what the box needs, bounded at 60% of the screen's height: six lines of text
   plus the action, the field's label, the count and the submit. On a short
   screen the box gives way (down to a few lines) rather than the submit button
-  leaving the panel.
+  leaving the panel. The part of the board under an editor taller than the
+  cap cannot be scrolled into view until the editor closes.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height. Keep anything the player must always see
