@@ -123,25 +123,22 @@ class SeatUndoGame extends Game<SeatUndoGame, SeatUndoPlayer> {
           return { success: true };
         }),
     );
-    this.registerAction(
+    this.registerActions(
       placing('done').execute((_args, ctx) => {
         seatOf(ctx).isDone = true;
         return { success: true };
       }),
+      Action.create('battle').execute(() => ({ success: true })),
     );
-    this.registerAction(Action.create('battle').execute(() => ({ success: true })));
 
-    this.setFlow({
-      root: sequence(
-        simultaneousActionStep({
-          name: 'deploy',
-          actions: ['placePack', 'stashToken', 'draftPack', 'rollPack', 'announcePack', 'raidPack', 'burnPack', 'pickPack', 'pairPack', 'done'],
-          playerDone: (_ctx, p) => p.isDone,
-          seatUndo: true,
-        }),
-        actionStep({ name: 'battle', actions: ['battle'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      ),
+    const deploy = simultaneousActionStep<SeatUndoGame>({
+      name: 'deploy',
+      actions: ['placePack', 'stashToken', 'draftPack', 'rollPack', 'announcePack', 'raidPack', 'burnPack', 'pickPack', 'pairPack', 'done'],
+      playerDone: (_ctx, p) => p.isDone,
+      seatUndo: true,
     });
+    const battle = actionStep<SeatUndoGame>({ name: 'battle', actions: ['battle'], player: (ctx) => ctx.game.getPlayer(1)! });
+    this.setFlow({ root: sequence(deploy, battle) });
   }
 }
 

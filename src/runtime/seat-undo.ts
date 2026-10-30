@@ -94,52 +94,68 @@ export function watchSeatOp(host: SeatUndoHost, seat: number): (() => void) | un
   const countBefore = host.actionCount;
 
   return () => {
-    if (seatUndoStepStart(host.game, host.actionCount) !== stepStart) {
-      host.seatUndo = undefined;
-      return;
-    }
-    const state = host.seatUndo?.stepStart === stepStart ? host.seatUndo : { stepStart, seats: {} };
-    host.seatUndo = state;
+    const state = openState(host, stepStart);
+    if (!state) return;
     const after = seatParts(host.game);
-
-    let othersChanged = false;
-    for (const [other, json] of after.players) {
-      if (other === seat || before.players.get(other) === json) continue;
-      othersChanged = true;
-      state.seats[other] = { entries: [], fence: "Cannot undo: another seat's action changed your own player since, so your earlier actions cannot be taken back on their own." };
-    }
-
+    const othersChanged = fenceOtherSeats(state, before, after, seat);
     const lines = linesFor(host.game, before.messageCount, seat);
+    const stack = (state.seats[seat] ??= { entries: [] });
     const fence = othersChanged ? 'outside' : fenceOf(before, after, seat, lines);
-    const stack: SeatUndoStack = state.seats[seat] ?? { entries: [] };
-    state.seats[seat] = stack;
-    const opening = stack.opening ?? { player: before.players.get(seat)!, followUp, lines: [] };
-    const taken = { ...opening, lines: [...opening.lines, ...(lines ?? [])], fence: opening.fence ?? fence };
-
+    const taken = takenSoFar(stack.opening ?? { player: before.players.get(seat)!, followUp, lines: [] }, lines, fence);
     const recorded = host.actionCount > countBefore ? host.actionHistory.at(-1) : undefined;
-    if (!recorded) {
-      const changed = after.players.get(seat) !== before.players.get(seat) || taken.lines.length > 0 || taken.fence;
-      if (stack.opening || changed) stack.opening = taken;
-      if (taken.fence) {
-        stack.entries = [];
-        stack.fence = 'Cannot undo: a pick you made changed what other seats can see, so it cannot be taken back on its own.';
-      }
-      return;
-    }
-    delete stack.opening;
-    if (recorded.undoable === false || taken.fence) {
-      stack.entries = [];
-      stack.fence = taken.fence ? fenceMessage('name' in recorded ? recorded.name : 'that action', taken.fence) : notUndoableMessage(recorded);
-      return;
-    }
-    const entry: SeatUndoEntry = { player: taken.player, followUp: taken.followUp, lines: taken.lines };
-    stack.entries.push(entry);
-    const { max } = host.checkpointPolicy;
-    if (stack.entries.length > max) {
-      stack.entries.shift();
-      stack.fence = `Cannot undo further back: this game keeps at most ${max} undo steps (checkpoints: { max: ${max} }).`;
-    }
+    if (recorded) settleAction(stack, recorded, taken, host.checkpointPolicy.max);
+    else settlePick(stack, taken, after.players.get(seat) !== before.players.get(seat));
   };
+}
+
+/** The per-seat undo of the step that opened at `stepStart`, or none (dropping it) once that step is over. */
+function openState(host: SeatUndoHost, stepStart: number): SeatUndoState | undefined {
+  if (seatUndoStepStart(host.game, host.actionCount) !== stepStart) {
+    host.seatUndo = undefined;
+    return undefined;
+  }
+  if (host.seatUndo?.stepStart !== stepStart) host.seatUndo = { stepStart, seats: {} };
+  return host.seatUndo;
+}
+
+/** How the seat stood before the action now being taken, with what this op added to it. */
+function takenSoFar(opening: Opening, lines: number[] | undefined, fence: SeatUndoFence | undefined): Opening {
+  return { ...opening, lines: [...opening.lines, ...(lines ?? [])], fence: opening.fence ?? fence };
+}
+
+/** End the undo of every seat but `seat` whose own `Player` the op changed; says whether there was one. */
+function fenceOtherSeats(state: SeatUndoState, before: SeatParts, after: SeatParts, seat: number): boolean {
+  let changed = false;
+  for (const [other, json] of after.players) {
+    if (other === seat || before.players.get(other) === json) continue;
+    changed = true;
+    state.seats[other] = { entries: [], fence: "Cannot undo: another seat's action changed your own player since, so your earlier actions cannot be taken back on their own." };
+  }
+  return changed;
+}
+
+type Opening = NonNullable<SeatUndoStack['opening']>;
+
+/** A pick of an action not yet taken: remember how the seat stood before it, and end its undo at a pick it cannot take back. */
+function settlePick(stack: SeatUndoStack, taken: Opening, changedPlayer: boolean): void {
+  if (stack.opening || changedPlayer || taken.lines.length > 0 || taken.fence) stack.opening = taken;
+  if (!taken.fence) return;
+  stack.entries = [];
+  stack.fence = 'Cannot undo: a pick you made changed what other seats can see, so it cannot be taken back on its own.';
+}
+
+/** An action the seat took: one more its undo can take back, or where its undo now stops. */
+function settleAction(stack: SeatUndoStack, recorded: HistoryEntry, taken: Opening, max: number): void {
+  delete stack.opening;
+  if (recorded.undoable === false || taken.fence) {
+    stack.entries = [];
+    stack.fence = taken.fence ? fenceMessage('name' in recorded ? recorded.name : 'that action', taken.fence) : notUndoableMessage(recorded);
+    return;
+  }
+  stack.entries.push({ player: taken.player, followUp: taken.followUp, lines: taken.lines });
+  if (stack.entries.length <= max) return;
+  stack.entries.shift();
+  stack.fence = `Cannot undo further back: this game keeps at most ${max} undo steps (checkpoints: { max: ${max} }).`;
 }
 
 /** The log positions an op wrote since `from`, or `undefined` when one of them reached anyone but `seat`. */

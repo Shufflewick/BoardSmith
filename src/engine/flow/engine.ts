@@ -1325,6 +1325,7 @@ export class FlowEngine<G extends Game = Game> {
 
     this.publishMoveCounts(state);
     this.publishOpenStep(state);
+    if (this.openStepUndoesPerSeat()) state.seatUndo = true;
     return state;
   }
 
@@ -1372,6 +1373,13 @@ export class FlowEngine<G extends Game = Game> {
     }
   }
 
+  /** Whether the step awaiting input is a simultaneous step that undoes per seat (#1526). */
+  private openStepUndoesPerSeat(): boolean {
+    const top = this.stack[this.stack.length - 1];
+    return this.awaitingInput && top?.node.type === 'simultaneous-action-step'
+      && (top.node.config as SimultaneousActionStepConfig).seatUndo === true;
+  }
+
   /** Writes the open step's window, the last action's error and the held follow-ups into `state`. */
   private publishOpenStep(state: FlowState): void {
     // The open step's window, resolved when it was entered and kept on its
@@ -1382,11 +1390,6 @@ export class FlowEngine<G extends Game = Game> {
       if (typeof timeLimitMs === 'number') {
         state.timeLimitMs = timeLimitMs;
       }
-    }
-
-    const top = this.stack[this.stack.length - 1];
-    if (this.awaitingInput && top?.node.type === 'simultaneous-action-step' && (top.node.config as SimultaneousActionStepConfig).seatUndo) {
-      state.seatUndo = true;
     }
 
     // Include action error if present

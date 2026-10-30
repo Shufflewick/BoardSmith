@@ -13,7 +13,6 @@ import {
   type GameOptions,
   type Player,
   isSeatExpiry,
-  isSeatUndo,
   type ActionResult,
   type FlowState,
   type ActionCheckpoint,
@@ -35,6 +34,8 @@ import {
 } from '../engine/utils/index.js';
 import type {
   SerializedAction,
+  SerializedSeatExpiry,
+  SerializedSeatUndo,
   HistoryEntry,
 } from '../engine/action/types.js';
 import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
@@ -559,19 +560,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // the barrier fences undo, it is not part of undo's payload.
     this.recordExecuteBarrierAdvance();
 
-    // Under `'turn'` history nothing is kept before the oldest point a seat's
-    // undo can still restore. No undo restores further back than the current
-    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
-    // in session/utils.ts), and with no frame open no undo is possible at all.
-    // Nor does any undo cross a `.notUndoable()` action or an irreversible
-    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so it
-    // starts after the last of those when it lies inside the frame.
     const len = this.actionCount;
-    const flow = this.getFlowState();
-    // A step that undoes per seat restores no checkpoint, so it keeps none behind the head (#1526).
-    const undoReach = this.checkpointPolicy_.history === 'full'
-      ? undefined
-      : flow?.seatUndo ? len : this.undoFloor(len - (flow?.moveCount ?? 0));
+    const undoReach = this.undoReach();
     this.dropUnreadHistory(undoReach);
     if (!this.checkpointPolicy_.enabled) return;
 
@@ -602,6 +592,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.actionCheckpoints = this.actionCheckpoints.slice(excess);
       this.checkpointBaseIndex += excess;
     }
+  }
+
+  /**
+   * The oldest action count a seat's undo can still restore, which `'turn'`
+   * history keeps nothing before; none when the host keeps full history. No
+   * undo restores further back than the current action-step frame's start
+   * (`computeUndoInfo`, `simultaneousUndoBoundary` in session/utils.ts), and
+   * with no frame open no undo is possible at all. Nor does any undo cross a
+   * `.notUndoable()` action or an irreversible `execute()` (`undoFloor`, which
+   * `assertUndoAllowed` refuses by), so it starts after the last of those when
+   * it lies inside the frame. A step that undoes per seat restores no
+   * checkpoint, so it keeps none behind the head (#1526).
+   */
+  private undoReach(): number | undefined {
+    if (this.checkpointPolicy_.history === 'full') return undefined;
+    const flow = this.getFlowState();
+    return flow?.seatUndo ? this.actionCount : this.undoFloor(this.actionCount - (flow?.moveCount ?? 0));
   }
 
   /**
@@ -1423,20 +1430,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     runner.start();
 
     for (const entry of history) {
-      if (isSeatExpiry(entry)) {
-        try {
-          runner.expireHeldSeat(entry.player);
-        } catch (error) {
-          throw new Error(`Replay failed at seat ${entry.player}'s expiry: ${error instanceof Error ? error.message : String(error)}`);
-        }
-        continue;
-      }
-      if (isSeatUndo(entry)) {
-        try {
-          runner.undoSeatAction(entry.player);
-        } catch (error) {
-          throw new Error(`Replay failed at seat ${entry.player}'s undo: ${error instanceof Error ? error.message : String(error)}`);
-        }
+      if (!('name' in entry)) {
+        runner.replaySeatEntry(entry);
         continue;
       }
       const { actionName, player, args } = deserializeAction(entry, runner.game);
@@ -1448,6 +1443,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     return runner;
+  }
+
+  /** Replay a history entry that is no action: a seat the host closed, or a seat's own undo. */
+  private replaySeatEntry(entry: SerializedSeatExpiry | SerializedSeatUndo): void {
+    const expiry = isSeatExpiry(entry);
+    try {
+      if (expiry) this.expireHeldSeat(entry.player);
+      else this.undoSeatAction(entry.player);
+    } catch (error) {
+      throw new Error(`Replay failed at seat ${entry.player}'s ${expiry ? 'expiry' : 'undo'}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
