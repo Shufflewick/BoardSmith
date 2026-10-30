@@ -1,5 +1,18 @@
 # Migration Guide
 
+## A simultaneous step can undo per seat: `simultaneousActionStep({ seatUndo: true })` (#1526)
+
+A step declared `seatUndo: true` lets each seat take back its own last action,
+one at a time, whatever the other seats did since. Only an action that changed
+nothing but the seat's own `Player`, drew no random number, and wrote log lines
+and animations to that seat alone can be taken back; any other is where that
+seat's undo stops. To use it in a secret round, keep the round's choices on the
+`Player` and drop the `.notUndoable()` you added only to stop undo leaking. The
+`undo` op now answers `undoScope: 'seat' | 'game'`, the action history can hold
+a `{ kind: 'seatUndo', player }` entry (`isSeatUndo`), and a seat's
+`restoreEpoch` also counts its own undos in such steps, so a code path that
+walks the history or reads the undo answer handles both.
+
 ## `boardsmith mutate`: a sample of 3 mutants of a change, for merge time (#1496)
 
 `boardsmith mutate --base <ref>` tries 3 mutants of the code lines changed

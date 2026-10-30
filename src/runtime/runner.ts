@@ -34,6 +34,8 @@ import {
 } from '../engine/utils/index.js';
 import type {
   SerializedAction,
+  SerializedSeatExpiry,
+  SerializedSeatUndo,
   HistoryEntry,
 } from '../engine/action/types.js';
 import type { LogEviction, RandomnessPolicy } from '../engine/element/game.js';
@@ -44,6 +46,9 @@ import { constructGame, animationFloorOf, type AnimationFloor } from '../engine/
 import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
+import { withHeldFollowUp } from '../engine/flow/engine.js';
+import type { SeatUndoStack, SeatUndoState } from '../engine/utils/snapshot.js';
+import { seatUndoStepStart, treeWithSeatRestored, watchSeatOp } from './seat-undo.js';
 
 /**
  * Re-exported so `boardsmith/runtime` keeps naming these policy types alongside
@@ -332,6 +337,82 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   restoreEpoch = 0;
 
   /**
+   * How many times each seat took back its own action in a step that undoes
+   * per seat (#1526), keyed by seat. Seat N is told `restoreEpochFor(N)`. See
+   * `GameStateSnapshot.seatRestoreEpochs`.
+   */
+  seatRestoreEpochs: Record<string, number> = {};
+
+  /**
+   * Each seat's own undo in the open step that undoes per seat (#1526). Read
+   * it through {@link seatUndoStack}, which drops it once its step is over.
+   * Carried through `getSnapshot`/`fromSnapshot`; a checkpoint restore starts
+   * without it, since it belongs to the position being left.
+   */
+  seatUndo: SeatUndoState | undefined;
+
+  /** The restore count `seat` is told: every restore, and its own undos in steps that undo per seat. */
+  restoreEpochFor(seat: number): number {
+    return this.restoreEpoch + (this.seatRestoreEpochs[String(seat)] ?? 0);
+  }
+
+  /** `seat`'s own undo in the open step that undoes per seat, or none when no such step is open. */
+  seatUndoStack(seat: number): SeatUndoStack | undefined {
+    const stepStart = seatUndoStepStart(this.game, this.actionCount);
+    return stepStart !== undefined && this.seatUndo?.stepStart === stepStart ? this.seatUndo.seats[String(seat)] : undefined;
+  }
+
+  /**
+   * Run `seat`'s cancel of the action it started, checked for the open step's
+   * per-seat undo like its picks are.
+   * @internal The session's PendingActionManager is its only caller.
+   */
+  runCancelOp(seat: number, run: () => void): void {
+    this.asSeatOp(seat, run, true);
+  }
+
+  /** Run one op `seat` takes, checking it for the open step's per-seat undo when there is one. */
+  private asSeatOp<R>(seat: number, run: () => R, cancel = false): R {
+    const settle = this.checkpointPolicy_.enabled ? watchSeatOp(this, seat, cancel) : undefined;
+    const result = run();
+    settle?.();
+    return result;
+  }
+
+  /**
+   * Take back `seat`'s last action in the open step that undoes per seat
+   * (#1526): put the seat's own `Player` and follow-up back as they were before
+   * it, withdraw the log lines it wrote to the seat, and leave everything else
+   * as it is. Recorded as a history entry, and told to `seat` alone through
+   * its restore epoch. `decideUndo` (session) is what allows it; throws when
+   * the seat has nothing to take back.
+   */
+  undoSeatAction(seat: number): void {
+    const stack = this.seatUndoStack(seat);
+    const entry = stack?.entries.pop();
+    if (!stack || !entry) {
+      throw new Error(`Seat ${seat} has no action of its own to take back in the open step.`);
+    }
+    // The picks of an action the seat had started go too, with the lines they wrote.
+    this.game.withdrawMessages(stack.opening?.lines ?? []);
+    delete stack.opening;
+    this.ensureHeadCheckpoint();
+    const tree = treeWithSeatRestored(this.game, seat, entry);
+    const flow = withHeldFollowUp(this.game.getFlowState()!, seat, entry.followUp);
+    const sequence = this.game._ctx.sequence;
+    const random = this.game.getRandomState();
+    this.game.withdrawMessages(entry.lines);
+    this.game.loadSerializedState(tree, { messageLog: this.game.messages });
+    this.game.rollBackFlow(flow);
+    this.game._ctx.sequence = sequence;
+    this.game.setRandomState(random);
+    this.game._afterRestoreSubtree();
+    this.game.reopenSimultaneousSeat(seat);
+    this.actionHistory.push({ kind: 'seatUndo', player: seat });
+    this.seatRestoreEpochs[String(seat)] = (this.seatRestoreEpochs[String(seat)] ?? 0) + 1;
+  }
+
+  /**
    * WHICH GAME THIS IS (#356). Minted the first time it is read, adopted
    * from the snapshot by `fromSnapshot`, and carried by `fromCheckpoint` — an
    * undo is the same game, and `restoreEpoch` is what says it moved.
@@ -490,17 +571,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // the barrier fences undo, it is not part of undo's payload.
     this.recordExecuteBarrierAdvance();
 
-    // Under `'turn'` history nothing is kept before the oldest point a seat's
-    // undo can still restore. No undo restores further back than the current
-    // action-step frame's start (`computeUndoInfo`, `simultaneousUndoBoundary`
-    // in session/utils.ts), and with no frame open no undo is possible at all.
-    // Nor does any undo cross a `.notUndoable()` action or an irreversible
-    // `execute()` (`undoFloor`, which `assertUndoAllowed` refuses by), so it
-    // starts after the last of those when it lies inside the frame.
     const len = this.actionCount;
-    const undoReach = this.checkpointPolicy_.history === 'full'
-      ? undefined
-      : this.undoFloor(len - (this.getFlowState()?.moveCount ?? 0));
+    const undoReach = this.undoReach();
     this.dropUnreadHistory(undoReach);
     if (!this.checkpointPolicy_.enabled) return;
 
@@ -531,6 +603,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       this.actionCheckpoints = this.actionCheckpoints.slice(excess);
       this.checkpointBaseIndex += excess;
     }
+  }
+
+  /**
+   * The oldest action count a seat's undo can still restore, which `'turn'`
+   * history keeps nothing before; none when the host keeps full history. No
+   * undo restores further back than the current action-step frame's start
+   * (`computeUndoInfo`, `simultaneousUndoBoundary` in session/utils.ts), and
+   * with no frame open no undo is possible at all. Nor does any undo cross a
+   * `.notUndoable()` action or an irreversible `execute()` (`undoFloor`, which
+   * `assertUndoAllowed` refuses by), so it starts after the last of those when
+   * it lies inside the frame. A step that undoes per seat restores no
+   * checkpoint, so it keeps none behind the head (#1526).
+   */
+  private undoReach(): number | undefined {
+    if (this.checkpointPolicy_.history === 'full') return undefined;
+    const flow = this.getFlowState();
+    return flow?.seatUndo ? this.actionCount : this.undoFloor(this.actionCount - (flow?.moveCount ?? 0));
   }
 
   /**
@@ -690,7 +779,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * the caller then puts the seat's pending action back as it was.
    * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
-  runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
+  runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(seat: number, run: () => R): { result: R; undone: boolean } {
+    return this.asSeatOp(seat, () => this.runPickOpUnwatched(run));
+  }
+
+  private runPickOpUnwatched<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
     this.captureCheckpoint();
     const version = this.game._ctx._stateVersion;
@@ -711,6 +804,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * Perform an action and record it in history
    */
   performAction(
+    actionName: string,
+    player: Player | number,
+    args: Record<string, unknown>
+  ): ActionExecutionResult {
+    const seat = typeof player === 'number' ? player : player.seat;
+    return this.asSeatOp(seat, () => this.performActionUnwatched(actionName, player, args));
+  }
+
+  private performActionUnwatched(
     actionName: string,
     player: Player | number,
     args: Record<string, unknown>
@@ -1187,10 +1289,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * one fails loudly.
    */
   private expireHeldSeat(seat: number): FlowState {
-    this.ensureHeadCheckpoint();
-    const state = this.game.expireHeldSeat(seat);
-    this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
-    return state;
+    return this.asSeatOp(seat, () => {
+      this.ensureHeadCheckpoint();
+      const state = this.game.expireHeldSeat(seat);
+      this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });
+      return state;
+    });
   }
 
   /**
@@ -1283,6 +1387,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       ...(this.actionHistoryBase > 0 && { actionHistoryBase: this.actionHistoryBase }),
       executeBarrierIndex: this.executeBarrierIndex,
       restoreEpoch: this.restoreEpoch,
+      ...(Object.keys(this.seatRestoreEpochs).length > 0 && { seatRestoreEpochs: { ...this.seatRestoreEpochs } }),
+      ...(this.seatUndo && seatUndoStepStart(this.game, this.actionCount) === this.seatUndo.stepStart && { seatUndo: structuredClone(this.seatUndo) }),
       gameInstanceId: this.gameInstanceId,
     };
   }
@@ -1335,12 +1441,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     runner.start();
 
     for (const entry of history) {
-      if (isSeatExpiry(entry)) {
-        try {
-          runner.expireHeldSeat(entry.player);
-        } catch (error) {
-          throw new Error(`Replay failed at seat ${entry.player}'s expiry: ${error instanceof Error ? error.message : String(error)}`);
-        }
+      if (!('name' in entry)) {
+        runner.replaySeatEntry(entry);
         continue;
       }
       const { actionName, player, args } = deserializeAction(entry, runner.game);
@@ -1352,6 +1454,17 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     }
 
     return runner;
+  }
+
+  /** Replay a history entry that is no action: a seat the host closed, or a seat's own undo. */
+  private replaySeatEntry(entry: SerializedSeatExpiry | SerializedSeatUndo): void {
+    const expiry = isSeatExpiry(entry);
+    try {
+      if (expiry) this.expireHeldSeat(entry.player);
+      else this.undoSeatAction(entry.player);
+    } catch (error) {
+      throw new Error(`Replay failed at seat ${entry.player}'s ${expiry ? 'expiry' : 'undo'}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   }
 
   /**
@@ -1463,6 +1576,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // snapshot), so reloading the same snapshot twice can never look like a
     // restore to a client comparing epochs.
     runner.restoreEpoch = snapshot.restoreEpoch ?? 0;
+    runner.seatRestoreEpochs = { ...snapshot.seatRestoreEpochs };
+    runner.seatUndo = snapshot.seatUndo && structuredClone(snapshot.seatUndo);
 
     // Adopt the game's identity. A snapshot that names none -- a hand-built
     // fixture, or a saved position written before #356 -- has never been
@@ -1625,6 +1740,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         // checkpoint-restore site, so no undo/rewind caller has to remember it,
         // and no host can ship a restore that forgets to tell its clients.
         restoreEpoch: (snapshot.restoreEpoch ?? 0) + 1,
+        seatRestoreEpochs: snapshot.seatRestoreEpochs,
         // The same game, restored: its identity does not change.
         gameInstanceId: snapshot.gameInstanceId,
       },
@@ -1667,7 +1783,7 @@ export function restoreEarlierSnapshot<G extends Game>(
     );
   }
   const runner = GameRunner.fromSnapshot(
-    { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1 },
+    { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1, seatRestoreEpochs: live.seatRestoreEpochs },
     GameClass,
     {
       animationFloor: animationFloorOf(snapshotTree(live)),

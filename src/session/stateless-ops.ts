@@ -444,7 +444,12 @@ export interface OpSuccessFields {
     warnings?: WarningEntry[];
   };
   cancelAction: Record<never, never>;
-  undo: Record<never, never>;
+  /**
+   * `'seat'`: only the undoing seat's own part went back, in a step that undoes
+   * per seat (#1526), and every other seat's state is as it was. `'game'`: the
+   * whole game was restored, and what every seat held against it is stale.
+   */
+  undo: { undoScope: 'seat' | 'game' };
   /**
    * The game's kept action history, oldest first. Entry `i` is action
    * `actionHistoryBase + i`; the base is absent while no action was dropped
@@ -1027,6 +1032,11 @@ function handleUndo(
   // every prior mutation and the correct flow position. fromCheckpoint
   // rehydrates the lean checkpoint and carries the prefix
   // `[0..turnStartActionIndex]` forward so further undos still resolve.
+  if (decision.scope === 'seat') {
+    runner.undoSeatAction(op.player);
+    return { success: true, undoScope: 'seat', ...stateEnvelope(runner, gameOptions.playerCount) };
+  }
+
   const restored = runnerFromCheckpoint(def, snapshot, decision.turnStartActionIndex);
   if (!restored) {
     throw new Error(
@@ -1037,6 +1047,7 @@ function handleUndo(
 
   return {
     success: true,
+    undoScope: 'game',
     ...stateEnvelope(restored, gameOptions.playerCount),
   };
 }

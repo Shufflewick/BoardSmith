@@ -961,15 +961,36 @@ export interface SerializedSeatExpiry {
 }
 
 /**
- * One entry of a game's action history: an action a seat took, or a timed
- * seat the host closed. Every consumer that walks the history (replay, undo,
- * the debug timeline) tells them apart with `isSeatExpiry`.
+ * A seat taking back its own last action in a simultaneous step that undoes
+ * per seat (`simultaneousActionStep({ seatUndo: true })`, #1526). Only that
+ * seat's own state went back; every other seat's stayed as it was, so the
+ * history grows by this entry instead of being cut back. A replay re-applies
+ * it through `GameRunner.undoSeatAction`.
  */
-export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
+export interface SerializedSeatUndo {
+  kind: 'seatUndo';
+  /** The seat that took back its action */
+  player: number;
+  /** Never set: a seat's undo is not something any undo reaches behind. */
+  undoable?: undefined;
+}
+
+/**
+ * One entry of a game's action history: an action a seat took, a timed seat
+ * the host closed, or a seat's undo in a step that undoes per seat. Every
+ * consumer that walks the history (replay, undo, the debug timeline) tells
+ * them apart with `isSeatExpiry` and `isSeatUndo`.
+ */
+export type HistoryEntry = SerializedAction | SerializedSeatExpiry | SerializedSeatUndo;
 
 /** Whether `entry` records a seat the host closed at a deadline rather than an action. */
 export function isSeatExpiry(entry: HistoryEntry): entry is SerializedSeatExpiry {
   return 'kind' in entry && entry.kind === 'seatExpiry';
+}
+
+/** Whether `entry` records a seat taking back its own last action rather than an action. */
+export function isSeatUndo(entry: HistoryEntry): entry is SerializedSeatUndo {
+  return 'kind' in entry && entry.kind === 'seatUndo';
 }
 
 /**

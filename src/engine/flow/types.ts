@@ -288,6 +288,19 @@ export interface SimultaneousActionStepConfig<G extends Game = Game> extends Bas
    * {@link ActionStepConfig.timeLimitMs}.
    */
   timeLimitMs?: StepTimeLimit<G>;
+  /**
+   * Each seat's undo takes back its own last action, one at a time, whatever
+   * the other seats did since (#1526). Without it, only the seat that acted
+   * last may undo, and its undo rewinds the whole game to the start of its run.
+   *
+   * A seat's action is undoable on its own only when it changed nothing but
+   * that seat's own `Player` (its attributes and the elements inside it), drew
+   * no random number, and wrote only log lines and animations addressed to
+   * that seat alone. Any other action, and a `.notUndoable()` one, is where
+   * that seat's undo stops. The other seats' undo is never affected, and no
+   * seat is sent anything when another seat acts in secret or undoes.
+   */
+  seatUndo?: boolean;
 }
 
 /**
@@ -433,6 +446,11 @@ export interface FlowState {
    * undo" that made the defect look like a design decision.
    */
   turnScopeUndeclared?: string;
+  /**
+   * Present while the open step is a simultaneous step that undoes per seat
+   * ({@link SimultaneousActionStepConfig.seatUndo}). Server-side only.
+   */
+  seatUndo?: true;
   /**
    * How long the open step stays open, in milliseconds, as the step declared it
    * ({@link ActionStepConfig.timeLimitMs}) and resolved when it was entered.

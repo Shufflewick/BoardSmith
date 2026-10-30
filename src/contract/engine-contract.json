@@ -1,6 +1,6 @@
 {
-  "revision": 277,
-  "surfaceHash": "81dea030f8a62315",
+  "revision": 278,
+  "surfaceHash": "fd9767c781f97d47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2159,6 +2159,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "No contract change; this build carries code since r276. GameShell: while a holdGameOverUntil hold keeps a finished game's result back, the shell shows a Show result button over the board (above any game modal); pressing it reveals the ending and posts game_over_shown, still once, so a stuck hold cannot keep the result or the signal away. World: in dev or test runs, a failed world view's player-facing rules-error sentence now carries the raw error text in brackets, as an action's does. CLI: boardsmith test's mutation step fails when its unmutated run exits non-zero or reports unhandled errors with no failing test. Published games need no rebuild; a game must be rebuilt on r277 to get the Show result button."
+    },
+    {
+      "revision": 278,
+      "date": "2026-10-30",
+      "surfaceHash": "fd9767c781f97d47",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "simultaneousActionStep takes seatUndo: true, so each seat's undo takes back its own last action alone, one at a time, whatever the other seats did, and tells only that seat (#1526). The undo op now answers undoScope: 'seat' | 'game' (a host keeps the other seats' picks on 'seat'), the action history can hold { kind: 'seatUndo', player } (isSeatUndo), snapshots may carry seatUndo and seatRestoreEpochs, and a seat's restoreEpoch also counts its own seat undos. Published games need no rebuild; a game must be rebuilt on r278 to declare seatUndo."
     }
   ]
 }

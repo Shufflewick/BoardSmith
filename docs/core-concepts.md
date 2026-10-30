@@ -470,7 +470,10 @@ element tree, not a log of operations that produced it.
   an incomplete or ambiguous history was a real source of bugs in earlier
   designs (mis-positioned flow state on restore).
 - **Undo**: Undo/redo, where supported, works from captured snapshots of prior
-  states, not by reversing a command log.
+  states, not by reversing a command log. In a simultaneous step declared
+  `seatUndo: true`, a seat's undo puts back only its own `Player`, as it was
+  saved before the action, and leaves every other seat's state as it is: still
+  a restore, of the part of the game that seat alone owns.
 - **What a restore cannot carry**: saved state is plain data, so anything that
   is not (a frozen object, for one) comes back without it. An element class
   re-applies such a thing in `protected override afterRestore()`, which runs on
@@ -744,20 +747,25 @@ from the new seat's numbers; GameShell does this for you.
 
 A page that connects or reconnects is always sent the full state.
 
-Two things still reach other seats when a seat acts in secret. Design around
-them:
+Undo is the other thing a secret move must not give away. Declare the step
+`simultaneousActionStep({ ..., seatUndo: true })` (#1526) and each seat's undo
+takes back its own last action, one at a time, whatever the other seats did
+since. A seat's Undo control and its count of actions follow its own actions
+alone, and when it undoes, no other seat is sent anything: only the undoing
+seat's `restoreEpoch` rises.
 
-- **Undo turns off when another seat acts after you.** A seat can undo back to
-  the start of its turn only while no other seat has acted since. If seat 2
-  makes a secret move and then seat 1 makes one, seat 2's Undo control goes
-  away, and the state that removes it tells seat 2 that another seat moved.
-  Where that matters, let a seat change its secret choice with a game action
-  (a "move my placement" action) rather than with undo.
-- **The restore count rises when another seat undoes.** Every undo replaces the
-  game's state, and every seat is told so through `restoreEpoch`, which the UI
-  needs to drop element references from before the undo. So when seat 1
-  undoes, every other seat receives a state and can tell that someone undid
-  something, though not what.
+That holds for an action that changes only the seat's own `Player` (its
+attributes and the elements inside it), draws no random number, and writes
+log lines and animations to that seat alone (`messageTo`, `animateTo`). An
+undo withdraws the log lines the action wrote. Any other action, and a
+`.notUndoable()` one, is where that seat's undo stops, and the refusal names
+it. So keep a secret round's choices on the `Player` and apply them to the
+shared board in an `execute()` after the step.
+
+Without `seatUndo`, only the seat that acted last may undo, and its undo
+replaces the whole game: seat 2's Undo control goes away once seat 1 acts after
+it, and when seat 1 undoes, every seat is told through `restoreEpoch`. Both
+tell a seat that another seat moved.
 
 ## Snapshot Mode and World Mode
 

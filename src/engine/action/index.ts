@@ -1,6 +1,6 @@
 export { Action } from './action-builder.js';
 export { evaluateCondition } from './action.js';
-export { DEFAULT_TEXT_MAX_LENGTH, isSeatExpiry } from './types.js';
+export { DEFAULT_TEXT_MAX_LENGTH, isSeatExpiry, isSeatUndo } from './types.js';
 export type { TextPattern } from './text-rules.js';
 export type {
   AnnotatedChoice,
@@ -20,6 +20,7 @@ export type {
   FollowUpOffer,
   SerializedAction,
   SerializedSeatExpiry,
+  SerializedSeatUndo,
   HistoryEntry,
   ValidationResult,
   RefWithRole,
