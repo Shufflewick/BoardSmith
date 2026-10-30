@@ -187,6 +187,15 @@ replay. The runner captures a per-action **checkpoint** (a full tree copy plus
 flow position, sequence and RNG state) into `snapshot.actionCheckpoints`, and
 those calls restore the checkpoint at the target action count directly.
 
+A seat's undo in a simultaneous step declared `seatUndo: true` (#1526) is a
+restore too, of a part of the game rather than the whole: the seat's own
+`Player`, saved before each of its actions, is put back in the live tree, and
+every other seat's state stays as it is. The engine checks each action as it is
+taken and lets the seat take back only one that changed nothing outside its own
+`Player`, so the other seats' later actions are never re-run, and the undo is
+appended to the history (`kind: 'seatUndo'`) rather than cutting it back. Such
+a step keeps no checkpoint behind the newest one.
+
 ```typescript
 snapshot.actionCheckpoints  // { baseIndex, entries[] } — a RETAINED WINDOW,
                             // not the whole history

@@ -119,6 +119,7 @@ export class PendingActionManager<G extends Game = Game> {
     // A failed step keeps nothing: the game and this pending action are as before it (#1169).
     const before = pendingState && serializePendingActionState(pendingState);
     const { result, undone } = this.#runner.runPickOp(
+      playerPosition,
       () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
     );
     if (undone && before) this.#pendingActions.set(playerPosition, deserializePendingState(before));

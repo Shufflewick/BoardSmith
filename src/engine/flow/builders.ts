@@ -367,6 +367,7 @@ export function simultaneousActionStep<G extends Game = Game>(config: Simultaneo
       allDone: config.allDone,
       skipPlayer: config.skipPlayer,
       timeLimitMs: config.timeLimitMs,
+      seatUndo: config.seatUndo,
     },
   };
 }

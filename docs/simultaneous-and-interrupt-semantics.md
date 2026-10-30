@@ -72,6 +72,14 @@ Concretely:
   performed.
 - On a mismatch, the op is **refused** — `success: false` with an actionable
   message. Not thrown, not an `ENGINE_ERROR`, not applied to the current round.
+- A seat's undo in a step declared `seatUndo: true` (#1526) takes back that
+  seat's own last action and leaves the round open, so the key does not move
+  and no other seat's submission goes stale. The host keeps every other seat's
+  half-made picks, pushes the undo to the undoing seat alone, and bumps only
+  that seat's `restoreEpoch`. A seat's undo stops at its own last action that
+  changed anything outside its own `Player`, drew a random number, or wrote a
+  log line or animation another seat receives, and at the host closing its part
+  at a deadline (a seat expiry). Another seat's actions never move it.
 
 The refusal is graceful and per-seat, matching the contract
 `resumeSimultaneousAction` already keeps for double-submits and stale clients

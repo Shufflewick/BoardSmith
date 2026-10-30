@@ -43,8 +43,15 @@ export interface SerializedSeatExpiry {
   timestamp?: number;
 }
 
-/** One entry of the history the host reports: an action, or a seat the host closed. */
-export type HistoryEntry = SerializedAction | SerializedSeatExpiry;
+/** A seat taking back its own last action in a step that undoes per seat. */
+export interface SerializedSeatUndo {
+  kind: 'seatUndo';
+  player: number;
+  timestamp?: number;
+}
+
+/** One entry of the history the host reports: an action, a seat the host closed, or a seat's undo. */
+export type HistoryEntry = SerializedAction | SerializedSeatExpiry | SerializedSeatUndo;
 
 /**
  * The history the host reports. Entry `i` is action `actionHistoryBase + i`:

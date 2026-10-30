@@ -1194,7 +1194,8 @@ Action.create('move')
 ```
 
 A `.notUndoable()` action is still recorded in the action history, one entry
-per use. Where a seat may repeat one without limit (move a piece until it
+per use. In a simultaneous step declared `seatUndo: true`, it stops only its own
+seat's undo (see [`seatUndo`](#seatundo---each-seat-undoes-its-own-actions)). Where a seat may repeat one without limit (move a piece until it
 checks in), set `checkpoints: { actionHistory: 'undo' }` on the game definition
 to keep only the history undo reads, so the saved game stays a fixed size. See
 [Bounding the action history](./state-size.md#bounding-the-action-history).
@@ -2135,7 +2136,8 @@ actionStep({
 
 ##### `turnScope` - say whether a re-entry continues the turn
 
-Undo reach is measured per action-step **frame**: `moveCount` lives on the frame,
+Undo reach is measured per action-step **frame** (a simultaneous step declared
+`seatUndo: true` measures it per seat instead): `moveCount` lives on the frame,
 and `computeUndoInfo` anchors the rewind at the action count minus `moveCount`.
 A step that stays open via `repeatUntil` keeps one frame, so the count
 accumulates. A step **re-entered** -- from a `loop` iteration, or as the next
@@ -2252,6 +2254,43 @@ which is the right trade, but it is not a fix on its own. To actually get the se
 
 Use `playerDone` for per-seat completion, `skipPlayer` to exclude a seat from the step
 entirely, and `allDone` for the round-level condition.
+
+##### `seatUndo` - each seat undoes its own actions
+
+```typescript
+simultaneousActionStep({
+  name: 'deployment',
+  actions: ['placePack', 'buyTechnology', 'checkIn'],
+  playerDone: (_ctx, player) => player.checkedIn,
+  seatUndo: true,
+})
+```
+
+By default only the seat that acted last may undo in a simultaneous step, and
+its undo rewinds the whole game to the start of its run. With `seatUndo: true`
+each seat's Undo takes back its own last action, one at a time, back to the
+start of the step or to the last action it cannot take back, whatever the
+other seats did since (#1526). `canUndo` and `actionsThisTurn` count that
+seat's own actions alone, and an undo is told to the undoing seat alone (its
+`restoreEpoch`), so it gives nothing away about a secret round. An undo after
+the action that ended the seat's part (`playerDone`) puts the seat back in the
+step.
+
+The undo puts back the seat's own `Player` (its attributes and the elements
+inside it) and its held follow-up, and withdraws the log lines the action
+wrote to it. Nothing else is touched, so an action can be taken back on its
+own only when it changed nothing else. The engine checks every action, and
+every pick, when it is taken: one that changed anything outside the seat's own
+`Player` (the shared board, another seat's `Player`, game attributes), drew a
+random number, or wrote a log line or animation any other seat receives, is
+where that seat's undo stops, as a `.notUndoable()` action is. The refusal
+names the action and why. So keep a round's choices on the `Player`, with
+`messageTo` and `animateTo` for what the seat is told, and apply them to the
+shared board in an `execute()` after the step.
+
+A seat's undo is not a checkpoint restore, so the step keeps no checkpoint
+behind the newest one. Each seat keeps one copy of its `Player` per action it
+can still take back, which `checkpoints: { max }` caps.
 
 #### `timeLimitMs` - a step that closes on a clock
 

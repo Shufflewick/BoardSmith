@@ -124,8 +124,14 @@ function completesAction(op: Op, res: OpResult): boolean {
  * rewind goes back to another one, and a tutorial's setup rewrites the board
  * (#1082). What any seat holds against the old position goes with it.
  */
-function replacesPosition(op: Op): boolean {
-  return op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'startTutorial';
+function replacesPosition(op: Op, res: OpResult): boolean {
+  if (op.type === 'undo') return !undidSeatOnly(res);
+  return op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'startTutorial';
+}
+
+/** Whether `res` answered an undo that took back the undoing seat's own part alone (#1526). */
+function undidSeatOnly(res: OpResult): boolean {
+  return 'undoScope' in res && res.undoScope === 'seat';
 }
 
 /**
@@ -1395,7 +1401,8 @@ export class SnapshotSessionHost {
       }
     }
 
-    if (replacesPosition(op)) this.#forgetReplacedTree();
+    if (replacesPosition(op, res)) this.#forgetReplacedTree();
+    else if (seat !== null && undidSeatOnly(res)) this.transientTeachingState.delete(seat);
 
     await this.apply(res, seat ?? undefined, pending);
     return res;

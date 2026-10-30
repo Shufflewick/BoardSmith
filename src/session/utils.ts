@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, isSeatUndo, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { formatElementCandidates, type AnnotatedCandidate } from '../engine/element/pick-candidates.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
@@ -10,7 +10,7 @@ import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
-import type { HistoryEntry } from '../engine/action/types.js';
+import type { HistoryEntry, SerializedSeatUndo } from '../engine/action/types.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState, SeatPendingAction } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
 
@@ -294,6 +294,8 @@ export interface UndoFlowState {
    * done nothing -- see {@link undoUnavailableMessage}.
    */
   turnScopeUndeclared?: string;
+  /** Set while the open simultaneous step undoes per seat (#1526). */
+  seatUndo?: true;
 }
 
 /**
@@ -419,16 +421,22 @@ export function simultaneousUndoBoundary(
  * eligible but simply hasn't acted yet.
  */
 function computeUndoEligibility(
-  history: KeptHistory,
+  runner: GameRunner,
   flowState: UndoFlowState | undefined,
   seat: number,
 ): { eligible: boolean; turnStartActionIndex: number; actionsThisTurn: number } {
+  const history: KeptHistory = runner;
   const count = history.actionHistoryBase + history.actionHistory.length;
   const isSimultaneousStep = (flowState?.awaitingPlayers?.length ?? 0) > 0;
 
   if (isSimultaneousStep) {
     if (!isSimultaneousParticipant(flowState, seat)) {
       return { eligible: false, turnStartActionIndex: count, actionsThisTurn: 0 };
+    }
+
+    // A step that undoes per seat counts the seat's own undoable actions alone (#1526).
+    if (flowState?.seatUndo) {
+      return { eligible: true, turnStartActionIndex: count, actionsThisTurn: runner.seatUndoStack(seat)?.entries.length ?? 0 };
     }
 
     // Participant, but either hasn't acted yet this step OR its own action
@@ -534,9 +542,9 @@ export class UndoRefusedError extends Error {
 const FINISHED_UNDO_REFUSAL = 'Cannot undo: the game is finished.';
 
 /** The not-undoable entry just below action `floor`, when there is one: it set the floor. */
-function notUndoableBelow(runner: GameRunner, floor: number): HistoryEntry | undefined {
+function notUndoableBelow(runner: GameRunner, floor: number): Exclude<HistoryEntry, SerializedSeatUndo> | undefined {
   const below = runner.actionHistory[floor - 1 - runner.actionHistoryBase];
-  return below?.undoable === false ? below : undefined;
+  return below?.undoable === false && !isSeatUndo(below) ? below : undefined;
 }
 
 export function assertUndoAllowed(args: {
@@ -610,7 +618,9 @@ export function assertUndoAllowed(args: {
  * The answer to "may `seat` undo right now?", with the refusal it gets if not.
  */
 type UndoDecision =
-  | { allowed: true; turnStartActionIndex: number; actionsThisTurn: number }
+  /** `scope: 'game'` restores the checkpoint at `turnStartActionIndex`; `'seat'` takes back the seat's own last action (#1526). */
+  | { allowed: true; scope: 'game'; turnStartActionIndex: number; actionsThisTurn: number }
+  | { allowed: true; scope: 'seat'; actionsThisTurn: number }
   | { allowed: false; error: string; errorCode: ErrorCode };
 
 /**
@@ -648,6 +658,7 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
   if (!eligible) {
     return { allowed: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
   }
+  if (flowState?.seatUndo) return decideSeatUndo(runner, seat, actionsThisTurn);
   if (actionsThisTurn === 0) {
     return { allowed: false, error: undoUnavailableMessage(flowState), errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
   }
@@ -674,7 +685,25 @@ export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
     };
   }
 
-  return { allowed: true, turnStartActionIndex, actionsThisTurn };
+  return { allowed: true, scope: 'game', turnStartActionIndex, actionsThisTurn };
+}
+
+/**
+ * {@link decideUndo} in a step that undoes per seat (#1526): the seat may take
+ * back its own last action when it has one its undo still reaches. Only that
+ * seat's own actions decide it, and no checkpoint is restored, but a game that
+ * turns checkpoints off has no undo here either.
+ */
+function decideSeatUndo(runner: GameRunner, seat: number, actionsThisTurn: number): UndoDecision {
+  if (!runner.checkpointPolicy.enabled) {
+    const absence = describeCheckpointAbsence(runner.checkpointWindow(), runner.actionCount, 'seat', runner.checkpointPolicy.history);
+    return { allowed: false, error: `Cannot undo: ${absence}`, errorCode: ErrorCode.UNDO_NOT_ALLOWED };
+  }
+  if (actionsThisTurn > 0) return { allowed: true, scope: 'seat', actionsThisTurn };
+  const fence = runner.seatUndoStack(seat)?.fence;
+  return fence
+    ? { allowed: false, error: fence, errorCode: ErrorCode.UNDO_NOT_ALLOWED }
+    : { allowed: false, error: 'No actions to undo', errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
 }
 
 /**
@@ -816,7 +845,7 @@ export function buildPlayerState(
     messageOffset: playerView.messageOffset,
     // Unconditional: how many restores this timeline has had -- see
     // PlayerGameState.restoreEpoch.
-    restoreEpoch: runner.restoreEpoch,
+    restoreEpoch: runner.restoreEpochFor(playerPosition),
     // Unconditional too: which game this is -- see PlayerGameState.gameInstanceId.
     gameInstanceId: runner.gameInstanceId,
     // Unconditional too: whose numbers the animation ids are -- see

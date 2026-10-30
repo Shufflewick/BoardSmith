@@ -54,10 +54,12 @@ export function formatConditionValue(value: unknown): string {
 
 /**
  * What the History tab shows for one entry: the action's name, or, for a seat
- * the host closed when its deadline passed, that no action was taken.
+ * the host closed when its deadline passed, that no action was taken, or, for
+ * a seat's undo in a step that undoes per seat, that it took back its last action.
  */
 export function formatHistoryEntry(entry: HistoryEntry): string {
-  return 'name' in entry ? formatActionName(entry.name) : 'Time ran out (seat closed)';
+  if ('name' in entry) return formatActionName(entry.name);
+  return entry.kind === 'seatExpiry' ? 'Time ran out (seat closed)' : 'Undid its last action';
 }
 
 /**

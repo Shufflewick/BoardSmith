@@ -241,7 +241,7 @@ describe('actionHistory: "undo" keeps only the history undo reads (#997)', () =>
 
       // Take an allowed undo now and then, in both games alike.
       const undo = decideUndo(full, seat);
-      if (undo.allowed && next() < 0.5) {
+      if (undo.allowed && undo.scope === 'game' && next() < 0.5) {
         full = GameRunner.fromCheckpoint(fullSnapshot, undo.turnStartActionIndex, PackGame)!;
         trimmed = GameRunner.fromCheckpoint(trimmedSnapshot, undo.turnStartActionIndex, PackGame, { checkpoints: UNDO_HISTORY })!;
         expect(board(trimmed)).toEqual(board(full));

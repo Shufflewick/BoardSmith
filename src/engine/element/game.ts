@@ -3352,6 +3352,34 @@ export class Game<
   }
 
   /**
+   * Settle `seat` again in the open simultaneous step once its own state is
+   * restored by an undo of its last action (#1526). See
+   * `FlowEngine.reopenSimultaneousSeat`; `GameRunner.undoSeatAction` is the caller.
+   * @internal
+   */
+  reopenSimultaneousSeat(seat: number): FlowState {
+    if (!this._flowEngine) {
+      throw new Error('Flow not started');
+    }
+    return this._flowEngine.reopenSimultaneousSeat(seat);
+  }
+
+  /**
+   * Withdraw the log lines at absolute positions `positions` (as
+   * `messageCount` counts them) from every audience, for an undo that takes
+   * back the action that wrote them while later lines stay (#1526). The lines
+   * keep their place, so every checkpoint's watermark still names the same
+   * boundary; a line already evicted is gone already.
+   * @internal
+   */
+  withdrawMessages(positions: readonly number[]): void {
+    for (const position of positions) {
+      const index = position - this._messagesEvicted;
+      if (index >= 0 && index < this.messages.length) this.messages[index] = { ...this.messages[index], to: [] };
+    }
+  }
+
+  /**
    * Get current flow state
    */
   getFlowState(): FlowState | undefined {

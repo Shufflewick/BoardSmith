@@ -14,6 +14,7 @@ import HistoryTab from './HistoryTab.vue';
 import { Game, Player, Action, actionStep, loop, eachPlayer, type GameOptions } from '../../../engine/index.js';
 import { createHeadlessSession } from '../../../testing/headless-session.js';
 import type { GameDefinitionLike } from '../../../session/stateless-ops.js';
+import { seatUndoDefinition } from '../../../session/testing/fixtures/seat-undo-fixture.js';
 
 // The game's own colours, set in setup as `Player.color` documents: a dark one,
 // a light one (which needs dark ink to read), and none for seat 3, the case the
@@ -144,5 +145,22 @@ describe('HistoryTab when the game dropped the start of its history (#997)', () 
     const wrapper = mountHistory({ actionHistory: history.actionHistory, actionHistoryBase: history.actionHistoryBase, players: [] });
     await wrapper.setProps({ selectedActionIndex: 4, isViewingHistory: true });
     expect(wrapper.findAll('.timeline-controls button')[0]!.attributes('disabled')).toBeDefined();
+  });
+});
+
+describe('HistoryTab seat undo (#1526)', () => {
+  it("shows a seat taking back its own action in a step that undoes per seat", async () => {
+    const session = createHeadlessSession(seatUndoDefinition, { playerCount: 2, seed: 'history-seat-undo' });
+    await session.start();
+    const placed = await session.send(1, { type: 'action', actionName: 'placePack', player: 1, args: {} });
+    if (!placed.success) throw new Error(placed.error);
+    const undone = await session.send(1, { type: 'undo', player: 1 });
+    if (!undone.success) throw new Error(undone.error);
+    const history = await session.send(1, { type: 'debugHistory' });
+    if (!history.success) throw new Error(history.error);
+    const views = session.broadcasts.at(-1) as Array<{ state: { players: Array<{ seat: number; color?: string }> } }>;
+
+    const wrapper = mountHistory({ actionHistory: history.actionHistory, players: views[0]!.state.players });
+    expect(wrapper.findAll('.history-action-name').map((name) => name.text())).toEqual(['Place Pack', 'Undid its last action']);
   });
 });

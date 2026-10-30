@@ -304,6 +304,32 @@ export class FlowHaltedError extends PlayerFacingError {
   }
 }
 
+/** The data of the open step's frame in `state`'s position, by the key `getPosition` writes it under. */
+function openFrameKey(state: FlowState): string {
+  return `__frame_${state.position.path.length - 1}`;
+}
+
+/**
+ * The follow-up the open step of `state` holds for `seat`, as its position
+ * stores it (element values encoded), so it can be put back with
+ * {@link withHeldFollowUp} after the tree it names is rebuilt.
+ */
+export function heldFollowUpIn(state: FlowState, seat: number): unknown {
+  const followUps = state.position.frameData?.[openFrameKey(state)]?.followUps as Record<string, unknown> | undefined;
+  return followUps?.[String(seat)];
+}
+
+/** `state` with its open step holding `followUp` (as {@link heldFollowUpIn} read it) for `seat`, or none. */
+export function withHeldFollowUp(state: FlowState, seat: number, followUp: unknown): FlowState {
+  const key = openFrameKey(state);
+  const { followUps, ...data } = state.position.frameData?.[key] ?? {};
+  const held = { ...(followUps as Record<string, unknown> | undefined) };
+  if (followUp === undefined) delete held[String(seat)];
+  else held[String(seat)] = followUp;
+  const frame = Object.keys(held).length > 0 ? { ...data, followUps: held } : data;
+  return { ...state, position: { ...state.position, frameData: { ...state.position.frameData, [key]: frame } } };
+}
+
 export class FlowEngine<G extends Game = Game> {
   private game: G;
   private definition: FlowDefinition<G>;
@@ -658,6 +684,28 @@ export class FlowEngine<G extends Game = Game> {
     this.awaitingPlayers = [];
     frame.completed = true;
     return this.run();
+  }
+
+  /**
+   * `seat` took back its last action in the open step that undoes per seat
+   * (#1526), and its own state is already restored: count the undo in the
+   * step's window, as an expiry is counted, and settle the seat again from its
+   * restored state, putting it back in the step when the undone action had
+   * ended its part.
+   */
+  reopenSimultaneousSeat(seat: number): FlowState {
+    const frame = this.stack[this.stack.length - 1];
+    const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
+    const player = this.game.getPlayer(seat);
+    if (!this.awaitingInput || frame?.node.type !== 'simultaneous-action-step' || !playerState || !player) {
+      throw new Error(`Seat ${seat} is not part of an open simultaneous step, so it has no action to take back there.`);
+    }
+    const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
+    frame.data = { ...frame.data, moveCount };
+    this.moveCount = moveCount;
+    playerState.completed = false;
+    this.reevaluateSimultaneousSeat(frame, frame.node.config as SimultaneousActionStepConfig, playerState, player, this.createContext());
+    return this.getState();
   }
 
   /**
@@ -1334,6 +1382,11 @@ export class FlowEngine<G extends Game = Game> {
       if (typeof timeLimitMs === 'number') {
         state.timeLimitMs = timeLimitMs;
       }
+    }
+
+    const top = this.stack[this.stack.length - 1];
+    if (this.awaitingInput && top?.node.type === 'simultaneous-action-step' && (top.node.config as SimultaneousActionStepConfig).seatUndo) {
+      state.seatUndo = true;
     }
 
     // Include action error if present

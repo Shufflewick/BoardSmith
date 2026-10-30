@@ -7,18 +7,19 @@
  * inspects an action's args wants to say so and fail loudly if the entry is
  * not one, rather than cast past the difference.
  */
-import { isSeatExpiry } from '../../engine/index.js';
+import { isSeatExpiry, isSeatUndo } from '../../engine/index.js';
 import type { HistoryEntry, SerializedAction } from '../../engine/action/types.js';
 
-/** `name:seat` for an action, `seatExpiry:seat` for a seat the host closed at a deadline, in order. */
+/** `name:seat` for an action, `seatExpiry:seat` for a seat the host closed at a deadline, `seatUndo:seat` for a seat's undo, in order. */
 export function historyLabels(history: readonly HistoryEntry[]): string[] {
-  return history.map((entry) => (isSeatExpiry(entry) ? `seatExpiry:${entry.player}` : `${entry.name}:${entry.player}`));
+  return history.map((entry) => ('name' in entry ? `${entry.name}:${entry.player}` : `${entry.kind}:${entry.player}`));
 }
 
-/** The action recorded at `index`, or a thrown error naming the seat expiry found there instead. */
+/** The action recorded at `index`, or a thrown error naming the seat expiry or undo found there instead. */
 export function recordedAction(history: readonly HistoryEntry[], index: number): SerializedAction {
   const entry = history[index];
   if (entry === undefined) throw new Error(`The history has ${history.length} entries, so there is none at index ${index}.`);
   if (isSeatExpiry(entry)) throw new Error(`The entry at index ${index} is seat ${entry.player}'s expiry, not an action.`);
+  if (isSeatUndo(entry)) throw new Error(`The entry at index ${index} is seat ${entry.player}'s undo, not an action.`);
   return entry;
 }

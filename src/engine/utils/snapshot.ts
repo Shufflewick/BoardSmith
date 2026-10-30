@@ -170,6 +170,22 @@ interface SnapshotFields {
   restoreEpoch?: number;
 
   /**
+   * How many times each seat took back its own action in a step that undoes
+   * per seat (#1526), keyed by seat. Such an undo restores that seat's part
+   * alone, so only that seat is told: it is published to seat N as
+   * `restoreEpoch + seatRestoreEpochs[N]`. Never reset, so neither sum ever
+   * repeats. Absent: no seat has undone this way.
+   */
+  seatRestoreEpochs?: Record<string, number>;
+
+  /**
+   * Each seat's own undo in the open simultaneous step that undoes per seat
+   * (#1526). Server-side state: no seat or bot copy is sent it. Absent when no
+   * such step is open.
+   */
+  seatUndo?: SeatUndoState;
+
+  /**
    * Which game this is (#356): minted when a runner begins a new game, and the
    * same for every snapshot of that game, undo included. Published as
    * `PlayerGameState.gameInstanceId`; see `GameRunner.gameInstanceId`.
@@ -192,6 +208,40 @@ interface SnapshotFields {
    * those callers keep real ids throughout, so no remap is ever needed.
    */
   hiddenIdRemap?: Map<number, number>;
+}
+
+/**
+ * What one seat's undo takes back in a step that undoes per seat (#1526): how
+ * the seat stood before one of its actions.
+ */
+export interface SeatUndoEntry {
+  /** The seat's `Player` element as `toJSON()` wrote it, as JSON text. */
+  player: string;
+  /** The follow-up the seat held, as the flow position stores it. */
+  followUp?: unknown;
+  /** The absolute log positions of the lines the action wrote to the seat alone. */
+  lines: number[];
+}
+
+/** One seat's undo in a step that undoes per seat (#1526). */
+export interface SeatUndoStack {
+  /** Its actions an undo can take back, oldest first. */
+  entries: SeatUndoEntry[];
+  /** Why the seat's undo stops where it does, once an action ended its reach. */
+  fence?: string;
+  /** How the seat stood before the first pick of an action it has not finished. */
+  opening?: SeatUndoEntry & { fence?: SeatUndoFence };
+}
+
+/** Why an action cannot be taken back on its own: it changed what another seat can see. */
+export type SeatUndoFence = 'outside' | 'random' | 'log' | 'animation';
+
+/** Every seat's undo in the open step that undoes per seat (#1526). */
+export interface SeatUndoState {
+  /** The action count the step opened at: the stacks belong to that step alone. */
+  stepStart: number;
+  /** Each seat's undo, keyed by seat. */
+  seats: Record<string, SeatUndoStack>;
 }
 
 /**
