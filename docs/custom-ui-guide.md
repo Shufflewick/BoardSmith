@@ -1361,7 +1361,9 @@ What follows for a custom board:
   ends in scroll room as tall as what the panel's cap adds to the reserved row,
   so the player can scroll what the panel covers into view, and a control that
   takes keyboard focus is scrolled to land above the panel. The scroll room is
-  a constant, so the panel re-wrapping never moves a scrolled board. The player
+  a constant, so the panel re-wrapping never moves a scrolled board. A game that
+  passes `:action-bar-opens-for-actions="false"` gets none while the panel is put
+  down, since nothing but the line can cover the board then (#1525). The player
   can also put the panel down to a thin line. On a short landscape screen the
   cap is the one reserved row, so only a typed editor (below), or a question
   that brings a put-down panel up by itself, covers the board.

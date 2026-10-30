@@ -359,7 +359,7 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized }">
+  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
@@ -908,6 +908,10 @@ const mobileToggleLabel = computed(() => {
   flex: none;
   height: calc(var(--bsg-panel-max) - var(--bsg-panel-reserved));
 }
+/* Down until the player's own toggle, which refits: only the reserved line covers the board, so no room (#1525). */
+.action-bar-stays-down .boardregion::after {
+  height: 0;
+}
 
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
    the sidebar too). Out of flow, so it never reflows, moves or resizes the board: its
@@ -987,8 +991,6 @@ const mobileToggleLabel = computed(() => {
   height: var(--bsg-action-bar-line);
   border: none;
   padding: 0;
-  /* The 20px icon is taller than the line: centre its track, not just the icon in it. */
-  align-content: center;
 }
 /* The dots' 24px target, drawn nowhere: it rises from the line over the board. */
 .actionbar.collapsed :deep(.menubtn)::before {
@@ -1004,6 +1006,9 @@ const mobileToggleLabel = computed(() => {
   box-shadow: inset 0 0 0 2px var(--bsg-accent);
 }
 .actionbar.collapsed :deep(.menubtn svg) {
+  /* No taller than the line, or its box hangs off the bottom of the screen and scrolls the page (#1525). */
+  width: var(--bsg-action-bar-line);
+  height: var(--bsg-action-bar-line);
   transform: rotate(90deg);
 }
 

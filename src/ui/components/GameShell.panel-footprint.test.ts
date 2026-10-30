@@ -260,8 +260,9 @@ describe('#230, #1439: the bar put down is a thin line', () => {
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'height')).toBe('var(--bsg-action-bar-line)');
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'border')).toBe('none');
     expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'padding')).toBe('0');
-    // The 20px icon is taller than the line; without this its track starts at the top and the dots sit low.
-    expect(declaration('.actionbar.collapsed :deep(.menubtn)', 'align-content')).toBe('center');
+    // A taller icon hangs off the bottom of the screen and scrolls the page (#1525).
+    expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'width')).toBe('var(--bsg-action-bar-line)');
+    expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'height')).toBe('var(--bsg-action-bar-line)');
     expect(declaration('.actionbar.collapsed :deep(.menubtn svg)', 'transform')).toBe('rotate(90deg)');
   });
 
