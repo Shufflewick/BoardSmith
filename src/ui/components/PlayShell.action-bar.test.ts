@@ -421,6 +421,21 @@ describe('the board region reserves the line only for the player\'s own toggle (
   });
 });
 
+describe('the board ends in scroll room only while the bar can float over it (#1525)', () => {
+  it('drops it for a bar kept down, and keeps it while a question may bring the bar up', async () => {
+    const { wrapper, controller } = mountDock({ actionBarMinimized: true, actionBarOpensForActions: false });
+    await flush();
+    expect(wrapper.classes()).toContain('action-bar-stays-down');
+    await controller.start('move');
+    await flush();
+    expect(wrapper.classes(), 'a question changed the scroll room, which can move a scrolled board').toContain('action-bar-stays-down');
+    await wrapper.setProps({ actionBarOpensForActions: true });
+    expect(wrapper.classes(), 'a bar that may come up for a question would cover the board with no room to scroll it clear').not.toContain('action-bar-stays-down');
+    await wrapper.setProps({ actionBarOpensForActions: false, actionBarMinimized: false });
+    expect(wrapper.classes(), 'a bar the player left up covers the board with its second row').not.toContain('action-bar-stays-down');
+  });
+});
+
 describe('minimizing is a view preference and nothing more', () => {
   it('changes neither the enumerated actions nor the action in progress', async () => {
     const { wrapper, controller, enumerated } = mountDock();
