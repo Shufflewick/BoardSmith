@@ -673,6 +673,11 @@ export class FlowEngine<G extends Game = Game> {
     const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
     frame.data = { ...frame.data, moveCount };
     this.moveCount = moveCount;
+    return this.endSimultaneousStepIfAllDone(frame, config);
+  }
+
+  /** End the open simultaneous step `frame` and run the flow on when its `allDone` holds; otherwise it stays open. */
+  private endSimultaneousStepIfAllDone(frame: ExecutionFrame<G>, config: SimultaneousActionStepConfig): FlowState {
     const allDone = config.allDone
       ? config.allDone(this.createContext())
       : this.awaitingPlayers.every((p) => p.completed);
@@ -691,7 +696,8 @@ export class FlowEngine<G extends Game = Game> {
    * (#1526), and its own state is already restored: count the undo in the
    * step's window, as an expiry is counted, and settle the seat again from its
    * restored state, putting it back in the step when the undone action had
-   * ended its part.
+   * ended its part, and ending the step when the restored state is what its
+   * `allDone` waits for.
    */
   reopenSimultaneousSeat(seat: number): FlowState {
     const frame = this.stack[this.stack.length - 1];
@@ -704,8 +710,10 @@ export class FlowEngine<G extends Game = Game> {
     frame.data = { ...frame.data, moveCount };
     this.moveCount = moveCount;
     playerState.completed = false;
-    this.reevaluateSimultaneousSeat(frame, frame.node.config as SimultaneousActionStepConfig, playerState, player, this.createContext());
-    return this.getState();
+    const config = frame.node.config as SimultaneousActionStepConfig;
+    this.reevaluateSimultaneousSeat(frame, config, playerState, player, this.createContext());
+    // The seat's restored state may finish the step, as the settling of an action can.
+    return this.endSimultaneousStepIfAllDone(frame, config);
   }
 
   /**

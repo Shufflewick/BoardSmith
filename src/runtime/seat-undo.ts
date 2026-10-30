@@ -82,11 +82,11 @@ export function seatUndoStepStart(game: Game, actionCount: number): number | und
 }
 
 /**
- * Watch one op `seat` takes (an action, or one pick of one): call before the
- * op runs, and call what it returns once the op is done. A no-op outside a
- * step that undoes per seat.
+ * Watch one op `seat` takes (an action, one pick of one, or the cancel of an
+ * action it started): call before the op runs, and call what it returns once
+ * the op is done. A no-op outside a step that undoes per seat.
  */
-export function watchSeatOp(host: SeatUndoHost, seat: number): (() => void) | undefined {
+export function watchSeatOp(host: SeatUndoHost, seat: number, cancel = false): (() => void) | undefined {
   const stepStart = seatUndoStepStart(host.game, host.actionCount);
   if (stepStart === undefined) return undefined;
   const before = seatParts(host.game);
@@ -105,6 +105,7 @@ export function watchSeatOp(host: SeatUndoHost, seat: number): (() => void) | un
     const recorded = host.actionCount > countBefore ? host.actionHistory.at(-1) : undefined;
     if (recorded) settleAction(stack, recorded, taken, host.checkpointPolicy.max);
     else settlePick(stack, taken, after.players.get(seat) !== before.players.get(seat));
+    if (cancel && stack.opening) settleCancel(stack, after.players.get(seat)!);
   };
 }
 
@@ -129,7 +130,13 @@ function fenceOtherSeats(state: SeatUndoState, before: SeatParts, after: SeatPar
   for (const [other, json] of after.players) {
     if (other === seat || before.players.get(other) === json) continue;
     changed = true;
-    state.seats[other] = { entries: [], fence: "Cannot undo: another seat's action changed your own player since, so your earlier actions cannot be taken back on their own." };
+    // An action the seat is partway through can no longer be taken back on its own either.
+    const opening = state.seats[other]?.opening;
+    state.seats[other] = {
+      entries: [],
+      fence: "Cannot undo: another seat's action changed your own player since, so your earlier actions cannot be taken back on their own.",
+      ...(opening && { opening: { ...opening, fence: 'outside' as const } }),
+    };
   }
   return changed;
 }
@@ -142,6 +149,18 @@ function settlePick(stack: SeatUndoStack, taken: Opening, changedPlayer: boolean
   if (!taken.fence) return;
   stack.entries = [];
   stack.fence = 'Cannot undo: a pick you made changed what other seats can see, so it cannot be taken back on its own.';
+}
+
+/**
+ * The seat gave up the action it started: what its picks did outside its own
+ * `Player` already ended its undo, so nothing of them weighs on its next
+ * action. Its `Player` as it stood before the picks is kept only while the
+ * cancel left it changed, so its next action is taken back to there.
+ */
+function settleCancel(stack: SeatUndoStack, player: string): void {
+  const opening = stack.opening!;
+  if (opening.player === player) delete stack.opening;
+  else stack.opening = { player: opening.player, followUp: opening.followUp, lines: opening.lines };
 }
 
 /** An action the seat took: one more its undo can take back, or where its undo now stops. */

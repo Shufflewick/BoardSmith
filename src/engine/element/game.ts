@@ -3361,7 +3361,9 @@ export class Game<
     if (!this._flowEngine) {
       throw new Error('Flow not started');
     }
-    return this._flowEngine.reopenSimultaneousSeat(seat);
+    const state = this._flowEngine.reopenSimultaneousSeat(seat);
+    this.#applyFlowCompletion(state);
+    return state;
   }
 
   /**

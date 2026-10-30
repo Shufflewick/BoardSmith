@@ -123,6 +123,29 @@ class SeatUndoGame extends Game<SeatUndoGame, SeatUndoPlayer> {
           return { success: true };
         }),
     );
+    // Two picks each, so a seat can be left partway through: `stakePack`'s first takes from the shared supply
+    // and puts it back on cancel, `reservePack`'s first adds to the picking seat's packs and tells it so.
+    const secondPick = { choices: () => ['left', 'right'] };
+    this.registerActions(
+      placing('stakePack')
+        .chooseFrom('size', { choices: () => ['small', 'large'], onSelect: () => { this.supply -= 1; }, onCancel: () => { this.supply += 1; } })
+        .chooseFrom('side', secondPick)
+        .execute((_args, ctx) => {
+          seatOf(ctx).packs += 1;
+          return { success: true };
+        }),
+      placing('reservePack')
+        .chooseFrom('seat', {
+          choices: (ctx) => [ctx.player.seat],
+          onSelect: (seat) => {
+            const player = this.getPlayer(seat)!;
+            player.packs += 1;
+            this.messageTo(player, 'You reserved a pack');
+          },
+        })
+        .chooseFrom('side', secondPick)
+        .execute(() => ({ success: true })),
+    );
     this.registerActions(
       placing('done').execute((_args, ctx) => {
         seatOf(ctx).isDone = true;
@@ -133,7 +156,7 @@ class SeatUndoGame extends Game<SeatUndoGame, SeatUndoPlayer> {
 
     const deploy = simultaneousActionStep<SeatUndoGame>({
       name: 'deploy',
-      actions: ['placePack', 'stashToken', 'draftPack', 'rollPack', 'announcePack', 'raidPack', 'burnPack', 'pickPack', 'pairPack', 'done'],
+      actions: ['placePack', 'stashToken', 'draftPack', 'rollPack', 'announcePack', 'raidPack', 'burnPack', 'pickPack', 'pairPack', 'stakePack', 'reservePack', 'done'],
       playerDone: (_ctx, p) => p.isDone,
       seatUndo: true,
     });

@@ -193,7 +193,9 @@ export class PendingActionManager<G extends Game = Game> {
    * fails rolls back to the cancel, not to before it (#1253).
    */
   cancelPendingAction(playerPosition: number): void {
-    if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
+    this.#runner.runCancelOp(playerPosition, () => {
+      if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
+    });
   }
 
   /**

@@ -200,3 +200,47 @@ describe('a seat undoing its own part at a hosted table (#1526)', () => {
     expect(seat2After.canUndo).toBe(true);
   });
 });
+
+describe('a seat partway through an action at a hosted table (#1526)', () => {
+  async function hosted() {
+    const table = createHeadlessSession(seatUndoDefinition, { playerCount: 2, seed: 'bs1526-picks' });
+    await table.host.start();
+    const key = () => table.metas.at(-1)!.turnBoundary.key;
+    const seatState = (seat: number) => (table.broadcasts.at(-1) as Array<{ state: PlayerGameState }>)[seat - 1]!.state;
+    return {
+      seatState,
+      act: async (seat: number, actionName: string) =>
+        succeeded(await table.host.handleOp(seat, { type: 'action', actionName, player: seat, args: {}, boundaryKey: key() })),
+      pick: async (seat: number, actionName: string, selectionName: string, value: unknown) =>
+        succeeded(await table.host.handleOp(seat, { type: 'selectionStep', player: seat, selectionName, value: value as {}, actionName, boundaryKey: key() })),
+      cancel: async (seat: number) => succeeded(await table.host.handleOp(seat, { type: 'cancelAction', player: seat })),
+      undo: (seat: number) => table.host.handleOp(seat, { type: 'undo', player: seat }),
+    };
+  }
+
+  it('a cancelled action whose pick could not be taken back weighs on nothing the seat does next', async () => {
+    const table = await hosted();
+    await table.pick(1, 'stakePack', 'size', 'small');
+    await table.cancel(1);
+    await table.act(1, 'placePack');
+    expect(table.seatState(1).canUndo).toBe(true);
+    succeeded(await table.undo(1));
+  });
+
+  it("another seat changing a seat's player partway through its action makes that action one it cannot take back", async () => {
+    const table = await hosted();
+    await table.pick(2, 'reservePack', 'seat', 2);
+    await table.act(1, 'raidPack');
+    await table.pick(2, 'reservePack', 'side', 'left');
+    expect(table.seatState(2).canUndo).toBe(false);
+  });
+
+  it('an undo partway through an action withdraws the lines its picks wrote', async () => {
+    const table = await hosted();
+    await table.act(1, 'placePack');
+    await table.pick(1, 'reservePack', 'seat', 1);
+    expect(table.seatState(1).messages?.map((m) => m.text)).toContain('You reserved a pack');
+    succeeded(await table.undo(1));
+    expect(table.seatState(1).messages?.map((m) => m.text) ?? []).not.toContain('You reserved a pack');
+  });
+});

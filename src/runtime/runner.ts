@@ -362,9 +362,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return stepStart !== undefined && this.seatUndo?.stepStart === stepStart ? this.seatUndo.seats[String(seat)] : undefined;
   }
 
+  /**
+   * Run `seat`'s cancel of the action it started, checked for the open step's
+   * per-seat undo like its picks are.
+   * @internal The session's PendingActionManager is its only caller.
+   */
+  runCancelOp(seat: number, run: () => void): void {
+    this.asSeatOp(seat, run, true);
+  }
+
   /** Run one op `seat` takes, checking it for the open step's per-seat undo when there is one. */
-  private asSeatOp<R>(seat: number, run: () => R): R {
-    const settle = this.checkpointPolicy_.enabled ? watchSeatOp(this, seat) : undefined;
+  private asSeatOp<R>(seat: number, run: () => R, cancel = false): R {
+    const settle = this.checkpointPolicy_.enabled ? watchSeatOp(this, seat, cancel) : undefined;
     const result = run();
     settle?.();
     return result;
@@ -384,6 +393,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!stack || !entry) {
       throw new Error(`Seat ${seat} has no action of its own to take back in the open step.`);
     }
+    // The picks of an action the seat had started go too, with the lines they wrote.
+    this.game.withdrawMessages(stack.opening?.lines ?? []);
     delete stack.opening;
     this.ensureHeadCheckpoint();
     const tree = treeWithSeatRestored(this.game, seat, entry);

@@ -126,3 +126,41 @@ describe('GameRunner per-seat undo (#1526)', () => {
     expect(r.getSnapshot().seatUndo).toBeUndefined();
   });
 });
+
+class RaceGame extends Game<RaceGame, Seat> {
+  static PlayerClass = Seat;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<RaceGame>('place').execute((_args, ctx) => {
+        ctx.player.placed += 1;
+        return { success: true };
+      }),
+      Action.create<RaceGame>('pass').execute(() => ({ success: true })),
+    );
+    this.setFlow({
+      root: sequence(
+        simultaneousActionStep({
+          name: 'race',
+          actions: ['place'],
+          // Over once one seat has placed twice while another has placed nothing.
+          allDone: (ctx) => ctx.game.players.some((p) => p.placed === 0) && ctx.game.players.some((p) => p.placed >= 2),
+          seatUndo: true,
+        }),
+        actionStep({ name: 'after', actions: ['pass'], player: (ctx) => ctx.game.getPlayer(1)! }),
+      ),
+    });
+  }
+}
+
+describe('GameRunner per-seat undo and the end of the step (#1526)', () => {
+  it("ends the step when the seat's restored state is what the step waits for", () => {
+    const r = new GameRunner({ GameClass: RaceGame, gameType: 'race-game', gameOptions: { playerCount: 2, seed: 'race' } });
+    r.start();
+    for (const seat of [1, 2, 2]) expect(r.performAction('place', seat, {}).success).toBe(true);
+    r.undoSeatAction(1);
+    expect(r.getFlowState()?.currentPlayer).toBe(1);
+    expect(r.getFlowState()?.awaitingPlayers).toBeUndefined();
+  });
+});
