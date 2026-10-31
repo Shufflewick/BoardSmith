@@ -392,6 +392,18 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
+  it('starts the sidebar as the rail when the game asks, and the player can still open it (#1529)', async () => {
+    const wrapper = mount(WorldShell, {
+      props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall', sidebarStartsCollapsed: true },
+    });
+    await drawn(wrapper, stateFrame());
+    const sidebar = () => wrapper.get('[data-testid="bs-seats"]');
+    expect(sidebar().classes()).toContain('rail');
+    await sidebar().get('.side-edge').trigger('click');
+    expect(sidebar().classes()).not.toContain('rail');
+    wrapper.unmount();
+  });
+
   it('offers the seat its enumerated actions in the shared panel', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame());

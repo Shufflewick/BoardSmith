@@ -82,6 +82,7 @@ interface PlatformShellOptions {
     formatTurnDeadline?: (remainingMs: number) => string;
     actionBarStartsCollapsed?: boolean;
     actionBarOpensForActions?: boolean;
+    sidebarStartsCollapsed?: boolean;
     preferences?: PlayerPreferences;
   };
   /** GameShell slots, for a test about what a slot is handed. */

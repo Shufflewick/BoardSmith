@@ -151,6 +151,13 @@ describe('seat identity and presence', () => {
     expect(wrapper.findAll('.side-scroll .seat-strip .hp').map((el) => el.text())).toEqual(['HP 0', 'HP 1']);
   });
 
+  it('opens the full players and log on a phone even when the sidebar is the rail (#1529)', () => {
+    const wrapper = mountShell({ sidebarRail: true, isCompact: true, mobileExpanded: true });
+
+    expect(wrapper.find('.side-scroll .seat-strip').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="bs-log"]').exists()).toBe(true);
+  });
+
   it('leaves both seat strips as they were when the game does not fill #player-strip-extra (#1513)', () => {
     const seats = mountShell({ sidebarRail: true }).findAll('.seat-strip .pt');
 

@@ -174,6 +174,8 @@ const props = withDefaults(defineProps<{
   actionBarStartsCollapsed?: boolean;
   /** Whether a question opens the bar the player put down (#1519). Default true; see GameShell's prop of the same name. */
   actionBarOpensForActions?: boolean;
+  /** Start with the player sidebar collapsed to its rail; the player can still open it (#1529). */
+  sidebarStartsCollapsed?: boolean;
   /** The game's own player preferences from `definePlayerPreferences`, listed in the controls menu (#1443). */
   preferences?: PlayerPreferences;
 }>(), {
@@ -281,7 +283,7 @@ const connectionIndicator = computed<PlayConnection | null>(() => {
 });
 
 // ── Chrome layout state, the shell's own ──────────────────────────────────────
-const sidebarRail = ref(false);
+const sidebarRail = ref(props.sidebarStartsCollapsed);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is, and not persisted for the same reason.
 const actionBarMinimized = ref(props.actionBarStartsCollapsed);
