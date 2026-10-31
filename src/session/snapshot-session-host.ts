@@ -1562,8 +1562,8 @@ export class SnapshotSessionHost {
       await this.apply(outcome.result);
       return outcome;
     });
-    // The new rules may hand the turn to a bot seat, and no op will wake it.
-    if (adopted.kind !== 'failed') await this.runBotTurns();
+    // The new rules may hand the turn to a bot seat, and no op will wake it. The reload stands if the bots fail (#1527).
+    if (adopted.kind !== 'failed') await this.afterMove('the rules reload', false);
     return adopted;
   }
 
@@ -1730,7 +1730,7 @@ export class SnapshotSessionHost {
     const what = seat === undefined
       ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')} was refused`
       : `The move the bot chose for seat ${seat} was refused, not by the game's rules (${res.category})`;
-    throw new Error(`${what}: ${res.error}${code}. The bots have stopped until they are woken again.`);
+    throw new Error(`${what}: ${res.error}${code}`);
   }
 
   /**

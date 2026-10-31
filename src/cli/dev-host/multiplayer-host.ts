@@ -1827,7 +1827,7 @@ export class MultiplayerHost {
     } catch (err) {
       console.error(
         `[boardsmith dev] The step's time ran out and the bots could not move: ` +
-          `${err instanceof Error ? err.message : String(err)} The idle action is submitted for them.`,
+          `${err instanceof Error ? err.message : String(err)}`,
       );
     }
     const bots = this.window === window ? window.boundary.dueSeats.filter(isBot) : [];

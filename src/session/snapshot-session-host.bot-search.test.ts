@@ -855,6 +855,26 @@ describe('a refused bot move (#635)', () => {
     ]);
   });
 
+  it("a rules reload whose first bot move is refused other than by the game's rules is still adopted, and the refusal goes to onBackgroundError (#1527)", async () => {
+    const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push({ success: false, error: UNREACHABLE, category: 'executor' });
+    const reload = t.host.adoptReloadedRules(async () => ({
+      kind: 'restored',
+      result: answer(snap(100)) as unknown as OpSuccess<'start'>,
+    }));
+    await untilSearches(t, 1);
+    t.searches[0].release(moved);
+
+    expect((await reload).kind).toBe('restored');
+    expect((t.host.snapshot as unknown as Snap).v).toBe(100);
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual([expect.stringMatching(/briefly unreachable/)]);
+    expect(errors.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringMatching(/the bot run after the rules reload failed: .*briefly unreachable/),
+    ]);
+  });
+
   it('a refused search fails the run, says which seats it was for and why, and does not say who refused it', async () => {
     errorLog();
     const t = table();
