@@ -22,6 +22,7 @@ class AudioService {
   private turnSoundUrl: string | null = null;
   private audioElement: HTMLAudioElement | null = null;
   private initialized: boolean = false;
+  private listeners = new Set<() => void>();
 
   /**
    * Initialize the audio service with options
@@ -115,6 +116,7 @@ class AudioService {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('boardsmith-audio-enabled', String(enabled));
     }
+    this.listeners.forEach((listener) => listener());
   }
 
   /**
@@ -134,6 +136,17 @@ class AudioService {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('boardsmith-audio-volume', String(this.volume));
     }
+    this.listeners.forEach((listener) => listener());
+  }
+
+  /**
+   * Call `listener` after each `setEnabled` or accepted `setVolume`, so a game
+   * that synthesizes sound or shows its own control follows the shell's menu.
+   * Returns the unsubscribe.
+   */
+  onChange(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
   }
 
   /**

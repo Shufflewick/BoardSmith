@@ -394,8 +394,8 @@ preferences are menu checkboxes and list picks are menu radio buttons, so both
 work by keyboard and screen reader.
 
 `WorldShell` takes the same prop. A world has no turn, undo or zoom, so its
-controls menu holds only "Preferences": Reduce motion, Show action help, then
-the world's own.
+controls menu holds only "Preferences": Reduce motion, Show action help, Sound
+and Volume, then the world's own.
 Pass them where the world entry mounts the shell, in `src/world-main.ts`:
 
 ```ts
@@ -446,6 +446,16 @@ BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`)
 The item is hidden while neither the open action nor any available action has
 help text or a disabled reason, so it never shows a switch that does nothing. Host teaching lockout
 (`teachingDisabled`) does not hide it: help explains the rules, not a good move.
+
+#### Sound
+
+Every game also gets a built-in "Sound" switch and "Volume" slider in
+"Preferences", after Show action help, in both GameShell and WorldShell. They
+set `audioService` from `boardsmith/client`, which saves them once for all
+BoardSmith games in this browser (`boardsmith-audio-enabled` and
+`boardsmith-audio-volume`) and which the turn chime follows. A game that makes
+its own sound reads `audioService.isEnabled()` and `getVolume()` when it plays
+(see [boardsmith/client](./api/client.md#audio-service)).
 
 #### Game commands
 

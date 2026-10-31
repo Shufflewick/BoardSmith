@@ -24,6 +24,7 @@ import type { MenuCommand } from '../composables/menuCommands.js';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
+import { audioService } from '../../client/audio.js';
 
 const props = withDefaults(defineProps<{
   /**
@@ -204,12 +205,21 @@ function handleOutsideClick(event: MouseEvent) {
   }
 }
 
+// Copies of audioService's settings for the template; audioService stays their one source (#1528).
+const soundOn = ref(audioService.isEnabled());
+const volume = ref(audioService.getVolume());
+const offSoundChange = audioService.onChange(() => {
+  soundOn.value = audioService.isEnabled();
+  volume.value = audioService.getVolume();
+});
+
 onMounted(() => {
   document.addEventListener('mousedown', handleOutsideClick);
 });
 
 onUnmounted(() => {
   document.removeEventListener('mousedown', handleOutsideClick);
+  offSoundChange();
 });
 
 function handleZoomInput(event: Event) {
@@ -322,6 +332,36 @@ function runCommand(command: MenuCommand) {
       <div class="grouplabel">Preferences</div>
       <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
       <PlayerPreferenceItems v-if="hasActionHelp" :preferences="actionHelpPreference()" />
+      <button
+        class="mi"
+        type="button"
+        role="menuitemcheckbox"
+        :aria-checked="soundOn"
+        @click="audioService.setEnabled(!soundOn)"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h4l5-4v14l-5-4H4z" stroke-linejoin="round"/><path v-if="soundOn" d="M16.5 8.5a5 5 0 0 1 0 7" stroke-linecap="round"/><path v-else d="M17 9l5 6M22 9l-5 6" stroke-linecap="round"/></svg>
+        Sound
+        <span class="r">
+          <span class="toggle" :class="{ on: soundOn }"></span>
+        </span>
+      </button>
+      <!-- A group like Zoom, so the slider keeps its arrow keys. -->
+      <div class="mi slider-mi" role="group" aria-label="Volume">
+        Volume
+        <span class="r">
+          <input
+            type="range"
+            class="menu-range"
+            min="0"
+            max="1"
+            step="0.05"
+            :value="volume"
+            aria-label="Volume"
+            :aria-valuetext="Math.round(volume * 100) + '%'"
+            @input="audioService.setVolume(parseFloat(($event.target as HTMLInputElement).value))"
+          />
+        </span>
+      </div>
       <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
@@ -497,10 +537,16 @@ function runCommand(command: MenuCommand) {
 }
 
 /* Zoom magnifier row: a group, since a menu item's children are hidden from screen readers. */
-.zoom-mi {
+.zoom-mi,
+.slider-mi {
   cursor: default;
 }
-.zoom-range {
+/* No icon, so indent to line up with the labels of items that have one; .menu outranks the .mi padding. */
+.menu .slider-mi {
+  padding-left: 39px;
+}
+.zoom-range,
+.menu-range {
   accent-color: var(--bsg-accent);
   width: 84px;
 }

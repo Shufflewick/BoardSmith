@@ -65,8 +65,8 @@ Read this before you plan your week.
   from the board and drawn by the shared action panel. See the next section.
 - **A world's controls menu holds the player's preferences.** The three dots on
   the action bar open "Preferences": the built-in Reduce motion item, "Show
-  action help" when an offered verb has `.help(text)` or a disabled reason, and
-  any your game declares with `definePlayerPreferences`, passed to `WorldShell`
+  action help" when an offered verb has `.help(text)` or a disabled reason,
+  Sound and Volume, and any your game declares with `definePlayerPreferences`, passed to `WorldShell`
   as `preferences` (see "Player preferences" and "Action help" in
   `docs/ui-components.md`). Above it, a "Game" group lists any commands your
   board registers with `useMenuCommands` (see "Game commands" there). A

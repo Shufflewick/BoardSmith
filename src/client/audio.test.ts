@@ -306,3 +306,16 @@ describe('loadPreferences', () => {
     }
   });
 });
+
+describe('onChange', () => {
+  it('tells a listener about a player change to sound or volume, until it unsubscribes (#1528)', () => {
+    const listener = vi.fn();
+    const off = audioService.onChange(listener);
+    audioService.setEnabled(false);
+    audioService.setVolume(0.3);
+    audioService.setVolume(NaN);
+    off();
+    audioService.setVolume(0.8);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});

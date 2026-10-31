@@ -36,7 +36,7 @@ describe('ControlsMenu focus', () => {
   });
 
   describe('arrow keys (#1458)', () => {
-    const ITEMS = ['Auto end turn', 'Undo last action', 'Fit', 'Deal', 'Shuffle', 'Reduce motion', 'Show action help', 'Full', 'Slow'];
+    const ITEMS = ['Auto end turn', 'Undo last action', 'Fit', 'Deal', 'Shuffle', 'Reduce motion', 'Show action help', 'Sound', 'Full', 'Slow'];
 
     async function openMenu() {
       localStorage.clear();
