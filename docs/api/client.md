@@ -49,8 +49,11 @@ const state = await client.getState();
 
 ### Audio Service
 
-`GameShell` initialises the service and plays the turn chime itself. A game can
-change the player's settings:
+`GameShell` initialises the service and plays the turn chime itself. Every
+game's controls menu has a "Sound" switch and a "Volume" slider in
+"Preferences", in GameShell and WorldShell, that set it. The settings are saved
+in this browser for every BoardSmith game. A game that makes its own sound reads
+them when it plays, and can change them or follow a change:
 
 <!-- typecheck: game src/ui/sound.ts -->
 ```typescript
@@ -59,6 +62,9 @@ import { audioService } from 'boardsmith/client';
 audioService.setEnabled(false);   // mute
 audioService.setVolume(0.5);      // 0..1; persisted for the next visit
 audioService.isEnabled();         // read back
+audioService.getVolume();
+const off = audioService.onChange(() => { /* settings changed */ });
+off();                            // stop listening
 ```
 
 ## See Also

@@ -1254,9 +1254,9 @@ describe('WorldShell — the controls menu (#1443)', () => {
     return wrapper;
   }
 
-  it('lists Reduce motion and then the world\'s own preferences, and none of a table\'s controls', async () => {
+  it('lists Reduce motion, Sound and then the world\'s own preferences, and none of a table\'s controls', async () => {
     const wrapper = await mountWithPreferences();
-    expect(menuItems().map((el) => el.textContent?.trim())).toEqual(['Reduce motion', 'Torchlight']);
+    expect(menuItems().map((el) => el.textContent?.trim())).toEqual(['Reduce motion', 'Sound', 'Torchlight']);
     expect(document.body.querySelector('[role="menu"]')!.textContent).not.toMatch(/Auto end turn|Undo|Zoom/);
     wrapper.unmount();
   });

@@ -20,6 +20,7 @@ import { useFocusTrap } from '../composables/useFocusTrap';
 import type { PlayerPreferences } from '../player-preferences.js';
 import PlayerPreferenceItems from './PlayerPreferenceItems.vue';
 import MenuCommandItems from './MenuCommandItems.vue';
+import SoundMenuItems from './SoundMenuItems.vue';
 import type { MenuCommand } from '../composables/menuCommands.js';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
@@ -317,11 +318,12 @@ function runCommand(command: MenuCommand) {
         <div class="sep"></div>
       </template>
 
-      <!-- Built-in Reduce motion (#1442) and action help (#1449), then the game's own
+      <!-- Built-in Reduce motion (#1442), action help (#1449) and sound (#1528), then the game's own
            preferences (#1440). Action help hides when no available action has any. -->
       <div class="grouplabel">Preferences</div>
       <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
       <PlayerPreferenceItems v-if="hasActionHelp" :preferences="actionHelpPreference()" />
+      <SoundMenuItems />
       <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game
@@ -472,7 +474,7 @@ function runCommand(command: MenuCommand) {
   color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
-.mi svg {
+.menu :deep(.mi svg) {
   width: 18px;
   height: 18px;
   stroke: currentColor;
@@ -481,8 +483,8 @@ function runCommand(command: MenuCommand) {
   color: var(--bsg-ink-2);
   flex: none;
 }
-/* Right-aligned slot (toggle, zoom input) */
-.mi .r {
+/* Right-aligned slot (toggle, slider); :deep so SoundMenuItems' items share it. */
+.menu :deep(.mi .r) {
   margin-left: auto;
   color: var(--bsg-ink-3);
   font-size: var(--bsg-text-xs);

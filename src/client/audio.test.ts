@@ -306,3 +306,26 @@ describe('loadPreferences', () => {
     }
   });
 });
+
+describe('onChange', () => {
+  it('tells a listener about a player change to sound or volume, until it unsubscribes (#1528)', () => {
+    const listener = vi.fn();
+    const off = audioService.onChange(listener);
+    audioService.setEnabled(false);
+    audioService.setVolume(0.3);
+    audioService.setVolume(NaN);
+    off();
+    audioService.setVolume(0.8);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('tells a listener when init or loadPreferences changes the settings (#1528 review F1)', () => {
+    const listener = vi.fn();
+    const off = audioService.onChange(listener);
+    audioService.init({ enabled: false, volume: 0.2 });
+    localStorage.setItem('boardsmith-audio-volume', '0.7');
+    audioService.loadPreferences();
+    off();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+});
