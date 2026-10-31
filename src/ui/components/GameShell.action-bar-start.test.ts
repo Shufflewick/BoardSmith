@@ -32,7 +32,7 @@ const actions = {
   },
 };
 
-async function mountAtTable(props: { actionBarStartsCollapsed?: boolean; actionBarOpensForActions?: boolean } = {}) {
+async function mountAtTable(props: { actionBarStartsCollapsed?: boolean; actionBarOpensForActions?: boolean; sidebarStartsCollapsed?: boolean } = {}) {
   enterIframe();
   const wrapper = mountPlatformShell({ props, board: AskingBoard });
   await nextTick();
@@ -69,6 +69,27 @@ describe('GameShell actionBarStartsCollapsed (#1439)', () => {
     expect(toggle.attributes('aria-expanded')).toBe('false');
     await toggle.trigger('click');
     expect(barIsDown(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+});
+
+describe('GameShell sidebarStartsCollapsed (#1529)', () => {
+  const sidebarIsRail = (wrapper: Awaited<ReturnType<typeof mountAtTable>>) =>
+    wrapper.get('[data-testid="bs-seats"]').classes().includes('rail');
+
+  it('starts open when the game says nothing', async () => {
+    const wrapper = await mountAtTable();
+    expect(sidebarIsRail(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('starts as the rail when the game asks, and the player can still open it', async () => {
+    const wrapper = await mountAtTable({ sidebarStartsCollapsed: true });
+    expect(sidebarIsRail(wrapper)).toBe(true);
+    const toggle = wrapper.get('[data-testid="bs-seats"] .side-edge');
+    expect(toggle.attributes('aria-expanded')).toBe('false');
+    await toggle.trigger('click');
+    expect(sidebarIsRail(wrapper)).toBe(false);
     wrapper.unmount();
   });
 });

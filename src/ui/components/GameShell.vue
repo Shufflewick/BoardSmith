@@ -148,6 +148,12 @@ interface GameShellProps {
    */
   actionBarOpensForActions?: boolean;
   /**
+   * Start with the player sidebar collapsed to its rail (#1529). Only the
+   * starting state: the player can still open it. Phones show their one-line
+   * strip either way. Default: false (open).
+   */
+  sidebarStartsCollapsed?: boolean;
+  /**
    * The game's own player preferences from `definePlayerPreferences` (#1440),
    * listed in the controls menu. Saved in this browser only.
    */
@@ -249,7 +255,7 @@ const autoEndTurn = ref(true); // Auto-end turn after making a move
 // IA-06: Sidebar rail state. Default expanded; collapses to --bsg-rail on compact phones.
 // The matchMedia listener ensures the rail collapses automatically when the viewport
 // narrows to compact, but never forces expansion when viewport widens (user preference).
-const sidebarRail = ref<boolean>(false);
+const sidebarRail = ref(props.sidebarStartsCollapsed);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is. Not persisted, for the same reason the rail is not: two answers to
 // "does a collapse survive a reload" would be two idioms for one idea.

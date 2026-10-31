@@ -129,6 +129,20 @@ accessible label. It sits outside the strip's live region, so a changing
 number does not re-announce the turn sentence. Leave the slot out and the strip
 is unchanged.
 
+#### The sidebar can start collapsed
+
+The player collapses the sidebar to the rail with the round arrow button on its
+right edge. A game whose players rarely need the full cards can start it there:
+
+```vue
+<GameShell :uis="uis" sidebar-starts-collapsed />
+```
+
+`sidebarStartsCollapsed` sets only the starting state, default open, and
+`WorldShell` takes the same prop. The player can still open the sidebar with
+the same button. On phones the sidebar is the one-line strip either way, and
+opening it shows the full players and log as before.
+
 #### Turn-change cue
 
 When the turn passes, the newly-active card plays a one-shot ring pulse. It
