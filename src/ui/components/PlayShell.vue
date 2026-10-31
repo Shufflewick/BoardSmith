@@ -453,8 +453,9 @@ const mobileToggleLabel = computed(() => {
                always on mobile (inside the overlay).
 
                A game cannot turn this off. The log is the shell's record of what
-               happened, and the only gate on it is the PLAYER's own sidebar-rail
-               collapse — reversible, by the person who chose it. There is
+               happened, and the only gate on it is the sidebar-rail collapse,
+               which a game may pick as the start (#1529) but only the player
+               toggles, and always can. There is
                deliberately no prop for hiding it: a game rendering its own
                narration elsewhere ADDS a surface, it does not remove this one,
                and a game that publishes nothing gets an honestly empty log

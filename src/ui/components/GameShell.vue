@@ -252,9 +252,8 @@ const playShell = ref<InstanceType<typeof PlayShell> | null>(null);
 const historyPanel = computed(() => playShell.value?.historyPanel ?? null);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
-// IA-06: Sidebar rail state. Default expanded; collapses to --bsg-rail on compact phones.
-// The matchMedia listener ensures the rail collapses automatically when the viewport
-// narrows to compact, but never forces expansion when viewport widens (user preference).
+// IA-06: Sidebar rail state, starting where the game asks (#1529). Phones ignore it
+// and show their own strip (see isCompact below).
 const sidebarRail = ref(props.sidebarStartsCollapsed);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is. Not persisted, for the same reason the rail is not: two answers to
