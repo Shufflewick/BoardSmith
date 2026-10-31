@@ -4,8 +4,9 @@
  * A step that declares `timeLimitMs` reports it on the turn boundary (#300).
  * The dev host arms ONE timer per boundary key on its own clock, stamps every
  * `game_state` frame with `deadlineAt` and `serverNow` (#301's contract), and
- * when the window elapses submits the manifest's `idleAction` for every seat
- * still due that is not a bot, stamped with the key it armed under. The clock
+ * when the window elapses submits the manifest's `idleAction` for every human
+ * seat still due, then wakes the bots and submits it for every bot seat that
+ * still owes its move (#1527), stamped with the key it armed under. The clock
  * here is a hand-driven stand-in for `createNodeWorldClock`, so nothing waits
  * on real time.
  */
@@ -316,16 +317,44 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(h.errors('A')).toEqual([]);
   });
 
-  it('never submits for a bot seat, and says so loudly when the round does not move', async () => {
+  it('submits the idle action for a bot seat that still owes its move once the window elapses, so the round moves (#1527)', async () => {
     const h = makeHost(fixedDeployDefinition, { stallBots: true });
     await h.host.handleMessage('A', { type: 'hello' });
+    const armedKey = clients.key('A');
 
     h.clock.advance(WINDOW_MS);
 
-    await vi.waitFor(() => expect(h.actionsFor(1)).toHaveLength(1));
-    expect(h.actionsFor(2)).toHaveLength(0);
-    expect(await h.reported()).toMatch(/did not move/);
-    expect(error).toHaveBeenCalledWith(expect.stringContaining('did not move'));
+    await vi.waitFor(() => expect(clients.key('A')).not.toBe(armedKey));
+    await h.host.settled();
+    expect(h.expiries().map((e) => (e.op as { player: number }).player)).toEqual([1, 2]);
+    expect(h.errors('A')).toEqual([]);
+  });
+
+  it('wakes a bot whose pump stopped when only it is still due as the window elapses, and the bot moves (#1527)', async () => {
+    let refuseSearches = false;
+    const h = makeHost(fixedDeployDefinition, {
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
+        if (refuseSearches && op.type === 'botSuggest') {
+          return { success: false, error: 'The bot executor did not answer in time.', category: 'executor' };
+        }
+        return executeOp(fixedDeployDefinition, gameOptions, snap, pend, op, hostOptions);
+      },
+    });
+    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and commits round 1 at once
+    refuseSearches = true;
+    await h.commit('A', 'a1'); // round 2 opens, and the bot's search of it is refused
+    await h.commit('A', 'a2'); // only the bot owes round 2, and its search is refused again
+    await h.host.settled();
+    expect(h.due('A')).toEqual([2]);
+    const armedKey = clients.key('A');
+    refuseSearches = false;
+
+    h.clock.advance(WINDOW_MS);
+
+    await vi.waitFor(() => expect(clients.key('A')).not.toBe(armedKey));
+    await h.host.settled();
+    expect(h.expiries()).toEqual([]);
+    expect(h.errors('A')).toEqual([]);
   });
 
   it('waits for a bot still searching when the window elapses before it checks that the round moved (#698)', async () => {

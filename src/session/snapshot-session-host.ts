@@ -465,6 +465,9 @@ export interface SnapshotSessionAdapters {
    * `handleOp` has answered; the host has logged the failure, and the bots are
    * asked again on the next wake. `error` is what was thrown, usually by
    * `executeOp`: tell the players in your own words, never with its stack.
+   * A bot's search or move refused other than by the game's rules fails the
+   * run too: wake the bots again ({@link SnapshotSessionHost.runBotTurns}),
+   * paced as you choose, or a table whose humans are done waits forever (#1527).
    *
    * EACH FAILURE GOES ONE WAY. A bot run that any caller of
    * {@link SnapshotSessionHost.runBotTurns} joined (directly, or through
@@ -1660,7 +1663,8 @@ export class SnapshotSessionHost {
    * itself to be made.
    *
    * A run that fails rejects every call that joined it, and is then not handed
-   * to `onBackgroundError` (#698): each failure goes one way.
+   * to `onBackgroundError` (#698): each failure goes one way. A bot's search or
+   * move refused other than by the game's rules fails the run (#1527).
    */
   runBotTurns(): Promise<void> {
     const run = this.wakeBots();
@@ -1697,8 +1701,9 @@ export class SnapshotSessionHost {
    *
    * Any other refusal (of the search, or of the move by the executor or by the
    * host's own executeOp, such as a platform that could not store the result)
-   * says nothing about this game state, so nothing is held back: the pump
-   * stops, and the next wake asks again.
+   * says nothing about this game state, so nothing is held back: it fails the
+   * run, as a throw does, so its callers or `onBackgroundError` learn the bots
+   * stopped and must be woken again (#1527).
    *
    * Either way it is said out loud: a bot that silently stops moving leaves
    * every seat waiting with nothing in the console to say why.
@@ -1725,12 +1730,7 @@ export class SnapshotSessionHost {
     const what = seat === undefined
       ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')} was refused`
       : `The move the bot chose for seat ${seat} was refused, not by the game's rules (${res.category})`;
-    console.error(
-      `[SnapshotSessionHost] ${what}: ` +
-        `${res.error}${code}. The bots stop here and are asked again on the next move, ` +
-        `roster change or resume.`,
-    );
-    return 'done';
+    throw new Error(`${what}: ${res.error}${code}. The bots have stopped until they are woken again.`);
   }
 
   /**
