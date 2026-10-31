@@ -810,52 +810,82 @@ describe('a refused bot move (#635)', () => {
     expect(t.searches).toHaveLength(1);
   });
 
-  it("a refusal that is not the game's (the platform's, say) stops the bot without holding its seat, so the next wake moves it", async () => {
+  const UNREACHABLE = 'The platform was briefly unreachable. Nothing was lost -- take the same move again.';
+
+  it("a refusal that is not the game's (the platform's, say) fails the run that asked, without holding the seat, so the owner knows to wake the bots again (#1527)", async () => {
     const errors = errorLog();
     const t = table();
     await t.host.start();
-    t.refuseBot.push({
-      success: false,
-      error: 'The platform was briefly unreachable. Nothing was lost -- take the same move again.',
-      category: 'executor',
-    });
+    t.refuseBot.push({ success: false, error: UNREACHABLE, category: 'executor' });
     const first = t.host.runBotTurns();
     await untilSearches(t, 1);
     t.searches[0].release(moved);
-    await first;
 
+    await expect(first).rejects.toThrow(/The move the bot chose for seat 2 was refused, not by the game's rules \(executor\): .*briefly unreachable/);
+    await expect(first).rejects.not.toThrow(/selections|move enumeration/);
     expect(t.botMoves).toEqual([0]);
     expect(t.searches).toHaveLength(1);
-    const logged = errors.mock.calls.map((call) => String(call[0]));
 
-    // The game did not change, and a later wake (a resume, say) still moves the bot.
+    // The game did not change, and the owner's next wake still moves the bot.
     const second = t.host.runBotTurns();
     await untilSearches(t, 2);
     t.searches[1].release(moved);
     await finish(t, second);
     expect(t.botMoves).toEqual([0, 0]);
     expect((t.host.snapshot as unknown as Snap).v).toBe(1);
-
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toMatch(/briefly unreachable/);
-    expect(logged[0]).toMatch(/not by the game's rules \(executor\)/);
-    expect(logged[0]).not.toMatch(/selections|move enumeration/);
+    // The caller that joined the run was handed the failure, so the host logged nothing of its own.
+    expect(errors).not.toHaveBeenCalled();
   });
 
-  it('a refused search says which seats it was for and why, and does not say who refused it', async () => {
+  it("a refusal that is not the game's, in the bot run a move woke, is handed to onBackgroundError once, so a table whose humans are done is not left waiting (#1527)", async () => {
     const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push({ success: false, error: UNREACHABLE, category: 'executor' });
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    t.searches[0].release(moved);
+    await t.host.settled();
+
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual([
+      expect.stringMatching(/The move the bot chose for seat 2 was refused, not by the game's rules \(executor\): .*briefly unreachable/),
+    ]);
+    expect(errors.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringMatching(/the bot run after seat 1's action failed: .*briefly unreachable/),
+    ]);
+  });
+
+  it("a rules reload whose first bot move is refused other than by the game's rules is still adopted, and the refusal goes to onBackgroundError (#1527)", async () => {
+    const errors = errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push({ success: false, error: UNREACHABLE, category: 'executor' });
+    const reload = t.host.adoptReloadedRules(async () => ({
+      kind: 'restored',
+      result: answer(snap(100)) as unknown as OpSuccess<'start'>,
+    }));
+    await untilSearches(t, 1);
+    t.searches[0].release(moved);
+
+    expect((await reload).kind).toBe('restored');
+    expect((t.host.snapshot as unknown as Snap).v).toBe(100);
+    expect(t.backgroundErrors.map((e) => (e as Error).message)).toEqual([expect.stringMatching(/briefly unreachable/)]);
+    expect(errors.mock.calls.map((call) => String(call[0]))).toEqual([
+      expect.stringMatching(/the bot run after the rules reload failed: .*briefly unreachable/),
+    ]);
+  });
+
+  it('a refused search fails the run, says which seats it was for and why, and does not say who refused it', async () => {
+    errorLog();
     const t = table();
     await t.host.start();
     const pump = t.host.runBotTurns();
     await untilSearches(t, 1);
     // A platform may report a search's failure under any category, the game's own included.
     t.searches[0].release({ success: false, error: 'The bot could not load the game.', category: 'bundle' });
-    await pump;
 
-    const logged = errors.mock.calls.map((call) => String(call[0]));
-    expect(logged).toHaveLength(1);
-    expect(logged[0]).toMatch(/The bot search for seat\(s\) 2 was refused: The bot could not load the game\./);
-    expect(logged[0]).not.toMatch(/game's rules/);
+    await expect(pump).rejects.toThrow(/The bot search for seat\(s\) 2 was refused: The bot could not load the game\./);
+    await expect(pump).rejects.not.toThrow(/game's rules/);
     expect(t.botMoves).toEqual([]);
   });
 

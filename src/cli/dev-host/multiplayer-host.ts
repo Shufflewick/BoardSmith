@@ -1796,7 +1796,8 @@ export class MultiplayerHost {
 
   /**
    * The window elapsed: submit `idleAction` for every seat still due that a
-   * human holds, stamped with the key the window was armed under.
+   * human holds, stamped with the key the window was armed under. Then wake the
+   * bots, and submit it for every bot seat that still owes its move (#1527).
    *
    * The ops queue behind any human submission already in flight, so a seat
    * that acted in time closes the round first and the timer's op is refused
@@ -1817,19 +1818,49 @@ export class MultiplayerHost {
       );
       return;
     }
-    const seats = window.boundary.dueSeats.filter((seat) => !this.botSeats.some((bot) => bot.seat === seat));
+    const humans = window.boundary.dueSeats.filter((seat) => !this.botSeats.some((bot) => bot.seat === seat));
+    if (!(await this.submitIdleActions(window, idle, humans))) return;
+    const bots = await this.botsStillDue(window);
+    if (!(await this.submitIdleActions(window, idle, bots))) return;
+    const seats = [...humans, ...bots];
+    if (seats.length === 0) return;
+    await window.session.host.settled();
+    this.assertRoundMoved(window, idle.name, seats);
+  }
+
+  /**
+   * Wake the bots, and answer the bot seats that still owe their move in
+   * `window`. The bots still due answer after the idle actions do (#698), and
+   * a pump that stopped is woken (#1527).
+   */
+  private async botsStillDue(window: StepWindow): Promise<number[]> {
+    try {
+      await window.session.host.runBotTurns();
+    } catch (err) {
+      console.error(
+        `[boardsmith dev] The step's time ran out and the bots could not move: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    if (this.window !== window) return [];
+    return window.boundary.dueSeats.filter((seat) => this.botSeats.some((bot) => bot.seat === seat));
+  }
+
+  /** Submit `idle` for each of `seats` in turn; false once one is refused, or the session is gone. */
+  private async submitIdleActions(
+    window: StepWindow,
+    idle: { name: string; args?: Record<string, unknown> },
+    seats: number[],
+  ): Promise<boolean> {
     for (const seat of seats) {
-      if (this.session !== window.session) return;
+      if (this.session !== window.session) return false;
       const result = await this.submitIdleAction(window, idle, seat);
       if (!result.success) {
         this.reportIdleRefusal(idle.name, seat, result);
-        return;
+        return false;
       }
     }
-    if (seats.length === 0) return;
-    // The bots still due answer after the idle actions do (#698); the round moves once they have.
-    await window.session.host.settled();
-    this.assertRoundMoved(window, idle.name, seats);
+    return true;
   }
 
   /**

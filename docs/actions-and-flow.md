@@ -2349,7 +2349,8 @@ actionStep({
   does. The dev host starts one timer when the step opens, sends the deadline
   on every `game_state` frame (so `turnDeadline` and the Action Panel count
   down), and when it runs out submits `idleAction` for every human seat still
-  due. A bot seat is left to its bot. If the game refuses the idle action, or
+  due. Then it wakes the bots, and submits `idleAction` for every bot seat
+  that still has not moved. If the game refuses the idle action, or
   the idle action does not move the round on, the terminal and every browser
   show an error saying so. **End step** in the Dev bar closes the open step
   straight away, so you do not have to wait out a long window. New game, and

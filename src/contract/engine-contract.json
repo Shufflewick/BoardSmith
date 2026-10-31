@@ -1,5 +1,5 @@
 {
-  "revision": 278,
+  "revision": 279,
   "surfaceHash": "fd9767c781f97d47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2167,6 +2167,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "simultaneousActionStep takes seatUndo: true, so each seat's undo takes back its own last action alone, one at a time, whatever the other seats did, and tells only that seat (#1526). The undo op now answers undoScope: 'seat' | 'game' (a host keeps the other seats' picks on 'seat'), the action history can hold { kind: 'seatUndo', player } (isSeatUndo), snapshots may carry seatUndo and seatRestoreEpochs, and a seat's restoreEpoch also counts its own seat undos. Published games need no rebuild; a game must be rebuilt on r278 to declare seatUndo."
+    },
+    {
+      "revision": 279,
+      "date": "2026-10-31",
+      "surfaceHash": "fd9767c781f97d47",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A bot's search or move refused other than by the game's rules now FAILS the bot run, as a throw does, instead of stopping the pump silently (#1527): runBotTurns() rejects for the callers that joined the run, and a run only moves woke is handed to onBackgroundError. Platform: treat either as 'the bots stopped' and wake them again (runBotTurns) on your own backoff, or a table whose humans are done waits forever (ShufflewickPub#685). The game's own refusal still holds the seat back and fails nothing. No surface, payload or stored byte changes; published games need no rebuild."
     }
   ]
 }
