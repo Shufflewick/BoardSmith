@@ -1818,10 +1818,22 @@ export class MultiplayerHost {
       );
       return;
     }
-    const isBot = (seat: number) => this.botSeats.some((bot) => bot.seat === seat);
-    const humans = window.boundary.dueSeats.filter((seat) => !isBot(seat));
+    const humans = window.boundary.dueSeats.filter((seat) => !this.botSeats.some((bot) => bot.seat === seat));
     if (!(await this.submitIdleActions(window, idle, humans))) return;
-    // The bots still due answer after the idle actions do (#698), and a pump that stopped is woken (#1527).
+    const bots = await this.botsStillDue(window);
+    if (!(await this.submitIdleActions(window, idle, bots))) return;
+    const seats = [...humans, ...bots];
+    if (seats.length === 0) return;
+    await window.session.host.settled();
+    this.assertRoundMoved(window, idle.name, seats);
+  }
+
+  /**
+   * Wake the bots, and answer the bot seats that still owe their move in
+   * `window`. The bots still due answer after the idle actions do (#698), and
+   * a pump that stopped is woken (#1527).
+   */
+  private async botsStillDue(window: StepWindow): Promise<number[]> {
     try {
       await window.session.host.runBotTurns();
     } catch (err) {
@@ -1830,12 +1842,8 @@ export class MultiplayerHost {
           `${err instanceof Error ? err.message : String(err)}`,
       );
     }
-    const bots = this.window === window ? window.boundary.dueSeats.filter(isBot) : [];
-    if (!(await this.submitIdleActions(window, idle, bots))) return;
-    const seats = [...humans, ...bots];
-    if (seats.length === 0) return;
-    await window.session.host.settled();
-    this.assertRoundMoved(window, idle.name, seats);
+    if (this.window !== window) return [];
+    return window.boundary.dueSeats.filter((seat) => this.botSeats.some((bot) => bot.seat === seat));
   }
 
   /** Submit `idle` for each of `seats` in turn; false once one is refused, or the session is gone. */
