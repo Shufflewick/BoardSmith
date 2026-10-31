@@ -354,7 +354,7 @@ function runCommand(command: MenuCommand) {
             class="menu-range"
             min="0"
             max="1"
-            step="0.05"
+            step="0.01"
             :value="volume"
             aria-label="Volume"
             :aria-valuetext="Math.round(volume * 100) + '%'"

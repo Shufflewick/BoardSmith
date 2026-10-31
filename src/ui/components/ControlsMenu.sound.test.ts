@@ -57,6 +57,17 @@ describe('ControlsMenu sound', () => {
     wrapper.unmount();
   });
 
+  it('announces the volume the slider shows, not an unsnapped one (#1528 review F6)', async () => {
+    const wrapper = await openMenu();
+    audioService.setVolume(0.33);
+    await nextTick();
+    // jsdom does not snap a range's value to its step as a browser does, so snap it here.
+    const step = Number(volumeSlider().step);
+    const shown = Math.round(Number(volumeSlider().value) / step) * step;
+    expect(volumeSlider().getAttribute('aria-valuetext')).toBe(`${Math.round(shown * 100)}%`);
+    wrapper.unmount();
+  });
+
   it('follows a change the game makes to audioService itself', async () => {
     const wrapper = await openMenu();
     audioService.setVolume(0.9);

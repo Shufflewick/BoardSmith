@@ -66,6 +66,7 @@ class AudioService {
     if (this.turnSoundUrl && (urlChanged || !this.audioElement)) {
       this.setTurnSoundUrl(this.turnSoundUrl);
     }
+    this.notify();
   }
 
   /**
@@ -116,7 +117,7 @@ class AudioService {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('boardsmith-audio-enabled', String(enabled));
     }
-    this.listeners.forEach((listener) => listener());
+    this.notify();
   }
 
   /**
@@ -136,11 +137,11 @@ class AudioService {
     if (typeof localStorage !== 'undefined') {
       localStorage.setItem('boardsmith-audio-volume', String(this.volume));
     }
-    this.listeners.forEach((listener) => listener());
+    this.notify();
   }
 
   /**
-   * Call `listener` after each `setEnabled` or accepted `setVolume`, so a game
+   * Call `listener` after each `init`, `loadPreferences`, `setEnabled` or accepted `setVolume`, so a game
    * that synthesizes sound or shows its own control follows the shell's menu.
    * Returns the unsubscribe.
    */
@@ -174,6 +175,11 @@ class AudioService {
       // hand-edited value must not become the live volume.
       this.applyVolume(parseFloat(volume));
     }
+    this.notify();
+  }
+
+  private notify(): void {
+    this.listeners.forEach((listener) => listener());
   }
 }
 
