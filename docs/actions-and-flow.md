@@ -2398,12 +2398,20 @@ Action.create<MyGame>('levelUp')
   a restore, an undo checkpoint and a bot's search copy answer as the op did.
   A bot searches at the instant of the op that asked it. A new game started
   from a saved position (`boardsmith dev --seed`) opens its step at its own
-  start, not when the position was saved.
+  start, not when the position was saved. A rules reload in `boardsmith dev`
+  carries the same game, so its open step keeps the instant it opened, as it
+  keeps its deadline, and the offers are worked out again at the reload's
+  instant.
 - **It throws, saying why**, when no step with `timeLimitMs` is open, or when
   the host stamped no instant. `GameRunner.replay` (the dev host's last resort
   when an edited flow no longer fits a saved position) has none, because the
   history records no instants, so a game that reads the clock in a replayed
   step reports that the reload failed.
+- **`boardsmith simulate` and the bot trainer's benchmark freeze time.** They
+  have no wall clock, so they stamp every op with one fixed instant: every move
+  is made the instant its step opened, `stepElapsedMs()` reads 0, and no
+  deadline runs out. An action greyed for the first part of a step is never
+  played there.
 - In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
   for the start and `testGame.runner.setNow(ms)` before a later move, or
   `createHeadlessSession(def, { ..., now: () => ms })`. `boardsmith dev`

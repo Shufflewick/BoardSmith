@@ -9,7 +9,8 @@
  * how well MCTS plays.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { benchmarkBot, weightedObjectives } from './benchmark.js';
+import { benchmarkBot, weightedBot, weightedObjectives } from './benchmark.js';
+import { PlaybackTurnGame } from '../session/testing/fixtures/timed-step-fixture.js';
 import { createBot } from '../bot/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -294,6 +295,23 @@ describe('benchmarkBot', () => {
     expect(result.gamesPlayed).toBe(2);
     expect(result.draws).toBe(2);
     expect(result.incomplete).toBe(0);
+  });
+
+  // #1535: the benchmark has no wall clock, so every move is made the instant its step opened.
+  it('plays a game whose rules read the step clock, with no time passing', async () => {
+    const result = await benchmarkBot(PlaybackTurnGame, 'playback', undefined, noWeights, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'clock',
+    });
+    expect(result.draws).toBe(2);
+    expect(result.incomplete).toBe(0);
+  });
+
+  it('checks weights against the objectives of a game whose rules read the step clock (#1535)', () => {
+    const bot = { objectives: () => ({ commits: { checker: () => 1, weight: 1 } }) };
+    expect(() => weightedBot(PlaybackTurnGame, 'playback', bot, [{ id: 'commits', weight: 2 }])).not.toThrow();
   });
 
   it('scores the winner a game declares by overriding getWinners(), as players are shown it', async () => {

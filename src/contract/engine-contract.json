@@ -1,5 +1,5 @@
 {
-  "revision": 282,
+  "revision": 283,
   "surfaceHash": "fd9e6c0ca296ce47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2199,6 +2199,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "No contract change; this build carries code since r281. Recorded here because r281's summary leaves it out: r281 was the first build to carry #1533, useActionController's executingAction, the name of the action the seat has out, so one button can show its own working label (UI only). New: boardsmith contract --minted-since <commit> fails when a file the platform packs changed with no new revision, and BoardSmith's verify and merge run it, so main no longer packs different files under one revision (#1534). Published games need no rebuild."
+    },
+    {
+      "revision": 283,
+      "date": "2026-11-01",
+      "surfaceHash": "fd9e6c0ca296ce47",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "No contract change; the platform must run this build for #1535. executeOp gains hostOptions.keepStepClock: with seedSnapshot, the seed is the same game carried onto edited rules, so its open timed step keeps the instant it opened instead of opening again at now (boardsmith dev's rules reload uses it and now stamps the reload with its clock). boardsmith simulate and the bot trainer's benchmark stamp every op with one fixed instant, so a game whose rules read game.stepElapsedMs() plays there with no time passing instead of crashing. Published games need no rebuild."
     }
   ]
 }

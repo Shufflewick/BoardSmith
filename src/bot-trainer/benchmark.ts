@@ -1,6 +1,7 @@
 import type { Game } from '../engine/index.js';
 import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
+import { FROZEN_NOW } from '../runtime/runner.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
@@ -273,6 +274,7 @@ async function runBenchmarkGame<G extends Game>(
       // the game every host starts (#701).
       declaredGameOptions: projectGameOptions(),
     });
+    runner.setNow(FROZEN_NOW);
     let flowState = runner.start();
 
     let actionCount = 0;
@@ -418,6 +420,7 @@ export function weightedBot<G extends Game>(
     gameOptions: { playerCount: 2, seed: 'objective-check' },
     declaredGameOptions: projectGameOptions(),
   });
+  runner.setNow(FROZEN_NOW);
   runner.start();
   objectives(runner.game, 1);
   return { ...bot, objectives };

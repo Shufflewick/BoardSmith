@@ -783,6 +783,7 @@ function handleStart(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
   seedSnapshot?: GameStateSnapshot,
+  keepStepClock?: boolean,
 ): OpResultFor<'start'> {
   // A new game mints its own element id key (#447). The only key a start op
   // could carry is one a client wrote into the host's options, and a client
@@ -812,7 +813,7 @@ function handleStart(
     const { gameInstanceId: _seedsGame, ...position } = seedSnapshot;
     const runner = runnerFromSnapshot(position, def);
     // A new game: its open timed step opens at this op's instant, not when the position was saved (#1532).
-    runner.game.reopenStepClock();
+    if (keepStepClock !== true) runner.game.reopenStepClock();
     return {
       success: true,
       ...stateEnvelope(runner, gameOptions.playerCount),
@@ -1694,6 +1695,13 @@ export interface ExecuteOpHostOptions {
    * the step clock refuses the op, saying so.
    */
   now?: number;
+  /**
+   * With `seedSnapshot`: the seed is the game in progress carried onto edited
+   * rules (`boardsmith dev`'s rules reload, #343), not a new game, so its open
+   * timed step keeps the instant it opened, as the host keeps its deadline
+   * (#1535). Without it, the step opens again at `now`.
+   */
+  keepStepClock?: boolean;
 }
 
 async function runOp(
@@ -1740,7 +1748,7 @@ async function runOp(
     }
 
     if (op.type === 'start') {
-      return handleStart(def, gameOptions, hostOptions?.seedSnapshot);
+      return handleStart(def, gameOptions, hostOptions?.seedSnapshot, hostOptions?.keepStepClock);
     }
 
     // All ops below require an existing snapshot
