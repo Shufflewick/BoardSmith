@@ -196,10 +196,11 @@ describe('playTurnSound', () => {
   });
 
   it('warns about any other refusal, naming it (#1530)', async () => {
-    const warn = refusePlay(new DOMException('no supported source', 'NotSupportedError'));
+    const refusal = new DOMException('', 'NotSupportedError');
+    const warn = refusePlay(refusal);
     await audioService.playTurnSound();
     expect(warn).toHaveBeenCalledTimes(1);
-    expect(String(warn.mock.calls[0][0])).toMatch(/no supported source/);
+    expect(warn.mock.calls[0]).toContain(refusal);
   });
 
   it('stays quiet when a newer sound interrupts the play (#1530)', async () => {

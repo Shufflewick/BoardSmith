@@ -35,7 +35,7 @@ class AudioService {
    *   rather than rejecting it, so a bare clamp looks safe and is not.
    * - Assigning `NaN` to `HTMLAudioElement.volume` throws in the browser, and
    *   the throw happens inside `playTurnSound`'s catch, so the failure mode is
-   *   silently muted audio rather than a visible error.
+   *   a muted chime and a console warning rather than an error the game sees.
    *
    * A non-finite value therefore keeps the current setting instead of taking
    * it. Returns whether the volume was accepted, so callers know whether there
@@ -112,7 +112,7 @@ class AudioService {
         );
         return;
       }
-      console.warn(`The turn chime could not play: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn('The turn chime could not play:', err);
     }
   }
 
