@@ -1,6 +1,6 @@
 {
   "revision": 281,
-  "surfaceHash": "32354d3478a13a61",
+  "surfaceHash": "fd9e6c0ca296ce47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2187,10 +2187,10 @@
     {
       "revision": 281,
       "date": "2026-11-01",
-      "surfaceHash": "32354d3478a13a61",
+      "surfaceHash": "fd9e6c0ca296ce47",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "Table rules can read how long the open timed step has been open with game.stepElapsedMs(): a host stamps every op with its instant through executeOp's hostOptions.now (GameRunner.setNow), the engine keeps the opening instant on the timed step's frame and the last instant on snapshot.now, and a game whose rules read the clock refuses an op the host did not stamp, so the platform must pass hostOptions.now on every op (#1532)."
+      "summary": "Table rules can read how long the open timed step has been open with game.stepElapsedMs() (in disabled, validate and execute; a condition that reads it throws): a host stamps every op with its instant through executeOp's hostOptions.now (GameRunner.setNow), the engine keeps the opening instant on the timed step's frame and the last instant on snapshot.now, a start from a seed snapshot reopens the step at its own instant, and a game whose rules read the clock refuses an op the host did not stamp, so the platform must pass hostOptions.now on every op (#1532)."
     }
   ]
 }

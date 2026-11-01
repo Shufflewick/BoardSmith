@@ -2382,10 +2382,13 @@ Action.create<MyGame>('levelUp')
   seat acting mid-round does not move the opening; the next round of a `loop`
   opens its own. Game code still reads no clock, so `no-nondeterministic` and
   `no-timers` stay satisfied.
-- **It works in `condition`, `disabled`, `validate` and `execute`.** The offer
-  each seat is sent is worked out at the instant of the op that produced it,
-  and the submission is checked again at its own instant, so the Action Panel,
-  the custom UI and the server agree. An offer is not re-sent as time passes:
+- **It works in `disabled`, `validate` and `execute`, not in `condition`.** The
+  offer each seat is sent is worked out at the instant of the op that produced
+  it, and the submission is checked again at its own instant, so the Action
+  Panel, the custom UI and the server agree. A `condition` decides which
+  actions the step offers and is not asked again as time passes, so an action
+  it hid would stay hidden; reading the clock there throws, saying to use
+  `disabled` or `validate`. An offer is not re-sent as time passes either:
   a seat sees the action greyed until the next op re-offers it. A refusal that
   lapses on its own while the seat watches is best left out of the offer and
   made in `validate`, which refuses the submission with its reason; the custom
@@ -2393,14 +2396,17 @@ Action.create<MyGame>('levelUp')
 - **Every restore measures the same way.** The opening instant rides on the
   step's frame, and the last op's instant on the snapshot (`snapshot.now`), so
   a restore, an undo checkpoint and a bot's search copy answer as the op did.
-  A bot searches at the instant of the op that asked it.
+  A bot searches at the instant of the op that asked it. A new game started
+  from a saved position (`boardsmith dev --seed`) opens its step at its own
+  start, not when the position was saved.
 - **It throws, saying why**, when no step with `timeLimitMs` is open, or when
   the host stamped no instant. `GameRunner.replay` (the dev host's last resort
   when an edited flow no longer fits a saved position) has none, because the
   history records no instants, so a game that reads the clock in a replayed
   step reports that the reload failed.
-- In a test, stamp the instant yourself: `testGame.runner.setNow(ms)` before a
-  move, or `createHeadlessSession(def, { ..., now: () => ms })`. `boardsmith dev`
+- In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
+  for the start and `testGame.runner.setNow(ms)` before a later move, or
+  `createHeadlessSession(def, { ..., now: () => ms })`. `boardsmith dev`
   stamps every op from the clock it runs step windows on.
 
 #### `phase` - Named game phase

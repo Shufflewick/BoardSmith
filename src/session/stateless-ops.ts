@@ -810,9 +810,12 @@ function handleStart(
   // would otherwise be published as the game it replaced (#356).
   if (seedSnapshot) {
     const { gameInstanceId: _seedsGame, ...position } = seedSnapshot;
+    const runner = runnerFromSnapshot(position, def);
+    // A new game: its open timed step opens at this op's instant, not when the position was saved (#1532).
+    runner.game.reopenStepClock();
     return {
       success: true,
-      ...stateEnvelope(runnerFromSnapshot(position, def), gameOptions.playerCount),
+      ...stateEnvelope(runner, gameOptions.playerCount),
     };
   }
 
@@ -834,8 +837,8 @@ function handleStart(
     // platform lobby passes it.
     declaredGameOptions: declaredGameOptionsOf(def),
   });
-  // The opening step opens at this op's instant (#1532).
-  if (def.now !== undefined) runner.setNow(def.now);
+  // Stamped before start(), so the opening step opens at this op's instant (#1532).
+  withHostState(runner, def);
 
   runner.start();
 

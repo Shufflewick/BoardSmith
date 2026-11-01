@@ -51,9 +51,15 @@ export interface TestGameOptions {
    */
   checkpoints?: CheckpointPolicy;
   /**
+   * The host's instant, epoch ms, the game starts at, for a game whose rules
+   * read `game.stepElapsedMs()` (#1532): its opening step opens then. Stamp
+   * later moves with `testGame.runner.setNow(ms)`.
+   */
+  now?: number;
+  /**
    * Extra game-specific constructor options passed through to the game class.
    *
-   * Any fields other than `playerCount`, `playerNames`, `seed`, and `autoStart`
+   * Any fields other than `playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints` and `now`
    * are spread into `gameOptions` so game subclasses can receive custom options
    * (e.g. `{ tutorialSetup: true }` for a tutorial-mode board position). Every
    * game option the project's `boardsmith.json` declares (the nearest one at
@@ -209,6 +215,7 @@ export class TestGame<G extends Game = Game> {
       seed: _s,
       autoStart: _a,
       checkpoints,
+      now,
       ...extraOptions
     } = options;
 
@@ -228,6 +235,7 @@ export class TestGame<G extends Game = Game> {
       declaredGameOptions: projectGameOptions(),
     });
 
+    if (now !== undefined) runner.setNow(now);
     const testGame = new TestGame(runner, seed);
 
     if (options.autoStart !== false) {

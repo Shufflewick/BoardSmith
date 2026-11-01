@@ -1393,6 +1393,12 @@ export class FlowEngine<G extends Game = Game> {
     return typeof data.openedAt === 'number' ? data.openedAt : null;
   }
 
+  /** Open the open timed step again at `now`, as a new game started from a saved position does (#1532). */
+  reopenTimedStep(now: number): void {
+    const frame = this.stack[this.stack.length - 1];
+    if (typeof frame?.data?.timeLimitMs === 'number') frame.data = { ...frame.data, openedAt: now };
+  }
+
   /** Whether the step awaiting input is a simultaneous step that undoes per seat (#1526). */
   private openStepUndoesPerSeat(): boolean {
     const top = this.stack[this.stack.length - 1];

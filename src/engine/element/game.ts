@@ -57,7 +57,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, type AcceptedArgs, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, readingCondition, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -3394,23 +3394,32 @@ export class Game<
    * host's instant for the op being run, less the host's instant for the op
    * that opened the step. Read it in the rules of an `actionStep` or
    * `simultaneousActionStep` that declares `timeLimitMs` -- an action's
-   * `condition`, `disabled`, `validate` or `execute` -- to refuse something
-   * during part of the window.
+   * `disabled`, `validate` or `execute` -- to refuse something during part of
+   * the window. A `condition` may not read it: offers are not re-asked as time
+   * passes, so an action it hid would stay hidden.
    *
    * The engine reads no clock: the host stamps every op with its own
    * (`executeOp`'s `hostOptions.now`), so a client cannot move it. The opening
    * instant is kept on the step's frame, and the last stamp on the snapshot, so
    * a restore, an undo and a bot's search copy all measure the same way.
    *
-   * @throws when no timed step is open, or when the host stamped no instant.
+   * @throws when read in a condition, when no timed step is open, or when the host stamped no instant.
    */
   stepElapsedMs(): number {
+    if (readingCondition()) {
+      throw new Error(
+        'stepElapsedMs() was read in a condition. A condition decides which actions a step offers when it ' +
+          'opens and after each move, and is not asked again as time passes, so an action it hides would ' +
+          'stay hidden once the time is up. Grey the action with .disabled() and a reason, or refuse the ' +
+          'submission in .validate().',
+      );
+    }
     const openedAt = this._flowEngine?.openTimedStepOpenedAt();
     if (openedAt === undefined) {
       throw new Error(
         'stepElapsedMs() measures how long the open timed step has been open, but no step with timeLimitMs ' +
           'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
-          'timeLimitMs: its actions\' condition, disabled, validate or execute.',
+          'timeLimitMs: its actions\' disabled, validate or execute.',
       );
     }
     if (openedAt === null || this._hostNow === undefined) {
@@ -3422,6 +3431,16 @@ export class Game<
     }
     // Two host machines' clocks can disagree by a little; a step is never open for less than no time.
     return Math.max(0, this._hostNow - openedAt);
+  }
+
+  /**
+   * Open the open timed step again at the host's instant for this op: a new
+   * game started from a saved position starts its clock then, not when the
+   * position was saved (#1532).
+   * @internal
+   */
+  reopenStepClock(): void {
+    if (this._hostNow !== undefined) this._flowEngine?.reopenTimedStep(this._hostNow);
   }
 
   /**

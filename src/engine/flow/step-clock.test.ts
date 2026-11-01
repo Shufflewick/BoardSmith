@@ -2,8 +2,10 @@ import { describe, it, expect } from 'vitest';
 import { createSnapshot } from '../utils/index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
-import type { Game } from '../index.js';
+import { Action, type Game, type GameOptions } from '../index.js';
+import { TestGame } from '../../testing/test-game.js';
 import {
+  DeployGame,
   PLAYBACK_MS,
   PlaybackGame,
   UntimedDeployGame,
@@ -83,6 +85,34 @@ describe('game.stepElapsedMs()', () => {
     runner.setNow(START);
     runner.start();
     expect(() => runner.game.stepElapsedMs()).toThrow(/no step with timeLimitMs is open/);
+  });
+});
+
+/** A game that hides an action with a `condition` reading the clock, which is never asked again as time passes. */
+class ConditionClockGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['peek', 'commit']);
+    this.registerAction(
+      Action.create<ConditionClockGame>('peek')
+        .condition({ 'playback over': (ctx) => ctx.game.stepElapsedMs() >= PLAYBACK_MS })
+        .execute(() => {}),
+    );
+  }
+}
+
+describe('where a rule may read the step clock', () => {
+  it('refuses a condition that reads it, naming disabled and validate instead', () => {
+    const runner = new GameRunner({ GameClass: ConditionClockGame, gameType: 'step-clock', gameOptions: opts });
+    runner.setNow(START);
+    expect(() => runner.start()).toThrow(/stepElapsedMs\(\) was read in a condition.*\.disabled\(\).*\.validate\(\)/s);
+  });
+
+  it('lets a TestGame stamp the instant its opening step opens at', () => {
+    const testGame = TestGame.create(PlaybackGame, { playerCount: 2, now: START });
+    expect(testGame.runner.performAction('levelUp', 1, {}).success).toBe(false);
+
+    testGame.runner.setNow(START + PLAYBACK_MS);
+    expect(testGame.runner.performAction('levelUp', 1, {}).success).toBe(true);
   });
 });
 

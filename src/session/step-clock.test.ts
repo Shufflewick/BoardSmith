@@ -45,6 +45,17 @@ describe('executeOp hostOptions.now', () => {
     expect((landed.playerViews[0] as View).state.disabledActions).toBeUndefined();
   });
 
+  it('opens the step afresh on a start from a saved position, which is a new game', async () => {
+    const saved = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, { now: START }));
+    const DAY = 86_400_000;
+    const restarted = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, {
+      now: START + DAY,
+      seedSnapshot: saved.snapshot,
+    }));
+    expect((restarted.playerViews[0] as View).state.disabledActions).toEqual({ levelUp: REASON });
+    refused(await levelUp(restarted.snapshot, START + DAY + PLAYBACK_MS - 1));
+  });
+
   it('refuses to run a game that reads the step clock when the host stamped no instant, saying how to stamp one', async () => {
     const failed = refused(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }));
     expect(failed.error).toContain('hostOptions.now');
