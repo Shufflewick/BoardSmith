@@ -324,9 +324,22 @@ function buildRandomArgs(
     }
     return { ok: true, args: rng.pick(moves) };
   }
+  return drawAcceptedPicks(game, actionDef, player, rng, onSelectionChoices);
+}
 
-  // A number is drawn from its min and max, and whether the action takes it
-  // can depend on other picks, which only the rules know (#1543).
+/**
+ * {@link drawPicks}, drawn again while the action refuses the move for its
+ * numbers, at most {@link REFUSED_DRAWS} draws in all (#1543): a number is
+ * drawn from its min and max, and whether the action takes it can depend on
+ * other picks, which only the rules know.
+ */
+function drawAcceptedPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
+): RandomArgs {
   const numbers = actionDef.selections.filter((s): s is NumberSelection => s.type === 'number');
   const refusable = Boolean(actionDef.validate) || numbers.some((n) => n.validate);
   let refusal = '';
