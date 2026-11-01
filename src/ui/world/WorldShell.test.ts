@@ -1329,11 +1329,12 @@ describe('WorldShell — the controls menu (#1443)', () => {
       attachTo: document.body,
     });
     await drawn(wrapper, stateFrame());
-    const shows = () => [wrapper.get('[data-testid="bs-seats"]').isVisible(), wrapper.get('[data-testid="bs-actionbar"]').isVisible()];
-    expect(shows()).toEqual([false, false]);
+    // jsdom applies no stylesheet: the class is what PlayShell's CSS hides the chrome under.
+    const hidden = () => wrapper.get('.game-shell__game').classes().includes('chrome-hidden');
+    expect(hidden()).toBe(true);
     fieldOnly.value = false;
     await nextTick();
-    expect(shows()).toEqual([true, true]);
+    expect(hidden()).toBe(false);
     wrapper.unmount();
   });
 

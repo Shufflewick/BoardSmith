@@ -45,12 +45,9 @@ async function mountAtTable() {
   return wrapper;
 }
 
-type Shell = Awaited<ReturnType<typeof mountAtTable>>;
-const chromeShows = (wrapper: Shell) => ({
-  seats: wrapper.get('[data-testid="bs-seats"]').isVisible(),
-  actionBar: wrapper.get('[data-testid="bs-actionbar"]').isVisible(),
-  toggle: wrapper.get('[data-testid="bs-actionbar-toggle"]').isVisible(),
-});
+// jsdom applies no stylesheet, so this reads the class PlayShell's CSS hides the chrome under; scripts/hide-chrome-browser.mjs measures what shows.
+const chromeHidden = (wrapper: { get(selector: string): { classes(): string[] } }) =>
+  wrapper.get('.game-shell__game').classes().includes('chrome-hidden');
 
 afterEach(() => {
   fieldOnly.value = false;
@@ -60,13 +57,13 @@ afterEach(() => {
 describe('GameShell useHideChrome (#1538)', () => {
   it('hides the players panel and the action bar while the board asks, and shows them when it stops', async () => {
     const wrapper = await mountAtTable();
-    expect(chromeShows(wrapper)).toEqual({ seats: true, actionBar: true, toggle: true });
+    expect(chromeHidden(wrapper)).toBe(false);
 
     await wrapper.get('[data-testid="eye"]').trigger('click');
-    expect(chromeShows(wrapper)).toEqual({ seats: false, actionBar: false, toggle: false });
+    expect(chromeHidden(wrapper)).toBe(true);
 
     await wrapper.get('[data-testid="eye"]').trigger('click');
-    expect(chromeShows(wrapper)).toEqual({ seats: true, actionBar: true, toggle: true });
+    expect(chromeHidden(wrapper)).toBe(false);
     wrapper.unmount();
   });
 
@@ -87,7 +84,7 @@ describe('GameShell useHideChrome (#1538)', () => {
     await nextTick();
     await nextTick();
     expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
-    expect((wrapper.get('[data-testid="bs-actionbar"]').element.parentElement as HTMLElement).style.display).toBe('');
+    expect(chromeHidden(wrapper)).toBe(false);
     wrapper.unmount();
   });
 });

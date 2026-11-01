@@ -34,14 +34,14 @@ import Field from './components/Field.vue';
 export default defineGameUIs({ Field: defaultUI(Field) });
 `;
 
-const WIDTHS = [1440, 390];
+const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 
 await runBrowserRegression(
   { script: 'hide-chrome-browser.mjs', table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Field.vue': FIELD_BOARD } } },
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      const page = await browser.newPage({ viewport: { width: WIDTHS[0], height: 900 } });
+      const page = await browser.newPage({ viewport: VIEWPORTS[0] });
       const frame = await openTableSample(page, hostUrl);
       const eye = frame.locator('.eye');
       /** What the player sees: whether each piece of chrome shows, and the board region's box against the frame's. */
@@ -60,8 +60,9 @@ await runBrowserRegression(
         };
       });
 
-      for (const width of WIDTHS) {
-        await page.setViewportSize({ width, height: width < 600 ? 844 : 900 });
+      for (const viewport of VIEWPORTS) {
+        const { width } = viewport;
+        await page.setViewportSize(viewport);
         await check(`the board's button hides the players panel and the action bar, and the field fills the frame, at ${width}px`, async () => {
           await eye.click();
           await frame.getByRole('button', { name: 'Show controls' }).waitFor({ timeout: 5_000 });
