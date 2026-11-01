@@ -1961,10 +1961,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </template>
 
         <!-- Choice selection. This comes AFTER multi-select so multiSelect+dependsOn uses the
-             multi-select template above. A dependent pick (filterBy or dependsOn) is shown even
-             before its choices arrive, and a click on one of its choices shows that choice on
-             the board before answering the pick (executeChoice). -->
-        <template v-else-if="currentPick.type === 'choice' && (isDependentChoicePick || filteredChoices.length)">
+             multi-select template above. Every other choice pick lands here, even with no
+             choices, so its prompt, empty state and skip button always show (#1539). A click on
+             a dependent pick's (filterBy or dependsOn) choice shows that choice on the board
+             before answering the pick (executeChoice). -->
+        <template v-else-if="currentPick.type === 'choice'">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
