@@ -161,6 +161,45 @@ class LeapRaceGame extends RaceGame {
   }
 }
 
+/**
+ * Each seat in turn shifts a marker from 0 or 100 by a number in -100..100,
+ * confirming the shift by name; the action's `validate` keeps the
+ * marker in 0..100, so whether a number is accepted depends on the start picked
+ * before it (#1543). With `refuseAll` it refuses every shift; with
+ * `refuseFrom100` the `from` pick refuses 100, which it still offers (#910).
+ * The game ends after six turns.
+ */
+class ShiftGame extends Game<ShiftGame, Player> {
+  turns = 0;
+
+  constructor(options: GameOptions & { refuseAll?: boolean; refuseFrom100?: boolean }) {
+    super(options);
+    const turn = (_args: unknown, ctx: { game: ShiftGame }) => {
+      if (++ctx.game.turns === 6) ctx.game.finish([]);
+      return { success: true };
+    };
+    this.registerAction(
+      Action.create<ShiftGame>('shift')
+        .chooseFrom('from', { choices: [0, 100], validate: (from) => !options.refuseFrom100 || from !== 100 })
+        .enterNumber('by', { min: -100, max: 100, integer: true })
+        .chooseFrom('confirm', { choices: (ctx) => [`shift by ${ctx.args.by as number}`] })
+        .validate((args) => {
+          if (options.refuseAll) return 'Shifting is never allowed.';
+          const to = (args.from as number) + (args.by as number);
+          return (to >= 0 && to <= 100) || 'The marker must stay between 0 and 100.';
+        })
+        .execute(turn),
+    );
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: ['shift'] }) }),
+      }),
+    });
+  }
+}
+
 const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers: 4 };
 
 /** The fixture greedy policy: take the largest step. */
@@ -466,6 +505,39 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toBe(
       "Policy 'stalling' waits until instant 0, which is not after the game's instant 0, so the game would never move on. " +
         'Wait only for an instant later than the game\'s, or return the move the seat makes now.',
+    );
+  });
+
+  // #1543: random drew a number in min..max without asking validate, and the game failed on the refusal.
+  it("random plays only numbers the action's validate accepts, drawing the move again when it refuses one, with the picks after a number following it", async () => {
+    // Seeds whose draws find an accepted move each turn: half of all draws are refused.
+    for (const seed of ['s4', 's6', 's7', 's8']) {
+      const result = await playGame(
+        { gameClass: ShiftGame },
+        { playerCount: 2, seed, policies: [random(), random()], maxActions: 20 },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.completed).toBe(true);
+    }
+  });
+
+  it('random still plays a pick the engine offered and the action refuses, so the game fails on it (#910, #1543)', async () => {
+    const result = await playGame(
+      { gameClass: ShiftGame },
+      { playerCount: 2, seed: 'offered', gameOptions: { refuseFrom100: true }, policies: [random(), random()], maxActions: 20 },
+    );
+    expect(result.stuck).toBe(true);
+    expect(result.error).toMatch(/^Action 'shift' rejected the move \{"from":100,/);
+  });
+
+  it("random names the action's refusal as the reason its seat has no move when every draw is refused", async () => {
+    const result = await playGame(
+      { gameClass: ShiftGame },
+      { playerCount: 2, seed: 'refused', gameOptions: { refuseAll: true }, policies: [random(), random()], maxActions: 20 },
+    );
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(
+      /action 'shift' refused all 3 moves the simulator drew for its numbers, the last with: Shifting is never allowed/,
     );
   });
 

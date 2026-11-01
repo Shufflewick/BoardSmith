@@ -48,6 +48,13 @@ shares the game's engine. Its options are described in
 - `random()` - Builds one random, valid move from each of the seat's enabled
   actions, step by step from the engine's own choices, and one from its held
   follow-up (`turn.followUp`), and plays one of them (#911).
+  A number is drawn from its `min` and `max`, so when the action's `validate`
+  or the number's own refuses the move (a range that depends on other picks,
+  #1543), the policy draws the whole move again, three draws in all, as the
+  smoke walk tries three numbers; an action that refuses all three has no move
+  this turn, and the refusal is the reason given if its seat has no other. A
+  move refused for a pick the engine offered is played as drawn, so the game
+  fails on it (#910).
   The policy `simulateRandomGames` plays every seat with. A follow-up's move
   is built differently from an action's: it comes from move enumeration, so a
   number input its args leave open is listed only with `min`, `max` and

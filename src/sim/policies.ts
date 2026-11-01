@@ -108,7 +108,8 @@ export interface SelectionChoicesObservation {
 /**
  * Builds one random, valid move from each enabled action, step by step from
  * the engine's own choices, and from the seat's held follow-up (#911), and
- * plays one of them. `onSelectionChoices` sees
+ * plays one of them. A move refused for its numbers is drawn again, three
+ * draws in all (#1543). `onSelectionChoices` sees
  * every choice, element and elements step it builds for an action (not a
  * repeating one, whose candidates exist only on a scratch copy); it cannot
  * change the game. A follow-up's move comes from move enumeration instead, so
@@ -289,6 +290,9 @@ function resolveBounds(
   return { min: cfg.min ?? 1, max: cfg.max ?? Infinity };
 }
 
+/** An action's random args, or why the random policy has none for it. */
+type RandomArgs = { ok: true; args: Record<string, unknown> } | { ok: false; reason: string };
+
 /**
  * Build one random, valid set of arguments for an action using the engine's
  * own choice introspection. Returns the buildable args, or a reason the action
@@ -301,7 +305,7 @@ function buildRandomArgs(
   player: Player,
   rng: SeededRandom,
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void
-): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
+): RandomArgs {
   // A repeating selection's picks change the game (`onEach`) as they are made,
   // so what each pick may be is only known by making them. The engine's move
   // enumerator does exactly that on a scratch copy (#325); one of its moves is
@@ -320,7 +324,66 @@ function buildRandomArgs(
     }
     return { ok: true, args: rng.pick(moves) };
   }
+  return drawAcceptedPicks(game, actionDef, player, rng, onSelectionChoices);
+}
 
+/**
+ * {@link drawPicks}, drawn again while the action refuses the move for its
+ * numbers, at most {@link REFUSED_DRAWS} draws in all (#1543): a number is
+ * drawn from its min and max, and whether the action takes it can depend on
+ * other picks, which only the rules know.
+ */
+function drawAcceptedPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
+): RandomArgs {
+  const numbers = actionDef.selections.filter((s): s is NumberSelection => s.type === 'number');
+  const refusable = Boolean(actionDef.validate) || numbers.some((n) => n.validate);
+  let refusal = '';
+  for (let draw = 0; draw < REFUSED_DRAWS; draw++) {
+    const built = drawPicks(game, actionDef, player, rng, onSelectionChoices);
+    if (!built.ok || !refusable || !numbers.some((n) => n.name in built.args)) return built;
+    const judged = game.getActionExecutor().validateAction(actionDef, player, built.args);
+    if (judged.valid || !offeredPicksPass(game, actionDef, player, built.args)) return built;
+    refusal = judged.errors.join(' ');
+  }
+  return {
+    ok: false,
+    reason: `action '${actionDef.name}' refused all ${REFUSED_DRAWS} moves the simulator drew for its numbers, the last with: ${refusal.replace(/\.$/, '')}`,
+  };
+}
+
+/** How many moves the random policy draws for an action that refuses its numbers, as the smoke walk tries three (#466). */
+const REFUSED_DRAWS = 3;
+
+/**
+ * Whether the picks the engine offered pass their own checks, so a refusal is
+ * the numbers' or the whole move's rule. One that does not is the game's to
+ * fix, and is played for the simulator to report (#910).
+ */
+function offeredPicksPass(game: Game, actionDef: ActionDefinition, player: Player, args: Record<string, unknown>): boolean {
+  const offeredOnly: ActionDefinition = {
+    ...actionDef,
+    validate: undefined,
+    selections: actionDef.selections.map((s) => (s.type === 'number' ? { ...s, validate: undefined } : s)),
+  };
+  return game.getActionExecutor().validateAction(offeredOnly, player, args).valid;
+}
+
+/**
+ * One random pick for each selection of an action with no repeating
+ * selection, each from the engine's own choices, or why it has none.
+ */
+function drawPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
+): RandomArgs {
   // Picks are kept as the elements and values offered, and submitted as they
   // are: performAction resolves an element by its id against the live game.
   const working: Record<string, unknown> = {};
