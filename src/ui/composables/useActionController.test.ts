@@ -1222,6 +1222,35 @@ describe('useActionController', () => {
       // After execution
       expect(controller.isExecuting.value).toBe(false);
     });
+
+    it('names the action that is out, so a button can tell its own request from another (#1533)', async () => {
+      let reply!: (r: { success: boolean; error?: string }) => void;
+      sendAction.mockImplementation(() => new Promise((resolve) => { reply = resolve; }));
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
+
+      expect(controller.executingAction.value).toBe(null);
+      const sent = controller.execute('endTurn');
+      expect(controller.executingAction.value).toBe('endTurn');
+      reply({ success: false, error: 'No' });
+      await sent;
+      expect(controller.executingAction.value).toBe(null);
+    });
+
+    it('names the action out for the viewing seat only (#1533)', async () => {
+      let reply!: (r: { success: boolean }) => void;
+      sendAction.mockImplementation(() => new Promise((resolve) => { reply = resolve; }));
+      const playerSeat = ref(1);
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, playerSeat });
+
+      const sent = controller.execute('endTurn');
+      playerSeat.value = 2;
+      expect(controller.executingAction.value).toBe(null);
+      playerSeat.value = 1;
+      expect(controller.executingAction.value).toBe('endTurn');
+      reply({ success: true });
+      await sent;
+      expect(controller.executingAction.value).toBe(null);
+    });
   });
 
   describe('state cleanup', () => {

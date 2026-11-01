@@ -422,6 +422,8 @@ export interface UseActionControllerReturn {
   isReady: ComputedRef<boolean>;
   /** Whether the current seat has an action out to the server */
   isExecuting: Readonly<Ref<boolean>>;
+  /** Name of the action the current seat has out to the server, or null when none is */
+  executingAction: Readonly<Ref<string | null>>;
   /** Last validation error */
   lastError: Ref<string | null>;
   /**
