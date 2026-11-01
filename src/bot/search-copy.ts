@@ -74,6 +74,8 @@ export function restoreSeatCopy<G extends Game>(
   if (snapshot.sequence !== undefined) {
     game._ctx.sequence = snapshot.sequence;
   }
+  // The search reads the step clock at the instant the live game was stamped with (#1532).
+  game._hostNow = snapshot.now;
 
   // The search game's own RNG position, never the live game's (#776).
   game.setRandomState(randomState);

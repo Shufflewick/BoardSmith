@@ -1125,6 +1125,14 @@ export class Game<
   /** Flow engine instance */
   private _flowEngine?: FlowEngine<G>;
 
+  /**
+   * The host's instant for the op being run, epoch ms (#1532), read by
+   * {@link stepElapsedMs}. Stamped by `GameRunner.setNow`, carried on the
+   * snapshot, never in the tree.
+   * @internal
+   */
+  _hostNow?: number;
+
   /** Debug registry for custom debug data (dev mode only) */
   private _debugRegistry: Map<string, () => unknown> = new Map();
 
@@ -3379,6 +3387,41 @@ export class Game<
       const index = position - this._messagesEvicted;
       if (index >= 0 && index < this.messages.length) this.messages[index] = { ...this.messages[index], to: [] };
     }
+  }
+
+  /**
+   * How long the open timed step has been open, in milliseconds (#1532): the
+   * host's instant for the op being run, less the host's instant for the op
+   * that opened the step. Read it in the rules of an `actionStep` or
+   * `simultaneousActionStep` that declares `timeLimitMs` -- an action's
+   * `condition`, `disabled`, `validate` or `execute` -- to refuse something
+   * during part of the window.
+   *
+   * The engine reads no clock: the host stamps every op with its own
+   * (`executeOp`'s `hostOptions.now`), so a client cannot move it. The opening
+   * instant is kept on the step's frame, and the last stamp on the snapshot, so
+   * a restore, an undo and a bot's search copy all measure the same way.
+   *
+   * @throws when no timed step is open, or when the host stamped no instant.
+   */
+  stepElapsedMs(): number {
+    const openedAt = this._flowEngine?.openTimedStepOpenedAt();
+    if (openedAt === undefined) {
+      throw new Error(
+        'stepElapsedMs() measures how long the open timed step has been open, but no step with timeLimitMs ' +
+          'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
+          'timeLimitMs: its actions\' condition, disabled, validate or execute.',
+      );
+    }
+    if (openedAt === null || this._hostNow === undefined) {
+      throw new Error(
+        `stepElapsedMs() needs the host's instant, and this game has no instant for ${openedAt === null ? "the op that opened the step" : 'this op'}. ` +
+          "A host stamps every op with its own clock (executeOp's hostOptions.now; GameRunner.setNow in a test). " +
+          'A replay of the move history (GameRunner.replay) has none, because the history records no instants.',
+      );
+    }
+    // Two host machines' clocks can disagree by a little; a step is never open for less than no time.
+    return Math.max(0, this._hostNow - openedAt);
   }
 
   /**

@@ -38,7 +38,7 @@ import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persist
 import { PickHandler } from './pick-handler.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { missingFieldError } from './parse-executor-op.js';
-import { runnerFromSnapshot } from './runner-from-snapshot.js';
+import { runnerFromSnapshot, withHostState } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
   offerFollowUp,
@@ -626,6 +626,8 @@ export interface GameDefinitionLike {
  */
 type RunnerDef = GameDefinitionLike & {
   readonly randomness: RandomnessPolicy;
+  /** The host's instant for this op (`hostOptions.now`), never read off the bundle. */
+  readonly now?: number;
   readonly checkpoints: RunnerCheckpointPolicy & { readonly history: 'turn' | 'full' };
 };
 
@@ -832,6 +834,8 @@ function handleStart(
     // platform lobby passes it.
     declaredGameOptions: declaredGameOptionsOf(def),
   });
+  // The opening step opens at this op's instant (#1532).
+  if (def.now !== undefined) runner.setNow(def.now);
 
   runner.start();
 
@@ -1345,10 +1349,7 @@ function runnerFromCheckpoint(
     randomness: def.randomness,
     undo: def.undo,
   });
-  if (runner && def.tutorial) {
-    (runner.game as Game).tutorialDefinition = def.tutorial;
-  }
-  return runner;
+  return runner && withHostState(runner, def);
 }
 
 /** A debug op's refusal when `snapshot` holds no checkpoint at `actionIndex`, naming why. */
@@ -1378,14 +1379,11 @@ function handleRestoreEarlier(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'restoreEarlier' }>,
 ): OpResultFor<'restoreEarlier'> {
-  const runner = restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
+  const runner = withHostState(restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
     checkpoints: def.checkpoints,
     randomness: def.randomness,
     undo: def.undo,
-  });
-  if (def.tutorial) {
-    (runner.game as Game).tutorialDefinition = def.tutorial;
-  }
+  }), def);
   return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
 }
 
@@ -1685,6 +1683,14 @@ export interface ExecuteOpHostOptions {
    * turn start is refused with the reason.
    */
   fullHistory?: boolean;
+  /**
+   * The host's instant for this op, epoch ms, read from its own clock as it
+   * runs the op (#1532). It is what `game.stepElapsedMs()` measures with, and
+   * the instant a step this op opens opened at. Host options are the host's
+   * alone, so no client can set it. Leave it out and a game whose rules read
+   * the step clock refuses the op, saying so.
+   */
+  now?: number;
 }
 
 async function runOp(
@@ -1710,7 +1716,7 @@ async function runOp(
     // `boardsmith dev` keeps it all for time travel, a hosted table keeps back
     // to the turn start.
     const history = hostOptions?.fullHistory === true ? 'full' : 'turn';
-    const def: RunnerDef = { ...definition, randomness, checkpoints: { ...definition.checkpoints, history } };
+    const def: RunnerDef = { ...definition, randomness, now: hostOptions?.now, checkpoints: { ...definition.checkpoints, history } };
     const { playerCount } = gameOptions;
     // A BUNDLE WITH NO SEAT RANGE HAS NO TABLE, and is refused by name rather
     // than compared against `undefined` -- `playerCount < undefined` is false,

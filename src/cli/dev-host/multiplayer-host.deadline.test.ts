@@ -29,7 +29,9 @@ import {
 } from '../../session/index.js';
 import { ErrorCode } from '../../types/protocol.js';
 import {
+  PLAYBACK_MS,
   fixedDeployDefinition,
+  playbackDefinition,
   untimedDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 import type { WorldHostClock } from './node-world-clock.js';
@@ -176,13 +178,14 @@ function makeHost(
     op.type === 'action' || op.type === 'expireSeat';
   const actionsFor = (seat: number) =>
     executed.filter((e) => closesSeat(e.op) && e.op.player === seat);
-  const commit = (clientId: string, requestId: string) =>
+  const act = (clientId: string, requestId: string, actionName: string) =>
     host.handleMessage(clientId, {
       type: 'server_request',
       requestId,
       op: 'action',
-      payload: { actionName: 'commit', args: {}, boundaryKey: clients.key(clientId) },
+      payload: { actionName, args: {}, boundaryKey: clients.key(clientId) },
     });
+  const commit = (clientId: string, requestId: string) => act(clientId, requestId, 'commit');
   /**
    * Seat both players as humans, A in seat 1 and B in seat 2, in a game that
    * started with both seated. The first hello starts the game with seat 2 as a
@@ -215,7 +218,7 @@ function makeHost(
   };
   const due = (clientId: string) =>
     dueSeats((lastFrame(clientId).view as { flowState: SeatActivityState }).flowState);
-  return { host, clock, lastFrame, errors, actions, actionsFor, expiries, reported, firesNothing, commit, seatBoth, due };
+  return { host, clock, lastFrame, errors, actions, actionsFor, expiries, reported, firesNothing, act, commit, seatBoth, due };
 }
 
 let info: ReturnType<typeof vi.spyOn>;
@@ -489,3 +492,24 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(h.lastFrame('A').deadlineAt).toBe(START + WINDOW_MS);
   });
 });
+
+describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
+  it('greys and refuses an action during the first part of a timed step, and lands it once that has passed', async () => {
+    const h = makeHost(playbackDefinition);
+    await h.seatBoth();
+    const reason = 'The battle is still playing back.';
+    const offer = () => (h.lastFrame('A').view as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
+    expect(offer()).toEqual({ levelUp: reason });
+
+    await h.act('A', 'early', 'levelUp');
+    const [early] = h.actionsFor(1);
+    expect(early.result.success).toBe(false);
+    expect((early.result as { error: string }).error).toContain(reason);
+
+    h.clock.advance(PLAYBACK_MS);
+    await h.act('A', 'late', 'levelUp');
+    expect(h.actionsFor(1)[1].result.success).toBe(true);
+    expect(offer()).toBeUndefined();
+  });
+});
+

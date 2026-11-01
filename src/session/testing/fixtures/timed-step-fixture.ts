@@ -37,14 +37,14 @@ type Limit = number | ((ctx: FlowContext<DeployGame>) => number);
 /** The step a round is made of: every seat at once, or one seat after another. */
 type Shape = 'simultaneous' | 'sequential';
 
-function roundStep(shape: Shape, limit: Limit | undefined): FlowNode<DeployGame> {
+function roundStep(shape: Shape, limit: Limit | undefined, actions: string[]): FlowNode<DeployGame> {
   const timeLimitMs = limit === undefined ? {} : { timeLimitMs: limit };
   if (shape === 'sequential') {
-    return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions: ['commit'], ...timeLimitMs }) });
+    return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions, ...timeLimitMs }) });
   }
   return simultaneousActionStep<DeployGame>({
     name: 'deploy',
-    actions: ['commit'],
+    actions,
     playerDone: (ctx, player) => ctx.game.committed.includes(player.seat),
     allDone: (ctx) => {
       if (ctx.game.committed.length < 2) return false;
@@ -61,7 +61,7 @@ export class DeployGame extends Game<DeployGame, Player> {
   /** Seats that committed in the current round. */
   committed: number[] = [];
 
-  constructor(options: GameOptions, limit?: Limit, shape: Shape = 'simultaneous') {
+  constructor(options: GameOptions, limit?: Limit, shape: Shape = 'simultaneous', actions = ['commit']) {
     super(options);
     this.registerAction(
       Action.create('commit').execute((_args, ctx) => {
@@ -72,7 +72,7 @@ export class DeployGame extends Game<DeployGame, Player> {
       }),
     );
     this.setFlow({
-      root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit) }),
+      root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit, actions) }),
     });
   }
 }
@@ -113,3 +113,28 @@ export const fixedDeployDefinition = twoSeat(FixedDeployGame, 'timed-step-fixed'
 export const growingDeployDefinition = twoSeat(GrowingDeployGame, 'timed-step-growing');
 export const untimedDeployDefinition = twoSeat(UntimedDeployGame, 'timed-step-untimed');
 export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
+
+/** How long `PlaybackGame`'s battle plays back once a deploy step opens. */
+export const PLAYBACK_MS = 30_000;
+
+/**
+ * Windup Warfare's level-up rule (#1532): each 120 s deploy round opens on a
+ * battle both screens play back, and `levelUp` is refused until the playback
+ * has ended, measured on the step's own clock rather than on a client's word.
+ */
+export class PlaybackGame extends DeployGame {
+  levelUps = 0;
+
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['levelUp', 'commit']);
+    this.registerAction(
+      Action.create<PlaybackGame>('levelUp')
+        .disabled((ctx) => ctx.game.stepElapsedMs() < PLAYBACK_MS && 'The battle is still playing back.')
+        .execute((_args, ctx) => {
+          ctx.game.levelUps += 1;
+        }),
+    );
+  }
+}
+
+export const playbackDefinition = twoSeat(PlaybackGame, 'timed-step-playback');

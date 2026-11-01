@@ -131,13 +131,15 @@ async function driveFixture(def: GameDefinitionLike) {
   // host's pump runs it, and the move it finds sent by hand, play exactly one
   // due seat per step, which is the bounded "several steps" this test needs.
   const table = { playerCount, seed: 'flow-state-clone' };
-  const session = createHeadlessSession(def, table, []);
+  // Stamped as a host stamps every op, so a fixture whose rules read the step clock runs too (#1532).
+  const now = 1_700_000_000_000;
+  const session = createHeadlessSession(def, { ...table, now: () => now }, []);
   await session.start();
   let steps = 0;
   for (let i = 0; i < STEPS; i++) {
     const flowState = session.host.flowState as FlowState | null;
     if (!flowState || flowState.complete) break;
-    const found = await executeOp(def, table, session.host.snapshot, null, { type: 'botSuggest', seats });
+    const found = await executeOp(def, table, session.host.snapshot, null, { type: 'botSuggest', seats }, { now });
     if (!found.success || found.botPlayer === undefined) break;
     const result = await session.host.handleOp(found.botPlayer, suggestedMoveOp(session.host.snapshot, found));
     if (!result.success) break;

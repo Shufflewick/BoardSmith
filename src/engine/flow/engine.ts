@@ -1381,6 +1381,18 @@ export class FlowEngine<G extends Game = Game> {
     }
   }
 
+  /**
+   * The host's instant when the open timed step opened (#1532): `undefined`
+   * when the innermost frame is no step with `timeLimitMs`, `null` when the
+   * host stamped no instant on the op that opened it. Not gated on
+   * `awaitingInput`: a step's offers are read while it is being entered.
+   */
+  openTimedStepOpenedAt(): number | null | undefined {
+    const data = this.stack[this.stack.length - 1]?.data;
+    if (typeof data?.timeLimitMs !== 'number') return undefined;
+    return typeof data.openedAt === 'number' ? data.openedAt : null;
+  }
+
   /** Whether the step awaiting input is a simultaneous step that undoes per seat (#1526). */
   private openStepUndoesPerSeat(): boolean {
     const top = this.stack[this.stack.length - 1];
@@ -2116,8 +2128,10 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Resolve a step's declared time limit ONCE, as it starts awaiting input, and
-   * keep the number on its frame (#300).
+   * Resolve a step's declared time limit ONCE, as it is entered and before its
+   * offers are read, and keep the number on its frame (#300), with the host's
+   * instant for the op that opened it (#1532), which `game.stepElapsedMs()`
+   * measures from, so its actions' rules can read the clock while they are offered.
    *
    * Once per frame: an action step re-runs this executor after every move while
    * it stays open (`repeatUntil`, `maxMoves`), and a seat's move must not move
@@ -2135,7 +2149,8 @@ export class FlowEngine<G extends Game = Game> {
   ): void {
     if (config.timeLimitMs === undefined || frame.data?.timeLimitMs !== undefined) return;
     const timeLimitMs = resolveTimeLimit(config.timeLimitMs, context, config.name ?? stepType);
-    frame.data = { ...frame.data, timeLimitMs };
+    const openedAt = this.game._hostNow;
+    frame.data = { ...frame.data, timeLimitMs, ...(openedAt !== undefined && { openedAt }) };
   }
 
   private executeActionStep(
@@ -2193,6 +2208,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
     this.currentPlayer = player;
+    this.openStepWindow(frame, config, context, 'action-step');
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2208,8 +2224,6 @@ export class FlowEngine<G extends Game = Game> {
     if (available.length === 0 && !minMovesMet) {
       throw new Error(`ActionStep requires ${config.minMoves} moves but only ${moveCount} were possible`);
     }
-
-    this.openStepWindow(frame, config, context, 'action-step');
 
     // Store config for getState() move count tracking
     this.currentActionConfig = config;
@@ -2247,10 +2261,10 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
     this.currentPlayer = player;
+    this.openStepWindow(frame, config, context, 'action-step');
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
-    this.openStepWindow(frame, config, context, 'action-step');
     this.currentActionConfig = config;
     this.moveCount = frame.data?.moveCount as number;
     this.availableActions = available;
@@ -2286,6 +2300,7 @@ export class FlowEngine<G extends Game = Game> {
     // boundary comes from `simultaneousUndoBoundary` (session/utils.ts), not
     // from a sequential run, so no run survives across it.
     this.turnRun = undefined;
+    this.openStepWindow(frame, config, context, 'simultaneous-action-step');
 
     for (const player of players) {
       if (this.seatEligibility(config, context, player, frame) !== 'awaited') continue;
@@ -2324,14 +2339,11 @@ export class FlowEngine<G extends Game = Game> {
     if (this.awaitingPlayers.length === 0) {
       if (config.allDone) {
         this.warnIfDeadlockedSimultaneousStep(config);
-        this.openStepWindow(frame, config, context, 'simultaneous-action-step');
         return { awaitingInput: true };
       }
       frame.completed = true;
       return { awaitingInput: false };
     }
-
-    this.openStepWindow(frame, config, context, 'simultaneous-action-step');
 
     // Don't mark completed - waiting for all players
     return { awaitingInput: true };

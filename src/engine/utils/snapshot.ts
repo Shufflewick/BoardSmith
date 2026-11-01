@@ -109,6 +109,13 @@ interface SnapshotFields {
   /** Random seed for deterministic replay */
   seed?: string;
 
+  /**
+   * The host's instant for the op that took this snapshot, epoch ms (#1532),
+   * so a restore or a bot's search copy reads `game.stepElapsedMs()` as that op
+   * did. Absent when the host stamped none. The next op's own stamp replaces it.
+   */
+  now?: number;
+
   /** Element sequence counter (`game._ctx.sequence`) captured at snapshot time.
    *  Restored after the tree is loaded so new-element ids stay aligned between
    *  dev and the executor. Without this, ids drift
@@ -560,6 +567,7 @@ function snapshotFields(
     winners: game.getWinners().map((p) => p.seat),
     actionHistory: [...actionHistory],
     seed,
+    ...(game._hostNow !== undefined && { now: game._hostNow }),
     sequence: game._ctx.sequence,
     ...snapshotRandom(game, opts),
   };

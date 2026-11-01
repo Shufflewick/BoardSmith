@@ -533,6 +533,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * Stamp the host's instant, epoch ms, on the ops that follow (#1532): what
+   * `game.stepElapsedMs()` measures with, and when a step opened by them
+   * opened. A host stamps each op from its own clock as it runs it; a test
+   * stamps whatever instant it needs.
+   */
+  setNow(now: number): void {
+    this.game._hostNow = now;
+  }
+
+  /**
    * Start the game flow
    */
   start(): FlowState {
@@ -1533,6 +1543,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // Preserve action history for the undo op (which reads runner.actionHistory).
     // It is intentionally NOT replayed.
     runner.actionHistory.push(...snapshot.actionHistory);
+    if (snapshot.now !== undefined) runner.setNow(snapshot.now);
     // Absent: nothing was dropped, the honest reading of a snapshot that does not say.
     runner.actionHistoryBase = snapshot.actionHistoryBase ?? 0;
 
@@ -1722,6 +1733,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         actionHistory: historyBefore(snapshot, actionIndex),
         actionHistoryBase: snapshot.actionHistoryBase,
         seed: snapshot.seed,
+        // The live game's last instant: an undo runs now, not when the checkpoint was taken.
+        now: snapshot.now,
         sequence: checkpoint.sequence,
         randomState: checkpoint.randomState,
         gameOptions: snapshot.gameOptions,
