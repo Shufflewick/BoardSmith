@@ -398,7 +398,8 @@ export interface PublishedViews {
  * - `change`: the game changed (a move, a start, an undo, a rules reload).
  * - `republish`: the game did not change; the host restated it (a hint, a
  *   heatmap, a demo frame, {@link SnapshotSessionHost.broadcastCurrent}, the
- *   offers built again by {@link SnapshotSessionHost.reoffer}).
+ *   offers built again by {@link SnapshotSessionHost.reoffer}, unless that
+ *   ended the step).
  * - `restore`: {@link SnapshotSessionHost.restore} brought the host back.
  * - `roster`: {@link SnapshotSessionHost.setBotSeats} changed whether a bot
  *   plays here.
@@ -1194,10 +1195,13 @@ export class SnapshotSessionHost {
   }
 
   /**
-   * Build every view again at the host's instant and publish it, with the
-   * game unchanged (#1536). Call it when the instant the last publish named as
+   * Build every view again at the host's instant and publish it, with no move
+   * made (#1536). Call it when the instant the last publish named as
    * `turnBoundary.reofferAt` has come: an action greyed by the step clock is
-   * offered then. It publishes with cause `republish`, pushes only the views
+   * offered then. Each seat's offered actions are worked out again too, so an
+   * action left with no enabled choice is no longer offered, and a step that
+   * leaves nobody anything to take ends as it would after a move (#1545). It
+   * publishes with cause `republish` (`change` when the step ended), pushes only the views
    * that changed, and persists the snapshot, which carries the next
    * `reofferAt`. Host-only: `handleOp` refuses `reoffer` from a seat.
    */
@@ -1444,6 +1448,7 @@ export class SnapshotSessionHost {
     // the round it named is over (a stale submission), in which case the picks
     // belong to the new round and must survive.
     const closing = closesSeat(op);
+    const boundaryBefore = this.turnBoundary().key;
     const res = await this.adapters.executeOp(
       this.snapshot,
       closing || seat === null ? null : this.pendingStates.get(seat) ?? null,
@@ -1471,8 +1476,9 @@ export class SnapshotSessionHost {
     if (replacesPosition(op, res)) this.#forgetReplacedTree();
     else if (seat !== null && undidSeatOnly(res)) this.transientTeachingState.delete(seat);
 
-    // A re-offer changed no move, only the instant the offers were built at (#1536).
-    await this.apply(res, seat ?? undefined, pending, op.type === 'reoffer' ? 'republish' : 'change');
+    // A re-offer made no move (#1536), but ends the step when it leaves nothing to take (#1545).
+    const restated = op.type === 'reoffer' && flowBoundaryKey(flowStateOf(res) as BoundaryKeyState | null) === boundaryBefore;
+    await this.apply(res, seat ?? undefined, pending, restated ? 'republish' : 'change');
     return res;
   }
 

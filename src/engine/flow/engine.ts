@@ -1011,7 +1011,8 @@ export class FlowEngine<G extends Game = Game> {
    * seat is left as it is: settling that action re-checks it by the same rules,
    * on every route the action takes (#973).
    *
-   * No-op when no simultaneous step is open: there is no stale list to correct.
+   * In an open sequential action step it offers that step's seat what it
+   * would after a move (`refreshActionStep`).
    *
    * Called from outside game code, it then ends the step when `allDone` holds,
    * as settling an action does; a seat made done outside an action otherwise
@@ -1025,6 +1026,7 @@ export class FlowEngine<G extends Game = Game> {
     // A complete flow prompts no seat, so there is nothing to admit.
     if (this.complete) return;
     const frame = this.stack[this.stack.length - 1];
+    if (frame?.node.type === 'action-step') return this.refreshActionStep(seat);
     if (!frame || frame.node.type !== 'simultaneous-action-step') return;
     const config = frame.node.config as SimultaneousActionStepConfig;
 
@@ -1089,6 +1091,18 @@ export class FlowEngine<G extends Game = Game> {
     this.awaitingInput = false;
     this.awaitingPlayers = [];
     frame.completed = true;
+    return this.run();
+  }
+
+  /**
+   * Offer the open action step's seat what the step offers it now, as after a
+   * move: the step ends when nothing is left to take. The step clock can
+   * change that list with no move made (#1545). Inside game code the running
+   * action's settling does this, and `seat` names only the seat the step awaits.
+   */
+  private refreshActionStep(seat: number | undefined): FlowState | undefined {
+    if (this.game._ctx._changingDepth > 0 || (seat !== undefined && seat !== this.currentPlayer?.seat)) return;
+    this.awaitingInput = false;
     return this.run();
   }
 
