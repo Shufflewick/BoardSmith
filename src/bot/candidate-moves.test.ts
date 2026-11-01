@@ -84,9 +84,17 @@ describe('candidateMoves narrows every listing the search makes (#1387)', () => 
     expect(seats).toEqual(new Set([1, 2]));
   });
 
-  it('refuses an empty list for a seat that has moves, and says how to fix it', async () => {
-    await expect(search({ candidateMoves: () => [] })).rejects.toThrow(
-      /candidateMoves returned no moves for seat 1, which has 4 moves/,
-    );
+  it("makes no move when the list for the bot's own seat is empty, and says the seat waits (#1537)", async () => {
+    const game = new JunkGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'junk' });
+    game.startFlow();
+    const bot = new MCTSBot(game, JunkGame, 'junk', 1, { iterations: 60, seed: 's', timeout: Infinity }, { candidateMoves: () => [] });
+    expect(await bot.play()).toBeNull();
+    expect(bot.lastWait).toEqual({});
+    expect(bot.lastStallReason).toMatch(/candidateMoves returned no moves for seat 1, so the seat waits until the game changes\./);
+  });
+
+  it('searches on when another seat waits below the root', async () => {
+    const move = await search({ candidateMoves: (_game, seat, listMoves) => (seat === 2 ? [] : listMoves()) });
+    expect(move).not.toBeNull();
   });
 });

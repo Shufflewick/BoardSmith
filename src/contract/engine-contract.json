@@ -1,6 +1,6 @@
 {
-  "revision": 284,
-  "surfaceHash": "9c57202cc3c96a84",
+  "revision": 285,
+  "surfaceHash": "ff10c8dd8784285a",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2215,6 +2215,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "An action greyed by the step clock is offered again when its time comes (#1536). game.stepElapsedMs() is replaced by game.stepOpenFor(ms), a threshold the engine can watch: each 'not yet' read while the views are built names the instant it lapses, and the earliest rides on snapshot.reofferAt and on the turn boundary as turnBoundary.reofferAt. Platform: on every publish, when meta.turnBoundary.reofferAt is set and comes before the step's deadline, arm a timer for it on your clock and call SnapshotSessionHost.reoffer() when it fires (the new host-only executor op { type: 'reoffer' }, stamped with hostOptions.now like every op), which builds every view again with the game unchanged and publishes with cause republish and the next reofferAt; parseExecutorOp accepts reoffer. Published games need no rebuild."
+    },
+    {
+      "revision": 285,
+      "date": "2026-11-01",
+      "surfaceHash": "ff10c8dd8784285a",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A bot can wait for an action the step clock still refuses (#1537). A BotStrategy's candidateMoves may now return no moves to say the seat waits, where it used to throw: MCTSBot.play() resolves to null with lastWait ({ until? }) and a lastStallReason saying so, and below the root such a seat has no move at that position. botSuggest answers botWaiting: { seat, until? } for it, where until is the instant a game.stepOpenFor() read made while listing the seat's moves (in disabled or validate) answers differently. SnapshotSessionHost holds that seat back until the game changes, unreported, and folds until into turnBoundary.reofferAt, publishing again with cause republish when that moves it earlier, so the reoffer() timer a platform already arms (r284) wakes the bot. Platform: forward botWaiting from a botSuggest result the way it forwards botStalled; nothing else changes. Published games need no rebuild."
     }
   ]
 }

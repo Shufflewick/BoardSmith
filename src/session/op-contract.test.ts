@@ -217,6 +217,7 @@ describe('the result of each op (#530, #536)', () => {
     // when no bot seat is due, or with the seat that could not move (#29, #635).
     expectTypeOf<Succeeded<'botSuggest'>['botPlayer']>().toEqualTypeOf<number | undefined>();
     expectTypeOf<Succeeded<'botSuggest'>['botStalled']>().toEqualTypeOf<{ seat: number; reason: string } | undefined>();
+    expectTypeOf<Succeeded<'botSuggest'>['botWaiting']>().toEqualTypeOf<{ seat: number; until?: number } | undefined>();
     // A search changes nothing, so it returns no state either (#675).
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('snapshot');
     expectTypeOf<Succeeded<'botSuggest'>>().not.toHaveProperty('playerViews');

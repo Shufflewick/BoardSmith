@@ -5,7 +5,14 @@ import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { succeeded, refused } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
-import { DeployGame, PLAYBACK_MS, PlaybackGame, playbackDefinition } from './testing/fixtures/timed-step-fixture.js';
+import {
+  DeployGame,
+  PLAYBACK_MS,
+  PlaybackGame,
+  disabledGatedDefinition,
+  playbackDefinition,
+  validateGatedDefinition,
+} from './testing/fixtures/timed-step-fixture.js';
 
 /**
  * The host stamps each op with its instant (`hostOptions.now`, #1532), and the
@@ -151,3 +158,26 @@ class OnlyLevelUpGame extends DeployGame {
     );
   }
 }
+
+describe('a bot seat waiting on the step clock (#1537)', () => {
+  it.each([
+    ['validate', validateGatedDefinition],
+    ['disabled', disabledGatedDefinition],
+  ])('is asked again when a %s refusal lapses, and levels up then', async (_gate, definition) => {
+    let now = START;
+    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
+    const reported = vi.spyOn(console, 'error');
+    await session.start();
+    await session.host.runBotTurns();
+
+    // The bot waits rather than giving up its level-up, unreported, and the host is told when to ask it again.
+    expect(session.readGame()).toMatchObject({ levelledUp: [], done: [] });
+    expect(reported).not.toHaveBeenCalled();
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBe(START + PLAYBACK_MS);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    await session.host.settled();
+    expect(session.readGame()).toMatchObject({ levelledUp: [2], done: [2] });
+  });
+});

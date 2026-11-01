@@ -2406,7 +2406,13 @@ Action.create<MyGame>('levelUp')
 - **Every restore measures the same way.** The opening instant rides on the
   step's frame, and the last op's instant on the snapshot (`snapshot.now`), so
   a restore, an undo checkpoint and a bot's search copy answer as the op did.
-  A bot searches at the instant of the op that asked it. A new game started
+  A bot searches at the instant of the op that asked it, and is asked again
+  at each re-offer. A bot that should hold out for an action the clock still
+  refuses, rather than skip it, waits by returning no moves from its
+  strategy's `candidateMoves` (#1537): the instant its moves change rides on
+  `turnBoundary.reofferAt`, so `reoffer()` wakes it then, whether the action
+  was greyed by `disabled` or refused by `validate` (see
+  [bot-system.md](./bot-system.md)). A new game started
   from a saved position (`boardsmith dev --seed`) opens its step at its own
   start, not when the position was saved. A rules reload in `boardsmith dev`
   carries the same game, so its open step keeps the instant it opened, as it

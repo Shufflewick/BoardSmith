@@ -77,6 +77,11 @@ interface BotRun {
 /** What became of one bot search: see {@link SnapshotSessionHost.runBotTurns}. */
 type BotStep = 'moved' | 'again' | 'stale' | 'done';
 
+/** The earlier of two instants, either of which may be absent. */
+function earliest(a: number | undefined, b: number | undefined): number | undefined {
+  return a === undefined ? b : b === undefined ? a : Math.min(a, b);
+}
+
 /**
  * Whether `made`, the refusal of a bot's move made on a table that moved since
  * its search, answers that move rather than the table: the game refused it
@@ -624,8 +629,10 @@ export class SnapshotSessionHost {
    * so asking the same seat again at the same state gets the same answer, and a
    * driver that keeps asking is a loop. The pump skips these seats until the
    * snapshot is a different one, and every other bot seat still moves.
+   * `wakeAt` is the earliest instant a waiting seat's moves change by the
+   * step clock (#1537), which the turn boundary names as `reofferAt`.
    */
-  private botSeatsHeldBack: { snapshot: unknown; seats: Set<number> } | null = null;
+  private botSeatsHeldBack: { snapshot: unknown; seats: Set<number>; wakeAt?: number } | null = null;
 
   /**
    * The one-at-a-time section: every change to the game snapshot (an op's
@@ -1092,7 +1099,7 @@ export class SnapshotSessionHost {
     const timeLimitMs = this.isComplete
       ? undefined
       : stepTimeLimitMs(flowState as StepTimeLimitState | null);
-    const reofferAt = this.isComplete ? undefined : this._snapshot?.reofferAt;
+    const reofferAt = this.isComplete ? undefined : earliest(this._snapshot?.reofferAt, this.heldBackHere()?.wakeAt);
     return {
       key: flowBoundaryKey(flowState as BoundaryKeyState | null),
       dueSeats: this.isComplete ? [] : dueSeats(flowState as SeatActivityState | null),
@@ -1741,9 +1748,14 @@ export class SnapshotSessionHost {
 
   /** The bot seats the pump may ask now: every one not held back at this state (#421). */
   private botSeatsToAsk(): Array<{ seat: number; level?: string }> {
-    const held = this.botSeatsHeldBack;
-    const heldBack = held !== null && held.snapshot === this._snapshot ? held.seats : null;
+    const heldBack = this.heldBackHere()?.seats;
     return this.botSeats.filter((s) => !heldBack?.has(s.seat));
+  }
+
+  /** The bot seats held back at the game as it stands, if any (#421). */
+  private heldBackHere(): { seats: Set<number>; wakeAt?: number } | null {
+    const held = this.botSeatsHeldBack;
+    return held !== null && held.snapshot === this._snapshot ? held : null;
   }
 
   /**
@@ -1811,14 +1823,23 @@ export class SnapshotSessionHost {
     this.holdBotSeatBack(stalled.seat);
   }
 
-  /** Skip `seat` in the bot pump until the game state changes (#421). */
-  private holdBotSeatBack(seat: number): void {
-    const current = this.botSeatsHeldBack;
-    const held = current !== null && current.snapshot === this._snapshot
-      ? current
-      : { snapshot: this._snapshot, seats: new Set<number>() };
+  /** Skip `seat` in the bot pump until the game state changes (#421), or until `wakeAt` (#1537). */
+  private holdBotSeatBack(seat: number, wakeAt?: number): void {
+    const held = this.heldBackHere() ?? { seats: new Set<number>() };
     held.seats.add(seat);
-    this.botSeatsHeldBack = held;
+    if (wakeAt !== undefined) held.wakeAt = Math.min(held.wakeAt ?? Infinity, wakeAt);
+    this.botSeatsHeldBack = { snapshot: this._snapshot, ...held };
+  }
+
+  /**
+   * Hold back a bot seat that chose to wait (#1537), and when its moves change
+   * by the step clock sooner than any offer does, publish the turn boundary
+   * again so the host's timer for `reofferAt` asks it then.
+   */
+  private holdWaitingSeat(waiting: { seat: number; until?: number }): void {
+    const before = this.turnBoundary().reofferAt;
+    this.holdBotSeatBack(waiting.seat, waiting.until);
+    if (this.turnBoundary().reofferAt !== before) this.publish('republish');
   }
 
   private async pumpBotTurns(): Promise<void> {
@@ -1892,6 +1913,10 @@ export class SnapshotSessionHost {
       if (!found.success) return this.reportRefusedBotMove(found, seats);
       if (found.botStalled) {
         this.holdBackStalledSeat(found.botStalled);
+        return 'again';
+      }
+      if (found.botWaiting) {
+        this.holdWaitingSeat(found.botWaiting);
         return 'again';
       }
       if (found.botPlayer === undefined) return 'done';
