@@ -131,6 +131,16 @@ function bareWord(word: string): string {
   return word.replace(/^[([{"'*_]+/, '').replace(/[)\]}"'*_,;:.!?]+$/, '');
 }
 
+/** Emphasis or brackets wrapped around a whole word, like `**a.ts**` or `[a.ts]`. */
+const WRAPPED = /^(?:(\*+)(.+)\1|\[(.+)\]|\{(.+)\})$/;
+
+/** A word with its quotes, closing punctuation and any emphasis or brackets wrapped around all of it removed. */
+function unwrappedWord(word: string): string {
+  let unwrapped = word.replace(/^["']+/, '').replace(/[.:!"']+$/, '');
+  for (let m = WRAPPED.exec(unwrapped); m; m = WRAPPED.exec(unwrapped)) unwrapped = m[2] ?? m[3] ?? m[4]!;
+  return unwrapped;
+}
+
 type Refuse = (fragment: string, why: string) => Error;
 
 const WRAP = (fragment: string) => `which cannot be read as a path. Wrap the path in backticks: \`${fragment}\`.`;
@@ -157,9 +167,10 @@ function wordPath(word: string, spans: string[], refuse: Refuse): string | undef
     if (!ENDS_IN_EXTENSION.test(span)) throw refuse(span, NOT_A_PATH);
     return composed(span, refuse);
   }
+  const unwrapped = unwrappedWord(word);
+  // Not bareWord: it strips a leading or trailing `*`, `?`, `]` or `}` that belongs to the pattern (#1540).
+  if (PATTERN.test(unwrapped) && /[/.]/.test(unwrapped)) throw refuse(unwrapped, A_PATTERN);
   const bare = bareWord(word);
-  // Before PATH_TOKEN: a pattern's own characters (and the commas that split `{a,b}`) can leave no path token in it (#1540).
-  if (PATTERN.test(bare)) throw refuse(bare, A_PATTERN);
   const found = bare.match(PATH_TOKEN);
   if (found === null) return undefined;
   if (found.length > 1 || found[0] !== bare) throw refuse(bare, WRAP(bare));
