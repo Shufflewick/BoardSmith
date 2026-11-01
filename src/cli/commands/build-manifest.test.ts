@@ -197,12 +197,25 @@ describe('parseBuildManifest', () => {
     ['`src/a?.ts`', 'src/a?.ts'],
     ['tests/auctions-*.test.ts', 'tests/auctions-*.test.ts'],
     ['src/ui/{a.ts, b.vue}', 'src/ui/{a.ts'],
+    ['src/rules/{flow,actions,rounding}.ts', 'src/rules/{flow'],
+    ['src/*.ts', 'src/*.ts'],
+    ['*.test.ts', '*.test.ts'],
+    ['src/rules/*', 'src/rules/*'],
+    ['src/a.t?', 'src/a.t?'],
   ])('refuses the pattern in "%s": patterns are not expanded (#1116)', (cell, fragment) => {
     const chunk = tableChunk(`| ${cell} | written |`);
     expect(() => parseBuildManifest(chunk)).toThrow(
       `Build Manifest row 1: the File cell "${cell}" has "${fragment}", a pattern. Patterns are not expanded: list each file in its own backticks.`,
     );
   });
+
+  it.each(['src/a.ts updates arr[0]', 'src/a.ts per [spec][1]', '**src/a.ts**', '[src/a.ts]', '{src/a.ts}'])(
+    'reads "%s" as src/a.ts: brackets and emphasis around a word, or in a word that is no path, are not a pattern (#1540)',
+    (cell) => {
+      const chunk = tableChunk(`| ${cell} | written |`);
+      expect(parseBuildManifest(chunk).entries.map((e) => e.path)).toEqual(['src/a.ts']);
+    },
+  );
 
   it('records a zero-path row in pathlessRowIndexes and produces no entry', () => {
     const chunk = tableChunk('| (no files) | n/a |');
