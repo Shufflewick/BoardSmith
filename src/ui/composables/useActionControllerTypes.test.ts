@@ -30,6 +30,7 @@ const MEMBERS: {
   startCandidates: 'Controller State',
   isReady: 'Controller State',
   isExecuting: 'Controller State',
+  executingAction: 'Controller State',
   lastError: 'Controller State',
   errorTick: 'Controller State',
   holdNotice: 'Controller State',

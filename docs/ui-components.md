@@ -2167,6 +2167,7 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `startCandidates` | `ComputedRef<ReadonlyMap<string, StartCandidates>>` | With no action open, each available action that opens with an element pick, mapped to `{ pick, elements }`. Empty off turn |
 | `isReady` | `ComputedRef<boolean>` | Whether an action is open with no pick left to answer (a skipped optional pick counts as answered). A quoted action then still waits for `confirm()` |
 | `isExecuting` | `Readonly<Ref<boolean>>` | Whether the current seat has an action out to the server (read `.value`) |
+| `executingAction` | `Readonly<Ref<string \| null>>` | Name of the action the current seat has out to the server, or `null` when none is. Use it to give one button its own working label, as in [Loading States During Execution](#loading-states-during-execution) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 | `errorTick` | `Readonly<Ref<number>>` | Goes up on every failure that sets `lastError`, even a repeat of the same message. Watch it to show each failure once |
 | `holdNotice` | `Readonly<Ref<{ reason: string } \| null>>` | Why the open action was just cancelled by a hold on this screen (`useActionHolds`), a new object each time. Not a failure, so the shells show it as a notice, not through `lastError` |
@@ -2389,7 +2390,8 @@ Show feedback while actions are processing:
       "
       @click="executeAction(action)"
     >
-      {{ actionController.isExecuting.value ? 'Working...' : action }}
+      <!-- Only the button whose action is out says so, not every button. -->
+      {{ actionController.executingAction.value === action ? 'Working...' : action }}
     </button>
   </div>
 </template>

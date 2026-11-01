@@ -372,8 +372,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const currentArgs = ref<Record<string, unknown>>({});
   const exposedCurrentArgs = readonly(currentArgs);
   // Per seat, so a seat change neither inherits nor clears another seat's request in flight (#1155).
-  const executingSeats = ref(new Set<number>());
-  const isExecuting = computed(() => executingSeats.value.has(playerSeat?.value ?? 0));
+  const executingSeats = ref(new Map<number, string>());
+  const executingAction = computed(() => executingSeats.value.get(playerSeat?.value ?? 0) ?? null);
+  const isExecuting = computed(() => executingAction.value !== null);
   const lastError = ref<string | null>(null);
 
   // UIX-01 (CR-01): monotonic failure signal. Vue refs only trigger watchers on
@@ -1891,7 +1892,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   async function sendAndResolve(actionName: string, args: Record<string, unknown>, seq: number): Promise<ControllerActionResult> {
     const seat = playerSeat?.value ?? 0;
-    executingSeats.value.add(seat);
+    executingSeats.value.set(seat, actionName);
     lastError.value = null;
     const sameSeat = (): boolean => (playerSeat?.value ?? 0) === seat;
 
@@ -3041,6 +3042,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     validElements,           // Reactive! Use this in custom UIs
     isReady,
     isExecuting,
+    executingAction,
     // Pulses (monotonic) when an action fully completes via the selection-step
     // transport with no further followUp — the board bridge watches it to auto-start
     // the next action (parity with the execute() path's isExecuting toggle), which is
