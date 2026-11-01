@@ -1798,8 +1798,9 @@ export class MultiplayerHost {
 
   /**
    * An offer the step clock greyed went out of date: build the views again
-   * now. Their publish arms the window's next instant. A failure is reported,
-   * and the deadline armed, so the step still closes.
+   * now, then arm the window's next instant, even when the publish named the
+   * same one (a clock that read a hair early), since this timer is spent. A
+   * failure is reported, and the deadline armed, so the step still closes.
    */
   private async reoffer(window: StepWindow, deadlineAt: number): Promise<void> {
     if (this.window !== window) return;
@@ -1810,7 +1811,11 @@ export class MultiplayerHost {
     } catch (err) {
       failure = err instanceof Error ? err.message : String(err);
     }
-    if (failure === undefined || this.window !== window) return;
+    if (this.window !== window) return;
+    if (failure === undefined) {
+      this.armWindow(window);
+      return;
+    }
     this.reportDeadlineFailure(
       `The time an action's rule waits for passed, but the actions could not be offered again: ${failure}. ` +
         'Each seat sees them as they were until the next move.',

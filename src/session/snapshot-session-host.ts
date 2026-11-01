@@ -1357,7 +1357,9 @@ export class SnapshotSessionHost {
     // just sits there. (Undo alone never showed this — it rewinds to the
     // requesting seat's own turn start, so the pump would find no due bot seat
     // anyway. A rewind or a restore can target ANY point, which is what made it reachable.)
-    const wakesBots = actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier';
+    // A re-offer can give a waiting bot seat the move it had none of (#1536).
+    const wakesBots =
+      actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'reoffer';
     if (!wakesBots) return res;
     const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted).finally(() =>
       this.backgroundWork.delete(tracked),
