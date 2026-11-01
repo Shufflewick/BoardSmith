@@ -90,6 +90,7 @@ import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./c
 // TYPE-ONLY, so the import is erased and the cycle with `engine.ts` is not one
 // at runtime. `WorldResidency` is declared beside the engine that answers it.
 import type { WorldDeclarationFacilities } from "./engine.js";
+import { PlayerFacingError } from "../engine/errors.js";
 import { worldRefusal } from "./refusals.js";
 import type { WorldNoticeBox, WorldNoticeRequest } from "./notices.js";
 
@@ -445,6 +446,14 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined, O = boolea
    * reads a plain default.
    */
   unavailable?: (value: unknown, context: WorldActionContext<G>) => string;
+  /**
+   * The player-facing refusal for a list past this host's
+   * `maxCandidatesPerSelection` when the panel asks for it, such as "Too many
+   * players match that name. Type more of it." (#1542). A submitted command is
+   * still checked against the whole list, so it may name any one valid choice.
+   * Without it the panel reads the host's own sentence.
+   */
+  tooMany?: string;
 }
 
 /**
@@ -684,6 +693,8 @@ export interface WorldActionBlock {
    * learn to ask.
    */
   readonly quote?: WorldQuote;
+  /** Each pick's `tooMany` sentence, by selection name (#1542). */
+  readonly tooMany?: Readonly<Record<string, string>>;
 }
 
 /**
@@ -1149,6 +1160,10 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     },
   ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
     this.declareSelection(options.needs);
+    if (options.tooMany !== undefined) {
+      const world = this.definition.world as { tooMany?: Record<string, string> };
+      world.tooMany = { ...world.tooMany, [name]: options.tooMany };
+    }
     this.inner.chooseFrom<K, T, P, O>(name, {
       // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
       // (#376).
@@ -1676,8 +1691,10 @@ export function assertCandidateBudget(
   selection: string,
   count: number,
   budgets: WorldBudgets,
+  tooMany: string | undefined,
 ): void {
   if (count <= budgets.maxCandidatesPerSelection) return;
+  if (tooMany !== undefined) throw new PlayerFacingError(tooMany);
   throw worldRefusal(
     "invalid-world-action",
     `The "${action}" action's "${selection}" selection offers ${count} candidates, and this ` +
