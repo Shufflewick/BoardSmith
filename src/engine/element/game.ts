@@ -1127,11 +1127,19 @@ export class Game<
 
   /**
    * The host's instant for the op being run, epoch ms (#1532), read by
-   * {@link stepElapsedMs}. Stamped by `GameRunner.setNow`, carried on the
+   * {@link stepOpenFor}. Stamped by `GameRunner.setNow`, carried on the
    * snapshot, never in the tree.
    * @internal
    */
   _hostNow?: number;
+
+  /**
+   * The earliest host instant at which a {@link stepOpenFor} read since the
+   * last `GameRunner.setNow` would answer differently (#1536), reported by
+   * `GameRunner.reofferAt`.
+   * @internal
+   */
+  _reofferAt?: number;
 
   /** Debug registry for custom debug data (dev mode only) */
   private _debugRegistry: Map<string, () => unknown> = new Map();
@@ -3390,13 +3398,23 @@ export class Game<
   }
 
   /**
-   * How long the open timed step has been open, in milliseconds (#1532): the
-   * host's instant for the op being run, less the host's instant for the op
-   * that opened the step. Read it in the rules of an `actionStep` or
-   * `simultaneousActionStep` that declares `timeLimitMs` -- an action's
+   * Whether the open timed step has been open for at least `ms` milliseconds
+   * (#1532): the host's instant for the op being run, less the host's instant
+   * for the op that opened the step. Read it in the rules of an `actionStep`
+   * or `simultaneousActionStep` that declares `timeLimitMs` -- an action's
    * `disabled`, `validate` or `execute` -- to refuse something during part of
-   * the window. A `condition` may not read it: offers are not re-asked as time
-   * passes, so an action it hid would stay hidden.
+   * the window:
+   *
+   * ```ts
+   * .disabled((ctx) => !ctx.game.stepOpenFor(30_000) && 'The battle is still playing back.')
+   * ```
+   *
+   * It answers a threshold rather than a number so the engine knows when the
+   * answer changes: each "not yet" is recorded, and the host is told the
+   * earliest such instant (`TurnBoundary.reofferAt`) to offer the actions
+   * again then, so an action greyed by the clock lights up on its own (#1536).
+   * A `condition` may not read it: it decides which actions a step offers and
+   * is not asked again as time passes, so an action it hid would stay hidden.
    *
    * The engine reads no clock: the host stamps every op with its own
    * (`executeOp`'s `hostOptions.now`), so a client cannot move it. The opening
@@ -3405,10 +3423,10 @@ export class Game<
    *
    * @throws when read in a condition, when no timed step is open, or when the host stamped no instant.
    */
-  stepElapsedMs(): number {
+  stepOpenFor(ms: number): boolean {
     if (readingCondition()) {
       throw new Error(
-        'stepElapsedMs() was read in a condition. A condition decides which actions a step offers when it ' +
+        'stepOpenFor() was read in a condition. A condition decides which actions a step offers when it ' +
           'opens and after each move, and is not asked again as time passes, so an action it hides would ' +
           'stay hidden once the time is up. Grey the action with .disabled() and a reason, or refuse the ' +
           'submission in .validate().',
@@ -3417,20 +3435,22 @@ export class Game<
     const openedAt = this._flowEngine?.openTimedStepOpenedAt();
     if (openedAt === undefined) {
       throw new Error(
-        'stepElapsedMs() measures how long the open timed step has been open, but no step with timeLimitMs ' +
+        'stepOpenFor() measures how long the open timed step has been open, but no step with timeLimitMs ' +
           'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
           'timeLimitMs: its actions\' disabled, validate or execute.',
       );
     }
     if (openedAt === null || this._hostNow === undefined) {
       throw new Error(
-        `stepElapsedMs() needs the host's instant, and this game has no instant for ${openedAt === null ? "the op that opened the step" : 'this op'}. ` +
+        `stepOpenFor() needs the host's instant, and this game has no instant for ${openedAt === null ? "the op that opened the step" : 'this op'}. ` +
           "A host stamps every op with its own clock (executeOp's hostOptions.now; GameRunner.setNow in a test). " +
           'A replay of the move history (GameRunner.replay) has none, because the history records no instants.',
       );
     }
     // Two host machines' clocks can disagree by a little; a step is never open for less than no time.
-    return Math.max(0, this._hostNow - openedAt);
+    if (Math.max(0, this._hostNow - openedAt) >= ms) return true;
+    this._reofferAt = Math.min(this._reofferAt ?? Infinity, openedAt + ms);
+    return false;
   }
 
   /**

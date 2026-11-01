@@ -6,7 +6,7 @@
     "src/ui/components/auto-ui/renderers/CardRenderer.vue:162-175|src/ui/components/auto-ui/renderers/HandRenderer.vue:170-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:37-47",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:431-437|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:263-269",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:224-242",
-    "src/session/stateless-ops.ts:1095-1111|src/session/stateless-ops.ts:1184-1198",
+    "src/session/stateless-ops.ts:1110-1126|src/session/stateless-ops.ts:1199-1213",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:166-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:34-47",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
@@ -16,8 +16,8 @@
     "src/engine/element/game-element.ts:1164-1170|src/engine/element/game-element.ts:1225-1231",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
-    "src/engine/element/game.ts:3874-3880|src/engine/element/game.ts:3904-3910",
-    "src/engine/element/game.ts:3946-3950|src/engine/element/game.ts:3978-3982",
+    "src/engine/element/game.ts:3894-3900|src/engine/element/game.ts:3924-3930",
+    "src/engine/element/game.ts:3966-3970|src/engine/element/game.ts:3998-4002",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:74-88|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:168-187"
   ],
   "clone_fingerprints": [

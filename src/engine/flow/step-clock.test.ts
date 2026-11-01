@@ -12,11 +12,13 @@ import {
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 
 /**
- * The open timed step's clock (#1532): `game.stepElapsedMs()` is the host's
- * instant for the op being run, less the host's instant when the step opened.
- * The engine reads no clock; the host stamps each op with `runner.setNow`, and
- * the opening instant is kept on the step's frame so every restore path
- * measures from the same moment.
+ * The open timed step's clock (#1532): `game.stepOpenFor(ms)` answers whether
+ * the host's instant for the op being run is at least `ms` past the host's
+ * instant when the step opened. The engine reads no clock; the host stamps
+ * each op with `runner.setNow`, and the opening instant is kept on the step's
+ * frame so every restore path measures from the same moment. Each "not yet"
+ * names the instant its answer changes, which the runner reports as
+ * `reofferAt()` so a host can offer again then (#1536).
  */
 
 const opts = { playerCount: 2, seed: 'step-clock' };
@@ -36,7 +38,7 @@ function act(runner: GameRunner<PlaybackGame>, now: number, action: string, seat
   return result;
 }
 
-describe('game.stepElapsedMs()', () => {
+describe('game.stepOpenFor()', () => {
   it('refuses an action during the first part of a timed step and allows it once that has passed', () => {
     const runner = startedAt(START);
 
@@ -54,7 +56,8 @@ describe('game.stepElapsedMs()', () => {
     expect(act(runner, START + 20_000, 'commit', 1).success).toBe(true);
 
     runner.setNow(START + 25_000);
-    expect(runner.game.stepElapsedMs()).toBe(25_000);
+    expect(runner.game.stepOpenFor(25_000)).toBe(true);
+    expect(runner.game.stepOpenFor(25_001)).toBe(false);
   });
 
   it('starts again when the next round opens the step afresh', () => {
@@ -63,7 +66,8 @@ describe('game.stepElapsedMs()', () => {
     act(runner, START + 50_000, 'commit', 2);
 
     runner.setNow(START + 60_000);
-    expect(runner.game.stepElapsedMs()).toBe(10_000);
+    expect(runner.game.stepOpenFor(10_000)).toBe(true);
+    expect(runner.game.stepOpenFor(10_001)).toBe(false);
   });
 
   it('offers the action greyed with its reason while the step is young', () => {
@@ -72,6 +76,27 @@ describe('game.stepElapsedMs()', () => {
 
     runner.setNow(START + PLAYBACK_MS);
     expect(runner.getPlayerView(1).disabledActions).toBeUndefined();
+  });
+
+  it('reports the instant an offer it greyed lapses, and nothing once none is greyed (#1536)', () => {
+    const runner = startedAt(START);
+    runner.getPlayerView(1);
+    expect(runner.reofferAt()).toBe(START + PLAYBACK_MS);
+
+    runner.setNow(START + PLAYBACK_MS);
+    runner.getPlayerView(1);
+    expect(runner.reofferAt()).toBeUndefined();
+  });
+
+  it('reports the earliest of several clock reads that answered "not yet"', () => {
+    const runner = startedAt(START);
+    runner.game.stepOpenFor(50_000);
+    runner.game.stepOpenFor(20_000);
+    runner.game.stepOpenFor(1);
+    runner.setNow(START + 10);
+    runner.game.stepOpenFor(50_000);
+    runner.game.stepOpenFor(20_000);
+    expect(runner.reofferAt()).toBe(START + 20_000);
   });
 
   it('says the host stamped no instant when it did not', () => {
@@ -84,7 +109,7 @@ describe('game.stepElapsedMs()', () => {
     const runner = new GameRunner({ GameClass: UntimedDeployGame, gameType: 'step-clock', gameOptions: opts });
     runner.setNow(START);
     runner.start();
-    expect(() => runner.game.stepElapsedMs()).toThrow(/no step with timeLimitMs is open/);
+    expect(() => runner.game.stepOpenFor(1)).toThrow(/no step with timeLimitMs is open/);
   });
 });
 
@@ -94,7 +119,7 @@ class ConditionClockGame extends DeployGame {
     super(options, 120_000, 'simultaneous', ['peek', 'commit']);
     this.registerAction(
       Action.create<ConditionClockGame>('peek')
-        .condition({ 'playback over': (ctx) => ctx.game.stepElapsedMs() >= PLAYBACK_MS })
+        .condition({ 'playback over': (ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) })
         .execute(() => {}),
     );
   }
@@ -104,7 +129,7 @@ describe('where a rule may read the step clock', () => {
   it('refuses a condition that reads it, naming disabled and validate instead', () => {
     const runner = new GameRunner({ GameClass: ConditionClockGame, gameType: 'step-clock', gameOptions: opts });
     runner.setNow(START);
-    expect(() => runner.start()).toThrow(/stepElapsedMs\(\) was read in a condition.*\.disabled\(\).*\.validate\(\)/s);
+    expect(() => runner.start()).toThrow(/stepOpenFor\(\) was read in a condition.*\.disabled\(\).*\.validate\(\)/s);
   });
 
   it('lets a TestGame stamp the instant its opening step opens at', () => {
@@ -126,15 +151,15 @@ describe('the step clock survives every restore path', () => {
 
   it('survives restore() from a snapshot, at the instant the snapshot was taken', () => {
     const restored = GameRunner.fromSnapshot(midRound().getSnapshot(), PlaybackGame);
-    expect(restored.game.stepElapsedMs()).toBe(12_000);
+    expect([restored.game.stepOpenFor(12_000), restored.game.stepOpenFor(12_001)]).toEqual([true, false]);
 
     restored.setNow(START + 31_000);
-    expect(restored.game.stepElapsedMs()).toBe(31_000);
+    expect([restored.game.stepOpenFor(31_000), restored.game.stepOpenFor(31_001)]).toEqual([true, false]);
   });
 
   it('survives an undo checkpoint restore', () => {
     const restored = GameRunner.fromCheckpoint(midRound().getSnapshot(), 1, PlaybackGame);
-    expect(restored!.game.stepElapsedMs()).toBe(12_000);
+    expect([restored!.game.stepOpenFor(12_000), restored!.game.stepOpenFor(12_001)]).toEqual([true, false]);
   });
 
   it('survives an MCTS clone', () => {
@@ -142,6 +167,6 @@ describe('the step clock survives every restore path', () => {
     const bot = new MCTSBot(runner.game, PlaybackGame, 'step-clock', 2, { iterations: 1, playoutDepth: 1 });
     const snapshot = createSnapshot(runner.game, 'step-clock', runner.actionHistory, opts.seed);
     const clone = (bot as unknown as { restoreGame(s: typeof snapshot): Game }).restoreGame(snapshot);
-    expect(clone.stepElapsedMs()).toBe(12_000);
+    expect([clone.stepOpenFor(12_000), clone.stepOpenFor(12_001)]).toEqual([true, false]);
   });
 });

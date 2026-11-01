@@ -80,7 +80,7 @@ function rulesSource(args: { step: number; flow: string; seats?: number; demo?: 
     '    super(options);',
     `    this.registerAction(Action.create('bump').execute(() => { this.count += ${args.step}; }));`,
     // Greyed for the first part of its step, measured on the step clock the host stamps (#1532).
-    `    this.registerAction(Action.create('level').disabled(() => this.stepElapsedMs() < ${LEVEL_GATE_MS} && 'Too early.').execute(() => {}));`,
+    `    this.registerAction(Action.create('level').disabled(() => !this.stepOpenFor(${LEVEL_GATE_MS}) && 'Too early.').execute(() => {}));`,
     `    this.setFlow({ root: ${args.flow} });`,
     '  }',
     '}',

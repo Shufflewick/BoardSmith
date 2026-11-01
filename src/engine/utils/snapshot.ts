@@ -111,10 +111,19 @@ interface SnapshotFields {
 
   /**
    * The host's instant for the op that took this snapshot, epoch ms (#1532),
-   * so a restore or a bot's search copy reads `game.stepElapsedMs()` as that op
+   * so a restore or a bot's search copy reads `game.stepOpenFor()` as that op
    * did. Absent when the host stamped none. The next op's own stamp replaces it.
    */
   now?: number;
+
+  /**
+   * The host's instant, epoch ms, at which an offer in the views built with
+   * this snapshot goes out of date (#1536): the earliest instant a
+   * `game.stepOpenFor()` read made while building them answers differently.
+   * Absent when no read answered "not yet". The executor sets it once the
+   * views are built; a host runs the `reoffer` op then.
+   */
+  reofferAt?: number;
 
   /** Element sequence counter (`game._ctx.sequence`) captured at snapshot time.
    *  Restored after the tree is loaded so new-element ids stay aligned between

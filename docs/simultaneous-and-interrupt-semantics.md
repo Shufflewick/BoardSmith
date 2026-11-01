@@ -185,9 +185,11 @@ Which means, precisely:
 - **How long the step has been open: the host stamps it, the engine records
   it.** A host passes its own instant with every op (`hostOptions.now`). The
   engine keeps the instant of the op that opened a timed step on the step's
-  frame, and `game.stepElapsedMs()` answers the op's instant less that one, so
-  a rule can refuse something during part of the window without trusting a
-  client (#1532).
+  frame, and `game.stepOpenFor(ms)` answers whether the op's instant is `ms`
+  past that one, so a rule can refuse something during part of the window
+  without trusting a client (#1532). Each "not yet" names the instant it lapses;
+  the earliest is published as `turnBoundary.reofferAt`, and the host offers
+  again then with `SnapshotSessionHost.reoffer()` (#1536).
   A timed step is always resolved by `idleAction`, never by a bot: the player
   is present and slow, not absent. Time limits always win over a held follow-up
   (#494): a seat held for one is closed by the idle action when the step offers

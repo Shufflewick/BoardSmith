@@ -1,6 +1,6 @@
 {
-  "revision": 283,
-  "surfaceHash": "fd9e6c0ca296ce47",
+  "revision": 284,
+  "surfaceHash": "9c57202cc3c96a84",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2207,6 +2207,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "No contract change; the platform must run this build for #1535. executeOp gains hostOptions.keepStepClock: with seedSnapshot, the seed is the same game carried onto edited rules, so its open timed step keeps the instant it opened instead of opening again at now (boardsmith dev's rules reload uses it and now stamps the reload with its clock). boardsmith simulate and the bot trainer's benchmark stamp every op with one fixed instant, so a game whose rules read game.stepElapsedMs() plays there with no time passing instead of crashing. Published games need no rebuild."
+    },
+    {
+      "revision": 284,
+      "date": "2026-11-01",
+      "surfaceHash": "9c57202cc3c96a84",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "An action greyed by the step clock is offered again when its time comes (#1536). game.stepElapsedMs() is replaced by game.stepOpenFor(ms), a threshold the engine can watch: each 'not yet' read while the views are built names the instant it lapses, and the earliest rides on snapshot.reofferAt and on the turn boundary as turnBoundary.reofferAt. Platform: on every publish, when meta.turnBoundary.reofferAt is set and comes before the step's deadline, arm a timer for it on your clock and call SnapshotSessionHost.reoffer() when it fires (the new host-only executor op { type: 'reoffer' }, stamped with hostOptions.now like every op), which builds every view again with the game unchanged and publishes with cause republish and the next reofferAt; parseExecutorOp accepts reoffer. Published games need no rebuild."
     }
   ]
 }

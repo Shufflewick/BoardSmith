@@ -134,6 +134,7 @@ const RULES: OpRules = {
   },
   cancelAction: { player: required(seatNumber) },
   undo: { player: required(seatNumber) },
+  reoffer: {},
   botSuggest: { seats: required(botSeats) },
 };
 

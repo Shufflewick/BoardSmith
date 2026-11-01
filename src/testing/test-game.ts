@@ -52,7 +52,7 @@ export interface TestGameOptions {
   checkpoints?: CheckpointPolicy;
   /**
    * The host's instant, epoch ms, the game starts at, for a game whose rules
-   * read `game.stepElapsedMs()` (#1532): its opening step opens then. Stamp
+   * read `game.stepOpenFor()` (#1532): its opening step opens then. Stamp
    * later moves with `testGame.runner.setNow(ms)`.
    */
   now?: number;

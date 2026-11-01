@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { Action, type GameOptions } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { succeeded, refused } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
-import { PLAYBACK_MS, PlaybackGame, playbackDefinition } from './testing/fixtures/timed-step-fixture.js';
+import { DeployGame, PLAYBACK_MS, PlaybackGame, playbackDefinition } from './testing/fixtures/timed-step-fixture.js';
 
 /**
  * The host stamps each op with its instant (`hostOptions.now`, #1532), and the
@@ -16,6 +17,8 @@ import { PLAYBACK_MS, PlaybackGame, playbackDefinition } from './testing/fixture
 const gameOptions = { playerCount: 2, seed: 'step-clock-session' };
 const START = 1_700_000_000_000;
 const REASON = 'The battle is still playing back.';
+
+afterEach(() => vi.restoreAllMocks());
 
 type View = { state: { disabledActions?: Record<string, string> } };
 
@@ -67,6 +70,16 @@ describe('executeOp hostOptions.now', () => {
     succeeded(await levelUp(carried.snapshot, START + PLAYBACK_MS));
   });
 
+  it('reports on the snapshot when an offer greyed by the step clock lapses, and offers again at that instant (#1536)', async () => {
+    const started = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, { now: START }));
+    expect(started.snapshot.reofferAt).toBe(START + PLAYBACK_MS);
+
+    const reoffered = succeeded(await executeOp(playbackDefinition, gameOptions, started.snapshot, null, { type: 'reoffer' }, { now: START + PLAYBACK_MS }));
+    expect((reoffered.playerViews[0] as View).state.disabledActions).toBeUndefined();
+    expect(reoffered.snapshot.reofferAt).toBeUndefined();
+    expect(reoffered.snapshot.actionHistory).toEqual(started.snapshot.actionHistory);
+  });
+
   it('refuses to run a game that reads the step clock when the host stamped no instant, saying how to stamp one', async () => {
     const failed = refused(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }));
     expect(failed.error).toContain('hostOptions.now');
@@ -85,6 +98,34 @@ describe('createHeadlessSession now', () => {
     succeeded(await session.send(1, { type: 'action', actionName: 'levelUp', player: 1, args: {}, boundaryKey: key }));
   });
 
+  it('puts the instant an offer lapses on the turn boundary, and reoffer() publishes the offer again then (#1536)', async () => {
+    let now = START;
+    const session = createHeadlessSession(playbackDefinition, { ...gameOptions, now: () => now });
+    await session.start();
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBe(START + PLAYBACK_MS);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    expect(session.metas.at(-1)).toMatchObject({ cause: 'republish' });
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBeUndefined();
+    expect((session.broadcasts.at(-1) as View[])[0].state.disabledActions).toBeUndefined();
+  });
+
+  it('wakes the bots when reoffer() offers an action they were waiting for', async () => {
+    let now = START;
+    const definition = { ...playbackDefinition, gameClass: OnlyLevelUpGame };
+    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
+    // The bot seat has no move until the playback ends, and says so.
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    await session.start();
+    expect(session.readGame().committed).toEqual([]);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    await session.host.settled();
+    expect(session.readGame().committed).toEqual([2]);
+  });
+
   it('lets a bot seat search a game that reads the step clock, at the instant of the op', async () => {
     const definition = { ...playbackDefinition, gameClass: PlaybackGame };
     const session = createHeadlessSession(definition, { ...gameOptions, now: () => START }, [{ seat: 2, level: 'easy' }]);
@@ -96,3 +137,17 @@ describe('createHeadlessSession now', () => {
     expect(session.readGame().levelUps).toBe(0);
   });
 });
+
+/** A deploy round whose only action, which also commits, waits for the playback. */
+class OnlyLevelUpGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['levelUp']);
+    this.registerAction(
+      Action.create<OnlyLevelUpGame>('levelUp')
+        .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
+        .execute((_args, ctx) => {
+          ctx.game.committed = [...ctx.game.committed, ctx.player.seat];
+        }),
+    );
+  }
+}

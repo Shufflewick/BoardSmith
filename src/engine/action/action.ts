@@ -224,7 +224,7 @@ export class ConditionEvaluationError extends Error {
 /** How many condition predicates are running, nested (#1532). */
 let conditionDepth = 0;
 
-/** Whether a `condition` predicate is running right now, which `game.stepElapsedMs()` refuses (#1532). */
+/** Whether a `condition` predicate is running right now, which `game.stepOpenFor()` refuses (#1532). */
 export function readingCondition(): boolean {
   return conditionDepth > 0;
 }

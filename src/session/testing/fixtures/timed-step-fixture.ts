@@ -122,7 +122,7 @@ export const PLAYBACK_MS = 30_000;
 /** `levelUp`, refused until the battle has played back, measured on the step's own clock. */
 function levelUp<G extends Game & { levelUps: number }>() {
   return Action.create<G>('levelUp')
-    .disabled((ctx) => ctx.game.stepElapsedMs() < PLAYBACK_MS && 'The battle is still playing back.')
+    .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
     .execute((_args, ctx) => {
       ctx.game.levelUps += 1;
     });

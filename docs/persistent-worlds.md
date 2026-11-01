@@ -872,8 +872,8 @@ world context, `ctx.world` included. It is not taken with `multiSelect` or
 ### `ctx.world`: what a world gives an action that a table cannot
 
 `ActionContext` is `{ game, player, args }` and stays that: the table backend has
-no instant and no partitions (only how long its open timed step has been open,
-`game.stepElapsedMs()`, see [Actions & Flow](./actions-and-flow.md#gamestepelapsedms---how-long-the-timed-step-has-been-open)),
+no instant and no partitions (only whether its open timed step has been open
+long enough, `game.stepOpenFor(ms)`, see [Actions & Flow](./actions-and-flow.md#gamestepopenforms---whether-the-timed-step-has-been-open-that-long)),
 and widening the shared context so a world could reach its own facilities would
 put `now` on a surface where it means nothing. So a world's facilities ride on
 one added property.

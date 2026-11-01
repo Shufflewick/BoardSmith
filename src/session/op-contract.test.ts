@@ -53,6 +53,7 @@ const EVERY_EXECUTOR_OP: ExecutorOp[] = [
   { type: 'resolveChoices', actionName: 'play', player: 1, selectionName: 'card', args: {} },
   { type: 'cancelAction', player: 1 },
   { type: 'undo', player: 2 },
+  { type: 'reoffer' },
   { type: 'botSuggest', seats: [{ seat: 1 }, { seat: 2, level: 'hard' }] },
 ];
 
@@ -61,7 +62,7 @@ describe('the op kinds (#530)', () => {
     expectTypeOf<Op>().toEqualTypeOf<ExecutorOp | DevOp | HostOp>();
     expectTypeOf<ExecutableOp>().toEqualTypeOf<ExecutorOp | DevOp>();
     expectTypeOf<ExecutorOp['type']>().toEqualTypeOf<
-      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'botSuggest'
+      'start' | 'action' | 'expireSeat' | 'selectionStep' | 'resolveChoices' | 'cancelAction' | 'undo' | 'reoffer' | 'botSuggest'
     >();
     expectTypeOf<HostOp['type']>().toEqualTypeOf<'demoStart' | 'demoStop' | 'demoControl' | 'convertSeatToBot'>();
     // A bot's search is an executor op, so a table host can search without changing the game (#635).
@@ -100,7 +101,7 @@ describe('parseExecutorOp (#530)', () => {
       ok: false,
       error:
         'An executor op has type "demoStart", which an executor does not run. An executor op\'s type ' +
-        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, botSuggest.',
+        'is one of: start, action, expireSeat, selectionStep, resolveChoices, cancelAction, undo, reoffer, botSuggest.',
     });
     expect(parseExecutorOp({}).ok).toBe(false);
     expect(parseExecutorOp({ type: 7 }).ok).toBe(false);
