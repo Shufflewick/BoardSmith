@@ -240,43 +240,10 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
  * The instant a harness with no wall clock (`boardsmith simulate`, the bot
  * trainer's benchmark) starts every game at (#1535). Time passes in such a
  * game only when every seat that can move waits on the step clock
- * ({@link moveClockToWait}, #1541): otherwise every move is made the instant its step opened, so
+ * (`ClockWaits`, #1541): otherwise every move is made the instant its step opened, so
  * `game.stepOpenFor(ms)` is false for any `ms` above 0, and no step's deadline ever runs out.
  */
 export const FROZEN_NOW = 0;
-
-/** A seat waiting on the step clock in a harness with no wall clock: the instant it waits for, and who waits, for messages. */
-export interface ClockWait {
-  until: number;
-  who: string;
-}
-
-/**
- * Move a harness's clock (see {@link FROZEN_NOW}) to the earliest instant the
- * seats that can move wait for, once every one of them waits, as a host's
- * reoffer timer would (#1541). Returns why it cannot instead: the open step's
- * time limit ends first, when a host would close the seats, and these
- * harnesses run no deadlines.
- */
-export function moveClockToWait(runner: GameRunner, waits: Iterable<ClockWait>): string | undefined {
-  const { until, who } = [...waits].reduce((earliest, wait) => (wait.until < earliest.until ? wait : earliest));
-  const now = runner.game._hostNow;
-  if (now === undefined || !(until > now)) {
-    throw new Error(
-      `${who} waits until instant ${until}, which is not after the game's instant ${now}, so the game would never move on. ` +
-        "Wait only for an instant later than the game's, or return the move the seat makes now.",
-    );
-  }
-  const closesAt = runner.game.stepClosesAt();
-  if (closesAt !== undefined && until >= closesAt) {
-    return (
-      `${who} waits until instant ${until}, but the open step's time limit ends at instant ${closesAt}, when a host would close the seat. ` +
-      'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.'
-    );
-  }
-  runner.setNow(until);
-  return undefined;
-}
 
 /** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
 const PARTIAL_CHANGES_KEPT =
