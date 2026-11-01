@@ -14,6 +14,7 @@ import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink 
 import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
 import { FROZEN_NOW } from '../runtime/runner.js';
+import { ClockWaits } from '../runtime/clock-waits.js';
 import type { Policy, SimulatedGame } from './policies.js';
 
 /** The move's args as the action history would write them, or a plain note when they cannot be written. */
@@ -109,6 +110,26 @@ function enabledSeats(
       .map(({ seat, enabled }) => ({ seat, actionNames: enabled, followUp: followUpForSeat(flowState, seat) })),
     refused: describeRefused(offers),
   };
+}
+
+/**
+ * The seats to ask for a move ({@link ClockWaits.seatsToAsk}), or why the game
+ * stops: no seat can move, or a seat waits past the open step's time limit.
+ */
+function seatsToAsk(testGame: TestGame<Game>, flowState: FlowState, waits: ClockWaits): ReturnType<typeof enabledSeats>['seats'] | string {
+  let refused: string[] = [];
+  const seats = waits.seatsToAsk(testGame.runner, () => {
+    const due = enabledSeats(testGame.game, flowState);
+    refused = due.refused;
+    return due.seats;
+  });
+  if (typeof seats === 'string' || seats.length > 0) return seats;
+  return (
+    'Game is awaiting input but no player has an enabled action to take.' +
+    (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '') +
+    ' If the game is meant to rest here until a rule not built yet ends it, declare that ' +
+    'with isResting in a simulateRandomGames test; otherwise the flow is deadlocked.'
+  );
 }
 
 /**
@@ -309,6 +330,7 @@ export async function playGame<G extends Game>(
   let stuck = false;
   let stopReason: string | undefined;
   let restReason: string | undefined;
+  const waits = new ClockWaits();
   const recorder = metricRecorder(definition.metrics);
 
   try {
@@ -358,14 +380,10 @@ export async function playGame<G extends Game>(
         break;
       }
 
-      const { seats, refused } = enabledSeats(testGame.game, flowState);
-      if (seats.length === 0) {
+      const seats = seatsToAsk(testGame, flowState, waits);
+      if (typeof seats === 'string') {
         stuck = true;
-        stopReason =
-          'Game is awaiting input but no player has an enabled action to take.' +
-          (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '') +
-          ' If the game is meant to rest here until a rule not built yet ends it, declare that ' +
-          'with isResting in a simulateRandomGames test; otherwise the flow is deadlocked.';
+        stopReason = seats;
         break;
       }
       const actor = mover.pick(seats);
@@ -391,6 +409,10 @@ export async function playGame<G extends Game>(
         stopReason = choice.noMove;
         break;
       }
+      if ('waitUntil' in choice) {
+        waits.add(actor.seat, choice.waitUntil, `Policy '${policy.name}'`);
+        continue;
+      }
 
       // tryAction (not doAction) so a rejection below is reported as stuck, not a crash.
       recorder.refuseStray(`policy '${policy.name}'`);
@@ -399,6 +421,7 @@ export async function playGame<G extends Game>(
 
       if (result.success) {
         recorder.keep();
+        waits.clear();
         actionCount++;
         if (!testGame.isComplete()) {
           restReason = declaredRest(isResting, testGame.game);

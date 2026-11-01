@@ -2,6 +2,7 @@ import type { Game } from '../engine/index.js';
 import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
 import { FROZEN_NOW } from '../runtime/runner.js';
+import { ClockWaits } from '../runtime/clock-waits.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
@@ -278,6 +279,7 @@ async function runBenchmarkGame<G extends Game>(
     let flowState = runner.start();
 
     let actionCount = 0;
+    const waits = new ClockWaits();
 
     while (!flowState.complete && actionCount < maxActions) {
       if (Date.now() - startTime > timeout) {
@@ -287,10 +289,12 @@ async function runBenchmarkGame<G extends Game>(
         return incomplete('A game stopped awaiting input before it completed.');
       }
 
-      // The first due seat that can move: the one seat of an action step, or the
-      // first co-decider with an enabled move in a simultaneous step (#321, #1133).
+      // The first due seat that can move and is not waiting on the step clock: the one seat of an action
+      // step, or the first co-decider with an enabled move in a simultaneous step (#321, #1133).
       // currentPlayer is a POSITION (1-indexed), trainedPlayerIndex is an INDEX (0-indexed)
-      const currentPlayer = dueSeatOffers(flowState, runner.game).find((offer) => offer.canMove)?.seat;
+      const seats = waits.seatsToAsk(runner, () => dueSeatOffers(flowState, runner.game).filter((offer) => offer.canMove));
+      if (typeof seats === 'string') return incomplete(seats);
+      const currentPlayer = seats[0]?.seat;
       if (currentPlayer === undefined) {
         return incomplete('A game was awaiting input with no seat that could act (no due seat had an enabled action or a follow-up), and the game was not over.');
       }
@@ -298,33 +302,14 @@ async function runBenchmarkGame<G extends Game>(
       const isTrainedSeat = currentPlayer === trainedPlayerIndex + 1;
       const bot = moveBot(runner, GameClass, gameType, currentPlayer, isTrainedSeat, actionCount, options);
 
-      let action: string;
-      let args: Record<string, unknown>;
-      try {
-        const move = await bot.play();
-        if (!move) {
-          // The bot found nothing searchable from this seat's view (#29). In a
-          // live game that stalls one seat; in a benchmark the game cannot
-          // proceed, and a game that cannot proceed is not a draw (#37).
-          return incomplete(
-            `The ${isTrainedSeat ? 'trained' : 'baseline'} bot had no searchable move for seat ` +
-            `${currentPlayer}: ${bot.lastStallReason ?? 'no reason recorded'}`
-          );
-        }
-        action = move.action;
-        // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
-        args = picksFromSeat(runner.game, move.action, move.args, currentPlayer);
-      } catch (error) {
-        // #37: this used to substitute a RANDOM bot for the crashing one and
-        // play on. A trained bot whose objectives function threw on every call
-        // therefore scored like a random player — roughly 50% against random —
-        // and evolution optimized that noise. A bot that cannot move is the
-        // result.
-        return incomplete(
-          `The ${isTrainedSeat ? 'trained' : 'baseline'} bot could not choose a move for seat ` +
-          `${currentPlayer}: ${error instanceof Error ? error.message : String(error)}`
-        );
+      const botName = `The ${isTrainedSeat ? 'trained' : 'baseline'} bot`;
+      const choice = await chooseMove(bot, runner.game, currentPlayer, botName);
+      if ('incomplete' in choice) return incomplete(choice.incomplete);
+      if ('waitUntil' in choice) {
+        waits.add(currentPlayer, choice.waitUntil, `${botName} for seat ${currentPlayer}`);
+        continue;
       }
+      const { action, args } = choice;
 
       const result = runner.performAction(action, currentPlayer, args);
       if (!result.success) {
@@ -334,6 +319,7 @@ async function runBenchmarkGame<G extends Game>(
       }
 
       actionCount++;
+      waits.clear();
       flowState = runner.getFlowState() ?? flowState;
     }
 
@@ -363,6 +349,39 @@ async function runBenchmarkGame<G extends Game>(
     return incomplete(
       `A game crashed: ${error instanceof Error ? error.message : String(error)}`
     );
+  }
+}
+
+/**
+ * The move `bot` makes for `seat`, the instant it waits for on the step clock
+ * (#1541), or why the game cannot go on.
+ */
+async function chooseMove(
+  bot: ReturnType<typeof createBot>,
+  game: Game,
+  seat: number,
+  botName: string,
+): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number } | { incomplete: string }> {
+  try {
+    const move = await bot.play();
+    if (!move && bot.lastWait?.until !== undefined) return { waitUntil: bot.lastWait.until };
+    if (!move) {
+      // The bot found nothing searchable from this seat's view (#29). In a
+      // live game that stalls one seat; in a benchmark the game cannot
+      // proceed, and a game that cannot proceed is not a draw (#37).
+      return { incomplete: `${botName} had no searchable move for seat ${seat}: ${bot.lastStallReason ?? 'no reason recorded'}` };
+    }
+    // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
+    return { action: move.action, args: picksFromSeat(game, move.action, move.args, seat) };
+  } catch (error) {
+    // #37: this used to substitute a RANDOM bot for the crashing one and
+    // play on. A trained bot whose objectives function threw on every call
+    // therefore scored like a random player — roughly 50% against random —
+    // and evolution optimized that noise. A bot that cannot move is the
+    // result.
+    return {
+      incomplete: `${botName} could not choose a move for seat ${seat}: ${error instanceof Error ? error.message : String(error)}`,
+    };
   }
 }
 

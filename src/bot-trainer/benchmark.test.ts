@@ -10,7 +10,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { benchmarkBot, weightedBot, weightedObjectives } from './benchmark.js';
-import { PlaybackTurnGame } from '../session/testing/fixtures/timed-step-fixture.js';
+import {
+  PlaybackTurnGame,
+  disabledGatedDefinition,
+  shortWindowGatedDefinition,
+  levelUpWhenAllowed,
+} from '../session/testing/fixtures/timed-step-fixture.js';
 import { createBot } from '../bot/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -307,6 +312,53 @@ describe('benchmarkBot', () => {
     });
     expect(result.draws).toBe(2);
     expect(result.incomplete).toBe(0);
+  });
+
+  // #1541: a bot that waits for a timed refusal to lapse moves the benchmark's clock to the instant it waits for.
+  it('moves the clock to the instant the trained bot waits for and asks it again', async () => {
+    const result = await benchmarkBot(disabledGatedDefinition.gameClass, 'gated', levelUpWhenAllowed, noWeights, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'wait',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.incomplete).toBe(0);
+  });
+
+  it('lets the baseline move before it moves the clock for a trained bot that waits (#1541)', async () => {
+    const { performAction } = GameRunner.prototype;
+    const instants: Array<number | undefined> = [];
+    const spy = vi.spyOn(GameRunner.prototype, 'performAction').mockImplementation(function (this: GameRunner, ...args) {
+      if (args[1] === 2) instants.push(this.game._hostNow);
+      return performAction.apply(this, args);
+    });
+    try {
+      // One game: the trained bot is seat 1, so it is asked first, and the baseline is seat 2.
+      await benchmarkBot(disabledGatedDefinition.gameClass, 'gated', levelUpWhenAllowed, noWeights, {
+        gameCount: 1,
+        mctsIterations: 1,
+        maxActions: 20,
+        seed: 'prompt',
+      });
+    } finally {
+      spy.mockRestore();
+    }
+    expect(instants).toEqual([0]);
+  });
+
+  it('reports a game whose trained bot waits past the open step\'s time limit as incomplete (#1541)', async () => {
+    const result = await benchmarkBot(shortWindowGatedDefinition.gameClass, 'short', levelUpWhenAllowed, noWeights, {
+      gameCount: 1,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'late',
+      allowIncomplete: true,
+    });
+    expect(result.failures).toEqual([
+      "The trained bot for seat 1 waits until instant 30000, but the open step's time limit ends at instant 10000, when a host would close the seat. " +
+        'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.',
+    ]);
   });
 
   it('checks weights against the objectives of a game whose rules read the step clock (#1535)', () => {

@@ -2427,7 +2427,10 @@ Action.create<MyGame>('levelUp')
   have no wall clock, so they stamp every op with one fixed instant: every move
   is made the instant its step opened, `stepOpenFor(ms)` is false for any
   `ms` above 0, and no deadline runs out. An action greyed for the first part of a step is never
-  played there.
+  played there, unless a bot waits for it (#1541): once every seat that can
+  move waits, the clock moves to the earliest instant they wait for, and they
+  are asked again. A wait that reaches the step's time limit stops the game,
+  since they run no deadlines.
 - In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
   for the start and `testGame.runner.setNow(ms)` before a later move, or
   `createHeadlessSession(def, { ..., now: () => ms })`, where

@@ -1393,6 +1393,12 @@ export class FlowEngine<G extends Game = Game> {
     return typeof data.openedAt === 'number' ? data.openedAt : null;
   }
 
+  /** The host instant the open timed step's time limit ends at (#1541), or `undefined` when no step with a stamped opening is open. */
+  openTimedStepClosesAt(): number | undefined {
+    const data = this.stack[this.stack.length - 1]?.data;
+    return typeof data?.timeLimitMs === 'number' && typeof data.openedAt === 'number' ? data.openedAt + data.timeLimitMs : undefined;
+  }
+
   /** Open the open timed step again at `now`, as a new game started from a saved position does (#1532). */
   reopenTimedStep(now: number): void {
     const frame = this.stack[this.stack.length - 1];
