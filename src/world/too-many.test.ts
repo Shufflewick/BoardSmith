@@ -75,7 +75,7 @@ describe("#1542: a pick's own sentence for an over-wide list", () => {
     const refused = engine.resolvePick("player-a", "send", "recipient", { to: "p" }, STAMP);
 
     await expect(refused).rejects.toBeInstanceOf(PlayerFacingError);
-    await expect(refused).rejects.toThrow(new RegExp(`^${TOO_MANY}$`));
+    await expect(refused).rejects.toHaveProperty("message", TOO_MANY);
   });
 
   it("still answers a narrow list", async () => {
@@ -101,5 +101,22 @@ describe("#1542: a pick's own sentence for an over-wide list", () => {
     await expect(engine.resolvePick("player-a", "send", "recipient", { to: "p" }, STAMP)).rejects.toThrow(
       /allows 2 per selection/,
     );
+  });
+
+  it("refuses a tooMany on the first pick, which the player has nothing earlier to narrow with", () => {
+    expect(() =>
+      worldAction<MailGame>("everyone")
+        .needs(() => [POST])
+        .chooseFrom("recipient", { choices: () => NAMES, tooMany: TOO_MANY }),
+    ).toThrow(/"everyone" action's "recipient" selection is the first.*Ask an earlier selection/);
+  });
+
+  it("refuses an empty tooMany, which would show the player a blank refusal", () => {
+    expect(() =>
+      worldAction<MailGame>("blank")
+        .needs(() => [POST])
+        .enterText("to")
+        .chooseFrom("recipient", { choices: () => NAMES, tooMany: " " }),
+    ).toThrow(/"blank" action's "recipient" selection has an empty tooMany/);
   });
 });

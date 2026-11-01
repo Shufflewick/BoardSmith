@@ -1161,6 +1161,22 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
     this.declareSelection(options.needs);
     if (options.tooMany !== undefined) {
+      const selection = `The "${this.definition.name}" action's "${name}" selection`;
+      if (this.definition.selections.length === 0) {
+        throw worldRefusal(
+          "invalid-world-action",
+          `${selection} is the first, so the player has nothing earlier to narrow it with and ` +
+            "its tooMany sentence could only ever refuse the whole offer. Ask an earlier selection " +
+            "the player can narrow it with, such as an enterText, or drop tooMany.",
+        );
+      }
+      if (options.tooMany.trim() === "") {
+        throw worldRefusal(
+          "invalid-world-action",
+          `${selection} has an empty tooMany, which would show the player a blank refusal. ` +
+            "Say what to do instead, such as \"Too many players match that name. Type more of it.\"",
+        );
+      }
       const world = this.definition.world as { tooMany?: Record<string, string> };
       world.tooMany = { ...world.tooMany, [name]: options.tooMany };
     }
