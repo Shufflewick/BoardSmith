@@ -210,6 +210,17 @@ boardsmith contract --update --adopt --summary "<why the platform must run this 
 It is refused when the contract DID move, so "the platform must adopt this"
 cannot become the sentence every revision carries.
 
+### Every change to a packed file mints a revision
+
+The platform refuses to vendor a BoardSmith `main` that packs different files
+under the revision it already holds (ShufflewickPub #532), so a merge that
+changes any file `npm pack` ships (a UI component, the CLI, a shipped doc) and
+mints no revision blocks the platform until a later merge mints one (#1534).
+`agent-policy verify` and every merge run
+`boardsmith contract --minted-since <where the branch left main>`, which fails
+naming each such file. Record the change with `--update`, or with
+`--update --adopt` when no fingerprint moved.
+
 ## Protocol: updating the platform
 
 On ShufflewickPub:

@@ -1,6 +1,10 @@
 {
   "verify": [
     {
+      "name": "contract-minted",
+      "run": "node bin/boardsmith.js contract --minted-since {changeBase}"
+    },
+    {
       "name": "audit",
       "run": "node bin/boardsmith.js audit --dupes-baseline --health-baseline --duplication"
     },

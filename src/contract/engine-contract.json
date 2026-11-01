@@ -1,5 +1,5 @@
 {
-  "revision": 281,
+  "revision": 282,
   "surfaceHash": "fd9e6c0ca296ce47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2191,6 +2191,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Table rules can read how long the open timed step has been open with game.stepElapsedMs() (in disabled, validate and execute; a condition that reads it throws): a host stamps every op with its instant through executeOp's hostOptions.now (GameRunner.setNow), the engine keeps the opening instant on the timed step's frame and the last instant on snapshot.now, a start from a seed snapshot reopens the step at its own instant, and a game whose rules read the clock refuses an op the host did not stamp, so the platform must pass hostOptions.now on every op (#1532)."
+    },
+    {
+      "revision": 282,
+      "date": "2026-11-01",
+      "surfaceHash": "fd9e6c0ca296ce47",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "No contract change; this build carries code since r281. Recorded here because r281's summary leaves it out: r281 was the first build to carry #1533, useActionController's executingAction, the name of the action the seat has out, so one button can show its own working label (UI only). New: boardsmith contract --minted-since <commit> fails when a file the platform packs changed with no new revision, and BoardSmith's verify and merge run it, so main no longer packs different files under one revision (#1534). Published games need no rebuild."
     }
   ]
 }
