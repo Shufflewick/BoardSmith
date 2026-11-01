@@ -228,12 +228,28 @@ describe('unmintedPackedChanges (#1534)', () => {
     expect(await unmintedPackedChanges(repo, base)).toEqual([]);
   });
 
+  it('refuses --minted-since alongside an option that records a revision', async () => {
+    process.exitCode = undefined;
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      await createProgram().parseAsync(['node', 'boardsmith', 'contract', '--minted-since', 'HEAD', '--update', '--adopt', '--summary', 'x']);
+      expect(error.mock.calls.flat().join('')).toContain('--minted-since only checks');
+      expect(process.exitCode).toBe(1);
+    } finally {
+      error.mockRestore();
+      process.exitCode = undefined;
+    }
+  });
+
   it('is what `boardsmith contract --minted-since` checks in this repository', async () => {
     process.exitCode = undefined;
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    await createProgram().parseAsync(['node', 'boardsmith', 'contract', '--minted-since', 'HEAD']);
-    expect(log.mock.calls.flat().join('')).toContain('No file the platform packs changed since HEAD');
-    log.mockRestore();
+    try {
+      await createProgram().parseAsync(['node', 'boardsmith', 'contract', '--minted-since', 'HEAD']);
+      expect(log.mock.calls.flat().join('')).toContain('No file the platform packs changed since HEAD');
+    } finally {
+      log.mockRestore();
+    }
     expect(process.exitCode).toBeUndefined();
   });
 });

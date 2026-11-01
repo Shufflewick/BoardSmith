@@ -225,6 +225,12 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     return;
   }
   if (options.mintedSince !== undefined) {
+    if (options.update || options.adopt || options.summary !== undefined || options.regenerateFormat) {
+      console.error(styleText('red', '\n--minted-since only checks, so it cannot be combined with --update, --adopt, --summary or --regenerate-format.\n'));
+      console.error('Record the revision first, commit it, then run the check on its own.\n');
+      process.exitCode = 1;
+      return;
+    }
     await reportMinted(options.mintedSince);
     return;
   }
