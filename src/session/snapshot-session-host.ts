@@ -1831,6 +1831,14 @@ export class SnapshotSessionHost {
     this.botSeatsHeldBack = { snapshot: this._snapshot, ...held };
   }
 
+  /** Hold back the seat a search found no move for, stalled or waiting, and say whether there was one. */
+  private heldBackUnmoved(found: OpSuccess<'botSuggest'>): boolean {
+    if (found.botStalled) this.holdBackStalledSeat(found.botStalled);
+    else if (found.botWaiting) this.holdWaitingSeat(found.botWaiting);
+    else return false;
+    return true;
+  }
+
   /**
    * Hold back a bot seat that chose to wait (#1537), and when its moves change
    * by the step clock sooner than any offer does, publish the turn boundary
@@ -1911,14 +1919,7 @@ export class SnapshotSessionHost {
       const tableMoved = this._snapshot !== searched;
       if (tableMoved && !(onTableAsItStands && foundAMove(found))) return 'stale';
       if (!found.success) return this.reportRefusedBotMove(found, seats);
-      if (found.botStalled) {
-        this.holdBackStalledSeat(found.botStalled);
-        return 'again';
-      }
-      if (found.botWaiting) {
-        this.holdWaitingSeat(found.botWaiting);
-        return 'again';
-      }
+      if (this.heldBackUnmoved(found)) return 'again';
       if (found.botPlayer === undefined) return 'done';
       return this.makeBotMove(searched, botMoveOp(searched, found.botPlayer, found.suggestedAction, found.suggestedArgs), seats);
     };
