@@ -301,6 +301,10 @@ export function createProgram(): Command {
       '--regenerate-format',
       'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
     )
+    .option(
+      '--minted-since <commit>',
+      'Fail when a file the platform packs changed between <commit> and HEAD and HEAD mints no new revision (a step of verify)',
+    )
     .action(contractCommand);
 
   // Whether this BoardSmith tree breaks a catalogue game. See src/cli/lib/catalogue-check.ts.

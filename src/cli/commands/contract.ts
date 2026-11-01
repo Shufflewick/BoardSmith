@@ -8,19 +8,23 @@
  * platform can find out.
  */
 
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { styleText } from 'node:util';
 
 import { buildFormatFixture, computeFingerprints } from '../../contract/fingerprint.js';
 import type { EngineContract } from '../../contract/index.js';
+import { gitOutput } from '../lib/git-output.js';
 
 export interface ContractOptions {
   update?: boolean;
   summary?: string;
   adopt?: boolean;
   regenerateFormat?: boolean;
+  mintedSince?: string;
 }
 
 // This file lives at src/cli/commands/contract.ts — repo root is three levels up.
@@ -131,6 +135,40 @@ export function nextContract(
   };
 }
 
+/** Each path npm would pack from the tree at `ref`, mapped to its git blob id. */
+async function packedBlobs(repo: string, ref: string): Promise<Map<string, string>> {
+  const dir = mkdtempSync(join(tmpdir(), 'boardsmith-packed-'));
+  try {
+    // npm applies `files` and its negations to a tree on disk, so the commit is exported, never the working tree.
+    await gitOutput(repo, ['archive', '-o', join(dir, 'tree.tar'), ref]);
+    execFileSync('tar', ['-xf', 'tree.tar'], { cwd: dir });
+    const [report] = JSON.parse(
+      execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
+    ) as [{ files: { path: string }[] }];
+    const packed = new Set(report.files.map((file) => file.path));
+    const blobs = new Map<string, string>();
+    for (const line of (await gitOutput(repo, ['ls-tree', '-r', '-z', ref])).split('\0').filter(Boolean)) {
+      const [meta, path] = line.split('\t');
+      if (packed.has(path)) blobs.set(path, meta.split(' ')[2]);
+    }
+    return blobs;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * The packed files that differ between `base` and HEAD when HEAD mints no engine revision
+ * past `base`'s, sorted; empty when nothing packed changed or a revision was minted.
+ */
+export async function unmintedPackedChanges(repo: string, base: string): Promise<string[]> {
+  const revisionAt = async (ref: string) =>
+    (JSON.parse(await gitOutput(repo, ['show', `${ref}:src/contract/engine-contract.json`])) as { revision: number }).revision;
+  if ((await revisionAt('HEAD')) > (await revisionAt(base))) return [];
+  const [before, after] = await Promise.all([packedBlobs(repo, base), packedBlobs(repo, 'HEAD')]);
+  return [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
+}
+
 function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContract>): void {
   console.log(styleText('cyan', '\nEngine contract\n'));
   console.log(`  revision        ${contract.revision}`);
@@ -158,6 +196,23 @@ function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContr
   console.error(styleText('dim', '\nSee docs/engine-contract.md.\n'));
 }
 
+async function reportMinted(base: string): Promise<void> {
+  const unminted = await unmintedPackedChanges(resolve(CONTRACT_PATH, '../../..'), base);
+  if (unminted.length === 0) {
+    console.log(styleText('green', `\n✓ No file the platform packs changed since ${base} without a new engine revision.\n`));
+    return;
+  }
+  console.error(styleText('red', `\n✗ This change alters ${unminted.length} file(s) BoardSmith packs, and mints no engine revision:\n`));
+  for (const path of unminted) console.error(`  ${path}`);
+  console.error('\nShufflewickPub archives one engine per revision, and refuses to vendor a main that');
+  console.error('packs different files under the revision it already holds. Record a revision:');
+  console.error(styleText('bold', '  boardsmith contract --update --summary "<one sentence for the platform team>"'));
+  console.error('or, when no fingerprint moved (a UI, CLI or docs change):');
+  console.error(styleText('bold', '  boardsmith contract --update --adopt --summary "<what changed, for the platform>"'));
+  console.error(styleText('dim', '\nThen commit src/contract/engine-contract.json. See docs/engine-contract.md.\n'));
+  process.exitCode = 1;
+}
+
 export async function contractCommand(options: ContractOptions): Promise<void> {
   const contract = readContract();
   if (contract === null) {
@@ -167,6 +222,10 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     console.error(styleText('dim', '\nTo see which engine a project is running, check its own vendored copy:'));
     console.error(styleText('dim', '  node_modules/boardsmith/src/contract/engine-contract.json\n'));
     process.exitCode = 1;
+    return;
+  }
+  if (options.mintedSince !== undefined) {
+    await reportMinted(options.mintedSince);
     return;
   }
   // REGENERATING THE CORPUS IS A DELIBERATE FORMAT BREAK, and it happens
