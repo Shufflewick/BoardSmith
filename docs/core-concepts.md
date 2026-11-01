@@ -1055,7 +1055,7 @@ The platform needs `choices` and a string `default`. The default names the seat 
 
 ### Presets
 
-Quick-start configurations for common game setups.
+Quick-start configurations for common game setups. `boardsmith dev` offers them: `--preset "<name>"` starts the run with one, and the preset picker in Table setup applies one to the next game.
 
 ```typescript
 presets: [
@@ -1063,22 +1063,25 @@ presets: [
     name: 'Quick Game',
     description: '7x7 board',
     options: { boardSize: 7 },
-    players: [
-      { color: '#e74c3c' },
-      { color: '#3498db' },
-    ],
   },
   {
-    name: 'vs bot',
-    description: 'Play against bot',
-    options: { boardSize: 9 },
+    name: 'Play as Dictator',
     players: [
-      { isBot: false, color: '#e74c3c' },
-      { isBot: true, botLevel: 'medium', color: '#3498db' },
+      { color: '#95a5a6', playerOptions: { role: 'dictator' } },
+      { color: '#e74c3c', isBot: true, botLevel: 'medium' },
     ],
   },
 ]
 ```
+
+`options` sets game options, as a player could choose them. `players`, when given, sets up one seat per entry, in seat order, and its length is the player count. Each seat (`PresetSeat`) may set:
+
+- `color`: a colour from `colorPalette`. A seat without one takes the palette's colour for its seat.
+- `isBot`: `true` leaves the seat to a bot. `boardsmith dev` seats no one there, and a person already sitting there when the preset is applied moves to a free seat the preset leaves to people, if there is one.
+- `botLevel`: the bot's level (`easy`, `medium`, `hard` or an iteration count), on a bot seat only. A bot seat without one plays at `--bot-level`.
+- `playerOptions`: the seat's player options by id. An option a seat leaves out takes its default. An exclusive option is set on the one seat that holds it, to its choice (`role: 'dictator'` above); when no seat sets it, the seat its default names holds it, as at the platform's lobby.
+
+`boardsmith dev` refuses, when the game loads, a preset the platform's lobby would refuse: a game option no player can choose, a seat field other than these four, a colour outside the palette, a bot level that is not one, a `botLevel` on a seat that is not a bot, or player options Table setup would refuse (such as an exclusive option given to two seats). `--game-option`, `--bot` and `--bot-level` beat what the preset sets, and `--players` may only repeat its number of seats.
 
 ### Receiving Options in Game Constructor
 

@@ -22,6 +22,7 @@ import {
   resolveDevPlayerOptions,
   parseGameOptionFlags,
   resolvePreset,
+  seatsUnderFlags,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
 import { createColorOption, type GameDefinition, type OpSuccess } from '../../session/index.js';
@@ -470,28 +471,43 @@ describe('parseGameOptionFlags (D13/DEVHOST-01: repeatable `--game-option key=va
   });
 });
 
-describe('resolvePreset (D13: applying a preset returns its options bundle + optional player count)', () => {
+describe('resolvePreset (D13: --preset names a preset the game declares)', () => {
   const presets = [
-    { name: 'advanced', description: 'Advanced setup', options: { difficulty: 'hard', rounds: 5 }, players: [{ name: 'P1' }, { name: 'P2' }, { name: 'P3' }] },
+    { name: 'advanced', description: 'Advanced setup', options: { difficulty: 'hard', rounds: 5 }, players: [{}, {}, {}] },
     { name: 'quick', options: { rounds: 1 } },
   ];
 
-  it('returns the named preset\'s options bundle', () => {
-    expect(resolvePreset(presets, 'quick').options).toEqual({ rounds: 1 });
-  });
-
-  it('returns the preset\'s player count when it declares `players`', () => {
-    const resolved = resolvePreset(presets, 'advanced');
-    expect(resolved.options).toEqual({ difficulty: 'hard', rounds: 5 });
-    expect(resolved.playerCount).toBe(3);
-  });
-
-  it('omits playerCount when the preset does not declare `players`', () => {
-    expect(resolvePreset(presets, 'quick').playerCount).toBeUndefined();
+  it('returns the named preset', () => {
+    expect(resolvePreset(presets, 'quick')).toBe(presets[1]);
   });
 
   it('refuses an unknown preset, naming the declared ones', () => {
     expectRefusal(() => resolvePreset(presets, 'nope'), '--preset takes a preset this game declares (advanced, quick), got "nope".');
+  });
+});
+
+describe('seatsUnderFlags (#1544: --bot and --bot-level beat the seats a preset sets up)', () => {
+  const seats = [
+    { playerOptions: { role: 'dictator' }, color: '#95a5a6', isBot: false },
+    { playerOptions: {}, isBot: true, botLevel: 'hard' },
+  ];
+
+  it('keeps the preset\'s seats when no flag sets them', () => {
+    expect(seatsUnderFlags('vs bot', seats, { players: 2 })).toEqual(seats);
+  });
+
+  it('takes the bots from --bot and every bot\'s level from --bot-level', () => {
+    expect(seatsUnderFlags('vs bot', seats, { players: 2, bot: [1], botLevel: 'easy' })).toEqual([
+      { ...seats[0], isBot: true, botLevel: 'easy' },
+      { ...seats[1], isBot: false, botLevel: 'easy' },
+    ]);
+  });
+
+  it('refuses --players asking for another number of seats', () => {
+    expectRefusal(
+      () => seatsUnderFlags('vs bot', seats, { players: 3 }),
+      '--preset "vs bot" sets up 2 seats, so it cannot run with --players 3. Leave out --players, or pass --players 2.',
+    );
   });
 });
 

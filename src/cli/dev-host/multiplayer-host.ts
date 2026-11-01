@@ -38,7 +38,7 @@ import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, PlayerOptionDefinition } from '../../session/types.js';
-import { defaultSeatOptions, exclusiveSeats, seatOptionsRefusal } from '../lib/player-options.js';
+import { defaultSeatOptions, exclusiveSeats, presetSeatSetup, seatOptionsRefusal, type SeatSetup } from '../lib/player-options.js';
 import {
   PERSIST_KEY,
   PersistenceStore,
@@ -260,6 +260,12 @@ export interface MultiplayerHostOptions {
    */
   presets?: GamePreset[];
   /**
+   * Each seat as the run's `--preset` sets it up, the `--bot` and
+   * `--bot-level` flags already over it (#1544). Its bot seats replace
+   * `designatedBotSeats`.
+   */
+  seatSetup?: SeatSetup[];
+  /**
    * When true, teaching/assist features (hint, heatmap, demo, tutorial) are rejected
    * fail-loud for this session. Set by `boardsmith dev --lock-teaching`.
    * Threaded as executeOp's dedicated `hostOptions` parameter (NOT the
@@ -466,6 +472,8 @@ export class MultiplayerHost {
    * host keeps its own copy, which `announceRoster` brings up to date.
    */
   private readonly botSeats: Array<{ seat: number; level?: string }> = [];
+  /** Each seat as the applied preset set it up (#1544), read for its colour and bot level; empty when none is. */
+  private seatSetup: SeatSetup[] = [];
   /** The bot roster the pages' lobby last showed, as `announceRoster` compares it. */
   private lobbyRoster = '';
   /** The client (if any) that follows the active seat — it controls whichever
@@ -545,6 +553,7 @@ export class MultiplayerHost {
       this.seats.set(seat, { seat, clientId: null, name: seatDisplayName(seat), connected: false, playerOptions: {} });
     }
     this.setSeatOptions(defaultSeatOptions(opts.playerOptions ?? {}, opts.playerCount));
+    if (opts.seatSetup) this.applySeatSetup(opts.seatSetup);
     this.appliedGameOptions = opts.baseGameOptions ?? selectDesignerGameOptions(opts.declaredGameOptions, {});
   }
 
@@ -796,6 +805,7 @@ export class MultiplayerHost {
     }
     let bundle: Record<string, unknown> = {};
     let requestedPlayerCount: unknown;
+    let seatSetup: SeatSetup[] | undefined;
     if (msg.preset !== undefined) {
       const preset = this.opts.presets?.find((p) => p.name === msg.preset);
       if (!preset) {
@@ -804,13 +814,26 @@ export class MultiplayerHost {
         return;
       }
       bundle = { ...preset.options };
-      if (preset.players?.length) requestedPlayerCount = preset.players.length;
+      try {
+        seatSetup = presetSeatSetup(preset, this.opts.playerOptions ?? {}, (this.opts.colorPalette ?? []).map((c) => c.value));
+      } catch (err) {
+        this.send(clientId, { type: 'error', message: (err as Error).message });
+        return;
+      }
+      requestedPlayerCount = seatSetup?.length;
     }
     if (msg.gameOptions) {
       // The player count may ride beside the options, as a preset declares
       // it. It is the host's field, applied to the seat map below, and never
       // part of the selection: the selection would refuse it by name.
       const { playerCount, ...options } = msg.gameOptions;
+      if (playerCount !== undefined && seatSetup !== undefined && playerCount !== seatSetup.length) {
+        this.send(clientId, {
+          type: 'error',
+          message: `Preset "${msg.preset}" sets up ${seatSetup.length} seats, so it cannot be applied with playerCount ${JSON.stringify(playerCount)}. Leave out playerCount.`,
+        });
+        return;
+      }
       if (playerCount !== undefined) requestedPlayerCount = playerCount;
       bundle = { ...bundle, ...options };
     }
@@ -855,6 +878,7 @@ export class MultiplayerHost {
       }
       this.resizeSeats(newPlayerCount);
     }
+    if (seatSetup) this.applySeatSetup(seatSetup);
 
     this.appliedGameOptions = selection;
     await this.startGame();
@@ -878,6 +902,45 @@ export class MultiplayerHost {
     table.forEach((values, index) => {
       this.seats.get(index + 1)!.playerOptions = { ...values };
     });
+  }
+
+  /**
+   * Set each seat up as a preset says (#1544): its player options, colour and
+   * bot. A person seated where the preset puts a bot moves to a free seat it
+   * leaves to people; with none free, they keep their seat, since a seat a
+   * person holds is never a bot's.
+   */
+  private applySeatSetup(setup: SeatSetup[]): void {
+    this.seatSetup = setup;
+    this.setSeatOptions(setup.map((seat) => seat.playerOptions));
+    this.opts.designatedBotSeats = setup.flatMap((seat, index) => (seat.isBot ? [index + 1] : []));
+    const seats = [...this.seats.values()];
+    const free = seats.filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
+    const moving = seats.filter((info) => info.clientId && setup[info.seat - 1].isBot);
+    moving.slice(0, free.length).forEach((from, index) => this.moveHolder(from, free[index]));
+    for (const info of seats) {
+      if (info.clientId) info.color = setup[info.seat - 1].color ?? info.color;
+    }
+  }
+
+  /** Move a seat's holder to the open seat `to`, telling their page; an away page keeps its grace there. */
+  private moveHolder(from: SeatInfo, to: SeatInfo): void {
+    const { seat, clientId, name, connected } = from;
+    const away = this.reconnecting.has(seat);
+    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name);
+    to.connected = connected;
+    if (away) this.startGrace(to.seat);
+    this.send(clientId!, { type: 'joined', seat: to.seat });
+  }
+
+  /** The colour a seat takes when its player chose none: the applied preset's, else the palette's. */
+  private defaultColor(seat: number): string | undefined {
+    return this.seatSetup[seat - 1]?.color ?? this.opts.colorPalette?.[seat - 1]?.value;
+  }
+
+  /** The level a bot plays a seat at: the applied preset's, else `--bot-level`. */
+  private botLevel(seat: number): string | undefined {
+    return this.seatSetup[seat - 1]?.botLevel ?? this.opts.botLevel;
   }
 
   /**
@@ -908,6 +971,7 @@ export class MultiplayerHost {
       }
     }
     this.opts.playerCount = newCount;
+    this.seatSetup = [];
     // An exclusive option's default names a seat by the count, so a new count starts from the defaults.
     this.setSeatOptions(defaultSeatOptions(this.opts.playerOptions ?? {}, newCount));
   }
@@ -1174,7 +1238,7 @@ export class MultiplayerHost {
     this.endGrace(seat);
     info.clientId = clientId;
     info.name = seatDisplayName(seat, name?.trim());
-    info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;
+    info.color = color ?? this.defaultColor(seat);
     info.connected = true;
     this.clientSeat.set(clientId, seat);
     this.removeBotSeat(seat); // a human now plays this seat
@@ -1187,7 +1251,7 @@ export class MultiplayerHost {
 
   private addBotSeat(seat: number): void {
     if (seat >= 1 && seat <= this.opts.playerCount && !this.botSeats.some((s) => s.seat === seat)) {
-      this.botSeats.push({ seat, level: this.opts.botLevel });
+      this.botSeats.push({ seat, level: this.botLevel(seat) });
     }
   }
 
@@ -1259,7 +1323,7 @@ export class MultiplayerHost {
   private rebuildBotSeats(): void {
     this.botSeats.length = 0;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
-      if (!this.heldByHuman(seat)) this.botSeats.push({ seat, level: this.opts.botLevel });
+      if (!this.heldByHuman(seat)) this.botSeats.push({ seat, level: this.botLevel(seat) });
     }
   }
 
@@ -1402,7 +1466,7 @@ export class MultiplayerHost {
         ...perSeatOptions[i],
         name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
         isBot: !humanSeats.has(i + 1),
-        botLevel: this.opts.botLevel,
+        botLevel: this.botLevel(i + 1),
       })),
     };
     this.injectPersistedStore(startGameOptions, humanSeats, playerCount);
@@ -1617,7 +1681,7 @@ export class MultiplayerHost {
   private buildPerSeatOptions(): Array<Record<string, unknown>> {
     return Array.from({ length: this.opts.playerCount }, (_, i) => {
       const seat = this.seats.get(i + 1);
-      const color = seat?.color ?? this.opts.colorPalette?.[i]?.value;
+      const color = seat?.color ?? this.defaultColor(i + 1);
       const perSeat: Record<string, unknown> = { ...seat?.playerOptions };
       if (color !== undefined) perSeat.color = color;
       return perSeat;
@@ -1636,7 +1700,7 @@ export class MultiplayerHost {
   private buildColorGameOptions(): { colors?: string[]; colorLabels?: Record<string, string> } {
     const colors = Array.from({ length: this.opts.playerCount }, (_, i) => {
       const seat = this.seats.get(i + 1);
-      return seat?.color ?? this.opts.colorPalette?.[i]?.value;
+      return seat?.color ?? this.defaultColor(i + 1);
     });
     if (colors.some((c) => c === undefined)) return {};
 

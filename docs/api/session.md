@@ -102,6 +102,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `ExclusivePlayerOption` - Exclusive player option
 - `PlayerConfig` - Player configuration
 - `GamePreset` - Game preset definition
+- `PresetSeat` - How a preset sets up one seat (colour, bot, bot level, player options)
 - `GameOptionDefinition` - Game option definition
 - `NumberOption` - Numeric option
 - `SelectOption` - Selection option

@@ -1,5 +1,5 @@
 {
-  "revision": 291,
+  "revision": 292,
   "surfaceHash": "f06ff4e4e6e71ec7",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2271,6 +2271,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The random simulation policy draws a move again, three draws in all, when the action's validate or a number's own validate refuses it for its numbers, so a number whose valid range depends on other picks no longer fails a simulated game (#1543)."
+    },
+    {
+      "revision": 292,
+      "date": "2026-11-01",
+      "surfaceHash": "f06ff4e4e6e71ec7",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Presets set up each seat in boardsmith dev: GamePreset.players is now PresetSeat[] (color, isBot, botLevel, playerOptions), including which seat holds an exclusive player option; no surface or payload the platform reads changed (#1544)."
     }
   ]
 }

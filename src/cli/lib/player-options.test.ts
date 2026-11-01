@@ -5,7 +5,7 @@
  * carry, since dev and the live lobby must offer the same list.
  */
 import { describe, it, expect } from 'vitest';
-import { defaultSeatOptions, exclusiveSeats, mergePlayerOptions, seatOptionsRefusal } from './player-options.js';
+import { defaultSeatOptions, exclusiveSeats, mergePlayerOptions, presetSeatSetup, seatOptionsRefusal } from './player-options.js';
 import { createColorOption, type PlayerOptionDefinition } from '../../session/index.js';
 
 const role: PlayerOptionDefinition = {
@@ -205,5 +205,37 @@ describe('seatOptionsRefusal (#1323)', () => {
     ['an exclusive option two seats hold', table(holder, holder), /Dictator is given to seats 1 and 2; give it to one seat\./],
   ])('refuses %s', (_case, seats, message, more = {}) => {
     expect(seatOptionsRefusal({ ...declared, ...more }, seats, 2)).toMatch(message);
+  });
+});
+
+describe('presetSeatSetup (#1544)', () => {
+  const options = { role, level: botLevel } as Record<string, PlayerOptionDefinition>;
+  const palette = ['#e74c3c', '#3498db'];
+  const setup = (players: unknown[]) => () => presetSeatSetup({ name: 'P', players } as never, options, palette);
+
+  it('sets up no seats for a preset that declares none', () => {
+    expect(presetSeatSetup({ name: 'P', options: {} }, options, palette)).toBeUndefined();
+  });
+
+  it('gives an exclusive option to the seat that sets it, and every option a seat leaves out its default', () => {
+    expect(setup([{ playerOptions: { role: 'dictator' } }, { isBot: true, botLevel: '750', playerOptions: { level: 'hard' } }])()).toEqual([
+      { playerOptions: { role: 'dictator', level: 'easy' }, isBot: false },
+      { playerOptions: { level: 'hard' }, isBot: true, botLevel: '750' },
+    ]);
+  });
+
+  it('leaves an exclusive option no seat sets on the seat its default names', () => {
+    expect(setup([{}, {}])()!.map((seat) => seat.playerOptions)).toEqual([{ level: 'easy' }, { level: 'easy', role: 'dictator' }]);
+  });
+
+  it.each([
+    [[{ color: '#000000' }, {}], 'seat 1\'s color "#000000" is not in the game\'s colorPalette (#e74c3c, #3498db).'],
+    [[{}, { botLevel: 'hard' }], 'seat 2 sets a botLevel but is not a bot. Give it isBot: true, or remove its botLevel.'],
+    [[{}, { isBot: true, botLevel: 'expert' }], 'seat 2: Unknown bot level "expert". Use one of: easy, medium, hard, or a positive iteration count such as 750.'],
+    [[{ playerOptions: { role: 'dictator' } }, { playerOptions: { role: 'dictator' } }], 'Dictator is given to seats 1 and 2; give it to one seat.'],
+    [[{ playerOptions: { level: 'expert' } }, {}], 'Seat 1: Difficulty is "expert", which is none of its choices (easy, hard).'],
+    [[{}, { color: '#e74c3c' }], 'seats 1 and 2 both take the color #e74c3c; give each seat its own.'],
+  ])('refuses %j', (players, reason) => {
+    expect(setup(players)).toThrow(`This game's preset "P" cannot be used: ${reason} Correct the preset.`);
   });
 });

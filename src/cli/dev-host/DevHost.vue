@@ -122,6 +122,8 @@ function applyLobbyOptions(): void {
   const message: Record<string, unknown> = { type: 'configure', gameOptions };
   if (presetSelection.value) message.preset = presetSelection.value;
   wsSend(message);
+  // Sent once: a later Apply sending it again would set the seats up over what was changed since.
+  presetSelection.value = '';
 }
 
 // ── Each seat's player options (#1323) ─────────────────────────────────────────
