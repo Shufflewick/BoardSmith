@@ -67,6 +67,14 @@ const off = audioService.onChange(() => { /* settings changed */ });
 off();                            // stop listening
 ```
 
+Browsers play no sound until the player has clicked or pressed a key in the
+game, and after that every sound plays. When the browser blocks the turn chime,
+`audioService` warns in the console. A host page that frames the game from
+another origin gives its iframe `allow="autoplay"`, so the player's clicks on
+the host page count too. Without it, sound waits for the first click inside the
+game frame. `boardsmith dev` serves its frame from the same origin as its host page, so
+it needs no `allow`.
+
 ## See Also
 
 - [Agent control](../agent-control.md) - Driving `boardsmith dev` from a script

@@ -13,6 +13,22 @@ export interface AudioServiceOptions {
   turnSoundUrl?: string;
 }
 
+/** Say in the console why the turn chime did not play, so a silent game has a visible cause. */
+function reportRefusedChime(err: unknown): void {
+  const name = err instanceof DOMException ? err.name : '';
+  // An AbortError only means a newer sound took over the element.
+  if (name === 'AbortError') return;
+  if (name === 'NotAllowedError') {
+    console.warn(
+      'The browser blocked the turn chime because nobody has clicked or pressed a key in the game yet. ' +
+        'Sounds play once you click or press a key in the game. A host page that frames the game from ' +
+        'another origin should give its iframe allow="autoplay" so clicks on the host page count too.',
+    );
+    return;
+  }
+  console.warn('The turn chime could not play:', err);
+}
+
 /**
  * Audio service singleton for playing game notification sounds
  */
@@ -35,7 +51,7 @@ class AudioService {
    *   rather than rejecting it, so a bare clamp looks safe and is not.
    * - Assigning `NaN` to `HTMLAudioElement.volume` throws in the browser, and
    *   the throw happens inside `playTurnSound`'s catch, so the failure mode is
-   *   silently muted audio rather than a visible error.
+   *   a muted chime and a console warning rather than an error the game sees.
    *
    * A non-finite value therefore keeps the current setting instead of taking
    * it. Returns whether the volume was accepted, so callers know whether there
@@ -102,9 +118,7 @@ class AudioService {
       this.audioElement.volume = this.volume;
       await this.audioElement.play();
     } catch (err) {
-      // Audio play can fail if user hasn't interacted with page yet
-      // This is expected behavior - silently ignore
-      console.debug('Audio play failed (user interaction required):', err);
+      reportRefusedChime(err);
     }
   }
 
