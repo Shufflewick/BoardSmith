@@ -13,7 +13,7 @@ import { encodeValue } from '../engine/element/game-element.js';
 import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
 import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
-import { FROZEN_NOW } from '../runtime/runner.js';
+import { FROZEN_NOW, moveClockToWait, type ClockWait } from '../runtime/runner.js';
 import type { Policy, SimulatedGame } from './policies.js';
 
 /** The move's args as the action history would write them, or a plain note when they cannot be written. */
@@ -309,8 +309,8 @@ export async function playGame<G extends Game>(
   let stuck = false;
   let stopReason: string | undefined;
   let restReason: string | undefined;
-  // The host instant the game is at: it moves only when a seat waits on the step clock (#1541).
-  let now = FROZEN_NOW;
+  /** Seats waiting on the step clock since the game last changed (#1541). */
+  const waiting = new Map<number, ClockWait>();
   const recorder = metricRecorder(definition.metrics);
 
   try {
@@ -321,7 +321,7 @@ export async function playGame<G extends Game>(
       playerCount,
       seed,
       autoStart: false,
-      now,
+      now: FROZEN_NOW,
       metricSink: recorder.sink,
     });
     testGame.start();
@@ -370,7 +370,18 @@ export async function playGame<G extends Game>(
           'with isResting in a simulateRandomGames test; otherwise the flow is deadlocked.';
         break;
       }
-      const actor = mover.pick(seats);
+      const ready = seats.filter(({ seat }) => !waiting.has(seat));
+      if (ready.length === 0) {
+        const late = moveClockToWait(testGame.runner, waiting.values());
+        if (late !== undefined) {
+          stuck = true;
+          stopReason = late;
+          break;
+        }
+        waiting.clear();
+        continue;
+      }
+      const actor = mover.pick(ready);
       const policy = policies[actor.seat - 1];
       const version = testGame.game._ctx._stateVersion;
       const choice = await policy.choose({
@@ -394,15 +405,7 @@ export async function playGame<G extends Game>(
         break;
       }
       if ('waitUntil' in choice) {
-        if (!(choice.waitUntil > now)) {
-          throw new Error(
-            `Policy '${policy.name}' waits until instant ${choice.waitUntil}, which is not after the game's instant ${now}, so the game would never move on. ` +
-              "Wait only for an instant later than the game's, or return the move the seat makes now.",
-          );
-        }
-        // As a host's reoffer timer would.
-        now = choice.waitUntil;
-        testGame.runner.setNow(now);
+        waiting.set(actor.seat, { until: choice.waitUntil, who: `Policy '${policy.name}'` });
         continue;
       }
 
@@ -413,6 +416,7 @@ export async function playGame<G extends Game>(
 
       if (result.success) {
         recorder.keep();
+        waiting.clear();
         actionCount++;
         if (!testGame.isComplete()) {
           restReason = declaredRest(isResting, testGame.game);

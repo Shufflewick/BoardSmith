@@ -3464,6 +3464,15 @@ export class Game<
   }
 
   /**
+   * The host instant the open timed step's time limit ends at (#1541), or
+   * `undefined` when no timed step with a stamped opening is open.
+   * @internal
+   */
+  stepClosesAt(): number | undefined {
+    return this._flowEngine?.openTimedStepClosesAt();
+  }
+
+  /**
    * Get current flow state
    */
   getFlowState(): FlowState | undefined {

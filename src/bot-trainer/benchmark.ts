@@ -1,7 +1,7 @@
 import type { Game } from '../engine/index.js';
 import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
-import { FROZEN_NOW } from '../runtime/runner.js';
+import { FROZEN_NOW, moveClockToWait, type ClockWait } from '../runtime/runner.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
@@ -278,6 +278,8 @@ async function runBenchmarkGame<G extends Game>(
     let flowState = runner.start();
 
     let actionCount = 0;
+    /** Seats waiting on the step clock since the game last changed (#1541). */
+    const waiting = new Map<number, ClockWait>();
 
     while (!flowState.complete && actionCount < maxActions) {
       if (Date.now() - startTime > timeout) {
@@ -287,12 +289,19 @@ async function runBenchmarkGame<G extends Game>(
         return incomplete('A game stopped awaiting input before it completed.');
       }
 
-      // The first due seat that can move: the one seat of an action step, or the
-      // first co-decider with an enabled move in a simultaneous step (#321, #1133).
+      // The first due seat that can move and is not waiting on the step clock: the one seat of an action
+      // step, or the first co-decider with an enabled move in a simultaneous step (#321, #1133).
       // currentPlayer is a POSITION (1-indexed), trainedPlayerIndex is an INDEX (0-indexed)
-      const currentPlayer = dueSeatOffers(flowState, runner.game).find((offer) => offer.canMove)?.seat;
-      if (currentPlayer === undefined) {
+      const movable = dueSeatOffers(flowState, runner.game).filter((offer) => offer.canMove);
+      if (movable.length === 0) {
         return incomplete('A game was awaiting input with no seat that could act (no due seat had an enabled action or a follow-up), and the game was not over.');
+      }
+      const currentPlayer = movable.find((offer) => !waiting.has(offer.seat))?.seat;
+      if (currentPlayer === undefined) {
+        const late = moveClockToWait(runner, waiting.values());
+        if (late !== undefined) return incomplete(late);
+        waiting.clear();
+        continue;
       }
 
       const isTrainedSeat = currentPlayer === trainedPlayerIndex + 1;
@@ -303,8 +312,10 @@ async function runBenchmarkGame<G extends Game>(
       try {
         const move = await bot.play();
         if (!move && bot.lastWait?.until !== undefined) {
-          // Time passes only when a seat waits on the step clock: move it there, as a host's reoffer timer would (#1541).
-          runner.setNow(bot.lastWait.until);
+          waiting.set(currentPlayer, {
+            until: bot.lastWait.until,
+            who: `The ${isTrainedSeat ? 'trained' : 'baseline'} bot for seat ${currentPlayer}`,
+          });
           continue;
         }
         if (!move) {
@@ -339,6 +350,7 @@ async function runBenchmarkGame<G extends Game>(
       }
 
       actionCount++;
+      waiting.clear();
       flowState = runner.getFlowState() ?? flowState;
     }
 

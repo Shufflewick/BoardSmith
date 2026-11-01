@@ -21,7 +21,10 @@
  * `src/bot-trainer/benchmark.test.ts`), which need a game that ends.
  * `ValidateGatedGame` and `DisabledGatedGame`, played with `levelUpWhenAllowed`,
  * have a bot that waits for the playback to level up (#1537), for
- * `src/session/step-clock.test.ts` and the dev host's deadline suite.
+ * `src/session/step-clock.test.ts` and the dev host's deadline suite, and for
+ * the simulator and the benchmark, which move their clock to the instant the
+ * bot waits for (#1541). `ShortWindowGatedGame` closes its step before the
+ * playback ends, so the bot waits past the deadline.
  */
 import {
   Game,
@@ -188,7 +191,7 @@ class ClockGatedGame extends Game<ClockGatedGame, Player> {
   levelledUp: number[] = [];
   done: number[] = [];
 
-  constructor(options: GameOptions, gate: 'validate' | 'disabled') {
+  constructor(options: GameOptions, gate: 'validate' | 'disabled', timeLimitMs = 120_000) {
     super(options);
     const offered = Action.create<ClockGatedGame>('levelUp')
       .condition({ 'not levelled up yet': (ctx) => !ctx.game.levelledUp.includes(ctx.player.seat) });
@@ -211,7 +214,7 @@ class ClockGatedGame extends Game<ClockGatedGame, Player> {
         actions: ['levelUp', 'done'],
         playerDone: (ctx, player) => ctx.game.done.includes(player.seat),
         allDone: (ctx) => ctx.game.done.length === 2,
-        timeLimitMs: 120_000,
+        timeLimitMs,
       }),
     });
   }
@@ -229,5 +232,13 @@ class DisabledGatedGame extends ClockGatedGame {
   }
 }
 
+/** A 10 s round, which a host closes before the 30 s playback ends (#1541). */
+class ShortWindowGatedGame extends ClockGatedGame {
+  constructor(options: GameOptions) {
+    super(options, 'disabled', 10_000);
+  }
+}
+
 export const validateGatedDefinition = twoSeat(ValidateGatedGame, 'timed-step-validate-gated');
 export const disabledGatedDefinition = twoSeat(DisabledGatedGame, 'timed-step-disabled-gated');
+export const shortWindowGatedDefinition = twoSeat(ShortWindowGatedGame, 'timed-step-short-window-gated');

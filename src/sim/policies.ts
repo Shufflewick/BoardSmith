@@ -53,7 +53,8 @@ export interface PolicyMove {
 /**
  * A policy's answer: a move, why its seat has none it can play, or the host
  * instant, epoch ms, its seat waits for (a bot whose strategy waits on the step
- * clock, #1541), at which the simulator moves the game's clock and asks again.
+ * clock, #1541). Once every seat that can move waits, the simulator moves the
+ * game's clock to the earliest of them and asks again.
  */
 export type PolicyChoice = PolicyMove | { noMove: string } | { waitUntil: number };
 

@@ -17,6 +17,7 @@ import {
   playbackTurnDefinition,
   validateGatedDefinition,
   disabledGatedDefinition,
+  shortWindowGatedDefinition,
   levelUpWhenAllowed,
 } from '../session/testing/fixtures/timed-step-fixture.js';
 
@@ -431,6 +432,31 @@ describe('playGame with policies (#556)', () => {
     expect(result.completed).toBe(true);
     // Each seat levels up once the playback has ended, then is done.
     expect(result.actionCount).toBe(4);
+  });
+
+  it('lets the other seats move before it moves the clock for a seat that waits (#1541)', async () => {
+    const instants: Array<number | undefined> = [];
+    const prompt: Policy = { name: 'prompt', choose: ({ game }) => (instants.push(game._hostNow), { action: 'done', args: {} }) };
+    for (const seed of ['a', 'b', 'c', 'd']) {
+      const result = await playGame(
+        { ...disabledGatedDefinition, bot: levelUpWhenAllowed },
+        { playerCount: 2, seed, policies: [mcts(1), prompt], maxActions: 20 },
+      );
+      expect(result.completed).toBe(true);
+    }
+    expect(instants).toEqual([0, 0, 0, 0]);
+  });
+
+  it('stops a game whose bot waits past the open step\'s time limit, which a host would close it at (#1541)', async () => {
+    const result = await playGame(
+      { ...shortWindowGatedDefinition, bot: levelUpWhenAllowed },
+      { playerCount: 2, seed: 'late', policies: [mcts(1), mcts(1)], maxActions: 20 },
+    );
+    expect(result.stuck).toBe(true);
+    expect(result.error).toBe(
+      "Policy 'mcts:1' waits until instant 30000, but the open step's time limit ends at instant 10000, when a host would close the seat. " +
+        'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.',
+    );
   });
 
   it('refuses a policy that waits for an instant that is not after the game\'s own (#1541)', async () => {
