@@ -265,8 +265,24 @@ export interface GamePreset {
   description?: string;
   /** Game options to apply; a preset that only sets its players leaves this out */
   options?: Record<string, unknown>;
-  /** Per-player configurations */
-  players?: PlayerConfig[];
+  /** One entry per seat, in seat order; their number is the player count */
+  players?: PresetSeat[];
+}
+
+/**
+ * How a preset sets up one seat. Every field may be left out: a seat with no
+ * `color` takes the palette's, and a player option it does not set takes its
+ * default, or for an exclusive option the seat its default names.
+ */
+export interface PresetSeat {
+  /** A colour from boardsmith.json's `colorPalette` */
+  color?: string;
+  /** Leave this seat to a bot: no one is seated here when the table opens */
+  isBot?: boolean;
+  /** The bot's level (easy, medium, hard or an iteration count); a bot seat only */
+  botLevel?: string;
+  /** This seat's player options by id; an exclusive option is set on the one seat that holds it, to its choice */
+  playerOptions?: Record<string, unknown>;
 }
 
 // ============================================

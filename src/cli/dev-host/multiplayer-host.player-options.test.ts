@@ -7,8 +7,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike, type PlayerOptionDefinition } from '../../session/index.js';
-import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { executeOp, type GameDefinitionLike, type GamePreset, type PlayerOptionDefinition } from '../../session/index.js';
+import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 
 class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
@@ -31,8 +31,26 @@ const playerOptions: Record<string, PlayerOptionDefinition> = {
   dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
 };
 const personal = { handicap: 2, ready: false };
+const colorPalette = [
+  { value: '#e74c3c', label: 'Red' },
+  { value: '#3498db', label: 'Blue' },
+  { value: '#95a5a6', label: 'Grey' },
+  { value: '#27ae60', label: 'Green' },
+];
+const presets = [
+  {
+    name: 'Play as Dictator',
+    players: [
+      { color: '#95a5a6', playerOptions: { dictator: 'dictator' } },
+      { color: '#e74c3c', isBot: true, botLevel: 'hard', playerOptions: { handicap: 4 } },
+    ],
+  },
+  { name: 'Two people and a bot', players: [{}, { isBot: true }, {}] },
+  // A game written in plain JavaScript, or cast, can still hand the host a field a seat does not take.
+  { name: 'Unknown field', players: [{ dictator: true }, {}] } as unknown as GamePreset,
+];
 
-function table(playerCount = 3) {
+function table(playerCount = 3, seating: Pick<MultiplayerHostOptions, 'colorPalette' | 'presets'> = {}) {
   const starts: Array<Record<string, any>> = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   const sent: HostOutbound[] = [];
   const host = new MultiplayerHost({
@@ -41,6 +59,7 @@ function table(playerCount = 3) {
     maxPlayers: def.maxPlayers,
     makeSeed: () => 'seat-options',
     playerOptions,
+    ...seating,
     executeOp: (gameOptions, snap, pend, op, hostOptions) => {
       if (op.type === 'start') starts.push(gameOptions);
       return executeOp(def, gameOptions, snap, pend, op, hostOptions);
@@ -107,5 +126,82 @@ describe('MultiplayerHost — each seat\'s player options (#1323, #1325)', () =>
 
     expect(starts.at(-1)!.playerOptions).toEqual([personal, { ...personal, dictator: 'dictator' }]);
     expect(starts.at(-1)!.exclusiveSeats).toEqual({ dictator: 2 });
+  });
+});
+
+describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
+  it('gives each seat the preset\'s player options, colour and bot, filling the rest from the defaults', async () => {
+    const { host, starts, sent } = table(3, { colorPalette, presets });
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'configure', preset: 'Play as Dictator' });
+
+    expect(sent.filter((m) => m.type === 'error')).toEqual([]);
+    const start = starts.at(-1)!;
+    expect(start.playerOptions).toEqual([
+      { ...personal, dictator: 'dictator', color: '#95a5a6' },
+      { ...personal, handicap: 4, color: '#e74c3c' },
+    ]);
+    expect(start.exclusiveSeats).toEqual({ dictator: 1 });
+    expect(start.colors).toEqual(['#95a5a6', '#e74c3c']);
+    expect(start.playerIsBot).toEqual([false, true]);
+    expect(start.playerConfigs[1]).toMatchObject({ isBot: true, botLevel: 'hard' });
+  });
+
+  it('moves a person out of a seat the preset gives a bot, into a seat it gives a person', async () => {
+    const { host, starts, sent } = table(3, { colorPalette, presets });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'join', seat: 2 });
+
+    await host.handleMessage('A', { type: 'configure', preset: 'Two people and a bot' });
+
+    expect(sent.filter((m) => m.type === 'joined').at(-1)).toEqual({ type: 'joined', seat: 3 });
+    expect(starts.at(-1)!.playerIsBot).toEqual([false, true, false]);
+  });
+
+  it('starts the first game with the seats the run was started with', async () => {
+    const starts: Array<Record<string, any>> = []; // eslint-disable-line @typescript-eslint/no-explicit-any
+    const host = new MultiplayerHost({
+      playerCount: 3,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'seat-setup',
+      playerOptions,
+      colorPalette,
+      seatSetup: [
+        { playerOptions: personal, isBot: false },
+        { playerOptions: { ...personal, dictator: 'dictator' }, color: '#27ae60', isBot: true, botLevel: 'easy' },
+        { playerOptions: personal, isBot: false },
+      ],
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') starts.push(gameOptions);
+        return executeOp(def, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: () => {},
+    });
+
+    await host.handleMessage('A', { type: 'hello' });
+
+    expect(starts[0].exclusiveSeats).toEqual({ dictator: 2 });
+    expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#95a5a6']);
+    expect(starts[0].playerIsBot).toEqual([false, true, true]);
+    expect(starts[0].playerConfigs[1]).toMatchObject({ botLevel: 'easy' });
+  });
+
+  it('refuses a preset seat that sets a field a seat does not take, and deals nothing', async () => {
+    const { host, starts, sent } = table(2, { colorPalette, presets });
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'configure', preset: 'Unknown field' });
+
+    expect(sent.at(-1)).toEqual({
+      type: 'error',
+      message:
+        'This game\'s preset "Unknown field" cannot be used: seat 1 sets "dictator", which a preset seat does not take. ' +
+        'A seat takes color, isBot, botLevel and playerOptions, and a player option goes in playerOptions, ' +
+        'e.g. { playerOptions: { "dictator": ... } }. Correct the preset.',
+    });
+    expect(starts).toHaveLength(1);
   });
 });

@@ -29,6 +29,7 @@ export type {
   ExclusivePlayerOption,
   PlayerConfig,
   GamePreset,
+  PresetSeat,
   // Game option types
   GameOptionDefinition,
   NumberOption,

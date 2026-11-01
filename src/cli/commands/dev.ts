@@ -27,7 +27,7 @@ import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './de
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { RulesError } from '../dev-host/rules-worker.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
-import { mergePlayerOptions, type ConfigOptionDefinition } from '../lib/player-options.js';
+import { mergePlayerOptions, presetSeatSetup, type ConfigOptionDefinition, type SeatSetup } from '../lib/player-options.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
@@ -382,29 +382,40 @@ export function parseGameOptionFlags(raw: string[] | undefined): Record<string, 
   return result;
 }
 
-/** D13/DEVHOST-01: a preset's resolved options bundle + optional player count. */
-export interface ResolvedPreset {
-  options: Record<string, unknown>;
-  /** Present only when the preset declares `players` (its length is the count). */
-  playerCount?: number;
-}
-
 /**
- * D13/DEVHOST-01: look up a preset by name (`--preset name` or the host
- * `configure` message's `preset` field). Applying a preset is a shortcut for
- * setting its underlying options — returns the WHOLE bundle (never a partial
- * pick) plus the preset's player count when it declares `players`. Throws an
- * Error naming the unknown preset and the declared names.
+ * D13/DEVHOST-01: look up a preset by name (`--preset name`). Throws an Error
+ * naming the unknown preset and the declared names.
  */
-export function resolvePreset(presets: GamePreset[] | undefined, name: string): ResolvedPreset {
+export function resolvePreset(presets: GamePreset[] | undefined, name: string): GamePreset {
   const preset = (presets ?? []).find((p) => p.name === name);
   if (!preset) {
     const known = (presets ?? []).map((p) => p.name).join(', ') || 'it declares none';
     throw new Error(`--preset takes a preset this game declares (${known}), got "${name}".`);
   }
-  const resolved: ResolvedPreset = { options: { ...preset.options } };
-  if (preset.players?.length) resolved.playerCount = preset.players.length;
-  return resolved;
+  return preset;
+}
+
+/**
+ * The seats `--preset` sets up, with `--bot` and `--bot-level` over them, as a
+ * flag beats a preset (#1544). Throws when `--players` asks for another number
+ * of seats, since the preset's seats could not all be set up.
+ */
+export function seatsUnderFlags(
+  preset: string,
+  seats: SeatSetup[],
+  flags: { players: number; bot?: number[]; botLevel?: string },
+): SeatSetup[] {
+  if (flags.players !== seats.length) {
+    throw new Error(
+      `--preset "${preset}" sets up ${seats.length} seats, so it cannot run with --players ${flags.players}. ` +
+        `Leave out --players, or pass --players ${seats.length}.`,
+    );
+  }
+  return seats.map((seat, index) => ({
+    ...seat,
+    ...(flags.bot === undefined ? {} : { isBot: flags.bot.includes(index + 1) }),
+    ...(flags.botLevel === undefined ? {} : { botLevel: flags.botLevel }),
+  }));
 }
 
 /** Flatten object-keyed option definitions to the dev host's id-carrying list. */
@@ -814,6 +825,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
 
     const playerOptions = resolveDevPlayerOptions(gameDefinition, config);
     colorPalette = playerOptions.color.choices;
+    // Its seats too, so a preset the platform's lobby would refuse is refused here, at load (#1544).
+    for (const preset of presets) presetSeatSetup(preset, playerOptions, colorPalette.map((c) => c.value));
 
     gameDefinition = {
       ...gameDefinition,
@@ -831,18 +844,19 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   }
 
   // D13/DEVHOST-01: --game-option/--preset resolve into the SELECTED gameOptions
-  // (flag beats preset beats default). A preset's player count is honored only
-  // when --players was NOT explicitly passed (an explicit --players always wins).
+  // (flag beats preset beats default). A preset that sets up seats gives the
+  // player count, and --players may only repeat it (#1544).
   const gameOptionFlags = parseGameOptionFlags(options.gameOption);
-  const presetBundle =
+  const preset =
     options.preset !== undefined
       ? resolvePreset(gameDefinition.presets, options.preset as string)
       : undefined;
+  const presetSeats = preset && presetSeatSetup(preset, gameDefinition.playerOptions ?? {}, colorPalette.map((c) => c.value));
   const selectedGameOptions = selectDesignerGameOptions(gameOptions, {
-    ...presetBundle?.options,
+    ...preset?.options,
     ...gameOptionFlags,
   });
-  const rawPlayers = options.players ?? (presetBundle?.playerCount !== undefined ? String(presetBundle.playerCount) : undefined);
+  const rawPlayers = options.players ?? (presetSeats ? String(presetSeats.length) : undefined);
 
   // CLIX-06 / F34 (Pitfall 3): out-of-range --players now ERRORS (naming the
   // bound) instead of silently clamping, and --bot seats are validated against
@@ -851,6 +865,15 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // defaults to minPlayers instead of a hardcoded '2'.
   const effectivePlayerCount = resolvePlayerCount(rawPlayers, minPlayers, maxPlayers);
   validateBotSeats(botPlayers, effectivePlayerCount);
+  const seatSetup =
+    preset && presetSeats
+      ? seatsUnderFlags(preset.name, presetSeats, {
+          players: effectivePlayerCount,
+          bot: options.bot === undefined ? undefined : botPlayers,
+          botLevel: options.botLevel,
+        })
+      : undefined;
+  const botSeats = seatSetup ? seatSetup.flatMap((seat, index) => (seat.isBot ? [index + 1] : [])) : botPlayers;
 
   const devConfig = buildDevConfig({
     gameDefinition,
@@ -858,7 +881,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     minPlayers,
     maxPlayers,
     playerCount: effectivePlayerCount,
-    botSeats: botPlayers,
+    botSeats,
     botLevel,
     colorPalette,
     teachingDisabled,
@@ -910,7 +933,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       minPlayers,
       maxPlayers,
       botLevel,
-      designatedBotSeats: botPlayers,
+      designatedBotSeats: botSeats,
+      seatSetup,
       colorPalette,
       playerOptions: gameDefinition.playerOptions,
       baseGameOptions,
@@ -1026,7 +1050,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     });
 
     console.log(styleText('dim', `  ${multiplayerBannerLine(isNonLocal)}`));
-    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
+    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot${botSeats.length ? `; seats ${botSeats.join(',')} left to bots` : ''}, level ${botLevel}).`));
     if (teachingDisabled) {
       console.log(styleText('yellow', `  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }

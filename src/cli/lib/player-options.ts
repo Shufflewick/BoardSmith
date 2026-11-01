@@ -1,6 +1,7 @@
 import { isDeepStrictEqual } from 'node:util';
-import type { PlayerOptionDefinition } from '../../session/types.js';
+import type { GamePreset, PlayerOptionDefinition } from '../../session/types.js';
 import { numberBoundsProblem } from '../../session/game-option-selection.js';
+import { parseBotLevel } from '../../bot/index.js';
 
 /** A player option in boardsmith.json's list form, where its key is a field. */
 export interface ConfigOptionDefinition {
@@ -236,4 +237,74 @@ export function seatOptionsRefusal(
     if (holders.length > 1) return `${option.label} is given to seats ${holders.join(' and ')}; give it to one seat.`;
   }
   return undefined;
+}
+
+/** One seat as a preset sets it up, with every player option it did not set at its default (#1544). */
+export interface SeatSetup {
+  playerOptions: Record<string, unknown>;
+  color?: string;
+  isBot: boolean;
+  botLevel?: string;
+}
+
+const PRESET_SEAT_FIELDS = ['color', 'isBot', 'botLevel', 'playerOptions'];
+
+/** Why a preset's seat cannot be set up as written, apart from its player options, or undefined when it can. */
+function presetSeatRefusal(seat: Record<string, unknown>, n: number, palette: readonly string[]): string | undefined {
+  const field = Object.keys(seat).find((key) => !PRESET_SEAT_FIELDS.includes(key));
+  if (field !== undefined) {
+    return (
+      `seat ${n} sets "${field}", which a preset seat does not take. A seat takes ${PRESET_SEAT_FIELDS.slice(0, -1).join(', ')} ` +
+      `and playerOptions, and a player option goes in playerOptions, e.g. { playerOptions: { ${JSON.stringify(field)}: ... } }.`
+    );
+  }
+  if (seat.color !== undefined && !palette.includes(seat.color as string)) {
+    return `seat ${n}'s color ${JSON.stringify(seat.color)} is not in the game's colorPalette (${palette.join(', ')}).`;
+  }
+  if (seat.isBot !== undefined && typeof seat.isBot !== 'boolean') return `seat ${n}'s isBot must be true or false.`;
+  if (seat.botLevel === undefined) return undefined;
+  if (seat.isBot !== true) return `seat ${n} sets a botLevel but is not a bot. Give it isBot: true, or remove its botLevel.`;
+  try {
+    parseBotLevel(seat.botLevel as string);
+  } catch (err) {
+    return `seat ${n}: ${(err as Error).message}`;
+  }
+  return undefined;
+}
+
+/**
+ * Each seat as `preset` sets it up, or undefined when it sets up no seats
+ * (#1544). A player option a seat does not set takes its default, and an
+ * exclusive option no seat sets goes to the seat its default names, as the
+ * platform's lobby opens a table. Throws, naming the preset, on a seat the
+ * platform's lobby would refuse: a field a seat does not take, a colour
+ * outside `palette`, a bot level that is not one, or player options
+ * {@link seatOptionsRefusal} refuses.
+ */
+export function presetSeatSetup(
+  preset: GamePreset,
+  options: Record<string, PlayerOptionDefinition>,
+  palette: readonly string[],
+): SeatSetup[] | undefined {
+  const seats = preset.players as Array<Record<string, unknown>> | undefined;
+  if (!seats?.length) return undefined;
+  const refuse = (reason: string) => new Error(`This game's preset "${preset.name}" cannot be used: ${reason} Correct the preset.`);
+  seats.forEach((seat, index) => {
+    const refused = presetSeatRefusal(seat, index + 1, palette);
+    if (refused !== undefined) throw refuse(refused);
+  });
+  const given = seats.map((seat) => (seat.playerOptions ?? {}) as Record<string, unknown>);
+  const set = new Set(given.flatMap((values) => Object.keys(values)));
+  const table = defaultSeatOptions(options, seats.length).map((defaults, index) => {
+    const values = Object.fromEntries(Object.entries(defaults).filter(([key]) => options[key]?.type !== 'exclusive' || !set.has(key)));
+    return { ...values, ...given[index] };
+  });
+  const refused = seatOptionsRefusal(options, table, seats.length);
+  if (refused !== undefined) throw refuse(refused);
+  return seats.map((seat, index) => ({
+    playerOptions: table[index],
+    ...(seat.color === undefined ? {} : { color: seat.color as string }),
+    isBot: seat.isBot === true,
+    ...(seat.botLevel === undefined ? {} : { botLevel: seat.botLevel as string }),
+  }));
 }

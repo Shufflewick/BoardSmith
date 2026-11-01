@@ -94,7 +94,7 @@ describe('boardsmith dev and a designer-only game option (#687, #701)', () => {
   });
 
   it('starts a game whose preset sets only its players', async () => {
-    const cwd = await projectDeclaring([], `  presets: [{ name: 'Pair', players: [{ name: 'A' }, { name: 'B' }] }],`);
+    const cwd = await projectDeclaring([], `  presets: [{ name: 'Pair', players: [{}, { isBot: true }] }],`);
     expect(await lobbyOf(cwd, ['--preset', 'Pair'])).toBeDefined();
   });
 });

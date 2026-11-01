@@ -73,7 +73,7 @@ const presets = [
     name: 'advanced',
     description: 'Advanced setup',
     options: { difficulty: 'hard', rounds: 7 },
-    players: [{ name: 'P1' }, { name: 'P2' }, { name: 'P3' }],
+    players: [{}, {}, {}],
   },
 ];
 
