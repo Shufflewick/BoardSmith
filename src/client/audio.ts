@@ -13,6 +13,22 @@ export interface AudioServiceOptions {
   turnSoundUrl?: string;
 }
 
+/** Say in the console why the turn chime did not play, so a silent game has a visible cause. */
+function reportRefusedChime(err: unknown): void {
+  const name = err instanceof DOMException ? err.name : '';
+  // An AbortError only means a newer sound took over the element.
+  if (name === 'AbortError') return;
+  if (name === 'NotAllowedError') {
+    console.warn(
+      'The browser blocked the turn chime because nobody has clicked or pressed a key in the game yet. ' +
+        'Sounds play once you click or press a key in the game. A host page that frames the game from ' +
+        'another origin should give its iframe allow="autoplay" so clicks on the host page count too.',
+    );
+    return;
+  }
+  console.warn('The turn chime could not play:', err);
+}
+
 /**
  * Audio service singleton for playing game notification sounds
  */
@@ -102,17 +118,7 @@ class AudioService {
       this.audioElement.volume = this.volume;
       await this.audioElement.play();
     } catch (err) {
-      // An AbortError only means a newer sound took over the element.
-      if (err instanceof DOMException && err.name === 'AbortError') return;
-      if (err instanceof DOMException && err.name === 'NotAllowedError') {
-        console.warn(
-          'The browser blocked the turn chime because nobody has clicked or pressed a key in the game yet. ' +
-            'Sounds play once you click or press a key in the game. A host page that frames the game from ' +
-            'another origin should give its iframe allow="autoplay" so clicks on the host page count too.',
-        );
-        return;
-      }
-      console.warn('The turn chime could not play:', err);
+      reportRefusedChime(err);
     }
   }
 
