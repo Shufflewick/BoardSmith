@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { afterEach, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 
 import { diffContract, nextContract, recordable, unmintedPackedChanges } from './contract.js';
 import { createProgram } from '../cli.js';
 import type { EngineContract } from '../../contract/index.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const BASE: EngineContract = {
   revision: 4,
@@ -163,69 +163,63 @@ describe('boardsmith contract options (#524)', () => {
   });
 });
 
+// ShufflewickPub archives one engine per revision and refuses a BoardSmith main
+// that packs different files under the revision it vendored, so a merge that
+// changes a packed file must mint one (#1534).
+const git = (repo: string, ...args: string[]) =>
+  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], {
+    cwd: repo,
+    encoding: 'utf8',
+  }).trim();
+
+function write(repo: string, files: Record<string, string>): void {
+  for (const [path, content] of Object.entries(files)) {
+    mkdirSync(dirname(join(repo, path)), { recursive: true });
+    writeFileSync(join(repo, path), content);
+  }
+}
+
+/** What unmintedPackedChanges says of one commit on a repo packing `src` minus tests at revision 1. */
+async function unmintedAfter(files: Record<string, string>, remove: string[] = []): Promise<string[]> {
+  const repo = tempTree('bs-unminted-');
+  git(repo, 'init', '-q');
+  write(repo, {
+    'package.json': JSON.stringify({ name: 'engine', version: '0.0.1', files: ['src', '!src/**/*.test.ts'] }),
+    'src/contract/engine-contract.json': JSON.stringify({ revision: 1 }),
+    'src/ui.ts': 'export const label = 1;\n',
+    'src/gone.ts': 'export const gone = 1;\n',
+    'src/ui.test.ts': 'test\n',
+    'notes.md': 'not packed\n',
+  });
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'base');
+  const base = git(repo, 'rev-parse', 'HEAD');
+  write(repo, files);
+  for (const path of remove) git(repo, 'rm', '-q', path);
+  git(repo, 'add', '.');
+  git(repo, 'commit', '-q', '-m', 'change');
+  return unmintedPackedChanges(repo, base);
+}
+
+// Slow one-time setup lives here, where no test timeout applies: each case exports and packs two trees.
+const changedAndDeleted = await unmintedAfter({ 'src/ui.ts': 'export const label = 2;\n' }, ['src/gone.ts']);
+const unpackedOnly = await unmintedAfter({ 'notes.md': 'edited\n', 'src/ui.test.ts': 'edited\n' });
+const minted = await unmintedAfter({
+  'src/ui.ts': 'export const label = 2;\n',
+  'src/contract/engine-contract.json': JSON.stringify({ revision: 2 }),
+});
+
 describe('unmintedPackedChanges (#1534)', () => {
-  // ShufflewickPub archives one engine per revision and refuses a BoardSmith main
-  // that packs different files under the revision it vendored, so a merge that
-  // changes a packed file must mint one.
-  const repos: string[] = [];
-  afterEach(() => {
-    for (const repo of repos.splice(0)) rmSync(repo, { recursive: true, force: true });
+  it('names a packed file changed, and one deleted, with no new revision', () => {
+    expect(changedAndDeleted).toEqual(['src/gone.ts', 'src/ui.ts']);
   });
 
-  const git = (repo: string, ...args: string[]) =>
-    execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: repo, encoding: 'utf8' }).trim();
-
-  function write(repo: string, files: Record<string, string>): void {
-    for (const [path, content] of Object.entries(files)) {
-      mkdirSync(dirname(join(repo, path)), { recursive: true });
-      writeFileSync(join(repo, path), content);
-    }
-  }
-
-  /** A repo packing `src` minus tests, at revision 1; returns it and its first commit. */
-  function repoAtRevision1(): { repo: string; base: string } {
-    const repo = mkdtempSync(join(tmpdir(), 'bs-unminted-'));
-    repos.push(repo);
-    git(repo, 'init', '-q');
-    write(repo, {
-      'package.json': JSON.stringify({ name: 'engine', version: '0.0.1', files: ['src', '!src/**/*.test.ts'] }),
-      'src/contract/engine-contract.json': JSON.stringify({ revision: 1 }),
-      'src/ui.ts': 'export const label = 1;\n',
-      'src/gone.ts': 'export const gone = 1;\n',
-      'src/ui.test.ts': 'test\n',
-      'notes.md': 'not packed\n',
-    });
-    git(repo, 'add', '.');
-    git(repo, 'commit', '-q', '-m', 'base');
-    return { repo, base: git(repo, 'rev-parse', 'HEAD') };
-  }
-
-  function commit(repo: string, files: Record<string, string>, remove: string[] = []): void {
-    write(repo, files);
-    for (const path of remove) git(repo, 'rm', '-q', path);
-    git(repo, 'add', '.');
-    git(repo, 'commit', '-q', '-m', 'change');
-  }
-
-  it('names a packed file changed, and one deleted, with no new revision', async () => {
-    const { repo, base } = repoAtRevision1();
-    commit(repo, { 'src/ui.ts': 'export const label = 2;\n' }, ['src/gone.ts']);
-    expect(await unmintedPackedChanges(repo, base)).toEqual(['src/gone.ts', 'src/ui.ts']);
+  it('passes a change to files the package does not pack', () => {
+    expect(unpackedOnly).toEqual([]);
   });
 
-  it('passes a change to files the package does not pack', async () => {
-    const { repo, base } = repoAtRevision1();
-    commit(repo, { 'notes.md': 'edited\n', 'src/ui.test.ts': 'edited\n' });
-    expect(await unmintedPackedChanges(repo, base)).toEqual([]);
-  });
-
-  it('passes a packed change that mints a revision', async () => {
-    const { repo, base } = repoAtRevision1();
-    commit(repo, {
-      'src/ui.ts': 'export const label = 2;\n',
-      'src/contract/engine-contract.json': JSON.stringify({ revision: 2 }),
-    });
-    expect(await unmintedPackedChanges(repo, base)).toEqual([]);
+  it('passes a packed change that mints a revision', () => {
+    expect(minted).toEqual([]);
   });
 
   it('refuses --minted-since alongside an option that records a revision', async () => {

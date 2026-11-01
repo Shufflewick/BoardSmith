@@ -165,6 +165,7 @@ export async function unmintedPackedChanges(repo: string, base: string): Promise
   const revisionAt = async (ref: string) =>
     (JSON.parse(await gitOutput(repo, ['show', `${ref}:src/contract/engine-contract.json`])) as { revision: number }).revision;
   if ((await revisionAt('HEAD')) > (await revisionAt(base))) return [];
+  if ((await gitOutput(repo, ['diff', '--name-only', base, 'HEAD'])).trim() === '') return [];
   const [before, after] = await Promise.all([packedBlobs(repo, base), packedBlobs(repo, 'HEAD')]);
   return [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
 }
