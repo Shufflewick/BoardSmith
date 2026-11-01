@@ -16,8 +16,8 @@
     "src/engine/element/game-element.ts:1164-1170|src/engine/element/game-element.ts:1225-1231",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
     "src/ui/composables/useFLIP.ts:331-339|src/ui/composables/useFLIP.ts:477-484",
-    "src/engine/element/game.ts:3903-3909|src/engine/element/game.ts:3933-3939",
-    "src/engine/element/game.ts:3975-3979|src/engine/element/game.ts:4007-4011",
+    "src/engine/element/game.ts:3906-3912|src/engine/element/game.ts:3936-3942",
+    "src/engine/element/game.ts:3978-3982|src/engine/element/game.ts:4010-4014",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:74-88|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:168-187"
   ],
   "clone_fingerprints": [
