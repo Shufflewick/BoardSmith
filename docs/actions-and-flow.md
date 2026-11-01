@@ -2359,6 +2359,56 @@ actionStep({
 See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
 section 5 for who enforces what.
 
+##### `game.stepElapsedMs()` - how long the timed step has been open
+
+A rule can refuse something during part of the window: say, a purchase until
+the battle both screens play back as the step opens has finished.
+`ctx.game.stepElapsedMs()` is how long the open timed step has been open, in
+milliseconds, measured on the host's clock. `ActionContext` stays
+`{ game, player, args }`; the clock is read through the game.
+
+```typescript
+const PLAYBACK_MS = 30_000;
+
+Action.create<MyGame>('levelUp')
+  .disabled((ctx) => ctx.game.stepElapsedMs() < PLAYBACK_MS && 'The battle is still playing back.')
+  .execute((args, ctx) => { /* ... */ });
+```
+
+- **The host stamps the time, never a client.** A host passes its own instant
+  with every op (`executeOp`'s `hostOptions.now`, epoch ms, read as it runs the
+  op). The engine keeps the instant of the op that opened the step on the
+  step's frame, so the answer is that op's instant less the opening one. A
+  seat acting mid-round does not move the opening; the next round of a `loop`
+  opens its own. Game code still reads no clock, so `no-nondeterministic` and
+  `no-timers` stay satisfied.
+- **It works in `disabled`, `validate` and `execute`, not in `condition`.** The
+  offer each seat is sent is worked out at the instant of the op that produced
+  it, and the submission is checked again at its own instant, so the Action
+  Panel, the custom UI and the server agree. A `condition` decides which
+  actions the step offers and is not asked again as time passes, so an action
+  it hid would stay hidden; reading the clock there throws, saying to use
+  `disabled` or `validate`. An offer is not re-sent as time passes either:
+  a seat sees the action greyed until the next op re-offers it. A refusal that
+  lapses on its own while the seat watches is best left out of the offer and
+  made in `validate`, which refuses the submission with its reason; the custom
+  UI can grey the button by its own playback meanwhile.
+- **Every restore measures the same way.** The opening instant rides on the
+  step's frame, and the last op's instant on the snapshot (`snapshot.now`), so
+  a restore, an undo checkpoint and a bot's search copy answer as the op did.
+  A bot searches at the instant of the op that asked it. A new game started
+  from a saved position (`boardsmith dev --seed`) opens its step at its own
+  start, not when the position was saved.
+- **It throws, saying why**, when no step with `timeLimitMs` is open, or when
+  the host stamped no instant. `GameRunner.replay` (the dev host's last resort
+  when an edited flow no longer fits a saved position) has none, because the
+  history records no instants, so a game that reads the clock in a replayed
+  step reports that the reload failed.
+- In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
+  for the start and `testGame.runner.setNow(ms)` before a later move, or
+  `createHeadlessSession(def, { ..., now: () => ms })`. `boardsmith dev`
+  stamps every op from the clock it runs step windows on.
+
 #### `phase` - Named game phase
 
 ```typescript

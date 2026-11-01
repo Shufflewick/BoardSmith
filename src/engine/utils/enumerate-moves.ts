@@ -569,6 +569,7 @@ function liveElement(game: Game, selection: Selection, ref: { id: number }): unk
 function scratchCopy(source: Game) {
   const GameClass = source.constructor as new (options: GameOptions) => Game;
   const game = constructGame(GameClass, source.getConstructorOptions() as GameOptions);
+  game._hostNow = source._hostNow;
   const state = source.toJSON();
   const messageLog = source.serializeMessageLog();
   const sequence = source._ctx.sequence;

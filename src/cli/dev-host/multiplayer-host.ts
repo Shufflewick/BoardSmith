@@ -296,7 +296,7 @@ export interface MultiplayerHostOptions {
     snapshot: unknown,
     pendingState: Record<string, unknown> | null,
     op: OpOfType<T>,
-    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean; fullHistory?: boolean },
+    hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot; debug?: boolean; fullHistory?: boolean; now?: number },
   ) => Promise<OpResultFor<T>>;
   /** Deliver a message to one client (the WS layer maps clientId → socket). */
   send: (clientId: string, message: HostOutbound) => void;
@@ -1431,8 +1431,9 @@ export class MultiplayerHost {
         op,
         // #481: whether debug ops (`debug:*`: history, state-at, state-diff,
         // action traces, flow state, rewind, deck edits) run is decided per op
-        // by `debugOn()`, the same answer the session gets below.
-        { ...hostOptions, debug: this.debugOn() },
+        // by `debugOn()`, the same answer the session gets below. Each op is
+        // stamped with the clock step windows run on (#1532).
+        { ...hostOptions, debug: this.debugOn(), now: this.clock.now() },
       );
       if (op.type === 'start' && !raw.success) startFailure = raw;
       // A read-only op on a finished game reports the end state; it ended nothing (#1179).

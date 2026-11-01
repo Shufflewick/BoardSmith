@@ -1,6 +1,6 @@
 {
-  "revision": 280,
-  "surfaceHash": "da82584e26d5c5e0",
+  "revision": 281,
+  "surfaceHash": "fd9e6c0ca296ce47",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2183,6 +2183,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A bot run that a refusal fails (#1527) now fails with the exported BotRunRefusedError, carrying the refused OpFailure as refusal and the seats as seats (#1531): runBotTurns() rejects with it, or onBackgroundError is handed it. Platform: wake the bots on your own backoff only for an error that is instanceof BotRunRefusedError, and treat any other as a crash; do not copy the host's rule for which refusals fail the run, since a refusal on a table that moved is stale and fails nothing. Published games need no rebuild."
+    },
+    {
+      "revision": 281,
+      "date": "2026-11-01",
+      "surfaceHash": "fd9e6c0ca296ce47",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Table rules can read how long the open timed step has been open with game.stepElapsedMs() (in disabled, validate and execute; a condition that reads it throws): a host stamps every op with its instant through executeOp's hostOptions.now (GameRunner.setNow), the engine keeps the opening instant on the timed step's frame and the last instant on snapshot.now, a start from a seed snapshot reopens the step at its own instant, and a game whose rules read the clock refuses an op the host did not stamp, so the platform must pass hostOptions.now on every op (#1532)."
     }
   ]
 }

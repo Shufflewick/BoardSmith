@@ -69,6 +69,12 @@ export interface HeadlessGameOptions {
    * keeps checkpoints back to the turn start, as a hosted table does (#504).
    */
   fullHistory?: boolean;
+  /**
+   * The host's clock, epoch ms, read once per op to stamp it (#1532), for a
+   * game whose rules read `game.stepElapsedMs()`. Without it ops carry no
+   * instant, and such a game refuses them.
+   */
+  now?: () => number;
 }
 
 /**
@@ -110,7 +116,7 @@ export function createHeadlessSession<G extends Game = Game>(
   tableOptions: HeadlessGameOptions,
   botSeats: BotSeat[] = [],
 ) {
-  const { options, teachingDisabled, fullHistory, ...table } = tableOptions;
+  const { options, teachingDisabled, fullHistory, now, ...table } = tableOptions;
   // The players' choice, with every option the project's boardsmith.json
   // declares that it leaves out at its default, as createTestGame fills them
   // (#701); then the table's own fields, so a selection cannot name the seat
@@ -131,7 +137,8 @@ export function createHeadlessSession<G extends Game = Game>(
     // seat-view debug op still answers only for the seat `send` names.
     debug: true,
     teachingDisabled,
-    executeOp: (snap, pend, op) => executeOp(def, gameOptions, snap, pend, op, { debug: true, teachingDisabled, fullHistory }),
+    executeOp: (snap, pend, op) =>
+      executeOp(def, gameOptions, snap, pend, op, { debug: true, teachingDisabled, fullHistory, now: now?.() }),
     record: (views, meta) => {
       // structuredClone here mirrors the production postMessage boundary: a
       // broadcast carrying a live game object would throw a DataCloneError.

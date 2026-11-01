@@ -221,6 +221,14 @@ export class ConditionEvaluationError extends Error {
  * @typeParam Ctx - The context object passed to each predicate (e.g. ActionContext, TutorialGateContext).
  * @param owner - What the condition belongs to, for the error message (e.g. `action 'draw'`).
  */
+/** How many condition predicates are running, nested (#1532). */
+let conditionDepth = 0;
+
+/** Whether a `condition` predicate is running right now, which `game.stepElapsedMs()` refuses (#1532). */
+export function readingCondition(): boolean {
+  return conditionDepth > 0;
+}
+
 export function evaluateConditionWithTrace<Ctx>(
   condition: Record<string, (ctx: Ctx) => boolean>,
   context: Ctx,
@@ -231,6 +239,7 @@ export function evaluateConditionWithTrace<Ctx>(
 
   for (const [label, predicate] of Object.entries(condition)) {
     let value: unknown;
+    conditionDepth++;
     try {
       value = predicate(context);
     } catch (error) {
@@ -242,6 +251,8 @@ export function evaluateConditionWithTrace<Ctx>(
       // the action.
       if (error instanceof NotSimulableError) throw error;
       throw new ConditionEvaluationError(label, owner, error);
+    } finally {
+      conditionDepth--;
     }
     // The trace keeps the RAW return value, not the coerced boolean, so a
     // designer reading it sees what was actually measured (a count, a name).
