@@ -13,6 +13,7 @@ import { encodeValue } from '../engine/element/game-element.js';
 import { endOfGameRecords, type GameMetrics, type MetricRecord, type MetricSink } from '../engine/metrics.js';
 import { createTestGame, type TestGame } from '../testing/test-game.js';
 import { SeededRandom } from '../utils/random.js';
+import { FROZEN_NOW } from '../runtime/runner.js';
 import type { Policy, SimulatedGame } from './policies.js';
 
 /** The move's args as the action history would write them, or a plain note when they cannot be written. */
@@ -127,7 +128,7 @@ export function noSeatHasEnabledAction(game: Game): boolean {
  * so it is refused instead.
  * @internal
  */
-const HARNESS_OWNED_OPTIONS = ['playerCount', 'playerNames', 'seed', 'autoStart'] as const;
+const HARNESS_OWNED_OPTIONS = ['playerCount', 'playerNames', 'seed', 'autoStart', 'now'] as const;
 
 /**
  * Reject a `gameOptions` bundle that names an option the harness controls.
@@ -312,12 +313,13 @@ export async function playGame<G extends Game>(
 
   try {
     testGame = createTestGame(definition.gameClass, {
-      // Game-specific options first: the four keys the harness owns are
+      // Game-specific options first: the keys the harness owns are
       // refused up front, so nothing here can shadow them.
       ...gameOptions,
       playerCount,
       seed,
       autoStart: false,
+      now: FROZEN_NOW,
       metricSink: recorder.sink,
     });
     testGame.start();

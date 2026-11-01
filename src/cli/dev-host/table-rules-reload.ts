@@ -25,7 +25,8 @@ import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { actionCountOf } from '../../engine/utils/snapshot.js';
 import { executeOp, type GameDefinitionLike, type OpResultFor, type RulesReload } from '../../session/index.js';
 
-type HostOptions = { teachingDisabled?: boolean };
+/** `now` is the host's instant for the reload (#1535): the carried game's views are built at it. */
+type HostOptions = { teachingDisabled?: boolean; now: number };
 
 /** Restore `snapshot` under `definition`, replaying its moves when the position no longer fits. */
 export async function reloadTableRules(
@@ -41,6 +42,8 @@ export async function reloadTableRules(
     executeOp(definition, gameOptions, null, null, { type: 'start' }, {
       ...hostOptions,
       seedSnapshot: state,
+      // The same game on edited rules: its open step keeps the instant it opened, as the host keeps its deadline (#1535).
+      keepStepClock: true,
       fullHistory: true,
     });
 

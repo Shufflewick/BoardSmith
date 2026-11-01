@@ -56,6 +56,17 @@ describe('executeOp hostOptions.now', () => {
     refused(await levelUp(restarted.snapshot, START + DAY + PLAYBACK_MS - 1));
   });
 
+  it('keeps the step open from its opening instant on a start that carries the same game (#1535)', async () => {
+    const saved = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, { now: START }));
+    const carried = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, {
+      now: START + PLAYBACK_MS,
+      seedSnapshot: saved.snapshot,
+      keepStepClock: true,
+    }));
+    expect((carried.playerViews[0] as View).state.disabledActions).toBeUndefined();
+    succeeded(await levelUp(carried.snapshot, START + PLAYBACK_MS));
+  });
+
   it('refuses to run a game that reads the step clock when the host stamped no instant, saying how to stamp one', async () => {
     const failed = refused(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }));
     expect(failed.error).toContain('hostOptions.now');

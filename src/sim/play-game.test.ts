@@ -13,6 +13,7 @@ import {
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
 import { random, greedy, mcts, type Policy } from './index.js';
+import { playbackTurnDefinition } from '../session/testing/fixtures/timed-step-fixture.js';
 
 /** Each seat adds 1-3 to its own score; the first to reach 10 ends the game, and the highest score wins. */
 class RaceGame extends Game<RaceGame, Player> {
@@ -404,6 +405,15 @@ describe('playGame with policies (#556)', () => {
     expect(result.crashed).toBe(false);
     expect(result.stuck).toBe(true);
     expect(result.error).toMatch(/^Action 'take' rejected .*, chosen by policy 'dated': Cannot serialize action 'take': Date at property 'args\.value'/);
+  });
+
+  // #1535: the simulator has no wall clock, so every move is made the instant its step opened.
+  it('plays a game whose rules read the step clock, with no time passing', async () => {
+    const result = await playGame(playbackTurnDefinition, { playerCount: 2, seed: 'clock', policies: [random(), random()], maxActions: 20 });
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    // One commit a seat: levelUp, greyed until 30 s into the turn, is never played.
+    expect(result.actionCount).toBe(2);
   });
 
   it('refuses a player count the game does not declare', async () => {

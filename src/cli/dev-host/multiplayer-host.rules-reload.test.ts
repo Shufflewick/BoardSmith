@@ -50,7 +50,20 @@ const FLOWS = {
   timed: (limitMs: number) => `sequence(
     loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['bump'], turnScope: 'restart', timeLimitMs: ${limitMs} }) }),
   )`,
+  /** One timed step offering `level` beside `bump`, repeated. */
+  clocked: `sequence(
+    loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }) }),
+  )`,
+  /** Three timed steps offering `level` beside `bump`, one after another. */
+  clockedThree: `sequence(
+    actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
+    actionStep({ name: 'b', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
+    actionStep({ name: 'c', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
+  )`,
 };
+
+/** How long into its step `level` stays greyed (#1535). */
+const LEVEL_GATE_MS = 5_000;
 
 /**
  * A counter game whose `bump` adds `step`, written the way an author writes one.
@@ -66,6 +79,8 @@ function rulesSource(args: { step: number; flow: string; seats?: number; demo?: 
     '  constructor(options: GameOptions) {',
     '    super(options);',
     `    this.registerAction(Action.create('bump').execute(() => { this.count += ${args.step}; }));`,
+    // Greyed for the first part of its step, measured on the step clock the host stamps (#1532).
+    `    this.registerAction(Action.create('level').disabled(() => this.stepElapsedMs() < ${LEVEL_GATE_MS} && 'Too early.').execute(() => {}));`,
     `    this.setFlow({ root: ${args.flow} });`,
     '  }',
     '}',
@@ -138,6 +153,11 @@ async function openCounterTable(runtime: TableRuntime, clock = fakeClock()) {
 function shownCount(frames: ReadonlyArray<Record<string, unknown>>): number {
   const view = frames.at(-1)?.view as { state: { view: { attributes: { count: number } } } };
   return view.state.view.attributes.count;
+}
+
+/** The actions the last frame the seat was sent greys, with why. */
+function shownDisabled(frames: ReadonlyArray<Record<string, unknown>>): Record<string, string> | undefined {
+  return (frames.at(-1)?.view as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
 }
 
 describe('#343: a table dev host reloads its rules on the server', () => {
@@ -258,6 +278,37 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     await table.bump();
     expect(time.armed.at(-1)).toBe(20_000);
     expect(table.frames().at(-1)?.deadlineAt).toBe(START + 4_000 + 20_000);
+  }, 30_000);
+
+  // #1535: the carried game is the same game, so its open step keeps the instant it opened, as it keeps its deadline.
+  it("measures the open step's clock across the reload at the reload's instant", async () => {
+    const project = counterProject({ step: 1, flow: FLOWS.clocked });
+    const time = fakeClock();
+    const table = await openCounterTable(await project.load(), time);
+    expect(shownDisabled(table.frames())).toEqual({ level: 'Too early.' });
+
+    time.advance(LEVEL_GATE_MS);
+    project.save({ step: 10, flow: FLOWS.clocked });
+    const outcome = await table.host.reloadRules((await project.load()).rules);
+
+    expect(outcome?.kind).toBe('restored');
+    expect(shownDisabled(table.frames())).toBeUndefined();
+    expect((await table.act('level'))?.success).toBe(true);
+  }, 30_000);
+
+  it('says the moves of a game whose rules read the step clock cannot be replayed, and to start a new game', async () => {
+    const project = counterProject({ step: 1, flow: FLOWS.clockedThree });
+    const table = await openCounterTable(await project.load());
+    await table.bump();
+    await table.bump();
+
+    const printed = vi.spyOn(console, 'error').mockImplementation(() => {});
+    project.save({ step: 1, flow: FLOWS.clocked });
+    const outcome = await table.host.reloadRules((await project.load()).rules);
+
+    expect(outcome?.kind).toBe('failed');
+    expect(printed).toHaveBeenCalledWith(expect.stringContaining('the history records no instants'));
+    expect(table.errors().at(-1)?.message).toContain('New game');
   }, 30_000);
 
   it('only swaps the rules when no game is running, so the next start uses them', async () => {

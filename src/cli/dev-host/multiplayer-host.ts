@@ -353,7 +353,7 @@ export interface TableRules {
   readonly carry: (
     gameOptions: { playerCount: number },
     snapshot: unknown,
-    hostOptions: { teachingDisabled?: boolean },
+    hostOptions: { teachingDisabled?: boolean; now: number },
   ) => Promise<RulesReload>;
 }
 
@@ -1574,7 +1574,7 @@ export class MultiplayerHost {
       const carried = await rules.carry(
         { playerCount: this.opts.playerCount },
         snapshot,
-        { teachingDisabled: this.opts.teachingDisabled },
+        { teachingDisabled: this.opts.teachingDisabled, now: this.clock.now() },
       );
       return carried;
     });

@@ -16,7 +16,9 @@
  * restore path), `src/session/step-time-limit-boundary.test.ts` (the turn
  * boundary a host broadcasts), the build and validate suites (a timed step
  * needs an `idleAction`), and `flow-state-clone.test.ts`, which drives every
- * definition exported here.
+ * definition exported here. `PlaybackTurnGame` is played by the simulator and
+ * the bot trainer's benchmark (`src/sim/play-game.test.ts`,
+ * `src/bot-trainer/benchmark.test.ts`), which need a game that ends.
  */
 import {
   Game,
@@ -138,3 +140,28 @@ export class PlaybackGame extends DeployGame {
 }
 
 export const playbackDefinition = twoSeat(PlaybackGame, 'timed-step-playback');
+
+/**
+ * The level-up rule in a game that ends (#1535): each seat takes one timed
+ * turn, and either levels up, once the playback has ended, or commits.
+ */
+export class PlaybackTurnGame extends Game<PlaybackTurnGame, Player> {
+  levelUps = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<PlaybackTurnGame>('levelUp')
+        .disabled((ctx) => ctx.game.stepElapsedMs() < PLAYBACK_MS && 'The battle is still playing back.')
+        .execute((_args, ctx) => {
+          ctx.game.levelUps += 1;
+        }),
+    );
+    this.registerAction(Action.create('commit').execute(() => {}));
+    this.setFlow({
+      root: eachPlayer<PlaybackTurnGame>({ do: actionStep({ name: 'turn', actions: ['levelUp', 'commit'], timeLimitMs: 120_000 }) }),
+    });
+  }
+}
+
+export const playbackTurnDefinition = twoSeat(PlaybackTurnGame, 'timed-step-playback-turn');

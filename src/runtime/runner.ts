@@ -236,6 +236,14 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
   return refused.rulesError ? ErrorCode.ENGINE_ERROR : ErrorCode.INVALID_PICK;
 }
 
+/**
+ * The instant a harness with no wall clock (`boardsmith simulate`, the bot
+ * trainer's benchmark) stamps on every op it runs (#1535). Time does not pass
+ * in such a game: every move is made the instant its step opened, so
+ * `game.stepElapsedMs()` reads 0, and no step's deadline ever runs out.
+ */
+export const FROZEN_NOW = 0;
+
 /** What a player is told when a failed action could not be undone (checkpoints off, #808, #989). */
 const PARTIAL_CHANGES_KEPT =
   'The action failed part way through, and the game may still hold its partial changes, ' +
