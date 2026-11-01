@@ -161,6 +161,43 @@ class LeapRaceGame extends RaceGame {
   }
 }
 
+/**
+ * Each seat in turn shifts a marker from 0 or 100 by a number in -100..100, or
+ * passes; the action's `validate` keeps the marker in 0..100, so whether a
+ * number is accepted depends on the start picked before it (#1543). With the
+ * `refuseAll` option it refuses every shift. The game ends after six turns.
+ */
+class ShiftGame extends Game<ShiftGame, Player> {
+  turns = 0;
+
+  constructor(options: GameOptions & { refuseAll?: boolean }) {
+    super(options);
+    const turn = (_args: unknown, ctx: { game: ShiftGame }) => {
+      if (++ctx.game.turns === 6) ctx.game.finish([]);
+      return { success: true };
+    };
+    this.registerAction(
+      Action.create<ShiftGame>('shift')
+        .chooseFrom('from', { choices: [0, 100] })
+        .enterNumber('by', { min: -100, max: 100, integer: true })
+        .validate((args) => {
+          if (options.refuseAll) return 'Shifting is never allowed.';
+          const to = (args.from as number) + (args.by as number);
+          return (to >= 0 && to <= 100) || 'The marker must stay between 0 and 100.';
+        })
+        .execute(turn),
+    );
+    this.registerAction(Action.create<ShiftGame>('pass').execute(turn));
+    this.setFlow({
+      root: loop({
+        while: (ctx) => !ctx.game.isFinished(),
+        maxIterations: 10,
+        do: eachPlayer({ do: actionStep({ actions: options.refuseAll ? ['shift'] : ['shift', 'pass'] }) }),
+      }),
+    });
+  }
+}
+
 const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers: 4 };
 
 /** The fixture greedy policy: take the largest step. */
@@ -466,6 +503,40 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toBe(
       "Policy 'stalling' waits until instant 0, which is not after the game's instant 0, so the game would never move on. " +
         'Wait only for an instant later than the game\'s, or return the move the seat makes now.',
+    );
+  });
+
+  // #1543: random drew a number in min..max without asking validate, and the game failed on the refusal.
+  it("random plays only numbers the action's validate accepts, drawing again when it refuses one", async () => {
+    let shifts = 0;
+    const policy = random();
+    const counting: Policy = {
+      name: 'random',
+      async choose(turn) {
+        const choice = await policy.choose(turn);
+        if ('action' in choice && choice.action === 'shift') shifts++;
+        return choice;
+      },
+    };
+    for (const seed of ['s1', 's2', 's3', 's4']) {
+      const result = await playGame(
+        { gameClass: ShiftGame },
+        { playerCount: 2, seed, policies: [counting, counting], maxActions: 20 },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.completed).toBe(true);
+    }
+    expect(shifts).toBeGreaterThan(0);
+  });
+
+  it("random names the action's refusal as the reason its seat has no move when every draw is refused", async () => {
+    const result = await playGame(
+      { gameClass: ShiftGame },
+      { playerCount: 2, seed: 'refused', gameOptions: { refuseAll: true }, policies: [random(), random()], maxActions: 20 },
+    );
+    expect(result.completed).toBe(false);
+    expect(result.error).toMatch(
+      /action 'shift' refused all 3 numbers the simulator drew for it, the last with: Shifting is never allowed/,
     );
   });
 
