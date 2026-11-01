@@ -69,6 +69,7 @@ export const ENGINE_OWNED_GAME_FIELDS = {
   _flowDefinition: 'engine-set',
   _flowEngine: 'engine-set',
   _hostNow: 'engine-set',
+  _reofferAt: 'engine-set',
   _debugRegistry: 'fixed',
   _persistentMaps: 'fixed',
   _animationEvents: 'engine-set',

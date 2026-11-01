@@ -326,6 +326,7 @@ const SHAPERS: { [T in Op['type']]: (result: OpResultFor<T>) => Reply } = {
         }
       : refusal(r),
   expireSeat: outcomeOnly,
+  reoffer: outcomeOnly,
   // The pick's answer and nothing else (#450).
   resolveChoices: (r) =>
     r.success

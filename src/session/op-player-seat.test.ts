@@ -96,7 +96,7 @@ describe('#950: an op naming another seat as `seat` is refused', () => {
 
 // #1100, #1102: only the host itself sends these: it calls executeOp directly, never handleOp.
 describe('#1100, #1102: a host-only op sent through handleOp is refused', () => {
-  it('refuses start, restoreEarlier and botSuggest from a seat, without running them or changing the game', async () => {
+  it('refuses start, restoreEarlier, reoffer and botSuggest from a seat, without running them or changing the game', async () => {
     const { host, executed } = await startedHost();
     host.setBotSeats([{ seat: 2 }]);
     const earlier = host.snapshot;
@@ -110,6 +110,8 @@ describe('#1100, #1102: a host-only op sent through handleOp is refused', () => 
       ['start', await host.handleOp(1, { type: 'start' })],
       // @ts-expect-error restoreEarlier is host-only
       ['restoreEarlier', await host.handleOp(1, { type: 'restoreEarlier', snapshot: earlier })],
+      // @ts-expect-error reoffer is host-only (#1536)
+      ['reoffer', await host.handleOp(1, { type: 'reoffer' })],
       // @ts-expect-error botSuggest is host-only
       ['botSuggest', await host.handleOp(1, { type: 'botSuggest', seats: [{ seat: 2 }] })],
     ] as const;
@@ -117,7 +119,7 @@ describe('#1100, #1102: a host-only op sent through handleOp is refused', () => 
       expect(res.success, type).toBe(false);
       expect(!res.success && res.error, type).toBe(
         `Seat 1 sent '${type}', and was refused: only the host itself sends it, ` +
-          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
+          'through host.start(), host.restoreEarlier(snapshot), host.reoffer() or host.runBotTurns(), never through handleOp.',
       );
       expect(!res.success && res.category, type).toBe('protocol');
     }

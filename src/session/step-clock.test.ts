@@ -67,6 +67,16 @@ describe('executeOp hostOptions.now', () => {
     succeeded(await levelUp(carried.snapshot, START + PLAYBACK_MS));
   });
 
+  it('reports on the snapshot when an offer greyed by the step clock lapses, and offers again at that instant (#1536)', async () => {
+    const started = succeeded(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }, { now: START }));
+    expect(started.snapshot.reofferAt).toBe(START + PLAYBACK_MS);
+
+    const reoffered = succeeded(await executeOp(playbackDefinition, gameOptions, started.snapshot, null, { type: 'reoffer' }, { now: START + PLAYBACK_MS }));
+    expect((reoffered.playerViews[0] as View).state.disabledActions).toBeUndefined();
+    expect(reoffered.snapshot.reofferAt).toBeUndefined();
+    expect(reoffered.snapshot.actionHistory).toEqual(started.snapshot.actionHistory);
+  });
+
   it('refuses to run a game that reads the step clock when the host stamped no instant, saying how to stamp one', async () => {
     const failed = refused(await executeOp(playbackDefinition, gameOptions, null, null, { type: 'start' }));
     expect(failed.error).toContain('hostOptions.now');
@@ -83,6 +93,19 @@ describe('createHeadlessSession now', () => {
     now = START + PLAYBACK_MS;
     const key = session.metas.at(-1)!.turnBoundary.key;
     succeeded(await session.send(1, { type: 'action', actionName: 'levelUp', player: 1, args: {}, boundaryKey: key }));
+  });
+
+  it('puts the instant an offer lapses on the turn boundary, and reoffer() publishes the offer again then (#1536)', async () => {
+    let now = START;
+    const session = createHeadlessSession(playbackDefinition, { ...gameOptions, now: () => now });
+    await session.start();
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBe(START + PLAYBACK_MS);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    expect(session.metas.at(-1)).toMatchObject({ cause: 'republish' });
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBeUndefined();
+    expect((session.broadcasts.at(-1) as View[])[0].state.disabledActions).toBeUndefined();
   });
 
   it('lets a bot seat search a game that reads the step clock, at the instant of the op', async () => {

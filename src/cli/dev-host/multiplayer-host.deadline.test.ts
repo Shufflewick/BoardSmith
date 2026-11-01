@@ -511,5 +511,35 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
     expect(h.actionsFor(1)[1].result.success).toBe(true);
     expect(offer()).toBeUndefined();
   });
+
+  it('offers a clock-greyed action again once its time has passed, with no other move, and still closes the step (#1536)', async () => {
+    const h = makeHost(playbackDefinition);
+    await h.seatBoth();
+    const offer = () => (h.lastFrame('A').view as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
+    expect(offer()).toEqual({ levelUp: 'The battle is still playing back.' });
+    expect(h.clock.armedDelay).toBe(PLAYBACK_MS);
+
+    h.clock.advance(PLAYBACK_MS);
+    await vi.waitFor(() => expect(offer()).toBeUndefined());
+    expect(h.actions()).toHaveLength(0);
+    expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+
+    h.clock.advance(WINDOW_MS - PLAYBACK_MS);
+    await vi.waitFor(() => expect(h.expiries()).toHaveLength(2));
+  });
+
+  it('reports an offer it could not build again, and still arms the deadline', async () => {
+    const h = makeHost(playbackDefinition, {
+      executeOp: async (gameOptions, snap, pend, op, hostOptions) =>
+        op.type === 'reoffer'
+          ? { success: false, error: 'the rules threw', category: 'executor' }
+          : executeOp(playbackDefinition, gameOptions, snap, pend, op, hostOptions),
+    });
+    await h.seatBoth();
+
+    h.clock.advance(PLAYBACK_MS);
+    expect(await h.reported()).toContain('could not be offered again: the rules threw');
+    expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+  });
 });
 

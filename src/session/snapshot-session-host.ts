@@ -180,6 +180,7 @@ const OP_SENDER = {
   resolveChoices: 'seat',
   cancelAction: 'seat',
   undo: 'seat',
+  reoffer: 'host',
   botSuggest: 'host',
   debugHistory: 'seat',
   debugStateAt: 'seat',
@@ -274,6 +275,19 @@ export interface TurnBoundary {
    * the `key` it armed under. It does not take part in `key`.
    */
   timeLimitMs?: number;
+  /**
+   * The host's instant, epoch ms, at which an offer in these views goes out
+   * of date (#1536): an action whose `disabled` rule read
+   * `game.stepOpenFor()` and was told "not yet" answers differently then.
+   * Absent when no offer waits on the step clock, and in a finished game.
+   *
+   * Unlike `timeLimitMs` it can change inside one boundary. A host arms a
+   * timer for it on its own clock, beside the step's deadline, and calls
+   * {@link SnapshotSessionHost.reoffer} when it comes, which builds the views
+   * again at that instant and publishes them with the next `reofferAt`, if
+   * any. It does not take part in `key`.
+   */
+  reofferAt?: number;
 }
 
 /**
@@ -378,7 +392,8 @@ export interface PublishedViews {
  *
  * - `change`: the game changed (a move, a start, an undo, a rules reload).
  * - `republish`: the game did not change; the host restated it (a hint, a
- *   heatmap, a demo frame, {@link SnapshotSessionHost.broadcastCurrent}).
+ *   heatmap, a demo frame, {@link SnapshotSessionHost.broadcastCurrent}, the
+ *   offers built again by {@link SnapshotSessionHost.reoffer}).
  * - `restore`: {@link SnapshotSessionHost.restore} brought the host back.
  * - `roster`: {@link SnapshotSessionHost.setBotSeats} changed whether a bot
  *   plays here.
@@ -1077,10 +1092,12 @@ export class SnapshotSessionHost {
     const timeLimitMs = this.isComplete
       ? undefined
       : stepTimeLimitMs(flowState as StepTimeLimitState | null);
+    const reofferAt = this.isComplete ? undefined : this._snapshot?.reofferAt;
     return {
       key: flowBoundaryKey(flowState as BoundaryKeyState | null),
       dueSeats: this.isComplete ? [] : dueSeats(flowState as SeatActivityState | null),
       ...(timeLimitMs === undefined ? {} : { timeLimitMs }),
+      ...(reofferAt === undefined ? {} : { reofferAt }),
     };
   }
 
@@ -1088,7 +1105,12 @@ export class SnapshotSessionHost {
    * Hold the game `res` returned, publish it, and persist it. `pending` is the
    * acting `seat`'s half-made selection after the op: `null` drops it.
    */
-  private async apply(res: StateEnvelope, seat?: number, pending: Record<string, unknown> | null = null): Promise<void> {
+  private async apply(
+    res: StateEnvelope,
+    seat?: number,
+    pending: Record<string, unknown> | null = null,
+    cause: PublishCause = 'change',
+  ): Promise<void> {
     this._snapshot = this.checkedSnapshot(res.snapshot, 'op');
     this.noteArrivals(this._snapshot);
     // FLOW-01/03: every state-mutating op's stateEnvelope() carries a fresh
@@ -1104,7 +1126,7 @@ export class SnapshotSessionHost {
     this.lastPlayerViews = res.playerViews;
     this.lastSpectatorView = res.spectatorView;
     if (this.disposed) return; // F-12: a dead session never broadcasts.
-    this.publish('change');
+    this.publish(cause);
     await this.persistDurableState();
   }
 
@@ -1165,6 +1187,18 @@ export class SnapshotSessionHost {
   }
 
   /**
+   * Build every view again at the host's instant and publish it, with the
+   * game unchanged (#1536). Call it when the instant the last publish named as
+   * `turnBoundary.reofferAt` has come: an action greyed by the step clock is
+   * offered then. It publishes with cause `republish`, pushes only the views
+   * that changed, and persists the snapshot, which carries the next
+   * `reofferAt`. Host-only: `handleOp` refuses `reoffer` from a seat.
+   */
+  async reoffer(): Promise<OpResultFor<'reoffer'>> {
+    return (await this.applyMutatingOp(null, { type: 'reoffer' })) as OpResultFor<'reoffer'>;
+  }
+
+  /**
    * Run `op` for `seat` and answer with that op's own result. Read-only ops
    * (a choices query, the read-only debug ops) do NOT mutate or broadcast.
    * State-mutating ops broadcast and persist the new state, THEN resolve,
@@ -1187,7 +1221,7 @@ export class SnapshotSessionHost {
         success: false,
         error:
           `Seat ${seat} sent '${op.type}', and was refused: only the host itself sends it, ` +
-          'through host.start(), host.restoreEarlier(snapshot) or host.runBotTurns(), never through handleOp.',
+          'through host.start(), host.restoreEarlier(snapshot), host.reoffer() or host.runBotTurns(), never through handleOp.',
         category: 'protocol',
       };
     }
@@ -1428,7 +1462,8 @@ export class SnapshotSessionHost {
     if (replacesPosition(op, res)) this.#forgetReplacedTree();
     else if (seat !== null && undidSeatOnly(res)) this.transientTeachingState.delete(seat);
 
-    await this.apply(res, seat ?? undefined, pending);
+    // A re-offer changed no move, only the instant the offers were built at (#1536).
+    await this.apply(res, seat ?? undefined, pending, op.type === 'reoffer' ? 'republish' : 'change');
     return res;
   }
 

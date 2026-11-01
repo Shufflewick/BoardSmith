@@ -142,6 +142,15 @@ export type ExecutorOp =
   | { type: 'cancelAction'; player: number }
   | { type: 'undo'; player: number }
   /**
+   * The views again, built at this op's instant, with the game unchanged
+   * (#1536): a host sends it when the instant the snapshot names as
+   * `reofferAt` has come, so an action `game.stepOpenFor()` greyed is
+   * offered once its time has passed. Host-internal:
+   * `SnapshotSessionHost.handleOp` refuses it; the host sends it through
+   * `SnapshotSessionHost.reoffer()`.
+   */
+  | { type: 'reoffer' }
+  /**
    * A bot's search: the move one due bot seat among `seats` would make, found
    * WITHOUT making it. Read-only: the game is left as it was. A host makes the
    * move as an ordinary `action` op for that seat, once it has checked the game
@@ -444,6 +453,7 @@ export interface OpSuccessFields {
     warnings?: WarningEntry[];
   };
   cancelAction: Record<never, never>;
+  reoffer: Record<never, never>;
   /**
    * `'seat'`: only the undoing seat's own part went back, in a step that undoes
    * per seat (#1526), and every other seat's state is as it was. `'game'`: the
@@ -650,11 +660,16 @@ type BotFlowState = {
 function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
   // getSnapshot() records the op's checkpoint, so it runs before any view is
   // built: each view's canUndo reads the settled checkpoint window (#385).
-  const snapshot = runner.getSnapshot();
+  const taken = runner.getSnapshot();
+  const playerViews = buildViews(runner, playerCount);
+  const spectatorView = buildSpectatorView(runner);
+  // Read once the offers are built, which is where a disabled rule read the step clock (#1536).
+  const reofferAt = runner.reofferAt();
+  const snapshot = reofferAt === undefined ? taken : { ...taken, reofferAt };
   return {
     snapshot,
-    playerViews: buildViews(runner, playerCount),
-    spectatorView: buildSpectatorView(runner),
+    playerViews,
+    spectatorView,
     // Computed once for every seat.
     // SnapshotSessionHost merges this into every per-seat view's `state`
     // alongside its own per-seat pendingAction lookup (see
@@ -1689,7 +1704,7 @@ export interface ExecuteOpHostOptions {
   fullHistory?: boolean;
   /**
    * The host's instant for this op, epoch ms, read from its own clock as it
-   * runs the op (#1532). It is what `game.stepElapsedMs()` measures with, and
+   * runs the op (#1532). It is what `game.stepOpenFor()` measures with, and
    * the instant a step this op opens opened at. Host options are the host's
    * alone, so no client can set it. Leave it out and a game whose rules read
    * the step clock refuses the op, saying so.
@@ -1771,6 +1786,8 @@ async function runOp(
         return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
         return handleCancelAction(def, gameOptions, snap, pendingState, op);
+      case 'reoffer':
+        return { success: true, ...stateEnvelope(runnerFromSnapshot(snap, def), gameOptions.playerCount) };
       case 'undo':
         return handleUndo(def, gameOptions, snap, op);
       case 'debugHistory':

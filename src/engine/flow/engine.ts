@@ -2136,7 +2136,7 @@ export class FlowEngine<G extends Game = Game> {
   /**
    * Resolve a step's declared time limit ONCE, as it is entered and before its
    * offers are read, and keep the number on its frame (#300), with the host's
-   * instant for the op that opened it (#1532), which `game.stepElapsedMs()`
+   * instant for the op that opened it (#1532), which `game.stepOpenFor()`
    * measures from, so its actions' rules can read the clock while they are offered.
    *
    * Once per frame: an action step re-runs this executor after every move while

@@ -240,7 +240,7 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
  * The instant a harness with no wall clock (`boardsmith simulate`, the bot
  * trainer's benchmark) stamps on every op it runs (#1535). Time does not pass
  * in such a game: every move is made the instant its step opened, so
- * `game.stepElapsedMs()` reads 0, and no step's deadline ever runs out.
+ * `game.stepOpenFor(ms)` is false for any `ms` above 0, and no step's deadline ever runs out.
  */
 export const FROZEN_NOW = 0;
 
@@ -542,12 +542,23 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
   /**
    * Stamp the host's instant, epoch ms, on the ops that follow (#1532): what
-   * `game.stepElapsedMs()` measures with, and when a step opened by them
+   * `game.stepOpenFor()` measures with, and when a step opened by them
    * opened. A host stamps each op from its own clock as it runs it; a test
-   * stamps whatever instant it needs.
+   * stamps whatever instant it needs. It starts a fresh {@link reofferAt}.
    */
   setNow(now: number): void {
     this.game._hostNow = now;
+    this.game._reofferAt = undefined;
+  }
+
+  /**
+   * The earliest host instant, epoch ms, at which a `game.stepOpenFor()` read
+   * since the last {@link setNow} answers differently (#1536), or undefined
+   * when none answered "not yet". Read after building the views: an offer an
+   * action's `disabled` greyed by the step clock is out of date from then.
+   */
+  reofferAt(): number | undefined {
+    return this.game._reofferAt;
   }
 
   /**

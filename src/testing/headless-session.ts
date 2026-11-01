@@ -71,7 +71,7 @@ export interface HeadlessGameOptions {
   fullHistory?: boolean;
   /**
    * The host's clock, epoch ms, read once per op to stamp it (#1532), for a
-   * game whose rules read `game.stepElapsedMs()`. Without it ops carry no
+   * game whose rules read `game.stepOpenFor()`. Without it ops carry no
    * instant, and such a game refuses them.
    */
   now?: () => number;

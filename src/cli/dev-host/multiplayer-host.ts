@@ -1753,8 +1753,9 @@ export class MultiplayerHost {
    * Called for every seat's frame of every broadcast, BEFORE the frame is sent,
    * so the first frame of a new boundary already carries its deadline. The same
    * key is the same window: a re-broadcast, a seat acting mid-round or a
-   * reconnect only refreshes which seats are still due and never re-arms, so
-   * the deadline does not slide.
+   * reconnect only refreshes which seats are still due, so the deadline does
+   * not slide; it re-arms only when the instant an offer goes out of date
+   * moved (#1536).
    */
   private observeBoundary(session: DevSession, boundary: TurnBoundary): void {
     const open = this.window;
@@ -1764,7 +1765,9 @@ export class MultiplayerHost {
       open.boundary.key === boundary.key &&
       timed === (open.deadlineAt !== null)
     ) {
+      const moved = open.boundary.reofferAt !== boundary.reofferAt;
       open.boundary = boundary;
+      if (moved) this.armWindow(open);
       return;
     }
     const limit = boundary.timeLimitMs;
@@ -1774,8 +1777,45 @@ export class MultiplayerHost {
       deadlineAt: limit === undefined ? null : this.clock.now() + limit,
     };
     this.window = window;
-    if (limit === undefined) this.disarm();
-    else this.clock.arm(limit, () => void this.closeWindow(window));
+    this.armWindow(window);
+  }
+
+  /**
+   * Arm the one timer for the open window's next instant: when an offer the
+   * step clock greyed goes out of date (`reofferAt`, #1536), if that comes
+   * before the deadline, else the deadline.
+   */
+  private armWindow(window: StepWindow): void {
+    const { deadlineAt, boundary: { reofferAt } } = window;
+    if (deadlineAt === null) this.disarm();
+    else if (reofferAt === undefined || reofferAt >= deadlineAt) this.armDeadline(window, deadlineAt);
+    else this.clock.arm(Math.max(0, reofferAt - this.clock.now()), () => void this.reoffer(window, deadlineAt));
+  }
+
+  private armDeadline(window: StepWindow, deadlineAt: number): void {
+    this.clock.arm(Math.max(0, deadlineAt - this.clock.now()), () => void this.closeWindow(window));
+  }
+
+  /**
+   * An offer the step clock greyed went out of date: build the views again
+   * now. Their publish arms the window's next instant. A failure is reported,
+   * and the deadline armed, so the step still closes.
+   */
+  private async reoffer(window: StepWindow, deadlineAt: number): Promise<void> {
+    if (this.window !== window) return;
+    let failure: string | undefined;
+    try {
+      const result = await window.session.host.reoffer();
+      if (!result.success) failure = result.error;
+    } catch (err) {
+      failure = err instanceof Error ? err.message : String(err);
+    }
+    if (failure === undefined || this.window !== window) return;
+    this.reportDeadlineFailure(
+      `The time an action's rule waits for passed, but the actions could not be offered again: ${failure}. ` +
+        'Each seat sees them as they were until the next move.',
+    );
+    this.armDeadline(window, deadlineAt);
   }
 
   private disarm(): void {

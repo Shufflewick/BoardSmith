@@ -2359,21 +2359,35 @@ actionStep({
 See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
 section 5 for who enforces what.
 
-##### `game.stepElapsedMs()` - how long the timed step has been open
+##### `game.stepOpenFor(ms)` - whether the timed step has been open that long
 
 A rule can refuse something during part of the window: say, a purchase until
 the battle both screens play back as the step opens has finished.
-`ctx.game.stepElapsedMs()` is how long the open timed step has been open, in
-milliseconds, measured on the host's clock. `ActionContext` stays
+`ctx.game.stepOpenFor(ms)` is true once the open timed step has been open for
+at least `ms` milliseconds, measured on the host's clock. `ActionContext` stays
 `{ game, player, args }`; the clock is read through the game.
 
 ```typescript
 const PLAYBACK_MS = 30_000;
 
 Action.create<MyGame>('levelUp')
-  .disabled((ctx) => ctx.game.stepElapsedMs() < PLAYBACK_MS && 'The battle is still playing back.')
+  .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
   .execute((args, ctx) => { /* ... */ });
 ```
+
+- **A greyed action lights up on its own when its time comes (#1536).** The
+  clock answers a threshold, not a number, so the engine knows the instant
+  each "not yet" turns into "yes": the step's opening instant plus `ms`. The
+  earliest of those read while the offers were built rides on the snapshot as
+  `reofferAt` and on the turn boundary as `turnBoundary.reofferAt`. A host arms
+  a timer for it beside the step's deadline and, when it comes, calls
+  `SnapshotSessionHost.reoffer()` (the executor op `{ type: 'reoffer' }`),
+  which builds every view again at that instant with the game unchanged and
+  publishes it with cause `republish`, naming the next `reofferAt` if there is
+  one. `boardsmith dev` does this. A platform host must too: on every publish,
+  arm a timer for `meta.turnBoundary.reofferAt` when it is set and comes before
+  the deadline, and call `reoffer()` when it fires, stamped like any op with
+  `hostOptions.now`.
 
 - **The host stamps the time, never a client.** A host passes its own instant
   with every op (`executeOp`'s `hostOptions.now`, epoch ms, read as it runs the
@@ -2388,11 +2402,7 @@ Action.create<MyGame>('levelUp')
   Panel, the custom UI and the server agree. A `condition` decides which
   actions the step offers and is not asked again as time passes, so an action
   it hid would stay hidden; reading the clock there throws, saying to use
-  `disabled` or `validate`. An offer is not re-sent as time passes either:
-  a seat sees the action greyed until the next op re-offers it. A refusal that
-  lapses on its own while the seat watches is best left out of the offer and
-  made in `validate`, which refuses the submission with its reason; the custom
-  UI can grey the button by its own playback meanwhile.
+  `disabled` or `validate`.
 - **Every restore measures the same way.** The opening instant rides on the
   step's frame, and the last op's instant on the snapshot (`snapshot.now`), so
   a restore, an undo checkpoint and a bot's search copy answer as the op did.
@@ -2409,13 +2419,14 @@ Action.create<MyGame>('levelUp')
   step reports that the reload failed.
 - **`boardsmith simulate` and the bot trainer's benchmark freeze time.** They
   have no wall clock, so they stamp every op with one fixed instant: every move
-  is made the instant its step opened, `stepElapsedMs()` reads 0, and no
-  deadline runs out. An action greyed for the first part of a step is never
+  is made the instant its step opened, `stepOpenFor(ms)` is false for any
+  `ms` above 0, and no deadline runs out. An action greyed for the first part of a step is never
   played there.
 - In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
   for the start and `testGame.runner.setNow(ms)` before a later move, or
-  `createHeadlessSession(def, { ..., now: () => ms })`. `boardsmith dev`
-  stamps every op from the clock it runs step windows on.
+  `createHeadlessSession(def, { ..., now: () => ms })`, where
+  `session.host.reoffer()` builds the views again at the clock's instant.
+  `boardsmith dev` stamps every op from the clock it runs step windows on.
 
 #### `phase` - Named game phase
 
