@@ -102,9 +102,17 @@ class AudioService {
       this.audioElement.volume = this.volume;
       await this.audioElement.play();
     } catch (err) {
-      // Audio play can fail if user hasn't interacted with page yet
-      // This is expected behavior - silently ignore
-      console.debug('Audio play failed (user interaction required):', err);
+      // An AbortError only means a newer sound took over the element.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      if (err instanceof DOMException && err.name === 'NotAllowedError') {
+        console.warn(
+          'The browser blocked the turn chime because nobody has clicked or pressed a key in the game yet. ' +
+            'Sounds play once you click or press a key in the game. A host page that frames the game from ' +
+            'another origin should give its iframe allow="autoplay" so clicks on the host page count too.',
+        );
+        return;
+      }
+      console.warn(`The turn chime could not play: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

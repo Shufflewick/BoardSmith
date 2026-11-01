@@ -176,16 +176,36 @@ describe('playTurnSound', () => {
     expect(played).toBe(2);
   });
 
-  it('swallows a rejected play — autoplay policy is not a game error', async () => {
-    class BlockedAudio extends FakeAudio {
+  /** Makes the next audio element refuse to play with `error`, and records console warnings. */
+  function refusePlay(error: DOMException) {
+    class RefusingAudio extends FakeAudio {
       override play(): Promise<void> {
-        return Promise.reject(new Error('NotAllowedError'));
+        return Promise.reject(error);
       }
     }
-    vi.stubGlobal('Audio', BlockedAudio as unknown as typeof Audio);
-    vi.spyOn(console, 'debug').mockImplementation(() => {});
+    vi.stubGlobal('Audio', RefusingAudio as unknown as typeof Audio);
     audioService.setTurnSoundUrl('turn.mp3');
+    return vi.spyOn(console, 'warn').mockImplementation(() => {});
+  }
+
+  it('warns, saying how to turn sound on, when the browser blocks it before any click (#1530)', async () => {
+    const warn = refusePlay(new DOMException('play() failed', 'NotAllowedError'));
     await expect(audioService.playTurnSound()).resolves.toBeUndefined();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/click or press a key in the game/);
+  });
+
+  it('warns about any other refusal, naming it (#1530)', async () => {
+    const warn = refusePlay(new DOMException('no supported source', 'NotSupportedError'));
+    await audioService.playTurnSound();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/no supported source/);
+  });
+
+  it('stays quiet when a newer sound interrupts the play (#1530)', async () => {
+    const warn = refusePlay(new DOMException('interrupted by pause()', 'AbortError'));
+    await audioService.playTurnSound();
+    expect(warn).not.toHaveBeenCalled();
   });
 });
 
