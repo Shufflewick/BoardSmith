@@ -1,5 +1,5 @@
 {
-  "revision": 286,
+  "revision": 287,
   "surfaceHash": "492c45d884dc0a6b",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2231,6 +2231,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Boards can hide the shell's players panel and action bar while their player wants the field, with useHideChrome from boardsmith/ui (#1538)"
+    },
+    {
+      "revision": 287,
+      "date": "2026-11-01",
+      "surfaceHash": "492c45d884dc0a6b",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The action panel shows a choice pick's prompt, empty state, skip and Done controls when its narrowed choices come back empty (#1539)"
     }
   ]
 }

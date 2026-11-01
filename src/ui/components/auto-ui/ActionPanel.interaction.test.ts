@@ -75,6 +75,20 @@ const notationChoiceAction: EnrichedActionMetadata = {
   ],
 };
 
+// Fixture: a choice pick narrowed by an earlier answer through ctx.args, so it
+// declares neither filterBy nor dependsOn, and whose narrowed choices are empty (#1539).
+function sendActionFixture(optional: string | undefined): EnrichedActionMetadata {
+  return {
+    name: 'send',
+    prompt: 'Send',
+    selections: [
+      { name: 'to', type: 'text', prompt: 'Who is it for?' },
+      { name: 'recipient', type: 'choice', prompt: 'Who exactly?', optional },
+      { name: 'message', type: 'text', prompt: 'What does it say?' },
+    ],
+  };
+}
+
 describe('ActionPanel interaction tests', () => {
   let sendAction: ReturnType<typeof vi.fn>;
 
@@ -326,5 +340,47 @@ describe('ActionPanel interaction tests', () => {
 
     expect(wrapper.findAll('button.anchored-choice-btn').map((b) => b.text())).toEqual(['a5', 'c5']);
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+  // ── #1539: a choice pick whose narrowed choices come back empty ─────────
+  async function mountEmptyRecipient(optional: string | undefined) {
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['send']),
+      actionMetadata: ref({ send: sendActionFixture(optional) }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+      fetchPickChoices: vi.fn().mockResolvedValue({ success: true, choices: [] }),
+    });
+    await controller.start('send', { args: { to: 'zzz-nobody' } });
+    await nextTick();
+    expect(controller.currentPick.value?.name).toBe('recipient');
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+      props: { availableActions: ['send'], isMyTurn: true },
+    });
+    return { controller, wrapper };
+  }
+
+  it('an optional choice pick with no choices shows its prompt and a skip button that moves on', async () => {
+    const { controller, wrapper } = await mountEmptyRecipient('skip');
+
+    const panel = wrapper.find('.selection-input');
+    expect(panel.text()).toContain('Who exactly?');
+    expect(panel.text()).toContain('(optional)');
+    const skip = panel.find('button.skip-btn');
+    expect(skip.text()).toBe('skip');
+
+    await skip.trigger('click');
+    await nextTick();
+    expect(controller.currentPick.value?.name).toBe('message');
+  });
+
+  it('a required choice pick with no choices shows its prompt and says no options are available', async () => {
+    const { wrapper } = await mountEmptyRecipient(undefined);
+
+    const panel = wrapper.find('.selection-input');
+    expect(panel.text()).toContain('Who exactly?');
+    expect(panel.text()).toContain('No options available');
   });
 });

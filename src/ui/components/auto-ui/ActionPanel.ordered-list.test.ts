@@ -56,6 +56,15 @@ function mountRepair(
 }
 
 describe('ActionPanel ordered lists (#249)', () => {
+  it('keeps the entries and Done when the narrowed choices come back empty (#1539)', () => {
+    const { wrapper } = mountRepair(['university'], { min: 1, max: 3 }, { currentChoices: ref([]) });
+
+    expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(1);
+    expect(wrapper.find('.ordered-list-remove').exists()).toBe(true);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
   it('draws an ADD button per choice rather than a checkbox', () => {
     const { wrapper } = mountRepair([]);
 
