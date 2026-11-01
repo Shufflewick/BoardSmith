@@ -108,8 +108,8 @@ export interface SelectionChoicesObservation {
 /**
  * Builds one random, valid move from each enabled action, step by step from
  * the engine's own choices, and from the seat's held follow-up (#911), and
- * plays one of them. A number the action refuses is drawn again, three draws
- * in all (#1543). `onSelectionChoices` sees
+ * plays one of them. A move refused for its numbers is drawn again, three
+ * draws in all (#1543). `onSelectionChoices` sees
  * every choice, element and elements step it builds for an action (not a
  * repeating one, whose candidates exist only on a scratch copy); it cannot
  * change the game. A follow-up's move comes from move enumeration instead, so
@@ -325,6 +325,52 @@ function buildRandomArgs(
     return { ok: true, args: rng.pick(moves) };
   }
 
+  // A number is drawn from its min and max, and whether the action takes it
+  // can depend on other picks, which only the rules know (#1543).
+  const numbers = actionDef.selections.filter((s): s is NumberSelection => s.type === 'number');
+  const refusable = Boolean(actionDef.validate) || numbers.some((n) => n.validate);
+  let refusal = '';
+  for (let draw = 0; draw < REFUSED_DRAWS; draw++) {
+    const built = drawPicks(game, actionDef, player, rng, onSelectionChoices);
+    if (!built.ok || !refusable || !numbers.some((n) => n.name in built.args)) return built;
+    const judged = game.getActionExecutor().validateAction(actionDef, player, built.args);
+    if (judged.valid || !offeredPicksPass(game, actionDef, player, built.args)) return built;
+    refusal = judged.errors.join(' ');
+  }
+  return {
+    ok: false,
+    reason: `action '${actionDef.name}' refused all ${REFUSED_DRAWS} moves the simulator drew for its numbers, the last with: ${refusal.replace(/\.$/, '')}`,
+  };
+}
+
+/** How many moves the random policy draws for an action that refuses its numbers, as the smoke walk tries three (#466). */
+const REFUSED_DRAWS = 3;
+
+/**
+ * Whether the picks the engine offered pass their own checks, so a refusal is
+ * the numbers' or the whole move's rule. One that does not is the game's to
+ * fix, and is played for the simulator to report (#910).
+ */
+function offeredPicksPass(game: Game, actionDef: ActionDefinition, player: Player, args: Record<string, unknown>): boolean {
+  const offeredOnly: ActionDefinition = {
+    ...actionDef,
+    validate: undefined,
+    selections: actionDef.selections.map((s) => (s.type === 'number' ? { ...s, validate: undefined } : s)),
+  };
+  return game.getActionExecutor().validateAction(offeredOnly, player, args).valid;
+}
+
+/**
+ * One random pick for each selection of an action with no repeating
+ * selection, each from the engine's own choices, or why it has none.
+ */
+function drawPicks(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  rng: SeededRandom,
+  onSelectionChoices?: (observation: SelectionChoicesObservation) => void
+): RandomArgs {
   // Picks are kept as the elements and values offered, and submitted as they
   // are: performAction resolves an element by its id against the live game.
   const working: Record<string, unknown> = {};
@@ -350,15 +396,16 @@ function buildRandomArgs(
           reason: `action '${actionDef.name}' requires number input '${sel.name}' without both min and max bounds, which the random simulator cannot generate`,
         };
       }
-      const value = drawNumber(ns, rng);
-      if (value === null) {
+      const lo = ns.integer ? Math.ceil(ns.min) : ns.min;
+      const hi = ns.integer ? Math.floor(ns.max) : ns.max;
+      if (hi < lo) {
         if (optional) continue;
         return {
           ok: false,
           reason: `action '${actionDef.name}' number input '${sel.name}' has an empty range [${ns.min}, ${ns.max}]`,
         };
       }
-      working[sel.name] = value;
+      working[sel.name] = ns.integer ? lo + rng.nextInt(hi - lo + 1) : lo + rng.next() * (hi - lo);
       continue;
     }
 
@@ -428,45 +475,5 @@ function buildRandomArgs(
     working[sel.name] = rng.pick(choices);
   }
 
-  return redrawRefusedNumbers(game, actionDef, player, rng, working);
-}
-
-/** How many numbers the random policy draws for an action that refuses them, as the smoke walk tries three (#466). */
-const REFUSED_DRAWS = 3;
-
-/** A random value of a number input with min and max, or null when its range holds none. */
-function drawNumber(ns: NumberSelection, rng: SeededRandom): number | null {
-  const lo = ns.integer ? Math.ceil(ns.min!) : ns.min!;
-  const hi = ns.integer ? Math.floor(ns.max!) : ns.max!;
-  if (hi < lo) return null;
-  return ns.integer ? lo + rng.nextInt(hi - lo + 1) : lo + rng.next() * (hi - lo);
-}
-
-/**
- * `args`, with its numbers drawn again while the action refuses them, at most
- * {@link REFUSED_DRAWS} draws in all (#1543): a number is drawn from its min
- * and max, and whether the action takes it can depend on other picks, which
- * only its `validate` knows. The other picks are kept: the engine offered
- * them, so the action refusing one is the game's to fix (#910).
- */
-function redrawRefusedNumbers(
-  game: Game,
-  actionDef: ActionDefinition,
-  player: Player,
-  rng: SeededRandom,
-  args: Record<string, unknown>,
-): RandomArgs {
-  const numbers = actionDef.selections.filter((s): s is NumberSelection => s.type === 'number' && s.name in args);
-  if (numbers.length === 0) return { ok: true, args };
-  for (let draw = 1; ; draw++) {
-    const judged = game.getActionExecutor().validateAction(actionDef, player, args);
-    if (judged.valid) return { ok: true, args };
-    if (draw === REFUSED_DRAWS) {
-      return {
-        ok: false,
-        reason: `action '${actionDef.name}' refused all ${REFUSED_DRAWS} numbers the simulator drew for it, the last with: ${judged.errors.join(' ')}`,
-      };
-    }
-    args = { ...args, ...Object.fromEntries(numbers.map((n) => [n.name, drawNumber(n, rng)])) };
-  }
+  return { ok: true, args: working };
 }
