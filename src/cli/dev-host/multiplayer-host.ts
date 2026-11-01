@@ -914,21 +914,23 @@ export class MultiplayerHost {
     this.seatSetup = setup;
     this.setSeatOptions(setup.map((seat) => seat.playerOptions));
     this.opts.designatedBotSeats = setup.flatMap((seat, index) => (seat.isBot ? [index + 1] : []));
-    const free = [...this.seats.values()].filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
-    for (const { seat, clientId, name, connected } of [...this.seats.values()]) {
-      const to = free[0];
-      if (!clientId || !setup[seat - 1].isBot || !to) continue;
-      free.shift();
-      // An away page keeps its grace on the seat it moves to.
-      const away = this.reconnecting.has(seat);
-      this.assignSeat(clientId, to.seat, name === seatDisplayName(seat) ? undefined : name);
-      to.connected = connected;
-      if (away) this.startGrace(to.seat);
-      this.send(clientId, { type: 'joined', seat: to.seat });
-    }
-    for (const info of this.seats.values()) {
+    const seats = [...this.seats.values()];
+    const free = seats.filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
+    const moving = seats.filter((info) => info.clientId && setup[info.seat - 1].isBot);
+    moving.slice(0, free.length).forEach((from, index) => this.moveHolder(from, free[index]));
+    for (const info of seats) {
       if (info.clientId) info.color = setup[info.seat - 1].color ?? info.color;
     }
+  }
+
+  /** Move a seat's holder to the open seat `to`, telling their page; an away page keeps its grace there. */
+  private moveHolder(from: SeatInfo, to: SeatInfo): void {
+    const { seat, clientId, name, connected } = from;
+    const away = this.reconnecting.has(seat);
+    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name);
+    to.connected = connected;
+    if (away) this.startGrace(to.seat);
+    this.send(clientId!, { type: 'joined', seat: to.seat });
   }
 
   /** The colour a seat takes when its player chose none: the applied preset's, else the palette's. */
