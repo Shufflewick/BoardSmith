@@ -3,6 +3,7 @@ import { Action, type GameOptions } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
+import type { BotStrategy } from '../bot/index.js';
 import { succeeded, refused } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import {
@@ -208,6 +209,30 @@ describe('reoffer() rebuilds the offered actions (#1545)', () => {
     expect(moved.cause).toBe('change');
     expect(moved.turnBoundary.dueSeats).toEqual([2]);
     expect(moved.turnBoundary.key).not.toBe(opened.key);
+  });
+});
+
+describe('reoffer() and the teaching tools (#1545)', () => {
+  // Each move names its action, so a heatmap shows which actions have moves.
+  const namedBot: BotStrategy = {
+    objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
+    hintTargetFromMove: (move) => ({ notation: move.action }),
+  };
+
+  it('drops a hint chosen before the re-offer and recomputes a visible heatmap', { timeout: 60_000 }, async () => {
+    let now = START;
+    const session = createHeadlessSession({ ...playbackDefinition, bot: namedBot }, { ...gameOptions, now: () => now });
+    await session.start();
+    succeeded(await session.send(1, { type: 'hint', seat: 1 }));
+    succeeded(await session.send(1, { type: 'heatmapToggle', seat: 1, visible: true }));
+    expect(session.playerState(1).hint).toBeDefined();
+    expect(session.playerState(1).heatmap!.entries.map((e) => e.cellRef.notation)).not.toContain('levelUp');
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    await session.host.settled();
+    expect(session.playerState(1).hint).toBeUndefined();
+    expect(session.playerState(1).heatmap!.entries.map((e) => e.cellRef.notation)).toContain('levelUp');
   });
 });
 

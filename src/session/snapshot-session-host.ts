@@ -1372,7 +1372,7 @@ export class SnapshotSessionHost {
     const wakesBots =
       actionCompleted || op.type === 'undo' || op.type === 'debugRewind' || op.type === 'restoreEarlier' || op.type === 'reoffer';
     if (!wakesBots) return res;
-    const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted).finally(() =>
+    const tracked: Promise<void> = this.afterMove(`${seat === null ? 'the host' : `seat ${seat}`}'s ${op.type}`, actionCompleted || op.type === 'reoffer').finally(() =>
       this.backgroundWork.delete(tracked),
     );
     this.backgroundWork.add(tracked);
@@ -1461,17 +1461,9 @@ export class SnapshotSessionHost {
 
     // Clear hint for the acting seat on successful action/selectionStep (completion):
     // a hint answers the position the seat was in, which its move just changed.
-    if (seat !== null && completesAction(op, res)) {
-      const seatTransient = this.transientTeachingState.get(seat);
-      if (seatTransient?.hint) {
-        const { hint: _h, ...rest } = seatTransient;
-        if (Object.keys(rest).length > 0) {
-          this.transientTeachingState.set(seat, rest);
-        } else {
-          this.transientTeachingState.delete(seat);
-        }
-      }
-    }
+    if (seat !== null && completesAction(op, res)) this.#dropHint(seat);
+    // A re-offer changes what every seat may do (#1545).
+    else if (op.type === 'reoffer') for (const held of [...this.transientTeachingState.keys()]) this.#dropHint(held);
 
     if (replacesPosition(op, res)) this.#forgetReplacedTree();
     else if (seat !== null && undidSeatOnly(res)) this.transientTeachingState.delete(seat);
@@ -1480,6 +1472,18 @@ export class SnapshotSessionHost {
     const restated = op.type === 'reoffer' && flowBoundaryKey(flowStateOf(res) as BoundaryKeyState | null) === boundaryBefore;
     await this.apply(res, seat ?? undefined, pending, restated ? 'republish' : 'change');
     return res;
+  }
+
+  /** Drop `seat`'s hint, keeping its other teaching state. */
+  #dropHint(seat: number): void {
+    const seatTransient = this.transientTeachingState.get(seat);
+    if (!seatTransient?.hint) return;
+    const { hint: _h, ...rest } = seatTransient;
+    if (Object.keys(rest).length > 0) {
+      this.transientTeachingState.set(seat, rest);
+    } else {
+      this.transientTeachingState.delete(seat);
+    }
   }
 
   /** A hint or heatmap toggle: computed on the current snapshot, stored as transient teaching state for that seat. */
