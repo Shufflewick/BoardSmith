@@ -1,6 +1,6 @@
 {
-  "revision": 279,
-  "surfaceHash": "fd9767c781f97d47",
+  "revision": 280,
+  "surfaceHash": "da82584e26d5c5e0",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2175,6 +2175,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A bot's search or move refused other than by the game's rules now FAILS the bot run, as a throw does, instead of stopping the pump silently (#1527): runBotTurns() rejects for the callers that joined the run, and a run only moves woke is handed to onBackgroundError. Platform: treat either as 'the bots stopped' and wake them again (runBotTurns) on your own backoff, or a table whose humans are done waits forever (ShufflewickPub#685). The game's own refusal still holds the seat back and fails nothing. No surface, payload or stored byte changes; published games need no rebuild."
+    },
+    {
+      "revision": 280,
+      "date": "2026-11-01",
+      "surfaceHash": "da82584e26d5c5e0",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A bot run that a refusal fails (#1527) now fails with the exported BotRunRefusedError, carrying the refused OpFailure as refusal and the seats as seats (#1531): runBotTurns() rejects with it, or onBackgroundError is handed it. Platform: wake the bots on your own backoff only for an error that is instanceof BotRunRefusedError, and treat any other as a crash; do not copy the host's rule for which refusals fail the run, since a refusal on a table that moved is stale and fails nothing. Published games need no rebuild."
     }
   ]
 }

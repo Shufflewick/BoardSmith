@@ -12,7 +12,7 @@
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { executeOp, isReadOnlyOp, STALE_SUBMISSION_MESSAGE, type ExecutableOp, type GameDefinitionLike, type Op, type OpSuccess } from './stateless-ops.js';
-import { SnapshotSessionHost, type SeatOp, type SnapshotSessionAdapters } from './snapshot-session-host.js';
+import { BotRunRefusedError, SnapshotSessionHost, type SeatOp, type SnapshotSessionAdapters } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultaneous-rounds-fixture.js';
 import { fixedDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
@@ -887,6 +887,52 @@ describe('a refused bot move (#635)', () => {
     await expect(pump).rejects.toThrow(/The bot search for seat\(s\) 2 was refused: The bot could not load the game\./);
     await expect(pump).rejects.not.toThrow(/game's rules/);
     expect(t.botMoves).toEqual([]);
+  });
+
+  const busy = { success: false, error: 'The executor is busy.', category: 'executor' } as const;
+
+  it('a run failed by a refused search rejects with a BotRunRefusedError that carries the refusal and the seats, so a platform can tell it from a crash (#1531)', async () => {
+    errorLog();
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    await untilSearches(t, 1);
+    t.searches[0].release(busy);
+
+    const error = await pump.then(() => null, (e: unknown) => e);
+    expect(error).toBeInstanceOf(BotRunRefusedError);
+    expect((error as BotRunRefusedError).refusal).toEqual(busy);
+    expect((error as BotRunRefusedError).seats).toEqual([2]);
+  });
+
+  it("a run failed by a refused move, in the run a move woke, hands onBackgroundError a BotRunRefusedError for the bot's seat (#1531)", async () => {
+    errorLog();
+    const t = table();
+    await t.host.start();
+    t.refuseBot.push(busy);
+    succeeded(await humanMove(t.host));
+    await untilSearches(t, 1);
+    t.searches[0].release(moved);
+    await t.host.settled();
+
+    expect(t.backgroundErrors).toHaveLength(1);
+    const error = t.backgroundErrors[0];
+    expect(error).toBeInstanceOf(BotRunRefusedError);
+    expect((error as BotRunRefusedError).refusal).toEqual(busy);
+    expect((error as BotRunRefusedError).seats).toEqual([2]);
+  });
+
+  it('a run failed by a search that threw is not a BotRunRefusedError, so a platform still treats it as a crash (#1531)', async () => {
+    errorLog();
+    const t = table();
+    await t.host.start();
+    const pump = t.host.runBotTurns();
+    await untilSearches(t, 1);
+    t.searches[0].release({ then: (_resolve: unknown, reject: (e: Error) => void) => reject(new Error('crash')) });
+
+    const error = await pump.then(() => null, (e: unknown) => e);
+    expect(error).toEqual(new Error('crash'));
+    expect(error).not.toBeInstanceOf(BotRunRefusedError);
   });
 
   it('a move found for a seat a human has taken since the search began is never made', async () => {
