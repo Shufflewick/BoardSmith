@@ -1719,6 +1719,30 @@ export interface ExecuteOpHostOptions {
   keepStepClock?: boolean;
 }
 
+function handleExitTutorial(
+  def: RunnerDef,
+  gameOptions: { playerCount: number; [key: string]: unknown },
+  snap: GameStateSnapshot,
+  op: Extract<Op, { type: 'exitTutorial' }>,
+): OpResultFor<'exitTutorial'> {
+  if (!def.tutorial) {
+    return errorResult('No tutorial definition on this game.', 'protocol');
+  }
+  if (op.player < 1 || op.player > gameOptions.playerCount) {
+    return errorResult(
+      `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
+      'protocol',
+    );
+  }
+  const runner = runnerFromSnapshot(snap, def);
+  const current = runner.game.tutorialProgress.get(op.player);
+  runner.game.tutorialProgress.set(op.player, {
+    stepId: current?.stepId ?? null,
+    status: 'exited',
+  });
+  return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+}
+
 async function runOp(
   definition: GameDefinitionLike,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1846,24 +1870,8 @@ async function runOp(
         return await handleBotSuggest(def, snap, op);
       case 'startTutorial':
         return handleStartTutorial(def, gameOptions, snap, op, teachingDisabled);
-      case 'exitTutorial': {
-        if (!def.tutorial) {
-          return errorResult('No tutorial definition on this game.', 'protocol');
-        }
-        if (op.player < 1 || op.player > gameOptions.playerCount) {
-          return errorResult(
-            `Invalid player seat ${op.player}: must be between 1 and ${gameOptions.playerCount}.`,
-            'protocol',
-          );
-        }
-        const runner = runnerFromSnapshot(snap, def);
-        const current = runner.game.tutorialProgress.get(op.player);
-        runner.game.tutorialProgress.set(op.player, {
-          stepId: current?.stepId ?? null,
-          status: 'exited',
-        });
-        return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
-      }
+      case 'exitTutorial':
+        return handleExitTutorial(def, gameOptions, snap, op);
     }
     // Every op type has a case above, so `op` is `never` here: an op added to
     // `ExecutorOp` or `DevOp` without a case is a compile error on this line.
