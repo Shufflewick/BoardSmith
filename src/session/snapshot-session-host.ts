@@ -44,6 +44,26 @@ const MAX_BOT_MOVES_PER_RUN = 20_000;
  */
 const MAX_STALE_BOT_SEARCHES = 3;
 
+/**
+ * What a bot run fails with when a bot's search or move was refused other
+ * than by the game's rules (#1527), so a platform can tell it from a crash
+ * (#1531): `runBotTurns()` rejects with it, or `onBackgroundError` is handed
+ * it. Wake the bots again on your own backoff; any other error is a crash.
+ * `refusal` is the refused answer, and `seats` the seats searched for, or the
+ * one seat whose move was refused.
+ */
+export class BotRunRefusedError extends Error {
+  readonly refusal: OpFailure;
+  readonly seats: number[];
+
+  constructor(message: string, refusal: OpFailure, seats: number[]) {
+    super(message);
+    this.name = 'BotRunRefusedError';
+    this.refusal = refusal;
+    this.seats = seats;
+  }
+}
+
 /** One run of the bot pump, which every wake while it runs joins: see {@link SnapshotSessionHost.runBotTurns}. */
 interface BotRun {
   done: Promise<void>;
@@ -466,8 +486,9 @@ export interface SnapshotSessionAdapters {
    * asked again on the next wake. `error` is what was thrown, usually by
    * `executeOp`: tell the players in your own words, never with its stack.
    * A bot's search or move refused other than by the game's rules fails the
-   * run too: wake the bots again ({@link SnapshotSessionHost.runBotTurns}),
-   * paced as you choose, or a table whose humans are done waits forever (#1527).
+   * run too, with a {@link BotRunRefusedError} (#1531): wake the bots again
+   * ({@link SnapshotSessionHost.runBotTurns}), paced as you choose, or a table
+   * whose humans are done waits forever (#1527). Any other error is a crash.
    *
    * EACH FAILURE GOES ONE WAY. A bot run that any caller of
    * {@link SnapshotSessionHost.runBotTurns} joined (directly, or through
@@ -1664,7 +1685,8 @@ export class SnapshotSessionHost {
    *
    * A run that fails rejects every call that joined it, and is then not handed
    * to `onBackgroundError` (#698): each failure goes one way. A bot's search or
-   * move refused other than by the game's rules fails the run (#1527).
+   * move refused other than by the game's rules fails the run (#1527) with a
+   * {@link BotRunRefusedError}, so it can be told from a crash (#1531).
    */
   runBotTurns(): Promise<void> {
     const run = this.wakeBots();
@@ -1702,8 +1724,8 @@ export class SnapshotSessionHost {
    * Any other refusal (of the search, or of the move by the executor or by the
    * host's own executeOp, such as a platform that could not store the result)
    * says nothing about this game state, so nothing is held back: it fails the
-   * run, as a throw does, so its callers or `onBackgroundError` learn the bots
-   * stopped and must be woken again (#1527).
+   * run with a {@link BotRunRefusedError}, so its callers or `onBackgroundError`
+   * learn the bots stopped and must be woken again (#1527), not that they crashed (#1531).
    *
    * Either way it is said out loud: a bot that silently stops moving leaves
    * every seat waiting with nothing in the console to say why.
@@ -1730,7 +1752,7 @@ export class SnapshotSessionHost {
     const what = seat === undefined
       ? `The bot search for seat(s) ${seats.map((s) => s.seat).join(', ')} was refused`
       : `The move the bot chose for seat ${seat} was refused, not by the game's rules (${res.category})`;
-    throw new Error(`${what}: ${res.error}${code}`);
+    throw new BotRunRefusedError(`${what}: ${res.error}${code}`, res, seat === undefined ? seats.map((s) => s.seat) : [seat]);
   }
 
   /**

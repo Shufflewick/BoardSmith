@@ -271,6 +271,13 @@ not asked again until the game changes, so a refused move never turns into a
 retry loop. `boardsmith dev`'s host behaves the same way, and holds back only
 the seat whose move was refused: other bot seats keep playing (#421).
 
+A search or move refused for any other reason (the platform's executor, say)
+stops the bots, unless the table moved since the search, when the bot just
+searches again: `runBotTurns()` rejects, or the host's `onBackgroundError` is
+handed the error, with a `BotRunRefusedError` that carries the refused
+`OpFailure` as `refusal` and the seats as `seats` (#1527, #1531). Wake the bots
+again with `runBotTurns()` on your own backoff. Any other error is a crash.
+
 ## BotConfig Options
 
 ```typescript
