@@ -13,7 +13,12 @@ import {
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
 import { random, greedy, mcts, type Policy } from './index.js';
-import { playbackTurnDefinition } from '../session/testing/fixtures/timed-step-fixture.js';
+import {
+  playbackTurnDefinition,
+  validateGatedDefinition,
+  disabledGatedDefinition,
+  levelUpWhenAllowed,
+} from '../session/testing/fixtures/timed-step-fixture.js';
 
 /** Each seat adds 1-3 to its own score; the first to reach 10 ends the game, and the highest score wins. */
 class RaceGame extends Game<RaceGame, Player> {
@@ -414,6 +419,28 @@ describe('playGame with policies (#556)', () => {
     expect(result.completed).toBe(true);
     // One commit a seat: levelUp, greyed until 30 s into the turn, is never played.
     expect(result.actionCount).toBe(2);
+  });
+
+  // #1541: a bot that waits for a timed refusal to lapse moves the simulator's clock to the instant it waits for.
+  it.each([validateGatedDefinition, disabledGatedDefinition])('moves the clock to the instant a bot waits for and asks it again ($gameType)', async (definition) => {
+    const result = await playGame(
+      { ...definition, bot: levelUpWhenAllowed },
+      { playerCount: 2, seed: 'wait', policies: [mcts(1), mcts(1)], maxActions: 20 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+    // Each seat levels up once the playback has ended, then is done.
+    expect(result.actionCount).toBe(4);
+  });
+
+  it('refuses a policy that waits for an instant that is not after the game\'s own (#1541)', async () => {
+    const stalling: Policy = { name: 'stalling', choose: () => ({ waitUntil: 0 }) };
+    const result = await playGame(playbackTurnDefinition, { playerCount: 2, seed: 'stall', policies: [stalling, stalling], maxActions: 20 });
+    expect(result.crashed).toBe(true);
+    expect(result.error).toBe(
+      "Policy 'stalling' waits until instant 0, which is not after the game's instant 0, so the game would never move on. " +
+        'Wait only for an instant later than the game\'s, or return the move the seat makes now.',
+    );
   });
 
   it('refuses a player count the game does not declare', async () => {

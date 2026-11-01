@@ -302,6 +302,11 @@ async function runBenchmarkGame<G extends Game>(
       let args: Record<string, unknown>;
       try {
         const move = await bot.play();
+        if (!move && bot.lastWait?.until !== undefined) {
+          // Time passes only when a seat waits on the step clock: move it there, as a host's reoffer timer would (#1541).
+          runner.setNow(bot.lastWait.until);
+          continue;
+        }
         if (!move) {
           // The bot found nothing searchable from this seat's view (#29). In a
           // live game that stalls one seat; in a benchmark the game cannot

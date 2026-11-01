@@ -85,8 +85,11 @@ shares the game's engine. Its options are described in
   ```
 
 - `Policy` - `{ name, choose(turn) }`. `choose` returns a move
-  (`{ action, args }`), or `{ noMove: reason }` when its seat has none it can
-  play; it may return a promise.
+  (`{ action, args }`), `{ noMove: reason }` when its seat has none it can
+  play, or `{ waitUntil: ms }` when its seat waits on the step clock (#1541):
+  the simulator moves the game's instant to `ms`, which must be later than the
+  game's, and asks again. `mcts` answers that for a bot that waits. It may
+  return a promise.
 - `PolicyTurn` - What `choose` is handed: the live `game`, the `seat` to move,
   its enabled `actions`, the `followUp` it holds, if any (#1078), its own
   seeded `random` generator and the game `definition`. A held follow-up is

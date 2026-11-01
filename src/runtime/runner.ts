@@ -238,8 +238,9 @@ export function pickFailureCode(refused: { rulesError?: boolean }): ErrorCode {
 
 /**
  * The instant a harness with no wall clock (`boardsmith simulate`, the bot
- * trainer's benchmark) stamps on every op it runs (#1535). Time does not pass
- * in such a game: every move is made the instant its step opened, so
+ * trainer's benchmark) starts every game at (#1535). Time passes in such a
+ * game only when a bot waits on the step clock, to the instant it waits for
+ * (#1541): otherwise every move is made the instant its step opened, so
  * `game.stepOpenFor(ms)` is false for any `ms` above 0, and no step's deadline ever runs out.
  */
 export const FROZEN_NOW = 0;

@@ -50,8 +50,12 @@ export interface PolicyMove {
   args: Record<string, unknown>;
 }
 
-/** A policy's answer: a move, or why its seat has none it can play. */
-export type PolicyChoice = PolicyMove | { noMove: string };
+/**
+ * A policy's answer: a move, why its seat has none it can play, or the host
+ * instant, epoch ms, its seat waits for (a bot whose strategy waits on the step
+ * clock, #1541), at which the simulator moves the game's clock and asks again.
+ */
+export type PolicyChoice = PolicyMove | { noMove: string } | { waitUntil: number };
 
 /** What a policy is handed each time its seat is to move. */
 export interface PolicyTurn {
@@ -258,6 +262,7 @@ export function mcts(level: DifficultyLevel | number): Policy {
         seed: String(rng.next()),
       });
       const move = await bot.play();
+      if (!move && bot.lastWait?.until !== undefined) return { waitUntil: bot.lastWait.until };
       if (!move) return { noMove: `${name} found no move for player ${seat}: ${bot.lastStallReason ?? 'no reason recorded'}` };
       // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
       return { action: move.action, args: picksFromSeat(game, move.action, move.args, seat) };

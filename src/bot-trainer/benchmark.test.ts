@@ -10,7 +10,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { benchmarkBot, weightedBot, weightedObjectives } from './benchmark.js';
-import { PlaybackTurnGame } from '../session/testing/fixtures/timed-step-fixture.js';
+import { PlaybackTurnGame, disabledGatedDefinition, levelUpWhenAllowed } from '../session/testing/fixtures/timed-step-fixture.js';
 import { createBot } from '../bot/index.js';
 import { GameRunner } from '../runtime/index.js';
 import {
@@ -306,6 +306,18 @@ describe('benchmarkBot', () => {
       seed: 'clock',
     });
     expect(result.draws).toBe(2);
+    expect(result.incomplete).toBe(0);
+  });
+
+  // #1541: a bot that waits for a timed refusal to lapse moves the benchmark's clock to the instant it waits for.
+  it('moves the clock to the instant the trained bot waits for and asks it again', async () => {
+    const result = await benchmarkBot(disabledGatedDefinition.gameClass, 'gated', levelUpWhenAllowed, noWeights, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'wait',
+    });
+    expect(result.failures).toEqual([]);
     expect(result.incomplete).toBe(0);
   });
 

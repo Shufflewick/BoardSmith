@@ -309,6 +309,8 @@ export async function playGame<G extends Game>(
   let stuck = false;
   let stopReason: string | undefined;
   let restReason: string | undefined;
+  // The host instant the game is at: it moves only when a seat waits on the step clock (#1541).
+  let now = FROZEN_NOW;
   const recorder = metricRecorder(definition.metrics);
 
   try {
@@ -319,7 +321,7 @@ export async function playGame<G extends Game>(
       playerCount,
       seed,
       autoStart: false,
-      now: FROZEN_NOW,
+      now,
       metricSink: recorder.sink,
     });
     testGame.start();
@@ -390,6 +392,18 @@ export async function playGame<G extends Game>(
         stuck = true;
         stopReason = choice.noMove;
         break;
+      }
+      if ('waitUntil' in choice) {
+        if (!(choice.waitUntil > now)) {
+          throw new Error(
+            `Policy '${policy.name}' waits until instant ${choice.waitUntil}, which is not after the game's instant ${now}, so the game would never move on. ` +
+              "Wait only for an instant later than the game's, or return the move the seat makes now.",
+          );
+        }
+        // As a host's reoffer timer would.
+        now = choice.waitUntil;
+        testGame.runner.setNow(now);
+        continue;
       }
 
       // tryAction (not doAction) so a rejection below is reported as stuck, not a crash.
