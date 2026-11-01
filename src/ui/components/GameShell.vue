@@ -1388,7 +1388,8 @@ defineExpose({
          action bar is up, and the bar carries the time-travel banner
          (#actionbar-extra below), which a browse must not hide. Nothing in the
          bar can act on it: the Action Panel there is this shell's own, handed
-         `gatedIsMyTurn`. -->
+         `gatedIsMyTurn`. A board's `useHideChrome` gives way during a browse for
+         the same reason (#1538). -->
     <PlayShell
       ref="playShell"
       :board-failed="boardFailed"
@@ -1416,7 +1417,7 @@ defineExpose({
       :zoom-level="zoomLevel"
       v-model:sidebar-rail="sidebarRail"
       v-model:action-bar-minimized="actionBarMinimized"
-      :chrome-hidden="hideChrome.hidden.value"
+      :chrome-hidden="hideChrome.hidden.value && !isViewingHistory"
       :action-bar-opens-for-actions="props.actionBarOpensForActions"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"

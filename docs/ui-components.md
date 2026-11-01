@@ -500,8 +500,10 @@ While the function returns true, the shell hides the players panel (on phones,
 the one-line players strip) and the action bar with its toggle and controls
 menu, and the board region takes the space they used. The function is read
 reactively, so the chrome comes back when it returns false, and when the board
-unmounts. The shell does not show the chrome again by itself, not even for an
-action the board starts, so the board must keep its own button to bring it
+unmounts. Focus inside the chrome moves to the board region, and GameShell
+shows the chrome while the player browses history, whose banner is on the
+action bar. Otherwise the shell does not show the chrome again by itself, not
+even for an action the board starts, so the board must keep its own button to bring it
 back on screen and reachable by keyboard. `useHideChrome` works in any board
 GameShell or WorldShell renders and in one `renderAsSeat` mounts; called
 anywhere else it throws.

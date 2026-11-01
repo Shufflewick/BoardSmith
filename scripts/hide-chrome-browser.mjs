@@ -56,6 +56,7 @@ await runBrowserRegression(
           toggle: shows('[data-testid="bs-actionbar-toggle"]'),
           fillsFrame: region.left === view.left && region.top === view.top && region.width === view.width && region.height === doc.documentElement.clientHeight,
           reserved: getComputedStyle(doc.querySelector('.boardregion')).paddingBottom,
+          overlap: getComputedStyle(doc.querySelector('.board-viewport')).getPropertyValue('--bsg-panel-overlap'),
         };
       });
 
@@ -68,6 +69,7 @@ await runBrowserRegression(
           assert(!hidden.seats && !hidden.actionBar && !hidden.toggle, `chrome still shows: ${JSON.stringify(hidden)}`);
           assert(hidden.fillsFrame, `the board region does not fill the frame: ${JSON.stringify(hidden)}`);
           assert(hidden.reserved === '0px', `the region still reserves ${hidden.reserved} for a hidden bar`);
+          assert(hidden.overlap === '0px', `--bsg-panel-overlap keeps a game overlay ${hidden.overlap} clear of a hidden bar`);
         });
         await check(`pressing it again brings the chrome back, at ${width}px`, async () => {
           await eye.click();

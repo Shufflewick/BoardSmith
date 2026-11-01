@@ -8,16 +8,17 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { defineComponent, h, nextTick, ref } from 'vue';
-import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
+import { enterIframe, leaveIframe, mountPlatformShell, mountTableWithDebugPanel, DEBUG_TABLE_PLAYERS } from './GameShell.platform-mount.test-helper.js';
 import { useHideChrome } from '../composables/hideChrome.js';
 
 function post(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
 }
 
+// Module-level, so a test can hide the chrome without the click moving focus to the board.
+const fieldOnly = ref(false);
 const FieldBoard = defineComponent({
   setup() {
-    const fieldOnly = ref(false);
     useHideChrome(() => fieldOnly.value);
     return () => h('button', { 'data-testid': 'eye', onClick: () => { fieldOnly.value = !fieldOnly.value; } }, 'Hide controls');
   },
@@ -51,7 +52,10 @@ const chromeShows = (wrapper: Shell) => ({
   toggle: wrapper.get('[data-testid="bs-actionbar-toggle"]').isVisible(),
 });
 
-afterEach(leaveIframe);
+afterEach(() => {
+  fieldOnly.value = false;
+  leaveIframe();
+});
 
 describe('GameShell useHideChrome (#1538)', () => {
   it('hides the players panel and the action bar while the board asks, and shows them when it stops', async () => {
@@ -63,6 +67,27 @@ describe('GameShell useHideChrome (#1538)', () => {
 
     await wrapper.get('[data-testid="eye"]').trigger('click');
     expect(chromeShows(wrapper)).toEqual({ seats: true, actionBar: true, toggle: true });
+    wrapper.unmount();
+  });
+
+  it('hands focus that was in the hidden chrome to the board region', async () => {
+    const wrapper = await mountAtTable();
+    (wrapper.get('[data-testid="bs-actionbar-toggle"]').element as HTMLElement).focus();
+    fieldOnly.value = true;
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).toBe(wrapper.get('[data-testid="bs-board"]').element);
+    wrapper.unmount();
+  });
+
+  it('keeps the action bar, and its time-travel banner, while the player browses history', async () => {
+    const { wrapper, debugPanel } = await mountTableWithDebugPanel(FieldBoard);
+    fieldOnly.value = true;
+    debugPanel.vm.$emit('time-travel', { view: {}, players: DEBUG_TABLE_PLAYERS }, 3, null);
+    await nextTick();
+    await nextTick();
+    expect(wrapper.find('.time-travel-banner').exists()).toBe(true);
+    expect((wrapper.get('[data-testid="bs-actionbar"]').element.parentElement as HTMLElement).style.display).toBe('');
     wrapper.unmount();
   });
 });

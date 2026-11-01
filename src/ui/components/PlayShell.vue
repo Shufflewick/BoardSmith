@@ -336,6 +336,16 @@ watch(actionBarEl, (bar, _previous, onCleanup) => {
 }, { flush: 'post' });
 
 const boardRegionEl = ref<HTMLElement | null>(null);
+const sidebarEl = ref<HTMLElement | null>(null);
+const actionBarFrameEl = ref<HTMLElement | null>(null);
+// Hiding the chrome would drop focus inside it to <body>, so it goes to the board the player asked to see (#1538).
+watch(() => props.chromeHidden, async (hidden) => {
+  const focused = document.activeElement;
+  if (!hidden || !(focused instanceof HTMLElement)) return;
+  if (!sidebarEl.value?.contains(focused) && !actionBarFrameEl.value?.contains(focused)) return;
+  await nextTick();
+  boardRegionEl.value?.focus();
+});
 const zoomContainerEl = ref<HTMLElement | null>(null);
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
@@ -368,6 +378,7 @@ const mobileToggleLabel = computed(() => {
       <!-- Sidebar: always-visible player status + log; collapses to rail (IA-06) -->
       <aside
         v-show="!chromeHidden"
+        ref="sidebarEl"
         class="sidebar"
         :class="{ rail: railed, 'mobile-expanded': expanded }"
         aria-label="Players and log"
@@ -559,7 +570,7 @@ const mobileToggleLabel = computed(() => {
          of). This wrapper is what carries the out-of-flow positioning, so the
          bar's height is the wrapper's height and the toggle rides its top edge
          with nothing measuring anything. -->
-    <div v-show="!chromeHidden" class="actionbar-frame">
+    <div v-show="!chromeHidden" ref="actionBarFrameEl" class="actionbar-frame">
       <div ref="actionBarEl" id="bs-actionbar" class="actionbar" :class="{ collapsed: actionBarCollapsed }" role="region" aria-label="Actions" data-testid="bs-actionbar">
         <!-- ⋯ controls menu: always at the far left of the bar, and the sole
              control surface. Its
@@ -917,9 +928,12 @@ const mobileToggleLabel = computed(() => {
 .action-bar-stays-down .boardregion::after {
   height: 0;
 }
-/* The board has hidden the bar (#1538): the region reserves nothing for it. */
+/* The board has hidden the bar (#1538): the region reserves nothing for it, and overlays need no clearance. */
 .game-shell__game.chrome-hidden {
   --bsg-panel-reserved: 0px;
+}
+.chrome-hidden .board-viewport {
+  --bsg-panel-overlap: 0px;
 }
 .chrome-hidden .boardregion::after {
   height: 0;
