@@ -190,11 +190,11 @@ class ClockGatedGame extends Game<ClockGatedGame, Player> {
 
   constructor(options: GameOptions, gate: 'validate' | 'disabled') {
     super(options);
-    const levelUp = Action.create<ClockGatedGame>('levelUp')
+    const offered = Action.create<ClockGatedGame>('levelUp')
       .condition({ 'not levelled up yet': (ctx) => !ctx.game.levelledUp.includes(ctx.player.seat) });
     const gated = gate === 'validate'
-      ? levelUp.validate((_args, ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) || PLAYBACK_REASON)
-      : levelUp.disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && PLAYBACK_REASON);
+      ? offered.validate((_args, ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) || PLAYBACK_REASON)
+      : offered.disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && PLAYBACK_REASON);
     this.registerAction(
       gated.execute((_args, ctx) => {
         ctx.game.levelledUp = [...ctx.game.levelledUp, ctx.player.seat];
