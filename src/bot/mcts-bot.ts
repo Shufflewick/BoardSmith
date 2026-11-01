@@ -192,6 +192,15 @@ export class MCTSBot<G extends Game = Game> {
   lastStallReason?: string;
 
   /**
+   * Set when the last {@link play} returned `null` because the game's
+   * `candidateMoves` returned no moves for this seat, which says the seat
+   * waits (#1537). `until` is the host instant, epoch ms, at which a
+   * `game.stepOpenFor()` read made while listing those moves answers
+   * differently, so a host asks the bot again then; absent when none did.
+   */
+  lastWait?: { until?: number };
+
+  /**
    * Run MCTS and return the best move, or `null` when this bot's own
    * information state offers nothing to search.
    *
@@ -312,6 +321,7 @@ export class MCTSBot<G extends Game = Game> {
         // Every sub-search sees the same information state, so one finding
         // nothing means they all will. Report the stall rather than voting.
         this.lastStallReason = subBot.lastStallReason;
+        this.lastWait = subBot.lastWait;
         return null;
       }
 
@@ -377,6 +387,15 @@ export class MCTSBot<G extends Game = Game> {
     // analysis; an action with more moves than enumeration lists gives a
     // random sample of them instead (#691).
     const allMoves = this.movesFor(this.searchGame, flowState, this.playerIndex, { sample: false });
+    this.lastWait = undefined;
+    if (allMoves.length === 0 && this.candidateMoves && this.listSeatMoves(this.searchGame, flowState, this.playerIndex, { sample: false }).length > 0) {
+      // The search copy is fresh from the root, so its step-clock reads are this listing's alone.
+      this.lastWait = { ...(this.searchGame._reofferAt !== undefined && { until: this.searchGame._reofferAt }) };
+      this.lastStallReason =
+        `The bot strategy's candidateMoves returned no moves for seat ${this.playerIndex}, so the seat waits ` +
+        'until the game changes' + (this.lastWait.until === undefined ? '.' : ' or the step clock says its moves have.');
+      return { move: null, root: null };
+    }
     if (allMoves.length === 0) {
       // See play()'s doc comment: a stall for this seat, not a session lock.
       this.lastStallReason =
@@ -1250,14 +1269,8 @@ export class MCTSBot<G extends Game = Game> {
     if (!this.candidateMoves) return listMoves();
 
     // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
-    const candidates = this.candidateMoves(enumerationGame, seat, listMoves);
-    if (candidates.length === 0 && listMoves().length > 0) {
-      throw new Error(
-        `The bot strategy's candidateMoves returned no moves for seat ${seat}, which has ${listMoves().length} moves to make, ` +
-          'so the bot cannot choose one. Return at least one move whenever listMoves() returns any.',
-      );
-    }
-    return candidates;
+    // An empty list says the seat waits here (#1537): it has no move at this position.
+    return this.candidateMoves(enumerationGame, seat, listMoves);
   }
 
   /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */

@@ -165,8 +165,37 @@ would otherwise consider. Filter that listing to leave moves out, or return the
 game's own short list without calling `listMoves`, which spares the full
 enumeration of an action with a large or open-ended set of args. Moves are in
 wire form (element ids). Return only legal moves: the bot can choose any move
-it is given, so an illegal one can reach the engine as the bot's move. An empty
-list for a seat that has moves throws.
+it is given, so an illegal one can reach the engine as the bot's move.
+
+Return an empty list to say the seat waits (#1537). For the bot's own seat the
+bot makes no move now, and is not reported as stalled. The host asks it again
+when the game changes, or when the step clock says its moves have: a
+`game.stepOpenFor()` read made while listing them (in a `disabled` or
+`validate` rule) names the instant its answer changes, and the host puts that
+instant on the turn boundary as `turnBoundary.reofferAt`, so the same timer
+that re-offers a greyed action wakes the bot (see `game.stepOpenFor(ms)` in
+[actions-and-flow.md](./actions-and-flow.md)). That is how a bot holds out for
+an action refused during the first part of a timed step instead of giving it
+up. Below the root, a seat with no moves has none at that position. Under
+`boardsmith simulate` and the benchmark time does not pass, so a seat that
+waits on the clock is reported as having no move, and the narrated demo, which
+makes one move after another, stops when a bot waits and says why.
+
+<!-- typecheck: game src/wait-for-level-up.ts -->
+```typescript
+import type { BotStrategy } from 'boardsmith/bot';
+
+export const botStrategy: BotStrategy = {
+  // Level up once the playback lets us; until then wait, rather than end the round without it.
+  candidateMoves: (game, seat, listMoves) => {
+    const moves = listMoves();
+    const levelUp = moves.filter((move) => move.action === 'levelUp');
+    if (levelUp.length > 0) return levelUp;
+    const levelled = (game as unknown as { levelledUp: number[] }).levelledUp.includes(seat);
+    return levelled ? moves : [];
+  },
+};
+```
 
 <!-- typecheck: game src/candidate-moves.ts -->
 ```typescript
@@ -267,7 +296,8 @@ await session.host.runBotTurns();
 
 A bot moves when the game hands it a turn, and a move the game refuses is
 reported once on the console, naming the seat and the game's reason. The bot is
-not asked again until the game changes, so a refused move never turns into a
+not asked again until the game changes (or, for a seat whose strategy chose
+to wait, until the step clock says its moves have), so a refused move never turns into a
 retry loop. `boardsmith dev`'s host behaves the same way, and holds back only
 the seat whose move was refused: other bot seats keep playing (#421).
 

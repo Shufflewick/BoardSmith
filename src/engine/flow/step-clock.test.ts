@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { createSnapshot } from '../utils/index.js';
+import { createSnapshot, enumerateLegalMoves } from '../utils/index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import { Action, type Game, type GameOptions } from '../index.js';
@@ -138,6 +138,31 @@ describe('where a rule may read the step clock', () => {
 
     testGame.runner.setNow(START + PLAYBACK_MS);
     expect(testGame.runner.performAction('levelUp', 1, {}).success).toBe(true);
+  });
+});
+
+/** A game whose `pack` has a repeating pick, so enumeration judges it on a scratch copy, refused until the playback ends. */
+class RepeatingClockGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['pack', 'commit']);
+    this.registerAction(
+      Action.create<RepeatingClockGame>('pack')
+        .chooseFrom('item', { choices: ['a', 'b'], repeat: { until: () => true } })
+        .validate((_args, ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) || 'The battle is still playing back.')
+        .execute(() => {}),
+    );
+  }
+}
+
+describe('a step-clock read on a copy of the game (#1537)', () => {
+  it("reports on the game it copied when move enumeration's scratch copy reads it", () => {
+    const runner = new GameRunner({ GameClass: RepeatingClockGame, gameType: 'step-clock', gameOptions: opts });
+    runner.setNow(START);
+    runner.start();
+    runner.setNow(START);
+
+    expect(enumerateLegalMoves(runner.game, 1).map((move) => move.action)).toEqual(['commit']);
+    expect(runner.reofferAt()).toBe(START + PLAYBACK_MS);
   });
 });
 

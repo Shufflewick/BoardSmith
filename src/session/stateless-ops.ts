@@ -493,7 +493,7 @@ export interface OpSuccessFields {
    * seat is due there is no move and no stall: the bots have nothing to do.
    */
   botSuggest:
-    | { botPlayer: number; suggestedAction: string; suggestedArgs: Record<string, unknown>; botStalled?: undefined }
+    | { botPlayer: number; suggestedAction: string; suggestedArgs: Record<string, unknown>; botStalled?: undefined; botWaiting?: undefined }
     | {
         botPlayer?: undefined;
         suggestedAction?: undefined;
@@ -504,6 +504,13 @@ export interface OpSuccessFields {
          * host reports it and holds the seat back until the game changes.
          */
         botStalled?: { seat: number; reason: string };
+        /**
+         * A bot seat that was due and chose to wait (#1537): the game's
+         * `candidateMoves` returned no moves for it. `until` is the host
+         * instant, epoch ms, at which its moves change by the step clock; a
+         * host asks the seat again then, or when the game changes.
+         */
+        botWaiting?: { seat: number; until?: number };
       };
   demoStart: Record<never, never>;
   demoStop: Record<never, never>;
@@ -1328,6 +1335,7 @@ async function handleBotSuggest(
     console.error(`[BoardSmith] Bot for seat ${botPlayer} failed to choose a move:`, error);
     return { success: true, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
   }
+  if (!move && bot.lastWait) return { success: true, botWaiting: { seat: botPlayer, ...bot.lastWait } };
   if (!move) {
     return {
       success: true,

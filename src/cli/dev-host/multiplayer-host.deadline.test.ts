@@ -31,8 +31,10 @@ import { ErrorCode } from '../../types/protocol.js';
 import {
   PLAYBACK_MS,
   fixedDeployDefinition,
+  levelUpWhenAllowed,
   playbackDefinition,
   untimedDeployDefinition,
+  validateGatedDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
@@ -547,6 +549,20 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
     h.clock.advance(0);
     await vi.waitFor(() => expect(offer()).toBeUndefined());
     expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+  });
+
+  it('wakes a bot that waits for an action validate refuses until the playback ends, and it takes it then (#1537)', async () => {
+    const h = makeHost({ ...validateGatedDefinition, bot: levelUpWhenAllowed }, { idleAction: { name: 'done' } });
+    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and waits
+    await h.host.settled();
+    expect(h.actionsFor(2)).toHaveLength(0);
+    expect(h.clock.armedDelay).toBe(PLAYBACK_MS);
+
+    h.clock.advance(PLAYBACK_MS);
+    await vi.waitFor(() => expect(h.actionsFor(2).map((e) => (e.op as { actionName: string }).actionName)).toEqual(['levelUp', 'done']));
+    expect(h.actionsFor(2).every((e) => e.result.success)).toBe(true);
+    expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+    expect(h.errors('A')).toEqual([]);
   });
 
   it('reports an offer it could not build again, and still arms the deadline', async () => {

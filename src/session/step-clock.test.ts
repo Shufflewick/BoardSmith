@@ -5,7 +5,15 @@ import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { succeeded, refused } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
-import { DeployGame, PLAYBACK_MS, PlaybackGame, playbackDefinition } from './testing/fixtures/timed-step-fixture.js';
+import {
+  DeployGame,
+  PLAYBACK_MS,
+  PlaybackGame,
+  disabledGatedDefinition,
+  levelUpWhenAllowed,
+  playbackDefinition,
+  validateGatedDefinition,
+} from './testing/fixtures/timed-step-fixture.js';
 
 /**
  * The host stamps each op with its instant (`hostOptions.now`, #1532), and the
@@ -151,3 +159,38 @@ class OnlyLevelUpGame extends DeployGame {
     );
   }
 }
+
+describe('a bot seat waiting on the step clock (#1537)', () => {
+  it.each([
+    ['validate', validateGatedDefinition],
+    ['disabled', disabledGatedDefinition],
+  ])('is asked again when a %s refusal lapses, and levels up then', async (_gate, gated) => {
+    const definition = { ...gated, bot: levelUpWhenAllowed };
+    let now = START;
+    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
+    const reported = vi.spyOn(console, 'error');
+    await session.start();
+    await session.host.runBotTurns();
+
+    // The bot waits rather than giving up its level-up, unreported, and the host is told when to ask it again.
+    expect(session.readGame()).toMatchObject({ levelledUp: [], done: [] });
+    expect(reported).not.toHaveBeenCalled();
+    expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBe(START + PLAYBACK_MS);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    await session.host.settled();
+    expect(session.readGame()).toMatchObject({ levelledUp: [2], done: [2] });
+  });
+
+  it('stops a narrated demo when its bot waits, saying why (#1537)', async () => {
+    const session = createHeadlessSession({ ...validateGatedDefinition, bot: levelUpWhenAllowed }, { ...gameOptions, now: () => START });
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await session.start();
+    await session.send(1, { type: 'demoStart', delay: 0 });
+    await vi.waitFor(() => expect(reported).toHaveBeenCalled());
+
+    expect(String(reported.mock.calls[0][0])).toMatch(/the demo failed: the bot for seat 1 chose to wait .*The demo has stopped/);
+    await vi.waitFor(() => expect(session.playerState(1).isDemoRunning).not.toBe(true));
+  });
+});

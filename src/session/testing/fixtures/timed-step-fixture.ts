@@ -19,6 +19,9 @@
  * definition exported here. `PlaybackTurnGame` is played by the simulator and
  * the bot trainer's benchmark (`src/sim/play-game.test.ts`,
  * `src/bot-trainer/benchmark.test.ts`), which need a game that ends.
+ * `ValidateGatedGame` and `DisabledGatedGame`, played with `levelUpWhenAllowed`,
+ * have a bot that waits for the playback to level up (#1537), for
+ * `src/session/step-clock.test.ts` and the dev host's deadline suite.
  */
 import {
   Game,
@@ -33,6 +36,7 @@ import {
   type GameOptions,
 } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
+import type { BotStrategy } from '../../../bot/types.js';
 
 type Limit = number | ((ctx: FlowContext<DeployGame>) => number);
 
@@ -118,11 +122,12 @@ export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
 
 /** How long `PlaybackGame`'s battle plays back once a deploy step opens. */
 export const PLAYBACK_MS = 30_000;
+const PLAYBACK_REASON = 'The battle is still playing back.';
 
 /** `levelUp`, refused until the battle has played back, measured on the step's own clock. */
 function levelUp<G extends Game & { levelUps: number }>() {
   return Action.create<G>('levelUp')
-    .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
+    .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && PLAYBACK_REASON)
     .execute((_args, ctx) => {
       ctx.game.levelUps += 1;
     });
@@ -162,3 +167,67 @@ export class PlaybackTurnGame extends Game<PlaybackTurnGame, Player> {
 }
 
 export const playbackTurnDefinition = twoSeat(PlaybackTurnGame, 'timed-step-playback-turn');
+
+/** A bot strategy for the gated games: level up once it may, wait while it is refused, then be done (#1537). */
+export const levelUpWhenAllowed: BotStrategy = {
+  candidateMoves: (game, seat, listMoves) => {
+    const moves = listMoves();
+    const up = moves.filter((move) => move.action === 'levelUp');
+    if (up.length > 0) return up;
+    if (!(game as ClockGatedGame).levelledUp.includes(seat)) return [];
+    return moves.filter((move) => move.action === 'done');
+  },
+};
+
+/**
+ * A 120 s round of `levelUp` and `done`, where `levelUp` waits for the
+ * playback (#1537), refused by `validate` or greyed by `disabled`. A seat that
+ * is done is out of the round; the round waits for both.
+ */
+class ClockGatedGame extends Game<ClockGatedGame, Player> {
+  levelledUp: number[] = [];
+  done: number[] = [];
+
+  constructor(options: GameOptions, gate: 'validate' | 'disabled') {
+    super(options);
+    const offered = Action.create<ClockGatedGame>('levelUp')
+      .condition({ 'not levelled up yet': (ctx) => !ctx.game.levelledUp.includes(ctx.player.seat) });
+    const gated = gate === 'validate'
+      ? offered.validate((_args, ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) || PLAYBACK_REASON)
+      : offered.disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && PLAYBACK_REASON);
+    this.registerAction(
+      gated.execute((_args, ctx) => {
+        ctx.game.levelledUp = [...ctx.game.levelledUp, ctx.player.seat];
+      }),
+    );
+    this.registerAction(
+      Action.create<ClockGatedGame>('done').execute((_args, ctx) => {
+        ctx.game.done = [...ctx.game.done, ctx.player.seat];
+      }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep<ClockGatedGame>({
+        name: 'deploy',
+        actions: ['levelUp', 'done'],
+        playerDone: (ctx, player) => ctx.game.done.includes(player.seat),
+        allDone: (ctx) => ctx.game.done.length === 2,
+        timeLimitMs: 120_000,
+      }),
+    });
+  }
+}
+
+class ValidateGatedGame extends ClockGatedGame {
+  constructor(options: GameOptions) {
+    super(options, 'validate');
+  }
+}
+
+class DisabledGatedGame extends ClockGatedGame {
+  constructor(options: GameOptions) {
+    super(options, 'disabled');
+  }
+}
+
+export const validateGatedDefinition = twoSeat(ValidateGatedGame, 'timed-step-validate-gated');
+export const disabledGatedDefinition = twoSeat(DisabledGatedGame, 'timed-step-disabled-gated');

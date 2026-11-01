@@ -271,8 +271,11 @@ export interface BotStrategy {
    * (element ids). Return only legal moves: the bot can choose any move it
    * is given, so an illegal one can reach the engine as the bot's move.
    *
-   * Return at least one move whenever `listMoves()` returns any: an empty
-   * list for a seat that has moves throws.
+   * Return no moves to say the seat waits (#1537): at the root the bot makes
+   * no move and is asked again when the game changes, or when a
+   * `game.stepOpenFor()` read made while listing says the seat's moves have,
+   * so a bot can hold out for an action the step clock still refuses. Below
+   * the root the seat has no move at that position.
    *
    * @param game - The search's copy of the game at this position
    * @param seat - The seat whose moves are listed, which is not always the bot's
