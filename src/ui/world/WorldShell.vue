@@ -61,6 +61,7 @@
       :connection="connectionIndicator"
       v-model:sidebar-rail="sidebarRail"
       v-model:action-bar-minimized="actionBarMinimized"
+      :chrome-hidden="hideChrome.hidden.value"
       :action-bar-opens-for-actions="props.actionBarOpensForActions"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
@@ -205,7 +206,7 @@ const toast = useToast();
  */
 const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
-const { play, controller: actionController, disabledActions, menuCommands, announcer, liveRegion } = seat;
+const { play, controller: actionController, disabledActions, menuCommands, hideChrome, announcer, liveRegion } = seat;
 
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
 const boardProps = computed(() => worldBoardProps(seat, host));

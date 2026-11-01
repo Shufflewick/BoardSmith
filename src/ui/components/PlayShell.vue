@@ -151,6 +151,8 @@ const props = withDefaults(defineProps<{
   mobileExpanded?: boolean;
   /** Whether the viewport is at the compact tier. */
   isCompact?: boolean;
+  /** Hide the players panel and the action bar while a board asks (`useHideChrome`, #1538). */
+  chromeHidden?: boolean;
 }>(), {
   showTurnStatus: true,
   unreadLogCount: 0,
@@ -334,6 +336,16 @@ watch(actionBarEl, (bar, _previous, onCleanup) => {
 }, { flush: 'post' });
 
 const boardRegionEl = ref<HTMLElement | null>(null);
+const sidebarEl = ref<HTMLElement | null>(null);
+const actionBarFrameEl = ref<HTMLElement | null>(null);
+// Hiding the chrome would drop focus inside it to <body>, so it goes to the board the player asked to see (#1538).
+watch(() => props.chromeHidden, async (hidden) => {
+  const focused = document.activeElement;
+  if (!hidden || !(focused instanceof HTMLElement)) return;
+  if (!sidebarEl.value?.contains(focused) && !actionBarFrameEl.value?.contains(focused)) return;
+  await nextTick();
+  boardRegionEl.value?.focus();
+});
 const zoomContainerEl = ref<HTMLElement | null>(null);
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
@@ -359,12 +371,13 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
+  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
       <!-- Sidebar: always-visible player status + log; collapses to rail (IA-06) -->
       <aside
+        ref="sidebarEl"
         class="sidebar"
         :class="{ rail: railed, 'mobile-expanded': expanded }"
         aria-label="Players and log"
@@ -555,7 +568,7 @@ const mobileToggleLabel = computed(() => {
          of). This wrapper is what carries the out-of-flow positioning, so the
          bar's height is the wrapper's height and the toggle rides its top edge
          with nothing measuring anything. -->
-    <div class="actionbar-frame">
+    <div ref="actionBarFrameEl" class="actionbar-frame">
       <div ref="actionBarEl" id="bs-actionbar" class="actionbar" :class="{ collapsed: actionBarCollapsed }" role="region" aria-label="Actions" data-testid="bs-actionbar">
         <!-- ⋯ controls menu: always at the far left of the bar, and the sole
              control surface. Its
@@ -1343,4 +1356,21 @@ const mobileToggleLabel = computed(() => {
   overflow: hidden;
 }
 
+
+/* The board has hidden the chrome (#1538). Last, so it wins over every layout rule above at every width. */
+.chrome-hidden .sidebar,
+.chrome-hidden .scrim,
+.chrome-hidden .actionbar-frame {
+  display: none;
+}
+/* Nothing to reserve room for or keep overlays clear of. */
+.game-shell__game.chrome-hidden {
+  --bsg-panel-reserved: 0px;
+}
+.chrome-hidden .board-viewport {
+  --bsg-panel-overlap: 0px;
+}
+.chrome-hidden .boardregion::after {
+  height: 0;
+}
 </style>

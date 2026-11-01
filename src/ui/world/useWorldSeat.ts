@@ -25,6 +25,7 @@ import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
 import { playContextProvisions } from '../composables/useGameContext.js';
 import { useToast } from '../composables/useToast.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from '../composables/menuCommands.js';
+import { HIDE_CHROME_KEY, createHideChrome } from '../composables/hideChrome.js';
 import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from '../composables/actionHolds.js';
 import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerReturn } from '../composables/useAnnouncer.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
@@ -53,6 +54,8 @@ export interface WorldSeat {
   disabledActions: ComputedRef<Record<string, string> | undefined>;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
+  /** The boards asking the shell to hide its chrome (`useHideChrome`). */
+  hideChrome: ReturnType<typeof createHideChrome>;
   /** Writes to the two live regions below. */
   announcer: UseAnnouncerReturn;
   /** The live-region text the announcer writes: render it with `LiveRegions`. */
@@ -163,9 +166,11 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
   }
 
   const menuCommands = createMenuCommands();
+  const hideChrome = createHideChrome();
   const provisions: Provision[] = [
     [BOARD_INTERACTION_KEY, boardInteraction],
     [MENU_COMMANDS_KEY, menuCommands],
+    [HIDE_CHROME_KEY, hideChrome],
     [ACTION_HOLDS_KEY, actionHolds],
     [ANNOUNCER_KEY, announcer],
     ...playContextProvisions({
@@ -199,7 +204,7 @@ export function useWorldSeat({ host, boardInteraction }: WorldSeatOptions): Worl
     ],
   ];
 
-  return { play, playerSeat, controller, disabledActions, menuCommands, announcer, liveRegion, provisions };
+  return { play, playerSeat, controller, disabledActions, menuCommands, hideChrome, announcer, liveRegion, provisions };
 }
 
 /** Provide a seat's {@link WorldSeat.provisions} to the components below. Call it in `setup`. */

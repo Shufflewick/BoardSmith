@@ -332,8 +332,9 @@ A game whose board already offers most choices can start the bar collapsed:
 
 `actionBarStartsCollapsed` sets only the starting state, default open, and
 `WorldShell` takes the same prop. The player can still open and close the bar,
-and it never goes away, so the controls menu and the button stay reachable by
-keyboard and screen reader.
+and it stays on screen, so the controls menu and the button stay reachable by
+keyboard and screen reader, unless the board hides it (see
+[Hiding the chrome to show the field](#hiding-the-chrome-to-show-the-field)).
 
 A game whose board answers every question itself, so that it starts actions all
 the time, can keep the bar from opening itself:
@@ -482,6 +483,30 @@ renders and in one `renderAsSeat` mounts; called anywhere else it throws.
 
 A command is for doing something once. A setting the player turns on or off
 belongs in [Player preferences](#player-preferences).
+
+#### Hiding the chrome to show the field
+
+A board can offer its player a button that hides everything over the field,
+such as an eye in its own top bar. The board hides its own HUD and asks the
+shell to hide its chrome with `useHideChrome` in its `setup`:
+
+```ts
+// useHideChrome comes from 'boardsmith/ui'; call it in a board's setup
+const fieldOnly = ref(false);
+useHideChrome(() => fieldOnly.value);
+```
+
+While the function returns true, the shell hides the players panel (on phones,
+the one-line players strip) and the action bar with its toggle and controls
+menu, and the board region takes the space they used. The function is read
+reactively, so the chrome comes back when it returns false, and when the board
+unmounts. Focus inside the chrome moves to the board region, and GameShell
+shows the chrome while the player browses history, whose banner is on the
+action bar. Otherwise the shell does not show the chrome again by itself, not
+even for an action the board starts, so the board must keep its own button to bring it
+back on screen and reachable by keyboard. `useHideChrome` works in any board
+GameShell or WorldShell renders and in one `renderAsSeat` mounts; called
+anywhere else it throws.
 
 #### Holding actions on this screen
 

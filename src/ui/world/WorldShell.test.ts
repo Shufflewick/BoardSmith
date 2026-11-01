@@ -15,6 +15,7 @@ import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 import { definePlayerPreferences } from '../player-preferences.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { useMenuCommands } from '../composables/menuCommands.js';
+import { useHideChrome } from '../composables/hideChrome.js';
 import { useActionHolds } from '../composables/actionHolds.js';
 import { usePlayContext } from '../composables/useGameContext.js';
 
@@ -1312,6 +1313,28 @@ describe('WorldShell — the controls menu (#1443)', () => {
     expect(searched).toBe(1);
     expect(document.body.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(trigger.element);
+    wrapper.unmount();
+  });
+
+  it("hides the players panel and the action bar while a world board asks (#1538)", async () => {
+    const fieldOnly = ref(true);
+    const Hall = defineComponent({
+      setup() {
+        useHideChrome(() => fieldOnly.value);
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall' },
+      attachTo: document.body,
+    });
+    await drawn(wrapper, stateFrame());
+    // jsdom applies no stylesheet: the class is what PlayShell's CSS hides the chrome under.
+    const hidden = () => wrapper.get('.game-shell__game').classes().includes('chrome-hidden');
+    expect(hidden()).toBe(true);
+    fieldOnly.value = false;
+    await nextTick();
+    expect(hidden()).toBe(false);
     wrapper.unmount();
   });
 
