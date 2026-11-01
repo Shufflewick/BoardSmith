@@ -1410,6 +1410,22 @@ evaluated on the read path, so an unbounded selection is paid by every watcher
 rather than by whoever acted. Narrow it with an earlier selection -- offer the
 exits of the room the player is in, not the rooms of the world.
 
+When the earlier selection is the player's own typing, a list past the cap is the
+player's to narrow, so `chooseFrom` takes `tooMany`, the sentence the panel shows
+in place of the host's (#1542). A submitted command is still checked against the
+whole list, so it may name any one valid choice:
+
+```ts
+worldAction<Clans>('send')
+  .needs(({ player }) => [rosterOf(player)])
+  .enterText('to', { maxLength: 40 })
+  .chooseFrom('recipient', {
+    choices: ({ game, args }) => namesStartingWith(game, args.to),
+    tooMany: 'Too many players match that name. Type more of it.',
+  })
+  .execute(/* ... */);
+```
+
 **(d) A world action may not declare a dependent (`dependsOn`, `filterBy`) or
 repeating (`repeat`, `repeatUntil`) selection.** A dependent selection asks the
 engine to compute candidates for *every* value of the selection it depends on,

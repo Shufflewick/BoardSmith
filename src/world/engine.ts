@@ -1806,7 +1806,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       ) as AnnotatedCandidate[];
 
     // (c) THE PER-SELECTION CAP, this host's own number.
-    assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets);
+    assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets, definition.world!.tooMany?.[selection.name]);
 
     const context = { game: reading, player: acting, args: { ...args } };
     // Warnings are the SESSION's channel for a soft-failed display callback and

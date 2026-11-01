@@ -1,5 +1,5 @@
 {
-  "revision": 289,
+  "revision": 290,
   "surfaceHash": "f06ff4e4e6e71ec7",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2255,6 +2255,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith simulate and the bot benchmark move their frozen clock to the instant a waiting bot waits for, once every seat that can move waits, and stop a wait that reaches the step's time limit (#1541)"
+    },
+    {
+      "revision": 290,
+      "date": "2026-11-01",
+      "surfaceHash": "f06ff4e4e6e71ec7",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world chooseFrom takes tooMany, the player's sentence for a list past maxCandidatesPerSelection when the panel re-asks a pick; a submitted command is still checked against the whole list (#1542)"
     }
   ]
 }
