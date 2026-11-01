@@ -293,6 +293,11 @@ export function presetSeatSetup(
     const refused = presetSeatRefusal(seat, index + 1, palette);
     if (refused !== undefined) throw refuse(refused);
   });
+  const colors = seats.map((seat, index) => (seat.color as string | undefined) ?? palette[index]);
+  const twin = colors.findIndex((color, index) => color !== undefined && colors.indexOf(color) !== index);
+  if (twin !== -1) {
+    throw refuse(`seats ${colors.indexOf(colors[twin]) + 1} and ${twin + 1} both take the color ${colors[twin]}; give each seat its own.`);
+  }
   const given = seats.map((seat) => (seat.playerOptions ?? {}) as Record<string, unknown>);
   const set = new Set(given.flatMap((values) => Object.keys(values)));
   const table = defaultSeatOptions(options, seats.length).map((defaults, index) => {

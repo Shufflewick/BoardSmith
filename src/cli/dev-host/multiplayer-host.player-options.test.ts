@@ -9,6 +9,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike, type GamePreset, type PlayerOptionDefinition } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
+import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 
 class PassGame extends Game<PassGame, Player> {
   constructor(options: GameOptions) {
@@ -50,7 +51,7 @@ const presets = [
   { name: 'Unknown field', players: [{ dictator: true }, {}] } as unknown as GamePreset,
 ];
 
-function table(playerCount = 3, seating: Pick<MultiplayerHostOptions, 'colorPalette' | 'presets'> = {}) {
+function table(playerCount = 3, seating: Pick<MultiplayerHostOptions, 'colorPalette' | 'presets' | 'reconnectTimer'> = {}) {
   const starts: Array<Record<string, any>> = []; // eslint-disable-line @typescript-eslint/no-explicit-any
   const sent: HostOutbound[] = [];
   const host = new MultiplayerHost({
@@ -158,6 +159,22 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
 
     expect(sent.filter((m) => m.type === 'joined').at(-1)).toEqual({ type: 'joined', seat: 3 });
     expect(starts.at(-1)!.playerIsBot).toEqual([false, true, false]);
+    // They take their new seat's colour, not the one of the seat they left.
+    expect(starts.at(-1)!.colors).toEqual(['#e74c3c', '#3498db', '#95a5a6']);
+  });
+
+  it('moves a person whose page is away, within its grace, as it moves one who is here', async () => {
+    const grace = manualGraceTimer();
+    const { host, lastLobby } = table(3, { colorPalette, presets, reconnectTimer: grace.timer });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'join', seat: 2 });
+    host.disconnect('A');
+
+    await host.handleMessage('B', { type: 'configure', preset: 'Two people and a bot' });
+
+    expect(lastLobby().seats.map((s) => [s.seat, s.held, s.connected])).toEqual([[1, true, true], [2, false, false], [3, true, false]]);
+    expect(grace.armed()).toHaveLength(1);
   });
 
   it('starts the first game with the seats the run was started with', async () => {

@@ -1050,7 +1050,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     });
 
     console.log(styleText('dim', `  ${multiplayerBannerLine(isNonLocal)}`));
-    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot${botSeats.length ? `; seats ${botSeats.join(',')} left to bots` : ''}, level ${botLevel}).`));
+    const botLevels = botSeats.map((seat) => `${seat} at ${seatSetup?.[seat - 1]?.botLevel ?? botLevel}`).join(', ');
+    console.log(styleText('cyan', `  Seats: ${effectivePlayerCount} (open seats play as bot, level ${botLevel}${botLevels ? `; seats left to bots: ${botLevels}` : ''}).`));
     if (teachingDisabled) {
       console.log(styleText('yellow', `  Teaching lockout active (--lock-teaching): hint, heatmap, demo, and tutorial are disabled.`));
     }

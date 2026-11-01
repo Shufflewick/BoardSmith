@@ -915,14 +915,16 @@ export class MultiplayerHost {
     this.setSeatOptions(setup.map((seat) => seat.playerOptions));
     this.opts.designatedBotSeats = setup.flatMap((seat, index) => (seat.isBot ? [index + 1] : []));
     const free = [...this.seats.values()].filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
-    for (const info of [...this.seats.values()]) {
+    for (const { seat, clientId, name, connected } of [...this.seats.values()]) {
       const to = free[0];
-      if (info.clientId && info.connected && setup[info.seat - 1].isBot && to) {
-        free.shift();
-        const clientId = info.clientId;
-        this.assignSeat(clientId, to.seat, info.name === seatDisplayName(info.seat) ? undefined : info.name, info.color);
-        this.send(clientId, { type: 'joined', seat: to.seat });
-      }
+      if (!clientId || !setup[seat - 1].isBot || !to) continue;
+      free.shift();
+      // An away page keeps its grace on the seat it moves to.
+      const away = this.reconnecting.has(seat);
+      this.assignSeat(clientId, to.seat, name === seatDisplayName(seat) ? undefined : name);
+      to.connected = connected;
+      if (away) this.startGrace(to.seat);
+      this.send(clientId, { type: 'joined', seat: to.seat });
     }
     for (const info of this.seats.values()) {
       if (info.clientId) info.color = setup[info.seat - 1].color ?? info.color;

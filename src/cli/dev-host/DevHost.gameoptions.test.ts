@@ -361,6 +361,20 @@ describe('DevHost: a change the host applies later replaces what the page shows 
     expect(configure?.preset).toBeUndefined();
     expect(configure?.gameOptions).toEqual({ difficulty: 'hard' });
   });
+
+  it('sends a preset with one Apply only, so a later Apply does not set the seats up again (#1544)', async () => {
+    const wrapper = await mountInLobby();
+    const ws = mockWsInstance!;
+    await wrapper.find('[data-testid="lobby-preset-picker"]').setValue('Quick Match');
+    const apply = wrapper.find('[data-testid="lobby-apply-options"]');
+
+    ws.send.mockClear();
+    await apply.trigger('click');
+    await apply.trigger('click');
+
+    const configures = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string)).filter((f) => f.type === 'configure');
+    expect(configures.map((f) => f.preset)).toEqual(['Quick Match', undefined]);
+  });
 });
 
 // ── Designer-only options (#687) ──────────────────────────────────────────────

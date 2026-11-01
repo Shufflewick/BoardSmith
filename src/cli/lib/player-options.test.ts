@@ -234,6 +234,7 @@ describe('presetSeatSetup (#1544)', () => {
     [[{}, { isBot: true, botLevel: 'expert' }], 'seat 2: Unknown bot level "expert". Use one of: easy, medium, hard, or a positive iteration count such as 750.'],
     [[{ playerOptions: { role: 'dictator' } }, { playerOptions: { role: 'dictator' } }], 'Dictator is given to seats 1 and 2; give it to one seat.'],
     [[{ playerOptions: { level: 'expert' } }, {}], 'Seat 1: Difficulty is "expert", which is none of its choices (easy, hard).'],
+    [[{}, { color: '#e74c3c' }], 'seats 1 and 2 both take the color #e74c3c; give each seat its own.'],
   ])('refuses %j', (players, reason) => {
     expect(setup(players)).toThrow(`This game's preset "P" cannot be used: ${reason} Correct the preset.`);
   });

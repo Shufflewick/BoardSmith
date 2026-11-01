@@ -43,7 +43,7 @@ type Seat = { seat: number; bot: boolean; playerOptions: Record<string, unknown>
 type Started = { view: { state: { players: Array<{ seat: number; color: string }> } } };
 
 /** The first game a page is sent from `boardsmith dev` run in `cwd` with `flags`, and the lobby's seats once it started. */
-async function tableOf(cwd: string, flags: string[]): Promise<{ started: Started; seats: Seat[] }> {
+async function tableOf(cwd: string, flags: string[]): Promise<{ started: Started; seats: Seat[]; output: string }> {
   const port = await freePort();
   const run = spawnDev(cwd, port, flags);
   try {
@@ -67,7 +67,7 @@ async function tableOf(cwd: string, flags: string[]): Promise<{ started: Started
     const lobby = await client.getLobby();
     client.close();
     // The wire's seat carries `bot` and `playerOptions`, which the client's reply type leaves out.
-    return { started, seats: lobby.seats as unknown as Seat[] };
+    return { started, seats: lobby.seats as unknown as Seat[], output: run.output() };
   } finally {
     run.child.kill('SIGINT');
     await run.ended;
@@ -80,7 +80,9 @@ describe('boardsmith dev --preset sets up each seat (#1544)', () => {
       `[{ name: 'Play as Dictator', players: [{ color: '#95a5a6', playerOptions: { role: 'dictator' } }, { color: '#e74c3c', isBot: true, botLevel: 'easy' }] }]`,
     );
 
-    const { started, seats } = await tableOf(cwd, ['--preset', 'Play as Dictator']);
+    const { started, seats, output } = await tableOf(cwd, ['--preset', 'Play as Dictator']);
+
+    expect(output).toContain('Seats: 2 (open seats play as bot, level medium; seats left to bots: 2 at easy).');
 
     expect(started.view.state.players.map(({ seat, color }) => ({ seat, color }))).toEqual([
       { seat: 1, color: '#95a5a6' },
