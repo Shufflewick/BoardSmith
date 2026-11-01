@@ -19,9 +19,9 @@
  * definition exported here. `PlaybackTurnGame` is played by the simulator and
  * the bot trainer's benchmark (`src/sim/play-game.test.ts`,
  * `src/bot-trainer/benchmark.test.ts`), which need a game that ends.
- * `ValidateGatedGame` and `DisabledGatedGame` carry a bot that waits for the
- * playback to level up (#1537), for `src/session/step-clock.test.ts` and the
- * dev host's deadline suite.
+ * `ValidateGatedGame` and `DisabledGatedGame`, played with `levelUpWhenAllowed`,
+ * have a bot that waits for the playback to level up (#1537), for
+ * `src/session/step-clock.test.ts` and the dev host's deadline suite.
  */
 import {
   Game,
@@ -168,8 +168,8 @@ export class PlaybackTurnGame extends Game<PlaybackTurnGame, Player> {
 
 export const playbackTurnDefinition = twoSeat(PlaybackTurnGame, 'timed-step-playback-turn');
 
-/** Seat 2's strategy: level up once it may, wait while it is refused, then be done (#1537). */
-const levelUpWhenAllowed: BotStrategy = {
+/** A bot strategy for the gated games: level up once it may, wait while it is refused, then be done (#1537). */
+export const levelUpWhenAllowed: BotStrategy = {
   candidateMoves: (game, seat, listMoves) => {
     const moves = listMoves();
     const up = moves.filter((move) => move.action === 'levelUp');
@@ -229,5 +229,5 @@ class DisabledGatedGame extends ClockGatedGame {
   }
 }
 
-export const validateGatedDefinition: GameDefinitionLike = { ...twoSeat(ValidateGatedGame, 'timed-step-validate-gated'), bot: levelUpWhenAllowed };
-export const disabledGatedDefinition: GameDefinitionLike = { ...twoSeat(DisabledGatedGame, 'timed-step-disabled-gated'), bot: levelUpWhenAllowed };
+export const validateGatedDefinition = twoSeat(ValidateGatedGame, 'timed-step-validate-gated');
+export const disabledGatedDefinition = twoSeat(DisabledGatedGame, 'timed-step-disabled-gated');

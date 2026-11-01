@@ -1,6 +1,6 @@
 {
   "revision": 285,
-  "surfaceHash": "ff10c8dd8784285a",
+  "surfaceHash": "492c45d884dc0a6b",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2219,7 +2219,7 @@
     {
       "revision": 285,
       "date": "2026-11-01",
-      "surfaceHash": "ff10c8dd8784285a",
+      "surfaceHash": "492c45d884dc0a6b",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A bot can wait for an action the step clock still refuses (#1537). A BotStrategy's candidateMoves may now return no moves to say the seat waits, where it used to throw: MCTSBot.play() resolves to null with lastWait ({ until? }) and a lastStallReason saying so, and below the root such a seat has no move at that position. botSuggest answers botWaiting: { seat, until? } for it, where until is the instant a game.stepOpenFor() read made while listing the seat's moves (in disabled or validate) answers differently. SnapshotSessionHost holds that seat back until the game changes, unreported, and folds until into turnBoundary.reofferAt, publishing again with cause republish when that moves it earlier, so the reoffer() timer a platform already arms (r284) wakes the bot. A step-clock read made on move enumeration's scratch copy of the game now counts toward the game's reofferAt. The narrated demo stops, reporting through onBackgroundError, when its bot waits. Platform: forward botWaiting from a botSuggest result the way it forwards botStalled; nothing else changes. Published games need no rebuild."

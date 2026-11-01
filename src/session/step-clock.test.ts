@@ -10,6 +10,7 @@ import {
   PLAYBACK_MS,
   PlaybackGame,
   disabledGatedDefinition,
+  levelUpWhenAllowed,
   playbackDefinition,
   validateGatedDefinition,
 } from './testing/fixtures/timed-step-fixture.js';
@@ -163,7 +164,8 @@ describe('a bot seat waiting on the step clock (#1537)', () => {
   it.each([
     ['validate', validateGatedDefinition],
     ['disabled', disabledGatedDefinition],
-  ])('is asked again when a %s refusal lapses, and levels up then', async (_gate, definition) => {
+  ])('is asked again when a %s refusal lapses, and levels up then', async (_gate, gated) => {
+    const definition = { ...gated, bot: levelUpWhenAllowed };
     let now = START;
     const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
     const reported = vi.spyOn(console, 'error');
@@ -182,7 +184,7 @@ describe('a bot seat waiting on the step clock (#1537)', () => {
   });
 
   it('stops a narrated demo when its bot waits, saying why (#1537)', async () => {
-    const session = createHeadlessSession(validateGatedDefinition, { ...gameOptions, now: () => START });
+    const session = createHeadlessSession({ ...validateGatedDefinition, bot: levelUpWhenAllowed }, { ...gameOptions, now: () => START });
     const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
     await session.start();
     await session.send(1, { type: 'demoStart', delay: 0 });

@@ -31,6 +31,7 @@ import { ErrorCode } from '../../types/protocol.js';
 import {
   PLAYBACK_MS,
   fixedDeployDefinition,
+  levelUpWhenAllowed,
   playbackDefinition,
   untimedDeployDefinition,
   validateGatedDefinition,
@@ -551,7 +552,7 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
   });
 
   it('wakes a bot that waits for an action validate refuses until the playback ends, and it takes it then (#1537)', async () => {
-    const h = makeHost(validateGatedDefinition, { idleAction: { name: 'done' } });
+    const h = makeHost({ ...validateGatedDefinition, bot: levelUpWhenAllowed }, { idleAction: { name: 'done' } });
     await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and waits
     await h.host.settled();
     expect(h.actionsFor(2)).toHaveLength(0);
