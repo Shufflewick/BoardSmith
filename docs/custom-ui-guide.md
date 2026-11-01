@@ -1205,6 +1205,12 @@ A board can add its own one-shot commands, such as "Watch the last battle", to
 the shell's controls menu with `useMenuCommands`. See "Game commands" in
 `docs/ui-components.md`.
 
+## Hiding the Shell's Chrome
+
+A board whose player asks to see the whole field can hide the shell's players
+panel and action bar with `useHideChrome`. See "Hiding the chrome to show the
+field" in `docs/ui-components.md`.
+
 ## Holding Actions While the Screen Is Busy
 
 A board in a state only its own screen has, such as a battle replay, can grey

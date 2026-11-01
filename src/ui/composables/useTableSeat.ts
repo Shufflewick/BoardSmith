@@ -27,6 +27,7 @@ import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type Us
 import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
+import { HIDE_CHROME_KEY, createHideChrome } from './hideChrome.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
@@ -117,6 +118,8 @@ export interface TableSeat extends TableActionWiring {
   showGameOverResult(): void;
   /** The game's own commands the board lists in the controls menu (`useMenuCommands`). */
   menuCommands: ReturnType<typeof createMenuCommands>;
+  /** The boards asking the shell to hide its chrome (`useHideChrome`). */
+  hideChrome: ReturnType<typeof createHideChrome>;
   /** Everything the board can inject, by key. Publish with {@link provideTableSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
 }
@@ -168,6 +171,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
 
   const gameOver = createGameOverReveal(() => flowState.value?.complete === true);
   const menuCommands = createMenuCommands();
+  const hideChrome = createHideChrome();
 
   const wiring = useTableActionWiring({
     ...transport,
@@ -205,6 +209,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     [ANNOUNCER_KEY, announcer],
     [GAME_OVER_HOLDS_KEY, gameOver.holds],
     [MENU_COMMANDS_KEY, menuCommands],
+    [HIDE_CHROME_KEY, hideChrome],
     ...gameContextProvisions({
       gameState: state,
       gameView,
@@ -243,6 +248,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     gameOverHeld: gameOver.held,
     showGameOverResult: gameOver.showResult,
     menuCommands,
+    hideChrome,
     provisions,
   };
 }

@@ -151,6 +151,8 @@ const props = withDefaults(defineProps<{
   mobileExpanded?: boolean;
   /** Whether the viewport is at the compact tier. */
   isCompact?: boolean;
+  /** Hide the players panel and the action bar while a board asks (`useHideChrome`, #1538). */
+  chromeHidden?: boolean;
 }>(), {
   showTurnStatus: true,
   unreadLogCount: 0,
@@ -359,12 +361,13 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
+  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
       <!-- Sidebar: always-visible player status + log; collapses to rail (IA-06) -->
       <aside
+        v-show="!chromeHidden"
         class="sidebar"
         :class="{ rail: railed, 'mobile-expanded': expanded }"
         aria-label="Players and log"
@@ -536,6 +539,7 @@ const mobileToggleLabel = computed(() => {
            .stage children so it sits inside .stage and never covers the
            .actionbar below. -->
       <div
+        v-show="!chromeHidden"
         class="scrim"
         :class="{ active: expanded }"
         aria-hidden="true"
@@ -555,7 +559,7 @@ const mobileToggleLabel = computed(() => {
          of). This wrapper is what carries the out-of-flow positioning, so the
          bar's height is the wrapper's height and the toggle rides its top edge
          with nothing measuring anything. -->
-    <div class="actionbar-frame">
+    <div v-show="!chromeHidden" class="actionbar-frame">
       <div ref="actionBarEl" id="bs-actionbar" class="actionbar" :class="{ collapsed: actionBarCollapsed }" role="region" aria-label="Actions" data-testid="bs-actionbar">
         <!-- ⋯ controls menu: always at the far left of the bar, and the sole
              control surface. Its
@@ -911,6 +915,13 @@ const mobileToggleLabel = computed(() => {
 }
 /* Down until the player's own toggle, which refits: only the reserved line covers the board, so no room (#1525). */
 .action-bar-stays-down .boardregion::after {
+  height: 0;
+}
+/* The board has hidden the bar (#1538): the region reserves nothing for it. */
+.game-shell__game.chrome-hidden {
+  --bsg-panel-reserved: 0px;
+}
+.chrome-hidden .boardregion::after {
   height: 0;
 }
 

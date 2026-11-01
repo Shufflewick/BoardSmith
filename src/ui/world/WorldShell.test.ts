@@ -15,6 +15,7 @@ import { offersFor, PARTITION } from '../../world/offer-fixture.test-helper.js';
 import { definePlayerPreferences } from '../player-preferences.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { useMenuCommands } from '../composables/menuCommands.js';
+import { useHideChrome } from '../composables/hideChrome.js';
 import { useActionHolds } from '../composables/actionHolds.js';
 import { usePlayContext } from '../composables/useGameContext.js';
 
@@ -1312,6 +1313,27 @@ describe('WorldShell — the controls menu (#1443)', () => {
     expect(searched).toBe(1);
     expect(document.body.querySelector('[role="menu"]')).toBeNull();
     expect(document.activeElement).toBe(trigger.element);
+    wrapper.unmount();
+  });
+
+  it("hides the players panel and the action bar while a world board asks (#1538)", async () => {
+    const fieldOnly = ref(true);
+    const Hall = defineComponent({
+      setup() {
+        useHideChrome(() => fieldOnly.value);
+        return () => h('div');
+      },
+    });
+    const wrapper = mount(WorldShell, {
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall' },
+      attachTo: document.body,
+    });
+    await drawn(wrapper, stateFrame());
+    const shows = () => [wrapper.get('[data-testid="bs-seats"]').isVisible(), wrapper.get('[data-testid="bs-actionbar"]').isVisible()];
+    expect(shows()).toEqual([false, false]);
+    fieldOnly.value = false;
+    await nextTick();
+    expect(shows()).toEqual([true, true]);
     wrapper.unmount();
   });
 

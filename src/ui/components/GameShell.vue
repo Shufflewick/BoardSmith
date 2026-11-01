@@ -585,6 +585,7 @@ const {
   gameOverHeld,
   showGameOverResult,
   menuCommands,
+  hideChrome,
 } = tableSeat;
 
 // The session's formatted, seat-scoped messages are the ONLY source. There used
@@ -1415,6 +1416,7 @@ defineExpose({
       :zoom-level="zoomLevel"
       v-model:sidebar-rail="sidebarRail"
       v-model:action-bar-minimized="actionBarMinimized"
+      :chrome-hidden="hideChrome.hidden.value"
       :action-bar-opens-for-actions="props.actionBarOpensForActions"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
