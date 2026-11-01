@@ -197,6 +197,8 @@ describe('parseBuildManifest', () => {
     ['`src/a?.ts`', 'src/a?.ts'],
     ['tests/auctions-*.test.ts', 'tests/auctions-*.test.ts'],
     ['src/ui/{a.ts, b.vue}', 'src/ui/{a.ts'],
+    ['src/rules/{flow,actions,rounding}.ts', 'src/rules/{flow'],
+    ['src/*.ts', 'src/*.ts'],
   ])('refuses the pattern in "%s": patterns are not expanded (#1116)', (cell, fragment) => {
     const chunk = tableChunk(`| ${cell} | written |`);
     expect(() => parseBuildManifest(chunk)).toThrow(

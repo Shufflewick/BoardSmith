@@ -158,9 +158,10 @@ function wordPath(word: string, spans: string[], refuse: Refuse): string | undef
     return composed(span, refuse);
   }
   const bare = bareWord(word);
+  // Before PATH_TOKEN: a pattern's own characters (and the commas that split `{a,b}`) can leave no path token in it (#1540).
+  if (PATTERN.test(bare)) throw refuse(bare, A_PATTERN);
   const found = bare.match(PATH_TOKEN);
   if (found === null) return undefined;
-  if (PATTERN.test(bare)) throw refuse(bare, A_PATTERN);
   if (found.length > 1 || found[0] !== bare) throw refuse(bare, WRAP(bare));
   return composed(bare, refuse);
 }
