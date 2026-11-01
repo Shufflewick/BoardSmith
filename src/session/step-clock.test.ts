@@ -180,4 +180,15 @@ describe('a bot seat waiting on the step clock (#1537)', () => {
     await session.host.settled();
     expect(session.readGame()).toMatchObject({ levelledUp: [2], done: [2] });
   });
+
+  it('stops a narrated demo when its bot waits, saying why (#1537)', async () => {
+    const session = createHeadlessSession(validateGatedDefinition, { ...gameOptions, now: () => START });
+    const reported = vi.spyOn(console, 'error').mockImplementation(() => {});
+    await session.start();
+    await session.send(1, { type: 'demoStart', delay: 0 });
+    await vi.waitFor(() => expect(reported).toHaveBeenCalled());
+
+    expect(String(reported.mock.calls[0][0])).toMatch(/the demo failed: the bot for seat 1 chose to wait .*The demo has stopped/);
+    await vi.waitFor(() => expect(session.playerState(1).isDemoRunning).not.toBe(true));
+  });
 });

@@ -1981,6 +1981,12 @@ export class SnapshotSessionHost {
           type: 'botSuggest',
           seats: allSeats,
         });
+        if (suggestRes.success && suggestRes.botWaiting) {
+          throw new Error(
+            `the bot for seat ${suggestRes.botWaiting.seat} chose to wait (its strategy's candidateMoves returned no moves), ` +
+              'and the demo makes one move after another without waiting for the step clock or another seat',
+          );
+        }
         // No move to show: the search was refused, no seat is due, or the bot stalled.
         if (!suggestRes.success || suggestRes.botPlayer === undefined) break;
 

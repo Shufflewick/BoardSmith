@@ -570,6 +570,11 @@ function scratchCopy(source: Game) {
   const GameClass = source.constructor as new (options: GameOptions) => Game;
   const game = constructGame(GameClass, source.getConstructorOptions() as GameOptions);
   game._hostNow = source._hostNow;
+  // A step-clock "not yet" read on the copy says when the source's moves change (#1537).
+  Object.defineProperty(game, '_reofferAt', {
+    get: () => source._reofferAt,
+    set: (at: number | undefined) => { source._reofferAt = at; },
+  });
   const state = source.toJSON();
   const messageLog = source.serializeMessageLog();
   const sequence = source._ctx.sequence;

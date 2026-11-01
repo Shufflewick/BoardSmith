@@ -178,7 +178,8 @@ that re-offers a greyed action wakes the bot (see `game.stepOpenFor(ms)` in
 an action refused during the first part of a timed step instead of giving it
 up. Below the root, a seat with no moves has none at that position. Under
 `boardsmith simulate` and the benchmark time does not pass, so a seat that
-waits on the clock is reported as having no move.
+waits on the clock is reported as having no move, and the narrated demo, which
+makes one move after another, stops when a bot waits and says why.
 
 <!-- typecheck: game src/wait-for-level-up.ts -->
 ```typescript
