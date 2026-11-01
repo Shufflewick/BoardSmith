@@ -1838,7 +1838,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              template because the two are mutually exclusive and this one is the
              more specific. A checkbox cannot express "again", which is why this
              pick gets its own control rather than a flag on that one. -->
-        <template v-else-if="currentPick.type === 'choice' && currentOrderedList && (filteredChoices.length || deferPickToBoard)">
+        <template v-else-if="currentPick.type === 'choice' && currentOrderedList">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <!-- SPOKEN, because nothing else about an Add is (#252): focus stays
@@ -1915,7 +1915,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </template>
 
         <!-- Multi-select choice selection (checkboxes with Done button) - MUST come before dependsOn template -->
-        <template v-else-if="currentPick.type === 'choice' && currentMultiSelect && filteredChoices.length">
+        <template v-else-if="currentPick.type === 'choice' && currentMultiSelect">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
@@ -1942,7 +1942,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>
-            <span v-if="filteredChoices.length === 0" class="no-choices">
+            <div v-if="filteredChoices.length === 0 && isLoadingChoices" class="loading-choices">
+              Loading choices...
+            </div>
+            <span v-else-if="filteredChoices.length === 0" class="no-choices">
               No options available
             </span>
             <DoneButton
@@ -1961,8 +1964,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </template>
 
         <!-- Choice selection. This comes AFTER multi-select so multiSelect+dependsOn uses the
-             multi-select template above. Every other choice pick lands here, even with no
-             choices, so its prompt, empty state and skip button always show (#1539). A click on
+             multi-select template above. Each choice template renders even with no choices,
+             so its prompt, empty state and skip button always show (#1539). A click on
              a dependent pick's (filterBy or dependsOn) choice shows that choice on the board
              before answering the pick (executeChoice). -->
         <template v-else-if="currentPick.type === 'choice'">

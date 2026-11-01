@@ -651,6 +651,43 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     expect(done.attributes('data-bs-disabled-reason')).toContain('2');
     wrapper.unmount();
   });
+
+  // #1539: choices narrowed by an earlier answer can come back empty.
+  function mountEmptyDiscard(overrides: Record<string, unknown> = {}) {
+    const controller = stubActionController({
+      currentAction: ref('discard'),
+      currentPick: ref({
+        name: 'cards',
+        type: 'choice',
+        prompt: 'Discard cards',
+        multiSelect: { min: 0, max: 3 },
+      }),
+      currentChoices: ref([]),
+      multiSelectDraft: ref({ selectionName: 'cards', values: [] }),
+      ...overrides,
+    });
+    return mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
+      props: { availableActions: ['discard'], isMyTurn: true },
+    });
+  }
+
+  it('keeps Done on a multi-select pick whose choices are empty, so the empty set can be submitted', () => {
+    const wrapper = mountEmptyDiscard();
+
+    expect(wrapper.find('.multi-select-count').exists()).toBe(true);
+    expect(wrapper.text()).toContain('No options available');
+    expect(wrapper.find('.done-button').attributes('aria-disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('says choices are loading, not that there are none, while a multi-select pick fetches them', () => {
+    const wrapper = mountEmptyDiscard({ isLoadingChoices: ref(true) });
+
+    expect(wrapper.text()).toContain('Loading choices...');
+    expect(wrapper.text()).not.toContain('No options available');
+    wrapper.unmount();
+  });
 });
 
 /** Mount the panel inside a host that provides a real board interaction. */
