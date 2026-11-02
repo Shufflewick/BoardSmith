@@ -141,7 +141,9 @@ Panel stay in parity: `appendListEntry(name, value)` adds an entry (again for a
 repeat), `removeListEntry(name, index)` drops one **by index** — with repeats, a
 value does not name an entry — and `confirmMultiSelect(name)` submits the finished
 list (an empty one, if nothing was added and `min` is 0). On a board, clicking a
-choice's element appends. Bots enumerate a list one entry at a time: with repeats
+choice's element appends. If the list changes while the player is building (the
+fetched list replacing the action's first one), every entry of a value it no
+longer offers enabled is taken out of the draft and `lastError` says which. Bots enumerate a list one entry at a time: with repeats
 allowed there is no cap that makes "every possible list" tractable, so every move
 offered is a real one and a longer sequence is reached by acting again.
 

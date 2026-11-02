@@ -1555,28 +1555,32 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getChoices(pick) as ChoiceWithRefs[];
   });
 
-  // A held copy the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575).
+  // A held entry the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575, #1576).
   watch(currentChoices, (choices, previous) => {
     const draft = multiSelectDraft.value;
     const pick = currentPick.value;
-    if (!draft || !pick || draft.selectionName !== pick.name || !resolveMultiSelectConfig(pick)) return;
+    if (!draft || !pick || draft.selectionName !== pick.name) return;
+    const ordered = resolveOrderedListConfig(pick) !== undefined;
+    if (!ordered && !resolveMultiSelectConfig(pick)) return;
     const { copies } = draft;
-    const entries = draft.values.map((value, i) => copyOfChoice(choices, value, copies[i]));
+    // An ordered list repeats a value without an offered entry per repeat, so it needs one enabled entry per value.
+    const entries = draft.values.map((value, i) => copyOfChoice(choices, value, ordered ? 0 : copies[i]));
     const kept = entries.map((entry) => entry !== undefined && !entry.disabled);
     if (kept.every(Boolean)) return;
-    const reasons = draft.values.flatMap((value, i) => {
+    const reasons = new Set(draft.values.flatMap((value, i) => {
       if (kept[i]) return [];
-      // The list the copy was held against still names a value the new one dropped.
+      // The list the entry was held against still names a value the new one dropped.
       const label = labelOfPick(value, previous ?? choices);
       const disabled = entries[i]?.disabled;
       return [disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`];
-    });
+    }));
+    const dropped = kept.filter((k) => !k).length;
     multiSelectDraft.value = {
       selectionName: draft.selectionName,
       values: draft.values.filter((_, i) => kept[i]),
       copies: copies.filter((_, i) => kept[i]),
     };
-    setError(`${reasons.join('; ')}, so ${reasons.length === 1 ? 'it was' : 'they were'} taken out of your selection.`);
+    setError(`${[...reasons].join('; ')}, so ${dropped === 1 ? 'it was' : 'they were'} taken out of your selection.`);
   }, { flush: 'sync' });
 
   /**
