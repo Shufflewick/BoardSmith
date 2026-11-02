@@ -21,7 +21,7 @@ import { createActionMutators } from './actionMutators.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction, provideBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
-import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, PickChoicesResult, UseActionControllerOptions } from './useActionControllerTypes.js';
 
 async function flush(n = 8): Promise<void> {
   for (let i = 0; i < n; i++) {
@@ -340,7 +340,7 @@ const CELL_METADATA: Record<string, EnrichedActionMetadata> = {
 };
 
 /** The real controller, bridge and board, driven through the mutators. The bridge marks the board (#1380). */
-function cellTable() {
+function cellTable(fetchPickChoices?: UseActionControllerOptions['fetchPickChoices']) {
   const board = createBoardInteraction();
   const availableActions = ref(['mark', 'markMany', 'markTwins']);
   const actionMetadata = ref(CELL_METADATA);
@@ -352,6 +352,7 @@ function cellTable() {
       isMyTurn: ref(true),
       autoFill: false,
       autoExecute: false,
+      fetchPickChoices,
     });
     useBoardActionBridge({
       controller: c,
@@ -411,6 +412,19 @@ describe('the multi-select highlight follows the draft (#860)', () => {
     await t.mutators.toggleMultiSelectValue('twins', 'twin', 1);
 
     expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+  });
+
+  it('clears the held copy the fetched list no longer offers (#1575)', async () => {
+    let land!: (result: PickChoicesResult) => void;
+    const t = cellTable(() => new Promise((resolve) => { land = resolve; }));
+    const started = t.mutators.startAction('markTwins');
+    await t.mutators.toggleMultiSelectValue('twins', 'twin', 1);
+    expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+
+    land({ success: true, choices: [{ value: 'twin', display: 'Twin', refs: [{ ref: { id: 51 }, role: 'target' }] }], multiSelect: { min: 1, max: 2 } });
+    await started;
+
+    expect(t.board.hoveredChoice).toBeNull();
   });
 
   it('clears when the draft is left holding only values with no board element', async () => {

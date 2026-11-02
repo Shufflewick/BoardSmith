@@ -1555,6 +1555,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getChoices(pick) as ChoiceWithRefs[];
   });
 
+  // A held copy the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575).
+  watch([currentChoices, multiSelectDraft], ([choices, draft]) => {
+    const pick = currentPick.value;
+    if (!draft || !pick || draft.selectionName !== pick.name || !resolveMultiSelectConfig(pick)) return;
+    const copies = draft.copies ?? [];
+    const entries = draft.values.map((value, i) => copyOfChoice(choices, value, copies[i]));
+    const kept = entries.map((entry) => entry !== undefined && !entry.disabled);
+    if (kept.every(Boolean)) return;
+    const reasons = draft.values.flatMap((value, i) => {
+      if (kept[i]) return [];
+      const label = labelOfPick(value, choices);
+      const disabled = entries[i]?.disabled;
+      return [disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`];
+    });
+    multiSelectDraft.value = {
+      selectionName: draft.selectionName,
+      values: draft.values.filter((_, i) => kept[i]),
+      copies: copies.filter((_, i) => kept[i]),
+    };
+    setError(`${reasons.join('; ')}, so ${reasons.length === 1 ? 'it was' : 'they were'} taken out of your selection.`);
+  }, { flush: 'sync' });
+
   /**
    * Reactive valid elements for the current pick.
    * This is the "pit of success" for custom UIs - just use this computed directly.
@@ -2960,7 +2982,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     let newValues: unknown[];
     let newCopies: number[];
     if (index >= 0) {
-      // Already selected - remove that copy, even if its choice has since been disabled
+      // Already selected - remove that copy
       newValues = current.filter((_, i) => i !== index);
       newCopies = currentCopies.filter((_, i) => i !== index);
     } else {
