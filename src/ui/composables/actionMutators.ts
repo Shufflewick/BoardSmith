@@ -52,7 +52,7 @@ export interface ActionMutators {
   executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean>;
   /** Answer the open pick. Resolves `true` when the controller accepted the value. */
   setSelectionValue(selectionName: string, value: unknown): Promise<boolean>;
-  toggleMultiSelectValue(selectionName: string, value: unknown): Promise<void>;
+  toggleMultiSelectValue(selectionName: string, value: unknown, copy?: number): Promise<void>;
   appendListValue(selectionName: string, value: unknown): Promise<void>;
   /** Draw the multi-select or ordered-list draft on the board. */
   updateMultiSelectBoardHighlights(): void;
@@ -134,9 +134,9 @@ export function createActionMutators(
     return result.valid;
   }
 
-  async function toggleMultiSelectValue(selectionName: string, value: unknown): Promise<void> {
+  async function toggleMultiSelectValue(selectionName: string, value: unknown, copy?: number): Promise<void> {
     if (guards.isViewingHistory()) return;
-    await controller.toggleMultiSelect(selectionName, value);
+    await controller.toggleMultiSelect(selectionName, value, copy);
     updateMultiSelectBoardHighlights();
   }
 

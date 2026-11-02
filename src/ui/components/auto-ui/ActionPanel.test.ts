@@ -928,7 +928,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.text()).toContain('Selected: 1/2');
 
     await options[1]!.find('input').trigger('click');
-    expect(toggleMultiSelect).toHaveBeenCalledWith('space', 's1');
+    expect(toggleMultiSelect).toHaveBeenCalledWith('space', 's1', 0);
     expect(fill).not.toHaveBeenCalled();
   });
 

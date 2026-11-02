@@ -522,6 +522,8 @@ await actionController.confirmMultiSelect('cards'); // with nothing toggled, a m
 
 Prefer `toggleMultiSelect()`/`confirmMultiSelect()` when the user builds up a selection by clicking multiple board elements one at a time (the common custom-UI case); use `fill()` with an array when you already have the full set of chosen values (e.g. from a checkbox list).
 
+When the choices list offers one value more than once (`['basic', 'basic', 'm1']`), each entry is its own slot and the player may take the value once per entry. Name the slot with the third argument, the copy counting from 0: `toggleMultiSelect('allocations', 'basic', 1)` adds a second `'basic'` while the first is held, and `isMultiSelectSelected('allocations', 'basic', 1)` says whether two are held. The Action Panel draws one checkbox per entry the same way.
+
 ## Step 5: Using boardInteraction
 
 For bidirectional interaction between the board and ActionPanel:
