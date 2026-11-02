@@ -835,6 +835,42 @@ describe('enumerateLegalMoves: optional multiSelect with too few candidates', ()
   }
 });
 
+describe('a min-0 pick with no enabled choice offers the empty pick, which performAction accepts (#1546)', () => {
+  const shapes = {
+    'a multiSelect whose choices are all disabled': { choices: () => ['A'], disabled: () => 'not allowed', multiSelect: { min: 0, max: 1 } },
+    'a multiSelect with no choices': { choices: () => [] as string[], multiSelect: { min: 0, max: 1 } },
+    'an orderedList whose choices are all disabled': { choices: () => ['A'], disabled: () => 'not allowed', orderedList: { min: 0, max: 1 } },
+  };
+  for (const [name, options] of Object.entries(shapes)) {
+    for (const repeating of [false, true]) {
+      it(`${name}${repeating ? ', after a repeating pick' : ''}`, () => {
+        class HireGame extends Game<HireGame, Player> {
+          constructor(gameOptions: GameOptions) {
+            super(gameOptions);
+            // An earlier pick keeps the action offered, as a held follow-up is.
+            const hire = Action.create<HireGame>('hire');
+            const done = () => ({ success: true });
+            // The two firsts build different Action types, so each is finished in its own branch.
+            if (repeating) {
+              const first = hire.chooseFrom('who', { choices: ['x'], repeat: { until: () => true } });
+              this.registerAction(first.chooseFrom('picked', options).execute(done));
+            } else {
+              this.registerAction(hire.chooseFrom('who', { choices: ['x'] }).chooseFrom('picked', options).execute(done));
+            }
+            this.setFlow({ root: actionStep({ actions: ['hire'] }) });
+          }
+        }
+        const game = new HireGame({ playerCount: 1, playerNames: ['A'], seed: 'bs1546' });
+        game.startFlow();
+        const who = repeating ? ['x'] : 'x';
+
+        expect(enumerateLegalMoves(game, 1).map((m) => m.args)).toEqual([{ who, picked: [] }]);
+        expect(game.performAction('hire', game.getPlayer(1)!, { who, picked: [] }).success).toBe(true);
+      });
+    }
+  }
+});
+
 class PickValidateGame extends Game<PickValidateGame, Player> {
   constructor(options: GameOptions) {
     super(options);
