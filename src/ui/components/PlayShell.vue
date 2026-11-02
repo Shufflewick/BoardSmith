@@ -854,7 +854,8 @@ const mobileToggleLabel = computed(() => {
    Class bound to connectionHealth ref: connected / stale / connecting. */
 .conn-dot {
   position: absolute;
-  top: var(--bsg-s2);
+  /* Below the host's corner (#1548), which may sit over the board's top-right. */
+  top: calc(var(--bsg-host-corner-height) + var(--bsg-s2));
   right: var(--bsg-s2);
   width: 8px;
   height: 8px;
@@ -1145,7 +1146,8 @@ const mobileToggleLabel = computed(() => {
     display: flex;
     align-items: center;
     gap: var(--bsg-s2);
-    padding: 6px var(--bsg-s3);
+    /* The strip's right end is the host's corner (#1548). */
+    padding: 6px var(--bsg-host-corner-width) 6px var(--bsg-s3);
   }
   .mobile-strip__players {
     flex: 1;
