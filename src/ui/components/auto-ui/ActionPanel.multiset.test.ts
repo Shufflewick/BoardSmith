@@ -146,6 +146,17 @@ describe('a multiSelect pick offering one value more than once (#1561)', () => {
     expect(count(t)).toBe('Selected: 1/3');
   });
 
+  it('treats a call naming no copy, as a board click makes, as whichever copy is held (#1574)', async () => {
+    const t = await table();
+    await clickBox(t, 1);
+    expect(t.controller.isMultiSelectSelected('allocations', 'basic')).toBe(true);
+
+    await t.controller.toggleMultiSelect('allocations', 'basic');
+    await settle();
+    expect(boxes(t).map(([, checked]) => checked)).toEqual([false, false, false, false, false]);
+    expect(count(t)).toBe('Selected: 0/3');
+  });
+
   it('unchecks one copy when a checked copy is clicked', async () => {
     const t = await table();
     await clickBox(t, 0);

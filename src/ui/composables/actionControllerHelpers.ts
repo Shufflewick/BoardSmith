@@ -15,6 +15,15 @@ import { textPickRefusal } from '../../engine/action/text-rules.js';
 // ============================================
 
 /**
+ * The entry that is copy `copy` of a value offered more than once (#1561, #1574):
+ * copies count the enabled entries first, then the disabled ones.
+ */
+export function copyOfChoice<C extends { value: unknown; disabled?: unknown }>(choices: readonly C[], value: unknown, copy: number): C | undefined {
+  const same = choices.filter(c => valuesEqual(c.value, value));
+  return [...same.filter(c => !c.disabled), ...same.filter(c => c.disabled)][copy];
+}
+
+/**
  * Resolve the EFFECTIVE multiSelect config for a selection — the one shared
  * helper `useActionController` (fill/toggleMultiSelect), `ActionPanel.vue`,
  * and `useBoardActionBridge.ts` all call, so the panel and custom UIs can
