@@ -91,6 +91,27 @@ describe('GameOverlay', () => {
     expect(wrapper.element.querySelector('.modal')).not.toBeNull();
   });
 
+  it('emits closed once its fade-out has finished, not when active turns false', async () => {
+    let closed!: () => void;
+    const fadedOut = new Promise<void>((resolve) => (closed = resolve));
+    const wrapper = mount(GameOverlay, {
+      props: { active: true, onClosed: () => closed() },
+      // The real Transition, so the leave runs its frames before it ends.
+      global: { stubs: { transition: false } },
+      attachTo: document.body,
+    });
+
+    await wrapper.setProps({ active: false });
+    // The leaving backdrop is no longer the component's root, so look in the page.
+    expect(document.querySelector('.game-overlay')).not.toBeNull();
+    expect(wrapper.emitted('closed')).toBeUndefined();
+
+    await fadedOut;
+    expect(document.querySelector('.game-overlay')).toBeNull();
+    expect(wrapper.emitted('closed')).toHaveLength(1);
+    wrapper.unmount();
+  });
+
   it('allows a fully transparent backdrop', () => {
     const style = overlay({ backdropOpacity: 0 }).find('.game-overlay').attributes('style')!;
     expect(style).toContain('rgba(0, 0, 0, 0)');

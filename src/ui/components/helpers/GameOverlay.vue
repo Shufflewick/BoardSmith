@@ -42,6 +42,7 @@
  * - Must be rendered inside a container with `contain: layout` (like GameShell)
  * - Use `@click.stop` on content to prevent backdrop clicks from closing
  * - The `@click` event fires when clicking the backdrop (outside content)
+ * - The `@closed` event fires once the fade-out has finished after `active` turns false
  */
 import { computed } from 'vue';
 
@@ -61,6 +62,8 @@ const props = withDefaults(defineProps<Props>(), {
 
 defineEmits<{
   (e: 'click'): void;
+  /** The fade-out has finished and the overlay is gone */
+  (e: 'closed'): void;
 }>();
 
 // Computed style for backdrop
@@ -71,7 +74,7 @@ const backdropStyle = computed(() => ({
 </script>
 
 <template>
-  <Transition name="game-overlay">
+  <Transition name="game-overlay" @after-leave="$emit('closed')">
     <div
       v-if="active"
       class="game-overlay"
