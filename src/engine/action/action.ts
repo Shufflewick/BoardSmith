@@ -229,6 +229,14 @@ export function readingCondition(): boolean {
   return conditionDepth > 0;
 }
 
+/** How many action `execute`s are running, nested (#1550). */
+let executeDepth = 0;
+
+/** Whether an action's `execute` is running right now, the one place `game.stepOpenMs()` may be read (#1550). */
+export function runningExecute(): boolean {
+  return executeDepth > 0;
+}
+
 export function evaluateConditionWithTrace<Ctx>(
   condition: Record<string, (ctx: Ctx) => boolean>,
   context: Ctx,
@@ -1372,11 +1380,14 @@ export class ActionExecutor {
 
   /** Run an action's `execute`, the one place it is called, as game code that changes the game (#631). */
   private runExecute(action: ActionDefinition, args: Record<string, unknown>, context: ActionContext): ActionResult {
+    executeDepth++;
     try {
       const result = actingFor(this.game._ctx, context.player.seat, () => action.execute(args, context));
       return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);
+    } finally {
+      executeDepth--;
     }
   }
 

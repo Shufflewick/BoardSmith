@@ -243,3 +243,57 @@ describe('game.refreshAwaitingActions() in an action step (#1545)', () => {
     expect(runner.game.getFlowState()).toMatchObject({ currentPlayer: 2 });
   });
 });
+
+/** A `vote` that records the step's elapsed host time in `execute`, as Windup Warfare's 2x vote records its tick (#1550). */
+class VoteClockGame extends DeployGame {
+  votedAt: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['vote', 'commit']);
+    this.registerAction(
+      Action.create<VoteClockGame>('vote').execute((_args, ctx) => {
+        ctx.game.votedAt = [...ctx.game.votedAt, ctx.game.stepOpenMs()];
+      }),
+    );
+  }
+}
+
+/** A `peek` greyed by a number read from the clock in `disabled`, which no host could offer again on time. */
+class DisabledMsGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['peek', 'commit']);
+    this.registerAction(
+      Action.create<DisabledMsGame>('peek')
+        .disabled((ctx) => ctx.game.stepOpenMs() < PLAYBACK_MS && 'Still playing back.')
+        .execute(() => {}),
+    );
+  }
+}
+
+describe('game.stepOpenMs() in execute (#1550)', () => {
+  function voteAt(now: number): GameRunner<VoteClockGame> {
+    const runner = new GameRunner({ GameClass: VoteClockGame, gameType: 'vote-clock', gameOptions: opts });
+    runner.setNow(START);
+    runner.start();
+    runner.setNow(now);
+    return runner;
+  }
+
+  it('reads how long the step has been open, as a number, without arming a re-offer', () => {
+    const runner = voteAt(START + 2_350);
+    expect(runner.performAction('vote', 1, {}).success).toBe(true);
+    expect(runner.game.votedAt).toEqual([2_350]);
+    expect(runner.reofferAt()).toBeUndefined();
+  });
+
+  it('refuses a read outside execute, naming stepOpenFor for an offer', () => {
+    const runner = voteAt(START + 2_350);
+    expect(() => runner.game.stepOpenMs()).toThrow(/stepOpenMs\(\) was read outside an action's execute.*stepOpenFor/s);
+  });
+
+  it('refuses a read in disabled, where the offer would never be worked out again as time passes', () => {
+    const runner = new GameRunner({ GameClass: DisabledMsGame, gameType: 'disabled-ms', gameOptions: opts });
+    runner.setNow(START);
+    expect(() => runner.start()).toThrow(/stepOpenMs\(\) was read outside an action's execute/);
+  });
+});
