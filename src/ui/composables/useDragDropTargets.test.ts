@@ -296,7 +296,7 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
     await flushAll();
     boardInteraction.triggerDrop({ id: 21 });
     await flushAll();
-    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [21] });
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [21], copies: [0] });
   });
 
   it('a disabled destination is not a drop target', async () => {

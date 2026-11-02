@@ -1,5 +1,5 @@
 {
-  "revision": 319,
+  "revision": 320,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2495,6 +2495,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A multiSelect's checkboxes in the Action Panel grow the bar past its two-row cap, bounded at 60% of the screen, so every choice shows at phone width; one the board draws keeps the cap (#1573)."
+    },
+    {
+      "revision": 320,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A multiSelect offering one value more than once ticks the copy the player clicked: the shared draft records which copy each entry is (multiSelectDraft.copies), and a toggleMultiSelect or isMultiSelectSelected call naming no copy means whichever copy is held (#1574)."
     }
   ]
 }

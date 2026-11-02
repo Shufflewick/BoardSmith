@@ -555,8 +555,10 @@ export interface UseActionControllerReturn {
    * multiSelect selection, observed by both the auto ActionPanel and custom UIs so
    * they stay in parity. SEPARATE from currentArgs: currentArgs[name] stays undefined
    * until confirmMultiSelect() runs the fill() path with the complete array.
+   * A multiSelect draft's `copies[i]` is which copy of its value `values[i]` is (#1574);
+   * an orderedList draft has none.
    */
-  multiSelectDraft: Ref<{ selectionName: string; values: unknown[] } | null>;
+  multiSelectDraft: Ref<{ selectionName: string; values: unknown[]; copies?: number[] } | null>;
 
   // === Editor draft (shared in-progress typed value) ===
   /**
@@ -644,7 +646,8 @@ export interface UseActionControllerReturn {
    *
    * A value the choices list offers more than once is one slot per entry: `copy`
    * (from 0) names which, so ticking copy 1 of a held value adds a second copy
-   * instead of removing the first (#1561).
+   * instead of removing the first (#1561). With no `copy`, a held copy is removed,
+   * else copy 0 is added (#1574).
    */
   toggleMultiSelect: (selectionName: string, value: unknown, copy?: number) => Promise<void>;
   /**
@@ -654,7 +657,7 @@ export interface UseActionControllerReturn {
    * or void when the named pick is neither drafted nor the current list pick.
    */
   confirmMultiSelect: (selectionName: string) => Promise<PickValidationResult | void>;
-  /** Whether the multiSelect draft for the given selection holds more than `copy` (default 0) copies of a value. */
+  /** Whether the multiSelect draft for the given selection holds that `copy` of a value, or with no `copy`, any copy. */
   isMultiSelectSelected: (selectionName: string, value: unknown, copy?: number) => boolean;
 
   // === Ordered, repeatable lists (#249) ===

@@ -80,6 +80,16 @@ describe('useActionController ordered lists (#249)', () => {
     });
   });
 
+  it('says a value the list holds is selected (#1574)', async () => {
+    const controller = newController();
+    await controller.start('repair');
+
+    await controller.appendListEntry('buildings', 'university');
+
+    expect(controller.isMultiSelectSelected('buildings', 'university')).toBe(true);
+    expect(controller.isMultiSelectSelected('buildings', 'shipyard')).toBe(false);
+  });
+
   it('keeps the order the player built, not the order the choices were offered', async () => {
     const controller = newController();
     await controller.start('repair');

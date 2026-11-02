@@ -91,7 +91,7 @@
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
-import { getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -423,7 +423,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // UIs so they stay in parity. This is SEPARATE from currentArgs — currentArgs[name]
   // stays undefined until confirmMultiSelect() runs the fill() path with the COMPLETE
   // array (a MERC composable relies on currentArgs[name] === undefined mid-selection).
-  const multiSelectDraft = ref<{ selectionName: string; values: unknown[] } | null>(null);
+  const multiSelectDraft = ref<{ selectionName: string; values: unknown[]; copies?: number[] } | null>(null);
 
   // === Editor draft (shared source of truth) ===
   // What the player has entered into the current number or text editor and not
@@ -2927,9 +2927,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *
    * When min === max, reaching the exact count auto-confirms (no Done button, unless the count is 0).
    * A value the choices list offers N times is N slots; `copy` (0 to N-1) names one,
-   * counting the enabled entries first.
+   * counting the enabled entries first. With no `copy`, a held copy is removed, else copy 0 is added.
    */
-  async function toggleMultiSelect(selectionName: string, value: unknown, copy = 0): Promise<void> {
+  async function toggleMultiSelect(selectionName: string, value: unknown, copy?: number): Promise<void> {
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
     if (!selection) {
       devWarn(
@@ -2951,37 +2951,36 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     // Start a fresh draft for this selection if needed
-    const current =
-      multiSelectDraft.value && multiSelectDraft.value.selectionName === selectionName
-        ? multiSelectDraft.value.values
-        : [];
+    const draft = multiSelectDraft.value?.selectionName === selectionName ? multiSelectDraft.value : null;
+    const current = draft?.values ?? [];
+    const currentCopies = draft?.copies ?? [];
 
     const { value: offered, refusal } = resolvePick(selection, value);
-    const held = current.filter(v => valuesEqual(v, offered)).length;
+    const index = current.findIndex((v, i) => valuesEqual(v, offered) && (copy === undefined || currentCopies[i] === copy));
     let newValues: unknown[];
-    if (held > copy) {
-      // Already selected - remove one copy, even if its choice has since been disabled
-      const index = current.findIndex(v => valuesEqual(v, offered));
+    let newCopies: number[];
+    if (index >= 0) {
+      // Already selected - remove that copy, even if its choice has since been disabled
       newValues = current.filter((_, i) => i !== index);
+      newCopies = currentCopies.filter((_, i) => i !== index);
     } else {
       if (refusal) {
         setError(refusal);
         return;
       }
-      // Copies count the enabled entries first, then the disabled ones.
-      const copies = choicesIn(actionSnapshot.value, currentArgs.value, selection)
-        .filter(c => valuesEqual(c.value, offered));
-      const closed = copies.filter(c => c.disabled);
-      const open = copies.length - closed.length;
-      if (copy >= open && copy < copies.length) {
-        setError(`Selection disabled: ${closed[copy - open]!.disabled}`);
+      const taken = copy ?? 0;
+      const choices = choicesIn(actionSnapshot.value, currentArgs.value, selection);
+      const entry = copyOfChoice(choices, offered, taken);
+      if (entry?.disabled) {
+        setError(`Selection disabled: ${entry.disabled}`);
         return;
       }
-      if (copy > 0 && copy >= copies.length) {
+      if (!entry && taken > 0) {
+        const offeredTimes = choices.filter(c => valuesEqual(c.value, offered)).length;
         devWarn(
           `multiselect-no-copy:${selectionName}`,
-          `toggleMultiSelect('${selectionName}', ..., ${copy}) was ignored: '${selectionName}' offers that value ` +
-            `${copies.length} time${copies.length === 1 ? '' : 's'}, and copies count from 0.`
+          `toggleMultiSelect('${selectionName}', ..., ${taken}) was ignored: '${selectionName}' offers that value ` +
+            `${offeredTimes} time${offeredTimes === 1 ? '' : 's'}, and copies count from 0.`
         );
         return;
       }
@@ -2991,17 +2990,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return;
       }
       newValues = [...current, offered];
+      newCopies = [...currentCopies, taken];
 
       // Auto-confirm when exact count required (min === max) and reached.
       if (cfg.min === cfg.max && newValues.length === cfg.min) {
-        multiSelectDraft.value = { selectionName, values: newValues };
+        multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
         await confirmMultiSelect(selectionName);
         return;
       }
     }
 
     // Reassign so Vue reactivity fires
-    multiSelectDraft.value = { selectionName, values: [...newValues] };
+    multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
   }
 
   /**
@@ -3023,17 +3023,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return await fill(selectionName, []);
   }
 
-  /** Whether the draft for the given selection holds more than `copy` copies of a value. */
-  function isMultiSelectSelected(selectionName: string, value: unknown, copy = 0): boolean {
+  /** Whether the draft for the given selection holds that copy of a value, or with no `copy`, any copy. */
+  function isMultiSelectSelected(selectionName: string, value: unknown, copy?: number): boolean {
     const draft = multiSelectDraft.value;
     if (!draft || draft.selectionName !== selectionName) return false;
-    const held = (v: unknown) => draft.values.filter(d => valuesEqual(d, v)).length;
+    const held = (v: unknown) =>
+      draft.values.some((d, i) => valuesEqual(d, v) && (copy === undefined || draft.copies?.[i] === copy));
     // The draft holds offered values, so only a shorthand needs resolving.
-    const direct = held(value);
-    if (direct > 0) return direct > copy;
+    if (held(value)) return true;
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
     if (!selection) return false;
-    return held(resolvePick(selection, value).value) > copy;
+    return held(resolvePick(selection, value).value);
   }
 
   // === Public API for Snapshot Access ===

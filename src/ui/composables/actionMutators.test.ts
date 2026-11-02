@@ -323,12 +323,26 @@ const CELL_METADATA: Record<string, EnrichedActionMetadata> = {
     prompt: 'Mark many',
     selections: [{ name: 'cells', type: 'choice', prompt: 'Which cells?', multiSelect: { min: 1, max: 2 }, choices: [CELL_A, CELL_B] }],
   },
+  markTwins: {
+    name: 'markTwins',
+    prompt: 'Mark twins',
+    selections: [{
+      name: 'twins',
+      type: 'choice',
+      prompt: 'Which twin?',
+      multiSelect: { min: 1, max: 2 },
+      choices: [
+        { value: 'twin', display: 'Twin', refs: [{ ref: { id: 51 }, role: 'target' as const }] },
+        { value: 'twin', display: 'Twin', refs: [{ ref: { id: 52 }, role: 'target' as const }] },
+      ],
+    }],
+  },
 };
 
 /** The real controller, bridge and board, driven through the mutators. The bridge marks the board (#1380). */
 function cellTable() {
   const board = createBoardInteraction();
-  const availableActions = ref(['mark', 'markMany']);
+  const availableActions = ref(['mark', 'markMany', 'markTwins']);
   const actionMetadata = ref(CELL_METADATA);
   const controller = effectScope().run(() => {
     const c = useActionController({
@@ -391,6 +405,14 @@ describe('the mutators find an object choice from a copy of its value (#857)', (
 });
 
 describe('the multi-select highlight follows the draft (#860)', () => {
+  it("draws the held copy's own element when a value is offered more than once (#1574)", async () => {
+    const t = cellTable();
+    await t.mutators.startAction('markTwins');
+    await t.mutators.toggleMultiSelectValue('twins', 'twin', 1);
+
+    expect(t.board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+  });
+
   it('clears when the draft is left holding only values with no board element', async () => {
     const t = cellTable();
     await t.mutators.startAction('markMany');

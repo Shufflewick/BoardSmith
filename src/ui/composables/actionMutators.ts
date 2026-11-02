@@ -16,7 +16,7 @@
  */
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
-import { valuesEqual } from '../../engine/action/choice-matching.js';
+import { copyOfChoice } from './actionControllerHelpers.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -152,9 +152,10 @@ export function createActionMutators(
 
   function updateMultiSelectBoardHighlights(): void {
     if (!board) return;
-    const selectedValues = controller.multiSelectDraft.value?.values ?? [];
+    const draft = controller.multiSelectDraft.value;
+    const selectedValues = draft?.values ?? [];
     const choices = controller.currentChoices.value;
-    const refs = selectedValues.flatMap(val => choices.find(c => valuesEqual(c.value, val))?.refs ?? []);
+    const refs = selectedValues.flatMap((val, i) => copyOfChoice(choices, val, draft?.copies?.[i] ?? 0)?.refs ?? []);
     if (refs.length === 0) {
       board.setHoveredChoice(null);
       return;

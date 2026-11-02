@@ -150,6 +150,24 @@ async function onScreen(browser, hostUrl, viewport) {
       assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
     });
 
+    // #1574: a value offered more than once ticks the copy clicked, and only the selected copies show ticked.
+    await check(`${size}: clicking one copy of a repeated value ticks that copy and no other`, async () => {
+      await open('mortar');
+      try {
+        for (const index of [0, 5]) await choices.nth(index).click();
+        const ticked = await surface.locator('.multi-select-choice input').evaluateAll((inputs) =>
+          inputs.flatMap((input, i) => (input.checked ? [i] : [])));
+        const shown = await surface.locator('.multi-select-choice').evaluateAll((labels) =>
+          labels.flatMap((label, i) => (label.classList.contains('selected') ? [i] : [])));
+        const count = (await surface.locator('.multi-select-count').textContent())?.trim();
+        assert(ticked.join() === '0,5', `the ticked checkboxes are ${ticked.join(', ')}, not 0 and 5`);
+        assert(shown.join() === '0,5', `the choices drawn as selected are ${shown.join(', ')}, not 0 and 5`);
+        assert(count?.includes('2/3'), `the count reads "${count}", not 2/3`);
+      } finally {
+        await close();
+      }
+    });
+
     // 23 choices are more than the screen bound holds on a phone: the bar grows to it and scrolls the rest.
     await check(`${size}: a pick longer than the screen bound keeps the action and count in view, and its last choice is reachable`, async () => {
       await open('mortar');
