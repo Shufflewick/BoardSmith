@@ -12,7 +12,7 @@ import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-
 import type { Game, GameClass } from '../engine/index.js';
 import type { BotSeat, SeatOpType, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
 import { fillGameOptionDefaults, type GameOptionSelection } from '../session/game-option-selection.js';
-import { projectGameOptions } from '#testing/project-game-options';
+import { projectColorOptions, projectGameOptions } from '#testing/project-game-options';
 import type { PlayerGameState } from '../session/types.js';
 
 /**
@@ -120,8 +120,12 @@ export function createHeadlessSession<G extends Game = Game>(
   // The players' choice, with every option the project's boardsmith.json
   // declares that it leaves out at its default, as createTestGame fills them
   // (#701); then the table's own fields, so a selection cannot name the seat
-  // count, the names or the seed.
-  const gameOptions = { ...fillGameOptionDefaults(projectGameOptions(), { ...options }), ...table };
+  // count, the names or the seed. Seats get boardsmith.json's colours, as createTestGame gives them (#1560).
+  const gameOptions = {
+    ...projectColorOptions(table.playerCount),
+    ...fillGameOptionDefaults(projectGameOptions(), { ...options }),
+    ...table,
+  };
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
   const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];

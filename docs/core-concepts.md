@@ -1018,7 +1018,7 @@ Per-player settings that appear for each player slot in the lobby. They can be d
 
 #### Color Palette
 
-Custom player colors for the color picker, each `{ "id", "hex", "label" }`. If omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`) are used. `createTestGame`, `boardsmith validate`, `boardsmith simulate` and `boardsmith build` seat players in it too, as the lobby does. A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
+Custom player colors for the color picker, each `{ "id", "hex", "label" }`. If omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`) are used. `createTestGame`, `createHeadlessSession`, `boardsmith validate`, `boardsmith simulate`, `boardsmith build` and `boardsmith evolve-bot-weights` seat players in it too, as the lobby does. A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
 ```json
 {

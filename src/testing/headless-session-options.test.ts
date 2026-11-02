@@ -33,9 +33,9 @@ const gameOptions = [
 const home = process.cwd();
 afterEach(() => process.chdir(home));
 
-function inProject(): void {
+function inProject(config: Record<string, unknown> = { gameOptions }): void {
   const dir = tempTree('bs-headless-options-');
-  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'options', backend: 'table', gameOptions }));
+  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'options', backend: 'table', ...config }));
   process.chdir(dir);
 }
 
@@ -55,5 +55,13 @@ describe('createHeadlessSession fills the options boardsmith.json declares (#701
     await session.start();
     const game = session.readGame() as OptionsGame;
     expect([game.rounds, game.lootScale]).toEqual([7, 1]);
+  });
+
+  it('seats players in the colours boardsmith.json\'s colorPalette declares, as createTestGame does (#1560)', async () => {
+    inProject({ colorPalette: [{ id: 'red', hex: '#E74C3C', label: 'Red' }, { id: 'sea', hex: '#3498DB', label: 'Sea' }] });
+    const session = createHeadlessSession(definition, { playerCount: 2, seed: 's' });
+    await session.start();
+    const game = session.readGame() as OptionsGame;
+    expect(game.all(Player).map((p) => [p.color, p.colorLabel])).toEqual([['#E74C3C', 'Red'], ['#3498DB', 'Sea']]);
   });
 });
