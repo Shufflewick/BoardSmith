@@ -28,6 +28,7 @@ import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerRetu
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
 import { HIDE_CHROME_KEY, createHideChrome } from './hideChrome.js';
+import { REQUEST_HOST_STATE_KEY } from './requestHostState.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import type { EnrichedActionMetadata } from './useActionControllerTypes.js';
@@ -67,6 +68,8 @@ interface TableSeatOptions extends SeatTransport {
   timeTravelDiff: Ref<TimeTravelDiff | null>;
   /** Issue a host op (the debug surfaces). */
   platformRequest: (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
+  /** Ask the host to re-send the game state: the auto-UI's Retry when no state has come. */
+  requestHostState: () => void;
   /** The presentation overlay the host supplied, if any. */
   presentation: Ref<unknown>;
   /** Element id the debug panel is highlighting, or null. */
@@ -135,6 +138,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     isViewingHistory,
     timeTravelDiff,
     platformRequest,
+    requestHostState,
     presentation,
     debugHighlight,
     turnDeadline,
@@ -210,6 +214,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     [GAME_OVER_HOLDS_KEY, gameOver.holds],
     [MENU_COMMANDS_KEY, menuCommands],
     [HIDE_CHROME_KEY, hideChrome],
+    [REQUEST_HOST_STATE_KEY, requestHostState],
     ...gameContextProvisions({
       gameState: state,
       gameView,

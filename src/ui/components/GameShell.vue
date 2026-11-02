@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick, provide } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
@@ -48,7 +48,6 @@ import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
-import { REQUEST_HOST_STATE_KEY } from '../composables/requestHostState.js';
 import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
@@ -540,6 +539,8 @@ const tableSeat = useTableSeat({
   isViewingHistory,
   timeTravelDiff,
   platformRequest,
+  // Covers the iframe mounting before the host sent its first game_state.
+  requestHostState: () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*'),
   presentation: toRef(props, 'presentation'),
   debugHighlight: debugHighlightedElementId,
   turnDeadline,
@@ -1182,11 +1183,6 @@ watch(() => state.value?.state.gameInstanceId, (game, previous) => {
 function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
 }
-
-// The auto-UI's Retry, after its loading timeout: covers the iframe mounting before the host sent its first game_state.
-provide(REQUEST_HOST_STATE_KEY, () => {
-  window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
-});
 
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
 
