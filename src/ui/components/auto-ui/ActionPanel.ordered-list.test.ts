@@ -295,7 +295,7 @@ describe('ActionPanel ordered lists (#249)', () => {
     expect(done.attributes('aria-disabled')).toBeUndefined();
     await done.trigger('click');
 
-    expect(confirmMultiSelect).toHaveBeenCalled();
+    expect(confirmMultiSelect).toHaveBeenCalledWith('buildings');
     wrapper.unmount();
   });
 });

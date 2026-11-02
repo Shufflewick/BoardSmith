@@ -2493,11 +2493,56 @@ describe('useActionController', () => {
 
       await controller.toggleMultiSelect('cards', 1);
       await controller.toggleMultiSelect('cards', 2);
-      await controller.confirmMultiSelect();
+      await controller.confirmMultiSelect('cards');
 
       expect(controller.currentArgs.value.cards).toEqual([1, 2]);
       expect(controller.multiSelectDraft.value).toBeNull();
       expect(controller.isReady.value).toBe(true);
+    });
+
+    describe('a min-0 pick confirmed with nothing ticked (#1555)', () => {
+      const zeroToThree = (name: string) => ({
+        name,
+        type: 'choice' as const,
+        prompt: 'Hire up to 3',
+        multiSelect: { min: 0, max: 3 },
+        choices: ['a', 'b', 'c'].map(v => ({ value: v, display: v.toUpperCase() })),
+      });
+
+      async function startHire() {
+        actionMetadata.value = {
+          ...createTestMetadata(),
+          hire: { name: 'hire', prompt: 'Hire', selections: [zeroToThree('picks'), zeroToThree('more')] },
+        };
+        availableActions.value = [...(availableActions.value ?? []), 'hire'];
+        const controller = useActionController({
+          sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, autoFill: false,
+        });
+        await controller.start('hire');
+        return controller;
+      }
+
+      it('answers the pick with the empty set and moves on', async () => {
+        const controller = await startHire();
+
+        const result = await controller.confirmMultiSelect('picks');
+
+        expect(result).toEqual({ valid: true });
+        expect(controller.currentArgs.value.picks).toEqual([]);
+        expect(controller.currentPick.value?.name).toBe('more');
+      });
+
+      it('a second confirm of the answered pick leaves the next list pick unanswered', async () => {
+        const controller = await startHire();
+        await controller.toggleMultiSelect('picks', 'a');
+
+        await controller.confirmMultiSelect('picks');
+        await controller.confirmMultiSelect('picks');
+
+        expect(controller.currentArgs.value.picks).toEqual(['a']);
+        expect(controller.currentArgs.value.more).toBeUndefined();
+        expect(controller.currentPick.value?.name).toBe('more');
+      });
     });
 
     it('min === max auto-confirms: fills currentArgs and the action becomes ready', async () => {

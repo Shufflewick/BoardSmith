@@ -1308,8 +1308,8 @@ const orderedListDoneDisabledReason = computed<DisabledReason>(() => {
  * Delegates to the controller, which runs the fill() path (currentArgs → readiness →
  * auto-execute) with the complete array.
  */
-async function confirmMultiSelect() {
-  await actionController.confirmMultiSelect();
+async function confirmMultiSelect(selectionName: string) {
+  await actionController.confirmMultiSelect(selectionName);
   boardInteraction?.setHoveredChoice(null);
 }
 
@@ -1743,7 +1743,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <DoneButton
               v-if="showMultiSelectDoneButton"
               :disabled-reason="multiSelectDoneDisabledReason"
-              @click="confirmMultiSelect"
+              @click="confirmMultiSelect(currentPick.name)"
             />
             <button
               v-if="currentPick.optional"
@@ -1821,7 +1821,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <DoneButton
               v-if="showMultiSelectDoneButton"
               :disabled-reason="multiSelectDoneDisabledReason"
-              @click="confirmMultiSelect"
+              @click="confirmMultiSelect(currentPick.name)"
             />
             <button
               v-if="currentPick.optional"
@@ -1902,7 +1902,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             </template>
             <DoneButton
               :disabled-reason="orderedListDoneDisabledReason"
-              @click="confirmMultiSelect"
+              @click="confirmMultiSelect(currentPick.name)"
             />
             <button
               v-if="currentPick.optional"
@@ -1951,7 +1951,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <DoneButton
               v-if="showMultiSelectDoneButton"
               :disabled-reason="multiSelectDoneDisabledReason"
-              @click="confirmMultiSelect"
+              @click="confirmMultiSelect(currentPick.name)"
             />
             <button
               v-if="currentPick.optional"

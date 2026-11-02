@@ -139,11 +139,11 @@ upper bound.
 A custom UI builds one through the shared controller draft, so it and the Action
 Panel stay in parity: `appendListEntry(name, value)` adds an entry (again for a
 repeat), `removeListEntry(name, index)` drops one **by index** — with repeats, a
-value does not name an entry — and `confirmMultiSelect()` submits the finished
-list. On a board, clicking a choice's element appends. Bots enumerate a list one
-entry at a time: with repeats allowed there is no cap that makes "every possible
-list" tractable, so every move offered is a real one and a longer sequence is
-reached by acting again.
+value does not name an entry — and `confirmMultiSelect(name)` submits the finished
+list (an empty one, if nothing was added and `min` is 0). On a board, clicking a
+choice's element appends. Bots enumerate a list one entry at a time: with repeats
+allowed there is no cap that makes "every possible list" tractable, so every move
+offered is a real one and a longer sequence is reached by acting again.
 
 #### One pick at a time, until it ends: a repeating selection (`repeat`)
 

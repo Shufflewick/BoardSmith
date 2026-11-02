@@ -2963,7 +2963,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // Auto-confirm when exact count required (min === max) and reached.
       if (cfg.min === cfg.max && newValues.length === cfg.min) {
         multiSelectDraft.value = { selectionName, values: newValues };
-        await confirmMultiSelect();
+        await confirmMultiSelect(selectionName);
         return;
       }
     }
@@ -2976,15 +2976,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Confirm the in-progress multiSelect draft.
    * This is the ONLY place currentArgs receives the multiSelect array — it runs the
    * existing fill() path (currentArgs → readiness → auto-execute) with the COMPLETE
-   * array.
+   * array. A confirm names its pick, so a repeated or stale one cannot answer the next.
    */
-  async function confirmMultiSelect(): Promise<PickValidationResult | void> {
+  async function confirmMultiSelect(selectionName: string): Promise<PickValidationResult | void> {
     const draft = multiSelectDraft.value;
-    if (!draft) return;
-
-    const { selectionName, values } = draft;
-    multiSelectDraft.value = null;
-    return await fill(selectionName, [...values]);
+    if (draft?.selectionName === selectionName) {
+      multiSelectDraft.value = null;
+      return await fill(selectionName, [...draft.values]);
+    }
+    const pick = currentPick.value;
+    if (pick?.name !== selectionName) return;
+    if (!resolveMultiSelectConfig(pick) && !resolveOrderedListConfig(pick)) return;
+    // Nothing ticked yet is the empty answer, the same as ticking and unticking first (#1555).
+    return await fill(selectionName, []);
   }
 
   /** Whether a value is currently in the multiSelect draft for the given selection. */

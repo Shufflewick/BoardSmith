@@ -383,4 +383,41 @@ describe('ActionPanel interaction tests', () => {
     expect(panel.text()).toContain('Who exactly?');
     expect(panel.text()).toContain('No options available');
   });
+
+  it('Done on a min-0 multiSelect with nothing ticked submits the empty set and moves on (#1555)', async () => {
+    const hire: EnrichedActionMetadata = {
+      name: 'hire',
+      prompt: 'Hire',
+      selections: [
+        {
+          name: 'picks',
+          type: 'choice',
+          prompt: 'Hire up to 3',
+          multiSelect: { min: 0, max: 3 },
+          choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })),
+        },
+        { name: 'message', type: 'text', prompt: 'What does it say?' },
+      ],
+    };
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['hire']),
+      actionMetadata: ref({ hire }),
+      isMyTurn: ref(true),
+      autoFill: false,
+      autoExecute: false,
+    });
+    await controller.start('hire');
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+      props: { availableActions: ['hire'], isMyTurn: true },
+    });
+    await nextTick();
+
+    await wrapper.find('button.done-button').trigger('click');
+    await nextTick();
+
+    expect(controller.currentArgs.value.picks).toEqual([]);
+    expect(controller.currentPick.value?.name).toBe('message');
+  });
 });

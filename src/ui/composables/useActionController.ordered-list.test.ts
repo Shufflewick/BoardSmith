@@ -137,12 +137,23 @@ describe('useActionController ordered lists (#249)', () => {
     await controller.appendListEntry('buildings', 'shipyard');
     await controller.appendListEntry('buildings', 'shipyard');
 
-    await controller.confirmMultiSelect();
+    await controller.confirmMultiSelect('buildings');
 
     expect(sendAction).toHaveBeenCalledWith(
       'repair',
       { buildings: ['shipyard', 'shipyard'] },
     );
+  });
+
+  it('confirms an EMPTY list on a min-0 pick before any entry is appended (#1555)', async () => {
+    actionMetadata.value!.repair.selections[0].orderedList = { min: 0, max: 3 };
+    const controller = newController();
+    await controller.start('repair');
+
+    await controller.confirmMultiSelect('buildings');
+
+    expect(controller.currentArgs.value.buildings).toEqual([]);
+    expect(controller.isReady.value).toBe(true);
   });
 
   it('REFUSES a scalar through fill(), the way a multiSelect pick does', async () => {
