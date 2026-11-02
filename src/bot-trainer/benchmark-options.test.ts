@@ -41,7 +41,7 @@ describe('the bot benchmark starts the game with the options boardsmith.json dec
 });
 
 /** Refuses to start with a seat outside the palette boardsmith.json declares. */
-const palette = ['#E74C3C', '#3498DB'];
+const palette = ['#123456', '#654321'];
 class PaletteGame extends Game<PaletteGame, Player> {
   constructor(options: GameOptions) {
     super(options);
