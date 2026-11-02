@@ -18,13 +18,12 @@ import {
   formatUnknownKeyWarnings,
   shouldOpenBrowser,
   resolvePlayerCount,
-  resolveColorOption,
-  resolveDevPlayerOptions,
   parseGameOptionFlags,
   resolvePreset,
   seatsUnderFlags,
 } from './dev.js';
 import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
+import { resolveColorOption, resolveDevPlayerOptions } from '../lib/player-options.js';
 import { createColorOption, type GameDefinition, type OpSuccess } from '../../session/index.js';
 import { deriveManifest } from './build.js';
 import { Game, Player } from '../../engine/index.js';

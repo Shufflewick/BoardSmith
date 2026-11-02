@@ -32,6 +32,9 @@ export {
   type TestGameOptions,
 } from './test-game.js';
 
+// A game started as `boardsmith dev --preset` starts it (#1565).
+export { presetStartOptions } from '#testing/project-game-options';
+
 // A whole session in process, over the host every platform runs. It lives here,
 // not in boardsmith/session, because it reads the project's boardsmith.json (#701).
 export { createHeadlessSession, type HeadlessSession, type HeadlessGameOptions } from './headless-session.js';

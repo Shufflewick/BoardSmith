@@ -1,5 +1,5 @@
 {
-  "revision": 311,
+  "revision": 315,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2430,7 +2430,39 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "MCTS lists a seat's moves in a simultaneous step against the game after its own earlier moves in the step, with only the other seats' picks hidden, so candidateMoves can read the seat's held follow-up (#1563)"
+      "summary": "The smoke check skips a file that vanishes between git's listing and its copy (Vite's config bundle), and throws any other copy failure as Node reports it."
+    },
+    {
+      "revision": 312,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith/testing exports presetStartOptions, which starts a test game with a preset's seats as boardsmith dev --preset does (#1565)"
+    },
+    {
+      "revision": 313,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The dev host refuses a join colour outside the game's colorPalette, comparing without case, and stores a matched colour as the palette writes it (#1566)."
+    },
+    {
+      "revision": 314,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The random simulation policy plays a move that move enumeration lists when the action refuses the numbers or sets it drew, so a rule few drawn sets pass no longer stops a simulated game, and draws again, three draws in all, only when enumeration lists none or cannot list them all (#1567)."
+    },
+    {
+      "revision": 315,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel shows Done for a multiSelect whose min and max are both 0, so with auto mode off the player can answer it with [] (#1568)."
     }
   ]
 }

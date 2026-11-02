@@ -1184,7 +1184,8 @@ async function pressAnswer(answer: Control, { walk, memory, name, step }: Answer
  * choice (an unticked box in the panel, else a board candidate the pick has not chosen) until the
  * pick has at least one and its Done button is ready, then Done. The pick's own min and max decide
  * through the panel: Done is ready from min on, every box left is refused at max, and a pick whose
- * min is its max has no Done at all and completes on its last choice. Returns what it pressed.
+ * min is its max has no Done at all and completes on its last choice, unless both are 0, when Done
+ * answers it empty. Returns what it pressed.
  */
 async function answerMultiSelect(answering: Answering): Promise<string | undefined> {
   const { frame, picked } = answering;

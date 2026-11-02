@@ -1,5 +1,6 @@
-import { isDeepStrictEqual } from 'node:util';
-import type { GamePreset, PlayerOptionDefinition } from '../../session/types.js';
+import { isDeepStrictEqual, styleText } from 'node:util';
+import type { GameDefinition, GamePreset, PlayerOptionDefinition } from '../../session/types.js';
+import { createColorOption, paletteChoices, type ColorChoice, type ColorOptionDefinition } from '../../session/colors.js';
 import { numberBoundsProblem } from '../../session/game-option-selection.js';
 import { parseBotLevel } from '../../bot/index.js';
 
@@ -239,6 +240,39 @@ export function seatOptionsRefusal(
   return undefined;
 }
 
+/** The level `boardsmith dev` plays a seat at when neither `--bot-level` nor a preset gives one. */
+export const DEV_BOT_LEVEL = 'medium';
+
+/** One seat as the start op carries it. */
+export interface StartSeat extends SeatSetup {
+  name: string;
+}
+
+/**
+ * The start op's seat fields, as the platform's start sends them (#1565): each
+ * seat's player options with its colour, which seat holds each exclusive
+ * option, which seats are bots, and the per-seat `playerConfigs`. `colors`
+ * goes to the engine only when every seat has one, since a partial list would
+ * misalign seats. The dev host and `presetStartOptions` both build it here.
+ */
+export function seatStartOptions(
+  options: Record<string, PlayerOptionDefinition>,
+  seats: StartSeat[],
+  palette: readonly ColorChoice[],
+): Record<string, unknown> {
+  const playerOptions = seats.map((seat) => (seat.color === undefined ? { ...seat.playerOptions } : { ...seat.playerOptions, color: seat.color }));
+  const colors = seats.map((seat) => seat.color);
+  const labels = palette.length === 0 ? {} : { colorLabels: Object.fromEntries(palette.map((c) => [c.value, c.label])) };
+  return {
+    ...(colors.includes(undefined) ? {} : { colors, ...labels }),
+    playerOptions,
+    exclusiveSeats: exclusiveSeats(options, playerOptions),
+    playerIsBot: seats.map((seat) => seat.isBot),
+    // The seat's own fields go last, so a player option with the same key cannot replace them.
+    playerConfigs: seats.map((seat, index) => ({ ...playerOptions[index], name: seat.name, isBot: seat.isBot, botLevel: seat.botLevel })),
+  };
+}
+
 /** One seat as a preset sets it up, with every player option it did not set at its default (#1544). */
 export interface SeatSetup {
   playerOptions: Record<string, unknown>;
@@ -312,4 +346,85 @@ export function presetSeatSetup(
     isBot: seat.isBot === true,
     ...(seat.botLevel === undefined ? {} : { botLevel: seat.botLevel as string }),
   }));
+}
+
+/**
+ * Normalize colorPalette entries to {value, label} format.
+ * Accepts plain hex strings, {value, label}, or {hex, label, id} objects.
+ *
+ * IN-01: an object entry missing all of `value`/`hex`/`color` is malformed
+ * (a typo'd field name, most often) — warn loudly (matches the
+ * `formatUnknownKeyWarnings` non-exiting pattern) and DROP the entry instead
+ * of emitting an invisible/unclickable empty-string swatch in the lobby
+ * color picker.
+ */
+function normalizeColorPalette(
+  palette: ReadonlyArray<string | object>
+): Array<{ value: string; label: string }> {
+  const { choices, unnamed } = paletteChoices(palette);
+  for (const entry of unnamed) {
+    console.warn(
+      styleText('yellow',
+        `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
+      ),
+    );
+  }
+  return choices;
+}
+
+/**
+ * D16/DEVHOST-04: the dev `color` player option, always offered, resolved as
+ * production does: the published manifest carries only `boardsmith.json`'s
+ * `colorPalette`, else players are seated in the engine palette (#814). A palette a
+ * game declares in code is never published, so one that differs is refused
+ * here rather than shown in dev and missing live. Its choices also seed each
+ * seat's colour in MultiplayerHost, so the option and the seats always agree.
+ */
+export function resolveColorOption(
+  gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
+  config: { colorPalette?: Array<string | Record<string, unknown>> },
+): ColorOptionDefinition {
+  const option = createColorOption();
+  if (config.colorPalette) option.choices = normalizeColorPalette(config.colorPalette);
+  const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
+  for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
+    if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
+      throw new Error(
+        `Your gameDefinition declares ${where} in code, but the live lobby uses ${source} ` +
+          `(${option.choices.map((c) => c.label).join(', ')}), so dev would show colours players never get. ` +
+          `Declare the palette in boardsmith.json's "colorPalette", or remove ${where} from your gameDefinition.`,
+      );
+    }
+  }
+  return option;
+}
+
+/**
+ * The player options dev offers: the game's merged code and boardsmith.json
+ * options, which the published manifest carries too (#992), and the colour
+ * option, which the live lobby builds from the same `colorPalette`.
+ */
+export function resolveDevPlayerOptions(
+  gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
+  config: { playerOptions?: unknown; colorPalette?: Array<string | Record<string, unknown>> },
+): Record<string, PlayerOptionDefinition> & { color: ColorOptionDefinition } {
+  return {
+    ...mergePlayerOptions(gameDefinition.playerOptions, config.playerOptions),
+    color: resolveColorOption(gameDefinition, config),
+  };
+}
+
+/** The colour lists a game declares in code, by where it declares them. */
+function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>) {
+  const declared = gameDefinition.playerOptions?.color;
+  // A `color` option that is not a colour list (or has no choices) can never match, so it is refused too.
+  const choices = declared?.type === 'color' ? declared.choices : undefined;
+  return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette };
+}
+
+function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((c, i) => c.value.toLowerCase() === b[i]!.value.toLowerCase() && c.label === b[i]!.label)
+  );
 }

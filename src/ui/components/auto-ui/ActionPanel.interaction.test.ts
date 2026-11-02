@@ -384,18 +384,17 @@ describe('ActionPanel interaction tests', () => {
     expect(panel.text()).toContain('No options available');
   });
 
-  it('Done on a min-0 multiSelect with nothing ticked submits the empty set and moves on (#1555)', async () => {
+  type Offer = Pick<EnrichedActionMetadata['selections'][number], 'type' | 'choices' | 'validElements'>;
+  it.each<{ pick: string; max: number; offer: Offer }>([
+    { pick: 'min-0 max-3 choice (#1555)', max: 3, offer: { type: 'choice', choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })) } },
+    { pick: 'min-0 max-0 choice (#1568)', max: 0, offer: { type: 'choice', choices: [{ value: 'squidhead', display: 'squidhead' }] } },
+    { pick: 'min-0 max-0 empty elements (#1568)', max: 0, offer: { type: 'elements', validElements: [] } },
+  ])('Done on a $pick multiSelect with nothing ticked submits the empty set and moves on', async ({ max, offer }) => {
     const hire: EnrichedActionMetadata = {
       name: 'hire',
       prompt: 'Hire',
       selections: [
-        {
-          name: 'picks',
-          type: 'choice',
-          prompt: 'Hire up to 3',
-          multiSelect: { min: 0, max: 3 },
-          choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })),
-        },
+        { name: 'picks', prompt: `Hire up to ${max}`, multiSelect: { min: 0, max }, ...offer },
         { name: 'message', type: 'text', prompt: 'What does it say?' },
       ],
     };
