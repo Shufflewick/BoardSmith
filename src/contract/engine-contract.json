@@ -1,5 +1,5 @@
 {
-  "revision": 313,
+  "revision": 314,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2447,6 +2447,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The dev host refuses a join colour outside the game's colorPalette, comparing without case, and stores a matched colour as the palette writes it (#1566)."
+    },
+    {
+      "revision": 314,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The random simulation policy plays a move that move enumeration lists when the action refuses the numbers or sets it drew, so a rule few drawn sets pass no longer stops a simulated game, and draws again, three draws in all, only for an action enumeration cannot list (#1567)."
     }
   ]
 }
