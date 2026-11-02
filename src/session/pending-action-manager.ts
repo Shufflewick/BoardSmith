@@ -99,9 +99,10 @@ export class PendingActionManager<G extends Game = Game> {
    * Process a selection step for a pending action.
    * Handles both regular selections and repeating selections.
    * Auto-creates the pending action if it doesn't exist.
-   * @param initialArgs - The picks the client made before this one, read only
-   *   when this step starts the pending action, and made as its own steps would be
-   *   (e.g., actingMerc before equipment)
+   * @param initialArgs - The picks the client made before this one, made as
+   *   their own steps would be when this step starts the pending action (e.g.,
+   *   actingMerc before equipment), and, for a repeating pick, its earlier
+   *   answers, whose count tells a fresh start from a continued one (#1556)
    */
   async processSelectionStep(
     playerPosition: number,
@@ -135,6 +136,7 @@ export class PendingActionManager<G extends Game = Game> {
     actionName: string | undefined,
     initialArgs: Record<string, unknown> | undefined,
   ): PickStepResult {
+    pendingState = this.#openActionKept(playerPosition, pendingState, selectionName, actionName, initialArgs);
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
@@ -213,6 +215,29 @@ export class PendingActionManager<G extends Game = Game> {
   }
 
   /**
+   * The seat's open action, or none once dropped (running `onCancel`) when the
+   * step starts it again: it names that action and a pick before the one the
+   * action is at, or the repeating pick it is at with a different count of
+   * that pick's earlier answers. A client that lost track of the action (a
+   * page reload, another controller for the seat) sends that, and refusing it
+   * would leave the player no way to finish (#1556).
+   */
+  #openActionKept(
+    playerPosition: number,
+    pendingState: PendingActionState | undefined,
+    selectionName: string,
+    actionName: string | undefined,
+    initialArgs: Record<string, unknown> | undefined,
+  ): PendingActionState | undefined {
+    if (!pendingState || pendingState.actionName !== actionName) return pendingState;
+    const index = this.#runner.game.getAction(actionName)?.selections.findIndex((s) => s.name === selectionName) ?? -1;
+    const passed = index >= 0 && index < pendingState.currentSelectionIndex;
+    if (!passed && !repeatStartsAgain(pendingState.repeating, selectionName, initialArgs)) return pendingState;
+    this.#dropPendingAction(playerPosition);
+    return undefined;
+  }
+
+  /**
    * Nothing of a pending action may run unless the flow offers it to this
    * seat now: not on a finished game, and not as another seat's move (#492),
    * and not once another seat's move took its condition away (#493,
@@ -278,4 +303,15 @@ export class PendingActionManager<G extends Game = Game> {
       partiallyApplied: actionResult.partiallyApplied,
     };
   }
+}
+
+/** Whether a step at the repeating pick in progress holds a different count of its earlier answers than the pick took (#1556). */
+function repeatStartsAgain(
+  repeating: PendingActionState['repeating'],
+  selectionName: string,
+  initialArgs: Record<string, unknown> | undefined,
+): boolean {
+  const earlier = initialArgs?.[selectionName];
+  if (repeating?.selectionName !== selectionName || earlier === undefined) return false;
+  return !Array.isArray(earlier) || earlier.length !== repeating.accumulated.length;
 }

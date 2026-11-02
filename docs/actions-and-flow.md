@@ -1082,6 +1082,15 @@ left out, or a value the game does not offer, is refused, and the step keeps
 nothing: the action is not started. A held follow-up's published args come
 from the engine, never from `initialArgs`, and an initial arg that names no
 pick is not taken.
+A step that names the seat's open action and a pick it has already passed
+starts that action again (#1556): a client that lost track of it, after a page
+reload or from another controller for the seat, starts at the first pick.
+A repeating pick's step also sends that pick's earlier answers under its own
+name in `initialArgs`, and a step that names the repeating pick the action is
+at with a different count of them starts the action again too.
+`onCancel` runs for the dropped picks, then the step is made as the first step
+of a new action, and if it fails the step keeps nothing, so the open action is
+as it was.
 
 **Its earlier picks must still be on offer when it runs** (#767). A pick
 another action took after the seat made it is checked again, as a whole
