@@ -1818,8 +1818,12 @@ async function runOp(
         return handleResolveChoices(def, gameOptions, snap, pendingState, op);
       case 'cancelAction':
         return handleCancelAction(def, gameOptions, snap, pendingState, op);
-      case 'reoffer':
-        return { success: true, ...stateEnvelope(runnerFromSnapshot(snap, def), gameOptions.playerCount) };
+      case 'reoffer': {
+        const runner = runnerFromSnapshot(snap, def);
+        // The clock can change which actions a seat is offered, not only why one is greyed (#1545).
+        runner.game.refreshAwaitingActions();
+        return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
+      }
       case 'undo':
         return handleUndo(def, gameOptions, snap, op);
       case 'debugHistory':

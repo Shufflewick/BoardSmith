@@ -2474,7 +2474,10 @@ export class Game<
    * The awaiting set can grow as well as shrink. A seat that already committed
    * this step is left alone. The step's `players` filter is re-evaluated and
    * only seats it includes are admitted; a seat already awaited stays even if
-   * the filter has since dropped it. No-op when no simultaneous step is open.
+   * the filter has since dropped it. In an open `actionStep`, called from
+   * outside game code (a host's re-offer, #1545), the step's seat is offered
+   * what it would be after a move, and the step ends when that is nothing.
+   * No-op when neither step is open.
    * Inside a seat's own action (its `execute`, `onSelect` or `onEach`) that
    * seat is left for the action's settling to decide (#973).
    *

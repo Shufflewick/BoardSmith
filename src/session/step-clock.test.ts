@@ -3,6 +3,7 @@ import { Action, type GameOptions } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import type { GameStateSnapshot } from '../engine/utils/index.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
+import type { BotStrategy } from '../bot/index.js';
 import { succeeded, refused } from './op-result.test-helper.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import {
@@ -159,6 +160,81 @@ class OnlyLevelUpGame extends DeployGame {
     );
   }
 }
+
+/** A round of `promote` and `commit`, where `promote` is greyed until the playback ends and its one rank never opens. */
+function promoteGame(shape: 'simultaneous' | 'sequential', actions: string[]) {
+  return class PromoteGame extends DeployGame {
+    constructor(options: GameOptions) {
+      super(options, 120_000, shape, actions);
+      this.registerAction(
+        Action.create<PromoteGame>('promote')
+          .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && REASON)
+          .chooseFrom('rank', { choices: [2], disabled: () => 'No pack can level.' })
+          .execute(() => {}),
+      );
+    }
+  };
+}
+
+describe('reoffer() rebuilds the offered actions (#1545)', () => {
+  it.each(['simultaneous', 'sequential'] as const)(
+    'stops offering, in a %s step, an action the clock greyed once its reason lapses and no choice is open',
+    async (shape) => {
+      let now = START;
+      const definition = { ...playbackDefinition, gameClass: promoteGame(shape, ['promote', 'commit']) };
+      const session = createHeadlessSession(definition, { ...gameOptions, now: () => now });
+      await session.start();
+      expect(session.playerState(1).availableActions).toEqual(['promote', 'commit']);
+      expect(session.playerState(1).disabledActions).toEqual({ promote: REASON });
+
+      now = START + PLAYBACK_MS;
+      await session.host.reoffer();
+      expect(session.playerState(1).availableActions).toEqual(['commit']);
+      expect(session.playerState(1).disabledActions).toBeUndefined();
+      expect(session.metas.at(-1)).toMatchObject({ cause: 'republish' });
+    },
+  );
+
+  it('moves the turn on, as the step would at entry, when the seat is left nothing to take, and publishes it as a change', async () => {
+    let now = START;
+    const definition = { ...playbackDefinition, gameClass: promoteGame('sequential', ['promote']) };
+    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now });
+    await session.start();
+    const opened = session.metas.at(-1)!.turnBoundary;
+    expect(opened.dueSeats).toEqual([1]);
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    const moved = session.metas.at(-1)!;
+    expect(moved.cause).toBe('change');
+    expect(moved.turnBoundary.dueSeats).toEqual([2]);
+    expect(moved.turnBoundary.key).not.toBe(opened.key);
+  });
+});
+
+describe('reoffer() and the teaching tools (#1545)', () => {
+  // Each move names its action, so a heatmap shows which actions have moves.
+  const namedBot: BotStrategy = {
+    objectives: () => ({ moves: { checker: () => 0.5, weight: 1 } }),
+    hintTargetFromMove: (move) => ({ notation: move.action }),
+  };
+
+  it('drops a hint chosen before the re-offer and recomputes a visible heatmap', { timeout: 60_000 }, async () => {
+    let now = START;
+    const session = createHeadlessSession({ ...playbackDefinition, bot: namedBot }, { ...gameOptions, now: () => now });
+    await session.start();
+    succeeded(await session.send(1, { type: 'hint', seat: 1 }));
+    succeeded(await session.send(1, { type: 'heatmapToggle', seat: 1, visible: true }));
+    expect(session.playerState(1).hint).toBeDefined();
+    expect(session.playerState(1).heatmap!.entries.map((e) => e.cellRef.notation)).not.toContain('levelUp');
+
+    now = START + PLAYBACK_MS;
+    await session.host.reoffer();
+    await session.host.settled();
+    expect(session.playerState(1).hint).toBeUndefined();
+    expect(session.playerState(1).heatmap!.entries.map((e) => e.cellRef.notation)).toContain('levelUp');
+  });
+});
 
 describe('a bot seat waiting on the step clock (#1537)', () => {
   it.each([

@@ -2382,9 +2382,13 @@ Action.create<MyGame>('levelUp')
   `reofferAt` and on the turn boundary as `turnBoundary.reofferAt`. A host arms
   a timer for it beside the step's deadline and, when it comes, calls
   `SnapshotSessionHost.reoffer()` (the executor op `{ type: 'reoffer' }`),
-  which builds every view again at that instant with the game unchanged and
+  which builds every view again at that instant with no move made and
   publishes it with cause `republish`, naming the next `reofferAt` if there is
-  one. `boardsmith dev` does this. A platform host must too: on every publish,
+  one. The offered actions are worked out again as well, as
+  `game.refreshAwaitingActions()` would (#1545): an action whose reason lapsed
+  but which has no enabled choice is no longer offered, and a step that leaves
+  nobody anything to take ends, as it would after a move, published with cause
+  `change`. `boardsmith dev` does this. A platform host must too: on every publish,
   arm a timer for `meta.turnBoundary.reofferAt` when it is set and comes before
   the deadline, and call `reoffer()` when it fires, stamped like any op with
   `hostOptions.now`.

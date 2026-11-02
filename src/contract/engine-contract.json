@@ -1,6 +1,6 @@
 {
-  "revision": 292,
-  "surfaceHash": "f06ff4e4e6e71ec7",
+  "revision": 293,
+  "surfaceHash": "6e90ef1902dcdb61",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2279,6 +2279,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Presets set up each seat in boardsmith dev: GamePreset.players is now PresetSeat[] (color, isBot, botLevel, playerOptions), including which seat holds an exclusive player option; no surface or payload the platform reads changed (#1544)."
+    },
+    {
+      "revision": 293,
+      "date": "2026-11-01",
+      "surfaceHash": "6e90ef1902dcdb61",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "SnapshotSessionHost.reoffer() works out each seat's offered actions again, not only why one is greyed (#1545): an action the step clock greyed that has no enabled choice once its reason lapses is no longer offered, and a step that leaves nobody anything to take ends as after a move, published with cause change; game.refreshAwaitingActions() does this for an open actionStep when called from outside game code. Platform: nothing to change, beyond treating a reoffer() publish with cause change as a change. Published games need no rebuild."
     }
   ]
 }

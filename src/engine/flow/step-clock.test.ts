@@ -195,3 +195,51 @@ describe('the step clock survives every restore path', () => {
     expect([clone.stepOpenFor(12_000), clone.stepOpenFor(12_001)]).toEqual([true, false]);
   });
 });
+
+/** Sequential turns of `promote`, greyed until the playback ends with its one rank never open, and a `recheck` each seat takes once. */
+class PromoteTurnGame extends DeployGame {
+  rechecked: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'sequential', ['promote', 'recheck']);
+    this.registerAction(
+      Action.create<PromoteTurnGame>('promote')
+        .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
+        .chooseFrom('rank', { choices: [2], disabled: () => 'No pack can level.' })
+        .execute(() => {}),
+    );
+    this.registerAction(
+      Action.create<PromoteTurnGame>('recheck')
+        .condition({ 'not rechecked yet': (ctx) => !ctx.game.rechecked.includes(ctx.player.seat) })
+        .execute((_args, ctx) => {
+          ctx.game.rechecked = [...ctx.game.rechecked, ctx.player.seat];
+          ctx.game.refreshAwaitingActions();
+        }),
+    );
+  }
+}
+
+describe('game.refreshAwaitingActions() in an action step (#1545)', () => {
+  function turnAt(now: number): GameRunner<PromoteTurnGame> {
+    const runner = new GameRunner({ GameClass: PromoteTurnGame, gameType: 'promote-turn', gameOptions: opts });
+    runner.setNow(START);
+    runner.start();
+    runner.setNow(now);
+    return runner;
+  }
+
+  it('offers the seat what the step offers it now, once the clock has changed that', () => {
+    const runner = turnAt(START + PLAYBACK_MS);
+    expect(runner.game.getFlowState()?.availableActions).toEqual(['promote', 'recheck']);
+    runner.game.refreshAwaitingActions(2);
+    expect(runner.game.getFlowState()?.availableActions).toEqual(['promote', 'recheck']);
+    runner.game.refreshAwaitingActions();
+    expect(runner.game.getFlowState()).toMatchObject({ currentPlayer: 1, availableActions: ['recheck'] });
+  });
+
+  it('leaves the step to the running action when called from inside it, which ends the turn once nothing is left', () => {
+    const runner = turnAt(START + PLAYBACK_MS);
+    expect(runner.performAction('recheck', 1, {}).success).toBe(true);
+    expect(runner.game.getFlowState()).toMatchObject({ currentPlayer: 2 });
+  });
+});
