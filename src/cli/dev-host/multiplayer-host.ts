@@ -38,7 +38,7 @@ import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
 import type { GameOptionDefinition, PlayerOptionDefinition } from '../../session/types.js';
-import { defaultSeatOptions, exclusiveSeats, presetSeatSetup, seatOptionsRefusal, type SeatSetup } from '../lib/player-options.js';
+import { defaultSeatOptions, presetSeatSetup, seatOptionsRefusal, seatStartOptions, type SeatSetup } from '../lib/player-options.js';
 import {
   PERSIST_KEY,
   PersistenceStore,
@@ -969,7 +969,7 @@ export class MultiplayerHost {
    * applied post-start via `configure`. Growing adds open (unclaimed) seats;
    * shrinking releases and drops any seat beyond the new count (its client
    * falls back to the seat-picker on the next lobby broadcast). Mutates
-   * `this.opts.playerCount` — the SAME field `startGame`, `buildPerSeatOptions`,
+   * `this.opts.playerCount` — the SAME field `startGame`,
    * `addBotSeat`, `rebuildBotSeats`, and `lobbyMessage` all already read — so
    * there is exactly one source of truth for the player count after a resize,
    * never two that can drift apart (the CR-01 defect: `playerCount` in the
@@ -1455,7 +1455,6 @@ export class MultiplayerHost {
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are bot.
-    const perSeatOptions = this.buildPerSeatOptions();
     const startGameOptions = {
       // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
       // any accepted `configure` preset/gameOptions), not the frozen
@@ -1465,30 +1464,28 @@ export class MultiplayerHost {
       ...this.appliedGameOptions,
       // `playerCount` is already the resized value (CR-01: `handleConfigure`
       // calls `resizeSeats`, which mutates `this.opts.playerCount`, BEFORE
-      // `startGame` reads it), so `playerOptions`/`playerIsBot`/`playerConfigs`
-      // below (all sized off this same `playerCount`) never diverge from it.
+      // `startGame` reads it), so the per-seat arrays below never diverge from it.
       playerCount,
       seed: seed ?? (this.opts.makeSeed ?? mintSeed)(),
       // DEVHOST-04 / F-04: top-level `colors`/`colorLabels` are what the engine
-      // reads to set `player.color`. Placed after appliedGameOptions so lobby
-      // color selections win, mirroring the production per-seat override.
-      ...this.buildColorGameOptions(),
-      playerOptions: perSeatOptions,
-      // Which seat holds each exclusive option, as the platform's start sends it (#1325).
-      exclusiveSeats: exclusiveSeats(this.opts.playerOptions ?? {}, perSeatOptions),
-      playerIsBot: Array.from({ length: playerCount }, (_, i) => !humanSeats.has(i + 1)),
-      // The per-seat playerConfigs a lobby builds from its slots, so games that read
-      // options.playerConfigs[seat-1] — e.g. per-seat isBot to drive in-flow bot —
-      // behave identically in dev. Without this a bot seat is invisible to such
-      // games: they treat the bot seat as a human, build an interactive turn, and
-      // the dev host's MCTS bot then finds "No available moves" and locks up.
-      // The seat's own fields go last, so a player option with the same key cannot replace them.
-      playerConfigs: Array.from({ length: playerCount }, (_, i) => ({
-        ...perSeatOptions[i],
-        name: seatDisplayName(i + 1, this.seats.get(i + 1)?.name),
-        isBot: !humanSeats.has(i + 1),
-        botLevel: this.botLevel(i + 1),
-      })),
+      // reads to set `player.color`, and `playerConfigs` is what games that read
+      // options.playerConfigs[seat-1] (e.g. per-seat isBot to drive in-flow bot)
+      // see, so a bot seat is never treated as a human there. Placed after
+      // appliedGameOptions so lobby choices win, as production's per-seat override does.
+      ...seatStartOptions(
+        this.opts.playerOptions ?? {},
+        Array.from({ length: playerCount }, (_, i) => {
+          const seat = this.seats.get(i + 1);
+          return {
+            playerOptions: { ...seat?.playerOptions },
+            color: seat?.color ?? this.defaultColor(i + 1),
+            isBot: !humanSeats.has(i + 1),
+            botLevel: this.botLevel(i + 1),
+            name: seatDisplayName(i + 1, seat?.name),
+          };
+        }),
+        this.opts.colorPalette ?? [],
+      ),
     };
     this.injectPersistedStore(startGameOptions, humanSeats, playerCount);
 
@@ -1697,44 +1694,6 @@ export class MultiplayerHost {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-
-  /** Per-seat playerOptions for the start op: each seat's player options and its chosen/default color. */
-  private buildPerSeatOptions(): Array<Record<string, unknown>> {
-    return Array.from({ length: this.opts.playerCount }, (_, i) => {
-      const seat = this.seats.get(i + 1);
-      const color = seat?.color ?? this.defaultColor(i + 1);
-      const perSeat: Record<string, unknown> = { ...seat?.playerOptions };
-      if (color !== undefined) perSeat.color = color;
-      return perSeat;
-    });
-  }
-
-  /**
-   * DEVHOST-04 / F-04: engine game options that actually deliver the palette to
-   * `player.color`. The `Game` constructor assigns `player.color = colors[i]`
-   * from a TOP-LEVEL `colors` array (and `colorLabel` from `colorLabels`) — it
-   * never reads `playerOptions[i].color`. We build `colors` from each seat's chosen/default
-   * color so both the palette AND any lobby color choices reach the engine.
-   * Returns `{}` (engine keeps its DEFAULT_COLOR_PALETTE) unless EVERY seat has
-   * a resolved color — a partial array would misalign seats.
-   */
-  private buildColorGameOptions(): { colors?: string[]; colorLabels?: Record<string, string> } {
-    const colors = Array.from({ length: this.opts.playerCount }, (_, i) => {
-      const seat = this.seats.get(i + 1);
-      return seat?.color ?? this.defaultColor(i + 1);
-    });
-    if (colors.some((c) => c === undefined)) return {};
-
-    const result: { colors?: string[]; colorLabels?: Record<string, string> } = {
-      colors: colors as string[],
-    };
-    if (this.opts.colorPalette && this.opts.colorPalette.length > 0) {
-      result.colorLabels = Object.fromEntries(
-        this.opts.colorPalette.map((c) => [c.value, c.label]),
-      );
-    }
-    return result;
-  }
 
   private reinitSeat(clientId: string, seat: number): void {
     this.send(clientId, { type: 'init', seat });

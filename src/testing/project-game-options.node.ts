@@ -1,6 +1,6 @@
 /**
- * The game options and seat colours of the project the tests run in, read from its
- * `boardsmith.json` with Node (#701, #1552). `test-game.ts`,
+ * The game options, seat colours and preset seats of the project the tests run in,
+ * read from its `boardsmith.json` with Node (#701, #1552, #1565). `test-game.ts`,
  * `headless-session.ts` and `bot-trainer/benchmark.ts` load this, through `#testing/project-game-options`,
  * and a compiler sees `project-game-options.d.ts` in its place (see
  * `project-test-utils.d.ts`).
@@ -8,21 +8,61 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { projectColorOptions as DeclaredColors, projectGameOptions as DeclaredOptions } from '#testing/project-game-options';
+import type {
+  presetStartOptions as DeclaredPreset,
+  projectColorOptions as DeclaredColors,
+  projectGameOptions as DeclaredOptions,
+} from '#testing/project-game-options';
 import type { GameOptionDefinition } from '../types/protocol.js';
-import { parseGameOptionList } from '../session/game-option-selection.js';
+import { parseGameOptionList, selectDesignerGameOptions } from '../session/game-option-selection.js';
 import { paletteGameOptions } from '../session/colors.js';
+import { seatDisplayName } from '../engine/element/seat-defaults.js';
+import { presetSeatSetup, resolveDevPlayerOptions, seatStartOptions } from '../cli/lib/player-options.js';
 
 /**
  * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
  * thousands of test games, and a file edited since (a watch-mode rerun) is parsed again.
  */
-const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition>; colorPalette: unknown }>();
+const parsed = new Map<
+  string,
+  { text: string; declared: Record<string, GameOptionDefinition>; playerOptions: unknown; colorPalette: unknown }
+>();
 
 export const projectGameOptions: typeof DeclaredOptions = () => projectDeclarations()?.declared;
 
 export const projectColorOptions: typeof DeclaredColors = (playerCount) =>
   paletteGameOptions(projectDeclarations()?.colorPalette, playerCount);
+
+export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) => {
+  const preset = gameDefinition.presets?.find((p) => p.name === name);
+  if (!preset) {
+    const known = (gameDefinition.presets ?? []).map((p) => p.name).join(', ');
+    throw new Error(`This game declares no preset "${name}"; ${known ? `its presets are ${known}` : 'it declares none'}.`);
+  }
+  const project = projectDeclarations();
+  // The same player options and palette `boardsmith dev` resolves, so a preset dev refuses is refused here.
+  const playerOptions = resolveDevPlayerOptions(gameDefinition, {
+    playerOptions: project?.playerOptions,
+    colorPalette: project?.colorPalette as Array<string | Record<string, unknown>> | undefined,
+  });
+  const palette = playerOptions.color.choices;
+  const seats = presetSeatSetup(preset, playerOptions, palette.map((c) => c.value));
+  if (!seats) {
+    throw new Error(
+      `Preset "${name}" sets up no seats, so it cannot say how to seat a game. ` +
+        'Give it players, or start the game with createTestGame(GameClass, { playerCount, ...preset.options }).',
+    );
+  }
+  return {
+    ...selectDesignerGameOptions(project?.declared, { ...preset.options }),
+    playerCount: seats.length,
+    ...seatStartOptions(
+      playerOptions,
+      seats.map((seat, index) => ({ ...seat, color: seat.color ?? palette[index]?.value, name: seatDisplayName(index + 1) })),
+      palette,
+    ),
+  };
+};
 
 function projectDeclarations() {
   const file = projectFile(process.cwd());
@@ -30,13 +70,18 @@ function projectDeclarations() {
   const text = readFileSync(file, 'utf-8');
   const cached = parsed.get(file);
   if (cached?.text === text) return cached;
-  let config: { gameOptions?: unknown; colorPalette?: unknown };
+  let config: { gameOptions?: unknown; playerOptions?: unknown; colorPalette?: unknown };
   try {
-    config = JSON.parse(text) as { gameOptions?: unknown; colorPalette?: unknown };
+    config = JSON.parse(text) as typeof config;
   } catch {
     throw new Error(`${file} is not valid JSON, so the game's options cannot be read from it. Fix the file.`);
   }
-  const declarations = { text, declared: parseGameOptionList(config.gameOptions), colorPalette: config.colorPalette };
+  const declarations = {
+    text,
+    declared: parseGameOptionList(config.gameOptions),
+    playerOptions: config.playerOptions,
+    colorPalette: config.colorPalette,
+  };
   parsed.set(file, declarations);
   return declarations;
 }

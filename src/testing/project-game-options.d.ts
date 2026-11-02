@@ -6,6 +6,7 @@
  * `#testing/project-game-options`.
  */
 import type { GameOptionDefinition } from '../types/protocol.js';
+import type { GameDefinition } from '../session/types.js';
 
 /**
  * The game options declared by the nearest `boardsmith.json` at or above the
@@ -28,3 +29,24 @@ export function projectGameOptions(): Record<string, GameOptionDefinition> | und
  * @throws As {@link projectGameOptions} does, and when the palette is not a list.
  */
 export function projectColorOptions(playerCount: number): { colors?: string[]; colorLabels?: Record<string, string> };
+
+/**
+ * The options `createTestGame` takes to start a game as `boardsmith dev
+ * --preset` and the dev lobby's preset picker start it (#1565): the preset's
+ * game options and each seat's player options, colour and bot, as the start op
+ * carries them (`playerOptions`, `exclusiveSeats`, `playerIsBot`,
+ * `playerConfigs`, `colors`). The player options and palette are the game's
+ * and the same `boardsmith.json`'s, as dev reads them.
+ *
+ * @example
+ * ```typescript
+ * const { game } = createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Dictator'));
+ * ```
+ *
+ * @throws When the game declares no preset `name`, when it sets up no seats,
+ * and when dev would refuse it.
+ */
+export function presetStartOptions(
+  gameDefinition: Pick<GameDefinition, 'presets' | 'playerOptions' | 'colorPalette'>,
+  name: string,
+): { playerCount: number } & Record<string, unknown>;
