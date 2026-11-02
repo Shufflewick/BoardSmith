@@ -1908,8 +1908,21 @@ export class ActionExecutor {
 
     const enabledChoices = this.getChoices(selection, player, args, actionName)
       .filter(c => c.disabled === false);
+    // A pick that takes several values answers with an array, so bind one as the player's would be.
+    const takesArray = answersWithList(selection);
+    const answers = enabledChoices.map(c => takesArray ? [c.value] : c.value);
+    // Nothing later declared a dependency on this step, so nothing later can be
+    // judged until the player answers it, and one answer makes it offerable.
+    const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+    if (answers.length > 0 && !hasDependent) return true;
 
-    if (enabledChoices.length === 0) {
+    // A list pick whose min is 0 can always be answered with nothing ticked (#1558).
+    const listContext = { game: this.game, player, args };
+    if ((resolveOrderedList(selection, listContext) ?? resolveMultiSelect(selection, listContext))?.min === 0) {
+      answers.push([]);
+    }
+
+    if (answers.length === 0) {
       // ONLY WHERE IT COULD SURPRISE ANYONE. A one-question verb is dropped
       // exactly when that question has no answer -- no deck, so no draw -- which
       // is ordinary play and is the whole of what its absence means. #270's
@@ -1930,18 +1943,12 @@ export class ActionExecutor {
       return false;
     }
 
-    // Nothing later declared a dependency on this step, so nothing later can be
-    // judged until the player answers it. The action is offerable.
-    if (!this.hasDependentSelection(selections, index + 1, selection.name)) {
-      return true;
-    }
+    if (!hasDependent) return true;
 
-    // A DECLARED dependency: re-ask the dependent step with each enabled answer
+    // A DECLARED dependency: re-ask the dependent step with each answer
     // bound, exactly as the player's own answer will.
-    // A pick that takes several values answers with an array, so bind one as the player's would be.
-    const takesArray = answersWithList(selection);
-    for (const choice of enabledChoices) {
-      const newArgs = { ...args, [selection.name]: takesArray ? [choice.value] : choice.value };
+    for (const answer of answers) {
+      const newArgs = { ...args, [selection.name]: answer };
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
         return true;
       }

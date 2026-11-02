@@ -97,30 +97,25 @@ function answerPick(
 
   if (selection.type === 'choice') {
     const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
-    if (choices.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
-    return {
-      success: true,
-      choices,
-      multiSelect: resolveMultiSelect(selection, ctx),
-      // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
-      // reason multiSelect is: a bound that reads an earlier selection's value
-      // is only knowable once that value is bound, and the static metadata was
-      // resolved with no arguments at all.
-      orderedList: resolveOrderedList(selection, ctx),
-      warnings: said(),
-    };
+    const multiSelect = resolveMultiSelect(selection, ctx);
+    // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
+    // reason multiSelect is: a bound that reads an earlier selection's value
+    // is only knowable once that value is bound, and the static metadata was
+    // resolved with no arguments at all.
+    const orderedList = resolveOrderedList(selection, ctx);
+    if (choices.length === 0 && !answersEmpty(selection, orderedList ?? multiSelect)) return deadEnd(action, selection, ctx);
+    return { success: true, choices, multiSelect, orderedList, warnings: said() };
   }
 
   const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings);
-  if (validElements.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
-  return {
-    success: true,
-    validElements,
-    multiSelect: selection.type === 'elements'
-      ? resolveMultiSelect(selection, ctx)
-      : undefined,
-    warnings: said(),
-  };
+  const multiSelect = selection.type === 'elements' ? resolveMultiSelect(selection, ctx) : undefined;
+  if (validElements.length === 0 && !answersEmpty(selection, multiSelect)) return deadEnd(action, selection, ctx);
+  return { success: true, validElements, multiSelect, warnings: said() };
+}
+
+/** Whether a pick with nothing to pick still has an answer: skipping an optional one, or [] for a min-0 list (#1558). */
+function answersEmpty(selection: Selection, listBounds: { min: number } | undefined): boolean {
+  return selection.optional === true || listBounds?.min === 0;
 }
 
 /**
