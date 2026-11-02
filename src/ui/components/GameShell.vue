@@ -1182,16 +1182,6 @@ function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
 }
 
-// Retry handler — wired from AutoUI → GameShell when the user clicks Retry
-// after the 8-second loading timeout (DEV-05). Asks the host to re-send the last
-// game_state, which covers the iframe mounting before the host sent its first.
-function handleRetry(): void {
-  window.parent.postMessage(
-    { source: 'shufflewick-game', type: 'request-state' },
-    '*'
-  );
-}
-
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
 
 // All writes go through announcer.announce() so every live-region write shares
@@ -1551,8 +1541,7 @@ defineExpose({
              dev switcher's selection. GameShell has no slot for the board — a second
              way to name the default UI would be a second thing to disagree
              with `src/ui/uis.ts`, and props drifted between the two paths for
-             real while both existed (the slot never received flow-state or
-             @retry). Games declare boards in defineGameUIs(); nothing else. -->
+             real while both existed (the slot never received flow-state). Games declare boards in defineGameUIs(); nothing else. -->
         <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
              DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
              always resolves its target (see the shellMounted declaration). -->
@@ -1572,7 +1561,6 @@ defineExpose({
           <component
             :is="selectedUiComponent"
             v-bind="boardProps"
-            @retry="handleRetry"
           />
         </BoardErrorBoundary>
         <!-- Only reachable if the registry's default entry resolved to no

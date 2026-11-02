@@ -107,10 +107,6 @@ const LOAD_TIMEOUT_MS = 8000;
 const loadTimedOut = ref(false);
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
 
-const emit = defineEmits<{
-  retry: [];
-}>();
-
 function armLoadTimer() {
   if (loadTimer !== null) clearTimeout(loadTimer);
   loadTimer = setTimeout(() => {
@@ -118,10 +114,11 @@ function armLoadTimer() {
   }, LOAD_TIMEOUT_MS);
 }
 
+// Asks the host to re-send the last game_state, which covers the iframe mounting before the host sent its first.
 function handleRetry() {
   loadTimedOut.value = false;
   armLoadTimer();
-  emit('retry');
+  window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
 }
 
 onMounted(() => {

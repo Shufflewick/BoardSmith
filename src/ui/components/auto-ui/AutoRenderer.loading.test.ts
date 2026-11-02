@@ -6,7 +6,8 @@
  *   1. When mounted with no gameView, the component renders a skeleton element
  *      (class "auto-renderer-skeleton") and does NOT render the old "Waiting…" text.
  *   2. The Retry button is hidden initially and becomes visible after the timeout elapses.
- *   3. Clicking Retry resets the timed-out state (retryVisible → false) and re-arms the timer.
+ *   3. Clicking Retry resets the timed-out state (retryVisible → false), re-arms the timer
+ *      and asks the host to re-send the game state.
  */
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
@@ -170,8 +171,9 @@ describe('AutoRenderer loading state — retry click', () => {
     expect(wrapper.find('.auto-renderer-retry').exists()).toBe(false);
   });
 
-  it('emits a "retry" event when the Retry button is clicked', async () => {
+  it('asks the host to re-send the game state when the Retry button is clicked', async () => {
     vi.useFakeTimers();
+    const post = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
     const wrapper = mountAutoRenderer(null);
 
     await vi.advanceTimersByTimeAsync(8001);
@@ -180,7 +182,8 @@ describe('AutoRenderer loading state — retry click', () => {
     const retryBtn = wrapper.find('.auto-renderer-retry button');
     await retryBtn.trigger('click');
 
-    expect(wrapper.emitted('retry')).toHaveLength(1);
+    expect(post).toHaveBeenCalledWith({ source: 'shufflewick-game', type: 'request-state' }, '*');
+    post.mockRestore();
   });
 
   it('re-arms the timer so retry affordance reappears after another 8s', async () => {

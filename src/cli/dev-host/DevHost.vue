@@ -428,7 +428,7 @@ function onWindowMessage(event: MessageEvent): void {
     });
     return;
   }
-  // Retry: GameShell's AutoUI retry button asks the host to re-send the
+  // Retry: the auto-UI's Retry button asks the host to re-send the
   // last cached state so the iframe can recover without a full reload.
   if (data.type === 'request-state') {
     if (lastInitSeat != null) postToGame({ type: 'init', seat: lastInitSeat, teachingDisabled: cfg.teachingDisabled === true });

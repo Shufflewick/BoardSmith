@@ -8,7 +8,7 @@
  * `board-props.test.ts`), so a prop added to a template and not to the type,
  * or the other way round, fails here.
  */
-import { describe, it, expect, expectTypeOf, afterEach } from 'vitest';
+import { describe, it, expect, expectTypeOf, afterEach, vi } from 'vitest';
 import { camelize, defineComponent, h, nextTick, useAttrs } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './world/WorldShell.vue';
@@ -56,10 +56,23 @@ const tableWithDebugPanel = () =>
   });
 
 describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
-  it('hands exactly the contract\'s props, and the retry listener', async () => {
+  it('hands exactly the contract\'s props, and no listener', async () => {
     const { wrapper } = await tableWithDebugPanel();
-    expect(propNames()).toEqual([...TABLE_BOARD_PROP_NAMES].sort());
-    expect(typeof received.onRetry).toBe('function');
+    expect(Object.keys(received).sort()).toEqual([...TABLE_BOARD_PROP_NAMES].sort());
+    wrapper.unmount();
+  });
+
+  it('mounts a multi-root board that declares exactly TableBoardProps without a Vue warning (#1553)', async () => {
+    const MultiRootBoard = defineComponent({
+      name: 'MultiRootBoard',
+      props: [...TABLE_BOARD_PROP_NAMES],
+      setup: () => () => [h('div', { class: 'table' }), h('div', { class: 'overlay' })],
+    });
+    const warn = vi.spyOn(console, 'warn');
+    const { wrapper } = await mountTableWithDebugPanel(MultiRootBoard);
+    expect(wrapper.find('.table').exists()).toBe(true);
+    expect(warn.mock.calls.filter(([message]) => String(message).includes('Extraneous'))).toEqual([]);
+    warn.mockRestore();
     wrapper.unmount();
   });
 

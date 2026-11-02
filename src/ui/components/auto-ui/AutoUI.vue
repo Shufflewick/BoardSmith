@@ -23,12 +23,6 @@ defineProps<{
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
 }>();
-
-// Forward retry events from AutoRenderer upward to GameShell, which owns
-// the connection and calls the real reconnect/refresh-state path.
-const emit = defineEmits<{
-  retry: [];
-}>();
 </script>
 
 <template>
@@ -39,7 +33,6 @@ const emit = defineEmits<{
       :game-view="gameView"
       :player-seat="playerSeat"
       :presentation="presentation"
-      @retry="emit('retry')"
     />
   </div>
 </template>
