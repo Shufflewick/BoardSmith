@@ -11,10 +11,7 @@
  * for and #276 was found through.
  *
  * `dev-host-typecheck.test.ts` uses it for the native-host modules.
- * `dice-typecheck.test.ts` uses it for `boardsmith/ui/dice`, twice: once with
- * the optional `three` peer installed and once without.
- * `ui-without-dice-typecheck.test.ts` uses it for an auto-UI game that never
- * imports `boardsmith/ui/dice`, compiled with every declared peer but `three`.
+ * `dice-typecheck.test.ts` uses it for `boardsmith/ui/dice`, with no peer installed.
  * `testing-typecheck.test.ts` uses it for a game's test importing
  * `boardsmith/testing`, compiled under the game's own tsconfig.
  * `aspect-boards-typecheck.test.ts` uses it for the `GameTable.vue` each aspect
@@ -112,8 +109,7 @@ interface ConsumerInstall {
   readonly entryPoints: readonly string[];
   /**
    * Packages the game installs ON TOP of our production closure, beyond the
-   * toolchain every game brings. An optional peer dependency belongs here: a
-   * gate proves BOTH the install that declared it and the install that did not.
+   * toolchain every game brings, such as the peers `declaredPeers()` lists.
    */
   readonly alsoInstalled?: readonly string[];
 }

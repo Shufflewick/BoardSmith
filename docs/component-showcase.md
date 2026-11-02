@@ -52,7 +52,7 @@ Auto-generated action UI from game metadata.
 ## Die3D
 
 3D dice with physics-based rolling animation. `Die3D` has its own entry point,
-`boardsmith/ui/dice`, so only a game that rolls dice installs `three`.
+`boardsmith/ui/dice`, so only a game that rolls dice ships `three` in its bundle.
 
 <!-- typecheck: board -->
 ```vue
