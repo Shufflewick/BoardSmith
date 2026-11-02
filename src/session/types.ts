@@ -124,7 +124,7 @@ export interface GameDefinition {
   /** Per-player configurable options */
   playerOptions?: Record<string, PlayerOptionDefinition>;
   /** Preset configurations for quick setup */
-  presets?: GamePreset[];
+  presets?: readonly GamePreset[];
   /**
    * Code-declared color palette for this game's seats, in the {id,hex,label}
    * shape `boardsmith validate` enforces on `boardsmith.json`'s `colorPalette`.
@@ -132,7 +132,7 @@ export interface GameDefinition {
    * `colorPalette`, else the engine's `DEFAULT_COLOR_PALETTE`, so
    * `boardsmith dev` refuses to start when this differs from that.
    */
-  colorPalette?: Array<{ id: string; hex: string; label: string }>;
+  colorPalette?: ReadonlyArray<{ id: string; hex: string; label: string }>;
   /**
    * Optional tutorial definition for this game.
    *
@@ -194,7 +194,7 @@ export interface StandardPlayerOption {
   description?: string;
   /** One of the choices' values. */
   default: string;
-  choices: Array<{ value: string; label: string }>;
+  choices: ReadonlyArray<{ value: string; label: string }>;
 }
 
 /**
@@ -243,7 +243,7 @@ export interface ExclusivePlayerOption {
   description?: string;
   /** Who holds the option at first, such as 'last'; the game reads it, so any string. */
   default: string;
-  choices: Array<{ value: string; label: string }>;
+  choices: ReadonlyArray<{ value: string; label: string }>;
 }
 
 /**

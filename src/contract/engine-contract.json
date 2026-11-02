@@ -2486,7 +2486,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "presetStartOptions takes an as-const gameDefinition: a game's presets and a preset's players are readonly types, so the scaffolded call typechecks with no cast (#1572)"
+      "summary": "presetStartOptions takes an as-const gameDefinition: a game's presets, a preset's players, its colorPalette and its player options' choices are readonly types, so the documented call typechecks with no cast (#1572)"
     }
   ]
 }

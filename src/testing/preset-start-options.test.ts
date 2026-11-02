@@ -125,7 +125,18 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
   it('takes an as-const gameDefinition, as boardsmith init scaffolds it (#1572)', () => {
     inProject();
     const scaffolded = {
-      ...def,
+      gameClass: RoleGame,
+      gameType: 'role',
+      minPlayers: 2,
+      maxPlayers: 3,
+      playerOptions: {
+        role: { type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+      },
+      colorPalette: [
+        { id: 'red', hex: '#E74C3C', label: 'Red' },
+        { id: 'blue', hex: '#3498DB', label: 'Blue' },
+        { id: 'green', hex: '#27AE60', label: 'Green' },
+      ],
       presets: [{ name: 'Play as Dictator', players: [{ playerOptions: { role: 'dictator' } }, { isBot: true }] }],
     } as const;
     expect(presetStartOptions(scaffolded, 'Play as Dictator').playerCount).toBe(2);

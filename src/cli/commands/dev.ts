@@ -288,7 +288,7 @@ export function parseGameOptionFlags(raw: string[] | undefined): Record<string, 
  * D13/DEVHOST-01: look up a preset by name (`--preset name`). Throws an Error
  * naming the unknown preset and the declared names.
  */
-export function resolvePreset(presets: GamePreset[] | undefined, name: string): GamePreset {
+export function resolvePreset(presets: readonly GamePreset[] | undefined, name: string): GamePreset {
   const preset = (presets ?? []).find((p) => p.name === name);
   if (!preset) {
     const known = (presets ?? []).map((p) => p.name).join(', ') || 'it declares none';
@@ -720,7 +720,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     // boardsmith.json's gameOptions, the one declaration (#701), which the
     // rules bundle carries on the definition.
     gameOptions = gameDefinition.declaredGameOptions;
-    const presets: GamePreset[] = gameDefinition.presets ?? [];
+    const presets: readonly GamePreset[] = gameDefinition.presets ?? [];
     // A preset is a shortcut a player picks, so one naming a designer-only or
     // undeclared option is refused here, at load, rather than when picked.
     assertPresetsSelectable(gameOptions, presets);

@@ -46,7 +46,7 @@ export interface DevHostConfig {
    * first time by the dev host. Lets a selector (Plan 03) render them and a
    * client apply one via the `configure` wire message.
    */
-  presets: GamePreset[];
+  presets: readonly GamePreset[];
   /** Color palette as {value,label} entries. */
   colorPalette: Array<{ value: string; label: string }>;
   /** URL the iframe loads to render the game UI (GameShell). */
