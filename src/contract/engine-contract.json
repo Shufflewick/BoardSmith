@@ -1,5 +1,5 @@
 {
-  "revision": 310,
+  "revision": 311,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2423,6 +2423,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Auto mode answers a list pick whose max is 0 with the empty list, fills no list pick with a lone choice its bounds refuse, and no longer reopens a sole action the server refused until a new state arrives (#1562)"
+    },
+    {
+      "revision": 311,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "MCTS lists a seat's moves in a simultaneous step against the game after its own earlier moves in the step, with only the other seats' picks hidden, so candidateMoves can read the seat's held follow-up (#1563)"
     }
   ]
 }
