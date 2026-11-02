@@ -135,6 +135,10 @@ export class PendingActionManager<G extends Game = Game> {
     actionName: string | undefined,
     initialArgs: Record<string, unknown> | undefined,
   ): PickStepResult {
+    if (pendingState && this.#restarts(pendingState, selectionName, actionName)) {
+      this.#dropPendingAction(playerPosition);
+      pendingState = undefined;
+    }
     // Auto-create pending action if it doesn't exist and actionName is provided
     if (!pendingState && actionName) {
       const startResult = this.startPendingAction(actionName, playerPosition);
@@ -210,6 +214,18 @@ export class PendingActionManager<G extends Game = Game> {
     if (!action || !pendingState.onSelectFired?.size) return false;
     this.#runner.game.getActionExecutor().fireOnCancelCallbacks(action, pendingState);
     return true;
+  }
+
+  /**
+   * Whether a step starts the seat's open action again: it names that action
+   * and a pick before the one the action is at. A client that lost track of
+   * the action (a page reload, another controller for the seat) sends that,
+   * and refusing it would leave the player no way to finish (#1556).
+   */
+  #restarts(pendingState: PendingActionState, selectionName: string, actionName: string | undefined): boolean {
+    if (actionName !== pendingState.actionName) return false;
+    const index = this.#runner.game.getAction(actionName)?.selections.findIndex((s) => s.name === selectionName) ?? -1;
+    return index >= 0 && index < pendingState.currentSelectionIndex;
   }
 
   /**
