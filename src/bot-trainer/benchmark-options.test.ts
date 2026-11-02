@@ -46,7 +46,7 @@ class PaletteGame extends Game<PaletteGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     for (const player of this.all(Player)) {
-      if (!palette.includes(player.color)) throw new Error(`Player colour ${player.color} is not in the palette`);
+      if (player.color === undefined || !palette.includes(player.color)) throw new Error(`Player colour ${player.color} is not in the palette`);
     }
     this.registerAction(Action.create<PaletteGame>('move').execute(() => ({ success: true })));
     this.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['move'] }) }) });
