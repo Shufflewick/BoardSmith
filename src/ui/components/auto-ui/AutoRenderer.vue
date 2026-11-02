@@ -19,7 +19,7 @@
 // MUST be imported before any component that uses resolveRenderer().
 import './builtin-renderers.js';
 
-import { computed, onMounted, onUnmounted, provide, ref, watch } from 'vue';
+import { computed, inject, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { PresentationOverlay } from './presentation.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { useFlyingElements } from '../../composables/useFlyingElements.js';
@@ -34,6 +34,7 @@ import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
 import type { GameElement } from './auto-ui-helpers.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
+import { REQUEST_HOST_STATE_KEY } from '../../composables/requestHostState.js';
 
 syncReducedMotionClass();
 
@@ -114,11 +115,12 @@ function armLoadTimer() {
   }, LOAD_TIMEOUT_MS);
 }
 
-// Asks the host to re-send the last game_state, which covers the iframe mounting before the host sent its first.
-function handleRetry() {
+const requestHostState = inject(REQUEST_HOST_STATE_KEY, null);
+
+function handleRetry(request: () => void) {
   loadTimedOut.value = false;
   armLoadTimer();
-  window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
+  request();
 }
 
 onMounted(() => {
@@ -177,7 +179,7 @@ useAutoRendererAnimations(animationEvents, { fly });
       </div>
       <div v-if="loadTimedOut" class="auto-renderer-retry">
         <p class="auto-renderer-retry__message">Still waiting for the game host&hellip;</p>
-        <button class="auto-renderer-retry__btn" type="button" @click="handleRetry">Retry</button>
+        <button v-if="requestHostState" class="auto-renderer-retry__btn" type="button" @click="handleRetry(requestHostState)">Retry</button>
       </div>
     </div>
 

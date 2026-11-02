@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick, provide } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
@@ -48,6 +48,7 @@ import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { seatDisplay } from '../seat-display.js';
+import { REQUEST_HOST_STATE_KEY } from '../composables/requestHostState.js';
 import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
@@ -1182,6 +1183,11 @@ function handleHighlightElement(elementId: number | null) {
   debugHighlightedElementId.value = elementId;
 }
 
+// The auto-UI's Retry, after its loading timeout: covers the iframe mounting before the host sent its first game_state.
+provide(REQUEST_HOST_STATE_KEY, () => {
+  window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
+});
+
 // ── Live-region watchers (immediate: false — never write to regions at mount) ─
 
 // All writes go through announcer.announce() so every live-region write shares
@@ -1541,7 +1547,8 @@ defineExpose({
              dev switcher's selection. GameShell has no slot for the board — a second
              way to name the default UI would be a second thing to disagree
              with `src/ui/uis.ts`, and props drifted between the two paths for
-             real while both existed (the slot never received flow-state). Games declare boards in defineGameUIs(); nothing else. -->
+             real while both existed (the slot never received flow-state).
+             Games declare boards in defineGameUIs(); nothing else. -->
         <!-- `shellMounted` gate: the game UI mounts one tick after GameShell's
              DOM is in the document, so a game's `<Teleport to="#bs-game-modal">`
              always resolves its target (see the shellMounted declaration). -->

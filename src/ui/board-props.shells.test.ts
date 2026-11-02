@@ -9,7 +9,7 @@
  * or the other way round, fails here.
  */
 import { describe, it, expect, expectTypeOf, afterEach, vi } from 'vitest';
-import { camelize, defineComponent, h, nextTick, useAttrs } from 'vue';
+import { camelize, defineComponent, h, inject, nextTick, useAttrs } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './world/WorldShell.vue';
 import { WORLD_HOST_SOURCE } from './world/worldProtocol.js';
@@ -24,15 +24,19 @@ import {
   mountTableWithDebugPanel,
 } from './components/GameShell.platform-mount.test-helper.js';
 import { TABLE_BOARD_PROP_NAMES, WORLD_BOARD_PROP_NAMES } from './board-props.test-helper.js';
+import { REQUEST_HOST_STATE_KEY } from './composables/requestHostState.js';
 
 /** What the board was last handed, by camelCase prop name. Listeners are kept apart. */
 let received: Record<string, unknown> = {};
+/** What the shell provides under REQUEST_HOST_STATE_KEY, read by the board. */
+let requestHostState: (() => void) | null = null;
 
 const AttrsBoard = defineComponent({
   name: 'AttrsBoard',
   inheritAttrs: false,
   setup() {
     const attrs = useAttrs();
+    requestHostState = inject(REQUEST_HOST_STATE_KEY, null);
     return () => {
       received = Object.fromEntries(Object.entries(attrs).map(([key, value]) => [camelize(key), value]));
       return h('div', { class: 'attrs-board' });
@@ -43,7 +47,9 @@ const AttrsBoard = defineComponent({
 const propNames = () => Object.keys(received).filter((key) => !/^on[A-Z]/.test(key)).sort();
 
 afterEach(() => {
+  vi.restoreAllMocks();
   received = {};
+  requestHostState = null;
   leaveIframe();
   document.body.innerHTML = '';
 });
@@ -62,6 +68,15 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
     wrapper.unmount();
   });
 
+  it('lets the auto-UI ask the host to re-send the game state, without a listener on the board (#1553)', async () => {
+    const { wrapper, posted } = await tableWithDebugPanel();
+    posted.length = 0;
+    expect(requestHostState).toBeTypeOf('function');
+    requestHostState?.();
+    expect(posted).toEqual([{ source: 'shufflewick-game', type: 'request-state' }]);
+    wrapper.unmount();
+  });
+
   it('mounts a multi-root board that declares exactly TableBoardProps without a Vue warning (#1553)', async () => {
     const MultiRootBoard = defineComponent({
       name: 'MultiRootBoard',
@@ -72,7 +87,6 @@ describe('GameShell binds TableBoardProps onto a table board (#516)', () => {
     const { wrapper } = await mountTableWithDebugPanel(MultiRootBoard);
     expect(wrapper.find('.table').exists()).toBe(true);
     expect(warn.mock.calls.filter(([message]) => String(message).includes('Extraneous'))).toEqual([]);
-    warn.mockRestore();
     wrapper.unmount();
   });
 
@@ -349,6 +363,8 @@ describe('WorldShell binds WorldBoardProps onto a world board (#516)', () => {
     expect(received.worldName).toBe('Gloamhall Rooms');
     expect(received.phase).toBe('watching');
     expect(received.availableActions).toEqual(['look']);
+    // A world host has no request-state, so the auto-UI offers no Retry there (#1553).
+    expect(requestHostState).toBeNull();
     wrapper.unmount();
   });
 });

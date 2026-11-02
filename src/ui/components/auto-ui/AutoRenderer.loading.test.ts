@@ -36,6 +36,8 @@ vi.mock('./useAutoRendererAnimations.js', () => ({
 
 // eslint-disable-next-line import/first -- must follow vi.mock calls
 import AutoRenderer from './AutoRenderer.vue';
+// eslint-disable-next-line import/first -- must follow vi.mock calls
+import { REQUEST_HOST_STATE_KEY } from '../../composables/requestHostState.js';
 
 // ---------------------------------------------------------------------------
 // Stub child components that are too expensive / require inject context
@@ -51,7 +53,7 @@ const stubs = {
 // ---------------------------------------------------------------------------
 // Minimal wrapper that provides the injection context AutoRenderer expects
 // ---------------------------------------------------------------------------
-function mountAutoRenderer(gameView: null | undefined = null) {
+function mountAutoRenderer(gameView: null | undefined = null, requestHostState: (() => void) | null = () => {}) {
   return mount(AutoRenderer, {
     props: {
       gameView,
@@ -62,6 +64,7 @@ function mountAutoRenderer(gameView: null | undefined = null) {
       // Provide required injection keys that child composables/components need
       provide: {
         animationEvents: undefined,
+        ...(requestHostState ? { [REQUEST_HOST_STATE_KEY as symbol]: requestHostState } : {}),
       },
     },
   });
@@ -171,10 +174,10 @@ describe('AutoRenderer loading state — retry click', () => {
     expect(wrapper.find('.auto-renderer-retry').exists()).toBe(false);
   });
 
-  it('asks the host to re-send the game state when the Retry button is clicked', async () => {
+  it('asks the shell to re-send the game state when the Retry button is clicked', async () => {
     vi.useFakeTimers();
-    const post = vi.spyOn(window.parent, 'postMessage').mockImplementation(() => {});
-    const wrapper = mountAutoRenderer(null);
+    const requestHostState = vi.fn();
+    const wrapper = mountAutoRenderer(null, requestHostState);
 
     await vi.advanceTimersByTimeAsync(8001);
     await flushPromises();
@@ -182,8 +185,18 @@ describe('AutoRenderer loading state — retry click', () => {
     const retryBtn = wrapper.find('.auto-renderer-retry button');
     await retryBtn.trigger('click');
 
-    expect(post).toHaveBeenCalledWith({ source: 'shufflewick-game', type: 'request-state' }, '*');
-    post.mockRestore();
+    expect(requestHostState).toHaveBeenCalledTimes(1);
+  });
+
+  it('offers no Retry button under a shell whose host cannot be asked (#1553)', async () => {
+    vi.useFakeTimers();
+    const wrapper = mountAutoRenderer(null, null);
+
+    await vi.advanceTimersByTimeAsync(8001);
+    await flushPromises();
+
+    expect(wrapper.find('.auto-renderer-retry').text()).toContain('Still waiting for the game host');
+    expect(wrapper.find('.auto-renderer-retry button').exists()).toBe(false);
   });
 
   it('re-arms the timer so retry affordance reappears after another 8s', async () => {
