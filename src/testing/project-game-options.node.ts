@@ -14,10 +14,11 @@ import type {
   projectGameOptions as DeclaredOptions,
 } from '#testing/project-game-options';
 import type { GameOptionDefinition } from '../types/protocol.js';
+import type { GamePreset } from '../session/types.js';
 import { assertPresetsSelectable, parseGameOptionList, selectDesignerGameOptions } from '../session/game-option-selection.js';
 import { paletteGameOptions } from '../session/colors.js';
 import { seatDisplayName } from '../engine/element/seat-defaults.js';
-import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, seatStartOptions } from '../cli/lib/player-options.js';
+import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, seatStartOptions, type SeatSetup } from '../cli/lib/player-options.js';
 
 /**
  * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
@@ -34,11 +35,7 @@ export const projectColorOptions: typeof DeclaredColors = (playerCount) =>
   paletteGameOptions(projectDeclarations()?.colorPalette, playerCount);
 
 export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) => {
-  const preset = gameDefinition.presets?.find((p) => p.name === name);
-  if (!preset) {
-    const known = (gameDefinition.presets ?? []).map((p) => p.name).join(', ');
-    throw new Error(`This game declares no preset "${name}"; ${known ? `its presets are ${known}` : 'it declares none'}.`);
-  }
+  const preset = findPreset(gameDefinition.presets, name);
   const project = projectDeclarations();
   assertPresetsSelectable(project?.declared, [preset]);
   // The same player options and palette `boardsmith dev` resolves, so a preset dev refuses is refused here.
@@ -48,21 +45,7 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
   });
   const palette = playerOptions.color.choices;
   const seats = presetSeatSetup(preset, playerOptions, palette.map((c) => c.value));
-  if (!seats) {
-    throw new Error(
-      `Preset "${name}" sets up no seats, so it cannot say how to seat a game. ` +
-        'Give it players, or start the game with createTestGame(GameClass, { playerCount, ...preset.options }).',
-    );
-  }
-  const { minPlayers, maxPlayers } = gameDefinition;
-  if (minPlayers === undefined || maxPlayers === undefined) {
-    throw new Error('This game declares no minPlayers and maxPlayers, so no table can seat it. Declare both in your gameDefinition.');
-  }
-  if (seats.length < minPlayers || seats.length > maxPlayers) {
-    throw new Error(
-      `Preset "${name}" sets up ${seats.length} seats, but this game seats ${minPlayers} to ${maxPlayers} players. Correct the preset.`,
-    );
-  }
+  assertSeatCount(name, seats, gameDefinition);
   return {
     ...selectDesignerGameOptions(project?.declared, { ...preset.options }),
     playerCount: seats.length,
@@ -78,6 +61,33 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
     ),
   };
 };
+
+function findPreset(presets: readonly GamePreset[] | undefined, name: string): GamePreset {
+  const preset = presets?.find((p) => p.name === name);
+  if (preset) return preset;
+  const known = (presets ?? []).map((p) => p.name).join(', ');
+  throw new Error(`This game declares no preset "${name}"; ${known ? `its presets are ${known}` : 'it declares none'}.`);
+}
+
+/** Throws unless a preset sets up seats, as many as the game takes. */
+function assertSeatCount(
+  name: string,
+  seats: SeatSetup[] | undefined,
+  { minPlayers, maxPlayers }: { minPlayers?: number; maxPlayers?: number },
+): asserts seats is SeatSetup[] {
+  if (seats === undefined) {
+    throw new Error(
+      `Preset "${name}" sets up no seats, so it cannot say how to seat a game. ` +
+        'Give it players, or start the game with createTestGame(GameClass, { playerCount, ...preset.options }).',
+    );
+  }
+  if (minPlayers === undefined || maxPlayers === undefined) {
+    throw new Error('This game declares no minPlayers and maxPlayers, so no table can seat it. Declare both in your gameDefinition.');
+  }
+  if (seats.length < minPlayers || seats.length > maxPlayers) {
+    throw new Error(`Preset "${name}" sets up ${seats.length} seats, but this game seats ${minPlayers} to ${maxPlayers} players. Correct the preset.`);
+  }
+}
 
 function projectDeclarations() {
   const file = projectFile(process.cwd());
