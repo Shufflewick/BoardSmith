@@ -167,6 +167,12 @@ enumeration of an action with a large or open-ended set of args. Moves are in
 wire form (element ids). Return only legal moves: the bot can choose any move
 it is given, so an illegal one can reach the engine as the bot's move.
 
+In a simultaneous step, once the search has made a move in it, the copy a seat's
+moves are listed against holds that seat's own moves in the step and none of the
+other seats' (#1563). So it never shows a seat the others' picks, and its
+`getFlowState()` holds the follow-up the seat's last move returned, which is how
+the hook reads that follow-up's args (`followUpForSeat(game.getFlowState(), seat)`).
+
 Return an empty list to say the seat waits (#1537). For the bot's own seat the
 bot makes no move now, and is not reported as stalled. The host asks it again
 when the game changes, or when the step clock says its moves have: a
