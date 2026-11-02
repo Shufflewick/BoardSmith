@@ -1044,7 +1044,7 @@ export class FlowEngine<G extends Game = Game> {
    * running action's settling makes that check, so the flow runs on once.
    *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
-   * @returns The flow's state when the refresh ended the step and ran the flow on.
+   * @returns The flow's state, once a refresh outside game code has re-checked `allDone`.
    */
   refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
@@ -1069,17 +1069,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
     if (this.game._ctx._changingDepth > 0) return;
-    const allDone = config.allDone
-      ? config.allDone(context)
-      : this.awaitingPlayers.every((p) => p.completed);
-    if (!allDone) {
-      this.warnIfDeadlockedSimultaneousStep(config);
-      return;
-    }
-    this.awaitingInput = false;
-    this.awaitingPlayers = [];
-    frame.completed = true;
-    return this.run();
+    return this.endSimultaneousStepIfAllDone(frame, config);
   }
 
   /**
@@ -1304,29 +1294,7 @@ export class FlowEngine<G extends Game = Game> {
       // This move can open or close what every other seat may do (#1551).
       this.rederiveSimultaneousSeats(frame, config, context, undefined, player.seat);
 
-      // Check if all players are done
-      const allDone = config.allDone
-        ? config.allDone(context)
-        : this.awaitingPlayers.every(p => p.completed);
-
-      if (allDone) {
-        // Clear awaiting state and complete the step.
-        this.awaitingInput = false;
-        this.awaitingPlayers = [];
-        frame.completed = true;
-        return this.run();
-      }
-
-      // F-06/SIM-03: allDone returned false. If NO seat can still act (every
-      // awaiting seat has already individually completed, or there are none),
-      // this step will not finalize on its own -- Option C keeps allDone
-      // authoritative, so it legitimately stays open, but this is exactly the
-      // shape of a silent permanent hang. Fail loud in dev so a genuine
-      // deadlock is visible instead of hanging forever.
-      this.warnIfDeadlockedSimultaneousStep(config);
-
-      // Still awaiting other players
-      return this.getState();
+      return this.endSimultaneousStepIfAllDone(frame, config);
     } catch (error) {
       if (error instanceof FlowHaltedError) throw error;
       throw new FlowHaltedError(error);
