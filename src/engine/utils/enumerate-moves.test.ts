@@ -848,11 +848,15 @@ describe('a min-0 pick with no enabled choice offers the empty pick, which perfo
           constructor(gameOptions: GameOptions) {
             super(gameOptions);
             // An earlier pick keeps the action offered, as a held follow-up is.
-            const first = Action.create<HireGame>('hire').chooseFrom('who', {
-              choices: ['x'],
-              ...(repeating ? { repeat: { until: () => true } } : {}),
-            });
-            this.registerAction(first.chooseFrom('picked', options).execute(() => ({ success: true })));
+            const hire = Action.create<HireGame>('hire');
+            const done = () => ({ success: true });
+            // The two firsts build different Action types, so each is finished in its own branch.
+            if (repeating) {
+              const first = hire.chooseFrom('who', { choices: ['x'], repeat: { until: () => true } });
+              this.registerAction(first.chooseFrom('picked', options).execute(done));
+            } else {
+              this.registerAction(hire.chooseFrom('who', { choices: ['x'] }).chooseFrom('picked', options).execute(done));
+            }
             this.setFlow({ root: actionStep({ actions: ['hire'] }) });
           }
         }
