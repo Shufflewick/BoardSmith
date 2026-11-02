@@ -606,7 +606,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
         { value: 'a', display: 'Card A' },
         { value: 'b', display: 'Card B' },
       ]),
-      multiSelectDraft: ref({ selectionName: 'cards', values: ['a'] }),
+      multiSelectDraft: ref({ selectionName: 'cards', values: ['a'], copies: [0] }),
       isMultiSelectSelected: (_name: string, value: unknown) => value === 'a',
     });
     const wrapper = mount(ActionPanel, {
@@ -639,7 +639,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
         { value: 'b', display: 'Card B' },
         { value: 'c', display: 'Card C' },
       ]),
-      multiSelectDraft: ref({ selectionName: 'cards', values: [] }),
+      multiSelectDraft: ref({ selectionName: 'cards', values: [], copies: [] }),
     });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
@@ -663,7 +663,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
         multiSelect: { min: 0, max: 3 },
       }),
       currentChoices: ref([]),
-      multiSelectDraft: ref({ selectionName: 'cards', values: [] }),
+      multiSelectDraft: ref({ selectionName: 'cards', values: [], copies: [] }),
       ...overrides,
     });
     return mount(ActionPanel, {
@@ -887,7 +887,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
 
   it('keeps the count and Done for a multi-select pick handed to the board', () => {
     const wrapper = mountSpacePick(spaces(50), { multiSelect: { min: 1, max: 3 } }, createBoardInteraction(), {
-      multiSelectDraft: ref({ selectionName: 'space', values: ['s1'] }),
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s1'], copies: [0] }),
     });
 
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
@@ -898,7 +898,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
 
   it('keeps the entries built so far and Done for an ordered list handed to the board', () => {
     const wrapper = mountSpacePick(spaces(50), { orderedList: { min: 1, max: 4 } }, createBoardInteraction(), {
-      multiSelectDraft: ref({ selectionName: 'space', values: ['s3', 's3'] }),
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s3', 's3'], copies: [0, 1] }),
     });
 
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
@@ -916,7 +916,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     const toggleMultiSelect = vi.fn(async () => {});
     const fill = vi.fn(async () => ({ valid: true }));
     const wrapper = mountSpacePick(spaces(3), { multiSelect: { min: 2, max: 2 } }, createBoardInteraction(), {
-      multiSelectDraft: ref({ selectionName: 'space', values: ['s0'] }),
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s0'], copies: [0] }),
       isMultiSelectSelected: (_name: string, value: unknown) => value === 's0',
       toggleMultiSelect,
       fill,
@@ -936,7 +936,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     const appendListEntry = vi.fn(async () => {});
     const fill = vi.fn(async () => ({ valid: true }));
     const wrapper = mountSpacePick(spaces(3), { orderedList: { min: 1, max: 3 } }, createBoardInteraction(), {
-      multiSelectDraft: ref({ selectionName: 'space', values: ['s2'] }),
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s2'], copies: [0] }),
       appendListEntry,
       fill,
     });
@@ -1075,7 +1075,7 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
   // #935: id refs are not split out as anchored, so the Add buttons must be hidden by the handoff itself.
   it('shows only the handoff, not every Add button, for an ordered list handed to the board', () => {
     const wrapper = mountPiecePick(pieces(50), { orderedList: { min: 1, max: 4 } }, {
-      multiSelectDraft: ref({ selectionName: 'piece', values: ['p3'] }),
+      multiSelectDraft: ref({ selectionName: 'piece', values: ['p3'], copies: [0] }),
     });
 
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);

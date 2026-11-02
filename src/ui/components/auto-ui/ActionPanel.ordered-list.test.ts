@@ -26,6 +26,9 @@ vi.mock('../../composables/useToast', () => ({
 }));
 
 /** The repair pick, with whatever entries the player has built so far. */
+/** Which repeat of its value each entry is, as the controller numbers an ordered list's draft. */
+const repeats = (values: unknown[]) => values.map((value, i) => values.slice(0, i).filter((v) => v === value).length);
+
 function mountRepair(
   values: unknown[],
   bounds: { min?: number; max?: number } = { min: 1, max: 3 },
@@ -44,7 +47,7 @@ function mountRepair(
       { value: 'university', display: 'University' },
       { value: 'shipyard', display: 'Shipyard' },
     ]),
-    multiSelectDraft: ref({ selectionName: 'buildings', values }),
+    multiSelectDraft: ref({ selectionName: 'buildings', values, copies: repeats(values) }),
     ...overrides,
   });
   const wrapper = mountPanel(
@@ -165,17 +168,15 @@ describe('ActionPanel ordered lists (#249)', () => {
    * has no `document.activeElement` for `focus()` to reach.
    */
   function mountLiveRepair(values: unknown[]) {
-    const draft = ref({ selectionName: 'buildings', values: [...values] });
+    const draft = ref({ selectionName: 'buildings', values: [...values], copies: repeats(values) });
     const { wrapper } = mountRepair(
       values,
       { min: 1, max: 4 },
       {
         multiSelectDraft: draft,
         removeListEntry: (_name: string, index: number) => {
-          draft.value = {
-            selectionName: 'buildings',
-            values: draft.value.values.filter((_, at) => at !== index),
-          };
+          const kept = draft.value.values.filter((_, at) => at !== index);
+          draft.value = { selectionName: 'buildings', values: kept, copies: repeats(kept) };
         },
       },
       { attachTo: document.body },

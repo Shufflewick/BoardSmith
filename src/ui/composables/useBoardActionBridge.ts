@@ -227,7 +227,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // The same module the Action Panel starts and executes through (#513), so a
   // board-started action and a panel-started one change the controller and the
   // board identically.
-  const { startAction, executeAction, setSelectionValue, toggleMultiSelectValue, appendListValue } = createActionMutators(
+  const { startAction, executeAction, setSelectionValue, toggleMultiSelectValue, appendListValue, updateMultiSelectBoardHighlights } = createActionMutators(
     controller,
     board,
     {
@@ -238,6 +238,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       actionMetadata: (name) => actionsWithMetadata.value.find(a => a.name === name),
     },
   );
+  // The draft also changes without a board or panel gesture, when a new list takes out a held copy (#1575).
+  watch([controller.multiSelectDraft, offeredChoices], ([draft]) => {
+    if (draft) updateMultiSelectBoardHighlights();
+  });
 
   // ── Auto-start single action ─────────────────────────────────────────────────
 

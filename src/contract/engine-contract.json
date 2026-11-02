@@ -1,5 +1,5 @@
 {
-  "revision": 320,
+  "revision": 321,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2503,6 +2503,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A multiSelect offering one value more than once ticks the copy the player clicked: the shared draft records which copy each entry is (multiSelectDraft.copies), and a toggleMultiSelect or isMultiSelectSelected call naming no copy means whichever copy is held (#1574)."
+    },
+    {
+      "revision": 321,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A multiSelect draft takes out a held copy the pick's list stops offering, or offers disabled, and says so in lastError, so the Action Panel, the board, the count and the submission always agree; multiSelectDraft.copies is now required, and an ordered list's draft numbers each repeat of a value (#1575)."
     }
   ]
 }
