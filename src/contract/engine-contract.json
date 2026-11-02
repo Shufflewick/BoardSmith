@@ -1,5 +1,5 @@
 {
-  "revision": 302,
+  "revision": 303,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2359,6 +2359,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The MCTS bot keeps a RAVE entry per seat and reads it from that seat's side, so an opponent's results for a move both seats can make (such as ending the turn) no longer steer the bot's own choice (#1554)."
+    },
+    {
+      "revision": 303,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "confirmMultiSelect now takes the selection name it confirms, and with nothing drafted answers a current min-0 multiSelect or ordered-list pick with [] instead of doing nothing (#1555)"
     }
   ]
 }
