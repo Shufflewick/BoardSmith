@@ -325,7 +325,7 @@ watch(actionBarCollapsed, async (down) => {
  */
 const actionBarEl = ref<HTMLElement | null>(null);
 const barClearance = ref(0);
-// Only the overlays that stop at the bar follow its height; board fitting and scroll layout never read it.
+// Only the overlays that stop at the bar, and focus scrolling, follow its height; board fitting and scroll layout never read it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
   const measure = () => { barClearance.value = bar.getBoundingClientRect().height; };
@@ -714,14 +714,16 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-max: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* The ONE exception to that cap: a typed editor (#229, #237). While one is
-     open the bar may grow past the strip and cover more of the board, and the
-     cap returns when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
+  /* The exceptions to that cap: a typed editor (#229, #237) and a multiSelect's
+     checkboxes (#1573). While one is open the bar may grow past the strip and
+     cover more of the board, and the cap returns when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
 
      A one-line or number field stacks label, hint and field + Done in three
      rows on a phone (#1058), and an earlier choice's chips or a prompt that
      wraps add more, so no fixed row count holds it: it may grow the bar to
-     what it needs, bounded by the screen (#1481). */
+     what it needs, bounded by the screen (#1481). A multiSelect's checkboxes
+     wrap to more rows than two on a phone, so they grow it the same way, unless
+     the board draws a candidate the grown bar would cover (#1573). */
 
   /* A multi-line box cannot be written in two rows, so it may grow the bar to
      what it needs: its box plus everything around it that must stay
@@ -909,8 +911,8 @@ const mobileToggleLabel = computed(() => {
   /* The row reserved for the bar (#1517, #1518). It changes only on the player's
      own toggle, so the fit, which reads this content box, never follows a pick. */
   padding-bottom: var(--bsg-panel-reserved);
-  /* WCAG 2.4.11: a control scrolled into view by focus lands above the floating bar. */
-  scroll-padding-bottom: var(--bsg-panel-max);
+  /* WCAG 2.4.11: a control scrolled into view by focus lands above the floating bar, grown or not. */
+  scroll-padding-bottom: max(var(--bsg-panel-max), var(--bsg-bar-clearance));
 }
 
 /* Scroll room after the board, so the player can scroll what the rows beyond the
@@ -974,9 +976,9 @@ const mobileToggleLabel = computed(() => {
   overflow-y: auto;
 }
 
-/* While a typed editor is open, and only then, the bar may grow past
-   the strip (see --bsg-panel-editor-max). Keyed on the
-   editor's own mark, so the exception lives exactly as long as the editor's DOM:
+/* While a typed editor or a multiSelect's checkboxes are open, and only then,
+   the bar may grow past the strip (see --bsg-panel-editor-max). Keyed on the
+   pick's own mark, so the exception lives exactly as long as the pick's DOM:
    submitting, cancelling or putting the bar down all unmount it and the strip
    cap is back. `max()` so a very short screen can never cap the bar below the
    strip itself. */
@@ -984,7 +986,7 @@ const mobileToggleLabel = computed(() => {
   max-height: max(var(--bsg-panel-max), var(--bsg-panel-editor-max));
 }
 
-.actionbar:has([data-bs-grows-panel="field"]) {
+.actionbar:has([data-bs-grows-panel="field"], [data-bs-grows-panel="choices"]) {
   max-height: max(var(--bsg-panel-max), 60dvh);
 }
 
