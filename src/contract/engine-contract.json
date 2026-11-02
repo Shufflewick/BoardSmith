@@ -1,6 +1,6 @@
 {
   "revision": 299,
-  "surfaceHash": "a24d9972a9426cda",
+  "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2331,10 +2331,10 @@
     {
       "revision": 299,
       "date": "2026-11-02",
-      "surfaceHash": "a24d9972a9426cda",
+      "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A simultaneousActionStep now works out every seat's offered actions again whenever any seat's action settles, as game.refreshAwaitingActions() does, not only the acting seat's (#1551): a seat is no longer offered an action another seat's move made unavailable (it was offered it, then refused with 'Action is not available'), and a seat another seat's move gave a legal action joins the awaiting set at once. A pending action already started is no longer refused for being missing from its seat's offer; its condition and stale-pick rules decide, as before, and a first pick whose condition fails is refused naming the condition. Platform: nothing to change. Published games need no rebuild."
+      "summary": "A simultaneousActionStep now works out every seat's offered actions again whenever any seat's action settles, as game.refreshAwaitingActions() does, not only the acting seat's (#1551): a seat is no longer offered an action another seat's move made unavailable (it was offered it, then refused with 'Action is not available'), and a seat another seat's move gave a legal action joins the awaiting set at once. A pending action already started need only be one the step still lists for its seat (Game.stepDeclaresAction, internal): its condition and stale-pick rules decide the rest, as before, and a first pick whose condition fails is refused naming the condition. Platform: nothing to change. Published games need no rebuild."
     }
   ]
 }

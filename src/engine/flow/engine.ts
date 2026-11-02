@@ -407,8 +407,7 @@ export class FlowEngine<G extends Game = Game> {
 
   /** The names a sequential action step offers `player`, from its declared list. */
   private offeredSequentialActions(config: ActionStepConfig<G>, context: FlowContext<G>, player: Player): string[] {
-    const declared = typeof config.actions === 'function' ? config.actions(context) : config.actions;
-    return this.offeredActions(declared, player, config.name ?? 'action-step');
+    return this.offeredActions(this.declaredSequentialActions(config, context), player, config.name ?? 'action-step');
   }
 
   /** The names a simultaneous step offers `player`, from its declared list. */
@@ -417,10 +416,40 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>,
     player: Player,
   ): string[] {
-    const declared = typeof config.actions === 'function'
-      ? config.actions(context, player as never)
-      : config.actions;
-    return this.offeredActions(declared, player, config.name ?? 'simultaneous-action-step');
+    return this.offeredActions(this.declaredSimultaneousActions(config, context, player), player, config.name ?? 'simultaneous-action-step');
+  }
+
+  private declaredSequentialActions(config: ActionStepConfig<G>, context: FlowContext<G>): string[] {
+    return typeof config.actions === 'function' ? config.actions(context) : config.actions;
+  }
+
+  private declaredSimultaneousActions(
+    config: SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    player: Player,
+  ): string[] {
+    return typeof config.actions === 'function' ? config.actions(context, player as never) : config.actions;
+  }
+
+  /**
+   * Whether the open step, awaiting `seat`, lists `actionName` for it, whether
+   * or not the seat can take it now: what a pending action already started
+   * must still be, once another seat's move has ended its condition or its
+   * choices and so dropped it from the seat's offer (#1551).
+   */
+  declaresAction(seat: number, actionName: string): boolean {
+    const frame = this.stack[this.stack.length - 1];
+    const player = this.game.getPlayer(seat);
+    if (!this.awaitingInput || !frame || !player) return false;
+    const context = this.createContext();
+    if (frame.node.type === 'action-step') {
+      return this.currentPlayer?.seat === seat
+        && this.declaredSequentialActions(frame.node.config as ActionStepConfig<G>, context).includes(actionName);
+    }
+    if (frame.node.type !== 'simultaneous-action-step') return false;
+    const config = frame.node.config as SimultaneousActionStepConfig<G>;
+    return this.awaitingPlayers.some((p) => p.playerIndex === seat && !p.completed)
+      && this.declaredSimultaneousActions(config, context, player).includes(actionName);
   }
 
   /** Move count for current action step with move limits */

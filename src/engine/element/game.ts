@@ -2504,6 +2504,16 @@ export class Game<
   }
 
   /**
+   * Whether the open step, awaiting `seat`, lists `actionName` for it, whether
+   * or not the seat can take it now. `GameRunner.refusalToPick` asks this at a
+   * later pick of a pending action (#1551).
+   * @internal
+   */
+  stepDeclaresAction(seat: number, actionName: string): boolean {
+    return this._flowEngine?.declaresAction(seat, actionName) ?? false;
+  }
+
+  /**
    * Get all registered action names
    */
   getActionNames(): string[] {
