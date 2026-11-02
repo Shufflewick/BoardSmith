@@ -51,7 +51,9 @@ shares the game's engine. Its options are described in
   A number is drawn from its `min` and `max`, so when the action's `validate`
   or the number's own refuses the move (a range that depends on other picks,
   #1543), the policy draws the whole move again, three draws in all, as the
-  smoke walk tries three numbers; an action that refuses all three has no move
+  smoke walk tries three numbers. A `multiSelect` set is drawn from its
+  enabled choices, so a set the action's `validate` refuses (a rule across its
+  items, #1559) is drawn again the same way. An action that refuses all three has no move
   this turn, and the refusal is the reason given if its seat has no other. A
   move refused for a pick the engine offered is played as drawn, so the game
   fails on it (#910).
