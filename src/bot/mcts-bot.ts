@@ -1249,10 +1249,9 @@ export class MCTSBot<G extends Game = Game> {
    */
   private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
     // Before the step's first move every seat's copy is the world itself.
-    const enumerationGame: G =
-      flowState.awaitingPlayers?.length && flowState.moveCount && this.simultaneousBaseline
-        ? this.simultaneousSeatGames.get(seat) ?? this.simultaneousBaseline
-        : game;
+    const enumerationGame: G = this.inPlayedSimultaneousStep(flowState)
+      ? this.simultaneousSeatGames.get(seat) ?? this.simultaneousBaseline!
+      : game;
     let listed: BotMove[] | undefined;
     const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
     if (!this.candidateMoves) return listMoves();
@@ -1334,9 +1333,14 @@ export class MCTSBot<G extends Game = Game> {
    * step, the copies are dropped so they can't leak into a later step.
    */
   private enterSimultaneousStep(flowState: FlowState): void {
-    if (flowState.awaitingPlayers?.length && this.simultaneousBaseline && flowState.moveCount) return;
+    if (this.inPlayedSimultaneousStep(flowState)) return;
     this.simultaneousBaseline = flowState.awaitingPlayers?.length ? this.cloneSearchGame(this.searchGame!) : undefined;
     this.simultaneousSeatGames.clear();
+  }
+
+  /** Whether `flowState` is a simultaneous step the search holds a baseline for and a move has been made in. */
+  private inPlayedSimultaneousStep(flowState: FlowState): boolean {
+    return Boolean(flowState.awaitingPlayers?.length && flowState.moveCount && this.simultaneousBaseline);
   }
 
   /**
@@ -1349,8 +1353,8 @@ export class MCTSBot<G extends Game = Game> {
    * refuse the seat's later moves listed against its copy.
    */
   private makeInSeatGame(move: BotMove, seat: number, flowState: FlowState, before: { randomState: string; sequence: number }): boolean {
-    if (!this.simultaneousBaseline || !flowState.awaitingPlayers?.length || !flowState.moveCount) return true;
-    const seatGame = this.simultaneousSeatGames.get(seat) ?? this.cloneSearchGame(this.simultaneousBaseline);
+    if (!this.inPlayedSimultaneousStep(flowState)) return true;
+    const seatGame = this.simultaneousSeatGames.get(seat) ?? this.cloneSearchGame(this.simultaneousBaseline!);
     this.simultaneousSeatGames.set(seat, seatGame);
     seatGame.setRandomState(before.randomState);
     seatGame._ctx.sequence = before.sequence;
