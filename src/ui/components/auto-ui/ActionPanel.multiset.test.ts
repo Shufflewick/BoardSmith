@@ -130,6 +130,22 @@ describe('a multiSelect pick offering one value more than once (#1561)', () => {
     expect(count(t)).toBe('Selected: 2/3');
   });
 
+  it('checks the copy clicked, not the first unchecked one, and the custom UI sees the same copies (#1574)', async () => {
+    const t = await table();
+    await clickBox(t, 2);
+    expect(boxes(t)).toEqual([['basic', false], ['basic', false], ['basic', true], ['m1', false], ['m2', false]]);
+
+    await clickBox(t, 0);
+    expect(boxes(t)).toEqual([['basic', true], ['basic', false], ['basic', true], ['m1', false], ['m2', false]]);
+    expect(count(t)).toBe('Selected: 2/3');
+    expect([0, 1, 2].map((copy) => t.controller.isMultiSelectSelected('allocations', 'basic', copy)))
+      .toEqual([true, false, true]);
+
+    await clickBox(t, 2);
+    expect(boxes(t)).toEqual([['basic', true], ['basic', false], ['basic', false], ['m1', false], ['m2', false]]);
+    expect(count(t)).toBe('Selected: 1/3');
+  });
+
   it('unchecks one copy when a checked copy is clicked', async () => {
     const t = await table();
     await clickBox(t, 0);

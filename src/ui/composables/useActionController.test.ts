@@ -2439,7 +2439,7 @@ describe('useActionController', () => {
       await controller.toggleMultiSelect('cards', 2);
 
       // Draft holds the in-progress values...
-      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [1, 2] });
+      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [1, 2], copies: [0, 0] });
       // ...but currentArgs stays undefined until confirm (MERC relies on this).
       expect(controller.currentArgs.value.cards).toBeUndefined();
       expect(controller.isReady.value).toBe(false);
@@ -2456,7 +2456,7 @@ describe('useActionController', () => {
       await controller.toggleMultiSelect('cards', 2);
       await controller.toggleMultiSelect('cards', 1); // remove 1
 
-      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [2] });
+      expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [2], copies: [0] });
     });
 
     it('respects max — additions beyond max are ignored', async () => {
