@@ -907,3 +907,44 @@ describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
     expect(start).not.toHaveBeenCalled();
   });
 });
+
+describe('useBoardActionBridge refused auto-fill (#1562)', () => {
+  const pick: EnrichedPickMetadata = { name: 'card', type: 'choice', prompt: 'Which?', choices: [{ value: 'x', display: 'X' }] };
+
+  /** The sole action, a one-choice pick the server refuses; the fourth send never settles, so a loop stops there. */
+  function refusedSoleAction() {
+    const sendAction = vi.fn().mockImplementation(async () =>
+      sendAction.mock.calls.length > 3 ? new Promise<never>(() => {}) : { success: false, error: 'Refused' });
+    const actionMetadata = ref({ play: { name: 'play', prompt: 'Play', selections: [pick] } });
+    const availableActions = ref(['play']);
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata,
+      isMyTurn: ref(true), autoFill: true, autoExecute: true,
+    });
+    useBoardActionBridge({
+      controller, boardInteraction: createBoardInteraction(), isMyTurn: ref(true), autoEndTurn: ref(true),
+      actionMetadata, availableActions, disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+    return { sendAction, controller, actionMetadata };
+  }
+
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+  it('sends a refused auto-filled action once, and leaves its pick open for the player', async () => {
+    const { sendAction, controller } = refusedSoleAction();
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(1);
+    expect(controller.currentAction.value).toBe('play');
+    expect(controller.currentArgs.value.card).toBeUndefined();
+  });
+
+  it('auto-fills the action again when it starts after a new state arrives', async () => {
+    const { sendAction, controller, actionMetadata } = refusedSoleAction();
+    await settle();
+    actionMetadata.value = { ...actionMetadata.value };
+    controller.cancel();
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(2);
+  });
+});

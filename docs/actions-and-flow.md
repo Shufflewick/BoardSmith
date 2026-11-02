@@ -1166,6 +1166,11 @@ The rules, in full:
 - Applies to a **non-optional** selection with exactly **one enabled** choice.
   Optional selections are never auto-filled (skipping is a real decision), and
   disabled choices don't count toward the one.
+- A list pick whose `max` is 0 (a `multiSelect` or ordered list that takes no
+  entries) is never filled with its one choice: its only answer is the empty
+  list, which the player gives with Done.
+- When the server refuses an action, its picks are not auto-filled again until
+  the next state arrives, so a refusal is never resent without the player.
 - Auto-fill cascades: filling one selection may leave the next with a single
   choice, which is filled in turn.
 - When everything is filled, auto-execute dispatches the action.

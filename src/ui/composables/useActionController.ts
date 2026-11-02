@@ -1043,7 +1043,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const choices = getChoices(selection);
     const enabledChoices = choices.filter(c => !c.disabled);
-    if (enabledChoices.length !== 1 || selection.optional) return false;
+    if (enabledChoices.length !== 1 || selection.optional || takesNoEntries(selection)) return false;
 
     const choice = enabledChoices[0];
     // A pick that takes a list is sent a list: the engine refuses a bare value for it.
@@ -1067,6 +1067,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!getAutoFill() || isExecuting.value || isViewingHistoryValue()) return true;
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
+    // Filling again what the server just refused would resend it with no player in the loop (#1562).
+    if (currentAction.value && refusedSinceState.has(currentAction.value)) return true;
 
     // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
     // selection for the player. Auto-filling a single enabled choice would flip
@@ -1635,6 +1637,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     [...fetchedStartCandidates.value].map(([action, { pick, elements }]) => [action, { pick, elements: enrichElementsList(elements) }]),
   ));
 
+  // Actions the server refused since the last state arrived; auto-fill leaves their picks to the player (#1562).
+  const refusedSinceState = new Set<string>();
+  watch([() => availableActions.value, () => actionMetadata.value], () => refusedSinceState.clear());
+
   // === Auto-fill Watch ===
   // When a pick changes, fetch choices if needed and auto-fill if only one choice
   // Also applies prefills when a pick becomes active
@@ -1913,6 +1919,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
       if (!result.success && sameSeat()) {
         setError(result.error || 'Action failed');
+        refusedSinceState.add(actionName);
       }
       resolveAction(actionName, seat, result);
 
@@ -2838,6 +2845,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return selection.type === 'elements'
       || resolveMultiSelectConfig(selection) !== undefined
       || resolveOrderedListConfig(selection) !== undefined;
+  }
+
+  /** True for a list pick whose max is 0: its only answer is the empty list, so it has no lone choice to fill. */
+  function takesNoEntries(selection: EnrichedPickMetadata): boolean {
+    return resolveMultiSelectConfig(selection)?.max === 0 || resolveOrderedListConfig(selection)?.max === 0;
   }
 
   /** A lone choice as the value its pick is sent: a one-item array for a list pick, else the choice itself. */
