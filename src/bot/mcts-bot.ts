@@ -792,20 +792,12 @@ export class MCTSBot<G extends Game = Game> {
       // RAVE blends into the value only; exploration stays whole so one unlucky sample cannot starve a move (#732)
       let value = exploitation;
       if (this.config.useRAVE !== false && child.parentMove) {
-        const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
+        const raveEntry = this.raveTable.get(this.raveKey(child.parentMove, node.currentPlayer));
         if (raveEntry && raveEntry.visits > 0) {
-          // RAVE value is already stored from correct perspective (move-maker's perspective)
-          // But here we need it from the parent's perspective (who made the move to this child)
-          // The move was made by node.currentPlayer, so:
-          // - If node.currentPlayer === this.playerIndex, RAVE value is from our perspective (use as-is)
-          // - If node.currentPlayer !== this.playerIndex, RAVE value is from opponent's perspective (flip it)
-          const raveValue = node.currentPlayer === this.playerIndex
-            ? raveEntry.value
-            : (1 - raveEntry.value);
-
+          // The entry is node.currentPlayer's, from their side, as the child's mean is (#1554)
           // Beta decreases as node visits increase (trust UCT more with more data)
           const beta = Math.sqrt(k / (3 * visits + k));
-          value = (1 - beta) * exploitation + beta * raveValue;
+          value = (1 - beta) * exploitation + beta * raveEntry.value;
         }
       }
       const score = value + exploration;
@@ -997,7 +989,7 @@ export class MCTSBot<G extends Game = Game> {
       // Combine tree moves and playout moves for RAVE update
       const allMoves = [...treeMoves, ...playoutMoves];
       for (const { move, player } of allMoves) {
-        const key = this.getMoveKey(move);
+        const key = this.raveKey(move, player);
 
         // RAVE value is from perspective of the player who made the move
         // If bot made the move: good result is good for RAVE
@@ -1188,6 +1180,11 @@ export class MCTSBot<G extends Game = Game> {
   // SECTION: Utility
   // Purpose: Helper methods for bot turn detection and position evaluation
   // ============================================================================
+
+  /** A move's RAVE key: one seat's move, so two seats that can make the same move never share an entry (#1554). */
+  private raveKey(move: BotMove, player: number): string {
+    return `${player}:${this.getMoveKey(move)}`;
+  }
 
   /**
    * Generate a unique key for a move (used for RAVE table lookup). An element,
