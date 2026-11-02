@@ -105,7 +105,7 @@ function assertClear(read) {
 await runBrowserRegression({ script: 'host-corner-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
-    const page = await browser.newPage({ viewport: VIEWPORTS[0] });
+    const page = await browser.newPage();
     const frame = await openTableSample(page, hostUrl);
 
     await check('the connection dot shows', async () => {
