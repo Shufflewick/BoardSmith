@@ -132,6 +132,11 @@ const STATIC_TOKENS = `
   --bsg-s5: 24px;
   --bsg-s6: 32px;
 
+  /* The game frame's top-right corner, left to the host's own control (#1548):
+     the shell draws none of its chrome in it at any width. */
+  --bsg-host-corner-width: 48px;
+  --bsg-host-corner-height: 32px;
+
   /* Fonts — family tokens only; @font-face loading is the host's responsibility */
   --bsg-font: 'Hanken Grotesk', system-ui, sans-serif;
   --bsg-display: 'Hanken Grotesk', system-ui, sans-serif;

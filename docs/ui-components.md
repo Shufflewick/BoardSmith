@@ -1870,6 +1870,20 @@ Common tokens (the full set lives in `src/ui/theme.ts`, the single source of tru
 | `--bsg-cell-size`, `--bsg-card-w` | Natural size of a grid cell edge and of a card's width (lengths, not colors) |
 | `--bsg-font`, `--bsg-display`, `--bsg-mono` | Font stacks |
 | `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
+| `--bsg-host-corner-width`, `--bsg-host-corner-height` | The frame's top-right corner left to the host page (below) |
+
+### The host's corner
+
+A host page that frames the game may draw its own control over the frame's
+top-right corner, as ShufflewickPub does with its menu tab. The shell leaves
+that corner, `--bsg-host-corner-width` by `--bsg-host-corner-height` (48 by
+32 px), free of its own chrome at every width: the phone strip of players ends
+before it, and the connection dot and the bot demo's narration sit below it. A
+host that keeps its control inside that box needs no other measurement of the
+shell. `scripts/host-corner-browser.mjs` holds the shell to it at 1440, 640, 639
+and 390 px wide and on a landscape phone, with the connection dot, the unread
+badge and a narration showing, and over a board scrolled down. The game's board is not moved, so a framed game keeps its own
+board controls out of that corner.
 
 ## Animation Events
 

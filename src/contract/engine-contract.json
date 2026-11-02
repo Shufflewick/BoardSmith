@@ -1,5 +1,5 @@
 {
-  "revision": 295,
+  "revision": 296,
   "surfaceHash": "6e90ef1902dcdb61",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2303,6 +2303,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith dev's bar gains Skip wait, which moves the host's time on to when an action the step clock greyed opens, and the smoke walk presses it for an action it still has to take (#1547)"
+    },
+    {
+      "revision": 296,
+      "date": "2026-11-02",
+      "surfaceHash": "6e90ef1902dcdb61",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The shell leaves the frame's top-right corner, --bsg-host-corner-width by --bsg-host-corner-height (48 by 32 px), free of its own chrome, so a host draws its own control there without copying the shell's offsets (#1548)"
     }
   ]
 }

@@ -219,7 +219,8 @@ withDefaults(
  */
 .bsg-board-message--narration {
   position: fixed;
-  top: var(--bsg-s3);
+  /* Below the host's corner (#1548). */
+  top: calc(var(--bsg-host-corner-height) + var(--bsg-s2));
   left: 0;
   right: 0;
   display: flex;
