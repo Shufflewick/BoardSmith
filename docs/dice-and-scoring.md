@@ -165,7 +165,7 @@ const randomIndex = Math.floor(game.random() * array.length);
 
 ## 3D Dice UI
 
-The `boardsmith/ui/dice` entry provides a WebGL-based 3D dice renderer that displays accurate polyhedral geometry with smooth roll animations. It draws with three.js, which BoardSmith installs for you; a game never declares `three` itself.
+The `boardsmith/ui/dice` entry provides a WebGL-based 3D dice renderer that displays accurate polyhedral geometry with smooth roll animations. It draws with three.js, which BoardSmith installs for you, so a game that only draws dice declares nothing for it. A game that also uses three.js directly declares the `three` range BoardSmith's `package.json` declares, so npm installs one copy and the bundle holds one three.js.
 
 Importing `boardsmith/ui/dice` is also what lets the auto-UI and the zoom preview draw a die. A game whose dice are drawn only by the auto-UI imports the entry once, in `src/ui/uis.ts`:
 

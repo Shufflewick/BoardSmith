@@ -1,5 +1,5 @@
 {
-  "revision": 322,
+  "revision": 323,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2519,6 +2519,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "An ordered-list draft takes out every entry of a value the pick's new list stops offering enabled, and says so; a draft entry named by shorthand is matched to the new list first"
+    },
+    {
+      "revision": 323,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "three and @types/three are regular dependencies of BoardSmith, so a game using boardsmith/ui/dice no longer installs them, and validate no longer prints the install hint (#1577)"
     }
   ]
 }
