@@ -76,6 +76,21 @@ describe('boardsmith verify: the smoke check', () => {
     }
   });
 
+  it.each(['ENOENT', 'ENOSPC'])('throws a copy failure (%s) of a file that is still there as it is, rather than leaving the file out (#1564)', async (code) => {
+    const dir = await smokeProject(false, { 'notes/rules.md': 'house rules\n' });
+    const rules = join(dir, 'notes', 'rules.md');
+    const copyFile = fsPromises.copyFile;
+    const spy = vi.spyOn(fsPromises, 'copyFile').mockImplementation(async (from, to, mode) => {
+      if (from === rules) throw Object.assign(new Error(`${code}: the copy could not be written`), { code });
+      return copyFile(from, to, mode);
+    });
+    try {
+      await expect(runSmoke({ projectDir: dir, log: quiet })).rejects.toThrow(`${code}: the copy could not be written`);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it("walks the world scaffold: the page attaches to a seat and takes the world's verb, with no error", async () => {
     const { dir, outcome } = await smokeOf(true);
 
