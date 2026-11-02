@@ -360,7 +360,7 @@
     },
     "src/runtime/runner.ts": {
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/session/move-summary.ts": {
