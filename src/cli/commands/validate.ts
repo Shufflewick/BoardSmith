@@ -43,7 +43,6 @@ import {
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
 import type { Game, GameElement, GameOptions } from '../../engine/index.js';
-import { missingThreePeerHint } from '../../ui/components/dice/three-peer.js';
 import { ENGINE_CONTRACT } from '../../contract/index.js';
 import { engineChangeHint } from '../lib/engine-changes.js';
 
@@ -657,11 +656,6 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
     shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`boardsmith typecheck\` for full output.`);
   }
 
-  // A game that imports `boardsmith/ui/dice` without installing the
-  // optional `three` peer fails INSIDE node_modules/boardsmith, which
-  // reads as our bug and tells the author nothing they can act on. The
-  // instruction goes first, above the compiler's own words (#276).
-  const threePeer = missingThreePeerHint(allErrors);
   // An API BoardSmith changed since the game's last build fails with only
   // the compiler's words; the contract history says what to write (#423).
   const builtRevision = lastBuiltEngineRevision(cwd);
@@ -675,7 +669,6 @@ export function typeScriptFailureDetails(cwd: string, allErrors: string[]): stri
           history: ENGINE_CONTRACT.history,
         });
   const details = [
-    ...(threePeer ? threePeer.split('\n').filter((line) => line.trim() !== '') : []),
     ...(engineChange ?? []),
     ...shown,
   ];

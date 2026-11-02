@@ -13,8 +13,8 @@ let warnedNoDiceSupport = false;
  * and forwards board interaction state.
  *
  * Die3D comes from the die registry, never from an import (#590). This file is
- * on every game's graph (GameShell offers the auto-UI), and Die3D needs three.js,
- * an optional peer only a dice game installs. Importing `boardsmith/ui/dice` is
+ * on every game's graph (GameShell offers the auto-UI), and Die3D pulls in
+ * three.js, which only a dice game should ship. Importing `boardsmith/ui/dice` is
  * what registers Die3D, so a game with dice elements in its auto-UI imports that
  * entry once, in `src/ui/uis.ts` or wherever it draws dice.
  */

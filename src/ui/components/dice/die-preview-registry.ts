@@ -23,8 +23,7 @@
  *
  * DieRenderer reads it for the same reason (#590): the auto-UI is reachable from
  * GameShell, so a direct import put three.js in every game's type-check and
- * build, and broke both for a game that never installed the optional peer. A
- * game whose dice only the auto-UI draws imports `boardsmith/ui/dice` once.
+ * build. A game whose dice only the auto-UI draws imports `boardsmith/ui/dice` once.
  */
 import type { Component } from 'vue';
 
@@ -36,7 +35,7 @@ let diePreviewComponent: Component | null = null;
  * string so the two cannot drift apart (#599). Completes a sentence.
  */
 export const ADD_DICE_SUPPORT_ADVICE =
-  "add `import 'boardsmith/ui/dice';` to src/ui/uis.ts and run `npm install three @types/three`: "
+  "add `import 'boardsmith/ui/dice';` to src/ui/uis.ts: "
   + 'that import registers the 3D die (and opts this game into shipping three.js).';
 
 /**
