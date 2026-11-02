@@ -721,7 +721,8 @@ const mobileToggleLabel = computed(() => {
      A one-line or number field stacks label, hint and field + Done in three
      rows on a phone (#1058), and an earlier choice's chips or a prompt that
      wraps add more, so no fixed row count holds it: it may grow the bar to
-     what it needs, bounded by the screen (#1481). */
+     what it needs, bounded by the screen (#1481). A multiSelect's checkboxes
+     wrap to more rows than two on a phone, so they grow it the same way (#1573). */
 
   /* A multi-line box cannot be written in two rows, so it may grow the bar to
      what it needs: its box plus everything around it that must stay
@@ -984,7 +985,7 @@ const mobileToggleLabel = computed(() => {
   max-height: max(var(--bsg-panel-max), var(--bsg-panel-editor-max));
 }
 
-.actionbar:has([data-bs-grows-panel="field"]) {
+.actionbar:has([data-bs-grows-panel="field"], [data-bs-grows-panel="choices"]) {
   max-height: max(var(--bsg-panel-max), 60dvh);
 }
 

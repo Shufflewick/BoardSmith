@@ -1379,17 +1379,19 @@ What follows for a custom board:
   screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
   lays itself out to fit them (at phone width it stacks the action's name over
   the chosen items and wraps the prompt beside its control), and on a step with
-  more than fits, it scrolls inside the cap. The one exception is a typed
-  editor (a text or number pick): while it is open the panel may grow past the
-  cap. A one-line or number field may grow it to what the field needs, bounded
-  at 60% of the screen's height: on a phone its label and hint stack above the
+  more than fits, it scrolls inside the cap. The exceptions are a typed
+  editor (a text or number pick) and a multiSelect's checkboxes: while one is
+  open the panel may grow past the cap. A multiSelect may grow it to show every
+  checkbox, bounded at 60% of the screen's height, and scrolls beyond that.
+  A one-line or number field may grow it to what the field needs, bounded at
+  60% of the screen's height: on a phone its label and hint stack above the
   field and submit, under any earlier choices, and a long prompt or a refusal
   message adds lines. A multi-line text box (`multiline: true`) may grow it to
   what the box needs, bounded at 60% of the screen's height: six lines of text
   plus the action, the field's label, the count and the submit. On a short
   screen the box gives way (down to a few lines) rather than the submit button
-  leaving the panel. The part of the board under an editor taller than the
-  cap cannot be scrolled into view until the editor closes.
+  leaving the panel. The part of the board under a panel grown past the
+  cap cannot be scrolled into view until the pick closes.
 
 Do **not** try to measure the Action Panel from a custom board, and do not size
 your board against a panel height. Keep anything the player must always see

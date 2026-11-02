@@ -1810,7 +1810,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons multi-select-choices">
+          <div class="choice-buttons multi-select-choices" data-bs-grows-panel="choices">
             <!-- The directive goes on the LABEL: it is the whole visible option, so
                  hovering anywhere on it reveals the reason, and its capture-phase
                  click guard also covers the checkbox nested inside it. The input
@@ -1939,7 +1939,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons multi-select-choices">
+          <div class="choice-buttons multi-select-choices" data-bs-grows-panel="choices">
             <!-- Directive on the label, aria-disabled on the control — see the
                  elements variant above for why they are split. -->
             <label
@@ -2077,7 +2077,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              a "box" grows to the ceiling its box is sized from, while a
              one-line "field" stacks label, hint and field + Done on a phone
              (#1058), under any chips and however the prompt wraps, and grows to
-             what it needs (#1481). The shell's bar reads the mark, so the
+             what it needs (#1481). A multiSelect's checkbox list grows the same
+             way as "choices" (#1573). The shell's bar reads the mark, so the
              exception ends when this unmounts. -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"

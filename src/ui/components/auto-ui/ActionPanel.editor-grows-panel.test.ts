@@ -23,11 +23,12 @@
  * applies no styles.
  */
 import { describe, it, expect } from 'vitest';
-import { nextTick } from 'vue';
+import { nextTick, ref } from 'vue';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { mountPanelAt, submitText } from './action-panel-editor.test-helper.js';
+import { mountPanel, stubActionController } from './action-panel-controller.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
@@ -36,6 +37,7 @@ import.meta.glob('../PlayShell.vue');
 const MARK = '[data-bs-grows-panel]';
 const BOX = '[data-bs-grows-panel="box"]';
 const FIELD = '[data-bs-grows-panel="field"]';
+const CHOICES = '[data-bs-grows-panel="choices"]';
 
 const setDescription: EnrichedActionMetadata = {
   name: 'setDescription',
@@ -75,6 +77,24 @@ describe('a typed editor may grow the panel past the strip, and only while it is
       expect(marked, action.name).toHaveLength(1);
       expect(marked[0]!.attributes('data-bs-grows-panel'), action.name).toBe('field');
       expect(marked[0]!.find('input').exists(), action.name).toBe(true);
+      wrapper.unmount();
+    }
+  });
+
+  it('marks a multiSelect checkbox list as choices, for a choice and an element pick (#1573)', () => {
+    // Eight checkboxes wrap to three rows at 390px under the prompt and count; the strip holds two.
+    for (const type of ['choice', 'elements']) {
+      const controller = stubActionController({
+        currentAction: ref('allocate'),
+        currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
+        currentChoices: ref([{ value: 'a', display: 'Adelheid' }, { value: 'g', display: 'Genesis' }]),
+        validElements: ref([{ id: 11, display: 'Adelheid' }, { id: 12, display: 'Genesis' }]),
+      });
+      const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true });
+      const marked = wrapper.findAll(MARK);
+      expect(marked, type).toHaveLength(1);
+      expect(marked[0]!.attributes('data-bs-grows-panel'), type).toBe('choices');
+      expect(marked[0]!.findAll('input[type="checkbox"]'), type).toHaveLength(2);
       wrapper.unmount();
     }
   });
@@ -126,10 +146,10 @@ describe("the shell's bar lifts its cap for a marked editor, and for nothing els
     );
   });
 
-  it('caps a bar holding a one-line or number field at the screen bound, never below the strip (#1481)', () => {
+  it('caps a bar holding a one-line or number field, or a multiSelect list, at the screen bound, never below the strip (#1481, #1573)', () => {
     // Not a fixed row count: an earlier choice's chips and a prompt that wraps
     // add rows, and a fixed ceiling put the field and its Done below the bar's edge.
-    expect(rule(`.actionbar:has(${FIELD})`)).toMatch(
+    expect(rule(`.actionbar:has(${FIELD}, ${CHOICES})`)).toMatch(
       /max-height:\s*max\(var\(--bsg-panel-max\),\s*60dvh\);/,
     );
     // No rule lifts the cap for an unvalued mark, which would give a field the box's ceiling.
