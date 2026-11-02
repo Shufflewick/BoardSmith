@@ -1,19 +1,11 @@
 /**
  * A seat that becomes eligible mid-step can be admitted (#28).
  *
- * `simultaneousActionStep` builds each awaiting seat's `availableActions` once,
- * at step entry, and re-derives it for exactly one seat afterwards: the seat
- * that just acted. `resumeSimultaneousAction` then gates every submission on
- * that frozen list. So a seat whose legal actions change for any reason OTHER
- * than its own action keeps a stale list for the rest of the step.
- *
- * The engine's two documented workarounds do not reach this: "keep the action
- * available" only works when the action CAN be legal from the moment the step
- * opens, and "re-enter the step" only helps at a step boundary. A change that
- * happens WHILE the step is open — a round boundary materialising a character
- * for a seat that was uninhabited when the step began — leaves that seat
- * present but frozen, which is the state the reporting game's rules forbid
- * outright.
+ * `simultaneousActionStep` works out every seat's `availableActions` at step
+ * entry and again whenever any seat's action settles (#1551), and gates every
+ * submission on that list. A change made OUTSIDE any action (a host, a test
+ * setting state directly) is seen by no settling, so the seat keeps a stale
+ * list until `refreshAwaitingActions()` works it out again.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { _clearShownWarnings } from '../utils/dev.js';
@@ -28,8 +20,8 @@ import {
 } from './index.js';
 
 /**
- * Seat 2 starts without a character, so only `create` is legal for it. Once it
- * has one, `act` becomes legal — a change driven by seat 1's action, not its own.
+ * Seat 2 starts without a character, so nothing is legal for it. Once it has
+ * one, `act` becomes legal: through seat 1's `grant`, or set from outside.
  */
 class LateArrivalGame extends Game<LateArrivalGame, Player> {
   hasCharacter: Record<number, boolean> = { 1: true, 2: false };
@@ -90,7 +82,7 @@ describe('without a refresh, a seat stays frozen at what it could do on entry', 
 describe('game.refreshAwaitingActions() admits a seat that became eligible', () => {
   it('adds the newly-eligible seat to the awaiting set', () => {
     const game = started();
-    game.continueFlow('grant', {}, 1);
+    game.hasCharacter[2] = true;
     expect(awaitingFor(game, 2)).toEqual([]);
 
     game.refreshAwaitingActions();
@@ -100,7 +92,7 @@ describe('game.refreshAwaitingActions() admits a seat that became eligible', () 
 
   it('lets that seat actually act, which is the point', () => {
     const game = started();
-    game.continueFlow('grant', {}, 1);
+    game.hasCharacter[2] = true;
     game.refreshAwaitingActions();
 
     const state = game.continueFlow('act', {}, 2);
@@ -110,16 +102,22 @@ describe('game.refreshAwaitingActions() admits a seat that became eligible', () 
 
   it('refuses that seat before the refresh, so the gate is real', () => {
     const game = started();
-    game.continueFlow('grant', {}, 1);
+    game.hasCharacter[2] = true;
 
     const state = game.continueFlow('act', {}, 2);
     expect(state.actionError).toMatch(/not available|not awaiting/i);
     expect(game.acted).not.toContain('act:2');
   });
 
-  it('can be scoped to one seat', () => {
+  it('is not needed when another seat\'s action made the seat eligible (#1551)', () => {
     const game = started();
     game.continueFlow('grant', {}, 1);
+    expect(awaitingFor(game, 2)).toContain('act');
+  });
+
+  it('can be scoped to one seat', () => {
+    const game = started();
+    game.hasCharacter[2] = true;
 
     game.refreshAwaitingActions(1);
     expect(awaitingFor(game, 2)).toEqual([]);

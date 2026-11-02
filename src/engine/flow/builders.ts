@@ -331,10 +331,13 @@ export function playerActions<G extends Game = Game>(config: {
  * `false` even with no eligible actor (the engine warns in dev, because that
  * state is indistinguishable from a deadlock).
  *
- * It is not a complete fix on its own, though — the awaiting set never grows
- * within one entry, so a seat outside it still cannot act (`resume` is rejected
- * with "Player N is not awaiting action"). `allDone` converts a silent wrong
- * answer into a visible stall. To let the seat actually act, either keep its
+ * Every seat's offer is worked out again whenever any seat's action settles
+ * (#1551), so a seat another seat's move gives a legal action joins the set,
+ * and one whose action another seat's move ended is no longer offered it. A
+ * change made outside any action admits nobody until
+ * `game.refreshAwaitingActions()` (`resume` for a seat outside the set is
+ * rejected with "Player N is not awaiting action"), so there `allDone` turns a
+ * silent wrong answer into a visible stall. To let the seat act, keep its
  * action AVAILABLE and enforce "not yet" via `playerDone` (preferred — the
  * participant list then matches the round's real membership), or re-enter the
  * step (e.g. inside a `loop`), which rebuilds the list.

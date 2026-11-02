@@ -243,15 +243,16 @@ describe('PendingActionManager on a runner, pick by pick', () => {
     expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'take:2', 'loot:1']);
   });
 
-  it('still refuses a seat that does not hold the follow-up, as before', async () => {
+  it('still refuses a seat that does not hold the follow-up', async () => {
     const r = runner();
     const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     picks.startPendingAction('loot', 2);
 
+    // Its condition is checked for every seat but the one holding the follow-up, and names why (#1551).
     expect(await picks.processSelectionStep(2, 'where', 'north')).toEqual({
       success: false,
-      error: "'loot' is not one of your actions right now.",
+      error: "'loot' is not available to you right now: 'only through scouting' does not hold.",
       errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
     });
   });
@@ -416,5 +417,80 @@ describe('stateless selectionStep op', () => {
     const step = await pick(first, first, 'loot', 'what', 'gold');
 
     expect(step).toMatchObject({ success: true, actionComplete: true });
+  });
+});
+
+/**
+ * Seat 2 is offered the two-pick `build`, and `rest` once it has rested
+ * nowhere else. Seat 1's `take` ends `build`'s condition, and `close` takes
+ * `build` off the step's list while its condition still holds.
+ */
+class OnlyBuildGame extends Game<OnlyBuildGame, Player> {
+  stoneInQuarry = true;
+  buildListed = true;
+  seat2MayRest = false;
+  ran: string[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<OnlyBuildGame>('build')
+        .condition({ 'the stone is still in the quarry': (ctx) => ctx.game.stoneInQuarry })
+        .chooseFrom('where', { choices: ['north', 'south'] })
+        .chooseFrom('what', { choices: ['wall', 'tower'] })
+        .execute((_a, ctx) => { ctx.game.ran.push(`build:${ctx.player.seat}`); }),
+      Action.create<OnlyBuildGame>('take')
+        .condition({ 'seat 1 only': (ctx) => ctx.player.seat === 1 })
+        .execute((_a, ctx) => { ctx.game.stoneInQuarry = false; }),
+      Action.create<OnlyBuildGame>('close')
+        .condition({ 'seat 1 only': (ctx) => ctx.player.seat === 1 })
+        .execute((_a, ctx) => { ctx.game.buildListed = false; }),
+      Action.create<OnlyBuildGame>('rest')
+        .condition({ 'seat 2 may rest': (ctx) => ctx.game.seat2MayRest })
+        .execute(() => {}),
+    );
+    this.setFlow({
+      root: loop({
+        maxIterations: 10,
+        do: simultaneousActionStep({
+          actions: (ctx, player) => (ctx.game.buildListed || player.seat === 1 ? ['build', 'take', 'close', 'rest'] : ['take', 'close', 'rest']),
+        }),
+      }),
+    });
+  }
+}
+
+describe('a later pick once the step no longer offers the action (#1551)', () => {
+  async function seat2PartwayThroughBuild() {
+    const r = new GameRunner({ GameClass: OnlyBuildGame, gameType: 'only-build', gameOptions: { playerCount: 2, seed: 'only-build' } });
+    r.start();
+    const picks = new PendingActionManager(r);
+    picks.startPendingAction('build', 2);
+    expect((await picks.processSelectionStep(2, 'where', 'north')).success).toBe(true);
+    return { r, picks };
+  }
+
+  it("names the condition another seat's move ended, though that move also dropped the seat from the step", async () => {
+    const { r, picks } = await seat2PartwayThroughBuild();
+    expect(r.performAction('take', 1, {}).success).toBe(true);
+
+    expect(await picks.processSelectionStep(2, 'what', 'wall')).toEqual({
+      success: false,
+      error: "'build' is no longer available to you: the game changed since your last choice, and 'the stone is still in the quarry' no longer holds.",
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+    });
+  });
+
+  it('refuses an action the step stopped listing for the seat while its condition still holds', async () => {
+    const { r, picks } = await seat2PartwayThroughBuild();
+    r.game.seat2MayRest = true;
+    expect(r.performAction('close', 1, {}).success).toBe(true);
+
+    expect(await picks.processSelectionStep(2, 'what', 'wall')).toEqual({
+      success: false,
+      error: "'build' is not one of your actions right now.",
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+    });
+    expect(r.game.ran).toEqual([]);
   });
 });

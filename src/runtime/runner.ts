@@ -263,6 +263,13 @@ function historyBefore(snapshot: GameStateSnapshot, actionIndex: number): Histor
   return snapshot.actionHistory.slice(0, actionIndex - base);
 }
 
+/** Why a seat may not take an action now, as a pick or a submission is answered. */
+type Refusal = { error: string; errorCode: ErrorCode };
+
+function refusalNotYourTurn(flowState: FlowState | undefined, seat: number): Refusal | undefined {
+  return canSeatAct(flowState, seat) ? undefined : { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
+}
+
 export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptions> {
   /** The game instance */
   readonly game: G;
@@ -1146,29 +1153,43 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * (`followUpForSeat`): that is how a chained action that the step does not
    * list is taken, and in a simultaneous step no other seat may take it.
    */
-  refusalToAct(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
+  refusalToAct(actionName: string, seat: number): Refusal | undefined {
+    const flowState = this.getFlowState();
+    return this.refusalToRun(actionName, flowState)
+      ?? refusalNotYourTurn(flowState, seat)
+      ?? this.refusalNotOffered(actionName, seat, flowState, false);
+  }
+
+  /** Why no seat may take `actionName` now (no such action, or no action is awaited), or `undefined`. */
+  private refusalToRun(actionName: string, flowState: FlowState | undefined): Refusal | undefined {
     if (!this.game.getAction(actionName)) {
       return { error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
-    const flowState = this.getFlowState();
     if (flowState?.complete || this.game.isFinished()) {
       return { error: 'The game is finished.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
     }
     if (!flowState?.awaitingInput) {
       return { error: 'The game is not waiting for any action right now.', errorCode: ErrorCode.NOT_AWAITING_INPUT };
     }
-    if (!canSeatAct(flowState, seat)) {
-      return { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
-    }
-    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
-      || followUpForSeat(flowState, seat)?.action === actionName;
-    if (!offered) {
-      return {
-        error: `'${actionName}' is not one of your actions right now.`,
-        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
-      };
-    }
     return undefined;
+  }
+
+  /**
+   * Why the flow does not offer `seat` the action, or `undefined`. An action
+   * already `started` needs only to be one the step lists for the seat: another
+   * seat's move that ends its condition or its choices drops it from the
+   * seat's offer (#1551), and `refusalToPick` and the stale picks say which of
+   * those refuse it.
+   */
+  private refusalNotOffered(actionName: string, seat: number, flowState: FlowState | undefined, started: boolean): Refusal | undefined {
+    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
+      || followUpForSeat(flowState, seat)?.action === actionName
+      || (started && this.game.stepDeclaresAction(seat, actionName));
+    if (offered) return undefined;
+    return {
+      error: `'${actionName}' is not one of your actions right now.`,
+      errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+    };
   }
 
   /**
@@ -1178,9 +1199,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `PendingActionManager` asks this before any pick is processed, then calls `markStalePicks`;
    * `takePick` calls `notePickTaken` after each pick that leaves the action open.
    *
-   * First, the flow must offer the action to the seat (`refusalToAct`). Then
-   * its `condition`, evaluated as hosts evaluate it to show the action (with
-   * no args), against the game as it stands (#493):
+   * The flow must await the seat and offer it the action (`refusalToAct`); at
+   * a later pick, the step need only list the action for the seat, since
+   * another seat's move that ends its condition or its choices drops it from
+   * the seat's offer (#1551), and the rules below and its stale picks (#767)
+   * say which of those refuse it. Its `condition` is evaluated as hosts
+   * evaluate it to show the action (with no args), against the game as it
+   * stands (#493):
    *
    * - At the first pick it must hold, as for a whole submission.
    * - At a later pick (the last one completes the action) the action is
@@ -1212,25 +1237,31 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     actionName: string,
     seat: number,
     pending: PendingActionState | undefined,
-  ): { error: string; errorCode: ErrorCode } | undefined {
-    const refusal = this.refusalToAct(actionName, seat);
-    if (refusal) return refusal;
+  ): Refusal | undefined {
+    const flowState = this.getFlowState();
+    const blocked = this.refusalToRun(actionName, flowState);
+    if (blocked) return blocked;
     const failed = this.failedConditionLabels(actionName, seat);
-    if (failed.length === 0) return undefined;
     const labels = failed.map((label) => `'${label}'`).join(' and ');
     if (pending?.conditionHeld === undefined) {
-      return {
-        error: `'${actionName}' is not available to you right now: ${labels} does not hold.`,
-        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
-      };
+      const notYourTurn = refusalNotYourTurn(flowState, seat);
+      if (notYourTurn) return notYourTurn;
+      if (failed.length > 0) {
+        return {
+          error: `'${actionName}' is not available to you right now: ${labels} does not hold.`,
+          errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+        };
+      }
+      return this.refusalNotOffered(actionName, seat, flowState, false);
     }
-    if (pending.conditionHeld) {
+    // Checked before the turn: the move that ended the condition can also have dropped the seat from the step (#1551).
+    if (failed.length > 0 && pending.conditionHeld) {
       return {
         error: `'${actionName}' is no longer available to you: the game changed since your last choice, and ${labels} no longer holds.`,
         errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
       };
     }
-    return undefined;
+    return refusalNotYourTurn(flowState, seat) ?? this.refusalNotOffered(actionName, seat, flowState, true);
   }
 
   /**

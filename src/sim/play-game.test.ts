@@ -9,6 +9,8 @@ import {
   eachPlayer,
   actionStep,
   simultaneousActionStep,
+  sequence,
+  execute,
   type GameOptions,
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
@@ -559,3 +561,45 @@ describe('playGame with policies (#556)', () => {
     ).rejects.toThrow(`A timeout of ${String(timeout)} ms cannot bound a game: give a number of milliseconds above 0.`);
   });
 });
+
+/** One shared token: each seat acts once, the first takes it, and the game ends. */
+class OneTokenGame extends Game<OneTokenGame, Player> {
+  tokens = 1;
+  acted: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<OneTokenGame>('take')
+        .condition({ 'a token is left': () => this.tokens > 0 })
+        .execute((_args, ctx) => { this.tokens--; this.acted.push(ctx.player.seat); }),
+      Action.create<OneTokenGame>('pass').execute((_args, ctx) => { this.acted.push(ctx.player.seat); }),
+    );
+    this.setFlow({
+      root: sequence(
+        simultaneousActionStep({
+          name: 'round',
+          actions: ['take', 'pass'],
+          playerDone: (ctx, player) => ctx.game.acted.includes(player.seat),
+        }),
+        execute<OneTokenGame>((ctx) => ctx.game.finish([])),
+      ),
+    });
+  }
+}
+
+describe('playGame in a simultaneous step (#1551)', () => {
+  it('never offers a seat an action another seat has just made unavailable', async () => {
+    // Picks from the offer alone, as the random policy does, without checking it is legal.
+    const takeWhenOffered: Policy = {
+      name: 'take-when-offered',
+      choose: ({ actions }) => ({ action: actions.includes('take') ? 'take' : 'pass', args: {} }),
+    };
+    const result = await playGame(
+      { gameClass: OneTokenGame, gameType: 'one-token', minPlayers: 2, maxPlayers: 2 },
+      { playerCount: 2, seed: 'token', policies: [takeWhenOffered, takeWhenOffered], maxActions: 10 },
+    );
+    expect(result).toMatchObject({ completed: true, stuck: false });
+  });
+});
+

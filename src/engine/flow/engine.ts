@@ -407,8 +407,7 @@ export class FlowEngine<G extends Game = Game> {
 
   /** The names a sequential action step offers `player`, from its declared list. */
   private offeredSequentialActions(config: ActionStepConfig<G>, context: FlowContext<G>, player: Player): string[] {
-    const declared = typeof config.actions === 'function' ? config.actions(context) : config.actions;
-    return this.offeredActions(declared, player, config.name ?? 'action-step');
+    return this.offeredActions(this.declaredSequentialActions(config, context), player, config.name ?? 'action-step');
   }
 
   /** The names a simultaneous step offers `player`, from its declared list. */
@@ -417,10 +416,40 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>,
     player: Player,
   ): string[] {
-    const declared = typeof config.actions === 'function'
-      ? config.actions(context, player as never)
-      : config.actions;
-    return this.offeredActions(declared, player, config.name ?? 'simultaneous-action-step');
+    return this.offeredActions(this.declaredSimultaneousActions(config, context, player), player, config.name ?? 'simultaneous-action-step');
+  }
+
+  private declaredSequentialActions(config: ActionStepConfig<G>, context: FlowContext<G>): string[] {
+    return typeof config.actions === 'function' ? config.actions(context) : config.actions;
+  }
+
+  private declaredSimultaneousActions(
+    config: SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    player: Player,
+  ): string[] {
+    return typeof config.actions === 'function' ? config.actions(context, player as never) : config.actions;
+  }
+
+  /**
+   * Whether the open step, awaiting `seat`, lists `actionName` for it, whether
+   * or not the seat can take it now: what a pending action already started
+   * must still be, once another seat's move has ended its condition or its
+   * choices and so dropped it from the seat's offer (#1551).
+   */
+  declaresAction(seat: number, actionName: string): boolean {
+    const frame = this.stack[this.stack.length - 1];
+    const player = this.game.getPlayer(seat);
+    if (!this.awaitingInput || !frame || !player) return false;
+    const context = this.createContext();
+    if (frame.node.type === 'action-step') {
+      return this.currentPlayer?.seat === seat
+        && this.declaredSequentialActions(frame.node.config as ActionStepConfig<G>, context).includes(actionName);
+    }
+    if (frame.node.type !== 'simultaneous-action-step') return false;
+    const config = frame.node.config as SimultaneousActionStepConfig<G>;
+    return this.awaitingPlayers.some((p) => p.playerIndex === seat && !p.completed)
+      && this.declaredSimultaneousActions(config, context, player).includes(actionName);
   }
 
   /** Move count for current action step with move limits */
@@ -983,15 +1012,10 @@ export class FlowEngine<G extends Game = Game> {
    * Re-derive the awaiting set of the OPEN simultaneous step, admitting seats
    * that have become eligible since it opened (#28).
    *
-   * `simultaneousActionStep` builds each seat's `availableActions` once at step
-   * entry and re-derives it for exactly one seat afterwards — the seat that just
-   * acted — and every submission is gated on that list. A seat whose legal
-   * actions change for any OTHER reason therefore keeps a stale list for the
-   * rest of the step. The engine's two documented workarounds do not reach that
-   * case: keeping the action available only works when it CAN be legal from the
-   * moment the step opens, and re-entering the step only helps at a boundary.
-   * A seat that gains its first legal action mid-step was left present but
-   * frozen, unable to act until the next entry.
+   * `simultaneousActionStep` builds each seat's `availableActions` at step
+   * entry and works every seat's out again whenever an action settles (#1551),
+   * and every submission is gated on that list. A seat whose legal actions a
+   * change OUTSIDE any action alters keeps a stale list until this is called.
    *
    * The set can now GROW, which is the part that was impossible: a seat absent
    * from it because it had nothing to do is admitted the moment it does. It can
@@ -1020,7 +1044,7 @@ export class FlowEngine<G extends Game = Game> {
    * running action's settling makes that check, so the flow runs on once.
    *
    * @param seat - Refresh only this seat. Omit to refresh every seat.
-   * @returns The flow's state when the refresh ended the step and ran the flow on.
+   * @returns The flow's state, once a refresh outside game code has re-checked `allDone`.
    */
   refreshAwaitingActions(seat?: number): FlowState | undefined {
     // A complete flow prompts no seat, so there is nothing to admit.
@@ -1040,15 +1064,33 @@ export class FlowEngine<G extends Game = Game> {
       );
     }
 
+    // The seat whose action is running is settled by that action, by the same rules (#973).
+    this.rederiveSimultaneousSeats(frame, config, context, seat, this.game._ctx._actingSeat);
+
+    // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
+    if (this.game._ctx._changingDepth > 0) return;
+    return this.endSimultaneousStepIfAllDone(frame, config);
+  }
+
+  /**
+   * Work out again which seats the open simultaneous step awaits and what each
+   * is offered, for `seat` or every seat, leaving `exceptSeat` alone: admit a
+   * seat that can now act, drop one that cannot, never touch a completed one.
+   */
+  private rederiveSimultaneousSeats(
+    frame: ExecutionFrame<G>,
+    config: SimultaneousActionStepConfig,
+    context: FlowContext<G>,
+    seat: number | undefined,
+    exceptSeat: number | undefined,
+  ): void {
     const admissible = config.players
       ? new Set(config.players(context).map((p) => p.seat))
       : undefined;
 
-    for (const player of players) {
+    for (const player of this.game.players as Player[]) {
       if (seat !== undefined && player.seat !== seat) continue;
-
-      // The seat whose action is running is settled by that action, by the same rules (#973).
-      if (player.seat === this.game._ctx._actingSeat) continue;
+      if (player.seat === exceptSeat) continue;
       const existing = this.awaitingPlayers.find((p) => p.playerIndex === player.seat);
       // A seat that already committed this step stays committed. Re-deriving
       // its list would be the one change a refresh must never make.
@@ -1078,20 +1120,6 @@ export class FlowEngine<G extends Game = Game> {
         });
       }
     }
-
-    // Inside game code (an action, a pick's onEach) the action's settling re-checks allDone and runs the flow once.
-    if (this.game._ctx._changingDepth > 0) return;
-    const allDone = config.allDone
-      ? config.allDone(context)
-      : this.awaitingPlayers.every((p) => p.completed);
-    if (!allDone) {
-      this.warnIfDeadlockedSimultaneousStep(config);
-      return;
-    }
-    this.awaitingInput = false;
-    this.awaitingPlayers = [];
-    frame.completed = true;
-    return this.run();
   }
 
   /**
@@ -1263,30 +1291,10 @@ export class FlowEngine<G extends Game = Game> {
 
       const context = this.createContext();
       this.reevaluateSimultaneousSeat(frame, config, playerState, player, context);
+      // This move can open or close what every other seat may do (#1551).
+      this.rederiveSimultaneousSeats(frame, config, context, undefined, player.seat);
 
-      // Check if all players are done
-      const allDone = config.allDone
-        ? config.allDone(context)
-        : this.awaitingPlayers.every(p => p.completed);
-
-      if (allDone) {
-        // Clear awaiting state and complete the step.
-        this.awaitingInput = false;
-        this.awaitingPlayers = [];
-        frame.completed = true;
-        return this.run();
-      }
-
-      // F-06/SIM-03: allDone returned false. If NO seat can still act (every
-      // awaiting seat has already individually completed, or there are none),
-      // this step will not finalize on its own -- Option C keeps allDone
-      // authoritative, so it legitimately stays open, but this is exactly the
-      // shape of a silent permanent hang. Fail loud in dev so a genuine
-      // deadlock is visible instead of hanging forever.
-      this.warnIfDeadlockedSimultaneousStep(config);
-
-      // Still awaiting other players
-      return this.getState();
+      return this.endSimultaneousStepIfAllDone(frame, config);
     } catch (error) {
       if (error instanceof FlowHaltedError) throw error;
       throw new FlowHaltedError(error);

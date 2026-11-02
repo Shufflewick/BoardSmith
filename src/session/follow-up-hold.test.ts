@@ -117,7 +117,8 @@ function raidClass(shape: Shape, decline: boolean, timed = false): typeof RaidGa
 }
 
 const gameOptions = { playerCount: 3, seed: 'follow-up-hold' };
-const NOT_YOURS = "'loot' is not one of your actions right now.";
+// Another seat's follow-up is refused by its own condition, which names why (#1551).
+const NOT_YOURS = "'loot' is not available to you right now: 'only as a follow-up' does not hold.";
 
 function runner(shape: Shape, decline = false): GameRunner<RaidGame> {
   const r = new GameRunner({ GameClass: raidClass(shape, decline), gameType: 'raid', gameOptions });
