@@ -564,6 +564,15 @@ markers this page documents, so it keeps up with any game without knowing it:
   do: more `steps`, a `seed` whose deal lets a player take it, a second seat in
   a world, or `unreachable` with the reason (#472). One it saw ready to take and
   never took is reported as offered and not taken.
+- An action greyed by the step clock (`game.stepOpenFor(ms)` in `disabled`)
+  opens on the host's clock, and the walk acts far quicker than a player waits.
+  So when the panel greys an action the walk still has to take and the dev bar
+  shows **Skip wait** (the host will offer the actions again before the step
+  closes), the walk presses it before taking anything else, and the host moves
+  its time on to that instant (#1547). The host does not say which greyed
+  action its clock holds, so the walk waits whatever greys the one it needs, as
+  a player would; each skip moves to a later instant before the deadline. Whether
+  the walk takes such an action does not depend on how fast the machine runs it.
 - It prints each step as it goes (`smoke step 4: pressing "6S" for "play"`), so
   `boardsmith smoke` shows exactly what the walk did, and the same seeds print
   the same steps.

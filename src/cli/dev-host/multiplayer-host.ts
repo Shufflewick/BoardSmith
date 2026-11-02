@@ -138,6 +138,12 @@ export type HostOutbound =
        * #302). The page counts down with `serverNow` and its own `receivedAt`.
        */
       deadlineAt: number | null;
+      /**
+       * Host clock, epoch ms, when an offer the step clock greyed goes out of
+       * date before the step closes (#1536), or null when none does. The dev
+       * bar shows "Skip wait" while it is set (#1547).
+       */
+      reofferAt: number | null;
       /** Host clock, epoch ms, when this frame was sent. */
       serverNow: number;
       /**
@@ -191,6 +197,11 @@ export type ClientInbound =
    * exactly as its window elapsing would.
    */
   | { type: 'fireDeadline' }
+  /**
+   * The dev bar's "Skip wait" (#1547): move the host's time on to when an
+   * action the step clock greyed opens, and offer the actions again then.
+   */
+  | { type: 'skipWait' }
   /**
    * D13/DEVHOST-01: a pre-start (lobby) gameOption/preset selection. Either
    * or both fields may be present; a `preset` applies its whole options
@@ -375,6 +386,11 @@ interface StepWindow {
   deadlineAt: number | null;
 }
 
+/** When the open window's next re-offer comes before its deadline, else null: the instant "Skip wait" moves to. */
+function skipTo({ deadlineAt, boundary: { reofferAt } }: StepWindow): number | null {
+  return deadlineAt !== null && reofferAt !== undefined && reofferAt < deadlineAt ? reofferAt : null;
+}
+
 /**
  * How this dev host reaches its store.
  *
@@ -532,6 +548,8 @@ export class MultiplayerHost {
   /** How many games this run has started, which numbers each game's session key. */
   private gamesStarted = 0;
   private readonly clock: WorldHostClock;
+  /** How far the dev bar's "Skip wait" has moved this game's time ahead of the host's clock (#1547); a new game starts on the clock. */
+  private skippedMs = 0;
   /** The open step's window, or null before the first broadcast of a session. */
   private window: StepWindow | null = null;
   /**
@@ -743,6 +761,8 @@ export class MultiplayerHost {
         return this.handleSetPlayerOptions(clientId, msg.playerOptions);
       case 'fireDeadline':
         return this.handleFireDeadline(clientId);
+      case 'skipWait':
+        return this.handleSkipWait(clientId);
     }
   }
 
@@ -1411,6 +1431,7 @@ export class MultiplayerHost {
     // with it: the new game arms its own from its first broadcast.
     this.disarm();
     this.window = null;
+    this.skippedMs = 0;
     this.session?.dispose();
     // A disposed session answers moves with success and no new state (#1042).
     this.session = null;
@@ -1497,7 +1518,7 @@ export class MultiplayerHost {
         // action traces, flow state, rewind, deck edits) run is decided per op
         // by `debugOn()`, the same answer the session gets below. Each op is
         // stamped with the clock step windows run on (#1532).
-        { ...hostOptions, debug: this.debugOn(), now: this.clock.now() },
+        { ...hostOptions, debug: this.debugOn(), now: this.now() },
       );
       if (op.type === 'start' && !raw.success) startFailure = raw;
       // A read-only op on a finished game reports the end state; it ended nothing (#1179).
@@ -1638,7 +1659,7 @@ export class MultiplayerHost {
       const carried = await rules.carry(
         { playerCount: this.opts.playerCount },
         snapshot,
-        { teachingDisabled: this.opts.teachingDisabled, now: this.clock.now() },
+        { teachingDisabled: this.opts.teachingDisabled, now: this.now() },
       );
       return carried;
     });
@@ -1803,7 +1824,8 @@ export class MultiplayerHost {
       winners: meta.winners,
       isDraw: meta.isDraw,
       deadlineAt: this.window?.deadlineAt ?? null,
-      serverNow: this.clock.now(),
+      reofferAt: this.window === null ? null : skipTo(this.window),
+      serverNow: this.now(),
       seed: this.dealtFrom,
     };
   }
@@ -1838,7 +1860,7 @@ export class MultiplayerHost {
     const window: StepWindow = {
       session,
       boundary,
-      deadlineAt: limit === undefined ? null : this.clock.now() + limit,
+      deadlineAt: limit === undefined ? null : this.now() + limit,
     };
     this.window = window;
     this.armWindow(window);
@@ -1850,14 +1872,15 @@ export class MultiplayerHost {
    * before the deadline, else the deadline.
    */
   private armWindow(window: StepWindow): void {
-    const { deadlineAt, boundary: { reofferAt } } = window;
+    const { deadlineAt } = window;
+    const reofferAt = skipTo(window);
     if (deadlineAt === null) this.disarm();
-    else if (reofferAt === undefined || reofferAt >= deadlineAt) this.armDeadline(window, deadlineAt);
-    else this.clock.arm(Math.max(0, reofferAt - this.clock.now()), () => void this.reoffer(window, deadlineAt));
+    else if (reofferAt === null) this.armDeadline(window, deadlineAt);
+    else this.clock.arm(Math.max(0, reofferAt - this.now()), () => void this.reoffer(window, deadlineAt));
   }
 
   private armDeadline(window: StepWindow, deadlineAt: number): void {
-    this.clock.arm(Math.max(0, deadlineAt - this.clock.now()), () => void this.closeWindow(window));
+    this.clock.arm(Math.max(0, deadlineAt - this.now()), () => void this.closeWindow(window));
   }
 
   /**
@@ -1885,6 +1908,31 @@ export class MultiplayerHost {
         'Each seat sees them as they were until the next move.',
     );
     this.armDeadline(window, deadlineAt);
+  }
+
+  /** The host's time: its clock, plus the waits the dev bar skipped. */
+  private now(): number {
+    return this.clock.now() + this.skippedMs;
+  }
+
+  /**
+   * The dev bar's "Skip wait" (#1547): move this host's time on to the instant
+   * an offer the step clock greyed goes out of date, and offer again now, as
+   * if the wait had passed. The deadline stays where it was, so it comes as
+   * much sooner as the time skipped.
+   */
+  private async handleSkipWait(clientId: string): Promise<void> {
+    const open = this.window;
+    const at = open === null ? null : skipTo(open);
+    if (open === null || at === null) {
+      this.send(clientId, {
+        type: 'error',
+        message: 'No greyed action is waiting on the step clock right now, so there is no wait to skip.',
+      });
+      return;
+    }
+    this.skippedMs += Math.max(0, at - this.now());
+    await this.reoffer(open, open.deadlineAt!);
   }
 
   private disarm(): void {

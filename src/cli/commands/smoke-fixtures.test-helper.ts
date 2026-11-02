@@ -2091,3 +2091,74 @@ function spin() {
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }
+
+/** Why the playback game greys out `levelUp` while the round's battle plays back. */
+export const PLAYBACK_REASON = 'Buying waits until the battle playback ends.';
+
+/**
+ * THE PLAYBACK GAME (#1547): Windup Warfare's step clock. Each seat's turn is a step open for an
+ * hour, and `levelUp` is greyed by `game.stepOpenFor` for its first ten minutes, while `ready` ends
+ * the turn at once. A walk that never waits for the step clock takes `ready` every turn and never
+ * sees `levelUp` enabled.
+ */
+export function playbackGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  levelUps = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('levelUp')
+      .prompt('Level up')
+      .disabled(() => !game.stepOpenFor(600_000) && ${JSON.stringify(PLAYBACK_REASON)})
+      .execute(() => {
+        game.levelUps += 1;
+        return { success: true };
+      }),
+    Action.create('ready')
+      .prompt('Ready')
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(_game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      maxIterations: 100,
+      do: eachPlayer({ do: actionStep({ name: 'turn', actions: ['levelUp', 'ready'], timeLimitMs: 3_600_000 }) }),
+    }),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the playback game', () => {
+  it('starts with no level-ups', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).levelUps).toBe(0);
+  });
+});
+`,
+  };
+}

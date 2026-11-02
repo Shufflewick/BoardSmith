@@ -2353,8 +2353,11 @@ actionStep({
   that still has not moved. If the game refuses the idle action, or
   the idle action does not move the round on, the terminal and every browser
   show an error saying so. **End step** in the Dev bar closes the open step
-  straight away, so you do not have to wait out a long window. New game, and
-  applying lobby options, clear the timer.
+  straight away, so you do not have to wait out a long window. **Skip wait**,
+  shown while an action the step clock greyed will open before the deadline,
+  moves the dev host's time on to that instant and offers the actions again,
+  so you do not wait out a playback either; the deadline comes as much sooner
+  (#1547). New game, and applying lobby options, clear the timer.
 
 See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
 section 5 for who enforces what.
