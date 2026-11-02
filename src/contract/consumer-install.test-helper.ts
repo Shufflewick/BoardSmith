@@ -13,7 +13,7 @@
  * `dev-host-typecheck.test.ts` uses it for the native-host modules.
  * `dice-typecheck.test.ts` uses it for `boardsmith/ui/dice`, with no peer installed.
  * `testing-typecheck.test.ts` uses it for a game's test importing
- * `boardsmith/testing`, compiled under the game's own tsconfig.
+ * `boardsmith/testing`, compiled under the game's own tsconfig, with no peer installed.
  * `aspect-boards-typecheck.test.ts` uses it for the `GameTable.vue` each aspect
  * template teaches, compiled under the game's own tsconfig.
  * `docs-game-typecheck.test.ts` uses it for the game code the docs mark for
@@ -96,7 +96,7 @@ function transitiveClosure(names: readonly string[]): string[] {
   return [...found];
 }
 
-/** Everything `package.json` asks a consumer to install beside us, optional peers included. */
+/** Everything `package.json` asks a consumer to install beside us: its peer dependencies. */
 export function declaredPeers(): string[] {
   const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
     peerDependencies?: Record<string, string>;
