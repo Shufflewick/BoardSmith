@@ -270,7 +270,7 @@ export interface MultiplayerHostOptions {
    * if it declares `players`, resizes the seat map to that count (see
    * `handleConfigure`).
    */
-  presets?: GamePreset[];
+  presets?: readonly GamePreset[];
   /**
    * Each seat as the run's `--preset` sets it up, the `--bot` and
    * `--bot-level` flags already over it (#1544). Its bot seats replace
