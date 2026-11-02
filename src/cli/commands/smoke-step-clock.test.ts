@@ -15,6 +15,6 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome.summary).toMatch(/a seated player took "levelUp", "ready"/);
     expect(outcome.passed).toBe(true);
-    expect(steps.some((line) => line.endsWith('skipping the wait for "levelUp"'))).toBe(true);
+    expect(steps.some((line) => line.endsWith('skipping the step clock\'s wait, with "levelUp" still to take and greyed'))).toBe(true);
   });
 });

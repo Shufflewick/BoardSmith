@@ -548,7 +548,7 @@ export class MultiplayerHost {
   /** How many games this run has started, which numbers each game's session key. */
   private gamesStarted = 0;
   private readonly clock: WorldHostClock;
-  /** How far the dev bar's "Skip wait" has moved this host's time ahead of its clock (#1547). */
+  /** How far the dev bar's "Skip wait" has moved this game's time ahead of the host's clock (#1547); a new game starts on the clock. */
   private skippedMs = 0;
   /** The open step's window, or null before the first broadcast of a session. */
   private window: StepWindow | null = null;
@@ -1431,6 +1431,7 @@ export class MultiplayerHost {
     // with it: the new game arms its own from its first broadcast.
     this.disarm();
     this.window = null;
+    this.skippedMs = 0;
     this.session?.dispose();
     // A disposed session answers moves with success and no new state (#1042).
     this.session = null;
