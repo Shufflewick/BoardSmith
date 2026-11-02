@@ -1911,8 +1911,13 @@ export class ActionExecutor {
     // A pick that takes several values answers with an array, so bind one as the player's would be.
     const takesArray = answersWithList(selection);
     const answers = enabledChoices.map(c => takesArray ? [c.value] : c.value);
-    const listContext = { game: this.game, player, args };
+    // Nothing later declared a dependency on this step, so nothing later can be
+    // judged until the player answers it, and one answer makes it offerable.
+    const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
+    if (answers.length > 0 && !hasDependent) return true;
+
     // A list pick whose min is 0 can always be answered with nothing ticked (#1558).
+    const listContext = { game: this.game, player, args };
     if ((resolveOrderedList(selection, listContext) ?? resolveMultiSelect(selection, listContext))?.min === 0) {
       answers.push([]);
     }
@@ -1938,11 +1943,7 @@ export class ActionExecutor {
       return false;
     }
 
-    // Nothing later declared a dependency on this step, so nothing later can be
-    // judged until the player answers it. The action is offerable.
-    if (!this.hasDependentSelection(selections, index + 1, selection.name)) {
-      return true;
-    }
+    if (!hasDependent) return true;
 
     // A DECLARED dependency: re-ask the dependent step with each answer
     // bound, exactly as the player's own answer will.
