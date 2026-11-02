@@ -645,8 +645,9 @@ export interface UseActionControllerReturn {
   toggleMultiSelect: (selectionName: string, value: unknown) => Promise<void>;
   /**
    * Confirm the in-progress multiSelect draft — the only place currentArgs receives
-   * the multiSelect array (via the existing fill() path). Returns the fill result, or
-   * void if there is no draft.
+   * the multiSelect array (via the existing fill() path). With no draft it fills the
+   * current list pick with `[]`. Returns the fill result, or void if there is no draft
+   * and the current pick does not take a list.
    */
   confirmMultiSelect: () => Promise<PickValidationResult | void>;
   /** Whether a value is currently in the multiSelect draft for the given selection. */

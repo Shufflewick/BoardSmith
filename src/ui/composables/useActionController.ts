@@ -2980,7 +2980,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   async function confirmMultiSelect(): Promise<PickValidationResult | void> {
     const draft = multiSelectDraft.value;
-    if (!draft) return;
+    if (!draft) {
+      // Nothing ticked yet is the empty answer, the same as ticking and unticking first (#1555).
+      const pick = currentPick.value;
+      if (pick && selectionTakesList(pick)) return await fill(pick.name, []);
+      return;
+    }
 
     const { selectionName, values } = draft;
     multiSelectDraft.value = null;

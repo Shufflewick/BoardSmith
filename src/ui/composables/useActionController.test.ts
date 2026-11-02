@@ -2500,6 +2500,46 @@ describe('useActionController', () => {
       expect(controller.isReady.value).toBe(true);
     });
 
+    it('confirmMultiSelect with nothing ticked answers a min-0 pick with the empty set (#1555)', async () => {
+      actionMetadata.value = {
+        ...createTestMetadata(),
+        hire: {
+          name: 'hire',
+          prompt: 'Hire',
+          selections: [
+            {
+              name: 'picks',
+              type: 'choice',
+              prompt: 'Hire up to 3',
+              multiSelect: { min: 0, max: 3 },
+              choices: [
+                { value: 'a', display: 'A' },
+                { value: 'b', display: 'B' },
+                { value: 'c', display: 'C' },
+              ],
+            },
+            {
+              name: 'after',
+              type: 'choice',
+              prompt: 'Then',
+              choices: [{ value: 'x', display: 'X' }, { value: 'y', display: 'Y' }],
+            },
+          ],
+        },
+      };
+      availableActions.value = [...(availableActions.value ?? []), 'hire'];
+      const controller = useActionController({
+        sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, autoFill: false,
+      });
+      await controller.start('hire');
+
+      const result = await controller.confirmMultiSelect();
+
+      expect(result).toEqual({ valid: true });
+      expect(controller.currentArgs.value.picks).toEqual([]);
+      expect(controller.currentPick.value?.name).toBe('after');
+    });
+
     it('min === max auto-confirms: fills currentArgs and the action becomes ready', async () => {
       // Local action with an exact-count (min === max) multiSelect.
       actionMetadata.value = {

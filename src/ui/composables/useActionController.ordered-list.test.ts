@@ -145,6 +145,17 @@ describe('useActionController ordered lists (#249)', () => {
     );
   });
 
+  it('confirms an EMPTY list on a min-0 pick before any entry is appended (#1555)', async () => {
+    actionMetadata.value!.repair.selections[0].orderedList = { min: 0, max: 3 };
+    const controller = newController();
+    await controller.start('repair');
+
+    await controller.confirmMultiSelect();
+
+    expect(controller.currentArgs.value.buildings).toEqual([]);
+    expect(controller.isReady.value).toBe(true);
+  });
+
   it('REFUSES a scalar through fill(), the way a multiSelect pick does', async () => {
     const controller = newController();
     await controller.start('repair');
