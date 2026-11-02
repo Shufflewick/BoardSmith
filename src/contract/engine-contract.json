@@ -1,5 +1,5 @@
 {
-  "revision": 308,
+  "revision": 309,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2407,6 +2407,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "createHeadlessSession and the bot benchmark seat players in boardsmith.json's colorPalette, as createTestGame does (#1560)"
+    },
+    {
+      "revision": 309,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A multiSelect pick takes a value once per entry that offers it: the Action Panel draws one checkbox per entry, toggleMultiSelect and isMultiSelectSelected take the copy, and a copy the game disabled is refused while an enabled copy of the same value is taken (#1561)"
     }
   ]
 }

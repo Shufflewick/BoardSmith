@@ -899,9 +899,9 @@ export class ActionExecutor {
    * identifies (by valuesEqual, or by smart resolution for raw IDs / display
    * strings) has already been claimed by an earlier item.
    *
-   * Items matching no choice at all are ignored here — the per-item
-   * validation loop already rejects them with a clear "Invalid selection"
-   * error.
+   * Items matching no choice at all, or only disabled ones, are ignored
+   * here — the per-item validation loop already rejects them. A disabled
+   * copy is a slot no item may claim (#1561).
    */
   private hasDuplicateChoiceItems(items: unknown[], choices: AnnotatedChoice<unknown>[]): boolean {
     const claimed = new Array<boolean>(choices.length).fill(false);
@@ -920,6 +920,8 @@ export class ActionExecutor {
           if (valuesEqual(choices[i].value, smartMatch.value)) matching.push(i);
         }
       }
+      matching = matching.filter(i => choices[i].disabled === false);
+      if (matching.length === 0) continue; // every copy disabled — per-item validation rejects it
       const free = matching.find(i => !claimed[i]);
       if (free === undefined) return true; // more copies than the choices offer
       claimed[free] = true;

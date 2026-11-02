@@ -641,8 +641,12 @@ export interface UseActionControllerReturn {
    * Respects the selection's max; auto-confirms when min === max and the exact count
    * is reached (running fill → auto-execute). No-op (with devWarn) if the selection
    * isn't active or isn't a multiSelect.
+   *
+   * A value the choices list offers more than once is one slot per entry: `copy`
+   * (from 0) names which, so ticking copy 1 of a held value adds a second copy
+   * instead of removing the first (#1561).
    */
-  toggleMultiSelect: (selectionName: string, value: unknown) => Promise<void>;
+  toggleMultiSelect: (selectionName: string, value: unknown, copy?: number) => Promise<void>;
   /**
    * Confirm the in-progress multiSelect draft — the only place currentArgs receives
    * the multiSelect array (via the existing fill() path). With no draft for the named
@@ -650,8 +654,8 @@ export interface UseActionControllerReturn {
    * or void when the named pick is neither drafted nor the current list pick.
    */
   confirmMultiSelect: (selectionName: string) => Promise<PickValidationResult | void>;
-  /** Whether a value is currently in the multiSelect draft for the given selection. */
-  isMultiSelectSelected: (selectionName: string, value: unknown) => boolean;
+  /** Whether the multiSelect draft for the given selection holds more than `copy` (default 0) copies of a value. */
+  isMultiSelectSelected: (selectionName: string, value: unknown, copy?: number) => boolean;
 
   // === Ordered, repeatable lists (#249) ===
   /**

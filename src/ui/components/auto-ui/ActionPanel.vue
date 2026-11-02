@@ -922,6 +922,23 @@ const _splitChoices = computed(() =>
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
+/**
+ * Which copy of its value each choice is: a value offered N times is N multiSelect
+ * slots (#1561), counted as the controller counts them, enabled entries first.
+ */
+const choiceCopies = computed(() => {
+  const copies: number[] = [];
+  const seen = new Map<string, number>();
+  for (const closed of [false, true]) {
+    filteredChoices.value.forEach((choice, i) => {
+      if (isDisabled(choice.disabled) !== closed) return;
+      const key = choiceValueKey(choice.value);
+      copies[i] = seen.get(key) ?? 0;
+      seen.set(key, copies[i] + 1);
+    });
+  }
+  return copies;
+});
 /** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
 const isDependentChoicePick = computed(() =>
   !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
@@ -1192,8 +1209,8 @@ function isRepeatingSelection(sel: EnrichedPickMetadata): boolean {
 /**
  * Check if a value is currently selected in multi-select mode (reads shared draft)
  */
-function isMultiSelectValueSelected(value: unknown): boolean {
-  return actionController.isMultiSelectSelected(currentPick.value?.name ?? '', value);
+function isMultiSelectValueSelected(value: unknown, copy?: number): boolean {
+  return actionController.isMultiSelectSelected(currentPick.value?.name ?? '', value, copy);
 }
 
 /**
@@ -1202,8 +1219,8 @@ function isMultiSelectValueSelected(value: unknown): boolean {
  * refreshes board highlights. The controller owns max-enforcement and min===max
  * auto-confirm (which runs fill → auto-execute).
  */
-async function toggleMultiSelectValue(selectionName: string, value: unknown, _display?: string) {
-  await mutators.toggleMultiSelectValue(selectionName, value);
+async function toggleMultiSelectValue(selectionName: string, value: unknown, copy?: number) {
+  await mutators.toggleMultiSelectValue(selectionName, value, copy);
 }
 
 /**
@@ -1459,11 +1476,11 @@ function actionDisabledReason(actionName: string): DisabledReason {
  * has one, otherwise the max-selections cap (which blocks only options that
  * are not already selected — deselecting is always allowed).
  */
-function multiSelectDisabledReason(own: DisabledReason, value: unknown): DisabledReason {
+function multiSelectDisabledReason(own: DisabledReason, value: unknown, copy?: number): DisabledReason {
   if (isDisabled(own)) return own;
   const max = currentMultiSelect.value?.max;
   if (max === undefined) return false;
-  if (isMultiSelectValueSelected(value)) return false;
+  if (isMultiSelectValueSelected(value, copy)) return false;
   if (multiSelectValues.value.length < max) return false;
   return max === 1
     ? 'You can pick only one — deselect the other first.'
@@ -1811,7 +1828,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 type="checkbox"
                 :checked="isMultiSelectValueSelected(element.id)"
                 :aria-disabled="isDisabled(multiSelectDisabledReason(element.disabled, element.id)) || undefined"
-                @click="toggleMultiSelectValue(currentPick.name, element.id, element.display)"
+                @click="toggleMultiSelectValue(currentPick.name, element.id)"
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
@@ -1925,20 +1942,20 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <!-- Directive on the label, aria-disabled on the control — see the
                  elements variant above for why they are split. -->
             <label
-              v-for="choice in filteredChoices"
-              :key="choiceValueKey(choice.value)"
+              v-for="(choice, i) in filteredChoices"
+              :key="`${choiceValueKey(choice.value)}#${choiceCopies[i]}`"
               class="multi-select-choice"
-              :class="{ selected: isMultiSelectValueSelected(choice.value) }"
-              v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value)"
+              :class="{ selected: isMultiSelectValueSelected(choice.value, choiceCopies[i]) }"
+              v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value, choiceCopies[i])"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
             >
               <input
                 type="checkbox"
-                :checked="isMultiSelectValueSelected(choice.value)"
+                :checked="isMultiSelectValueSelected(choice.value, choiceCopies[i])"
                 :aria-label="choiceSpokenName(choice)"
-                :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value)) || undefined"
-                @click="toggleMultiSelectValue(currentPick.name, choice.value, choice.display)"
+                :aria-disabled="isDisabled(multiSelectDisabledReason(choice.disabled, choice.value, choiceCopies[i])) || undefined"
+                @click="toggleMultiSelectValue(currentPick.name, choice.value, choiceCopies[i])"
               />
               <span class="checkbox-label">{{ choice.display }}</span>
             </label>

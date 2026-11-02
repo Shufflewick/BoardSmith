@@ -716,7 +716,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   function listBoundsRefusal(
     selection: EnrichedPickMetadata,
     entries: readonly unknown[],
-    offered: Array<{ value: unknown }> = getChoices(selection),
+    offered: Array<{ value: unknown; disabled?: string }> = getChoices(selection),
   ): string | null {
     const ordered = resolveOrderedListConfig(selection);
     const bounds = ordered ?? resolveMultiSelectConfig(selection);
@@ -730,10 +730,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** The first entry of a set given more often than it is offered, counted by the choice it matches in one pass. */
-  function repeatedEntry(entries: readonly unknown[], offered: Array<{ value: unknown }>): { entry: unknown } | undefined {
+  function repeatedEntry(entries: readonly unknown[], offered: Array<{ value: unknown; disabled?: string }>): { entry: unknown } | undefined {
     const counts = new Map<unknown, { given: number; offered: number }>();
     const keyOf = (value: unknown) => findMatchingChoice(value, offered) ?? value;
     for (const choice of offered) {
+      // A disabled copy is a slot no entry may take (#1561).
+      if (choice.disabled) continue;
       const key = keyOf(choice.value);
       const count = counts.get(key) ?? { given: 0, offered: 0 };
       count.offered++;
@@ -2919,8 +2921,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * the fill() path with the complete array).
    *
    * When min === max, reaching the exact count auto-confirms (no Done button).
+   * A value the choices list offers N times is N slots; `copy` (0 to N-1) names one,
+   * counting the enabled entries first.
    */
-  async function toggleMultiSelect(selectionName: string, value: unknown): Promise<void> {
+  async function toggleMultiSelect(selectionName: string, value: unknown, copy = 0): Promise<void> {
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
     if (!selection) {
       devWarn(
@@ -2948,14 +2952,32 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         : [];
 
     const { value: offered, refusal } = resolvePick(selection, value);
-    const index = current.findIndex(v => valuesEqual(v, offered));
+    const held = current.filter(v => valuesEqual(v, offered)).length;
     let newValues: unknown[];
-    if (index >= 0) {
-      // Already selected - remove it, even if its choice has since been disabled
+    if (held > copy) {
+      // Already selected - remove one copy, even if its choice has since been disabled
+      const index = current.findIndex(v => valuesEqual(v, offered));
       newValues = current.filter((_, i) => i !== index);
     } else {
       if (refusal) {
         setError(refusal);
+        return;
+      }
+      // Copies count the enabled entries first, then the disabled ones.
+      const copies = choicesIn(actionSnapshot.value, currentArgs.value, selection)
+        .filter(c => valuesEqual(c.value, offered));
+      const closed = copies.filter(c => c.disabled);
+      const open = copies.length - closed.length;
+      if (copy >= open && copy < copies.length) {
+        setError(`Selection disabled: ${closed[copy - open]!.disabled}`);
+        return;
+      }
+      if (copy > 0 && copy >= copies.length) {
+        devWarn(
+          `multiselect-no-copy:${selectionName}`,
+          `toggleMultiSelect('${selectionName}', ..., ${copy}) was ignored: '${selectionName}' offers that value ` +
+            `${copies.length} time${copies.length === 1 ? '' : 's'}, and copies count from 0.`
+        );
         return;
       }
       // Not selected - add it (respecting max)
@@ -2996,16 +3018,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return await fill(selectionName, []);
   }
 
-  /** Whether a value is currently in the multiSelect draft for the given selection. */
-  function isMultiSelectSelected(selectionName: string, value: unknown): boolean {
+  /** Whether the draft for the given selection holds more than `copy` copies of a value. */
+  function isMultiSelectSelected(selectionName: string, value: unknown, copy = 0): boolean {
     const draft = multiSelectDraft.value;
     if (!draft || draft.selectionName !== selectionName) return false;
+    const held = (v: unknown) => draft.values.filter(d => valuesEqual(d, v)).length;
     // The draft holds offered values, so only a shorthand needs resolving.
-    if (draft.values.some(v => valuesEqual(v, value))) return true;
+    const direct = held(value);
+    if (direct > 0) return direct > copy;
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
     if (!selection) return false;
-    const offered = resolvePick(selection, value).value;
-    return draft.values.some(v => valuesEqual(v, offered));
+    return held(resolvePick(selection, value).value) > copy;
   }
 
   // === Public API for Snapshot Access ===
