@@ -1,5 +1,5 @@
 {
-  "revision": 311,
+  "revision": 312,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2431,6 +2431,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke check skips a file that vanishes between git's listing and its copy (Vite's config bundle), and throws any other copy failure as Node reports it."
+    },
+    {
+      "revision": 312,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith/testing exports presetStartOptions, which starts a test game with a preset's seats as boardsmith dev --preset does (#1565)"
     }
   ]
 }
