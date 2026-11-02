@@ -1019,6 +1019,12 @@ function categoryButton(group: { label: string; children: readonly unknown[] }) 
   };
 }
 
+/** A multiSelect list's growth mark, left off while the board draws a candidate the grown bar would cover (#1573). */
+const checkboxGrowth = computed(() => {
+  const candidates = currentPick.value?.type === 'choice' ? offeredChoices.value : offeredElements.value;
+  return candidates.some((candidate) => (candidate.refs ?? []).length > 0) ? undefined : 'choices';
+});
+
 /** How many candidates the board handoff sends the player to. */
 const boardCandidateCount = computed(() =>
   currentPick.value?.type === 'choice' ? offeredChoices.value.length : offeredElements.value.length,
@@ -1810,7 +1816,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons multi-select-choices" data-bs-grows-panel="choices">
+          <div class="choice-buttons multi-select-choices" :data-bs-grows-panel="checkboxGrowth">
             <!-- The directive goes on the LABEL: it is the whole visible option, so
                  hovering anywhere on it reveals the reason, and its capture-phase
                  click guard also covers the checkbox nested inside it. The input
@@ -1939,7 +1945,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons multi-select-choices" data-bs-grows-panel="choices">
+          <div class="choice-buttons multi-select-choices" :data-bs-grows-panel="checkboxGrowth">
             <!-- Directive on the label, aria-disabled on the control — see the
                  elements variant above for why they are split. -->
             <label
@@ -2078,7 +2084,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              one-line "field" stacks label, hint and field + Done on a phone
              (#1058), under any chips and however the prompt wraps, and grows to
              what it needs (#1481). A multiSelect's checkbox list grows the same
-             way as "choices" (#1573). The shell's bar reads the mark, so the
+             way as "choices" unless the board draws a candidate (#1573). The shell's bar reads the mark, so the
              exception ends when this unmounts. -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"

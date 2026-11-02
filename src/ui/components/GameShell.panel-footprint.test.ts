@@ -157,8 +157,9 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
     // player's cursor (#1514 review F1).
     expect(declaration('.boardregion::after', 'height')).toBe('calc(var(--bsg-panel-max) - var(--bsg-panel-reserved))');
     expect(declaration('.boardregion::after', 'flex')).toBe('none');
-    // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it.
-    expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('var(--bsg-panel-max)');
+    // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it,
+    // also while an editor or a multiSelect has grown the bar past its cap (#1573).
+    expect(declaration('.boardregion', 'scroll-padding-bottom')).toBe('max(var(--bsg-panel-max), var(--bsg-bar-clearance))');
   });
 
   it('does not feed action-panel measurements into board fitting', () => {

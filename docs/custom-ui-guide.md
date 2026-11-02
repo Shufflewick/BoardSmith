@@ -1382,7 +1382,8 @@ What follows for a custom board:
   more than fits, it scrolls inside the cap. The exceptions are a typed
   editor (a text or number pick) and a multiSelect's checkboxes: while one is
   open the panel may grow past the cap. A multiSelect may grow it to show every
-  checkbox, bounded at 60% of the screen's height, and scrolls beyond that.
+  checkbox, bounded at 60% of the screen's height, and scrolls beyond that;
+  one whose candidates your board draws keeps the cap, so it never covers them.
   A one-line or number field may grow it to what the field needs, bounded at
   60% of the screen's height: on a phone its label and hint stack above the
   field and submit, under any earlier choices, and a long prompt or a refusal

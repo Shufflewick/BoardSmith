@@ -99,6 +99,22 @@ describe('a typed editor may grow the panel past the strip, and only while it is
     }
   });
 
+  it('leaves a multiSelect whose candidates are on the board unmarked, so the bar never covers them (#1573)', () => {
+    const onBoard = [{ ref: { id: 11 }, role: 'target' as const }];
+    for (const type of ['choice', 'elements']) {
+      const controller = stubActionController({
+        currentAction: ref('allocate'),
+        currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
+        currentChoices: ref([{ value: 'a', display: 'Adelheid', refs: onBoard }, { value: 'g', display: 'Genesis' }]),
+        validElements: ref([{ id: 11, display: 'Adelheid', refs: onBoard }, { id: 12, display: 'Genesis' }]),
+      });
+      const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true });
+      expect(wrapper.findAll('.multi-select-choice'), type).toHaveLength(2);
+      expect(wrapper.find(MARK).exists(), type).toBe(false);
+      wrapper.unmount();
+    }
+  });
+
   it('drops the mark when the editor is cancelled', async () => {
     const { wrapper } = await mountPanelAt(setDescription);
     expect(wrapper.find(MARK).exists()).toBe(true);
