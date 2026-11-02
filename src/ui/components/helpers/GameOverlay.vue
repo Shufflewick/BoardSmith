@@ -44,7 +44,7 @@
  * - The `@click` event fires when clicking the backdrop (outside content)
  * - The `@closed` event fires once the fade-out has finished after `active` turns false
  */
-import { computed } from 'vue';
+import { computed, onBeforeUnmount } from 'vue';
 
 interface Props {
   /** Whether the overlay is active/visible */
@@ -60,11 +60,21 @@ const props = withDefaults(defineProps<Props>(), {
   backdropOpacity: 0.85,
 });
 
-defineEmits<{
+const emit = defineEmits<{
   (e: 'click'): void;
   /** The fade-out has finished and the overlay is gone */
   (e: 'closed'): void;
 }>();
+
+let fadingOut = false;
+function fadeOutEnded() {
+  fadingOut = false;
+  emit('closed');
+}
+// An unmounted instance cannot emit, so a fade cut short by unmounting reports its close now.
+onBeforeUnmount(() => {
+  if (fadingOut) fadeOutEnded();
+});
 
 // Computed style for backdrop
 const backdropStyle = computed(() => ({
@@ -74,7 +84,7 @@ const backdropStyle = computed(() => ({
 </script>
 
 <template>
-  <Transition name="game-overlay" @after-leave="$emit('closed')">
+  <Transition name="game-overlay" @before-leave="fadingOut = true" @after-leave="fadeOutEnded">
     <div
       v-if="active"
       class="game-overlay"

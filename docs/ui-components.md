@@ -942,7 +942,7 @@ const showModal = ref(false);
 
 **Events:**
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
-- `@closed` - Fires once the 0.3 s fade-out has finished after `active` turns false. An animation handler that shows the overlay should wait for it, so the next animation starts on a clear board:
+- `@closed` - Fires once the fade-out has finished after `active` turns false, or at once if the overlay is unmounted part way through it. It fires only for an overlay that was rendered: setting `active` true and back to false in the same tick shows nothing and fires nothing. An animation handler that shows the overlay should wait for it, so the next animation starts on a clear board:
 
 <!-- typecheck: board -->
 ```vue
@@ -954,11 +954,17 @@ const animationEvents = useAnimationEvents();
 const showBanner = ref(false);
 let bannerClosed = () => {};
 
-animationEvents?.registerHandler('banner', async () => {
+animationEvents?.registerHandler('banner', async (_event, { signal }) => {
   showBanner.value = true;
-  await new Promise<void>((resolve) => setTimeout(resolve, 2000));
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 2000);
+    signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+  const closed = new Promise<void>((resolve) => (bannerClosed = resolve));
   showBanner.value = false;
-  await new Promise<void>((resolve) => (bannerClosed = resolve));
+  // Skipped: stop here, as a banner skipped before it rendered has no fade-out to wait for.
+  if (signal.aborted) return;
+  await closed;
 }, { skip: 'drop' });
 </script>
 
