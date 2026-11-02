@@ -1083,6 +1083,8 @@ presets: [
 
 `boardsmith dev` refuses, when the game loads, a preset the platform's lobby would refuse: a game option no player can choose, a seat field other than these four, a colour outside the palette, a bot level that is not one, a `botLevel` on a seat that is not a bot, or player options Table setup would refuse (such as an exclusive option given to two seats). `--game-option`, `--bot` and `--bot-level` beat what the preset sets, and `--players` may only repeat its number of seats.
 
+To test that a preset seats players where its name says, start a test game from it: `createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Dictator'))` (`boardsmith/testing`) starts it with the seats `boardsmith dev --preset` gives it.
+
 ### Receiving Options in Game Constructor
 
 Options are passed to your game constructor via `CreateGameRequest`:
