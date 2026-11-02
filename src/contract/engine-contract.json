@@ -2422,7 +2422,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "Auto mode no longer fills a list pick with a lone choice its bounds refuse (a multiSelect with max 0), and no longer reopens a sole action the server refused until a new state arrives (#1562)"
+      "summary": "Auto mode answers a list pick whose max is 0 with the empty list, fills no list pick with a lone choice its bounds refuse, and no longer reopens a sole action the server refused until a new state arrives (#1562)"
     }
   ]
 }
