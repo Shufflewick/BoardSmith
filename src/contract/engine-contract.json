@@ -1,5 +1,5 @@
 {
-  "revision": 306,
+  "revision": 307,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2391,6 +2391,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "GameOverlay emits closed once its fade-out has finished, or when it is unmounted part way through it, so an animation handler can wait for a clear board (#1557)"
+    },
+    {
+      "revision": 307,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The random simulation policy draws a move again, three draws in all, when the action's validate refuses a multiSelect set it drew, as it does for numbers, so a rule across a set's items no longer fails a simulated game (#1559)"
     }
   ]
 }
