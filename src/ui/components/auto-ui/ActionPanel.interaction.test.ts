@@ -384,7 +384,10 @@ describe('ActionPanel interaction tests', () => {
     expect(panel.text()).toContain('No options available');
   });
 
-  it('Done on a min-0 multiSelect with nothing ticked submits the empty set and moves on (#1555)', async () => {
+  it.each([
+    { pick: 'min-0 max-3 (#1555)', max: 3, choices: ['a', 'b', 'c'] },
+    { pick: 'min-0 max-0 (#1568)', max: 0, choices: ['squidhead'] },
+  ])('Done on a $pick multiSelect with nothing ticked submits the empty set and moves on', async ({ max, choices }) => {
     const hire: EnrichedActionMetadata = {
       name: 'hire',
       prompt: 'Hire',
@@ -392,9 +395,9 @@ describe('ActionPanel interaction tests', () => {
         {
           name: 'picks',
           type: 'choice',
-          prompt: 'Hire up to 3',
-          multiSelect: { min: 0, max: 3 },
-          choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })),
+          prompt: `Hire up to ${max}`,
+          multiSelect: { min: 0, max },
+          choices: choices.map((v) => ({ value: v, display: v })),
         },
         { name: 'message', type: 'text', prompt: 'What does it say?' },
       ],

@@ -1344,13 +1344,13 @@ const isMultiSelectReady = computed(() => {
 });
 
 /**
- * Check if Done button should be shown (hidden when min === max, since auto-confirms)
+ * Check if Done button should be shown: hidden when min === max, since reaching
+ * that count auto-confirms, unless the count is 0, which no tick ever reaches (#1568).
  */
 const showMultiSelectDoneButton = computed(() => {
   if (!currentMultiSelect.value) return false;
   const { min, max } = currentMultiSelect.value;
-  // Hide Done button when exact count required - auto-confirms on reaching count
-  return min !== max;
+  return min !== max || max === 0;
 });
 
 /**

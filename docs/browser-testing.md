@@ -468,7 +468,7 @@ markers this page documents, so it keeps up with any game without knowing it:
   choice and its Done button is ready, it presses Done. The pick's own min and
   max decide through the panel: Done is ready from `min` on, every box left is
   refused at `max`, and a pick whose `min` is its `max` has no Done and
-  completes on its last choice.
+  completes on its last choice, unless both are 0, when Done answers it empty.
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
   candidate, nor inside an `inert` subtree, nor inside the game-over card (whose
