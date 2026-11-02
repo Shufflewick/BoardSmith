@@ -897,7 +897,8 @@ interface SelectionOffer<T = unknown> {
 
 /**
  * The values both enumeration paths try for one selection, or `null` when it
- * has nothing to offer (an empty list means the same): no enabled choice, a text input, or a number input
+ * has nothing to offer (an empty list means the same): no enabled choice, unless a multiSelect or
+ * orderedList allows the empty pick, a text input, or a number input
  * with no value to offer (see {@link numberInputPicks}). With `random` (a
  * sampling walk), a multiSelect offers one combination drawn with it.
  */
@@ -914,7 +915,6 @@ function selectionValues(
     return judgedOnce(walk, selection, seen, () => numberInputPicks(game, actionDef, player, selection, seen));
   }
   const choices = judgedOnce(walk, selection, seen, () => _getChoices(game, actionDef.name, selection, player, seen));
-  if (choices.values.length === 0) return { values: null, judged: choices.judged };
   return _valuesToTry(game, player, selection, choices, seen, walk.random);
 }
 
