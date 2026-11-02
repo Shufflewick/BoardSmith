@@ -270,6 +270,44 @@ class DisabledMsGame extends DeployGame {
   }
 }
 
+/**
+ * A `relay` whose execute performs another action, whose condition, disabled,
+ * validate or choices reads `stepOpenMs()`, and records what that read threw.
+ */
+class NestedMsGame extends DeployGame {
+  refusals: string[] = [];
+
+  constructor(options: GameOptions) {
+    super(options, 120_000, 'simultaneous', ['relay', 'commit']);
+    this.registerAction(
+      Action.create<NestedMsGame>('relay')
+        .chooseFrom('inner', { choices: ['inCondition', 'inDisabled', 'inValidate', 'inChoices'] })
+        .execute(({ inner }, ctx) => {
+          try {
+            ctx.game.performAction(inner as string, ctx.player, inner === 'inChoices' ? { pick: 'a' } : {});
+          } catch (error) {
+            ctx.game.refusals = [...ctx.game.refusals, (error as Error).message];
+          }
+        }),
+    );
+    const young = (game: NestedMsGame) => game.stepOpenMs() < PLAYBACK_MS;
+    this.registerAction(
+      Action.create<NestedMsGame>('inCondition').condition({ 'played back': (ctx) => !young(ctx.game) }).execute(() => {}),
+    );
+    this.registerAction(
+      Action.create<NestedMsGame>('inDisabled').disabled((ctx) => young(ctx.game) && 'Still playing back.').execute(() => {}),
+    );
+    this.registerAction(
+      Action.create<NestedMsGame>('inValidate').validate((_args, ctx) => !young(ctx.game) || 'Still playing back.').execute(() => {}),
+    );
+    this.registerAction(
+      Action.create<NestedMsGame>('inChoices')
+        .chooseFrom('pick', { choices: (ctx) => (young(ctx.game) ? [] : ['a']) })
+        .execute(() => {}),
+    );
+  }
+}
+
 describe('game.stepOpenMs() in execute (#1550)', () => {
   function voteAt(now: number): GameRunner<VoteClockGame> {
     const runner = new GameRunner({ GameClass: VoteClockGame, gameType: 'vote-clock', gameOptions: opts });
@@ -290,6 +328,18 @@ describe('game.stepOpenMs() in execute (#1550)', () => {
     const runner = voteAt(START + 2_350);
     expect(() => runner.game.stepOpenMs()).toThrow(/stepOpenMs\(\) was read outside an action's execute.*stepOpenFor/s);
   });
+
+  it.each(['inCondition', 'inDisabled', 'inValidate', 'inChoices'])(
+    'refuses a read in %s of an action performed from inside an execute',
+    (inner) => {
+      const runner = new GameRunner({ GameClass: NestedMsGame, gameType: 'nested-ms', gameOptions: opts });
+      runner.setNow(START);
+      runner.start();
+      runner.setNow(START + 2_350);
+      expect(runner.performAction('relay', 1, { inner }).success).toBe(true);
+      expect(runner.game.refusals).toEqual([expect.stringMatching(/stepOpenMs\(\) was read outside an action's execute/)]);
+    },
+  );
 
   it('refuses a read in disabled, where the offer would never be worked out again as time passes', () => {
     const runner = new GameRunner({ GameClass: DisabledMsGame, gameType: 'disabled-ms', gameOptions: opts });

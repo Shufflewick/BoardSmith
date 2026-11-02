@@ -57,7 +57,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, readingCondition, runningExecute, type AcceptedArgs, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, offering, readingCondition, runningExecute, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -2599,7 +2599,8 @@ export class Game<
     // (ShufflewickPub #384). Enforcement passes nothing and gets the live game,
     // so the button a player sees and the gate the server applies are still one
     // rule evaluated one way.
-    const reason = action.disabled({ game: reading ?? this, player, args: {} });
+    const disabled = action.disabled;
+    const reason = offering(() => disabled({ game: reading ?? this, player, args: {} }));
     return reason === false ? null : reason;
   }
 
@@ -3435,7 +3436,7 @@ export class Game<
           'submission in .validate().',
       );
     }
-    const { openedAt, elapsed } = this.timedStepClock('stepOpenFor');
+    const { openedAt, elapsed } = this.timedStepClock('stepOpenFor', "its actions' disabled, validate or execute");
     if (elapsed >= ms) return true;
     this._reofferAt = Math.min(this._reofferAt ?? Infinity, openedAt + ms);
     return false;
@@ -3465,17 +3466,17 @@ export class Game<
           'tells the host when its answer changes.',
       );
     }
-    return this.timedStepClock('stepOpenMs').elapsed;
+    return this.timedStepClock('stepOpenMs', "its actions' execute").elapsed;
   }
 
   /** The open timed step's opening instant and how long it has been open, at the host's instant for this op. */
-  private timedStepClock(reader: string): { openedAt: number; elapsed: number } {
+  private timedStepClock(reader: string, where: string): { openedAt: number; elapsed: number } {
     const openedAt = this._flowEngine?.openTimedStepOpenedAt();
     if (openedAt === undefined) {
       throw new Error(
         `${reader}() measures how long the open timed step has been open, but no step with timeLimitMs ` +
           'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
-          'timeLimitMs.',
+          `timeLimitMs: ${where}.`,
       );
     }
     if (openedAt === null || this._hostNow === undefined) {
