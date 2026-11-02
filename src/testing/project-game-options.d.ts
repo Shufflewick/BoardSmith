@@ -6,7 +6,7 @@
  * `#testing/project-game-options`.
  */
 import type { GameOptionDefinition } from '../types/protocol.js';
-import type { GameDefinition } from '../session/types.js';
+import type { GameDefinition, GamePreset } from '../session/types.js';
 
 /**
  * The game options declared by the nearest `boardsmith.json` at or above the
@@ -51,6 +51,8 @@ export function projectColorOptions(playerCount: number): { colors?: string[]; c
  * more or fewer than the game seats, and when dev would refuse it.
  */
 export function presetStartOptions(
-  gameDefinition: Pick<GameDefinition, 'presets' | 'playerOptions' | 'colorPalette' | 'minPlayers' | 'maxPlayers'>,
+  gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette' | 'minPlayers' | 'maxPlayers'> & {
+    presets?: readonly GamePreset[];
+  },
   name: string,
 ): { playerCount: number } & Record<string, unknown>;

@@ -266,7 +266,7 @@ export interface GamePreset {
   /** Game options to apply; a preset that only sets its players leaves this out */
   options?: Record<string, unknown>;
   /** One entry per seat, in seat order; their number is the player count */
-  players?: PresetSeat[];
+  players?: readonly PresetSeat[];
 }
 
 /**
