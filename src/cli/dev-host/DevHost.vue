@@ -240,6 +240,8 @@ let lastInitSeat: number | null = null;
 let lastGameState: Record<string, unknown> | null = null;
 /** True while the host reports a deadline on the open step; shows "End step". */
 const stepDeadlineOpen = ref(false);
+/** When the host's step clock next offers a greyed action, before the deadline; shows "Skip wait" (#1547). */
+const reofferAt = ref<number | null>(null);
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -332,6 +334,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
         receivedAt: Date.now(),
       };
       stepDeadlineOpen.value = msg.deadlineAt !== null && msg.deadlineAt !== undefined;
+      reofferAt.value = (msg.reofferAt as number | null | undefined) ?? null;
       postToGame(lastGameState);
       // Shown only once the frame carrying it is on its way to the game, so a
       // page that reads the seed reads the game dealt from it.
@@ -464,6 +467,10 @@ function leaveSeat(): void {
 /** Close the open timed step now, as its window elapsing would (#302). */
 function fireDeadline(): void {
   wsSend({ type: 'fireDeadline' });
+}
+/** Move the host's time on to when an action the step clock greyed opens (#1547). */
+function skipWait(): void {
+  wsSend({ type: 'skipWait' });
 }
 function toggleFollow(): void {
   wsSend({ type: 'follow', enabled: !followActive.value });
@@ -907,6 +914,18 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-label">End step</span>
                 </button>
                 <button
+                  v-if="reofferAt !== null"
+                  type="button"
+                  class="btn"
+                  data-testid="skip-wait"
+                  :data-reoffer-at="reofferAt"
+                  title="Move the step's clock on to when a greyed action opens"
+                  @click="overflowChosen(); skipWait()"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">»</span>
+                  <span class="dev-chrome__btn-label">Skip wait</span>
+                </button>
+                <button
                   type="button"
                   class="btn"
                   data-testid="table-setup-toggle"
@@ -949,6 +968,17 @@ onUnmounted(() => {
                 @click="fireDeadline"
               >
                 End step
+              </button>
+              <button
+                v-if="reofferAt !== null"
+                type="button"
+                class="btn"
+                data-testid="skip-wait"
+                :data-reoffer-at="reofferAt"
+                title="Move the step's clock on to when a greyed action opens"
+                @click="skipWait"
+              >
+                Skip wait
               </button>
               <button
                 type="button"

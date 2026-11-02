@@ -22,6 +22,7 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
   'configure',
   'setPlayerOptions',
   'fireDeadline',
+  'skipWait',
   'join',
   'leave',
 ]);

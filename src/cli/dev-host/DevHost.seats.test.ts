@@ -267,14 +267,29 @@ describe('DevHost — choosing from the … menu closes it (#664)', () => {
     await activateSeat(wrapper);
     const ws = mockWsInstance!;
     ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
-    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, reofferAt: 6_000, serverNow: 4_000 });
     await wrapper.vm.$nextTick();
     await wrapper.find('.dev-chrome__overflow-trigger').trigger('click');
     expect(wrapper.find(MENU).exists()).toBe(true);
     return wrapper;
   }
 
-  it.each(['table-setup-toggle', 'debug-toggle', 'fire-deadline'])('choosing %s closes it', async (testid) => {
+  // #1547: "Skip wait" shows while the host names a re-offer, and asks the host to skip to it.
+  it.each(['.dev-chrome__overflow-menu', '.dev-chrome__bar-wide'])('%s offers Skip wait while the host names a re-offer, and sends skipWait', async (bar) => {
+    const wrapper = await openOverflow();
+    const ws = mockWsInstance!;
+    ws.send.mockClear();
+    await wrapper.find(`${bar} [data-testid="skip-wait"]`).trigger('click');
+    expect(ws.send.mock.calls.map((c) => JSON.parse(c[0] as string))).toContainEqual({ type: 'skipWait' });
+
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, reofferAt: null, serverNow: 6_000 });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="skip-wait"]').exists()).toBe(false);
+    expect(wrapper.find('[data-testid="fire-deadline"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it.each(['table-setup-toggle', 'debug-toggle', 'fire-deadline', 'skip-wait'])('choosing %s closes it', async (testid) => {
     const wrapper = await openOverflow();
     await wrapper.find(`${MENU} [data-testid="${testid}"]`).trigger('click');
     expect(wrapper.find(MENU).exists()).toBe(false);
@@ -348,7 +363,7 @@ describe('DevHost — after a menu choice, focus goes where the choice leads (#6
     await activateSeat(wrapper);
     const ws = mockWsInstance!;
     ws.simulateMessage({ ...SEAT_LOBBY, debug: true });
-    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, reofferAt: 6_000, serverNow: 4_000 });
     await wrapper.vm.$nextTick();
     return wrapper;
   }
@@ -410,7 +425,7 @@ describe('DevHost — after a menu choice, focus goes where the choice leads (#6
     wrapper.unmount();
   });
 
-  it.each(['fire-deadline', 'debug-toggle'])('%s in the … menu returns focus to the … button', async (testid) => {
+  it.each(['fire-deadline', 'skip-wait', 'debug-toggle'])('%s in the … menu returns focus to the … button', async (testid) => {
     const wrapper = await inGame();
     await wrapper.find(OVERFLOW_TRIGGER).trigger('click');
     await choose(wrapper, `${OVERFLOW} [data-testid="${testid}"]`);

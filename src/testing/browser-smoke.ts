@@ -607,6 +607,8 @@ async function settle(frame: Frame): Promise<void> {
 interface Offers {
   /** The actions the panel shows that may be taken now. */
   readonly enabled: string[];
+  /** The actions the panel shows greyed out. */
+  readonly greyed: string[];
   /** The groups the panel shows, each a menu of more actions. */
   readonly groups: string[];
   /** Whether the panel is showing a group's menu, which has a way back. */
@@ -641,7 +643,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   for (const name of [...offers.enabled, ...open]) walk.enabled.add(name);
   // An action in flight greys every button for itself, which is no reason of the action's own.
   if (!offers.submitting) recordGreyed(walk, offers.greyed);
-  return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
+  return { enabled: offers.enabled, greyed: offers.greyed.map(([name]) => name), groups: offers.groups, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
 }
 
 /** How many times the walk settles a panel that was unsettled again by the time it was read. */
@@ -1920,9 +1922,30 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
   await openACollapsedBar(frame);
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
+  if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
+}
+
+/**
+ * Presses the dev bar's "Skip wait" when the panel greys an action the walk still has to take and
+ * the host's step clock offers the actions again before the step closes (#1547): a player would wait
+ * for it, and the walk, far quicker than a player, would otherwise end the step first. Waits until
+ * the host has skipped to that instant. Returns whether it pressed.
+ */
+async function skipAWait(page: Page, offers: Offers, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+  const waiting = offers.greyed.find((name) => stillToTake(walk, memory).includes(name));
+  if (waiting === undefined) return false;
+  const skip = page.getByTestId('skip-wait').filter({ visible: true }).first();
+  if ((await inPageTime(page, 'looking for "Skip wait"', () => skip.count())) === 0) return false;
+  const at = await inPageTime(page, 'reading when "Skip wait" skips to', () => skip.getAttribute('data-reoffer-at'));
+  narrate(step, `skipping the wait for "${waiting}"`);
+  await actWithinPageTime(page, PRESS_MS, 'pressing "Skip wait"', (timeout) => skip.click({ timeout }));
+  await withinPageTime(page, TURN_WAIT_MS, 'waiting for the wait to be skipped', (timeout) =>
+    page.locator(`[data-testid="skip-wait"][data-reoffer-at="${at}"]`).first().waitFor({ state: 'detached', timeout }),
+  ).catch(saying(`The dev host had not skipped the wait ${TURN_WAIT_MS / 1000}s after "Skip wait" was pressed. Run \`boardsmith dev\` and press it to see why.`));
+  return true;
 }
 
 /**

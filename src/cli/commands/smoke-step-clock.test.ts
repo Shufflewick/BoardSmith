@@ -1,0 +1,20 @@
+/**
+ * The in-browser smoke check (#453), run for real: an action the step clock greys (#1547).
+ * smoke-walk.test-helper.ts says how each walk runs. The check's tests are split across the
+ * smoke*.test.ts files so they run side by side (#1319).
+ */
+import { describe, expect, it, vi } from 'vitest';
+import { smokeOf } from './smoke-walk.test-helper.js';
+import { playbackGame, smokeSpec } from './smoke-fixtures.test-helper.js';
+
+vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
+
+describe('boardsmith verify: the smoke check', () => {
+  it('#1547: skips the wait for an action the step clock greys, as a player would wait, so it takes it however fast it walks', async () => {
+    const { outcome, steps } = await smokeOf(false, { ...playbackGame(), 'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], undefined, { steps: 8 }) });
+
+    expect(outcome.summary).toMatch(/a seated player took "levelUp", "ready"/);
+    expect(outcome.passed).toBe(true);
+    expect(steps.some((line) => line.endsWith('skipping the wait for "levelUp"'))).toBe(true);
+  });
+});

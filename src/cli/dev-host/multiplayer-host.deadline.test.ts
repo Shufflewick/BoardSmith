@@ -565,6 +565,24 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
     expect(h.errors('A')).toEqual([]);
   });
 
+  it('skips the wait to when a clock-greyed action opens when a client asks, and the deadline keeps the time skipped (#1547)', async () => {
+    const h = makeHost(playbackDefinition);
+    await h.seatBoth();
+    const offer = () => (h.lastFrame('A').view as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
+    expect(h.lastFrame('A').reofferAt).toBe(START + PLAYBACK_MS);
+
+    await h.host.handleMessage('A', { type: 'skipWait' });
+
+    expect(offer()).toBeUndefined();
+    expect(h.lastFrame('A')).toMatchObject({ reofferAt: null, deadlineAt: START + WINDOW_MS, serverNow: START + PLAYBACK_MS });
+    expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+    await h.act('A', 'skipped', 'levelUp');
+    expect(h.actionsFor(1)[0].result.success).toBe(true);
+
+    await h.host.handleMessage('A', { type: 'skipWait' });
+    expect(h.errors('A')).toEqual(['No greyed action is waiting on the step clock right now, so there is no wait to skip.']);
+  });
+
   it('reports an offer it could not build again, and still arms the deadline', async () => {
     const h = makeHost(playbackDefinition, {
       executeOp: async (gameOptions, snap, pend, op, hostOptions) =>
