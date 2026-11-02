@@ -423,7 +423,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // UIs so they stay in parity. This is SEPARATE from currentArgs — currentArgs[name]
   // stays undefined until confirmMultiSelect() runs the fill() path with the COMPLETE
   // array (a MERC composable relies on currentArgs[name] === undefined mid-selection).
-  const multiSelectDraft = ref<{ selectionName: string; values: unknown[]; copies?: number[] } | null>(null);
+  const multiSelectDraft = ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>(null);
 
   // === Editor draft (shared source of truth) ===
   // What the player has entered into the current number or text editor and not
@@ -1556,16 +1556,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   // A held copy the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575).
-  watch([currentChoices, multiSelectDraft], ([choices, draft]) => {
+  watch(currentChoices, (choices, previous) => {
+    const draft = multiSelectDraft.value;
     const pick = currentPick.value;
     if (!draft || !pick || draft.selectionName !== pick.name || !resolveMultiSelectConfig(pick)) return;
-    const copies = draft.copies ?? [];
+    const { copies } = draft;
     const entries = draft.values.map((value, i) => copyOfChoice(choices, value, copies[i]));
     const kept = entries.map((entry) => entry !== undefined && !entry.disabled);
     if (kept.every(Boolean)) return;
     const reasons = draft.values.flatMap((value, i) => {
       if (kept[i]) return [];
-      const label = labelOfPick(value, choices);
+      // The list the copy was held against still names a value the new one dropped.
+      const label = labelOfPick(value, previous ?? choices);
       const disabled = entries[i]?.disabled;
       return [disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`];
     });
@@ -2919,7 +2921,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
     if (cfg.max !== undefined && current.length >= cfg.max) return;
 
-    multiSelectDraft.value = { selectionName, values: [...current, offered] };
+    multiSelectDraft.value = listDraft(selectionName, [...current, offered]);
+  }
+
+  /** An ordered-list draft, each entry numbered as which repeat of its value it is. */
+  function listDraft(selectionName: string, values: unknown[]): NonNullable<typeof multiSelectDraft.value> {
+    const copies = values.map((value, i) => values.slice(0, i).filter(v => valuesEqual(v, value)).length);
+    return { selectionName, values, copies };
   }
 
   /** Drop one entry of the ordered-list draft BY INDEX (#249) — with repeats, a
@@ -2935,10 +2943,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       return;
     }
-    multiSelectDraft.value = {
-      selectionName,
-      values: draft.values.filter((_, i) => i !== index),
-    };
+    multiSelectDraft.value = listDraft(selectionName, draft.values.filter((_, i) => i !== index));
   }
 
   /**
@@ -3050,7 +3055,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const draft = multiSelectDraft.value;
     if (!draft || draft.selectionName !== selectionName) return false;
     const held = (v: unknown) =>
-      draft.values.some((d, i) => valuesEqual(d, v) && (copy === undefined || draft.copies?.[i] === copy));
+      draft.values.some((d, i) => valuesEqual(d, v) && (copy === undefined || draft.copies[i] === copy));
     // The draft holds offered values, so only a shorthand needs resolving.
     if (held(value)) return true;
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);

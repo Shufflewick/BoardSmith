@@ -78,6 +78,18 @@ describe('a multiSelect draft whose list changes mid-pick (#1575)', () => {
     expect(controller.lastError.value).toBe('Basic can no longer be chosen (spent), so it was taken out of your selection.');
   });
 
+  it('names a value the new list dropped altogether by its label', async () => {
+    const { controller, land } = controllerWithHeldFetch();
+    const started = controller.start('allocate');
+    await controller.toggleMultiSelect('allocations', 'basic', 0);
+
+    land([{ value: 'm1', display: 'M1' }]);
+    await started;
+
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'allocations', values: [], copies: [] });
+    expect(controller.lastError.value).toBe('Basic is no longer on offer, so it was taken out of your selection.');
+  });
+
   it('keeps every held copy the new list still offers, and says nothing', async () => {
     const { controller, land } = controllerWithHeldFetch();
     const started = controller.start('allocate');
@@ -113,5 +125,17 @@ describe('a multiSelect draft whose list changes mid-pick (#1575)', () => {
     expect(ticked).toEqual([false, false, false]);
     expect(panel.find('.multi-select-count').text()).toBe('Selected: 0/3');
     panel.unmount();
+  });
+
+  it('names the copy of every entry a custom UI writes into the draft (#1575 review F1)', async () => {
+    const { controller } = controllerWithHeldFetch();
+    void controller.start('allocate');
+    // @ts-expect-error A draft without copies would be counted but ticked nowhere, so the type refuses it.
+    const unnumbered: typeof controller.multiSelectDraft.value = { selectionName: 'allocations', values: ['basic'] };
+    expect(unnumbered).not.toBeNull();
+
+    controller.multiSelectDraft.value = { selectionName: 'allocations', values: ['basic'], copies: [1] };
+    expect(controller.isMultiSelectSelected('allocations', 'basic', 1)).toBe(true);
+    expect(controller.lastError.value).toBeNull();
   });
 });

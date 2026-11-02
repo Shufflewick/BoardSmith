@@ -555,10 +555,10 @@ export interface UseActionControllerReturn {
    * multiSelect selection, observed by both the auto ActionPanel and custom UIs so
    * they stay in parity. SEPARATE from currentArgs: currentArgs[name] stays undefined
    * until confirmMultiSelect() runs the fill() path with the complete array.
-   * A multiSelect draft's `copies[i]` is which copy of its value `values[i]` is (#1574);
-   * an orderedList draft has none.
+   * `copies[i]` is which copy of its value `values[i]` is (#1574): for a multiSelect,
+   * which offered entry it holds; for an orderedList, which repeat of the value it is.
    */
-  multiSelectDraft: Ref<{ selectionName: string; values: unknown[]; copies?: number[] } | null>;
+  multiSelectDraft: Ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>;
 
   // === Editor draft (shared in-progress typed value) ===
   /**

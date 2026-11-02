@@ -155,7 +155,7 @@ export function createActionMutators(
     const draft = controller.multiSelectDraft.value;
     const selectedValues = draft?.values ?? [];
     const choices = controller.currentChoices.value;
-    const refs = selectedValues.flatMap((val, i) => copyOfChoice(choices, val, draft?.copies?.[i] ?? 0)?.refs ?? []);
+    const refs = draft?.values.flatMap((val, i) => copyOfChoice(choices, val, draft.copies[i])?.refs ?? []) ?? [];
     if (refs.length === 0) {
       board.setHoveredChoice(null);
       return;

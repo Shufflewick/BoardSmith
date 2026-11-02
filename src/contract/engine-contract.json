@@ -2510,7 +2510,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A multiSelect draft takes out a held copy the pick's list stops offering, or offers disabled, and says so in lastError, so the Action Panel, the board, the count and the submission always agree (#1575)."
+      "summary": "A multiSelect draft takes out a held copy the pick's list stops offering, or offers disabled, and says so in lastError, so the Action Panel, the board, the count and the submission always agree; multiSelectDraft.copies is now required, and an ordered list's draft numbers each repeat of a value (#1575)."
     }
   ]
 }

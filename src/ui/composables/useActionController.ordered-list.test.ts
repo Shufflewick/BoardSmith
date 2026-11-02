@@ -77,6 +77,7 @@ describe('useActionController ordered lists (#249)', () => {
     expect(controller.multiSelectDraft.value).toEqual({
       selectionName: 'buildings',
       values: ['university', 'university'],
+      copies: [0, 1],
     });
   });
 
@@ -115,6 +116,22 @@ describe('useActionController ordered lists (#249)', () => {
     controller.removeListEntry('buildings', 1);
 
     expect(controller.multiSelectDraft.value?.values).toEqual(['university', 'university']);
+  });
+
+  it('numbers the copies of a repeated entry again once an earlier one is removed (#1575)', async () => {
+    const controller = newController();
+    await controller.start('repair');
+    await controller.appendListEntry('buildings', 'university');
+    await controller.appendListEntry('buildings', 'shipyard');
+    await controller.appendListEntry('buildings', 'university');
+
+    controller.removeListEntry('buildings', 0);
+
+    expect(controller.multiSelectDraft.value).toEqual({
+      selectionName: 'buildings',
+      values: ['shipyard', 'university'],
+      copies: [0, 0],
+    });
   });
 
   it('stops appending at the ENTRY cap', async () => {
