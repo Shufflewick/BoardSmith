@@ -2454,7 +2454,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "The random simulation policy plays a move that move enumeration lists when the action refuses the numbers or sets it drew, so a rule few drawn sets pass no longer stops a simulated game, and draws again, three draws in all, only for an action enumeration cannot list (#1567)."
+      "summary": "The random simulation policy plays a move that move enumeration lists when the action refuses the numbers or sets it drew, so a rule few drawn sets pass no longer stops a simulated game, and draws again, three draws in all, only when enumeration lists none or cannot list them all (#1567)."
     }
   ]
 }

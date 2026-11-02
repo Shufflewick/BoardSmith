@@ -333,7 +333,7 @@ function buildRandomArgs(
  * sets, one of the moves enumeration lists for it (#1567): a number is drawn
  * from its min and max (#1543) and a set from its choices (#1559), and whether
  * the action takes it can depend on other picks, which only the rules know.
- * An action enumeration cannot list is drawn again instead, at most
+ * When enumeration lists none, it is drawn again instead, at most
  * {@link REFUSED_DRAWS} draws in all.
  */
 function drawAcceptedPicks(
@@ -350,14 +350,8 @@ function drawAcceptedPicks(
     const refused = drawnPicksRefusal(game, actionDef, player, built.args);
     if (refused === undefined) return built;
     refusal = refused.replace(/\.$/, '');
-    const listed = draw === 0 ? listedMoves(game, actionDef, player) : undefined;
-    if (listed?.length === 0) {
-      return {
-        ok: false,
-        reason: `action '${actionDef.name}' refused the move the simulator drew for its numbers or sets, with: ${refusal}, and move enumeration lists no move it accepts`,
-      };
-    }
-    if (listed) return { ok: true, args: rng.pick(listed) };
+    const listed = draw === 0 ? listedMoves(game, actionDef, player) : [];
+    if (listed.length > 0) return { ok: true, args: rng.pick(listed) };
   }
   return {
     ok: false,
@@ -365,7 +359,7 @@ function drawAcceptedPicks(
   };
 }
 
-/** How many moves the random policy draws for an action enumeration cannot list, as the smoke walk tries three (#466). */
+/** How many moves the random policy draws for an action enumeration lists none for, as the smoke walk tries three (#466). */
 const REFUSED_DRAWS = 3;
 
 /**
@@ -389,20 +383,20 @@ function drawnPicksRefusal(
 }
 
 /**
- * Every move enumeration lists for the action, or `undefined` when it cannot
- * list them all: a required number input it cannot list (#689), or more
- * moves than its budget (#691).
+ * Every move enumeration lists for the action, or none when it cannot list
+ * every move the policy draws: a number input it cannot list, which it leaves
+ * out (#689), or more moves than its budget (#691).
  */
-function listedMoves(game: Game, actionDef: ActionDefinition, player: Player): Record<string, unknown>[] | undefined {
+function listedMoves(game: Game, actionDef: ActionDefinition, player: Player): Record<string, unknown>[] {
   const unlistable = actionDef.selections.some(
-    (s) => s.type === 'number' && !s.optional && 'unlistable' in numberInputValues(s as NumberSelection),
+    (s) => s.type === 'number' && 'unlistable' in numberInputValues(s as NumberSelection),
   );
-  if (unlistable) return undefined;
+  if (unlistable) return [];
   try {
     return enumerateActionMoves(game, actionDef, player);
   } catch (error) {
     if (!(error instanceof MoveListTooLargeError)) throw error;
-    return undefined;
+    return [];
   }
 }
 

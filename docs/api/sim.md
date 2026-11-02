@@ -53,12 +53,11 @@ shares the game's engine. Its options are described in
   `orderedList`), so the action's `validate` or the pick's own can refuse the
   move (a range that depends on other picks, #1543, or a rule across a set's
   items, #1559). The policy then plays one of the moves move enumeration lists
-  for the action instead (#1567), and the action has no move this turn when it
-  lists none. An action enumeration cannot list (a required number input
-  without `integer: true`, or more moves than its budget) is drawn again
-  instead, three draws in all, as the smoke walk tries three numbers, and has
-  no move this turn when all three are refused. Either way the refusal is the
-  reason given if its seat has no other move. A move refused for a pick the
+  for the action instead (#1567). When it lists none, or cannot list them all
+  (a number input it cannot list, or more moves than its budget), the move is
+  drawn again, three draws in all, as the smoke walk tries three numbers. An
+  action that refuses all three has no move this turn, and the refusal is the
+  reason given if its seat has no other. A move refused for a pick the
   engine offered is played as drawn, so the game fails on it (#910).
   The policy `simulateRandomGames` plays every seat with. A follow-up's move
   is built differently from an action's: it comes from move enumeration, so a

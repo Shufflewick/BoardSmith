@@ -14,7 +14,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
-import { random, greedy, mcts, type Policy } from './index.js';
+import { random, greedy, mcts, type Policy, type PolicyMove } from './index.js';
 import {
   playbackTurnDefinition,
   validateGatedDefinition,
@@ -169,23 +169,25 @@ class LeapRaceGame extends RaceGame {
  * marker in 0..100, so whether a number is accepted depends on the start picked
  * before it (#1543). With `refuseAll` it refuses every shift; with
  * `refuseFrom100` the `from` pick refuses 100, which it still offers (#910).
- * With `fractional` the shift is not `integer`, so enumeration cannot list it
- * (#1567). The game ends after six turns.
+ * With `nudge` it also takes an optional fractional nudge, which enumeration
+ * cannot list (#1567). The game ends after six turns.
  */
 class ShiftGame extends Game<ShiftGame, Player> {
   turns = 0;
 
-  constructor(options: GameOptions & { refuseAll?: boolean; refuseFrom100?: boolean; fractional?: boolean }) {
+  constructor(options: GameOptions & { refuseAll?: boolean; refuseFrom100?: boolean; nudge?: boolean }) {
     super(options);
     const turn = (_args: unknown, ctx: { game: ShiftGame }) => {
       if (++ctx.game.turns === 6) ctx.game.finish([]);
       return { success: true };
     };
+    const shift = Action.create<ShiftGame>('shift')
+      .chooseFrom('from', { choices: [0, 100], validate: (from) => !options.refuseFrom100 || from !== 100 })
+      .enterNumber('by', { min: -100, max: 100, integer: true })
+      .chooseFrom('confirm', { choices: (ctx) => [`shift by ${ctx.args.by as number}`] });
+    if (options.nudge) shift.enterNumber('nudge', { min: 0, max: 1, optional: true });
     this.registerAction(
-      Action.create<ShiftGame>('shift')
-        .chooseFrom('from', { choices: [0, 100], validate: (from) => !options.refuseFrom100 || from !== 100 })
-        .enterNumber('by', { min: -100, max: 100, integer: !options.fractional })
-        .chooseFrom('confirm', { choices: (ctx) => [`shift by ${ctx.args.by as number}`] })
+      shift
         .validate((args) => {
           if (options.refuseAll) return 'Shifting is never allowed.';
           const to = (args.from as number) + (args.by as number);
@@ -583,26 +585,32 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toMatch(/^Action 'shift' rejected the move \{"from":100,/);
   });
 
-  it("random names the action's refusal as the reason its seat has no move when enumeration lists none it accepts (#1567)", async () => {
+  it("random names the action's refusal as the reason its seat has no move when every draw is refused", async () => {
     const result = await playGame(
       { gameClass: ShiftGame },
       { playerCount: 2, seed: 'refused', gameOptions: { refuseAll: true }, policies: [random(), random()], maxActions: 20 },
     );
     expect(result.completed).toBe(false);
     expect(result.error).toMatch(
-      /action 'shift' refused the move the simulator drew for its numbers or sets, with: Shifting is never allowed, and move enumeration lists no move it accepts/,
+      /action 'shift' refused all 3 moves the simulator drew for its numbers or sets, the last with: Shifting is never allowed/,
     );
   });
 
-  it("random draws a move enumeration cannot list again, naming the action's refusal when every draw is refused", async () => {
-    const result = await playGame(
-      { gameClass: ShiftGame },
-      { playerCount: 2, seed: 'refused', gameOptions: { refuseAll: true, fractional: true }, policies: [random(), random()], maxActions: 20 },
-    );
-    expect(result.completed).toBe(false);
-    expect(result.error).toMatch(
-      /action 'shift' refused all 3 moves the simulator drew for its numbers or sets, the last with: Shifting is never allowed/,
-    );
+  it('random draws a refused move again rather than play a listed one without the number input enumeration cannot list (#1567)', async () => {
+    const played: PolicyMove[] = [];
+    const recording: Policy = {
+      name: 'recording',
+      async choose(turn) {
+        const choice = await random().choose(turn);
+        if ('action' in choice) played.push(choice);
+        return choice;
+      },
+    };
+    for (const seed of Array.from({ length: 20 }, (_, i) => `n${i}`)) {
+      await playGame({ gameClass: ShiftGame }, { playerCount: 2, seed, gameOptions: { nudge: true }, policies: [recording, recording], maxActions: 20 });
+    }
+    expect(played.length).toBeGreaterThan(0);
+    expect(played.filter((move) => !('nudge' in move.args))).toEqual([]);
   });
 
   it('refuses a player count the game does not declare', async () => {
