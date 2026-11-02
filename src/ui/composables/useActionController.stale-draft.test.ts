@@ -32,6 +32,11 @@ const METADATA: Record<string, EnrichedActionMetadata> = {
       choices: [{ value: 'university', display: 'University' }, { value: 'shipyard', display: 'Shipyard' }],
     }],
   },
+  rebuild: {
+    name: 'rebuild',
+    prompt: 'Rebuild',
+    selections: [{ name: 'buildings', type: 'choice', prompt: 'Rebuild, in order', orderedList: { min: 1, max: 3 }, choices: [] }],
+  },
   allocate: {
     name: 'allocate',
     prompt: 'Allocate',
@@ -58,7 +63,7 @@ function controllerWithHeldFetch(action = 'allocate') {
     fetchPickChoices: () => new Promise((resolve) => { land = resolve; }),
   });
   // The server answers a list pick with its bounds as well as its list.
-  const bounds = action === 'repair' ? { orderedList: { min: 1, max: 3 } } : { multiSelect: { min: 1, max: 3 } };
+  const bounds = action === 'allocate' ? { multiSelect: { min: 1, max: 3 } } : { orderedList: { min: 1, max: 3 } };
   return { controller, land: (choices: PickChoicesResult['choices']) => land({ success: true, choices, ...bounds }) };
 }
 
@@ -202,6 +207,19 @@ describe('an ordered-list draft whose list changes mid-pick (#1576)', () => {
     expect(panel.findAll('.ordered-list-label').map((entry) => entry.text())).toEqual(['University']);
     expect(panel.find('.ordered-list-count').text()).toBe('Added: 1/3');
     panel.unmount();
+  });
+
+  it('holds the offered value for an entry named by shorthand while nothing was on offer (#1576 review F1)', async () => {
+    const { controller, land } = controllerWithHeldFetch('rebuild');
+    const started = controller.start('rebuild');
+    await controller.appendListEntry('buildings', 'Shipyard');
+    await controller.appendListEntry('buildings', 'shipyard');
+
+    land([{ value: 'shipyard', display: 'Shipyard' }]);
+    await started;
+
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'buildings', values: ['shipyard', 'shipyard'], copies: [0, 1] });
+    expect(controller.lastError.value).toBeNull();
   });
 
   it('keeps every repeat of a value the new list offers once, and says nothing', async () => {

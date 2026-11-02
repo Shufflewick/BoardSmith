@@ -1563,10 +1563,17 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const ordered = resolveOrderedListConfig(pick) !== undefined;
     if (!ordered && !resolveMultiSelectConfig(pick)) return;
     const { copies } = draft;
+    // An entry added while nothing was on offer is held as the player named it, so match it to the new list first.
+    const offered = draft.values.map((value) => findMatchingChoice(value, choices)?.value ?? value);
     // An ordered list repeats a value without an offered entry per repeat, so it needs one enabled entry per value.
-    const entries = draft.values.map((value, i) => copyOfChoice(choices, value, ordered ? 0 : copies[i]));
+    const entries = offered.map((value, i) => copyOfChoice(choices, value, ordered ? 0 : copies[i]));
     const kept = entries.map((entry) => entry !== undefined && !entry.disabled);
-    if (kept.every(Boolean)) return;
+    const values = offered.filter((_, i) => kept[i]);
+    const next = ordered ? listDraft(draft.selectionName, values) : { selectionName: draft.selectionName, values, copies: copies.filter((_, i) => kept[i]) };
+    if (kept.every(Boolean)) {
+      if (offered.some((value, i) => value !== draft.values[i])) multiSelectDraft.value = next;
+      return;
+    }
     const reasons = new Set(draft.values.flatMap((value, i) => {
       if (kept[i]) return [];
       // The list the entry was held against still names a value the new one dropped.
@@ -1575,11 +1582,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return [disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`];
     }));
     const dropped = kept.filter((k) => !k).length;
-    multiSelectDraft.value = {
-      selectionName: draft.selectionName,
-      values: draft.values.filter((_, i) => kept[i]),
-      copies: copies.filter((_, i) => kept[i]),
-    };
+    multiSelectDraft.value = next;
     setError(`${[...reasons].join('; ')}, so ${dropped === 1 ? 'it was' : 'they were'} taken out of your selection.`);
   }, { flush: 'sync' });
 
