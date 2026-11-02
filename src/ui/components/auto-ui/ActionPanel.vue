@@ -922,15 +922,22 @@ const _splitChoices = computed(() =>
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
-/** Which copy of its value each choice is: a value offered N times is N multiSelect slots (#1561). */
+/**
+ * Which copy of its value each choice is: a value offered N times is N multiSelect
+ * slots (#1561), counted as the controller counts them, enabled entries first.
+ */
 const choiceCopies = computed(() => {
+  const copies: number[] = [];
   const seen = new Map<string, number>();
-  return filteredChoices.value.map(({ value }) => {
-    const key = choiceValueKey(value);
-    const copy = seen.get(key) ?? 0;
-    seen.set(key, copy + 1);
-    return copy;
-  });
+  for (const closed of [false, true]) {
+    filteredChoices.value.forEach((choice, i) => {
+      if (isDisabled(choice.disabled) !== closed) return;
+      const key = choiceValueKey(choice.value);
+      copies[i] = seen.get(key) ?? 0;
+      seen.set(key, copies[i] + 1);
+    });
+  }
+  return copies;
 });
 /** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
 const isDependentChoicePick = computed(() =>

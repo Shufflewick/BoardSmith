@@ -36,9 +36,26 @@ class AllocationGame extends Game<AllocationGame, Player> {
           return { success: true };
         }),
     );
+    // `prepare` is shared by one evaluation's `disabled` calls, which is how a
+    // game disables one copy of a value and not another.
+    const spending = (name: string, spent: (copy: number) => boolean) =>
+      Action.create<AllocationGame>(name)
+        .chooseFrom('allocations', {
+          choices: ['basic', 'basic', 'm1'],
+          multiSelect: { min: 1, max: 2 },
+          prepare: () => ({ seen: 0 }),
+          disabled: (choice, _ctx, prepared) =>
+            choice === 'basic' && spent((prepared as { seen: number }).seen++) ? 'spent' : false,
+        })
+        .execute((args, ctx) => {
+          (ctx.game as AllocationGame).allocated = args.allocations as unknown[];
+          return { success: true };
+        });
+    this.registerAction(spending('firstSpent', (copy) => copy === 0));
+    this.registerAction(spending('lastSpent', (copy) => copy === 1));
     this.setFlow({
       root: actionStep({
-        actions: ['allocate'],
+        actions: ['allocate', 'firstSpent', 'lastSpent'],
         player: (ctx) => ctx.game.getPlayer(1)!,
         repeatUntil: () => false,
         maxMoves: 5,
@@ -58,7 +75,7 @@ interface Table {
   panel: VueWrapper;
 }
 
-async function table(): Promise<Table> {
+async function table(action = 'allocate'): Promise<Table> {
   const { session, wiring, board, seatState } = await mountLiveSeat(AllocationGame, 'bs1561', mounted);
   const Host = defineComponent({
     setup: () => () =>
@@ -79,7 +96,7 @@ async function table(): Promise<Table> {
   });
   mounted.push(panel);
   await settle();
-  await wiring.controller.start('allocate');
+  await wiring.controller.start(action);
   await settle();
   return { session, controller: wiring.controller, panel };
 }
@@ -147,5 +164,23 @@ describe('a multiSelect pick offering one value more than once (#1561)', () => {
     await t.controller.toggleMultiSelect('allocations', 'm1', 1);
     await settle();
     expect(count(t)).toBe('Selected: 0/3');
+  });
+
+  it('takes an enabled copy of a value whose first copy is disabled', async () => {
+    const t = await table('firstSpent');
+    await clickBox(t, 1);
+    expect(boxes(t)).toEqual([['basic', false], ['basic', true], ['m1', false]]);
+    expect(count(t)).toBe('Selected: 1/2');
+  });
+
+  it('refuses a disabled copy of a value with its reason, though another copy is held', async () => {
+    const t = await table('lastSpent');
+    await clickBox(t, 0);
+    await clickBox(t, 1);
+    await t.controller.toggleMultiSelect('allocations', 'basic', 1);
+    await settle();
+    expect(boxes(t)).toEqual([['basic', true], ['basic', false], ['m1', false]]);
+    expect(count(t)).toBe('Selected: 1/2');
+    expect(t.controller.lastError.value).toBe('Selection disabled: spent');
   });
 });

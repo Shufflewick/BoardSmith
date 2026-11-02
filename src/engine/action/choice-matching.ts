@@ -17,6 +17,8 @@ interface MatchableChoice {
   value: unknown;
   /** The label a `{ value, label }` choice brought (#509), matched as display text. */
   label?: string;
+  /** Why the choice cannot be taken; falsy when it can. */
+  disabled?: string | false;
 }
 
 /**
@@ -145,15 +147,16 @@ function byIdentifyingSubset<C extends MatchableChoice>(
 /**
  * The choice a submitted value names: the structurally equal one, or the one
  * its shorthand resolves to. Undefined when the value names nothing on offer.
+ * Of a value offered more than once, an enabled copy, so the value is disabled
+ * only when every copy is (#1561).
  */
 export function findMatchingChoice<C extends MatchableChoice>(
   value: unknown,
   choices: readonly C[],
 ): C | undefined {
-  for (const choice of choices) {
-    if (valuesEqual(choice.value, value)) return choice;
-  }
-  return trySmartResolveChoice(value, choices);
+  const match = choices.find(choice => valuesEqual(choice.value, value)) ?? trySmartResolveChoice(value, choices);
+  if (!match?.disabled) return match;
+  return choices.find(choice => !choice.disabled && valuesEqual(choice.value, match.value)) ?? match;
 }
 
 /**

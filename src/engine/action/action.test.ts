@@ -639,6 +639,49 @@ describe('Action Executor', () => {
       expect(result.errors.join(' ')).toContain('duplicate');
     });
 
+    // #1561: each entry of a repeated value is its own slot, so a copy the game
+    // disabled cannot be taken and an enabled one can, wherever it is listed.
+    // `prepare` is shared by one evaluation's `disabled` calls, which is how a
+    // game tells copies of one value apart.
+    const copiesSpentAfter = (open: number) => Action.create('allocate')
+      .chooseFrom('allocations', {
+        choices: ['basic', 'basic', 'm1'],
+        multiSelect: { min: 1, max: 3 },
+        prepare: () => ({ seen: 0 }),
+        disabled: (choice, _ctx, prepared) =>
+          choice === 'basic' && (prepared as { seen: number }).seen++ >= open ? 'spent' : false,
+      })
+      .execute(() => {});
+
+    it('refuses a copy of a value past the copies the game left enabled (#1561)', () => {
+      const result = executor.validateSelection(
+        copiesSpentAfter(1).selections[0], ['basic', 'basic'], game.getPlayer(1)!, {},
+      );
+
+      expect(result.valid).toBe(false);
+    });
+
+    it('accepts a value whose first copy is disabled while a later one is not (#1561)', () => {
+      const firstSpent = Action.create('allocate')
+        .chooseFrom('allocations', {
+          choices: ['basic', 'basic', 'm1'],
+          multiSelect: { min: 1, max: 3 },
+          prepare: () => ({ seen: 0 }),
+          disabled: (choice, _ctx, prepared) =>
+            choice === 'basic' && (prepared as { seen: number }).seen++ === 0 ? 'spent' : false,
+        })
+        .execute(() => {});
+
+      const result = executor.validateSelection(
+        firstSpent.selections[0], ['basic'], game.getPlayer(1)!, {},
+      );
+
+      expect(result).toEqual({ valid: true, errors: [] });
+      expect(executor.validateSelection(
+        firstSpent.selections[0], ['basic', 'basic'], game.getPlayer(1)!, {},
+      ).valid).toBe(false);
+    });
+
     it('does not falsely flag distinct object choices that share an id field (WR-07)', () => {
       const attack = { id: 1, kind: 'attack' };
       const defend = { id: 1, kind: 'defend' };
