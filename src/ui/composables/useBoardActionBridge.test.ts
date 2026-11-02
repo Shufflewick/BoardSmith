@@ -907,3 +907,67 @@ describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
     expect(start).not.toHaveBeenCalled();
   });
 });
+
+describe('useBoardActionBridge: an auto-started action the server refused (#1562)', () => {
+  const pick: EnrichedPickMetadata = { name: 'card', type: 'choice', prompt: 'Which?', choices: [{ value: 'x', display: 'X' }] };
+
+  /**
+   * `play` is the sole action. The server refuses every send it is given, and
+   * the fourth never settles, so a loop stops there instead of spinning.
+   */
+  function refusedSoleAction(selections: EnrichedPickMetadata[] = [pick]) {
+    const sendAction = vi.fn().mockImplementation(async () =>
+      sendAction.mock.calls.length > 3 ? new Promise<never>(() => {}) : { success: false, error: 'Refused' });
+    const actionMetadata = ref({ play: { name: 'play', prompt: 'Play', selections } });
+    const availableActions = ref(['play']);
+    const controller = useActionController({
+      sendAction, availableActions, actionMetadata,
+      isMyTurn: ref(true), autoFill: true, autoExecute: true,
+    });
+    useBoardActionBridge({
+      controller, boardInteraction: createBoardInteraction(), isMyTurn: ref(true), autoEndTurn: ref(true),
+      actionMetadata, availableActions, disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+    /** A new state with the same offer, as the next broadcast would deliver it. */
+    const newState = () => { actionMetadata.value = { ...actionMetadata.value }; };
+    return { sendAction, controller, newState };
+  }
+
+  const settle = async () => { for (let i = 0; i < 10; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+  it('sends an auto-filled action once, and leaves it to the player after the refusal', async () => {
+    const { sendAction, controller } = refusedSoleAction();
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(1);
+    expect(controller.currentAction.value).toBeNull();
+  });
+
+  it('sends a sole action with no picks once', async () => {
+    const { sendAction } = refusedSoleAction([]);
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(1);
+  });
+
+  it('starts and auto-fills it again when a new state arrives', async () => {
+    const { sendAction, newState } = refusedSoleAction();
+    await settle();
+    newState();
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(2);
+  });
+
+  it('starts it again when a new state landed while the refused send was out', async () => {
+    const { sendAction, newState } = refusedSoleAction();
+    let refuse!: () => void;
+    sendAction.mockImplementationOnce(() => new Promise((resolve) => {
+      refuse = () => resolve({ success: false, error: 'Refused' });
+    }));
+    await settle();
+    newState();
+    await settle();
+    refuse();
+    await settle();
+    expect(sendAction).toHaveBeenCalledTimes(2);
+  });
+});

@@ -21,6 +21,7 @@ export function makeController(opts: {
   const currentArgs = ref<Record<string, unknown>>(opts.args ?? {});
   const isExecuting = ref(false);
   const actionCompletedTick = ref(0);
+  const lastActionResult = ref(null);
   const multiSelectDraft = ref(null);
   const actionSnapshot = ref(null);
   const pendingFollowUp = ref(false);
@@ -48,6 +49,7 @@ export function makeController(opts: {
     currentArgs,
     isExecuting,
     actionCompletedTick,
+    lastActionResult,
     multiSelectDraft,
     actionSnapshot,
     pendingFollowUp,

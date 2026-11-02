@@ -251,6 +251,15 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // the sole endTurn auto-executes whenever the action set finally settles.
   let autoEndArmed = false;
 
+  // The action auto-start last opened and the offer it opened from, and that pair
+  // once the server refused it: auto-start leaves a refused action to the player
+  // until a new offer arrives, so a refusal is never resent in a loop (#1562).
+  let autoStarted: { action: string; offer: EnrichedActionMetadata[] } | undefined;
+  let refused: typeof autoStarted;
+  watch(() => controller.lastActionResult.value, (last) => {
+    if (last && !last.result.success && last.action === autoStarted?.action) refused = autoStarted;
+  });
+
   function tryAutoStartSingleAction(skipNoSelections = false): void {
     if (autoEndTurn.value === false) return;
     if (!isMyTurn.value) return;
@@ -270,6 +279,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     // ENABLED action", which would start auto-executing a lone `pass` the
     // moment some other action went grey.
     if (actionDisabledReason(action.name)) return;
+    if (refused?.action === action.name && refused.offer === actions) return;
+    autoStarted = { action: action.name, offer: actions };
 
     if (action.selections.length > 0) {
       autoEndArmed = false; // a selection action auto-started — the auto-end intent is moot

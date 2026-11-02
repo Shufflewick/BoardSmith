@@ -25,6 +25,18 @@ const metadata: Record<string, EnrichedActionMetadata> = {
     name: 'pickOrder', prompt: 'Order',
     selections: [{ name: 'order', type: 'choice', prompt: 'Which?', choices: ONE, orderedList: { min: 1, max: 2 } }],
   },
+  pickNone: {
+    name: 'pickNone', prompt: 'Allocate',
+    selections: [{ name: 'none', type: 'choice', prompt: 'Which?', choices: ONE, multiSelect: { min: 0, max: 0 } }],
+  },
+  orderNone: {
+    name: 'orderNone', prompt: 'Order none',
+    selections: [{ name: 'none', type: 'choice', prompt: 'Which?', choices: ONE, orderedList: { min: 0, max: 0 } }],
+  },
+  pickTwo: {
+    name: 'pickTwo', prompt: 'Pick two',
+    selections: [{ name: 'two', type: 'choice', prompt: 'Which?', choices: ONE, multiSelect: { min: 2, max: 3 } }],
+  },
   pickOne: {
     name: 'pickOne', prompt: 'Pick one',
     selections: [{ name: 'one', type: 'choice', prompt: 'Which?', choices: ONE }],
@@ -56,5 +68,21 @@ describe('auto-fill of a one-choice list pick (#769)', () => {
     const sendAction = await autoFilled(action);
     expect(sendAction).toHaveBeenCalledTimes(1);
     expect(sendAction.mock.calls[0][1]).toEqual(args);
+  });
+});
+
+describe('auto-fill of a list pick a list of one does not fit (#1562)', () => {
+  it.each([
+    ['pickNone', { none: [] }],
+    ['orderNone', { none: [] }],
+  ])('%s, whose max is 0, sends the empty list', async (action, args) => {
+    const sendAction = await autoFilled(action);
+    expect(sendAction).toHaveBeenCalledTimes(1);
+    expect(sendAction.mock.calls[0][1]).toEqual(args);
+  });
+
+  it('a pick of at least two is left to the player, not sent the one choice', async () => {
+    const sendAction = await autoFilled('pickTwo');
+    expect(sendAction).not.toHaveBeenCalled();
   });
 });
