@@ -85,6 +85,21 @@ export function paletteChoices(palette: ReadonlyArray<string | object>): { choic
 }
 
 /**
+ * Each seat's colour (#1569): the one it chose, else the first `palette` colour
+ * no seat chose or was dealt before it, so seats differ while the palette has
+ * enough colours. A seat left none, past the palette's end, stays undefined.
+ */
+export function dealSeatColors(chosen: ReadonlyArray<string | undefined>, palette: readonly string[]): Array<string | undefined> {
+  const taken = new Set(chosen);
+  return chosen.map((color) => {
+    if (color !== undefined) return color;
+    const free = palette.find((c) => !taken.has(c));
+    taken.add(free);
+    return free;
+  });
+}
+
+/**
  * The `colors` and `colorLabels` game options that seat a `playerCount` table in
  * boardsmith.json's `colorPalette` as the dev host seats it, or none when it
  * declares no palette, so a game built without a host gets the colours real play gives (#1552).

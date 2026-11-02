@@ -201,7 +201,8 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
     await host.handleMessage('A', { type: 'hello' });
 
     expect(starts[0].exclusiveSeats).toEqual({ dictator: 2 });
-    expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#95a5a6']);
+    // Seat 3 names no colour, so it is dealt the first one no seat takes (#1569).
+    expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#3498db']);
     expect(starts[0].playerIsBot).toEqual([false, true, true]);
     expect(starts[0].playerConfigs[1]).toMatchObject({ botLevel: 'easy' });
   });

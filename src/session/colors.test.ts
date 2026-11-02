@@ -3,7 +3,7 @@
  * engine's own palette and names, so there is one player-colour list (#814).
  */
 import { describe, it, expect } from 'vitest';
-import { createColorOption, type ColorOptionDefinition } from './colors.js';
+import { createColorOption, dealSeatColors, type ColorOptionDefinition } from './colors.js';
 import { DEFAULT_COLOR_PALETTE } from '../engine/index.js';
 
 describe('createColorOption', () => {
@@ -42,5 +42,21 @@ describe('the colour option\'s label (#1304)', () => {
     const relabelled: ColorOptionDefinition = { type: 'color', label: 'Team colour', choices: [] };
     expect(createColorOption().label).toBe('Color');
     expect(relabelled.type).toBe('color');
+  });
+});
+
+describe('dealSeatColors (#1569)', () => {
+  const palette = ['#e74c3c', '#3498db', '#27ae60'];
+
+  it('gives each seat with no colour the first palette colour no seat holds', () => {
+    expect(dealSeatColors([undefined, '#e74c3c', undefined], palette)).toEqual(['#3498db', '#e74c3c', '#27ae60']);
+  });
+
+  it('keeps the colours seats chose', () => {
+    expect(dealSeatColors(['#27ae60', undefined], palette)).toEqual(['#27ae60', '#e74c3c']);
+  });
+
+  it('leaves a seat uncoloured once the palette has no colour left for it', () => {
+    expect(dealSeatColors(['#e74c3c', '#3498db', '#27ae60', undefined], palette)).toEqual([...palette, undefined]);
   });
 });

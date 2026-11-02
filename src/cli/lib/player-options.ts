@@ -327,7 +327,8 @@ export function presetSeatSetup(
     const refused = presetSeatRefusal(seat, index + 1, palette);
     if (refused !== undefined) throw refuse(refused);
   });
-  const colors = seats.map((seat, index) => (seat.color as string | undefined) ?? palette[index]);
+  // A seat that names no colour is dealt one no seat takes (dealSeatColors), so only named colours can collide.
+  const colors = seats.map((seat) => seat.color as string | undefined);
   const twin = colors.findIndex((color, index) => color !== undefined && colors.indexOf(color) !== index);
   if (twin !== -1) {
     throw refuse(`seats ${colors.indexOf(colors[twin]) + 1} and ${twin + 1} both take the color ${colors[twin]}; give each seat its own.`);
