@@ -229,6 +229,30 @@ export function readingCondition(): boolean {
   return conditionDepth > 0;
 }
 
+/** The innermost action rule running: an `execute`, or one that works out an offer, which an execute may nest (#1550). */
+let runningRule: 'execute' | 'offer' | undefined;
+
+/** Run an action rule as `rule`, the innermost until it returns. */
+function asRule<T>(rule: 'execute' | 'offer', run: () => T): T {
+  const outer = runningRule;
+  runningRule = rule;
+  try {
+    return run();
+  } finally {
+    runningRule = outer;
+  }
+}
+
+/** Whether the innermost action rule running is an `execute`, the one place `game.stepOpenMs()` may be read (#1550). */
+export function runningExecute(): boolean {
+  return runningRule === 'execute' && !readingCondition();
+}
+
+/** Run rules that work out what a seat is offered (`disabled`, `validate`, candidates), where `game.stepOpenMs()` is refused (#1550). */
+export function offering<T>(run: () => T): T {
+  return asRule('offer', run);
+}
+
 export function evaluateConditionWithTrace<Ctx>(
   condition: Record<string, (ctx: Ctx) => boolean>,
   context: Ctx,
@@ -710,10 +734,11 @@ export class ActionExecutor {
         ? (selection as DisabledRule<unknown>)
         : {};
     const { disabled } = rule;
-    const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
+    const { prepare } = rule;
+    const prepared = disabled && prepare ? offering(() => prepare(context)) : undefined;
     const argsHidden = disabled !== undefined && hidesFrom(player.seat, args);
     return candidates.map((candidate) => {
-      const reason = disabled ? disabled(candidate.value, context, prepared) : false;
+      const reason = disabled ? offering(() => disabled(candidate.value, context, prepared)) : false;
       const gameDisabled = reason === false ? false : seatText(
         reason,
         NEUTRAL_DISABLED,
@@ -741,8 +766,10 @@ export class ActionExecutor {
    * `disabled` rule, the wire, validation, `execute` -- sees the value.
    */
   private candidatesOf(selection: Selection, context: ActionContext): Candidate[] {
-    if (selection.type === 'choice') return this.choiceItemsOf(selection as ChoiceSelection, context).map(asCandidate);
-    return this.elementCandidatesOf(selection, context).map((value) => ({ value }));
+    return offering(() => {
+      if (selection.type === 'choice') return this.choiceItemsOf(selection as ChoiceSelection, context).map(asCandidate);
+      return this.elementCandidatesOf(selection, context).map((value) => ({ value }));
+    });
   }
 
   /** A choice selection's `choices`, after `filterBy`, as the game wrote them. */
@@ -1228,8 +1255,9 @@ export class ActionExecutor {
    */
   private checkActionValidate(action: ActionDefinition, context: ActionContext): string | null {
     if (!action.validate) return null;
+    const validate = action.validate;
     return interpretValidateResult(
-      action.validate(context.args, context),
+      offering(() => validate(context.args, context)),
       `validate for action '${action.name}'`,
       `Action '${action.name}' is not allowed with these choices`,
       hidesFrom(context.player.seat, context.args),
@@ -1373,7 +1401,7 @@ export class ActionExecutor {
   /** Run an action's `execute`, the one place it is called, as game code that changes the game (#631). */
   private runExecute(action: ActionDefinition, args: Record<string, unknown>, context: ActionContext): ActionResult {
     try {
-      const result = actingFor(this.game._ctx, context.player.seat, () => action.execute(args, context));
+      const result = asRule('execute', () => actingFor(this.game._ctx, context.player.seat, () => action.execute(args, context)));
       return result ? acceptExecuteResult(action.name, result) : { success: true };
     } catch (error) {
       return failedExecute(action.name, error);

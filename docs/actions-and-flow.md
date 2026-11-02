@@ -2444,6 +2444,27 @@ Action.create<MyGame>('levelUp')
   `session.host.reoffer()` builds the views again at the clock's instant.
   `boardsmith dev` stamps every op from the clock it runs step windows on.
 
+##### `game.stepOpenMs()` - how long the timed step has been open, in `execute`
+
+An action's `execute` sometimes needs the number itself, to record in the
+game: say, the playback tick a 2x vote takes effect at. A seat sends the tick
+its screen shows, and the host must not accept one earlier than its own clock
+has reached, so `execute` clamps it:
+
+```typescript
+Action.create<MyGame>('speedUp')
+  .enterNumber('tick', { min: 0 })
+  .execute(({ tick }, ctx) => {
+    ctx.game.speedUpAt = Math.max(tick, ctx.game.stepOpenMs());
+  });
+```
+
+It measures as `stepOpenFor(ms)` does and throws in the same cases, and it
+arms no re-offer (#1550). **Only `execute` may read it**: an offer worked out
+from a number would not be worked out again as time passes, so reading it in
+`disabled`, `validate`, a `condition` or outside any action throws, saying to
+read `stepOpenFor(ms)` there.
+
 #### `phase` - Named game phase
 
 ```typescript

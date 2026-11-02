@@ -57,7 +57,7 @@ import {
   type VisibilityState,
 } from './visibility.js';
 import type { ActionDefinition, ActionResult, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
-import { ActionExecutor, readingCondition, type AcceptedArgs, type PerformOptions } from '../action/action.js';
+import { ActionExecutor, offering, readingCondition, runningExecute, type AcceptedArgs, type PerformOptions } from '../action/action.js';
 import { hasActionTemp, settingsForSeat } from '../action/helpers.js';
 import type { FlowDefinition, FlowState, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -2599,7 +2599,8 @@ export class Game<
     // (ShufflewickPub #384). Enforcement passes nothing and gets the live game,
     // so the button a player sees and the gate the server applies are still one
     // rule evaluated one way.
-    const reason = action.disabled({ game: reading ?? this, player, args: {} });
+    const disabled = action.disabled;
+    const reason = offering(() => disabled({ game: reading ?? this, player, args: {} }));
     return reason === false ? null : reason;
   }
 
@@ -3435,25 +3436,58 @@ export class Game<
           'submission in .validate().',
       );
     }
+    const { openedAt, elapsed } = this.timedStepClock('stepOpenFor', "its actions' disabled, validate or execute");
+    if (elapsed >= ms) return true;
+    this._reofferAt = Math.min(this._reofferAt ?? Infinity, openedAt + ms);
+    return false;
+  }
+
+  /**
+   * How many milliseconds the open timed step has been open (#1550), measured
+   * as {@link stepOpenFor} measures, for an action's `execute` to record in
+   * the game: say, the tick a vote changes the playback speed at, clamped so
+   * a seat cannot claim a tick earlier than the host has reached.
+   *
+   * ```ts
+   * .execute(({ tick }, ctx) => { ctx.game.speedUpAt = Math.max(tick, ctx.game.stepOpenMs()); })
+   * ```
+   *
+   * Only `execute` may read it. An offer worked out from a number would never
+   * be worked out again as time passes; `disabled` and `validate` read the
+   * threshold {@link stepOpenFor}, which tells the host when to offer again.
+   *
+   * @throws when read outside an action's execute, when no timed step is open, or when the host stamped no instant.
+   */
+  stepOpenMs(): number {
+    if (!runningExecute()) {
+      throw new Error(
+        "stepOpenMs() was read outside an action's execute. An offer worked out from it would not be worked " +
+          'out again as time passes, so in .disabled() or .validate() read game.stepOpenFor(ms), which ' +
+          'tells the host when its answer changes.',
+      );
+    }
+    return this.timedStepClock('stepOpenMs', "its actions' execute").elapsed;
+  }
+
+  /** The open timed step's opening instant and how long it has been open, at the host's instant for this op. */
+  private timedStepClock(reader: string, where: string): { openedAt: number; elapsed: number } {
     const openedAt = this._flowEngine?.openTimedStepOpenedAt();
     if (openedAt === undefined) {
       throw new Error(
-        'stepOpenFor() measures how long the open timed step has been open, but no step with timeLimitMs ' +
+        `${reader}() measures how long the open timed step has been open, but no step with timeLimitMs ` +
           'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
-          'timeLimitMs: its actions\' disabled, validate or execute.',
+          `timeLimitMs: ${where}.`,
       );
     }
     if (openedAt === null || this._hostNow === undefined) {
       throw new Error(
-        `stepOpenFor() needs the host's instant, and this game has no instant for ${openedAt === null ? "the op that opened the step" : 'this op'}. ` +
+        `${reader}() needs the host's instant, and this game has no instant for ${openedAt === null ? "the op that opened the step" : 'this op'}. ` +
           "A host stamps every op with its own clock (executeOp's hostOptions.now; GameRunner.setNow in a test). " +
           'A replay of the move history (GameRunner.replay) has none, because the history records no instants.',
       );
     }
     // Two host machines' clocks can disagree by a little; a step is never open for less than no time.
-    if (Math.max(0, this._hostNow - openedAt) >= ms) return true;
-    this._reofferAt = Math.min(this._reofferAt ?? Infinity, openedAt + ms);
-    return false;
+    return { openedAt, elapsed: Math.max(0, this._hostNow - openedAt) };
   }
 
   /**
