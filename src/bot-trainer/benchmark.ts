@@ -7,7 +7,7 @@ import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
 import type { ObjectiveWeight } from './types.js';
-import { projectGameOptions } from '#testing/project-game-options';
+import { projectColorOptions, projectGameOptions } from '#testing/project-game-options';
 
 /**
  * Benchmark configuration
@@ -270,7 +270,8 @@ async function runBenchmarkGame<G extends Game>(
     const runner = new GameRunner({
       GameClass,
       gameType,
-      gameOptions: { playerCount: 2, seed },
+      // Seats get boardsmith.json's colours, as a host gives them (#1560).
+      gameOptions: { ...projectColorOptions(2), playerCount: 2, seed },
       // Every option the project's boardsmith.json declares, at its default:
       // the game every host starts (#701).
       declaredGameOptions: projectGameOptions(),
@@ -436,7 +437,7 @@ export function weightedBot<G extends Game>(
   const runner = new GameRunner({
     GameClass,
     gameType,
-    gameOptions: { playerCount: 2, seed: 'objective-check' },
+    gameOptions: { ...projectColorOptions(2), playerCount: 2, seed: 'objective-check' },
     declaredGameOptions: projectGameOptions(),
   });
   runner.setNow(FROZEN_NOW);

@@ -39,3 +39,29 @@ describe('the bot benchmark starts the game with the options boardsmith.json dec
     expect(() => weightedBot(RoundsGame, 'rounds', { objectives }, [{ id: 'none', weight: 1 }])).not.toThrow(/rounds/);
   });
 });
+
+/** Refuses to start with a seat outside the palette boardsmith.json declares. */
+const palette = ['#E74C3C', '#3498DB'];
+class PaletteGame extends Game<PaletteGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const player of this.all(Player)) {
+      if (!palette.includes(player.color)) throw new Error(`Player colour ${player.color} is not in the palette`);
+    }
+    this.registerAction(Action.create<PaletteGame>('move').execute(() => ({ success: true })));
+    this.setFlow({ root: eachPlayer({ do: actionStep({ actions: ['move'] }) }) });
+  }
+}
+
+describe('the bot benchmark seats players in boardsmith.json\'s colorPalette (#1560)', () => {
+  it('plays every game, and weighs the objectives, in the declared colours', async () => {
+    const dir = tempTree('bs-benchmark-palette-');
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'palette', backend: 'table', colorPalette: palette }));
+    process.chdir(dir);
+    const result = await benchmarkBot(PaletteGame, 'palette', undefined, [], { gameCount: 2, mctsIterations: 1, maxActions: 4, seed: 'r' });
+    expect(result.failures).toEqual([]);
+    expect(result.gamesPlayed).toBe(2);
+    const objectives = () => ({ none: { checker: () => 0, weight: 0 } });
+    expect(() => weightedBot(PaletteGame, 'palette', { objectives }, [{ id: 'none', weight: 1 }])).not.toThrow();
+  });
+});

@@ -827,7 +827,7 @@ To let players choose colors when they set up a game, define `colorPalette` in `
 }
 ```
 
-If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. `createTestGame`, `boardsmith validate`, `boardsmith simulate` and `boardsmith build` seat players in the declared palette too, as the lobby does.
+If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. `createTestGame`, `createHeadlessSession`, `boardsmith validate`, `boardsmith simulate`, `boardsmith build` and `boardsmith evolve-bot-weights` seat players in the declared palette too, as the lobby does.
 
 A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 
