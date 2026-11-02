@@ -821,13 +821,13 @@ To let players choose colors when they set up a game, define `colorPalette` in `
 ```json
 {
   "colorPalette": [
-    { "hex": "#ff0000", "label": "Fire" },
-    { "hex": "#0000ff", "label": "Ice" }
+    { "id": "fire", "hex": "#ff0000", "label": "Fire" },
+    { "id": "ice", "hex": "#0000ff", "label": "Ice" }
   ]
 }
 ```
 
-If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. Plain hex strings are also accepted (e.g., `["#ff0000", "#0000ff"]`).
+If `colorPalette` is omitted, the engine's 16 named colours (`DEFAULT_COLOR_PALETTE`: Red, Blue, Green, Yellow, ...) are used. `createTestGame`, `boardsmith validate`, `boardsmith simulate` and `boardsmith build` seat players in the declared palette too, as the lobby does.
 
 A colour list declared in code (a `color` player option such as `createColorOption()`, or `gameDefinition.colorPalette`) is never published, so `boardsmith dev` refuses to start unless it matches exactly what the lobby will offer; declare custom colours in `boardsmith.json`'s `colorPalette` instead.
 

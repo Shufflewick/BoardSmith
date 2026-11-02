@@ -1,6 +1,6 @@
 /**
- * The game options of the project the tests run in, read from its
- * `boardsmith.json` with Node (#701). `test-game.ts`,
+ * The game options and seat colours of the project the tests run in, read from its
+ * `boardsmith.json` with Node (#701, #1552). `test-game.ts`,
  * `headless-session.ts` and `bot-trainer/benchmark.ts` load this, through `#testing/project-game-options`,
  * and a compiler sees `project-game-options.d.ts` in its place (see
  * `project-test-utils.d.ts`).
@@ -8,32 +8,38 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import type { projectGameOptions as Declared } from '#testing/project-game-options';
+import type { projectColorOptions as DeclaredColors, projectGameOptions as DeclaredOptions } from '#testing/project-game-options';
 import type { GameOptionDefinition } from '../types/protocol.js';
 import { parseGameOptionList } from '../session/game-option-selection.js';
+import { paletteGameOptions } from '../session/colors.js';
 
 /**
  * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
  * thousands of test games, and a file edited since (a watch-mode rerun) is parsed again.
  */
-const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition> }>();
+const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition>; colorPalette: unknown }>();
 
-export const projectGameOptions: typeof Declared = () => {
+export const projectGameOptions: typeof DeclaredOptions = () => projectDeclarations()?.declared;
+
+export const projectColorOptions: typeof DeclaredColors = (playerCount) =>
+  paletteGameOptions(projectDeclarations()?.colorPalette, playerCount);
+
+function projectDeclarations() {
   const file = projectFile(process.cwd());
   if (file === undefined) return undefined;
   const text = readFileSync(file, 'utf-8');
   const cached = parsed.get(file);
-  if (cached?.text === text) return cached.declared;
-  let config: { gameOptions?: unknown };
+  if (cached?.text === text) return cached;
+  let config: { gameOptions?: unknown; colorPalette?: unknown };
   try {
-    config = JSON.parse(text) as { gameOptions?: unknown };
+    config = JSON.parse(text) as { gameOptions?: unknown; colorPalette?: unknown };
   } catch {
     throw new Error(`${file} is not valid JSON, so the game's options cannot be read from it. Fix the file.`);
   }
-  const declared = parseGameOptionList(config.gameOptions);
-  parsed.set(file, { text, declared });
-  return declared;
-};
+  const declarations = { text, declared: parseGameOptionList(config.gameOptions), colorPalette: config.colorPalette };
+  parsed.set(file, declarations);
+  return declarations;
+}
 
 /**
  * The nearest `boardsmith.json` at or above `start`, or `undefined` when the

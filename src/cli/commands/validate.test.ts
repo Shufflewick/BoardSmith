@@ -58,6 +58,8 @@ import {
   OptionSpriteGame,
   FlowSpriteGame,
   BrokenFlowSpriteGame,
+  PaletteSpriteGame,
+  FOUR_COLOURS,
 } from './sprite-images.fixture.js';
 import { withDeclaredGameOptions } from '../../session/game-option-selection.js';
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
@@ -1018,11 +1020,11 @@ describe('validate.ts sprite images (#1021)', () => {
     ({ gameClass, gameType: 'fixture', displayName: 'Fixture', minPlayers, maxPlayers }) as GameDefinition;
 
   it('passes a game whose every sprite has its four sizes', () => {
-    expect(checkSpriteImages(definition(GoodSpriteGame)).passed).toBe(true);
+    expect(checkSpriteImages(definition(GoodSpriteGame), undefined).passed).toBe(true);
   });
 
   it('refuses a sprite missing its sheet sizes, naming the element, the image and the fix', () => {
-    const result = checkSpriteImages(definition(MissingSheetSizeGame));
+    const result = checkSpriteImages(definition(MissingSheetSizeGame), undefined);
 
     expect(result.passed).toBe(false);
     expect(result.severity).toBeUndefined();
@@ -1033,13 +1035,13 @@ describe('validate.ts sprite images (#1021)', () => {
   });
 
   it('checks a card removed to the pile during setup too', () => {
-    const result = checkSpriteImages(definition(PiledSpriteGame));
+    const result = checkSpriteImages(definition(PiledSpriteGame), undefined);
 
     expect(result.details).toEqual([expect.stringMatching(/^Card 'burned', \$image: .* is missing width\./)]);
   });
 
   it('builds the game at every seat count it supports', () => {
-    const result = checkSpriteImages(definition(ThreeSeatSpriteGame, 2, 4));
+    const result = checkSpriteImages(definition(ThreeSeatSpriteGame, 2, 4), undefined);
 
     expect(result.details).toEqual([
       expect.stringMatching(/^Card '3H', \$image \(only at 3 players with the default game options\): Sprite image .* is missing sheetWidth, sheetHeight\./),
@@ -1047,7 +1049,7 @@ describe('validate.ts sprite images (#1021)', () => {
   });
 
   it('counts each seat count once when same-named cards share a bad sprite', () => {
-    const result = checkSpriteImages(definition(TwinSpriteGame, 2, 4));
+    const result = checkSpriteImages(definition(TwinSpriteGame, 2, 4), undefined);
 
     expect(result.details).toEqual([expect.stringMatching(/^Card '3H', \$image \(only at 3 players with the default game options\): /)]);
   });
@@ -1083,30 +1085,30 @@ describe('validate.ts sprite images (#1021)', () => {
   it('fails, not run, for a game that declares no seat range', () => {
     const noSeats = { gameClass: GoodSpriteGame, gameType: 'fixture', displayName: 'Fixture' } as GameDefinition;
 
-    const result = checkSpriteImages(noSeats);
+    const result = checkSpriteImages(noSeats, undefined);
     expect(result.passed).toBe(false);
     expect(result.message).toMatch(/^Sprite images were not checked: .*minPlayers\/maxPlayers/);
   });
 
   it('fails, not run, for a seat range with no seat count in it (#1303)', () => {
-    const result = checkSpriteImages(definition(GoodSpriteGame, 4, 2));
+    const result = checkSpriteImages(definition(GoodSpriteGame, 4, 2), undefined);
     expect(result.passed).toBe(false);
     expect(result.message).toMatch(/^Sprite images were not checked: minPlayers \(4\) is more than maxPlayers \(2\)/);
   });
 
   it('fails, not run, rather than build a seat range too wide to build each (#1303)', () => {
-    const result = checkSpriteImages(definition(GoodSpriteGame, 2, 1000));
+    const result = checkSpriteImages(definition(GoodSpriteGame, 2, 1000), undefined);
     expect(result.passed).toBe(false);
     expect(result.message).toMatch(/^Sprite images were not checked: This game would have to be built 999 times to check every sprite it creates/);
   });
 
   it('names an unnamed element by its class alone, so one bad sprite is one problem at every seat count (#1303)', () => {
-    const result = checkSpriteImages(definition(UnnamedSpriteGame, 2, 3));
+    const result = checkSpriteImages(definition(UnnamedSpriteGame, 2, 3), undefined);
     expect(result.details).toEqual([expect.stringMatching(/^An unnamed Card, \$image: Sprite image .* is missing sheetWidth, sheetHeight\./)]);
   });
 
   it('reports a build that throws and keeps every problem found at the others (#1303)', () => {
-    const result = checkSpriteImages(definition(ThrowsAtThreeGame, 2, 4));
+    const result = checkSpriteImages(definition(ThrowsAtThreeGame, 2, 4), undefined);
     expect(result.passed).toBe(false);
     // Found at every table that built, so it is not marked as found at some only.
     expect(result.details).toEqual([
@@ -1117,12 +1119,12 @@ describe('validate.ts sprite images (#1021)', () => {
 
   it('builds every combination of the game\'s boolean and select options too (#1303)', () => {
     const jokers = { id: 'jokers', type: 'boolean', label: 'Jokers', default: false };
-    const result = checkSpriteImages(withDeclaredGameOptions(definition(OptionSpriteGame), [jokers]));
+    const result = checkSpriteImages(withDeclaredGameOptions(definition(OptionSpriteGame), [jokers]), undefined);
     expect(result.details).toEqual([expect.stringMatching(/^Card 'joker', \$image \(only at 2 players with game options jokers: true\): /)]);
   });
 
   it('says the flow would not start, and still checks what the constructor built (#1303)', () => {
-    const result = checkSpriteImages(definition(BrokenFlowSpriteGame));
+    const result = checkSpriteImages(definition(BrokenFlowSpriteGame), undefined);
     expect(result.details).toEqual([
       expect.stringMatching(/^Card 'built', \$image: /),
       expect.stringMatching(/^Starting this game's flow at 2 players with the default game options threw: /),
@@ -1130,9 +1132,25 @@ describe('validate.ts sprite images (#1021)', () => {
   });
 
   it('starts the flow, so elements its opening creates are checked too (#1303)', () => {
-    const result = checkSpriteImages(definition(FlowSpriteGame));
+    const result = checkSpriteImages(definition(FlowSpriteGame), undefined);
     expect(result.details).toEqual([expect.stringMatching(/^Card 'dealt', \$image: /)]);
   });
+
+  it('builds each table with the colours boardsmith.json declares, as a host seats players (#1552)', async () => {
+    const colorPalette = FOUR_COLOURS.map((hex, i) => ({ id: `c${i}`, hex, label: `Colour ${i}` }));
+    const cwd = tempTree('bs-validate-palette-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table', colorPalette }));
+    mkdirSync(join(cwd, 'src', 'rules'), { recursive: true });
+    const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'sprite-images.fixture.ts');
+    writeFileSync(join(cwd, 'src', 'rules', 'index.ts'), [
+      `import { PaletteSpriteGame } from ${JSON.stringify(fixture)};`,
+      "export const gameDefinition = { gameClass: PaletteSpriteGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 2, maxPlayers: 4 };",
+    ].join('\n'));
+
+    const { passed, details } = await validateSpriteImages(projectRules(cwd));
+    expect({ passed, details }).toEqual({ passed: true, details: undefined });
+    expect(checkRulesAgreement({ backend: 'table', colorPalette }, definition(PaletteSpriteGame, 2, 4)).details).toBeUndefined();
+  }, 30_000);
 
   it('loads the rules once for every check that reads them (#1303)', () => {
     const rules = projectRules(tempTree('bs-validate-loader-'));

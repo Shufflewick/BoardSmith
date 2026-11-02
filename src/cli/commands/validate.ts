@@ -31,10 +31,8 @@ import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
-import { type TableBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
+import { type TableBuild, constructBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
 import type { GameDefinition } from '../../session/index.js';
-import { declaredGameOptionsOf, selectGameOptions } from '../../session/game-option-selection.js';
-import { constructGame } from '../../engine/element/game.js';
 import { parseImageInfo } from '../../ui/utils/image.js';
 import {
   auditChoiceCardinality,
@@ -1466,7 +1464,7 @@ async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationRe
  * type-checked, and a sprite missing a size renders as an empty card with no message. A table that
  * cannot be built is reported, and the others are still checked.
  */
-export function checkSpriteImages(gameDefinition: GameDefinition): ValidationResult {
+export function checkSpriteImages(gameDefinition: GameDefinition, colorPalette: unknown): ValidationResult {
   const name = 'Sprite images';
   const { builds, refusal } = tableBuilds(gameDefinition, 'to check every sprite it creates');
   if (refusal !== undefined) return { name, passed: false, message: `Sprite images were not checked: ${refusal}` };
@@ -1474,7 +1472,7 @@ export function checkSpriteImages(gameDefinition: GameDefinition): ValidationRes
   const failedBuilds: string[] = [];
   let built = 0;
   for (const build of builds) {
-    const game = startedGame(gameDefinition, build, failedBuilds);
+    const game = startedGame(gameDefinition, colorPalette, build, failedBuilds);
     if (game === undefined) continue;
     built += 1;
     addSpriteProblems(game, build, problems);
@@ -1517,11 +1515,10 @@ function describeSpriteProblem({ image, reason, builds }: SpriteProblem, tables:
  * creates elements too (#1303). Why it could not be built, or started, is added to `failures`; a
  * game whose flow would not start is still returned, so what its constructor built is checked.
  */
-function startedGame(gameDefinition: GameDefinition, build: TableBuild, failures: string[]) {
-  const options = selectGameOptions(declaredGameOptionsOf(gameDefinition), build.choices);
+function startedGame(gameDefinition: GameDefinition, colorPalette: unknown, build: TableBuild, failures: string[]) {
   let game;
   try {
-    game = constructGame(gameDefinition.gameClass, { ...options, playerCount: build.playerCount, seed: 'sprite-images' });
+    game = constructBuild(gameDefinition, colorPalette, build, 'sprite-images');
   } catch (error) {
     failures.push(`Building this game ${describeBuild(build)} threw: ${(error as Error).message}`);
     return undefined;
@@ -1568,7 +1565,8 @@ export async function validateSpriteImages(rules: ProjectRules): Promise<Validat
   }
   let result: ValidationResult;
   try {
-    result = checkSpriteImages(gameDefinition);
+    const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as { colorPalette?: unknown };
+    result = checkSpriteImages(gameDefinition, config.colorPalette);
   } catch (error) {
     spinner.fail('Sprite images could not be checked');
     return {

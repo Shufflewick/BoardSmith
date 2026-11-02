@@ -302,6 +302,24 @@ describe('timed steps that depend on game options (#812)', () => {
   });
 });
 
+describe('the game is built with the colours boardsmith.json declares (#1552)', () => {
+  const palette = ['#E74C3C', '#3498DB', '#27AE60', '#E67E22'];
+  /** Refuses a seat colour its palette lacks, as a game mapping its palette to its own colour names does. */
+  class PaletteGame extends Game<PaletteGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      for (const p of this.players) if (!palette.includes(p.color!)) throw new Error(`Player colour ${p.color} is not in the palette`);
+    }
+  }
+  const declared = { colorPalette: palette.map((hex, i) => ({ id: `c${i}`, hex, label: `Colour ${i}` })) };
+
+  it('builds every seat count with the palette, so a game that refuses another colour agrees', () => {
+    const definition = { gameClass: PaletteGame, minPlayers: 2, maxPlayers: 4 };
+    expect(capabilityContradictions({ backend: 'table', definition, declared })).toEqual([]);
+    expect(capabilities('table', definition, declared).timedSteps).toBe(false);
+  });
+});
+
 describe('a table seat range must hold a seat count (#1303)', () => {
   const contradictions = (backend: GameBackend, definition: Parameters<typeof capabilityContradictions>[0]['definition']) =>
     capabilityContradictions({ backend, definition, declared: {} });

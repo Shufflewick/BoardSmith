@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createTestGame } from './test-game.js';
+import { projectGameOptions } from '#testing/project-game-options';
 import { tempTree } from './temp-tree.test-helper.js';
 
 class OptionsGame extends Game<OptionsGame, Player> {
@@ -38,6 +39,15 @@ function inProject(config: Record<string, unknown>, under = '.'): void {
 const gameOptions = [
   { id: 'rounds', type: 'number', label: 'Rounds', default: 3 },
   { id: 'lootScale', type: 'number', label: 'Loot scale', default: 1, designerOnly: true },
+];
+
+/** MERC's palette, whose fourth colour is not the engine default's fourth (#1552). */
+const colorPalette = [
+  { id: 'red', hex: '#E74C3C', label: 'Red' },
+  { id: 'blue', hex: '#3498DB', label: 'Blue' },
+  { id: 'green', hex: '#27AE60', label: 'Green' },
+  { id: 'orange', hex: '#E67E22', label: 'Orange' },
+  { id: 'purple', hex: '#9B59B6', label: 'Purple' },
 ];
 
 describe('createTestGame fills the options boardsmith.json declares (#701)', () => {
@@ -71,6 +81,32 @@ describe('createTestGame fills the options boardsmith.json declares (#701)', () 
     writeFileSync('boardsmith.json', JSON.stringify({ name: 'options', backend: 'table', gameOptions: [{ ...gameOptions[0], default: 5 }] }));
     const { game } = createTestGame(OptionsGame, { playerCount: 1 });
     expect(game.rounds).toBe(5);
+  });
+
+  it('seats players in the colours boardsmith.json\'s colorPalette declares, as a host does (#1552)', () => {
+    inProject({ colorPalette });
+    const { game } = createTestGame(OptionsGame, { playerCount: 4 });
+    expect(game.all(Player).map((p) => [p.color, p.colorLabel])).toEqual([
+      ['#E74C3C', 'Red'], ['#3498DB', 'Blue'], ['#27AE60', 'Green'], ['#E67E22', 'Orange'],
+    ]);
+  });
+
+  it('reads the palette shapes the dev host reads: plain hex strings, and labels named label or name (#1552)', () => {
+    inProject({ colorPalette: ['#E74C3C', { color: '#3498DB', name: 'Sea' }] });
+    const { game } = createTestGame(OptionsGame, { playerCount: 2 });
+    expect(game.all(Player).map((p) => [p.color, p.colorLabel])).toEqual([['#E74C3C', '#E74C3C'], ['#3498DB', 'Sea']]);
+  });
+
+  it('a palette with fewer colours than seats leaves every seat in the engine palette, as the dev host does (#1552)', () => {
+    inProject({ colorPalette: colorPalette.slice(0, 2) });
+    const { game } = createTestGame(OptionsGame, { playerCount: 3 });
+    expect(game.all(Player).map((p) => p.color)).toEqual(['#e74c3c', '#3498db', '#27ae60']);
+  });
+
+  it('a colorPalette that is not a list is refused, naming the shape, but only where colours are wanted (#1552)', () => {
+    inProject({ gameOptions, colorPalette: { red: '#E74C3C' } });
+    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette" must be a list of \{ "id", "hex", "label" \}/);
+    expect(projectGameOptions()).toMatchObject({ rounds: { default: 3 } });
   });
 
   it('refuses to start outside any game project, rather than leave the options out', () => {
