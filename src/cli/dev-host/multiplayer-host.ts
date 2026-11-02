@@ -37,6 +37,7 @@ import { dueSeats, type SeatActivityState } from '../../engine/index.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { selectDesignerGameOptions, type GameOptionSelection } from '../../session/game-option-selection.js';
+import { dealSeatColors } from '../../session/colors.js';
 import type { GameOptionDefinition, PlayerOptionDefinition } from '../../session/types.js';
 import { defaultSeatOptions, presetSeatSetup, seatOptionsRefusal, seatStartOptions, type SeatSetup } from '../lib/player-options.js';
 import {
@@ -938,24 +939,34 @@ export class MultiplayerHost {
     const free = seats.filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
     const moving = seats.filter((info) => info.clientId && setup[info.seat - 1].isBot);
     moving.slice(0, free.length).forEach((from, index) => this.moveHolder(from, free[index]));
+    // A player keeps their colour unless the preset gives it to another seat; then the start deals them a free one.
+    const named = setup.map((seat) => seat.color);
     for (const info of seats) {
-      if (info.clientId) info.color = setup[info.seat - 1].color ?? info.color;
+      if (info.clientId) info.color = setup[info.seat - 1].color ?? (named.includes(info.color) ? undefined : info.color);
     }
   }
 
   /** Move a seat's holder to the open seat `to`, telling their page; an away page keeps its grace there. */
   private moveHolder(from: SeatInfo, to: SeatInfo): void {
-    const { seat, clientId, name, connected } = from;
+    const { seat, clientId, name, connected, color } = from;
     const away = this.reconnecting.has(seat);
-    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name);
+    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name, color);
     to.connected = connected;
     if (away) this.startGrace(to.seat);
     this.send(clientId!, { type: 'joined', seat: to.seat });
   }
 
-  /** The colour a seat takes when its player chose none: the applied preset's, else the palette's. */
-  private defaultColor(seat: number): string | undefined {
-    return this.seatSetup[seat - 1]?.color ?? this.opts.colorPalette?.[seat - 1]?.value;
+  /**
+   * Each seat's colour (#1569): its player's, else the applied preset's unless
+   * a player holds that, else the first palette colour no seat has.
+   */
+  private seatColors(): Array<string | undefined> {
+    const held = [...this.seats.values()].map((info) => info.color);
+    const wanted = held.map((color, index) => {
+      const preset = this.seatSetup[index]?.color;
+      return color ?? (held.includes(preset) ? undefined : preset);
+    });
+    return dealSeatColors(wanted, (this.opts.colorPalette ?? []).map((c) => c.value));
   }
 
   /** The level a bot plays a seat at: the applied preset's, else `--bot-level`. */
@@ -1106,7 +1117,19 @@ export class MultiplayerHost {
       const palette = this.opts.colorPalette!.map((c) => c.value).join(', ');
       return `Seat ${msg.seat} was not taken: its color ${JSON.stringify(msg.color)} is not in the game's colorPalette (${palette}).`;
     }
-    return undefined;
+    return this.heldColorRefusal(clientId, msg);
+  }
+
+  /** Why the colour `msg` names cannot be taken because another seat holds it (#1569), or undefined when it can. */
+  private heldColorRefusal(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): string | undefined {
+    const palette = this.opts.colorPalette ?? [];
+    // Past the palette's end seats share colours on purpose, so only a palette with enough keeps them apart.
+    if (msg.color === undefined || palette.length < this.opts.playerCount) return undefined;
+    const color = this.paletteColor(msg.color);
+    const holder = [...this.seats.values()].find((s) => s.seat !== msg.seat && s.clientId !== clientId && s.color === color);
+    if (holder === undefined) return undefined;
+    const label = palette.find((c) => c.value === color)!.label;
+    return `Seat ${msg.seat} was not taken: seat ${holder.seat} holds the color ${label}. Pick a color no other seat holds.`;
   }
 
   /** `color` as the palette writes it, compared without case, or undefined when the palette lacks it; a host with no palette takes any. */
@@ -1265,11 +1288,14 @@ export class MultiplayerHost {
     // `clientSeat` dangles a mapping to a seat the old client no longer owns, and
     // its next `hello` would take the reconnect branch, flip this seat's
     // `connected` flag under the new owner, and re-init the old client onto it.
-    if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
+    if (info.clientId && info.clientId !== clientId) {
+      this.clientSeat.delete(info.clientId);
+      info.color = undefined;
+    }
     this.endGrace(seat);
     info.clientId = clientId;
     info.name = seatDisplayName(seat, name?.trim());
-    info.color = color ?? this.defaultColor(seat);
+    info.color = color ?? this.seatColors()[seat - 1];
     info.connected = true;
     this.clientSeat.set(clientId, seat);
     this.removeBotSeat(seat); // a human now plays this seat
@@ -1466,6 +1492,9 @@ export class MultiplayerHost {
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are bot.
+    const colors = this.seatColors();
+    // A held seat shows the colour this game deals it, which a repeat or a preset may have changed.
+    for (const info of this.seats.values()) if (info.clientId) info.color = colors[info.seat - 1];
     const startGameOptions = {
       // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
       // any accepted `configure` preset/gameOptions), not the frozen
@@ -1489,7 +1518,7 @@ export class MultiplayerHost {
           const seat = this.seats.get(i + 1);
           return {
             playerOptions: { ...seat?.playerOptions },
-            color: seat?.color ?? this.defaultColor(i + 1),
+            color: colors[i],
             isBot: !humanSeats.has(i + 1),
             botLevel: this.botLevel(i + 1),
             name: seatDisplayName(i + 1, seat?.name),

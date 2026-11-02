@@ -116,6 +116,12 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
     expect(Object.fromEntries(Object.keys(seatFields).map((key) => [key, starts.at(-1)![key]]))).toEqual(seatFields);
   });
 
+  it('deals a seat the preset gives no colour the first colour no other seat takes (#1569)', () => {
+    inProject();
+    const redSecond = { ...def, presets: [{ name: 'Red second', options: {}, players: [{}, { color: '#E74C3C' }] }] };
+    expect(presetStartOptions(redSecond, 'Red second').colors).toEqual(['#3498DB', '#E74C3C']);
+  });
+
   it('refuses a preset the game does not declare, naming the ones it does', () => {
     inProject();
     expect(() => presetStartOptions(def, 'Play as Rebel')).toThrow(

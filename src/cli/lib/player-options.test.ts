@@ -224,6 +224,10 @@ describe('presetSeatSetup (#1544)', () => {
     ]);
   });
 
+  it('takes a colour at another seat\'s position, since a seat that names none is dealt a colour no seat takes (#1569)', () => {
+    expect(setup([{}, { color: '#e74c3c' }])()!.map((seat) => seat.color)).toEqual([undefined, '#e74c3c']);
+  });
+
   it('leaves an exclusive option no seat sets on the seat its default names', () => {
     expect(setup([{}, {}])()!.map((seat) => seat.playerOptions)).toEqual([{ level: 'easy' }, { level: 'easy', role: 'dictator' }]);
   });
@@ -234,7 +238,7 @@ describe('presetSeatSetup (#1544)', () => {
     [[{}, { isBot: true, botLevel: 'expert' }], 'seat 2: Unknown bot level "expert". Use one of: easy, medium, hard, or a positive iteration count such as 750.'],
     [[{ playerOptions: { role: 'dictator' } }, { playerOptions: { role: 'dictator' } }], 'Dictator is given to seats 1 and 2; give it to one seat.'],
     [[{ playerOptions: { level: 'expert' } }, {}], 'Seat 1: Difficulty is "expert", which is none of its choices (easy, hard).'],
-    [[{}, { color: '#e74c3c' }], 'seats 1 and 2 both take the color #e74c3c; give each seat its own.'],
+    [[{ color: '#e74c3c' }, { color: '#e74c3c' }], 'seats 1 and 2 both take the color #e74c3c; give each seat its own.'],
   ])('refuses %j', (players, reason) => {
     expect(setup(players)).toThrow(`This game's preset "P" cannot be used: ${reason} Correct the preset.`);
   });

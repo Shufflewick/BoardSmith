@@ -212,8 +212,10 @@ function canTake(seat: SeatInfo): boolean {
   return !(seat.held && seat.connected);
 }
 const takenColors = computed(
-  () => new Set(seats.value.filter((s) => s.color).map((s) => s.color as string)),
+  () => new Set(seats.value.filter((s) => s.color && !s.mine).map((s) => s.color as string)),
 );
+/** Seats keep different colours while the palette has one for each; past that they share (#1569). */
+const colorsShared = computed(() => cfg.colorPalette.length < seats.value.length);
 
 // ── WebSocket transport to the Node host ─────────────────────────────────────
 let ws: WebSocket | null = null;
@@ -707,8 +709,10 @@ onUnmounted(() => {
               :title="c.label"
               :aria-label="c.label"
               :aria-pressed="colorInput === c.value"
+              :disabled="takenColors.has(c.value) && colorInput !== c.value && !colorsShared"
               @click="colorInput = c.value"
             ></button>
+            <span class="lobby__hint">Applies from the next game</span>
           </div>
           <template v-if="cfg.gameOptions.length || cfg.presets.length">
             <label
@@ -1303,6 +1307,10 @@ onUnmounted(() => {
 
 .color-swatch--taken {
   opacity: 0.4;
+}
+
+.color-swatch:disabled {
+  cursor: not-allowed;
 }
 
 /* ── Buttons ── */

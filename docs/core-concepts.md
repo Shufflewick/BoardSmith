@@ -1032,6 +1032,8 @@ Custom player colors for the color picker, each `{ "id", "hex", "label" }`. If o
 
 Each entry needs a `hex` color value and a `label` for display. Plain hex strings are also accepted (e.g., `["#e74c3c", "#3498db"]`).
 
+While the palette has a colour for every seat, `boardsmith dev` keeps seats' colours apart: it refuses a colour another seat holds, and a seat with no chosen colour is dealt the first palette colour no seat has. Past the palette's end, seats share colours. A colour picked when joining a game in progress applies from the next game, as seat player options do.
+
 ### Exclusive Player Options
 
 For asymmetric games where exactly one player must have a specific role (e.g., 1 Dictator vs many Rebels), use the `exclusive` type in `playerOptions`:
@@ -1076,7 +1078,7 @@ presets: [
 
 `options` sets game options, as a player could choose them. `players`, when given, sets up one seat per entry, in seat order, and its length is the player count. Each seat (`PresetSeat`) may set:
 
-- `color`: a colour from `colorPalette`. A seat without one takes the palette's colour for its seat.
+- `color`: a colour from `colorPalette`, each seat its own. A seat without one is dealt the first palette colour no other seat has.
 - `isBot`: `true` leaves the seat to a bot. `boardsmith dev` seats no one there, and a person already sitting there when the preset is applied moves to a free seat the preset leaves to people, if there is one.
 - `botLevel`: the bot's level (`easy`, `medium`, `hard` or an iteration count), on a bot seat only. A bot seat without one plays at `--bot-level`.
 - `playerOptions`: the seat's player options by id. An option a seat leaves out takes its default. An exclusive option is set on the one seat that holds it, to its choice (`role: 'dictator'` above); when no seat sets it, the seat its default names holds it, as at the platform's lobby.

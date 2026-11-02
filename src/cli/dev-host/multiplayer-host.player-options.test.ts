@@ -159,8 +159,8 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
 
     expect(sent.filter((m) => m.type === 'joined').at(-1)).toEqual({ type: 'joined', seat: 3 });
     expect(starts.at(-1)!.playerIsBot).toEqual([false, true, false]);
-    // They take their new seat's colour, not the one of the seat they left.
-    expect(starts.at(-1)!.colors).toEqual(['#e74c3c', '#3498db', '#95a5a6']);
+    // They keep their colour, and the bot seat they left is dealt one no seat has (#1569).
+    expect(starts.at(-1)!.colors).toEqual(['#e74c3c', '#95a5a6', '#3498db']);
   });
 
   it('moves a person whose page is away, within its grace, as it moves one who is here', async () => {
@@ -201,7 +201,8 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
     await host.handleMessage('A', { type: 'hello' });
 
     expect(starts[0].exclusiveSeats).toEqual({ dictator: 2 });
-    expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#95a5a6']);
+    // Seat 3 names no colour, so it is dealt the first one no seat takes (#1569).
+    expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#3498db']);
     expect(starts[0].playerIsBot).toEqual([false, true, true]);
     expect(starts[0].playerConfigs[1]).toMatchObject({ botLevel: 'easy' });
   });

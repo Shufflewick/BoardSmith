@@ -16,7 +16,7 @@ import type {
 import type { GameOptionDefinition } from '../types/protocol.js';
 import type { GamePreset } from '../session/types.js';
 import { assertPresetsSelectable, parseGameOptionList, selectDesignerGameOptions } from '../session/game-option-selection.js';
-import { paletteGameOptions } from '../session/colors.js';
+import { dealSeatColors, paletteGameOptions } from '../session/colors.js';
 import { seatDisplayName } from '../engine/element/seat-defaults.js';
 import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, seatStartOptions, type SeatSetup } from '../cli/lib/player-options.js';
 
@@ -46,6 +46,7 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
   const palette = playerOptions.color.choices;
   const seats = presetSeatSetup(preset, playerOptions, palette.map((c) => c.value));
   assertSeatCount(name, seats, gameDefinition);
+  const colors = dealSeatColors(seats.map((seat) => seat.color), palette.map((c) => c.value));
   return {
     ...selectDesignerGameOptions(project?.declared, { ...preset.options }),
     playerCount: seats.length,
@@ -53,7 +54,7 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
       playerOptions,
       seats.map((seat, index) => ({
         ...seat,
-        color: seat.color ?? palette[index]?.value,
+        color: colors[index],
         botLevel: seat.botLevel ?? DEV_BOT_LEVEL,
         name: seatDisplayName(index + 1),
       })),
