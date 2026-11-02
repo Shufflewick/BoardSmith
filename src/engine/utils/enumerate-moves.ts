@@ -839,9 +839,10 @@ function _enumerateRecursive(
   const seen = argsCallbacksSee(actionDef, currentArgs);
   const tried = spend(walk, actionDef, selection, selectionValues(game, actionDef, player, selection, seen, walk));
 
-  // Nothing to offer (no enabled choice, a text input, a number input that
-  // cannot be listed, a multiSelect with fewer candidates than its min): skip
-  // an optional selection, block a required one.
+  // Nothing to offer (no enabled choice for a pick that cannot be answered
+  // with [], a text input, a number input that cannot be listed, a multiSelect
+  // with fewer candidates than its min): skip an optional selection, block a
+  // required one.
   if (tried === null || tried.length === 0) {
     if (selection.optional) {
       return _enumerateRecursive(game, actionDef, player, index + 1, currentArgs, walk);
@@ -1120,7 +1121,8 @@ function orderedListsToTry(
  * reading state that is REDACTED in the bot's search sandbox (e.g. deriving
  * choices from an opponent's hidden hand), which yields `undefined` fields.
  * Dropping the choice leaves a required selection with none, so the action
- * simply produces no moves — the honest answer — and the warning names the
+ * produces no moves (or only the empty pick, for a min-0 multiSelect or
+ * orderedList, which the rules accept) — the honest answer — and the warning names the
  * action and selection so the game author can make the choices public-info.
  */
 function _getChoices(
