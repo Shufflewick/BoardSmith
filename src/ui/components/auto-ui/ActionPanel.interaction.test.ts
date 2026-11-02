@@ -385,19 +385,19 @@ describe('ActionPanel interaction tests', () => {
   });
 
   it.each([
-    { pick: 'min-0 max-3 (#1555)', max: 3, choices: ['a', 'b', 'c'] },
-    { pick: 'min-0 max-0 (#1568)', max: 0, choices: ['squidhead'] },
-  ])('Done on a $pick multiSelect with nothing ticked submits the empty set and moves on', async ({ max, choices }) => {
+    { pick: 'min-0 max-3 choice (#1555)', max: 3, type: 'choice', choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })) },
+    { pick: 'min-0 max-0 choice (#1568)', max: 0, type: 'choice', choices: [{ value: 'squidhead', display: 'squidhead' }] },
+    { pick: 'min-0 max-0 empty elements (#1568)', max: 0, type: 'elements', validElements: [] },
+  ] as const)('Done on a $pick multiSelect with nothing ticked submits the empty set and moves on', async ({ max, ...offer }) => {
     const hire: EnrichedActionMetadata = {
       name: 'hire',
       prompt: 'Hire',
       selections: [
         {
           name: 'picks',
-          type: 'choice',
           prompt: `Hire up to ${max}`,
           multiSelect: { min: 0, max },
-          choices: choices.map((v) => ({ value: v, display: v })),
+          ...offer,
         },
         { name: 'message', type: 'text', prompt: 'What does it say?' },
       ],

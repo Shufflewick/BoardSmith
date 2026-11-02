@@ -1802,8 +1802,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </template>
 
-        <!-- Elements selection with multiSelect (checkboxes for multiple element selection) -->
-        <template v-else-if="currentPick.type === 'elements' && currentMultiSelect && offeredElements.length">
+        <!-- Elements selection with multiSelect (checkboxes for multiple element selection);
+             with none offered it still draws, since its Done may be the only answer (#1568) -->
+        <template v-else-if="currentPick.type === 'elements' && currentMultiSelect && (offeredElements.length || !isLoadingChoices)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
