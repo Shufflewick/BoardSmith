@@ -13,6 +13,7 @@ import {
   type GameDefinition,
   type PlayerOptionDefinition,
 } from '../../session/index.js';
+import { paletteChoices } from '../../session/colors.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { TableDefinition } from '../dev-host/table-rules-worker.js';
@@ -284,26 +285,15 @@ interface BoardSmithConfig {
 function normalizeColorPalette(
   palette: ReadonlyArray<string | object>
 ): Array<{ value: string; label: string }> {
-  const result: Array<{ value: string; label: string }> = [];
-  for (const item of palette) {
-    if (typeof item === 'string') {
-      result.push({ value: item, label: item });
-      continue;
-    }
-    const entry = item as Record<string, unknown>;
-    const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
-    if (hex === undefined) {
-      console.warn(
-        styleText('yellow',
-          `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
-        ),
-      );
-      continue;
-    }
-    const label = (entry.label ?? entry.name ?? hex) as string;
-    result.push({ value: hex, label });
+  const { choices, unnamed } = paletteChoices(palette);
+  for (const entry of unnamed) {
+    console.warn(
+      styleText('yellow',
+        `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
+      ),
+    );
   }
-  return result;
+  return choices;
 }
 
 /**

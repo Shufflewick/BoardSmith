@@ -61,25 +61,50 @@ export function createColorOption(): ColorOptionDefinition {
 }
 
 /**
- * The `colors` and `colorLabels` game options that seat players in boardsmith.json's
- * `colorPalette`, as `boardsmith dev` and the platform seat them, or none when it
+ * `colorPalette` entries as choices: a plain hex string, or an object naming its
+ * hex as `value`, `hex` or `color` and its label as `label` or `name` (the hex
+ * when it has neither). An object naming no hex is left out and returned in `unnamed`.
+ */
+export function paletteChoices(palette: ReadonlyArray<string | object>): { choices: ColorChoice[]; unnamed: object[] } {
+  const choices: ColorChoice[] = [];
+  const unnamed: object[] = [];
+  for (const item of palette) {
+    if (typeof item === 'string') {
+      choices.push({ value: item, label: item });
+      continue;
+    }
+    const entry = item as Record<string, unknown>;
+    const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
+    if (hex === undefined) {
+      unnamed.push(item);
+      continue;
+    }
+    choices.push({ value: hex, label: (entry.label ?? entry.name ?? hex) as string });
+  }
+  return { choices, unnamed };
+}
+
+/**
+ * The `colors` and `colorLabels` game options that seat a `playerCount` table in
+ * boardsmith.json's `colorPalette` as the dev host seats it, or none when it
  * declares no palette, so a game built without a host gets the colours real play gives (#1552).
  */
-export function paletteGameOptions(colorPalette: unknown): { colors?: string[]; colorLabels?: Record<string, string> } {
+export function paletteGameOptions(
+  colorPalette: unknown,
+  playerCount: number,
+): { colors?: string[]; colorLabels?: Record<string, string> } {
   if (colorPalette === undefined) return {};
-  if (!Array.isArray(colorPalette) || colorPalette.length === 0 || !colorPalette.every(isPaletteEntry)) {
+  if (!Array.isArray(colorPalette)) {
     throw new Error(
-      'boardsmith.json\'s "colorPalette" must be a non-empty list of { "id", "hex", "label" } entries ' +
+      'boardsmith.json\'s "colorPalette" must be a list of { "id", "hex", "label" } entries ' +
         '(e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }), so players cannot be given its colours. Fix the list.',
     );
   }
+  const { choices } = paletteChoices(colorPalette);
+  // The dev host seats every player in the engine palette when this one cannot colour them all.
+  if (choices.length < playerCount) return {};
   return {
-    colors: colorPalette.map((entry) => entry.hex),
-    colorLabels: Object.fromEntries(colorPalette.map((entry) => [entry.hex, entry.label])),
+    colors: choices.slice(0, playerCount).map((choice) => choice.value),
+    colorLabels: Object.fromEntries(choices.map((choice) => [choice.value, choice.label])),
   };
-}
-
-function isPaletteEntry(entry: unknown): entry is { hex: string; label: string } {
-  const { hex, label } = (entry ?? {}) as Record<string, unknown>;
-  return typeof hex === 'string' && hex !== '' && typeof label === 'string' && label !== '';
 }

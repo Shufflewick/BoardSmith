@@ -238,7 +238,7 @@ export function constructBuild(
   seed: string,
 ) {
   const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
-  return constructGame(definition.gameClass, { ...options, ...paletteGameOptions(colorPalette), playerCount: build.playerCount, seed });
+  return constructGame(definition.gameClass, { ...options, ...paletteGameOptions(colorPalette, build.playerCount), playerCount: build.playerCount, seed });
 }
 
 /**

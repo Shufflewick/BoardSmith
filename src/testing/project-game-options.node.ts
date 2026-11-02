@@ -17,11 +17,12 @@ import { paletteGameOptions } from '../session/colors.js';
  * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
  * thousands of test games, and a file edited since (a watch-mode rerun) is parsed again.
  */
-const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition>; colors: ReturnType<typeof paletteGameOptions> }>();
+const parsed = new Map<string, { text: string; declared: Record<string, GameOptionDefinition>; colorPalette: unknown }>();
 
 export const projectGameOptions: typeof DeclaredOptions = () => projectDeclarations()?.declared;
 
-export const projectColorOptions: typeof DeclaredColors = () => projectDeclarations()?.colors ?? {};
+export const projectColorOptions: typeof DeclaredColors = (playerCount) =>
+  paletteGameOptions(projectDeclarations()?.colorPalette, playerCount);
 
 function projectDeclarations() {
   const file = projectFile(process.cwd());
@@ -35,7 +36,7 @@ function projectDeclarations() {
   } catch {
     throw new Error(`${file} is not valid JSON, so the game's options cannot be read from it. Fix the file.`);
   }
-  const declarations = { text, declared: parseGameOptionList(config.gameOptions), colors: paletteGameOptions(config.colorPalette) };
+  const declarations = { text, declared: parseGameOptionList(config.gameOptions), colorPalette: config.colorPalette };
   parsed.set(file, declarations);
   return declarations;
 }

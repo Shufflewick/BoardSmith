@@ -10,6 +10,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { createTestGame } from './test-game.js';
+import { projectGameOptions } from '#testing/project-game-options';
 import { tempTree } from './temp-tree.test-helper.js';
 
 class OptionsGame extends Game<OptionsGame, Player> {
@@ -90,9 +91,22 @@ describe('createTestGame fills the options boardsmith.json declares (#701)', () 
     ]);
   });
 
-  it('a colorPalette that is not a list of { id, hex, label } entries is refused, naming the shape', () => {
-    inProject({ colorPalette: ['#E74C3C'] });
-    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette".*\{ "id", "hex", "label" \}/);
+  it('reads the palette shapes the dev host reads: plain hex strings, and labels named label or name (#1552)', () => {
+    inProject({ colorPalette: ['#E74C3C', { color: '#3498DB', name: 'Sea' }] });
+    const { game } = createTestGame(OptionsGame, { playerCount: 2 });
+    expect(game.all(Player).map((p) => [p.color, p.colorLabel])).toEqual([['#E74C3C', '#E74C3C'], ['#3498DB', 'Sea']]);
+  });
+
+  it('a palette with fewer colours than seats leaves every seat in the engine palette, as the dev host does (#1552)', () => {
+    inProject({ colorPalette: colorPalette.slice(0, 2) });
+    const { game } = createTestGame(OptionsGame, { playerCount: 3 });
+    expect(game.all(Player).map((p) => p.color)).toEqual(['#e74c3c', '#3498db', '#27ae60']);
+  });
+
+  it('a colorPalette that is not a list is refused, naming the shape, but only where colours are wanted (#1552)', () => {
+    inProject({ gameOptions, colorPalette: { red: '#E74C3C' } });
+    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette" must be a list of \{ "id", "hex", "label" \}/);
+    expect(projectGameOptions()).toMatchObject({ rounds: { default: 3 } });
   });
 
   it('refuses to start outside any game project, rather than leave the options out', () => {

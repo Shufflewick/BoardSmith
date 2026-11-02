@@ -224,7 +224,7 @@ export class TestGame<G extends Game = Game> {
       gameType: GameClass.name.toLowerCase(),
       gameOptions: {
         // Seats get boardsmith.json's colours, as a host gives them, unless the test passes its own (#1552).
-        ...projectColorOptions(),
+        ...projectColorOptions(playerCount),
         // Game-specific options (e.g. tutorialSetup, variant flags).
         ...extraOptions,
         playerCount,
