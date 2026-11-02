@@ -351,6 +351,8 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
     format: 'esm',
     platform: 'node',
     outfile: bundlePath,
+    // A snapshot names each element by its class's `name`, so a class esbuild renames apart must keep it, as `build` does (#1549).
+    keepNames: true,
     // A stack from the rules names the author's line; mappings only, since every save's bundle is a new file.
     sourcemap: 'inline',
     sourcesContent: false,

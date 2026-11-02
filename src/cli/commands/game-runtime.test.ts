@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { cliSourceFile, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import type { executeOp } from '../../session/index.js';
+import type { GameRunner } from '../../runtime/index.js';
 
 const REPO = realpathSync(resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..'));
 
@@ -137,5 +138,44 @@ describe('importRuntimeBundle: a crash names the line in the game it came from (
     const map = JSON.parse(Buffer.from(inline![1], 'base64').toString('utf8'));
     expect(map.mappings.length).toBeGreaterThan(0);
     expect(map.sourcesContent).toBeUndefined();
+  });
+});
+
+// A game whose element class shares its name with another top-level class in the bundle,
+// which esbuild renames apart (MERC's `Sector` came out `_Sector`, #1549).
+const sameNameGame = game(() => {});
+writeFileSync(join(sameNameGame, 'src', 'rules', 'other.ts'), `export class Sector { readonly label = 'not an element'; }`);
+writeFileSync(
+  join(sameNameGame, 'src', 'rules', 'index.ts'),
+  [
+    `import { Game, Space } from 'boardsmith';`,
+    `import { Sector as OtherSector } from './other.js';`,
+    `export class Sector extends Space<SameNameGame> {}`,
+    `class SameNameGame extends Game<SameNameGame> {`,
+    `  constructor(options: any) {`,
+    `    super(options);`,
+    `    this.registerElements([Sector]);`,
+    `    this.create(Sector, new OtherSector().label);`,
+    `  }`,
+    `}`,
+    `export const gameDefinition = { gameClass: SameNameGame, gameType: 'same-name', displayName: 'Same name', minPlayers: 2, maxPlayers: 2 };`,
+  ].join('\n'),
+);
+// Bundled once here, at the top, where no test timeout applies.
+const sameNameRuntime = await importRuntimeBundle({
+  rulesPath: join(sameNameGame, 'src', 'rules'),
+  tempDir: tempTree('boardsmith-same-name-build-'),
+  name: 'same-name',
+  context: 'monorepo',
+  gameOptions: undefined,
+  exports: [`export { GameRunner } from 'boardsmith/runtime';`],
+});
+
+describe('buildRuntimeBundle: element classes keep their names (#1549)', () => {
+  it('names an element in a snapshot by its class as the author wrote it, as every other runner does', () => {
+    const Runner = sameNameRuntime.GameRunner as typeof GameRunner;
+    const runner = new Runner({ GameClass: sameNameRuntime.gameDefinition.gameClass, gameType: 'same-name', gameOptions: { playerCount: 2 } });
+    const classNames = [...JSON.stringify(runner.getSnapshot()).matchAll(/"className":"(\w*Sector\w*)"/g)].map((m) => m[1]);
+    expect(classNames).toEqual(['Sector']);
   });
 });
