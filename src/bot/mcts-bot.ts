@@ -135,18 +135,21 @@ export class MCTSBot<G extends Game = Game> {
   /** The game's random position when this step's search game was restored. */
   private resumedRandomState?: string;
   /**
-   * T-159-07 (bot-02): pre-reveal baseline clone of searchGame, captured the
-   * moment a fresh simultaneous step begins (before any co-decider's action
-   * mutates the shared searchGame). `resumeSimultaneousAction` applies each
+   * T-159-07 (bot-02): pre-reveal baseline clone of searchGame, captured before
+   * the search makes its first move in a simultaneous step (see
+   * {@link enterSimultaneousStep}). `resumeSimultaneousAction` applies each
    * co-decider's action to the LIVE game immediately (no deferred reveal),
    * so without this baseline a later co-decider's move enumeration would
-   * read an earlier co-decider's already-committed effects. All co-decider
-   * enumeration within one simultaneous step reads from this frozen clone
-   * instead of the mutating searchGame. Cleared once the step fully
-   * resolves (no awaitingPlayers left) so it never leaks into unrelated
-   * future steps.
+   * read an earlier co-decider's already-committed effects. Dropped once the
+   * search leaves the step so it never leaks into unrelated future steps.
    */
   private simultaneousBaseline?: G;
+  /**
+   * Each seat's own copy of the game in the open simultaneous step: the
+   * baseline plus that seat's moves in the step and no other seat's (#1563).
+   * A seat that acts several times lists its later moves against its copy.
+   */
+  private simultaneousSeatGames = new Map<number, G>();
   /**
    * Root moves a `threatResponseMoves` hook forced for THIS search (#73).
    * Only set when the game said a block is mandatory; the per-world root
@@ -815,15 +818,6 @@ export class MCTSBot<G extends Game = Game> {
    * Used during selection to descend the tree.
    */
   private applyMoveToSearchGame(node: MCTSNode): SearchMoveOutcome {
-    // T-159-07 / F-07: capture the pre-reveal simultaneous baseline during
-    // SELECT descent too (not only in expand/playout). `searchGame` is currently
-    // at `node.parent`'s state; if that is the START of a fresh simultaneous
-    // step (nobody completed), snapshot it BEFORE this move commits a co-decider
-    // pick. Without this, descending past 2+ already-committed co-deciders left
-    // the baseline undefined, so the 3rd+ co-decider re-enumerated against the
-    // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
-    // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
-    this.maybeCaptureSimultaneousBaseline(this.worldFlowState());
     return this.makeSearchMove(node.parentMove!, node.parent!.currentPlayer).outcome;
   }
 
@@ -837,9 +831,14 @@ export class MCTSBot<G extends Game = Game> {
    * refusal on the state it returns. The search used to read that state as the
    * position the move led to, so every refused move became a child that scored
    * the unchanged position as if the move had been played.
+   *
+   * In a simultaneous step the move is also made in its seat's own copy of the
+   * game (#1563); a move that copy refuses spoils the step, as the world has changed.
    */
   private makeSearchMove(move: BotMove, seat: number): { outcome: SearchMoveOutcome; flowState: FlowState } {
     const game = this.searchGame!;
+    this.enterSimultaneousStep(this.worldFlowState());
+    const before = { randomState: game.getRandomState(), sequence: game._ctx.sequence };
     let flowState: FlowState;
     try {
       flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
@@ -848,7 +847,9 @@ export class MCTSBot<G extends Game = Game> {
       this.searchSteps.firstFailure ??= error instanceof Error ? error.message : String(error);
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
-    if (flowState.actionError === undefined) return { outcome: 'made', flowState };
+    if (flowState.actionError === undefined) {
+      return { outcome: this.makeInSeatGame(move, seat, flowState, before) ? 'made' : 'refusedAfterChanges', flowState };
+    }
     if (!flowState.actionPartiallyApplied) {
       this.searchSteps.firstRefusal ??= flowState.actionError;
       return { outcome: 'refused', flowState };
@@ -869,12 +870,6 @@ export class MCTSBot<G extends Game = Game> {
     if (node.untriedMoves.length === 0 || node.flowState.complete || !onTurn) {
       return node;
     }
-
-    // T-159-07: if the world is at the start of a fresh simultaneous step (no
-    // co-decider has acted yet), snapshot searchGame now -- BEFORE this move
-    // mutates it -- so later co-deciders' enumeration in this step reads the
-    // pre-reveal state, not this move's committed effects.
-    this.maybeCaptureSimultaneousBaseline(this.worldFlowState());
 
     // Pick first untried move (ordering determined at node creation by moveOrdering hook)
     const move = node.untriedMoves.shift()!;
@@ -924,10 +919,6 @@ export class MCTSBot<G extends Game = Game> {
     let depth = 0;
 
     while (!flowState.complete && depth < this.config.playoutDepth) {
-      // T-159-07: same pre-reveal baseline capture as expandIncremental --
-      // must run before this iteration's move mutates searchGame.
-      this.maybeCaptureSimultaneousBaseline(flowState);
-
       // One seat lists the moves and makes the one chosen (#522). With no seat
       // to move, the step is held open from outside: score the position as it stands.
       const { seat: currentPlayer, moves } = this.seatToMove(flowState);
@@ -1070,10 +1061,9 @@ export class MCTSBot<G extends Game = Game> {
     const rngState = this.searchGame.getRandomState();
     this.searchGame = this.restoreGame(copy === undefined ? this.rootSnapshot : JSON.parse(copy), rngState, sampleWorld);
     this.resumedRandomState = rngState;
-    // F-07: drop any baseline captured last iteration — it was cloned from the
-    // now-discarded searchGame instance. It is re-captured fresh during this
-    // iteration's descent/expand when a fresh simultaneous step is reached.
+    // F-07: drop the copies made last iteration; the next move in a simultaneous step makes them afresh.
     this.simultaneousBaseline = undefined;
+    this.simultaneousSeatGames.clear();
   }
 
   /**
@@ -1162,8 +1152,7 @@ export class MCTSBot<G extends Game = Game> {
    * plain choice's own `id` (#873), passes through untouched; already-live
    * elements resolve to themselves (no-op).
    */
-  private rebindArgs(args: Record<string, unknown>): Record<string, unknown> {
-    const game = this.searchGame;
+  private rebindArgs(args: Record<string, unknown>, game: G | null = this.searchGame): Record<string, unknown> {
     if (!game) return args;
     const rebind = (v: unknown): unknown => {
       if (isElement(v)) return game.getElementById(v.id) ?? v;
@@ -1248,19 +1237,21 @@ export class MCTSBot<G extends Game = Game> {
    * engine's own gated enumerator, `enumerateActionMoves`, so the bot never
    * reaches a move `enumerateLegalMoves` would refuse (#19).
    *
-   * Within a simultaneous step, args are drawn from the pre-reveal baseline
-   * when one was captured (T-159-07): a co-decider's moves must not depend on
-   * what an earlier co-decider already picked. The action list and follow-up
-   * still come from `flowState`, the world's own position.
+   * Once a move has been made in a simultaneous step, args are drawn from the
+   * seat's own copy of the game, the pre-reveal baseline plus the seat's own
+   * moves in the step (T-159-07, #1563): a co-decider's moves must not depend on
+   * what an earlier co-decider already picked, and must follow the seat's own.
+   * The `candidateMoves` hook is handed that copy too. The action list and
+   * follow-up still come from `flowState`, the world's own position.
    *
    * A game's `candidateMoves` hook, when it has one, decides what this
    * returns, from the listing or from its own list (#1387).
    */
   private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
-    const enumerationGame: G =
-      flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0 && this.simultaneousBaseline
-        ? this.simultaneousBaseline
-        : game;
+    // Before the step's first move every seat's copy is the world itself.
+    const enumerationGame: G = this.inPlayedSimultaneousStep(flowState)
+      ? this.simultaneousSeatGames.get(seat) ?? this.simultaneousBaseline!
+      : game;
     let listed: BotMove[] | undefined;
     const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
     if (!this.candidateMoves) return listMoves();
@@ -1335,22 +1326,46 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * T-159-07: detect the start of a fresh simultaneous step and snapshot
-   * searchGame BEFORE any co-decider's move mutates it. A step is "fresh"
-   * when every awaiting player is still not-completed (nobody has acted
-   * yet). Mid-step (some completed, some not) the existing baseline is kept
-   * unchanged. Outside a simultaneous step, any stale baseline is cleared so
-   * it can't leak into an unrelated future step.
+   * T-159-07: before the search makes a move in a simultaneous step, snapshot
+   * searchGame as the step's baseline unless one is held for this step. The
+   * step is new when no move has been made in it (`moveCount` 0), and the
+   * search may enter one part-played, at the root. Outside a simultaneous
+   * step, the copies are dropped so they can't leak into a later step.
    */
-  private maybeCaptureSimultaneousBaseline(flowState: FlowState): void {
-    const awaiting = flowState.awaitingPlayers;
-    if (!awaiting || awaiting.length === 0) {
-      this.simultaneousBaseline = undefined;
-      return;
+  private enterSimultaneousStep(flowState: FlowState): void {
+    if (this.inPlayedSimultaneousStep(flowState)) return;
+    this.simultaneousBaseline = flowState.awaitingPlayers?.length ? this.cloneSearchGame(this.searchGame!) : undefined;
+    this.simultaneousSeatGames.clear();
+  }
+
+  /** Whether `flowState` is a simultaneous step the search holds a baseline for and a move has been made in. */
+  private inPlayedSimultaneousStep(flowState: FlowState): boolean {
+    return Boolean(flowState.awaitingPlayers?.length && flowState.moveCount && this.simultaneousBaseline);
+  }
+
+  /**
+   * Make `move`, just made in the world, in `seat`'s own copy of the step too,
+   * drawing the same randomness and minting the same element ids the world did
+   * from `before`, while the step is still open (#1563). Says whether that copy took it.
+   *
+   * A draw from state another seat changed in the step (a shared deck) can still
+   * differ from the world's: the copy hides that seat's pick, so the world may then
+   * refuse the seat's later moves listed against its copy.
+   */
+  private makeInSeatGame(move: BotMove, seat: number, flowState: FlowState, before: { randomState: string; sequence: number }): boolean {
+    if (!this.inPlayedSimultaneousStep(flowState)) return true;
+    const seatGame = this.simultaneousSeatGames.get(seat) ?? this.cloneSearchGame(this.simultaneousBaseline!);
+    this.simultaneousSeatGames.set(seat, seatGame);
+    seatGame.setRandomState(before.randomState);
+    seatGame._ctx.sequence = before.sequence;
+    try {
+      const state = seatGame.continueFlow(move.action, this.rebindArgs(move.args, seatGame), seat);
+      if (state.actionError === undefined) return true;
+      this.searchSteps.firstFailure ??= state.actionError;
+    } catch (error) {
+      this.searchSteps.firstFailure ??= error instanceof Error ? error.message : String(error);
     }
-    if (awaiting.every(p => !p.completed) && this.searchGame) {
-      this.simultaneousBaseline = this.cloneSearchGame(this.searchGame);
-    }
+    return false;
   }
 
   /**

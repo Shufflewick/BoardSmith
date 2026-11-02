@@ -345,10 +345,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
    * Drive the bot's low-level search primitives directly (bypassing the full
    * tree SELECT/EXPAND/BACKPROPAGATE loop) to isolate exactly the leak
    * vector under test: seat 1 commits a pick on the shared searchGame, then
-   * seat 2's moves are enumerated. `maybeCaptureSimultaneousBaseline` is the
-   * hook the fix adds (mcts-bot.ts) -- called optionally so this test is
-   * genuinely RED before the fix exists (no such method) and exercises it
-   * once added.
+   * seat 2's moves are enumerated.
    *
    * (v4.8-MCTS-UNDO, fixed: this used to ALSO have to dodge a second, unrelated
    * leak -- backpropagation's old incremental undo never reverted the
@@ -370,13 +367,10 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
     );
 
     bot.searchGame = bot.restoreGame(bot.captureSnapshot());
-    const preRevealFlowState = bot.searchGame.getFlowState();
 
-    // Mirror the fix's integration point: capture the pre-reveal baseline
-    // BEFORE seat 1's pick mutates the shared searchGame. No-op pre-fix.
-    bot.maybeCaptureSimultaneousBaseline?.(preRevealFlowState);
-
-    const postPickFlowState = bot.searchGame.continueFlow('pick', { choice: pick }, 1);
+    // The search makes every move through makeSearchMove, which captures the
+    // pre-reveal baseline BEFORE seat 1's pick mutates the shared searchGame.
+    const { flowState: postPickFlowState } = bot.makeSearchMove({ action: 'pick', args: { choice: pick } }, 1);
     const seat2Moves = bot.movesFor(bot.searchGame, postPickFlowState, 2, { sample: true });
     return new Set((seat2Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
   }
@@ -422,8 +416,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
 
     bot.rootSnapshot = bot.captureSnapshot();
     bot.searchGame = bot.restoreGame(bot.rootSnapshot);
-    // NOTE: deliberately do NOT call maybeCaptureSimultaneousBaseline manually —
-    // the descent (applyMoveToSearchGame) must capture it. Pre-fix it did not.
+    // NOTE: the descent (applyMoveToSearchGame) must capture the baseline itself.
 
     const rootFlow = bot.searchGame.getFlowState();
     const root = bot.createNode(rootFlow, null, null, [], bot.playerIndex);
