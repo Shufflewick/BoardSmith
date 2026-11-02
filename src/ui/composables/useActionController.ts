@@ -320,18 +320,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * completed its action still reached the server first, so that action really
    * committed and its result is published under its own name (as sendAndResolve
    * does); its followUp is left to the server, which holds it for the seat.
+   * `earlier` is a repeating pick's answers before this one, which the server
+   * counts to tell a page that started the action again from one going on (#1556).
    */
   async function sendStep(
     stepFn: NonNullable<typeof options.pickStep>,
     selectionName: string,
     value: unknown,
+    earlier?: unknown[],
   ): Promise<PickStepResponse | null> {
     const seq = actionStartTick.value;
     const actionName = currentAction.value as string;
     const player = playerSeat?.value ?? 0;
     stepSeq.value = seq;
     try {
-      const result = await stepFn(player, selectionName, value, actionName, buildServerArgs());
+      const args = earlier ? { ...buildServerArgs(), [selectionName]: earlier } : buildServerArgs();
+      const result = await stepFn(player, selectionName, value, actionName, args);
       if (actionMovedOn(seq)) return lateStepReply(actionName, player, result);
       // Set before the step stops being outstanding, so the action never reads unheld in between (#1388).
       pendingOnServer.value ||= result.success;
@@ -2437,11 +2441,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Add to accumulated with the label its button carried
     const state = repeatingState.value;
     const display = labelOfPick(value, state.currentChoices ?? []);
+    const earlier = state.accumulated.map(a => a.value);
     state.accumulated.push({ value, display });
     state.awaitingServer = true;
 
     try {
-      const result = await sendStep(stepFn, selection.name, value);
+      const result = await sendStep(stepFn, selection.name, value, earlier);
       if (!result || !repeatingState.value) return MOVED_ON;
 
       if (!result.success) {

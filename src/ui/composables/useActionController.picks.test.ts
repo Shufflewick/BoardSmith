@@ -75,8 +75,11 @@ describe('useActionController picks', () => {
 
       await controller.start('repeatAction');
       await controller.fill('items', 1);
+      await controller.fill('items', 2);
 
-      expect(pickStep).toHaveBeenCalledWith(0, 'items', 1, 'repeatAction', {});
+      // Each step carries the pick's earlier answers, so the server can tell a restarted page (#1556).
+      expect(pickStep).toHaveBeenNthCalledWith(1, 0, 'items', 1, 'repeatAction', { items: [] });
+      expect(pickStep).toHaveBeenNthCalledWith(2, 0, 'items', 2, 'repeatAction', { items: [1] });
     });
 
     it('should accumulate values in repeatingState', async () => {

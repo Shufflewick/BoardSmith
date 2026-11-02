@@ -2382,7 +2382,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A pick-by-pick step that names the seat's open action and a pick it has already passed starts that action again, running onCancel for the dropped picks, instead of being refused, so a page reloaded part way through can finish it (#1556)"
+      "summary": "A pick-by-pick step that names the seat's open action and a pick it has already passed starts that action again, running onCancel for the dropped picks, instead of being refused, and so does a step at the repeating pick the action is at whose initialArgs hold a different count of that pick's earlier answers, so a page reloaded part way through can finish it (#1556)"
     }
   ]
 }

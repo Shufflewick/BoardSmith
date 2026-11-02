@@ -99,9 +99,10 @@ export class PendingActionManager<G extends Game = Game> {
    * Process a selection step for a pending action.
    * Handles both regular selections and repeating selections.
    * Auto-creates the pending action if it doesn't exist.
-   * @param initialArgs - The picks the client made before this one, read only
-   *   when this step starts the pending action, and made as its own steps would be
-   *   (e.g., actingMerc before equipment)
+   * @param initialArgs - The picks the client made before this one, made as
+   *   their own steps would be when this step starts the pending action (e.g.,
+   *   actingMerc before equipment), and, for a repeating pick, its earlier
+   *   answers, whose count tells a fresh start from a continued one (#1556)
    */
   async processSelectionStep(
     playerPosition: number,
@@ -135,7 +136,7 @@ export class PendingActionManager<G extends Game = Game> {
     actionName: string | undefined,
     initialArgs: Record<string, unknown> | undefined,
   ): PickStepResult {
-    if (pendingState && this.#restarts(pendingState, selectionName, actionName)) {
+    if (pendingState && this.#restarts(pendingState, selectionName, actionName, initialArgs)) {
       this.#dropPendingAction(playerPosition);
       pendingState = undefined;
     }
@@ -218,14 +219,25 @@ export class PendingActionManager<G extends Game = Game> {
 
   /**
    * Whether a step starts the seat's open action again: it names that action
-   * and a pick before the one the action is at. A client that lost track of
-   * the action (a page reload, another controller for the seat) sends that,
-   * and refusing it would leave the player no way to finish (#1556).
+   * and a pick before the one the action is at, or the repeating pick it is at
+   * with a different count of that pick's earlier answers in `initialArgs`. A
+   * client that lost track of the action (a page reload, another controller
+   * for the seat) sends that, and refusing it would leave the player no way to
+   * finish (#1556).
    */
-  #restarts(pendingState: PendingActionState, selectionName: string, actionName: string | undefined): boolean {
+  #restarts(
+    pendingState: PendingActionState,
+    selectionName: string,
+    actionName: string | undefined,
+    initialArgs: Record<string, unknown> | undefined,
+  ): boolean {
     if (actionName !== pendingState.actionName) return false;
     const index = this.#runner.game.getAction(actionName)?.selections.findIndex((s) => s.name === selectionName) ?? -1;
-    return index >= 0 && index < pendingState.currentSelectionIndex;
+    if (index >= 0 && index < pendingState.currentSelectionIndex) return true;
+    const repeating = pendingState.repeating;
+    if (repeating?.selectionName !== selectionName || !initialArgs || !(selectionName in initialArgs)) return false;
+    const earlier = initialArgs[selectionName];
+    return !Array.isArray(earlier) || earlier.length !== repeating.accumulated.length;
   }
 
   /**

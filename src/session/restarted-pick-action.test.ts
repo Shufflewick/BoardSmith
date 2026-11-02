@@ -42,13 +42,17 @@ class HireGame extends Game<HireGame, Player> {
     this.registerActions(
       hire(Action.create<HireGame>('hire')),
       hire(Action.create<HireGame>('hireOffer').condition({ 'only as a follow-up': () => false })),
+      Action.create<HireGame>('haul')
+        .chooseFrom('cart', { choices: ['small', 'big'] })
+        .chooseFrom('loads', { choices: ['gold', 'gems', 'done'], repeat: { until: (_ctx, load) => load === 'done' } })
+        .execute((args) => { this.hired.push({ ...args }); }),
       Action.create<HireGame>('scout').execute((_args, ctx) => ({
         success: true,
         followUp: { action: 'hireOffer', args: { by: ctx.player.seat } },
       })),
     );
     this.setFlow({
-      root: actionStep({ actions: ['hire', 'scout'], player: (ctx) => ctx.game.getPlayer(1)! }),
+      root: actionStep({ actions: ['hire', 'haul', 'scout'], player: (ctx) => ctx.game.getPlayer(1)! }),
     });
   }
 }
@@ -59,7 +63,7 @@ const definition: GameDefinitionLike = { gameClass: HireGame, gameType: 'hire', 
 interface Table { team: string[]; pool: string[]; hired: unknown }
 
 interface Seat {
-  pick(selection: string, value: string): Promise<{ success: boolean; error?: string; actionComplete?: boolean }>;
+  pick(selection: string, value: string, initialArgs?: Record<string, unknown>): Promise<{ success: boolean; error?: string; actionComplete?: boolean }>;
   table(): Table;
   /** Take `scout`, whose follow-up holds `hireOffer` for the seat. */
   scout(): Promise<{ success: boolean }>;
@@ -71,7 +75,7 @@ function sessionSeat(action: string): Seat {
   const manager = new PendingActionManager(runner);
   const names = (zone: Zone) => zone.all(Token).map((token) => token.name!);
   return {
-    pick: (selection, value) => manager.processSelectionStep(1, selection, value, action),
+    pick: (selection, value, initialArgs) => manager.processSelectionStep(1, selection, value, action, initialArgs),
     table: () => ({ team: names(runner.game.team), pool: names(runner.game.pool), hired: runner.game.hired }),
     scout: async () => runner.performAction('scout', 1, {}),
   };
@@ -88,8 +92,8 @@ async function hostSeat(action: string): Promise<Seat> {
   await host.start();
   const boundaryKey = () => boundaryKeyOfHost(host);
   return {
-    pick: (selection, value) =>
-      host.handleOp(1, { type: 'selectionStep', player: 1, selectionName: selection, value, actionName: action, boundaryKey: boundaryKey() }),
+    pick: (selection, value, initialArgs) =>
+      host.handleOp(1, { type: 'selectionStep', player: 1, selectionName: selection, value, actionName: action, initialArgs, boundaryKey: boundaryKey() }),
     table: () => {
       const tree = snapshotTree(host.snapshot!);
       const names = (zone: string) => (tree.children!.find((child) => child.name === zone)!.children ?? []).map((child) => child.name!);
@@ -132,6 +136,26 @@ describe('a restarted pick-by-pick action answers its first pick again (#1556)',
       expect(seat.table()).toMatchObject({ team: ['ann'], pool: ['bob'] });
       expect(await seat.pick('gear', 'rifle')).toMatchObject({ success: true, actionComplete: true });
       expect(seat.table().hired).toEqual([{ merc: 'ann', gear: 'rifle' }]);
+    });
+
+    it(`restarts 'haul' at its repeating pick when the step holds fewer of its answers, on the ${name} route`, async () => {
+      const seat = await route('haul');
+      expect((await seat.pick('loads', 'gold', { cart: 'small', loads: [] })).success).toBe(true);
+
+      // The reloaded page made its plain pick again and starts the repeat afresh.
+      expect((await seat.pick('loads', 'gems', { cart: 'big', loads: [] })).success).toBe(true);
+      expect(await seat.pick('loads', 'done', { cart: 'big', loads: ['gems'] })).toMatchObject({ success: true, actionComplete: true });
+
+      expect(seat.table().hired).toEqual([{ cart: 'big', loads: ['gems', 'done'] }]);
+    });
+
+    it(`goes on with 'haul' when the step holds every answer its repeating pick took, on the ${name} route`, async () => {
+      const seat = await route('haul');
+      expect((await seat.pick('loads', 'gold', { cart: 'small', loads: [] })).success).toBe(true);
+      expect((await seat.pick('loads', 'gems', { cart: 'small', loads: ['gold'] })).success).toBe(true);
+      expect(await seat.pick('loads', 'done', { cart: 'small', loads: ['gold', 'gems'] })).toMatchObject({ success: true, actionComplete: true });
+
+      expect(seat.table().hired).toEqual([{ cart: 'small', loads: ['gold', 'gems', 'done'] }]);
     });
   }
 });
