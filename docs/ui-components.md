@@ -942,6 +942,38 @@ const showModal = ref(false);
 
 **Events:**
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
+- `@closed` - Fires once the fade-out has finished after `active` turns false, or at once if the overlay is unmounted part way through it. It fires only for an overlay that was rendered: setting `active` true and back to false in the same tick shows nothing and fires nothing. An animation handler that shows the overlay should wait for it, so the next animation starts on a clear board:
+
+<!-- typecheck: board -->
+```vue
+<script setup lang="ts">
+import { ref } from 'vue';
+import { GameOverlay, useAnimationEvents } from 'boardsmith/ui';
+
+const animationEvents = useAnimationEvents();
+const showBanner = ref(false);
+let bannerClosed = () => {};
+
+animationEvents?.registerHandler('banner', async (_event, { signal }) => {
+  showBanner.value = true;
+  await new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, 2000);
+    signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+  });
+  const closed = new Promise<void>((resolve) => (bannerClosed = resolve));
+  showBanner.value = false;
+  // Skipped: stop here, as a banner skipped before it rendered has no fade-out to wait for.
+  if (signal.aborted) return;
+  await closed;
+}, { skip: 'drop' });
+</script>
+
+<template>
+  <GameOverlay :active="showBanner" @closed="bannerClosed()">
+    <div>Combat Detected</div>
+  </GameOverlay>
+</template>
+```
 
 **Important:**
 - Must be rendered inside the board component GameShell mounts from `src/ui/uis.ts`

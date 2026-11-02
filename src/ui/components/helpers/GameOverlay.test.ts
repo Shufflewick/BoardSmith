@@ -5,9 +5,27 @@
  * inside GameShell's `contain: layout` container so the header and Action Panel
  * stay reachable behind it.
  */
-import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { defineComponent, h, ref } from 'vue';
+import { enableAutoUnmount, mount } from '@vue/test-utils';
 import GameOverlay from './GameOverlay.vue';
+
+enableAutoUnmount(afterEach);
+
+// Mounts the overlay with the real Transition, so a leave runs its frames before it ends.
+// `closed()` resolves on the next `closed` event; the leaving backdrop is no longer the
+// component's root, so the tests look for it in the page.
+function fadingOverlay() {
+  let next = () => {};
+  const onClosed = vi.fn(() => next());
+  const wrapper = mount(GameOverlay, {
+    props: { active: true, onClosed },
+    global: { stubs: { transition: false } },
+    attachTo: document.body,
+  });
+  const closed = () => new Promise<void>((resolve) => (next = resolve));
+  return { wrapper, onClosed, closed };
+}
 
 const overlay = (props: Record<string, unknown> = {}, slots: Record<string, string> = {}) =>
   mount(GameOverlay, { props: { active: true, ...props }, slots });
@@ -89,6 +107,41 @@ describe('GameOverlay', () => {
     // to document.body — teleporting would escape GameShell's contain: layout
     // and cover the header and Action Panel.
     expect(wrapper.element.querySelector('.modal')).not.toBeNull();
+  });
+
+  it('emits closed once its fade-out has finished, not when active turns false', async () => {
+    const { wrapper, onClosed, closed } = fadingOverlay();
+    const fadedOut = closed();
+
+    await wrapper.setProps({ active: false });
+    expect(document.querySelector('.game-overlay')).not.toBeNull();
+    expect(onClosed).not.toHaveBeenCalled();
+
+    await fadedOut;
+    expect(document.querySelector('.game-overlay')).toBeNull();
+    expect(onClosed).toHaveBeenCalledTimes(1);
+  });
+
+  it('emits closed when active turns true again part way through the fade-out, as the fading backdrop gives way to a new one', async () => {
+    const { wrapper, onClosed } = fadingOverlay();
+    await wrapper.setProps({ active: false });
+    await wrapper.setProps({ active: true });
+    expect(onClosed).toHaveBeenCalledTimes(1);
+    expect(document.querySelectorAll('.game-overlay')).toHaveLength(1);
+  });
+
+  it('emits closed when it is unmounted part way through the fade-out', async () => {
+    const onClosed = vi.fn();
+    const shown = ref(true);
+    const active = ref(true);
+    const Board = defineComponent(() => () => (shown.value ? h(GameOverlay, { active: active.value, onClosed }) : null));
+    const wrapper = mount(Board, { global: { stubs: { transition: false } }, attachTo: document.body });
+
+    active.value = false;
+    await wrapper.vm.$nextTick();
+    shown.value = false;
+    await wrapper.vm.$nextTick();
+    expect(onClosed).toHaveBeenCalledTimes(1);
   });
 
   it('allows a fully transparent backdrop', () => {
