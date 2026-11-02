@@ -305,7 +305,8 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
     import('../ui/composables/hideChrome.js'),
     import('../ui/composables/actionHolds.js'),
     import('../ui/world/useWorld.js'),
-  ]).then(([interaction, context, animation, announcer, gameOver, menu, hideChrome, holds, world]) => {
+    import('../ui/composables/requestHostState.js'),
+  ]).then(([interaction, context, animation, announcer, gameOver, menu, hideChrome, holds, world, hostState]) => {
     const key = (k: unknown) => k as symbol;
     const allContext = Object.values(context.GAME_CONTEXT_KEYS).map(key);
     const playContext = context.PLAY_CONTEXT_KEY_NAMES.map((name) => key(context.GAME_CONTEXT_KEYS[name]));
@@ -318,6 +319,7 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
         key(menu.MENU_COMMANDS_KEY),
         key(hideChrome.HIDE_CHROME_KEY),
         key(holds.ACTION_HOLDS_KEY),
+        key(hostState.REQUEST_HOST_STATE_KEY),
         ...allContext,
       ]),
       world: new Set([
@@ -923,6 +925,12 @@ async function wireTableSeat(
         throw new Error(
           `renderAsSeat mounted seat ${seat}'s board with no host page, so the host request "${op}" has ` +
             'nothing to answer it. It is made by the debug tools, which run only inside boardsmith dev.',
+        );
+      },
+      requestHostState: () => {
+        throw new Error(
+          `renderAsSeat mounted seat ${seat}'s board with no host page, so asking the host to re-send the game state ` +
+            'has nothing to answer it. The auto-UI asks only when no state has come, and renderAsSeat always hands it one.',
         );
       },
       presentation: ref(undefined),

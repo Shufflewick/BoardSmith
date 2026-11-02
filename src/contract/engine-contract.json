@@ -1,5 +1,5 @@
 {
-  "revision": 300,
+  "revision": 301,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2343,6 +2343,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "createTestGame, boardsmith validate, simulate and build now seat players in boardsmith.json's colorPalette the way the dev host does, instead of the engine default palette (#1552)"
+    },
+    {
+      "revision": 301,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "GameShell no longer binds a retry listener on every board (#1553): a board that declares exactly TableBoardProps, multi-root included, mounts without Vue's 'extraneous non-emits listener' warning. The auto-UI's loading Retry asks the host for the game state through the shell instead, and offers no Retry under a world shell, whose host has no request-state. Platform: nothing to change. Published games need no rebuild."
     }
   ]
 }
