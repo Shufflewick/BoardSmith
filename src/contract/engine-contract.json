@@ -1,5 +1,5 @@
 {
-  "revision": 293,
+  "revision": 294,
   "surfaceHash": "6e90ef1902dcdb61",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2287,6 +2287,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "SnapshotSessionHost.reoffer() works out each seat's offered actions again, not only why one is greyed (#1545): an action the step clock greyed that has no enabled choice once its reason lapses is no longer offered, and a step that leaves nobody anything to take ends as after a move, published with cause change; game.refreshAwaitingActions() does this for an open actionStep when called from outside game code. Platform: nothing to change, beyond treating a reoffer() publish with cause change as a change. Published games need no rebuild."
+    },
+    {
+      "revision": 294,
+      "date": "2026-11-02",
+      "surfaceHash": "6e90ef1902dcdb61",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "enumerateLegalMoves and the bot now list the empty pick for a min-0 multiSelect or orderedList with no enabled choice, which performAction already accepted, so a bot is no longer left with no move (#1546)"
     }
   ]
 }
