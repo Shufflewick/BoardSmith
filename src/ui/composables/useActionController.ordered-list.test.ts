@@ -137,7 +137,7 @@ describe('useActionController ordered lists (#249)', () => {
     await controller.appendListEntry('buildings', 'shipyard');
     await controller.appendListEntry('buildings', 'shipyard');
 
-    await controller.confirmMultiSelect();
+    await controller.confirmMultiSelect('buildings');
 
     expect(sendAction).toHaveBeenCalledWith(
       'repair',
@@ -150,7 +150,7 @@ describe('useActionController ordered lists (#249)', () => {
     const controller = newController();
     await controller.start('repair');
 
-    await controller.confirmMultiSelect();
+    await controller.confirmMultiSelect('buildings');
 
     expect(controller.currentArgs.value.buildings).toEqual([]);
     expect(controller.isReady.value).toBe(true);

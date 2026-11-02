@@ -517,7 +517,7 @@ await actionController.fill('cards', [card1.id, card2.id]);
 // (toggle each card as the user clicks it, confirm when they're done)
 actionController.toggleMultiSelect('cards', card.id);
 actionController.toggleMultiSelect('cards', anotherCard.id);
-await actionController.confirmMultiSelect();
+await actionController.confirmMultiSelect('cards'); // with nothing toggled, a min-0 pick gets []
 ```
 
 Prefer `toggleMultiSelect()`/`confirmMultiSelect()` when the user builds up a selection by clicking multiple board elements one at a time (the common custom-UI case); use `fill()` with an array when you already have the full set of chosen values (e.g. from a checkbox list).
