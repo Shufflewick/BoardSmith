@@ -10,7 +10,9 @@
  * open action on the host.
  *
  * Served from `boardsmith init`'s table sample, with `play` taking two picks,
- * the first with an `onSelect` so the page sends it to the server on its own.
+ * the first with an `onSelect` so the page sends it to the server on its own,
+ * and `stack` taking a plain pick then a repeating one, which a reloaded page
+ * starts afresh at the repeat the server is part way through.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/restarted-pick-browser.mjs`; a missing Chromium says to run
@@ -21,15 +23,6 @@ import { assert, check, onFreshPage, runBrowserRegression, summarise, waitUntil 
 const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
 import type { TableFixtureGame } from './game.js';
 import { Card } from './elements.js';
-
-export function createDrawAction(): ActionDefinition {
-  return Action.create<TableFixtureGame>('draw')
-    .prompt('Draw a card from the deck')
-    .execute((args, ctx) => {
-      ctx.game.deck.first(Card)?.putInto(ctx.player.hand);
-      return { success: true };
-    });
-}
 
 export function createPlayAction(): ActionDefinition {
   return Action.create<TableFixtureGame>('play')
@@ -47,9 +40,21 @@ export function createPlayAction(): ActionDefinition {
       return { success: true };
     });
 }
+
+// The sample's game registers this export by name; this table stacks instead of drawing.
+export function createDrawAction(): ActionDefinition {
+  return Action.create<TableFixtureGame>('stack')
+    .prompt('Stack marks')
+    .chooseFrom('pace', { prompt: 'Which pace?', choices: ['slow', 'fast'] })
+    .chooseFrom('marks', { prompt: 'Add a mark', choices: ['ring', 'star', 'done'], repeat: { until: (_ctx, mark) => mark === 'done' } })
+    .execute(({ pace, marks }, ctx) => {
+      ctx.game.message('Stacked ' + pace + ' ' + marks.join(' '));
+      return { success: true };
+    });
+}
 `;
 
-const FLOW = `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+const FLOW = `import { loop, actionStep, type FlowDefinition } from 'boardsmith';
 import type { TableFixtureGame } from './game.js';
 
 export function createGameFlow(): FlowDefinition<TableFixtureGame> {
@@ -57,7 +62,8 @@ export function createGameFlow(): FlowDefinition<TableFixtureGame> {
     root: loop({
       name: 'game-loop',
       maxIterations: 100,
-      do: eachPlayer({ name: 'player-turns', do: actionStep({ name: 'turn', actions: ['draw', 'play'] }) }),
+      // Every turn is the page's seat's, so it can stack after it played.
+      do: actionStep({ name: 'turn', actions: ['stack', 'play'], player: (ctx) => ctx.game.getPlayer(1)! }),
     }),
   };
 }
@@ -66,6 +72,17 @@ export function createGameFlow(): FlowDefinition<TableFixtureGame> {
 const gameFrame = (page) => page.frameLocator('.dev-host__frame');
 const playOffered = (page) => gameFrame(page).locator('.action-btn[data-bs-action="play"]').waitFor({ timeout: 60_000 });
 const prompt = (frame) => frame.locator('.selection-prompt').first().innerText().catch(() => '');
+
+/** Open `stack`, answer its plain pick, then give its repeating pick `marks` one by one. */
+async function stackMarks(page, marks) {
+  const frame = gameFrame(page);
+  await frame.locator('.action-btn[data-bs-action="stack"]').click();
+  await frame.locator('.selection-input .choice-btn', { hasText: 'slow' }).click();
+  for (const mark of marks) {
+    await waitUntil(() => prompt(frame), (text) => text.includes('Add a mark'), 10_000);
+    await frame.locator('.selection-input .choice-btn', { hasText: mark }).click();
+  }
+}
 
 /** Open `play` and answer its first pick with the first card. */
 async function pickACard(page) {
@@ -100,6 +117,21 @@ await runBrowserRegression(
         const logged = await waitUntil(() => lines.count(), (n) => n > 0, 10_000);
         await check('the restarted action completes', async () => {
           assert(logged === 1, `the log holds ${logged} "Played a card twice" lines`);
+        });
+
+        await playOffered(page);
+        await stackMarks(page, ['ring']);
+        // The server has taken `ring` once its chip shows without the step's loading mark.
+        await frame.locator('.accumulated-chip', { hasText: 'ring' }).waitFor({ timeout: 10_000 });
+        await waitUntil(() => frame.locator('.accumulated-selections .loading-indicator').count(), (n) => n === 0, 10_000);
+        await page.reload();
+        await playOffered(page);
+        await stackMarks(page, ['star', 'done']);
+
+        const stacked = frame.locator('[data-testid="bs-log-line"]', { hasText: 'Stacked' });
+        const texts = await waitUntil(() => stacked.allInnerTexts(), (found) => found.length > 0, 10_000);
+        await check('after a reload part way through a repeating pick, the action keeps only the marks the new page gave (#1556 F1)', async () => {
+          assert(texts.length === 1 && texts[0].includes('Stacked slow star done'), `the log holds ${JSON.stringify(texts)}`);
         });
       });
     } finally {
