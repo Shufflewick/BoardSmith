@@ -9,7 +9,7 @@ import { join } from 'node:path';
 import { Game, Player, Action, actionStep, type GameOptions } from '../engine/index.js';
 import { executeOp, type GamePreset } from '../session/index.js';
 import { MultiplayerHost } from '../cli/dev-host/multiplayer-host.js';
-import { resolveDevPlayerOptions } from '../cli/lib/player-options.js';
+import { DEV_BOT_LEVEL, resolveDevPlayerOptions } from '../cli/lib/player-options.js';
 import { createTestGame, presetStartOptions } from './index.js';
 import { projectGameOptions } from '#testing/project-game-options';
 import { tempTree } from './temp-tree.test-helper.js';
@@ -25,7 +25,10 @@ class RoleGame extends Game<RoleGame, Player> {
 }
 
 const config = {
-  gameOptions: [{ id: 'rounds', type: 'number', label: 'Rounds', default: 3 }],
+  gameOptions: [
+    { id: 'rounds', type: 'number', label: 'Rounds', default: 3 },
+    { id: 'peek', type: 'boolean', label: 'Peek', default: false, designerOnly: true },
+  ],
   playerOptions: [
     { id: 'role', type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
     { id: 'handicap', type: 'number', label: 'Handicap', default: 0 },
@@ -44,6 +47,8 @@ const presets: GamePreset[] = [
     players: [{ playerOptions: { role: 'dictator' } }, { isBot: true, botLevel: 'hard', color: '#27AE60' }],
   },
   { name: 'Long game', options: { rounds: 9 } },
+  { name: 'Peeking', options: { peek: true }, players: [{}, {}] },
+  { name: 'Crowd', players: [{}, {}, {}, {}] },
 ];
 const def = { gameClass: RoleGame, gameType: 'role', minPlayers: 2, maxPlayers: 3, presets };
 
@@ -73,7 +78,7 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
       colors: ['#E74C3C', '#27AE60'],
     });
     expect(game.started.playerConfigs).toEqual([
-      { role: 'dictator', handicap: 0, color: '#E74C3C', name: 'Player 1', isBot: false, botLevel: undefined },
+      { role: 'dictator', handicap: 0, color: '#E74C3C', name: 'Player 1', isBot: false, botLevel: DEV_BOT_LEVEL },
       { handicap: 0, color: '#27AE60', name: 'Player 2', isBot: true, botLevel: 'hard' },
     ]);
   });
@@ -91,6 +96,7 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
       playerOptions,
       colorPalette: playerOptions.color.choices,
       presets,
+      botLevel: DEV_BOT_LEVEL,
       declaredGameOptions: projectGameOptions(),
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
         if (op.type === 'start') starts.push(gameOptions);
@@ -113,7 +119,7 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
   it('refuses a preset the game does not declare, naming the ones it does', () => {
     inProject();
     expect(() => presetStartOptions(def, 'Play as Rebel')).toThrow(
-      'This game declares no preset "Play as Rebel"; its presets are Play as Dictator, Long game.',
+      'This game declares no preset "Play as Rebel"; its presets are Play as Dictator, Long game, Peeking, Crowd.',
     );
   });
 
@@ -122,6 +128,18 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
     expect(() => presetStartOptions(def, 'Long game')).toThrow(
       'Preset "Long game" sets up no seats, so it cannot say how to seat a game. ' +
         'Give it players, or start the game with createTestGame(GameClass, { playerCount, ...preset.options }).',
+    );
+  });
+
+  it('refuses a preset that sets a designer-only option, as dev refuses it when the game loads', () => {
+    inProject();
+    expect(() => presetStartOptions(def, 'Peeking')).toThrow(/^This game's preset "Peeking" cannot be used: .*peek.* Correct the preset\.$/);
+  });
+
+  it('refuses a preset with more seats than the game takes', () => {
+    inProject();
+    expect(() => presetStartOptions(def, 'Crowd')).toThrow(
+      'Preset "Crowd" sets up 4 seats, but this game seats 2 to 3 players. Correct the preset.',
     );
   });
 });

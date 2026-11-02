@@ -35,7 +35,7 @@ export function projectColorOptions(playerCount: number): { colors?: string[]; c
  * --preset` and the dev lobby's preset picker start it (#1565): the preset's
  * game options and each seat's player options, colour and bot, as the start op
  * carries them (`playerOptions`, `exclusiveSeats`, `playerIsBot`,
- * `playerConfigs`, `colors`). The player options and palette are the game's
+ * `playerConfigs`, `colors`, `colorLabels`). The player options and palette are the game's
  * and the same `boardsmith.json`'s, as dev reads them.
  *
  * @example
@@ -43,10 +43,14 @@ export function projectColorOptions(playerCount: number): { colors?: string[]; c
  * const { game } = createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Dictator'));
  * ```
  *
- * @throws When the game declares no preset `name`, when it sets up no seats,
- * and when dev would refuse it.
+ * Each seat a preset gives no `botLevel` plays at dev's default level, as
+ * `boardsmith dev` without `--bot-level` gives it, and every game option the
+ * project declares that the preset leaves out is at its default.
+ *
+ * @throws When the game declares no preset `name`, when it sets up no seats or
+ * more or fewer than the game seats, and when dev would refuse it.
  */
 export function presetStartOptions(
-  gameDefinition: Pick<GameDefinition, 'presets' | 'playerOptions' | 'colorPalette'>,
+  gameDefinition: Pick<GameDefinition, 'presets' | 'playerOptions' | 'colorPalette' | 'minPlayers' | 'maxPlayers'>,
   name: string,
 ): { playerCount: number } & Record<string, unknown>;

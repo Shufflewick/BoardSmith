@@ -14,10 +14,10 @@ import type {
   projectGameOptions as DeclaredOptions,
 } from '#testing/project-game-options';
 import type { GameOptionDefinition } from '../types/protocol.js';
-import { parseGameOptionList, selectDesignerGameOptions } from '../session/game-option-selection.js';
+import { assertPresetsSelectable, parseGameOptionList, selectDesignerGameOptions } from '../session/game-option-selection.js';
 import { paletteGameOptions } from '../session/colors.js';
 import { seatDisplayName } from '../engine/element/seat-defaults.js';
-import { presetSeatSetup, resolveDevPlayerOptions, seatStartOptions } from '../cli/lib/player-options.js';
+import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, seatStartOptions } from '../cli/lib/player-options.js';
 
 /**
  * Each boardsmith.json parsed so far, by path, with the text it was parsed from: a simulation starts
@@ -40,6 +40,7 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
     throw new Error(`This game declares no preset "${name}"; ${known ? `its presets are ${known}` : 'it declares none'}.`);
   }
   const project = projectDeclarations();
+  assertPresetsSelectable(project?.declared, [preset]);
   // The same player options and palette `boardsmith dev` resolves, so a preset dev refuses is refused here.
   const playerOptions = resolveDevPlayerOptions(gameDefinition, {
     playerOptions: project?.playerOptions,
@@ -53,12 +54,26 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
         'Give it players, or start the game with createTestGame(GameClass, { playerCount, ...preset.options }).',
     );
   }
+  const { minPlayers, maxPlayers } = gameDefinition;
+  if (minPlayers === undefined || maxPlayers === undefined) {
+    throw new Error('This game declares no minPlayers and maxPlayers, so no table can seat it. Declare both in your gameDefinition.');
+  }
+  if (seats.length < minPlayers || seats.length > maxPlayers) {
+    throw new Error(
+      `Preset "${name}" sets up ${seats.length} seats, but this game seats ${minPlayers} to ${maxPlayers} players. Correct the preset.`,
+    );
+  }
   return {
     ...selectDesignerGameOptions(project?.declared, { ...preset.options }),
     playerCount: seats.length,
     ...seatStartOptions(
       playerOptions,
-      seats.map((seat, index) => ({ ...seat, color: seat.color ?? palette[index]?.value, name: seatDisplayName(index + 1) })),
+      seats.map((seat, index) => ({
+        ...seat,
+        color: seat.color ?? palette[index]?.value,
+        botLevel: seat.botLevel ?? DEV_BOT_LEVEL,
+        name: seatDisplayName(index + 1),
+      })),
       palette,
     ),
   };

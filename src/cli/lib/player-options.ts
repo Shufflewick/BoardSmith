@@ -240,6 +240,9 @@ export function seatOptionsRefusal(
   return undefined;
 }
 
+/** The level `boardsmith dev` plays a seat at when neither `--bot-level` nor a preset gives one. */
+export const DEV_BOT_LEVEL = 'medium';
+
 /** One seat as the start op carries it. */
 export interface StartSeat extends SeatSetup {
   name: string;
@@ -259,9 +262,9 @@ export function seatStartOptions(
 ): Record<string, unknown> {
   const playerOptions = seats.map((seat) => (seat.color === undefined ? { ...seat.playerOptions } : { ...seat.playerOptions, color: seat.color }));
   const colors = seats.map((seat) => seat.color);
+  const labels = palette.length === 0 ? {} : { colorLabels: Object.fromEntries(palette.map((c) => [c.value, c.label])) };
   return {
-    ...(colors.includes(undefined) ? {} : { colors }),
-    ...(colors.includes(undefined) || palette.length === 0 ? {} : { colorLabels: Object.fromEntries(palette.map((c) => [c.value, c.label])) }),
+    ...(colors.includes(undefined) ? {} : { colors, ...labels }),
     playerOptions,
     exclusiveSeats: exclusiveSeats(options, playerOptions),
     playerIsBot: seats.map((seat) => seat.isBot),

@@ -21,7 +21,7 @@ import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './de
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { RulesError } from '../dev-host/rules-worker.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
-import { presetSeatSetup, resolveDevPlayerOptions, type ConfigOptionDefinition, type SeatSetup } from '../lib/player-options.js';
+import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, type ConfigOptionDefinition, type SeatSetup } from '../lib/player-options.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
@@ -538,7 +538,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   // a store another run of this project may be holding.
   await requireFreePort(port, host);
 
-  const botLevel = options.botLevel ?? 'medium';
+  const botLevel = options.botLevel ?? DEV_BOT_LEVEL;
   validateBotLevel(botLevel);
   // Single source of truth for the teaching lockout — passed into both the server
   // (MultiplayerHost → createDevSession adapters) and the client (buildDevConfig →
