@@ -1,5 +1,5 @@
 {
-  "revision": 321,
+  "revision": 322,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2511,6 +2511,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A multiSelect draft takes out a held copy the pick's list stops offering, or offers disabled, and says so in lastError, so the Action Panel, the board, the count and the submission always agree; multiSelectDraft.copies is now required, and an ordered list's draft numbers each repeat of a value (#1575)."
+    },
+    {
+      "revision": 322,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "An ordered-list draft takes out every entry of a value the pick's new list stops offering enabled, and says so; a draft entry named by shorthand is matched to the new list first"
     }
   ]
 }

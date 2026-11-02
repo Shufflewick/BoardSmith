@@ -1555,29 +1555,43 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getChoices(pick) as ChoiceWithRefs[];
   });
 
-  // A held copy the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575).
+  // A held entry the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575, #1576).
   watch(currentChoices, (choices, previous) => {
     const draft = multiSelectDraft.value;
     const pick = currentPick.value;
-    if (!draft || !pick || draft.selectionName !== pick.name || !resolveMultiSelectConfig(pick)) return;
-    const { copies } = draft;
-    const entries = draft.values.map((value, i) => copyOfChoice(choices, value, copies[i]));
-    const kept = entries.map((entry) => entry !== undefined && !entry.disabled);
-    if (kept.every(Boolean)) return;
-    const reasons = draft.values.flatMap((value, i) => {
-      if (kept[i]) return [];
-      // The list the copy was held against still names a value the new one dropped.
-      const label = labelOfPick(value, previous ?? choices);
-      const disabled = entries[i]?.disabled;
-      return [disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`];
-    });
-    multiSelectDraft.value = {
-      selectionName: draft.selectionName,
-      values: draft.values.filter((_, i) => kept[i]),
-      copies: copies.filter((_, i) => kept[i]),
-    };
-    setError(`${reasons.join('; ')}, so ${reasons.length === 1 ? 'it was' : 'they were'} taken out of your selection.`);
+    if (!draft || !pick || draft.selectionName !== pick.name) return;
+    const ordered = resolveOrderedListConfig(pick) !== undefined;
+    if (!ordered && !resolveMultiSelectConfig(pick)) return;
+    const { next, gone, entries, changed } = judgeDraft(draft, choices, ordered);
+    if (!changed) return;
+    multiSelectDraft.value = next;
+    if (gone.length) setError(takenOutMessage(gone.map((i) => draft.values[i]), gone.map((i) => entries[i]), previous ?? choices));
   }, { flush: 'sync' });
+
+  /** The draft held against `choices`: each entry matched to its offered value, and the indexes of those it no longer offers enabled. */
+  function judgeDraft(draft: NonNullable<typeof multiSelectDraft.value>, choices: ChoiceWithRefs[], ordered: boolean) {
+    // An entry added while nothing was on offer is held as the player named it, so match it to the new list first.
+    const offered = draft.values.map((value) => findMatchingChoice(value, choices)?.value ?? value);
+    // An ordered list repeats a value without an offered entry per repeat, so it needs one enabled entry per value.
+    const entries = offered.map((value, i) => copyOfChoice(choices, value, ordered ? 0 : draft.copies[i]));
+    const gone = entries.flatMap((entry, i) => entry && !entry.disabled ? [] : [i]);
+    const values = offered.filter((_, i) => !gone.includes(i));
+    const next = ordered
+      ? listDraft(draft.selectionName, values)
+      : { selectionName: draft.selectionName, values, copies: draft.copies.filter((_, i) => !gone.includes(i)) };
+    return { next, gone, entries, changed: gone.length > 0 || offered.some((value, i) => value !== draft.values[i]) };
+  }
+
+  /** Why held entries were taken out of the draft, each named by the list it was held against. */
+  function takenOutMessage(values: unknown[], entries: (ChoiceWithRefs | undefined)[], heldAgainst: ChoiceWithRefs[]): string {
+    const reasons = new Set(values.map((value, i) => {
+      // The list the entry was held against still names a value the new one dropped.
+      const label = labelOfPick(value, heldAgainst);
+      const disabled = entries[i]?.disabled;
+      return disabled ? `${label} can no longer be chosen (${disabled})` : `${label} is no longer on offer`;
+    }));
+    return `${[...reasons].join('; ')}, so ${values.length === 1 ? 'it was' : 'they were'} taken out of your selection.`;
+  }
 
   /**
    * Reactive valid elements for the current pick.
