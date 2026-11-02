@@ -838,7 +838,7 @@ export class MCTSBot<G extends Game = Game> {
   private makeSearchMove(move: BotMove, seat: number): { outcome: SearchMoveOutcome; flowState: FlowState } {
     const game = this.searchGame!;
     this.enterSimultaneousStep(this.worldFlowState());
-    const randomState = game.getRandomState();
+    const before = { randomState: game.getRandomState(), sequence: game._ctx.sequence };
     let flowState: FlowState;
     try {
       flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
@@ -848,7 +848,7 @@ export class MCTSBot<G extends Game = Game> {
       return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
     if (flowState.actionError === undefined) {
-      return { outcome: this.makeInSeatGame(move, seat, flowState, randomState) ? 'made' : 'refusedAfterChanges', flowState };
+      return { outcome: this.makeInSeatGame(move, seat, flowState, before) ? 'made' : 'refusedAfterChanges', flowState };
     }
     if (!flowState.actionPartiallyApplied) {
       this.searchSteps.firstRefusal ??= flowState.actionError;
@@ -1341,14 +1341,19 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Make `move`, just made in the world, in `seat`'s own copy of the step too,
-   * drawing the same randomness, while the step is still open (#1563). Says
-   * whether that copy took it.
+   * drawing the same randomness and minting the same element ids the world did
+   * from `before`, while the step is still open (#1563). Says whether that copy took it.
+   *
+   * A draw from state another seat changed in the step (a shared deck) can still
+   * differ from the world's: the copy hides that seat's pick, so the world may then
+   * refuse the seat's later moves listed against its copy.
    */
-  private makeInSeatGame(move: BotMove, seat: number, flowState: FlowState, randomState: string): boolean {
+  private makeInSeatGame(move: BotMove, seat: number, flowState: FlowState, before: { randomState: string; sequence: number }): boolean {
     if (!this.simultaneousBaseline || !flowState.awaitingPlayers?.length || !flowState.moveCount) return true;
     const seatGame = this.simultaneousSeatGames.get(seat) ?? this.cloneSearchGame(this.simultaneousBaseline);
     this.simultaneousSeatGames.set(seat, seatGame);
-    seatGame.setRandomState(randomState);
+    seatGame.setRandomState(before.randomState);
+    seatGame._ctx.sequence = before.sequence;
     try {
       const state = seatGame.continueFlow(move.action, this.rebindArgs(move.args, seatGame), seat);
       if (state.actionError === undefined) return true;

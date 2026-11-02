@@ -6,14 +6,15 @@
  * never saw its own last move and did see the other seats' earlier ones.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, simultaneousActionStep, followUpForSeat, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Action, simultaneousActionStep, followUpForSeat, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotMove, BotStrategy } from './types.js';
 
 /**
  * Each seat explores once, which uses up the rope in its own stash and hands it
  * a follow-up to collect one item from that stash, then ends its turn. A seat
- * may cheer once another seat has explored.
+ * may cheer once another seat has explored, and may carve a marker, which makes
+ * a new element.
  */
 class ExpeditionGame extends Game<ExpeditionGame, Player> {
   explored: number[] = [];
@@ -41,13 +42,16 @@ class ExpeditionGame extends Game<ExpeditionGame, Player> {
       Action.create<ExpeditionGame>('cheer')
         .condition({ 'another seat explored': (ctx) => (ctx.game as ExpeditionGame).explored.some((seat) => seat !== ctx.player.seat) })
         .execute(() => {}),
+      Action.create<ExpeditionGame>('carve').execute((_args, ctx) => {
+        ctx.game.create(Piece, `marker-${ctx.player.seat}`);
+      }),
       Action.create<ExpeditionGame>('endTurn').execute((_args, ctx) => {
         (ctx.game as ExpeditionGame).ended.push(ctx.player.seat);
       }),
     );
     this.setFlow({
       root: simultaneousActionStep<ExpeditionGame>({
-        actions: ['explore', 'cheer', 'endTurn'],
+        actions: ['explore', 'cheer', 'carve', 'endTurn'],
         playerDone: (ctx, player) => (ctx.game as ExpeditionGame).ended.includes(player.seat),
       }),
     });
@@ -88,6 +92,7 @@ type SearchInternals = {
   captureSnapshot(): unknown;
   restoreGame(snapshot: unknown): ExpeditionGame;
   searchGame: ExpeditionGame | null;
+  simultaneousSeatGames: Map<number, ExpeditionGame>;
   makeSearchMove(move: BotMove, seat: number): { outcome: 'made' | 'refused' | 'refusedAfterChanges' };
 };
 
@@ -116,5 +121,19 @@ describe('MCTSBot in a simultaneous step a seat acts in several times (#1563)', 
     expect(bot.makeSearchMove({ action: 'explore', args: {} }, 1).outcome).toBe('made');
     // The world offers seat 2 the cheer, but seat 2's own copy has not seen seat 1 explore.
     expect(bot.makeSearchMove({ action: 'cheer', args: {} }, 2).outcome).toBe('refusedAfterChanges');
+  });
+
+  it('gives an element a seat makes in its own copy the id the world gives it, after another seat made one', () => {
+    const game = new ExpeditionGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'expedition' });
+    game.startFlow();
+    const bot = new MCTSBot(game, ExpeditionGame, 'expedition', 1, { seed: 'expedition' }) as unknown as SearchInternals;
+    bot.searchGame = bot.restoreGame(bot.captureSnapshot());
+
+    expect(bot.makeSearchMove({ action: 'carve', args: {} }, 1).outcome).toBe('made');
+    expect(bot.makeSearchMove({ action: 'carve', args: {} }, 2).outcome).toBe('made');
+    const inWorld = bot.searchGame!.first(Piece, 'marker-2')!.id;
+    const inCopy = bot.simultaneousSeatGames.get(2)!.first(Piece, 'marker-2')!.id;
+    // Another id would name a different element, or none, when the copy's listing is made in the world.
+    expect(inCopy).toBe(inWorld);
   });
 });
