@@ -85,8 +85,20 @@ class EquipGame extends Game<EquipGame, Player> {
         .execute(() => ({ success: true }))
     );
 
+    // A min-0 list pick with nothing to pick: [] answers it, so it is no dead end (#1558).
+    this.registerAction(
+      Action.create('hire')
+        .chooseFrom('picked', { prompt: 'Hire', choices: () => [] as string[], multiSelect: { min: 0, max: 1 } })
+        .execute(() => ({ success: true }))
+    );
+    this.registerAction(
+      Action.create('hireElements')
+        .chooseElements('picked', { prompt: 'Hire', elements: () => [], multiSelect: { min: 0, max: 1 } })
+        .execute(() => ({ success: true }))
+    );
+
     this.setFlow({
-      root: actionStep({ actions: ['equip', 'equipMaybe', 'equipGreyed'] }),
+      root: actionStep({ actions: ['equip', 'equipMaybe', 'equipGreyed', 'hire', 'hireElements'] }),
     });
   }
 }
@@ -138,6 +150,16 @@ describe('#270 — a step with nothing to pick refuses, and says what was asked 
     const result = succeeded(await choicesFor('equipMaybe', 'item', { slot: 'head' }));
 
     expect(result.choices).toEqual([]);
+  });
+
+  test('leaves a min-0 list pick alone: [] answers it (#1558)', async () => {
+    const choices = succeeded(await choicesFor('hire', 'picked'));
+    expect(choices.choices).toEqual([]);
+    expect(choices.multiSelect).toEqual({ min: 0, max: 1 });
+
+    const elements = succeeded(await choicesFor('hireElements', 'picked'));
+    expect(elements.validElements).toEqual([]);
+    expect(elements.multiSelect).toEqual({ min: 0, max: 1 });
   });
 
   test('leaves an all-greyed step alone: every row already carries its reason', async () => {
