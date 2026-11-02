@@ -1,5 +1,5 @@
 {
-  "revision": 303,
+  "revision": 304,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2367,6 +2367,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "confirmMultiSelect now takes the selection name it confirms, and with nothing drafted answers a current min-0 multiSelect or ordered-list pick with [] instead of doing nothing (#1555)"
+    },
+    {
+      "revision": 304,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A min-0 multiSelect or orderedList with no enabled choice no longer drops its action from the offer, since [] answers it, and availability tries [] when a later pick depends on such a pick (#1558)"
     }
   ]
 }
