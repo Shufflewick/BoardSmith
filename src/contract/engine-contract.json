@@ -1,5 +1,5 @@
 {
-  "revision": 315,
+  "revision": 316,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2463,6 +2463,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel shows Done for a multiSelect whose min and max are both 0, so with auto mode off the player can answer it with [] (#1568)."
+    },
+    {
+      "revision": 316,
+      "date": "2026-11-02",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "MCTS lists a seat's moves in a simultaneous step against the game after its own earlier moves in the step, with only the other seats' picks hidden, so candidateMoves can read the seat's held follow-up (#1563)"
     }
   ]
 }
