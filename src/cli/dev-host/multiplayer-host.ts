@@ -1080,7 +1080,7 @@ export class MultiplayerHost {
       return;
     }
     const vacated = this.clientSeat.get(clientId);
-    this.assignSeat(clientId, msg.seat, msg.name, msg.color);
+    this.assignSeat(clientId, msg.seat, msg.name, msg.color === undefined ? undefined : this.paletteColor(msg.color));
     if (this.followShared()) await this.endFollow(FOLLOW_SHARED);
     this.send(clientId, { type: 'joined', seat: msg.seat });
     if (this.phase === 'playing') this.reinitSeat(clientId, msg.seat);
@@ -1102,7 +1102,18 @@ export class MultiplayerHost {
     if (![msg.name, msg.color].every((text) => text === undefined || typeof text === 'string')) {
       return `Seat ${msg.seat} was not taken: its name and color must be text.`;
     }
+    if (msg.color !== undefined && this.paletteColor(msg.color) === undefined) {
+      const palette = this.opts.colorPalette!.map((c) => c.value).join(', ');
+      return `Seat ${msg.seat} was not taken: its color ${JSON.stringify(msg.color)} is not in the game's colorPalette (${palette}).`;
+    }
     return undefined;
+  }
+
+  /** `color` as the palette writes it, compared without case, or undefined when the palette lacks it; a host with no palette takes any. */
+  private paletteColor(color: string): string | undefined {
+    const palette = this.opts.colorPalette ?? [];
+    if (palette.length === 0) return color;
+    return palette.find((c) => c.value.toLowerCase() === color.toLowerCase())?.value;
   }
 
   /**

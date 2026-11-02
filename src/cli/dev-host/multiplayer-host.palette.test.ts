@@ -181,3 +181,42 @@ describe('MultiplayerHost — a player option named like a seat field does not r
     expect(startOptions.playerConfigs[1].name).not.toBe('Option');
   });
 });
+
+describe('MultiplayerHost — a join colour must be one of the palette\'s (#1566)', () => {
+  function paletteHost() {
+    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 1,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'join-colour',
+      colorPalette: [{ value: '#E74C3C', label: 'Red' }, { value: '#3498DB', label: 'Blue' }],
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(def, gameOptions, snap, pend, op, hostOptions),
+      send: (clientId, msg) => sent.push({ clientId, msg }),
+    });
+    const lastOfType = <T extends HostOutbound['type']>(clientId: string, type: T) =>
+      sent.filter((s) => s.clientId === clientId && s.msg.type === type).at(-1)?.msg as Extract<HostOutbound, { type: T }>;
+    return { host, lastOfType };
+  }
+
+  it('refuses a colour outside the palette, and leaves the seat open', async () => {
+    const { host, lastOfType } = paletteHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, color: '#1abc9c' });
+    expect(lastOfType('B', 'error').message).toBe(
+      'Seat 2 was not taken: its color "#1abc9c" is not in the game\'s colorPalette (#E74C3C, #3498DB).',
+    );
+    await host.handleMessage('B', { type: 'getLobby', requestId: 'check' });
+    expect(lastOfType('B', 'lobby').seats.find((s) => s.seat === 2)).toMatchObject({ held: false, connected: false });
+  });
+
+  it('takes a palette colour written in another case as the palette writes it', async () => {
+    const { host, lastOfType } = paletteHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, color: '#3498db' });
+    expect(lastOfType('B', 'joined')).toMatchObject({ seat: 2 });
+    expect(lastOfType('B', 'lobby').seats.find((s) => s.seat === 2)).toMatchObject({ held: true, color: '#3498DB' });
+  });
+});
