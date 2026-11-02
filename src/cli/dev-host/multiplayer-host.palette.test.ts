@@ -301,6 +301,41 @@ describe('MultiplayerHost — seats hold different colours while the palette has
     expect(lastColors()).toEqual([RED, BLUE]);
   });
 
+  it('deals a shared colour again once the table shrinks to one the palette covers (#1569 review F1)', async () => {
+    const { host, lastOfType, lastColors } = colourHost(3, [RED, BLUE]);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, color: RED });
+    await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 2 } });
+    expect(lastColors()).toEqual([RED, BLUE]);
+    expect(lastOfType('B', 'lobby').seats.map((s) => s.color)).toEqual([RED, BLUE]);
+  });
+
+  it('keeps the colour of a player a preset moves off a bot seat (#1569 review F2)', async () => {
+    const presets = [{ name: 'Bot second', options: {}, players: [{}, { isBot: true }, {}] }];
+    const YELLOW = '#F1C40F';
+    const { host, lastOfType, lastColors } = colourHost(3, [RED, BLUE, GREEN, YELLOW], presets);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, color: YELLOW });
+    await host.handleMessage('A', { type: 'configure', preset: 'Bot second' });
+    expect(lastOfType('B', 'joined')).toMatchObject({ seat: 3 });
+    expect(lastColors()).toEqual([RED, BLUE, YELLOW]);
+  });
+
+  it('gives a player taking an away player\'s seat the seat\'s own colour, not the away player\'s (#1569 review F5)', async () => {
+    const presets = [{ name: 'Green second', options: {}, players: [{}, { color: GREEN }] }];
+    const { host, lastOfType } = colourHost(2, [RED, BLUE, GREEN], presets);
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'configure', preset: 'Green second' });
+    await host.handleMessage('B', { type: 'hello' });
+    await host.handleMessage('B', { type: 'join', seat: 2, color: BLUE });
+    host.disconnect('B');
+    await host.handleMessage('C', { type: 'hello' });
+    await host.handleMessage('C', { type: 'join', seat: 2 });
+    expect(lastOfType('C', 'lobby').seats.map((s) => s.color)).toEqual([RED, GREEN]);
+  });
+
   it('gives an open seat whose preset colour a player holds the first colour no seat holds', async () => {
     const presets = [{ name: 'Blue second', options: {}, players: [{}, { color: BLUE }] }];
     const { host, lastColors } = colourHost(2, [RED, BLUE, GREEN], presets);

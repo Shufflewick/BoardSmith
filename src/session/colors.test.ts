@@ -56,6 +56,14 @@ describe('dealSeatColors (#1569)', () => {
     expect(dealSeatColors(['#27ae60', undefined], palette)).toEqual(['#27ae60', '#e74c3c']);
   });
 
+  it('deals a colour an earlier seat has again while the palette has one for every seat', () => {
+    expect(dealSeatColors(['#e74c3c', '#e74c3c'], palette)).toEqual(['#e74c3c', '#3498db']);
+  });
+
+  it('lets seats share a colour once the table has more seats than the palette has colours', () => {
+    expect(dealSeatColors(['#e74c3c', '#e74c3c', '#3498db', '#27ae60'], palette)).toEqual(['#e74c3c', '#e74c3c', '#3498db', '#27ae60']);
+  });
+
   it('leaves a seat uncoloured once the palette has no colour left for it', () => {
     expect(dealSeatColors(['#e74c3c', '#3498db', '#27ae60', undefined], palette)).toEqual([...palette, undefined]);
   });

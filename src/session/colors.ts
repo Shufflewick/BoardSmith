@@ -86,12 +86,15 @@ export function paletteChoices(palette: ReadonlyArray<string | object>): { choic
 
 /**
  * Each seat's colour (#1569): the one it chose, else the first `palette` colour
- * no seat chose or was dealt before it, so seats differ while the palette has
- * enough colours. A seat left none, past the palette's end, stays undefined.
+ * no seat chose or was dealt before it. While the palette has a colour for
+ * every seat, a colour an earlier seat chose is dealt again, so seats differ;
+ * past that they may share, and a seat left none stays undefined.
  */
 export function dealSeatColors(chosen: ReadonlyArray<string | undefined>, palette: readonly string[]): Array<string | undefined> {
-  const taken = new Set(chosen);
-  return chosen.map((color) => {
+  const apart = palette.length >= chosen.length;
+  const wanted = apart ? chosen.map((color, index) => (chosen.indexOf(color) === index ? color : undefined)) : chosen;
+  const taken = new Set(wanted);
+  return wanted.map((color) => {
     if (color !== undefined) return color;
     const free = palette.find((c) => !taken.has(c));
     taken.add(free);

@@ -939,22 +939,18 @@ export class MultiplayerHost {
     const free = seats.filter((info) => !info.clientId && !setup[info.seat - 1].isBot);
     const moving = seats.filter((info) => info.clientId && setup[info.seat - 1].isBot);
     moving.slice(0, free.length).forEach((from, index) => this.moveHolder(from, free[index]));
-    // A player keeps their colour unless the preset gives it to another seat; then they are dealt a free one.
+    // A player keeps their colour unless the preset gives it to another seat; then the start deals them a free one.
     const named = setup.map((seat) => seat.color);
     for (const info of seats) {
       if (info.clientId) info.color = setup[info.seat - 1].color ?? (named.includes(info.color) ? undefined : info.color);
-    }
-    const dealt = this.seatColors();
-    for (const info of seats) {
-      if (info.clientId) info.color = dealt[info.seat - 1];
     }
   }
 
   /** Move a seat's holder to the open seat `to`, telling their page; an away page keeps its grace there. */
   private moveHolder(from: SeatInfo, to: SeatInfo): void {
-    const { seat, clientId, name, connected } = from;
+    const { seat, clientId, name, connected, color } = from;
     const away = this.reconnecting.has(seat);
-    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name);
+    this.assignSeat(clientId!, to.seat, name === seatDisplayName(seat) ? undefined : name, color);
     to.connected = connected;
     if (away) this.startGrace(to.seat);
     this.send(clientId!, { type: 'joined', seat: to.seat });
@@ -1286,7 +1282,10 @@ export class MultiplayerHost {
     // `clientSeat` dangles a mapping to a seat the old client no longer owns, and
     // its next `hello` would take the reconnect branch, flip this seat's
     // `connected` flag under the new owner, and re-init the old client onto it.
-    if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
+    if (info.clientId && info.clientId !== clientId) {
+      this.clientSeat.delete(info.clientId);
+      info.color = undefined;
+    }
     this.endGrace(seat);
     info.clientId = clientId;
     info.name = seatDisplayName(seat, name?.trim());
@@ -1488,6 +1487,8 @@ export class MultiplayerHost {
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are bot.
     const colors = this.seatColors();
+    // A held seat shows the colour this game deals it, which a repeat or a preset may have changed.
+    for (const info of this.seats.values()) if (info.clientId) info.color = colors[info.seat - 1];
     const startGameOptions = {
       // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
       // any accepted `configure` preset/gameOptions), not the frozen

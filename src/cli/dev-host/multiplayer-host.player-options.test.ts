@@ -159,8 +159,8 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
 
     expect(sent.filter((m) => m.type === 'joined').at(-1)).toEqual({ type: 'joined', seat: 3 });
     expect(starts.at(-1)!.playerIsBot).toEqual([false, true, false]);
-    // They take their new seat's colour, not the one of the seat they left.
-    expect(starts.at(-1)!.colors).toEqual(['#e74c3c', '#3498db', '#95a5a6']);
+    // They keep their colour, and the bot seat they left is dealt one no seat has (#1569).
+    expect(starts.at(-1)!.colors).toEqual(['#e74c3c', '#95a5a6', '#3498db']);
   });
 
   it('moves a person whose page is away, within its grace, as it moves one who is here', async () => {

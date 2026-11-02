@@ -658,6 +658,24 @@ describe('DevHost — seat picker colours (#1569)', () => {
     wrapper.unmount();
   });
 
+  it('lets the viewer pick the colour of a seat they hold (#1569 review F3)', async () => {
+    const wrapper = mount(DevHost, { props: { config: { ...TEST_CONFIG, colorPalette: [RED, BLUE] } }, attachTo: document.body });
+    await wrapper.vm.$nextTick();
+    mockWsInstance!.simulateOpen();
+    mockWsInstance!.simulateMessage({
+      type: 'lobby',
+      seats: [
+        { seat: 1, held: true, mine: true, name: 'Me', connected: false, color: RED.value },
+        { seat: 2, held: false, mine: false, name: '', connected: false },
+      ],
+    });
+    await wrapper.vm.$nextTick();
+    (wrapper.vm as unknown as { mySeat: number | null }).mySeat = null;
+    await wrapper.vm.$nextTick();
+    expect(swatch(wrapper, 'Red').attributes('disabled')).toBeUndefined();
+    wrapper.unmount();
+  });
+
   it('says the colour picked applies from the next game', async () => {
     const wrapper = await pickerWith([RED, BLUE], 2);
     expect(wrapper.find('.lobby__colors').text()).toContain('from the next game');

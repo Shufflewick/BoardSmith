@@ -212,7 +212,7 @@ function canTake(seat: SeatInfo): boolean {
   return !(seat.held && seat.connected);
 }
 const takenColors = computed(
-  () => new Set(seats.value.filter((s) => s.color).map((s) => s.color as string)),
+  () => new Set(seats.value.filter((s) => s.color && !s.mine).map((s) => s.color as string)),
 );
 /** Seats keep different colours while the palette has one for each; past that they share (#1569). */
 const colorsShared = computed(() => cfg.colorPalette.length < seats.value.length);
