@@ -260,6 +260,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
       expect(controller.multiSelectDraft.value).toEqual({
         selectionName: 'items',
         values: [1],
+        copies: [0],
       });
     });
   });
