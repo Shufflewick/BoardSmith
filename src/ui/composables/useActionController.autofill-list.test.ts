@@ -71,9 +71,18 @@ describe('auto-fill of a one-choice list pick (#769)', () => {
   });
 });
 
-describe('auto-fill of a one-choice list pick whose bounds a list of one breaks (#1562)', () => {
-  it.each(['pickNone', 'orderNone', 'pickTwo'])('%s is left to the player, not sent the one choice', async (action) => {
+describe('auto-fill of a list pick a list of one does not fit (#1562)', () => {
+  it.each([
+    ['pickNone', { none: [] }],
+    ['orderNone', { none: [] }],
+  ])('%s, whose max is 0, sends the empty list', async (action, args) => {
     const sendAction = await autoFilled(action);
+    expect(sendAction).toHaveBeenCalledTimes(1);
+    expect(sendAction.mock.calls[0][1]).toEqual(args);
+  });
+
+  it('a pick of at least two is left to the player, not sent the one choice', async () => {
+    const sendAction = await autoFilled('pickTwo');
     expect(sendAction).not.toHaveBeenCalled();
   });
 });

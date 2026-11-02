@@ -1167,8 +1167,8 @@ The rules, in full:
   Optional selections are never auto-filled (skipping is a real decision), and
   disabled choices don't count toward the one.
 - A list pick (`multiSelect` or ordered list) is filled with its one choice
-  only when a list of one fits its bounds. With `max: 0` its only answer is the
-  empty list, which the player gives with Done.
+  only when a list of one fits its bounds. One whose `max` is 0 takes only the
+  empty list, so it is answered with `[]` whatever it offers.
 - When the server refuses the sole action auto-start opened, it is not opened
   again until the next state arrives, so a refusal is never resent without the
   player.

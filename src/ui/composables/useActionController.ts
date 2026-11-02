@@ -1032,35 +1032,38 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
-   * Attempt to auto-fill a selection if it has exactly one non-optional choice.
+   * Attempt to auto-fill a non-optional selection that has exactly one answer.
    * Updates both currentArgs and collectedPicks in actionSnapshot.
    *
    * @param selection - The selection metadata to check for auto-fill
    * @returns true if auto-fill was applied, false otherwise
    */
   function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
-    if (autoFillHeldBack(selection)) return false;
+    if (autoFillHeldBack(selection) || selection.optional) return false;
 
-    const choices = getChoices(selection);
-    const enabledChoices = choices.filter(c => !c.disabled);
-    if (enabledChoices.length !== 1 || selection.optional) return false;
-
-    const choice = enabledChoices[0];
-    // A list pick whose bounds a list of one breaks (a max of 0, a min of 2) is the player's to answer (#1562).
-    if (listBoundsRefusal(selection, [choice.value])) return false;
-    // A pick that takes a list is sent a list: the engine refuses a bare value for it.
-    const value = asPickValue(selection, choice.value);
-    currentArgs.value[selection.name] = value;
+    const answer = loneAnswer(selection);
+    if (!answer) return false;
+    currentArgs.value[selection.name] = answer.value;
 
     if (actionSnapshot.value) {
-      actionSnapshot.value.collectedPicks.set(selection.name, {
-        value,
-        display: choice.display,
-        skipped: false,
-      });
+      actionSnapshot.value.collectedPicks.set(selection.name, { ...answer, skipped: false });
     }
 
     return true;
+  }
+
+  /** The one answer `selection` takes, with its label, or undefined when the player has a choice to make. */
+  function loneAnswer(selection: EnrichedPickMetadata): { value: unknown; display: string } | undefined {
+    // A list pick whose max is 0 takes only the empty list, whatever it offers (#1562).
+    if ((resolveOrderedListConfig(selection) ?? resolveMultiSelectConfig(selection))?.max === 0) return { value: [], display: '' };
+
+    const enabledChoices = getChoices(selection).filter(c => !c.disabled);
+    if (enabledChoices.length !== 1) return undefined;
+    const choice = enabledChoices[0];
+    // A list of one that breaks the pick's bounds (a min of 2) is no answer (#1562).
+    if (listBoundsRefusal(selection, [choice.value])) return undefined;
+    // A pick that takes a list is sent a list: the engine refuses a bare value for it.
+    return { value: asPickValue(selection, choice.value), display: choice.display };
   }
 
   /** Whether anything rules out auto-filling `selection` before its choices are looked at. */
