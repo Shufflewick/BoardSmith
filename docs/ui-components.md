@@ -1878,10 +1878,11 @@ A host page that frames the game may draw its own control over the frame's
 top-right corner, as ShufflewickPub does with its menu tab. The shell leaves
 that corner, `--bsg-host-corner-width` by `--bsg-host-corner-height` (48 by
 32 px), free of its own chrome at every width: the phone strip of players ends
-before it, and the connection dot sits below it. A host that keeps its control
-inside that box needs no other measurement of the shell, and a shell restyle
-cannot move into it (`scripts/host-corner-browser.mjs` checks it at 1440, 640,
-639 and 390 px). The game's board is not moved, so a framed game keeps its own
+before it, and the connection dot and the bot demo's narration sit below it. A
+host that keeps its control inside that box needs no other measurement of the
+shell. `scripts/host-corner-browser.mjs` holds the shell to it at 1440, 640, 639
+and 390 px wide and on a landscape phone, with the connection dot, the unread
+badge and a narration showing, and over a board scrolled down. The game's board is not moved, so a framed game keeps its own
 board controls out of that corner.
 
 ## Animation Events

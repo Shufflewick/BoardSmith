@@ -489,6 +489,21 @@ const mobileToggleLabel = computed(() => {
            It reserves one constant row for the Action Panel; rows beyond it
            float over the board (#1514, #1517). -->
       <div class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
+        <!-- Connection indicator: one dot, two sources. Surfaced only when the
+             adapter has something to say — a persistent healthy dot over the
+             board reads as a mystery speck (IA-01). The adapter names the tone
+             and writes the sentence, because a table's socket health and a
+             world's attachment lifecycle are different axes and merging the two
+             state machines would lose states neither has an analogue for. Beside the
+             region, not in it, so it never scrolls into the host's corner (#1548). -->
+        <span
+          v-if="connection"
+          class="conn-dot"
+          :class="connection.tone"
+          :title="connection.title"
+          data-testid="bs-connection"
+          aria-hidden="true"
+        ></span>
         <main
           class="boardregion"
           id="main"
@@ -497,21 +512,6 @@ const mobileToggleLabel = computed(() => {
           ref="boardRegionEl"
           data-testid="bs-board"
         >
-          <!-- Connection indicator: one dot, two sources. Surfaced only when the
-               adapter has something to say — a persistent healthy dot over the
-               board reads as a mystery speck (IA-01). The adapter names the tone
-               and writes the sentence, because a table's socket health and a
-               world's attachment lifecycle are different axes and merging the two
-               state machines would lose states neither has an analogue for. -->
-          <span
-            v-if="connection"
-            class="conn-dot"
-            :class="connection.tone"
-            :title="connection.title"
-            data-testid="bs-connection"
-            aria-hidden="true"
-          ></span>
-
           <div
             class="game-shell__zoom-container"
             ref="zoomContainerEl"
@@ -850,7 +850,7 @@ const mobileToggleLabel = computed(() => {
   padding: var(--bsg-s3);
 }
 
-/* Connection health dot: absolute corner of boardregion; drawn only while `connection` is set (IA-01).
+/* Connection health dot: absolute corner of the board viewport; drawn only while `connection` is set (IA-01).
    Class bound to connectionHealth ref: connected / stale / connecting. */
 .conn-dot {
   position: absolute;
@@ -1146,8 +1146,8 @@ const mobileToggleLabel = computed(() => {
     display: flex;
     align-items: center;
     gap: var(--bsg-s2);
-    /* The strip's right end is the host's corner (#1548). */
-    padding: 6px var(--bsg-host-corner-width) 6px var(--bsg-s3);
+    /* The strip ends its own gap short of the host's corner (#1548). */
+    padding: 6px calc(var(--bsg-host-corner-width) + var(--bsg-s2)) 6px var(--bsg-s3);
   }
   .mobile-strip__players {
     flex: 1;
