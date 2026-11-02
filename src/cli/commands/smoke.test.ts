@@ -5,7 +5,7 @@
  */
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
-import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, promises as fsPromises, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
@@ -57,6 +57,23 @@ describe('boardsmith verify: the smoke check', () => {
       chmodSync(join(dir, 'notes'), 0o755);
     }
     expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
+  });
+
+  it('skips an untracked file that is deleted between its listing and its copy, as Vite does its config bundle (#1564)', async () => {
+    const dir = await smokeProject(false);
+    const transient = join(dir, 'vite.config.ts.timestamp-1-0.mjs');
+    writeFileSync(transient, 'export default {};\n');
+    const copyFile = fsPromises.copyFile;
+    const spy = vi.spyOn(fsPromises, 'copyFile').mockImplementation(async (from, to, mode) => {
+      if (from === transient) rmSync(transient);
+      return copyFile(from, to, mode);
+    });
+    try {
+      const { outcome } = await runSmoke({ projectDir: dir, log: quiet });
+      expect(outcome.passed).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it("walks the world scaffold: the page attaches to a seat and takes the world's verb, with no error", async () => {

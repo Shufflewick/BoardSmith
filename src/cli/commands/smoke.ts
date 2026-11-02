@@ -132,8 +132,10 @@ async function copyProject(projectDir: string, copy: string): Promise<void> {
     if (stat === undefined) continue; // tracked, but deleted in the working tree
     const to = join(copy, path);
     await fs.mkdir(dirname(to), { recursive: true });
-    if (stat.isSymbolicLink()) await fs.symlink(await fs.readlink(from), to);
-    else await fs.copyFile(from, to, fs.constants.COPYFILE_FICLONE);
+    // A file can vanish after the lstat too (Vite deletes its config bundle), so the copy is guarded as well.
+    await readIfExists(from, async (file) =>
+      stat.isSymbolicLink() ? fs.symlink(await fs.readlink(file), to) : fs.copyFile(file, to, fs.constants.COPYFILE_FICLONE),
+    );
   }
 }
 
