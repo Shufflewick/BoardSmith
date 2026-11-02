@@ -40,6 +40,15 @@ const gameOptions = [
   { id: 'lootScale', type: 'number', label: 'Loot scale', default: 1, designerOnly: true },
 ];
 
+/** MERC's palette, whose fourth colour is not the engine default's fourth (#1552). */
+const colorPalette = [
+  { id: 'red', hex: '#E74C3C', label: 'Red' },
+  { id: 'blue', hex: '#3498DB', label: 'Blue' },
+  { id: 'green', hex: '#27AE60', label: 'Green' },
+  { id: 'orange', hex: '#E67E22', label: 'Orange' },
+  { id: 'purple', hex: '#9B59B6', label: 'Purple' },
+];
+
 describe('createTestGame fills the options boardsmith.json declares (#701)', () => {
   it('an option the test does not pass, designer-only or not, is its default', () => {
     inProject({ gameOptions });
@@ -71,6 +80,19 @@ describe('createTestGame fills the options boardsmith.json declares (#701)', () 
     writeFileSync('boardsmith.json', JSON.stringify({ name: 'options', backend: 'table', gameOptions: [{ ...gameOptions[0], default: 5 }] }));
     const { game } = createTestGame(OptionsGame, { playerCount: 1 });
     expect(game.rounds).toBe(5);
+  });
+
+  it('seats players in the colours boardsmith.json\'s colorPalette declares, as a host does (#1552)', () => {
+    inProject({ colorPalette });
+    const { game } = createTestGame(OptionsGame, { playerCount: 4 });
+    expect(game.all(Player).map((p) => [p.color, p.colorLabel])).toEqual([
+      ['#E74C3C', 'Red'], ['#3498DB', 'Blue'], ['#27AE60', 'Green'], ['#E67E22', 'Orange'],
+    ]);
+  });
+
+  it('a colorPalette that is not a list of { id, hex, label } entries is refused, naming the shape', () => {
+    inProject({ colorPalette: ['#E74C3C'] });
+    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette".*\{ "id", "hex", "label" \}/);
   });
 
   it('refuses to start outside any game project, rather than leave the options out', () => {

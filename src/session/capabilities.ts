@@ -38,6 +38,7 @@ import { valuesEqual } from '../engine/action/choice-matching.js';
 import { declaredGameOptionsOf, selectGameOptions } from './game-option-selection.js';
 import { timedStepNames } from '../engine/flow/step-time-limit.js';
 import { constructGame } from '../engine/element/game.js';
+import { paletteGameOptions } from './colors.js';
 
 /** The backends one engine runs. A third would be added here and nowhere else. */
 export const GAME_BACKENDS = ['table', 'world'] as const;
@@ -180,6 +181,8 @@ export interface CapabilityInputs {
     /** Round policy. Table-only: a world has no rounds to put a deadline on. */
     roundDeadline?: unknown;
     idleAction?: unknown;
+    /** The seat colours, which each build is constructed with, as a host seats players (#1552). */
+    colorPalette?: unknown;
   };
 }
 
@@ -225,15 +228,28 @@ function optionChoiceSets(declared: Record<string, GameOptionDefinition>): Array
 }
 
 /**
+ * The game built as `build`, its seats given `boardsmith.json`'s `colorPalette`
+ * as a host gives them, so a build fails only where real play would (#1552).
+ */
+export function constructBuild(
+  definition: { gameClass: GameClass },
+  colorPalette: unknown,
+  build: TableBuild,
+  seed: string,
+) {
+  const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
+  return constructGame(definition.gameClass, { ...options, ...paletteGameOptions(colorPalette), playerCount: build.playerCount, seed });
+}
+
+/**
  * The timed steps of the flow this game builds at `playerCount` with `choices`
  * (none if it builds no flow). A constructor that throws is rethrown naming the
  * build, since the author may never have played that combination.
  */
-function timedStepsOf(definition: CapabilityInputs['definition'], build: TableBuild): string[] {
-  const options = selectGameOptions(declaredGameOptionsOf(definition), build.choices);
+function timedStepsOf(definition: CapabilityInputs['definition'], colorPalette: unknown, build: TableBuild): string[] {
   let game;
   try {
-    game = constructGame(definition.gameClass, { ...options, playerCount: build.playerCount, seed: 'compiled-flow' });
+    game = constructBuild(definition, colorPalette, build, 'compiled-flow');
   } catch (error) {
     const reason = error instanceof Error ? error.message : String(error);
     throw new Error(`Constructing this game ${describeBuild(build)} threw: ${reason}`, { cause: error });
@@ -254,27 +270,26 @@ function timedStepsOf(definition: CapabilityInputs['definition'], build: TableBu
  * minPlayers/maxPlayers yields nothing here because `capabilityContradictions`
  * refuses it by name.
  */
-function findTimedBuild(definition: CapabilityInputs['definition']): TimedBuildSearch {
-  let search = timedBuildSearches.get(definition);
-  if (search === undefined) {
-    search = searchTimedBuild(definition);
-    timedBuildSearches.set(definition, search);
-  }
+function findTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
+  const cached = timedBuildSearches.get(definition);
+  if (cached !== undefined && cached.colorPalette === colorPalette) return cached.search;
+  const search = searchTimedBuild(definition, colorPalette);
+  timedBuildSearches.set(definition, { colorPalette, search });
   return search;
 }
 
 type TimedBuildSearch = { timed?: TimedBuild; refusal?: string };
 
 // `boardsmith build` asks both `capabilityContradictions` and `resolveCapabilities`
-// about one compiled definition, and each search constructs the game per seat count.
-const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], TimedBuildSearch>();
+// about one compiled definition and palette, and each search constructs the game per seat count.
+const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], { colorPalette: unknown; search: TimedBuildSearch }>();
 
-function searchTimedBuild(definition: CapabilityInputs['definition']): TimedBuildSearch {
+function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
   // `tableContradictions` refuses a seat range that holds no seat count, by name.
   if (seatRangeProblem(definition) !== undefined) return {};
   const { builds, refusal } = tableBuilds(definition, 'to find every step that declares timeLimitMs');
   for (const build of builds) {
-    const steps = timedStepsOf(definition, build);
+    const steps = timedStepsOf(definition, colorPalette, build);
     if (steps.length > 0) return { timed: { ...build, steps } };
   }
   if (refusal === undefined) return {};
@@ -373,14 +388,14 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     asyncPlay: isWorld || declaredTrue(declared.asyncPlay),
     joinInProgress: isWorld || declaredTrue(declared.joinInProgress),
     crossSessionState: isWorld || declaredTrue(definition.persistence),
-    timedSteps: timedStepsResolved(backend, definition),
+    timedSteps: timedStepsResolved(backend, definition, declared.colorPalette),
   };
 }
 
 /** `timedSteps`, refusing to guess for a game too large to search (`capabilityContradictions` names it first). */
-function timedStepsResolved(backend: GameBackend, definition: CapabilityInputs['definition']): boolean {
+function timedStepsResolved(backend: GameBackend, definition: CapabilityInputs['definition'], colorPalette: unknown): boolean {
   if (backend !== 'table') return false;
-  const { timed, refusal } = findTimedBuild(definition);
+  const { timed, refusal } = findTimedBuild(definition, colorPalette);
   if (refusal !== undefined) throw new Error(refusal);
   return timed !== undefined;
 }
@@ -522,7 +537,7 @@ function timedStepContradictions(
   definition: CapabilityInputs['definition'],
   declared: CapabilityInputs['declared'],
 ): string[] {
-  const { timed, refusal } = findTimedBuild(definition);
+  const { timed, refusal } = findTimedBuild(definition, declared.colorPalette);
   if (refusal !== undefined) return [refusal];
   if (timed === undefined || declared.idleAction !== undefined) return [];
   const one = timed.steps.length === 1;

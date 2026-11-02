@@ -18,3 +18,13 @@ import type { GameOptionDefinition } from '../types/protocol.js';
  * unusable, naming the problem.
  */
 export function projectGameOptions(): Record<string, GameOptionDefinition> | undefined;
+
+/**
+ * The `colors` and `colorLabels` game options that seat players in the colours
+ * the same `boardsmith.json`'s `colorPalette` declares, as a host seats them, or
+ * none when it declares no palette or the tests run in BoardSmith's own checkout (#1552).
+ *
+ * @throws As {@link projectGameOptions} does, and when the palette is not a
+ * non-empty list of `{ "id", "hex", "label" }` entries.
+ */
+export function projectColorOptions(): { colors?: string[]; colorLabels?: Record<string, string> };

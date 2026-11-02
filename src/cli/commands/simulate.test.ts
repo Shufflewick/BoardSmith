@@ -430,6 +430,35 @@ describe('boardsmith simulate reports per player count (#556)', () => {
 });
 
 /**
+ * #1552: simulated seats get the colours boardsmith.json's colorPalette declares, as a host gives
+ * them, so a game that refuses a colour its palette lacks plays at every seat count.
+ */
+const paletteProject = tempTree('boardsmith-simulate-palette-');
+const palette = ['#E74C3C', '#3498DB', '#27AE60', '#E67E22'];
+writeFileSync(join(paletteProject, 'boardsmith.json'), JSON.stringify({
+  name: 'palette',
+  backend: 'table',
+  colorPalette: palette.map((hex, i) => ({ id: `c${i}`, hex, label: `Colour ${i}` })),
+}));
+mkdirSync(join(paletteProject, 'src', 'rules'), { recursive: true });
+writeFileSync(join(paletteProject, 'src', 'rules', 'index.ts'), [
+  `import { ScoreGame, scoreMetrics } from ${JSON.stringify(deadEndFixture)};`,
+  `const palette = ${JSON.stringify(palette)};`,
+  'class PaletteGame extends ScoreGame { constructor(options) { super(options);',
+  '  for (const p of this.players) if (!palette.includes(p.color)) throw new Error(`Player colour ${p.color} is not in the palette`); } }',
+  `export const gameDefinition = { gameClass: PaletteGame, gameType: 'palette', displayName: 'Palette',`,
+  '  minPlayers: 4, maxPlayers: 4, metrics: scoreMetrics };',
+].join('\n'));
+const paletteRun = await simulateOutput(paletteProject, { games: '2', seed: 'palette', json: true });
+
+describe('boardsmith simulate seats players in the project\'s colorPalette (#1552)', () => {
+  it('plays a game that refuses a colour its palette lacks', () => {
+    expect(paletteRun.exitCode, paletteRun.output).toBe(0);
+    expect(JSON.parse(paletteRun.output).games).toEqual([]);
+  });
+});
+
+/**
  * #556: a game's author metrics reach every output of `boardsmith simulate`
  * with nothing but `gameDefinition.metrics` declared. Each run bundles the
  * rules, so they run while the file is collected (#363).

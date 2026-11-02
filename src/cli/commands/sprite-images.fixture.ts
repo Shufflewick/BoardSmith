@@ -77,6 +77,17 @@ export class ThrowsAtThreeGame extends Game<ThrowsAtThreeGame, Player> {
   }
 }
 
+/** Four seat colours, the fourth not the engine default's fourth (#1552). */
+export const FOUR_COLOURS = ['#E74C3C', '#3498DB', '#27AE60', '#E67E22'];
+
+/** Refuses a seat colour {@link FOUR_COLOURS} lacks, as a game mapping its palette to its own colour names does (#1552). */
+export class PaletteSpriteGame extends Game<PaletteSpriteGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const p of this.players) if (!FOUR_COLOURS.includes(p.color!)) throw new Error(`Player colour ${p.color} is not in the palette`);
+  }
+}
+
 /** Only the non-default `jokers` option deals the card whose sprite lacks its sheet sizes (#1303). */
 export class OptionSpriteGame extends Game<OptionSpriteGame, Player> {
   constructor(options: GameOptions & { jokers?: boolean }) {

@@ -59,3 +59,27 @@ export function createColorOption(): ColorOptionDefinition {
     choices: DEFAULT_COLOR_PALETTE.map((value) => ({ value, label: DEFAULT_COLOR_LABELS[value]! })),
   };
 }
+
+/**
+ * The `colors` and `colorLabels` game options that seat players in boardsmith.json's
+ * `colorPalette`, as `boardsmith dev` and the platform seat them, or none when it
+ * declares no palette, so a game built without a host gets the colours real play gives (#1552).
+ */
+export function paletteGameOptions(colorPalette: unknown): { colors?: string[]; colorLabels?: Record<string, string> } {
+  if (colorPalette === undefined) return {};
+  if (!Array.isArray(colorPalette) || colorPalette.length === 0 || !colorPalette.every(isPaletteEntry)) {
+    throw new Error(
+      'boardsmith.json\'s "colorPalette" must be a non-empty list of { "id", "hex", "label" } entries ' +
+        '(e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }), so players cannot be given its colours. Fix the list.',
+    );
+  }
+  return {
+    colors: colorPalette.map((entry) => entry.hex),
+    colorLabels: Object.fromEntries(colorPalette.map((entry) => [entry.hex, entry.label])),
+  };
+}
+
+function isPaletteEntry(entry: unknown): entry is { hex: string; label: string } {
+  const { hex, label } = (entry ?? {}) as Record<string, unknown>;
+  return typeof hex === 'string' && hex !== '' && typeof label === 'string' && label !== '';
+}
