@@ -1117,13 +1117,19 @@ export class MultiplayerHost {
       const palette = this.opts.colorPalette!.map((c) => c.value).join(', ');
       return `Seat ${msg.seat} was not taken: its color ${JSON.stringify(msg.color)} is not in the game's colorPalette (${palette}).`;
     }
-    // Past the palette's end seats share colours on purpose, so only a palette with enough keeps them apart.
+    return this.heldColorRefusal(clientId, msg);
+  }
+
+  /** Why the colour `msg` names cannot be taken because another seat holds it (#1569), or undefined when it can. */
+  private heldColorRefusal(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): string | undefined {
     const palette = this.opts.colorPalette ?? [];
-    const color = palette.find((c) => c.value.toLowerCase() === msg.color?.toLowerCase());
-    if (color === undefined || palette.length < this.opts.playerCount) return undefined;
-    const holder = [...this.seats.values()].find((s) => s.seat !== msg.seat && s.clientId !== clientId && s.color === color.value);
+    // Past the palette's end seats share colours on purpose, so only a palette with enough keeps them apart.
+    if (msg.color === undefined || palette.length < this.opts.playerCount) return undefined;
+    const color = this.paletteColor(msg.color);
+    const holder = [...this.seats.values()].find((s) => s.seat !== msg.seat && s.clientId !== clientId && s.color === color);
     if (holder === undefined) return undefined;
-    return `Seat ${msg.seat} was not taken: seat ${holder.seat} holds the color ${color.label}. Pick a color no other seat holds.`;
+    const label = palette.find((c) => c.value === color)!.label;
+    return `Seat ${msg.seat} was not taken: seat ${holder.seat} holds the color ${label}. Pick a color no other seat holds.`;
   }
 
   /** `color` as the palette writes it, compared without case, or undefined when the palette lacks it; a host with no palette takes any. */
