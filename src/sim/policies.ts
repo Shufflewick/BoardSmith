@@ -108,8 +108,9 @@ export interface SelectionChoicesObservation {
 /**
  * Builds one random, valid move from each enabled action, step by step from
  * the engine's own choices, and from the seat's held follow-up (#911), and
- * plays one of them. A move refused for its numbers or sets is drawn again,
- * three draws in all (#1543, #1559). `onSelectionChoices` sees
+ * plays one of them. A move refused for its numbers or sets is replaced by
+ * one move enumeration lists, or drawn again, three draws in all, when it
+ * cannot list them (#1543, #1559, #1567). `onSelectionChoices` sees
  * every choice, element and elements step it builds for an action (not a
  * repeating one, whose candidates exist only on a scratch copy); it cannot
  * change the game. A follow-up's move comes from move enumeration instead, so
@@ -328,10 +329,12 @@ function buildRandomArgs(
 }
 
 /**
- * {@link drawPicks}, drawn again while the action refuses the move for its
- * numbers or sets, at most {@link REFUSED_DRAWS} draws in all: a number is
- * drawn from its min and max (#1543) and a set from its choices (#1559), and
- * whether the action takes it can depend on other picks, which only the rules know.
+ * {@link drawPicks}, or, when the action refuses the move for its numbers or
+ * sets, one of the moves enumeration lists for it (#1567): a number is drawn
+ * from its min and max (#1543) and a set from its choices (#1559), and whether
+ * the action takes it can depend on other picks, which only the rules know.
+ * When enumeration lists none, it is drawn again instead, at most
+ * {@link REFUSED_DRAWS} draws in all.
  */
 function drawAcceptedPicks(
   game: Game,
@@ -344,22 +347,58 @@ function drawAcceptedPicks(
   for (let draw = 0; draw < REFUSED_DRAWS; draw++) {
     const built = drawPicks(game, actionDef, player, rng, onSelectionChoices);
     if (!built.ok) return built;
-    const drawn = actionDef.selections.filter(
-      (s) => s.name in built.args && (s.type === 'number' || Array.isArray(built.args[s.name])),
-    );
-    if (drawn.length === 0 || !(actionDef.validate || drawn.some((s) => s.validate))) return built;
-    const judged = game.getActionExecutor().validateAction(actionDef, player, built.args);
-    if (judged.valid || !offeredPicksPass(game, actionDef, player, built.args, drawn)) return built;
-    refusal = judged.errors.join(' ');
+    const refused = drawnPicksRefusal(game, actionDef, player, built.args);
+    if (refused === undefined) return built;
+    refusal = refused.replace(/\.$/, '');
+    const listed = draw === 0 ? listedMoves(game, actionDef, player) : [];
+    if (listed.length > 0) return { ok: true, args: rng.pick(listed) };
   }
   return {
     ok: false,
-    reason: `action '${actionDef.name}' refused all ${REFUSED_DRAWS} moves the simulator drew for its numbers or sets, the last with: ${refusal.replace(/\.$/, '')}`,
+    reason: `action '${actionDef.name}' refused all ${REFUSED_DRAWS} moves the simulator drew for its numbers or sets, the last with: ${refusal}`,
   };
 }
 
-/** How many moves the random policy draws for an action that refuses its numbers or sets, as the smoke walk tries three (#466). */
+/** How many moves the random policy draws for an action enumeration lists none for, as the smoke walk tries three (#466). */
 const REFUSED_DRAWS = 3;
+
+/**
+ * Why the action refuses drawn args for their numbers or sets, or `undefined`
+ * when it takes them, or refuses a pick the engine offered: that is the
+ * game's to fix, and is played for the simulator to report (#910).
+ */
+function drawnPicksRefusal(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  args: Record<string, unknown>,
+): string | undefined {
+  const drawn = actionDef.selections.filter(
+    (s) => s.name in args && (s.type === 'number' || Array.isArray(args[s.name])),
+  );
+  if (drawn.length === 0 || !(actionDef.validate || drawn.some((s) => s.validate))) return undefined;
+  const judged = game.getActionExecutor().validateAction(actionDef, player, args);
+  if (judged.valid || !offeredPicksPass(game, actionDef, player, args, drawn)) return undefined;
+  return judged.errors.join(' ');
+}
+
+/**
+ * Every move enumeration lists for the action, or none when it cannot list
+ * every move the policy draws: a number input it cannot list, which it leaves
+ * out (#689), or more moves than its budget (#691).
+ */
+function listedMoves(game: Game, actionDef: ActionDefinition, player: Player): Record<string, unknown>[] {
+  const unlistable = actionDef.selections.some(
+    (s) => s.type === 'number' && 'unlistable' in numberInputValues(s as NumberSelection),
+  );
+  if (unlistable) return [];
+  try {
+    return enumerateActionMoves(game, actionDef, player);
+  } catch (error) {
+    if (!(error instanceof MoveListTooLargeError)) throw error;
+    return [];
+  }
+}
 
 /**
  * Whether the picks the engine offered pass their own checks, so a refusal is

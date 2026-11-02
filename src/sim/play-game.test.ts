@@ -14,7 +14,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
-import { random, greedy, mcts, type Policy } from './index.js';
+import { random, greedy, mcts, type Policy, type PolicyMove } from './index.js';
 import {
   playbackTurnDefinition,
   validateGatedDefinition,
@@ -169,22 +169,25 @@ class LeapRaceGame extends RaceGame {
  * marker in 0..100, so whether a number is accepted depends on the start picked
  * before it (#1543). With `refuseAll` it refuses every shift; with
  * `refuseFrom100` the `from` pick refuses 100, which it still offers (#910).
- * The game ends after six turns.
+ * With `nudge` it also takes an optional fractional nudge, which enumeration
+ * cannot list (#1567). The game ends after six turns.
  */
 class ShiftGame extends Game<ShiftGame, Player> {
   turns = 0;
 
-  constructor(options: GameOptions & { refuseAll?: boolean; refuseFrom100?: boolean }) {
+  constructor(options: GameOptions & { refuseAll?: boolean; refuseFrom100?: boolean; nudge?: boolean }) {
     super(options);
     const turn = (_args: unknown, ctx: { game: ShiftGame }) => {
       if (++ctx.game.turns === 6) ctx.game.finish([]);
       return { success: true };
     };
+    const shift = Action.create<ShiftGame>('shift')
+      .chooseFrom('from', { choices: [0, 100], validate: (from) => !options.refuseFrom100 || from !== 100 })
+      .enterNumber('by', { min: -100, max: 100, integer: true })
+      .chooseFrom('confirm', { choices: (ctx) => [`shift by ${ctx.args.by as number}`] });
+    if (options.nudge) shift.enterNumber('nudge', { min: 0, max: 1, optional: true });
     this.registerAction(
-      Action.create<ShiftGame>('shift')
-        .chooseFrom('from', { choices: [0, 100], validate: (from) => !options.refuseFrom100 || from !== 100 })
-        .enterNumber('by', { min: -100, max: 100, integer: true })
-        .chooseFrom('confirm', { choices: (ctx) => [`shift by ${ctx.args.by as number}`] })
+      shift
         .validate((args) => {
           if (options.refuseAll) return 'Shifting is never allowed.';
           const to = (args.from as number) + (args.by as number);
@@ -206,7 +209,8 @@ class ShiftGame extends Game<ShiftGame, Player> {
  * Each seat in turn puts two hits on targets; the action's `validate` lets at
  * most one go to a bonus target, a rule across the set no per-choice
  * `disabled` can say (#1559). With `ruleOnSet` the set's own `validate` holds
- * the rule instead. The game ends after six turns.
+ * the rule instead. Only 8 of the 36 sets are accepted, so three random draws
+ * all miss about half the time (#1567). The game ends after six turns.
  */
 class AllocateGame extends Game<AllocateGame, Player> {
   turns = 0;
@@ -217,7 +221,7 @@ class AllocateGame extends Game<AllocateGame, Player> {
     this.registerAction(
       Action.create<AllocateGame>('allocate')
         .chooseFrom('hits', {
-          choices: ['main::0', 'main::1', 'bonus1::0', 'bonus2::0'],
+          choices: ['main', ...Array.from({ length: 8 }, (_, i) => `bonus${i + 1}`)],
           multiSelect: { min: 2, max: 2 },
           validate: (hits) => !options.ruleOnSet || oneBonus(hits as unknown as string[]),
         })
@@ -236,9 +240,6 @@ class AllocateGame extends Game<AllocateGame, Player> {
     });
   }
 }
-
-/** Seeds whose draws find an accepted set each turn: one draw in six is refused. */
-const SET_SEEDS = Array.from({ length: 19 }, (_, i) => `m${i}`);
 
 const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers: 4 };
 
@@ -549,9 +550,8 @@ describe('playGame with policies (#556)', () => {
   });
 
   // #1543: random drew a number in min..max without asking validate, and the game failed on the refusal.
-  it("random plays only numbers the action's validate accepts, drawing the move again when it refuses one, with the picks after a number following it", async () => {
-    // Seeds whose draws find an accepted move each turn: half of all draws are refused.
-    for (const seed of ['s4', 's6', 's7', 's8']) {
+  it("random plays only numbers the action's validate accepts, playing a listed move when it refuses one, with the picks after a number following it (#1567)", async () => {
+    for (const seed of Array.from({ length: 20 }, (_, i) => `s${i}`)) {
       const result = await playGame(
         { gameClass: ShiftGame },
         { playerCount: 2, seed, policies: [random(), random()], maxActions: 20 },
@@ -565,8 +565,8 @@ describe('playGame with policies (#556)', () => {
   it.each([
     ["the action's validate", false],
     ["the set's own validate", true],
-  ])('random plays only multiSelect sets %s accepts, drawing the move again when it refuses one', async (_rule, ruleOnSet) => {
-    for (const seed of SET_SEEDS) {
+  ])('random plays only multiSelect sets %s accepts, playing a listed move when it refuses one (#1567)', async (_rule, ruleOnSet) => {
+    for (const seed of Array.from({ length: 20 }, (_, i) => `m${i}`)) {
       const result = await playGame(
         { gameClass: AllocateGame },
         { playerCount: 2, seed, gameOptions: { ruleOnSet }, policies: [random(), random()], maxActions: 20 },
@@ -594,6 +594,23 @@ describe('playGame with policies (#556)', () => {
     expect(result.error).toMatch(
       /action 'shift' refused all 3 moves the simulator drew for its numbers or sets, the last with: Shifting is never allowed/,
     );
+  });
+
+  it('random draws a refused move again rather than play a listed one without the number input enumeration cannot list (#1567)', async () => {
+    const played: PolicyMove[] = [];
+    const recording: Policy = {
+      name: 'recording',
+      async choose(turn) {
+        const choice = await random().choose(turn);
+        if ('action' in choice) played.push(choice);
+        return choice;
+      },
+    };
+    for (const seed of Array.from({ length: 20 }, (_, i) => `n${i}`)) {
+      await playGame({ gameClass: ShiftGame }, { playerCount: 2, seed, gameOptions: { nudge: true }, policies: [recording, recording], maxActions: 20 });
+    }
+    expect(played.length).toBeGreaterThan(0);
+    expect(played.filter((move) => !('nudge' in move.args))).toEqual([]);
   });
 
   it('refuses a player count the game does not declare', async () => {
