@@ -205,17 +205,23 @@ class ShiftGame extends Game<ShiftGame, Player> {
 /**
  * Each seat in turn puts two hits on targets; the action's `validate` lets at
  * most one go to a bonus target, a rule across the set no per-choice
- * `disabled` can say (#1559). The game ends after six turns.
+ * `disabled` can say (#1559). With `ruleOnSet` the set's own `validate` holds
+ * the rule instead. The game ends after six turns.
  */
 class AllocateGame extends Game<AllocateGame, Player> {
   turns = 0;
 
-  constructor(options: GameOptions) {
+  constructor(options: GameOptions & { ruleOnSet?: boolean }) {
     super(options);
+    const oneBonus = (hits: string[]) => hits.filter((h) => h.startsWith('bonus')).length <= 1 || 'Only one hit may go to a bonus target.';
     this.registerAction(
       Action.create<AllocateGame>('allocate')
-        .chooseFrom('hits', { choices: ['main::0', 'main::1', 'bonus1::0', 'bonus2::0'], multiSelect: { min: 2, max: 2 } })
-        .validate((args) => (args.hits as string[]).filter((h) => h.startsWith('bonus')).length <= 1 || 'Only one hit may go to a bonus target.')
+        .chooseFrom('hits', {
+          choices: ['main::0', 'main::1', 'bonus1::0', 'bonus2::0'],
+          multiSelect: { min: 2, max: 2 },
+          validate: (hits) => !options.ruleOnSet || oneBonus(hits as unknown as string[]),
+        })
+        .validate((args) => options.ruleOnSet || oneBonus(args.hits as string[]))
         .execute((_args, ctx) => {
           if (++ctx.game.turns === 6) ctx.game.finish([]);
           return { success: true };
@@ -556,11 +562,14 @@ describe('playGame with policies (#556)', () => {
   });
 
   // #1559: random drew a multiSelect set without asking validate, and the game failed on the refusal.
-  it("random plays only multiSelect sets the action's validate accepts, drawing the move again when it refuses one", async () => {
+  it.each([
+    ["the action's validate", false],
+    ["the set's own validate", true],
+  ])('random plays only multiSelect sets %s accepts, drawing the move again when it refuses one', async (_rule, ruleOnSet) => {
     for (const seed of SET_SEEDS) {
       const result = await playGame(
         { gameClass: AllocateGame },
-        { playerCount: 2, seed, policies: [random(), random()], maxActions: 20 },
+        { playerCount: 2, seed, gameOptions: { ruleOnSet }, policies: [random(), random()], maxActions: 20 },
       );
       expect(result.error).toBeUndefined();
       expect(result.completed).toBe(true);

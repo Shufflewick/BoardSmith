@@ -2398,7 +2398,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "The random simulation policy draws a move again, three draws in all, when the action's validate refuses a multiSelect set it drew, as it does for numbers, so a rule across a set's items no longer fails a simulated game (#1559)"
+      "summary": "The random simulation policy draws a move again, three draws in all, when the action's validate or the set's own refuses a multiSelect set or other list it drew, as it does for numbers, so a rule across a set's items no longer fails a simulated game (#1559)"
     }
   ]
 }

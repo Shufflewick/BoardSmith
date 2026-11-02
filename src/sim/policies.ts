@@ -340,15 +340,16 @@ function drawAcceptedPicks(
   rng: SeededRandom,
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void
 ): RandomArgs {
-  const numbers = actionDef.selections.filter((s): s is NumberSelection => s.type === 'number');
-  const refusable = Boolean(actionDef.validate) || numbers.some((n) => n.validate);
   let refusal = '';
   for (let draw = 0; draw < REFUSED_DRAWS; draw++) {
     const built = drawPicks(game, actionDef, player, rng, onSelectionChoices);
-    if (!built.ok || !refusable) return built;
-    if (!numbers.some((n) => n.name in built.args) && !Object.values(built.args).some(Array.isArray)) return built;
+    if (!built.ok) return built;
+    const drawn = actionDef.selections.filter(
+      (s) => s.name in built.args && (s.type === 'number' || Array.isArray(built.args[s.name])),
+    );
+    if (drawn.length === 0 || !(actionDef.validate || drawn.some((s) => s.validate))) return built;
     const judged = game.getActionExecutor().validateAction(actionDef, player, built.args);
-    if (judged.valid || !offeredPicksPass(game, actionDef, player, built.args)) return built;
+    if (judged.valid || !offeredPicksPass(game, actionDef, player, built.args, drawn)) return built;
     refusal = judged.errors.join(' ');
   }
   return {
@@ -362,14 +363,20 @@ const REFUSED_DRAWS = 3;
 
 /**
  * Whether the picks the engine offered pass their own checks, so a refusal is
- * the numbers' or the whole move's rule. One that does not is the game's to
- * fix, and is played for the simulator to report (#910).
+ * the drawn numbers' and sets' or the whole move's rule. One that does not is
+ * the game's to fix, and is played for the simulator to report (#910).
  */
-function offeredPicksPass(game: Game, actionDef: ActionDefinition, player: Player, args: Record<string, unknown>): boolean {
+function offeredPicksPass(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  args: Record<string, unknown>,
+  drawn: Selection[],
+): boolean {
   const offeredOnly: ActionDefinition = {
     ...actionDef,
     validate: undefined,
-    selections: actionDef.selections.map((s) => (s.type === 'number' ? { ...s, validate: undefined } : s)),
+    selections: actionDef.selections.map((s) => (drawn.includes(s) ? { ...s, validate: undefined } : s)),
   };
   return game.getActionExecutor().validateAction(offeredOnly, player, args).valid;
 }
