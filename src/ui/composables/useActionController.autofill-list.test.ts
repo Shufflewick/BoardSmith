@@ -33,6 +33,10 @@ const metadata: Record<string, EnrichedActionMetadata> = {
     name: 'orderNone', prompt: 'Order none',
     selections: [{ name: 'none', type: 'choice', prompt: 'Which?', choices: ONE, orderedList: { min: 0, max: 0 } }],
   },
+  pickTwo: {
+    name: 'pickTwo', prompt: 'Pick two',
+    selections: [{ name: 'two', type: 'choice', prompt: 'Which?', choices: ONE, multiSelect: { min: 2, max: 3 } }],
+  },
   pickOne: {
     name: 'pickOne', prompt: 'Pick one',
     selections: [{ name: 'one', type: 'choice', prompt: 'Which?', choices: ONE }],
@@ -67,8 +71,8 @@ describe('auto-fill of a one-choice list pick (#769)', () => {
   });
 });
 
-describe('auto-fill of a one-choice list pick that takes no entries (#1562)', () => {
-  it.each(['pickNone', 'orderNone'])('%s is left to the player, not sent the one choice', async (action) => {
+describe('auto-fill of a one-choice list pick whose bounds a list of one breaks (#1562)', () => {
+  it.each(['pickNone', 'orderNone', 'pickTwo'])('%s is left to the player, not sent the one choice', async (action) => {
     const sendAction = await autoFilled(action);
     expect(sendAction).not.toHaveBeenCalled();
   });
