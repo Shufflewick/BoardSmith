@@ -17,9 +17,9 @@ import { _clearShownWarnings } from '../utils/dev.js';
 // the pathological "every offered action fails its condition" strand both
 // vanished with zero diagnostic. This suite proves the narrowing now warns.
 //
-// The divergence is reachable in a SIMULTANEOUS step: a co-decider's frozen
-// availableActions are captured at step entry and NOT re-evaluated when another
-// seat's action mutates shared state that flips their conditions false.
+// The divergence is reachable in a SIMULTANEOUS step: a seat's offered list is
+// worked out again when any seat's action settles (#1551), but a change made
+// outside any action (with no refreshAwaitingActions()) leaves it stale.
 
 class SimGateGame extends Game<SimGateGame, Player> {
   canPlay = true;
@@ -29,12 +29,7 @@ class SimGateGame extends Game<SimGateGame, Player> {
     this.registerAction(
       Action.create('play')
         .condition({ 'gate is open': (ctx) => (ctx.game as SimGateGame).canPlay })
-        .execute((_args, ctx) => {
-          // Seat 1's play slams the gate shut — seat 2's already-offered (frozen)
-          // 'play' now fails its condition at broadcast time.
-          (ctx.game as SimGateGame).canPlay = false;
-          return { success: true };
-        }),
+        .execute(() => ({ success: true })),
     );
     this.setFlow({
       root: simultaneousActionStep({
@@ -59,9 +54,9 @@ function startRunner(): GameRunner<SimGateGame> {
 describe('SPACE-05 silent-narrowing diagnostic (F-10)', () => {
   it('warns loudly (stranded) when an on-turn seat has EVERY offered action narrowed away', () => {
     const runner = startRunner();
-    // Seat 1 plays -> gate closes. Seat 2's frozen offered list still has 'play'
-    // but its condition is now false.
-    runner.performAction('play', 1, {});
+    // The gate closes outside any action: seat 2's offered list still has
+    // 'play' but its condition is now false.
+    runner.game.canPlay = false;
 
     _clearShownWarnings();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});

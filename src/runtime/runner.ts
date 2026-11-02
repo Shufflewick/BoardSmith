@@ -1147,6 +1147,22 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * list is taken, and in a simultaneous step no other seat may take it.
    */
   refusalToAct(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
+    const refusal = this.refusalToSeat(actionName, seat);
+    if (refusal) return refusal;
+    const flowState = this.getFlowState();
+    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
+      || followUpForSeat(flowState, seat)?.action === actionName;
+    if (!offered) {
+      return {
+        error: `'${actionName}' is not one of your actions right now.`,
+        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+      };
+    }
+    return undefined;
+  }
+
+  /** Why `seat` may take no action now (the game is over, or the flow awaits another seat), or `undefined`. */
+  private refusalToSeat(actionName: string, seat: number): { error: string; errorCode: ErrorCode } | undefined {
     if (!this.game.getAction(actionName)) {
       return { error: `Action not found: ${actionName}`, errorCode: ErrorCode.ACTION_NOT_FOUND };
     }
@@ -1160,14 +1176,6 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!canSeatAct(flowState, seat)) {
       return { error: "It's not your turn.", errorCode: ErrorCode.NOT_YOUR_TURN };
     }
-    const offered = availableActionsForSeat(flowState, seat).includes(actionName)
-      || followUpForSeat(flowState, seat)?.action === actionName;
-    if (!offered) {
-      return {
-        error: `'${actionName}' is not one of your actions right now.`,
-        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
-      };
-    }
     return undefined;
   }
 
@@ -1178,8 +1186,11 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * `PendingActionManager` asks this before any pick is processed, then calls `markStalePicks`;
    * `takePick` calls `notePickTaken` after each pick that leaves the action open.
    *
-   * First, the flow must offer the action to the seat (`refusalToAct`). Then
-   * its `condition`, evaluated as hosts evaluate it to show the action (with
+   * First, the flow must await the seat. At the first pick it must also offer
+   * the action (`refusalToAct`); at a later pick it need not, since the step
+   * drops an action from a seat's offer once another seat's move ends its
+   * condition or its choices (#1551), and the rules below and its stale picks
+   * (#767) say which of those refuse it, and why. Then its `condition`, evaluated as hosts evaluate it to show the action (with
    * no args), against the game as it stands (#493):
    *
    * - At the first pick it must hold, as for a whole submission.
@@ -1213,23 +1224,26 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     seat: number,
     pending: PendingActionState | undefined,
   ): { error: string; errorCode: ErrorCode } | undefined {
-    const refusal = this.refusalToAct(actionName, seat);
+    const refusal = this.refusalToSeat(actionName, seat);
     if (refusal) return refusal;
     const failed = this.failedConditionLabels(actionName, seat);
-    if (failed.length === 0) return undefined;
     const labels = failed.map((label) => `'${label}'`).join(' and ');
     if (pending?.conditionHeld === undefined) {
-      return {
-        error: `'${actionName}' is not available to you right now: ${labels} does not hold.`,
-        errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
-      };
+      if (failed.length > 0) {
+        return {
+          error: `'${actionName}' is not available to you right now: ${labels} does not hold.`,
+          errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
+        };
+      }
+      return this.refusalToAct(actionName, seat);
     }
-    if (pending.conditionHeld) {
+    if (failed.length > 0 && pending.conditionHeld) {
       return {
         error: `'${actionName}' is no longer available to you: the game changed since your last choice, and ${labels} no longer holds.`,
         errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
       };
     }
+    // The step no longer offers an action whose condition or choices another seat's move ended (#1551): the rules above and its stale picks say why.
     return undefined;
   }
 

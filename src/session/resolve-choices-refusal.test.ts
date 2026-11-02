@@ -103,7 +103,7 @@ describe('resolveChoices refuses a seat that may not take the action now (#714)'
     expect(res).toMatchObject({
       success: false,
       errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
-      error: "'spy' is not one of your actions right now.",
+      error: "'spy' is not available to you right now: 'never' does not hold.",
     });
     expect(JSON.stringify(res)).not.toContain('ACE-of-seat-2');
   });

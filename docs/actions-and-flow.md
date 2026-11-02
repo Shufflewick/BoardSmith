@@ -2236,11 +2236,16 @@ even when no seat can currently act. The engine warns in dev when that happens,
 because the state is indistinguishable from a deadlock.
 
 **Know what an explicit `allDone` does and does not buy you.** The awaiting set is
-built once per step *entry* and never grows within it. So:
+built at step *entry*, and every seat's offer is worked out again whenever any
+seat's action settles (#1551): a seat another seat's move gives a legal action
+joins the set, and a seat is no longer offered an action another seat's move
+ended. A change made *outside* any action (a host, a timer) is not seen until
+`game.refreshAwaitingActions()`. So:
 
 - It **does** stop the round ending without a seat that was supposed to act.
-- It **does not** let that seat act in this entry. A `resume` for a seat outside the
-  awaiting set is rejected with `Player N is not awaiting action`.
+- It **does not** let a seat in that only a change outside any action made able
+  to act. A `resume` for a seat outside the awaiting set is rejected with
+  `Player N is not awaiting action`.
 
 The honest outcome is therefore a visible stall instead of a silent wrong answer —
 which is the right trade, but it is not a fix on its own. To actually get the seat in:

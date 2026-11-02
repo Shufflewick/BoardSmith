@@ -243,15 +243,16 @@ describe('PendingActionManager on a runner, pick by pick', () => {
     expect(historyLabels(r.actionHistory)).toEqual(['scout:1', 'take:2', 'loot:1']);
   });
 
-  it('still refuses a seat that does not hold the follow-up, as before', async () => {
+  it('still refuses a seat that does not hold the follow-up', async () => {
     const r = runner();
     const picks = new PendingActionManager(r);
     expect(r.performAction('scout', 1, {}).success).toBe(true);
     picks.startPendingAction('loot', 2);
 
+    // Its condition is checked for every seat but the one holding the follow-up, and names why (#1551).
     expect(await picks.processSelectionStep(2, 'where', 'north')).toEqual({
       success: false,
-      error: "'loot' is not one of your actions right now.",
+      error: "'loot' is not available to you right now: 'only through scouting' does not hold.",
       errorCode: ErrorCode.ACTION_NOT_AVAILABLE,
     });
   });

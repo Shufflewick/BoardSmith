@@ -2465,11 +2465,11 @@ export class Game<
    * Re-derive the awaiting set of the currently open `simultaneousActionStep`,
    * admitting seats that have become eligible since it opened (#28).
    *
-   * Call this after something OTHER than a seat's own action changes what that
-   * seat may legally do — a round boundary that gives an uninhabited seat a
-   * character, a resource that arrives from elsewhere. Without it the seat keeps
-   * the list it was frozen with at step entry and cannot act until the next
-   * entry, even though the game considers it a full participant.
+   * Every seat's list is worked out again whenever any seat's action settles
+   * (#1551). Call this after something OUTSIDE any action changes what a seat
+   * may legally do — a host setting state, a resource that arrives from
+   * elsewhere. Without it the seat keeps its last list until an action settles
+   * or the step is entered again.
    *
    * The awaiting set can grow as well as shrink. A seat that already committed
    * this step is left alone. The step's `players` filter is re-evaluated and

@@ -1,21 +1,23 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, FlowEngine, simultaneousActionStep, sequence } from '../index.js';
+import { Game, Player, Action, FlowEngine, simultaneousActionStep } from '../index.js';
 
 /**
  * Pins the `simultaneousActionStep` default-`allDone` trap that
  * `docs/actions-and-flow.md` and the `simultaneousActionStep` JSDoc now
  * document, so the docs and the behaviour cannot drift apart.
  *
- * The awaiting set is built ONCE per step ENTRY, from the seats that have at
- * least one available action right then. Two consequences, both pinned below:
+ * The awaiting set is built at step ENTRY from the seats that have at least
+ * one available action right then, and worked out again only when a seat's
+ * action settles (#1551). Consequences, pinned below:
  *
  *  1. The default `allDone` ("every AWAITING seat is done") ends the step as
  *     soon as that subset finishes — a seat that was momentarily unable to act
  *     is skipped in silence.
- *  2. An explicit `allDone` prevents the silent skip, but does NOT let the
- *     excluded seat act: the awaiting set never grows within one entry. It
- *     converts a silent wrong answer into a visible stall, and the seat gets
- *     in on the next entry.
+ *  2. An explicit `allDone` prevents the silent skip, but a seat made able to
+ *     act by something OUTSIDE an action is not admitted: it converts a silent
+ *     wrong answer into a visible stall, and the seat gets in on the next
+ *     entry (or a `refreshAwaitingActions()`).
+ *  3. A seat another seat's action made able to act is admitted at once.
  */
 
 class OrderPlayer extends Player<OrderGame, OrderPlayer> {
@@ -89,8 +91,8 @@ describe('simultaneousActionStep default allDone', () => {
     // a round seat 2 never took part in.
     expect(afterEligible.awaitingInput).toBe(true);
 
-    // But the awaiting set does not grow mid-entry. Even once seat 2 CAN act,
-    // this step entry will not accept it — the honest outcome is a stall.
+    // A change made outside any action admits nobody: even once seat 2 CAN
+    // act, this step entry will not accept it — the honest outcome is a stall.
     game.getPlayerOrThrow(2).ready = true;
     const rejected = engine.resume('submitOrder', {}, 2);
 
@@ -98,10 +100,9 @@ describe('simultaneousActionStep default allDone', () => {
     expect(game.getPlayerOrThrow(2).order).toBeUndefined();
   });
 
-  it('a seat left out of one entry is admitted on the next one', () => {
+  it('a seat another seat unblocks is admitted in the same entry (#1551)', () => {
     const game = new OrderGame({ playerCount: 3, seed: 'trap' });
-    // Seat 2 cannot act until seat 1 has ordered — a seat whose legal move
-    // depends on another seat, which is the shape the default rule mishandles.
+    // Seat 2 cannot act until seat 1 has ordered: its legal move depends on another seat.
     game.registerAction(
       Action.create<OrderGame>('submitOrder')
         .condition({
@@ -114,23 +115,17 @@ describe('simultaneousActionStep default allDone', () => {
         })
     );
 
-    // Two entries into the same step. Entry 1 finishes without seat 2 (the
-    // trap); entry 2 rebuilds the participant list and admits it.
-    const engine = new FlowEngine(
-      game,
-      { root: sequence(orderStep(), orderStep()) }
-    );
+    const engine = new FlowEngine(game, { root: orderStep() });
 
     engine.start();
     expect(engine.getState().awaitingPlayers?.map(p => p.playerIndex)).toEqual([1, 3]);
 
-    engine.resume('submitOrder', {}, 1);
-    const entry2 = engine.resume('submitOrder', {}, 3);
+    const afterSeat1 = engine.resume('submitOrder', {}, 1);
+    expect(afterSeat1.awaitingPlayers?.map(p => p.playerIndex)).toEqual([1, 3, 2]);
 
-    // Seats 1 and 3 are already done, so entry 2 awaits exactly seat 2.
-    expect(entry2.awaitingPlayers?.map(p => p.playerIndex)).toEqual([2]);
-
-    engine.resume('submitOrder', {}, 2);
+    engine.resume('submitOrder', {}, 3);
+    const done = engine.resume('submitOrder', {}, 2);
     expect(game.getPlayerOrThrow(2).order).toBe('given');
+    expect(done.awaitingInput).toBe(false);
   });
 });
