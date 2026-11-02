@@ -20,6 +20,9 @@
  * else, in particular not `vitest`, whose own types would pull Node's in and
  * hide the fault -- in a sandbox holding what a consumer's install holds, under
  * the tsconfig `boardsmith init` writes.
+ *
+ * The sandbox holds no peer dependency: `@vue/test-utils`, which `dom-leak.ts`
+ * imports, is a regular dependency (#1578), so it arrives with BoardSmith.
  */
 import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -27,7 +30,7 @@ import { join } from 'node:path';
 
 import { generateSmokeSpecTs } from '../cli/lib/project-scaffold.js';
 import { gameTsConfig } from '../cli/lib/game-tsconfig.test-helper.js';
-import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
+import { consumerInstall } from './consumer-install.test-helper.js';
 import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 /** The smallest use of the entry: a board rendered as a seat, and the preload a rendering test file calls. */
@@ -43,11 +46,9 @@ export async function renderSeatOne(game: TestGame<Game>): Promise<string> {
 export const create = createTestGame;
 `;
 
-describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411)", () => {
-  it('reports zero vue-tsc errors for a game test that imports it', () => {
-    // The declared peers are installed because `@vue/test-utils` is one, and a
-    // game that renders a seat installs it (`boardsmith init` does).
-    const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
+describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411, #1578)", () => {
+  it('reports zero vue-tsc errors for a game test that imports it, with no @vue/test-utils in the game', () => {
+    const root = consumerInstall({ entryPoints: [] });
     mkdirSync(join(root, 'tests'), { recursive: true });
     writeFileSync(join(root, 'tests', 'seat.test.ts'), GAME_TEST);
     writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['tests/**/*']));
@@ -56,15 +57,17 @@ describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411
       root,
       'game.tsconfig.json',
       'a game test that imports boardsmith/testing under the tsconfig `boardsmith init` writes, which has no ' +
-        'Node types',
+        'Node types, holding only our production closure and the toolchain a game brings',
       'A "Cannot find module \'node:...\'" or a missing `process` member means Node-only code is reachable from ' +
         'the entry\'s types: keep it behind a declaration, as package.json "imports" does for ' +
-        '`#testing/project-test-utils` (see src/testing/project-test-utils.d.ts).',
+        '`#testing/project-test-utils` (see src/testing/project-test-utils.d.ts). A "Cannot find module" for a ' +
+        'package means the entry imports something BoardSmith does not install for the game -- declare it in ' +
+        '"dependencies" and refresh package-lock.json.',
     );
   }, 180_000);
 
   it('reports zero vue-tsc errors for a game holding only the smoke spec `boardsmith init` writes (#1306)', () => {
-    const root = consumerInstall({ entryPoints: [], alsoInstalled: declaredPeers() });
+    const root = consumerInstall({ entryPoints: [] });
     mkdirSync(join(root, 'tests', 'browser'), { recursive: true });
     writeFileSync(join(root, 'tests', 'browser', 'smoke.spec.ts'), generateSmokeSpecTs(['move']));
     writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig(['tests/**/*']));

@@ -493,8 +493,10 @@ the same jsdom message a render does.
 **It renders with your project's own `@vue/test-utils`** (#389), resolved from
 the directory the tests run in exactly as your own test files resolve it, so a
 board renders on the same Vue its components import and re-renders when a test
-hands it new props. `boardsmith init` installs it; a project without it is told
-to run `npm install --save-dev @vue/test-utils`. The first load also checks that
+hands it new props. It is a dependency of BoardSmith (#1578), so npm installs
+it with BoardSmith; a game whose own tests import it, as the ones
+`boardsmith init` writes do, declares it too. A project where it cannot be
+resolved is told to run `npm install --save-dev @vue/test-utils`. The first load also checks that
 BoardSmith's UI and your `@vue/test-utils` share one copy of Vue, and refuses,
 saying what to change, when they do not (aliasing `vue` to another build of it
 is the usual cause). It also supplies the browser APIs jsdom lacks and a board
