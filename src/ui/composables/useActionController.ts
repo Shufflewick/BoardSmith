@@ -2925,7 +2925,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * in parity. currentArgs is NOT touched until confirmMultiSelect() (which uses
    * the fill() path with the complete array).
    *
-   * When min === max, reaching the exact count auto-confirms (no Done button).
+   * When min === max, reaching the exact count auto-confirms (no Done button, unless the count is 0).
    * A value the choices list offers N times is N slots; `copy` (0 to N-1) names one,
    * counting the enabled entries first.
    */
