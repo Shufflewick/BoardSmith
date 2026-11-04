@@ -40,17 +40,17 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
-  it('#1582: answers an ordered list longer than the press cap with one entry, then its ready Done, rather than adding until the cap', async () => {
+  it('#1582: answers an ordered list longer than the press cap with entries up to its min, then its ready Done, rather than adding until the cap', async () => {
     const { outcome, steps } = await smokeOf(false, { ...ledgerGame(), 'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'stack']) });
 
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "stack"/);
     expect(outcome.passed).toBe(true);
-    // Each time the walk takes it: one entry, then Done.
+    // Each time the walk takes it: entries up to the list's min of 2, then Done.
     const add = 'pressing "Add a" for "stack"';
     const done = 'pressing "Done" for "stack"';
     const presses = steps.filter((line) => /pressing "[^"]+" for "stack"$/.test(line)).map((line) => line.replace(/^smoke step \d+: /, ''));
     expect(presses.length).toBeGreaterThan(0);
-    expect(presses).toEqual(presses.map((_, index) => (index % 2 === 0 ? add : done)));
+    expect(presses).toEqual(presses.map((_, index) => (index % 3 === 2 ? done : add)));
     expect(presses.at(-1)).toBe(done);
   });
 

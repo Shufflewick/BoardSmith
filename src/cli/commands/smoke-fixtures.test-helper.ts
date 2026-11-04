@@ -163,8 +163,8 @@ describe('the ace game', () => {
 
 /**
  * THE LEDGER GAME (#1582): the ace game whose seats `draw` or `stack` a list of letters in order,
- * an ordered list of up to 60 entries that may be empty, so its Done is ready from the start and
- * its Add buttons stay pressable past the walk's 50-press cap.
+ * an ordered list of two to 60 entries, so its Done is ready from the second entry and its Add
+ * buttons stay pressable past the walk's 50-press cap.
  */
 export function ledgerGame(): Record<string, string> {
   return {
@@ -186,7 +186,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .chooseFrom('letters', {
         prompt: 'Letters in stacking order',
         choices: () => ['a', 'b'],
-        orderedList: { min: 0, max: 60 },
+        orderedList: { min: 2, max: 60 },
       })
       .execute(() => ({ success: true })),
   ];
