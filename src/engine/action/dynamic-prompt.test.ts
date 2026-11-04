@@ -15,6 +15,7 @@ import { Game, Piece, Space, Player, Action } from '../index.js';
 import type { GameOptions } from '../index.js';
 import { buildActionMetadata, buildPickMetadata } from '../element/action-metadata.js';
 import type { Selection } from './types.js';
+import { buildSingleActionMetadata } from '../../session/utils.js';
 
 class Token extends Piece<PromptGame> {}
 
@@ -113,5 +114,59 @@ describe('dynamic selection prompts (#140)', () => {
     expect(() => buildActionMetadata(game, game.getPlayer(1)!, ['broken'])).toThrow(
       'The prompt function for "flavor" in action "broken" threw an error: round is missing',
     );
+  });
+});
+
+
+describe('dynamic action prompts (#1590)', () => {
+  it('evaluates the action title for each seat and current game state', () => {
+    const game = new PromptGame({ playerCount: 2 });
+    game.registerAction(Action.create<PromptGame>('aim')
+      .prompt((ctx) => `Seat ${ctx.player.seat}: aim in round ${ctx.game.round}`)
+      .execute(() => {}));
+
+    expect(buildActionMetadata(game, game.getPlayer(1)!, ['aim']).aim!.prompt)
+      .toBe('Seat 1: aim in round 3');
+    game.round = 7;
+    expect(buildActionMetadata(game, game.getPlayer(2)!, ['aim']).aim!.prompt)
+      .toBe('Seat 2: aim in round 7');
+  });
+});
+
+
+describe('action prompt metadata paths (#1590)', () => {
+  it.each(['schema', 'followUp'] as const)('evaluates a seat prompt through %s', (path) => {
+    const game = new PromptGame({ playerCount: 2 });
+    game.registerAction(Action.create<PromptGame>('aim')
+      .prompt((ctx) => `Seat ${ctx.player.seat}: aim in round ${ctx.game.round}`)
+      .execute(() => {}));
+    const metadata = path === 'schema'
+      ? game.getActionSchema('aim', 2)
+      : buildSingleActionMetadata(game, game.getPlayer(2)!, 'aim');
+    expect(metadata?.prompt).toBe('Seat 2: aim in round 3');
+  });
+});
+
+
+describe('action prompt failures (#1590)', () => {
+  it.each(['menu', 'schema', 'followUp'] as const)('names the broken action through %s', (path) => {
+    const game = new PromptGame({ playerCount: 1 });
+    game.registerAction(Action.create<PromptGame>('brokenAim')
+      .prompt(() => { throw new Error('upgrade is missing'); })
+      .execute(() => {}));
+    const read = () => path === 'menu'
+      ? buildActionMetadata(game, game.getPlayer(1)!, ['brokenAim'])
+      : path === 'schema' ? game.getActionSchema('brokenAim', 1)
+        : buildSingleActionMetadata(game, game.getPlayer(1)!, 'brokenAim');
+    expect(read).toThrow('The prompt function for action "brokenAim" threw an error: upgrade is missing. Fix the prompt function before this action can be offered.');
+  });
+
+  it('passes known follow-up args to the action prompt', () => {
+    const game = new PromptGame({ playerCount: 1 });
+    game.registerAction(Action.create<PromptGame>('followAim')
+      .prompt((ctx) => `Aim at ${ctx.args.target}`)
+      .execute(() => {}));
+    expect(buildSingleActionMetadata(game, game.getPlayer(1)!, 'followAim', { target: 'moon' })?.prompt)
+      .toBe('Aim at moon');
   });
 });

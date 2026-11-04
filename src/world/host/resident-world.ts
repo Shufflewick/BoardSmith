@@ -1281,9 +1281,8 @@ export class ResidentWorld {
       return { ended: this.completed, displaced };
     });
     if (outcome.kind === "refused") {
-      const label =
-        readWorldDefinition(this.#definition).actions.find((one) => one.name === event.action)?.prompt ??
-        event.action;
+      const prompt = readWorldDefinition(this.#definition).actions.find((one) => one.name === event.action)?.prompt;
+      const label = typeof prompt === "string" ? prompt : event.action;
       this.#refused = { label, retryAt: this.now() + RETRY_WAIT_MS };
       // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED, at the
       // occurrence that refused -- which is where the last occurrence that ran

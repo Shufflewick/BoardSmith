@@ -74,7 +74,7 @@ import type {
   Player,
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
-import { buildPickMetadata } from "../engine/element/action-metadata.js";
+import { buildPickMetadata, evaluatePrompt } from "../engine/element/action-metadata.js";
 import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
 import {
@@ -1370,7 +1370,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
       );
       if (disabled === null && !satisfiable) return warnDropped(definition, seat);
 
-      return offerOf(definition, selections, disabled);
+      return this.game.readingOnly(() =>
+        offerOf(definition, selections, disabled, { game: project(this.game), player: acting, args: {} }),
+      );
     } finally {
       bindWorldFacilities(this.game, null);
     }
@@ -3937,6 +3939,7 @@ function offerOf(
   definition: ActionDefinition,
   selections: PickMetadata[],
   disabled: string | null,
+  ctx: ActionContext,
 ): WorldActionOffer {
   return {
     name: definition.name,
@@ -3956,7 +3959,7 @@ function offerOf(
     //     It is what tells the panel and a custom UI to confirm rather than
     //     auto-commit.
     ...sent({
-      prompt: definition.prompt,
+      prompt: evaluatePrompt(definition.name, definition, ctx),
       help: definition.help,
       manual: definition.manual === true ? true : undefined,
       suppressFromActionPanel: definition.suppressFromActionPanel === true ? true : undefined,

@@ -67,7 +67,7 @@ import { availableActionsForSeat } from '../flow/index.js';
 import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
 import { refuseUnknownFlowKeys } from '../flow/flow-definition-keys.js';
 import { describeFlowPosition } from '../flow/describe-flow-position.js';
-import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
+import { buildActionMetadata, buildPickMetadata, evaluatePrompt } from './action-metadata.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn, isDevMode } from '../../utils/dev.js';
 import { SeededRandom, mintSeed, type RandomState } from '../../utils/random.js';
@@ -2760,7 +2760,7 @@ export class Game<
     );
     return {
       name: actionName,
-      prompt: actionDef.prompt,
+      prompt: evaluatePrompt(actionName, actionDef, { game: this, player, args: {} }),
       help: actionDef.help,
       selections,
     };

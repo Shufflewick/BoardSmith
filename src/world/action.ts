@@ -1021,8 +1021,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     (this.definition.world!.needs as WorldNeedsRound[]).push({ kind: "notices", before, box });
   }
 
-  prompt(prompt: string): this {
-    this.inner.prompt(prompt);
+  prompt(prompt: WorldPrompt<G>): this {
+    this.inner.prompt(forwardPrompt<G>(prompt)!);
     return this;
   }
 

@@ -45,7 +45,7 @@ class EquipGame extends Game<EquipGame, Player> {
     // player into a question with no answer.
     this.registerAction(
       Action.create('equip')
-        .prompt('Equip an item')
+        .prompt((ctx) => `Equip an item for seat ${ctx.player.seat}`)
         .chooseFrom('slot', { prompt: 'Slot', choices: ['head', 'hand'] })
         .chooseFrom('item', {
           prompt: 'Item',
@@ -129,7 +129,7 @@ describe('#270 — a step with nothing to pick refuses, and says what was asked 
     const { error } = await choicesFor('equip', 'item', { slot: 'head' });
 
     expect(error).toContain('Item');          // what is being asked for
-    expect(error).toContain('Equip an item'); // which verb is asking
+    expect(error).toContain('Equip an item for seat 1'); // which verb is asking
     expect(error).toContain('slot');          // why there is nothing
     expect(error).toContain('head');
   });

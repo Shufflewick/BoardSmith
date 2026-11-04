@@ -62,6 +62,15 @@ export function createMyAction(): ActionDefinition {
 }
 ```
 
+The action's `.prompt()` also accepts `(ctx) => string`, with the same typed
+`ctx.game` and `ctx.player` as its other callbacks. It is evaluated for the seat
+when action metadata is built, so a menu button and the open action's title can
+name that seat's current upgrade. Menu prompts receive empty `ctx.args`;
+follow-up metadata receives its known args. A throwing callback names the action
+and asks the author to fix the prompt before it can be offered. World actions
+accept the same form, with `ctx.world` available for partitions declared in the
+first `.needs()` round. A seatless clock action keeps a static string prompt.
+
 ### Selection Methods
 
 #### `chooseFrom` - Choose from a list

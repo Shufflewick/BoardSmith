@@ -71,7 +71,7 @@ export function buildActionMetadata(
       pickMetas.push(pickMeta);
     }
 
-    metadata[actionName] = actionMetadataOf(actionName, actionDef, pickMetas);
+    metadata[actionName] = actionMetadataOf(actionName, actionDef, pickMetas, { game, player, args: {} });
   }
 
   return metadata;
@@ -92,10 +92,11 @@ function actionMetadataOf(
   actionName: string,
   actionDef: ActionDefinition,
   selections: PickMetadata[],
+  ctx: ActionContext,
 ): ActionMetadata {
   return {
     name: actionName,
-    prompt: actionDef.prompt,
+    prompt: evaluatePrompt(actionName, actionDef, ctx),
     help: actionDef.help,
     ...(actionDef.manual ? { manual: true } : {}),
     ...(actionDef.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
@@ -175,17 +176,17 @@ function describeNumberPick(base: PickMetadata, selection: NumberSelection): voi
 }
 
 /**
- * A pick's prompt: a static string, or the author's function evaluated now, its
+ * An action or pick's prompt: a string, or the author's function evaluated now, its
  * failure named. None when the function was handed a card the seat cannot see (#1293).
  */
-export function evaluatePrompt(actionName: string, selection: Selection, ctx: ActionContext): string | undefined {
+export function evaluatePrompt(actionName: string, selection: Selection | ActionDefinition, ctx: ActionContext): string | undefined {
   if (typeof selection.prompt !== 'function') return selection.prompt;
   try {
     const prompt = selection.prompt(ctx);
-    return seatText(prompt, undefined, hidesFrom(ctx.player.seat, ctx.args), `prompt for selection '${selection.name}'`);
+    return seatText(prompt, undefined, hidesFrom(ctx.player.seat, ctx.args), `prompt for ${'type' in selection ? 'selection' : 'action'} '${selection.name}'`);
   } catch (error) {
     throw new Error(
-      `The prompt function for "${selection.name}" in action "${actionName}" threw an error: ` +
+      `The prompt function for ${'type' in selection ? `"${selection.name}" in ` : ''}action "${actionName}" threw an error: ` +
       `${error instanceof Error ? error.message : String(error)}. Fix the prompt function before this action can be offered.`,
     );
   }
