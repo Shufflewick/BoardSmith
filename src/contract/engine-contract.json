@@ -1,5 +1,5 @@
 {
-  "revision": 327,
+  "revision": 328,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2559,6 +2559,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The verbs check counts the world runner's runner.apply({ command: { name: 'verb' } }), and a tests/ helper that passes its verb parameter into it, as dispatching that verb, so a world game tested through the runner can publish (#1581)"
+    },
+    {
+      "revision": 328,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The smoke walk answers an ordered list as it does a multi-select: one entry until Done is ready, then Done, rather than pressing Add until the 50-press cap (#1582)"
     }
   ]
 }
