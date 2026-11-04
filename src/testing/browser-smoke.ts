@@ -1179,31 +1179,49 @@ async function pressAnswer(answer: Control, { walk, memory, name, step }: Answer
   return nameOf(answer);
 }
 
+/** Where a list pick's panel shows its choices: every one, one it can still add, and those it has. */
+interface ListPick {
+  readonly choices: string;
+  readonly addable: string;
+  readonly chosen: string;
+}
+
+const MULTI_SELECT: ListPick = {
+  choices: '.action-config .multi-select-choice input[type="checkbox"]',
+  addable: '.action-config .multi-select-choice input[type="checkbox"]:not(:checked)',
+  chosen: '.action-config .multi-select-choice input:checked',
+};
+
+/** An ordered list (#1582): its Add buttons stay pressable for repeats until max, so only Done ends it. */
+const ORDERED_LIST: ListPick = {
+  choices: '.action-config .ordered-list-add',
+  addable: '.action-config .ordered-list-add',
+  chosen: '.action-config .ordered-list-entry',
+};
+
 /**
- * Answers one step of an open multi-select pick (#459), as a player makes one: one more distinct
- * choice (an unticked box in the panel, else a board candidate the pick has not chosen) until the
- * pick has at least one and its Done button is ready, then Done. The pick's own min and max decide
- * through the panel: Done is ready from min on, every box left is refused at max, and a pick whose
- * min is its max has no Done at all and completes on its last choice, unless both are 0, when Done
- * answers it empty. Returns what it pressed.
+ * Answers one step of an open multi-select pick (#459) or ordered list (#1582), as a player makes
+ * one: one more choice (one the panel can still add, else a board candidate the pick has not
+ * chosen) until the pick has at least one and its Done button is ready, then Done. The pick's own
+ * min and max decide through the panel: Done is ready from min on, every choice left is refused at
+ * max, and a multi-select whose min is its max has no Done at all and completes on its last choice,
+ * unless both are 0, when Done answers it empty. Returns what it pressed.
  */
-async function answerMultiSelect(answering: Answering): Promise<string | undefined> {
+async function answerListPick(answering: Answering, pick: ListPick): Promise<string | undefined> {
   const { frame, picked } = answering;
   const count = (selector: string) => inPageTime(frame.page(), 'counting the choices', () => frame.locator(selector).count());
-  const inPanel = (await count('.action-config .multi-select-choice input[type="checkbox"]')) > 0;
-  const chosen = inPanel ? await count('.action-config .multi-select-choice input:checked') : picked.size;
+  const inPanel = (await count(pick.choices)) > 0;
+  const chosen = inPanel ? await count(pick.chosen) : picked.size;
   const done = await firstPressable(frame, ['.action-config .done-button']);
   const next =
     done !== undefined && chosen > 0
       ? done
-      : ((inPanel
-          ? await firstPressable(frame, ['.action-config .multi-select-choice input[type="checkbox"]:not(:checked)'])
-          : await unpickedCandidate(answering)) ?? done);
+      : ((inPanel ? await firstPressable(frame, [pick.addable]) : await unpickedCandidate(answering)) ?? done);
   return next === undefined ? undefined : pressAnswer(next, answering);
 }
 
 /**
- * Answers one choice of the open action, as a player would: a multi-select pick one choice at a
+ * Answers one choice of the open action, as a player would: a multi-select or ordered list one choice at a
  * time, else the board's own candidate first (so the board's controls are pressed, not only the
  * panel's), then the panel's choices, a value for a number or text field, and the button that
  * finishes a step. Returns what it pressed, or undefined when there was nothing to answer.
@@ -1212,9 +1230,10 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   const { frame } = answering;
   await fillAnEmptyField(answering);
   if (answering.stop !== undefined) return undefined;
-  // An ordered list shows a count too, and is answered by its Add buttons below.
-  const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
-  if ((await inPageTime(frame.page(), 'looking for a multi-select pick', () => multiSelect.count())) > 0) return answerMultiSelect(answering);
+  const shown = (selector: string) => inPageTime(frame.page(), 'looking for a list pick', () => frame.locator(selector).count());
+  // An ordered list shows a multi-select's count too, marked as its own.
+  if ((await shown('.action-config .ordered-list-count')) > 0) return answerListPick(answering, ORDERED_LIST);
+  if ((await shown('.action-config .multi-select-count')) > 0) return answerListPick(answering, MULTI_SELECT);
 
   const target =
     (await firstPressable(frame, ['.action-config [data-bs-confirm]', BOARD_CANDIDATES])) ??
@@ -1222,7 +1241,6 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
     (await firstPressable(frame, [
       '.action-config .board-handoff-btn',
       '.action-config .choice-btn',
-      '.action-config .ordered-list-add',
       '.action-config .done-button',
       '.action-config .skip-btn',
     ]));

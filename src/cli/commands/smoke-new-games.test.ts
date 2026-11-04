@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { smokeOf } from './smoke-walk.test-helper.js';
-import { QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-helper.js';
+import { ledgerGame, QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -39,6 +39,20 @@ describe('boardsmith verify: the smoke check', () => {
       expect(outcome.passed).toBe(true);
     },
   );
+
+  it('#1582: answers an ordered list longer than the press cap with entries up to its min, then its ready Done, rather than adding until the cap', async () => {
+    const { outcome, steps } = await smokeOf(false, { ...ledgerGame(), 'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'stack']) });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "stack"/);
+    expect(outcome.passed).toBe(true);
+    // Each time the walk takes it: entries up to the list's min of 2, then Done.
+    const add = 'pressing "Add a" for "stack"';
+    const done = 'pressing "Done" for "stack"';
+    const presses = steps.filter((line) => /pressing "[^"]+" for "stack"$/.test(line)).map((line) => line.replace(/^smoke step \d+: /, ''));
+    expect(presses.length).toBeGreaterThan(0);
+    expect(presses).toEqual(presses.map((_, index) => (index % 3 === 2 ? done : add)));
+    expect(presses.at(-1)).toBe(done);
+  });
 
   it('#1463: sees the end of a game whose board draws its own ending, with no game-over card, and deals a new game rather than reporting a stall', async () => {
     const { outcome } = await smokeOf(false, {

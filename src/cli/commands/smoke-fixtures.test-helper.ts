@@ -161,6 +161,57 @@ describe('the ace game', () => {
   };
 }
 
+/**
+ * THE LEDGER GAME (#1582): the ace game whose seats `draw` or `stack` a list of letters in order,
+ * an ordered list of two to 60 entries, so its Done is ready from the second entry and its Add
+ * buttons stay pressable past the walk's 50-press cap.
+ */
+export function ledgerGame(): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('stack')
+      .prompt('Stack letters')
+      .chooseFrom('letters', {
+        prompt: 'Letters in stacking order',
+        choices: () => ['a', 'b'],
+        orderedList: { min: 2, max: 60 },
+      })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'stack'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+  };
+}
+
 /** The truce game's action that no walk from a fresh game reaches, and why. */
 export const QUIET_CLAIM_REASON =
   'Offered only after forty rounds in which nobody played a card, and the walk plays cards every round.';

@@ -469,6 +469,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   max decide through the panel: Done is ready from `min` on, every box left is
   refused at `max`, and a pick whose `min` is its `max` has no Done and
   completes on its last choice, unless both are 0, when Done answers it empty.
+- An ordered list (#1582) is answered the same way, with its Add buttons for
+  the boxes: one entry at a time until the list has at least one (or `min`) and
+  its Done is ready, then Done. Add stays pressable for repeats until `max`, so
+  a walk that only added would never finish a long list.
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
   candidate, nor inside an `inert` subtree, nor inside the game-over card (whose
