@@ -1834,6 +1834,7 @@ production:
 referral?: {
   founding: string;
   onGrant: string;
+  onJoin?: string;
 };
 ```
 
@@ -1848,8 +1849,33 @@ world's own moves rather than as a host reaching into your state. Whatever a
 grant means in your rules — a stipend, a settled parcel, a favour owed — you
 write it, and the host only says when.
 
+`onJoin` is optional: the verb a seat **assignment** is delivered as, so a game
+can place a referred player near their inviter before the player sees the
+world. It is a **seatless** action, run with
+`{ seat, inviterSeat: number | null }`, where `inviterSeat` is the inviter's
+chair in this world, or `null` when the newcomer was not invited or the host
+could not tell. Use it rather than `presence.onArrive`: an arrival is about
+sockets, comes again on every return after a departure, and may run after the
+seat's first view.
+
+A host that runs `onJoin` meets this contract:
+
+- It runs it **once per seat assignment**: a new chair, or a chair handed to a
+  new account after a vacancy. A reconnect, a second tab or a host restart is
+  not an assignment.
+- It runs it **before** that seat's first view and offers are published, so the
+  player never sees the world as it was before placement.
+- It reads `inviterSeat` from its **own trusted evidence**, never from anything
+  the client sent. Only a seat goes down, never an account id or invitation
+  code.
+
+`boardsmith dev` has no invitations. It runs `onJoin` when it assigns a seat,
+with `inviterSeat: null`, before that seat's first view and before `onArrive`,
+so a game's join path runs locally too. A seat the world's clock vacated is
+assigned again, and joins again, when a page next takes it.
+
 The library types the declaration and hands it back exactly as you wrote it.
-**Nothing in the engine reads it, and nothing in the engine checks the two
+**Nothing in the engine reads it, and nothing in the engine checks the
 names.** That is `presence`'s rule rather than `vacate`'s, for `presence`'s
 reason: whether a founding is worth a reward at all, what the reward is, and
 which verbs a host is willing to issue on its own behalf are that **host's**
@@ -1858,8 +1884,8 @@ with one browser tab, and should.
 
 So the host is the one that checks it, and the host is the one that decides what
 it means. ShufflewickPub reads the block at a world's first wake and refuses a
-`founding` that is not seated or an `onGrant` that is not seatless, with a
-sentence you can read. A world that declares no `referral` is simply a world no
+`founding` that is not seated, or an `onGrant` or `onJoin` that is not
+seatless, with a sentence you can read. A world that declares no `referral` is simply a world no
 invitation is attributed through.
 
 ## Activity: how long this seat has been gone

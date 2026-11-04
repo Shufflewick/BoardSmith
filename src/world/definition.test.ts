@@ -230,6 +230,22 @@ describe("readWorldDefinition — what a bundle must export", () => {
     });
   });
 
+  it("hands back a declared join-time verb too (#1583)", () => {
+    const joining = bundle({
+      world: {
+        maxPlayers: 2,
+        actions: [poke, sweep],
+        view: () => [],
+        referral: { founding: "poke", onGrant: "sweep", onJoin: "sweep" },
+      },
+    });
+    expect(readWorldDefinition(joining).referral).toEqual({
+      founding: "poke",
+      onGrant: "sweep",
+      onJoin: "sweep",
+    });
+  });
+
   it("leaves an undeclared referral undeclared, so no host attributes anything", () => {
     expect(readWorldDefinition(bundle()).referral).toBeUndefined();
   });

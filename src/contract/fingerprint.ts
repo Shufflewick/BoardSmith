@@ -1396,12 +1396,12 @@ async function computeWorldDeclaration(): Promise<unknown> {
     // that named nothing would hash the same as one built by an engine that
     // had never heard of the field.
     vacate: 'abandon',
-    // AND THE TWO VERBS AN INVITATION IS ATTRIBUTED THROUGH (ShufflewickPub
-    // #473), declared here for the same reason. The engine checks neither name
+    // AND THE VERBS AN INVITATION IS ATTRIBUTED THROUGH (ShufflewickPub #473,
+    // with the join-time verb of #1583), declared here for the same reason. The engine checks neither name
     // -- that is the host's policy, as it is for `presence` -- so the fact this
     // fixture pins is the one a platform depends on: the block a bundle wrote
     // is the block `readWorldDefinition` hands back.
-    referral: { founding: 'abandon', onGrant: 'settle' },
+    referral: { founding: 'abandon', onGrant: 'settle', onJoin: 'settle' },
   };
 
   const built = createWorld({

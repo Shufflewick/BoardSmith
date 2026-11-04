@@ -857,6 +857,89 @@ describe('#339: the told-present record is kept in the world store', () => {
 });
 
 /**
+ * A WORLD THAT DECLARES A JOIN-TIME REFERRAL VERB (#1583). `welcome` lays a log
+ * on the hearth, so a view shows whether it ran, and writes down
+ * `join:<seat>:<inviterSeat>`; `greet` writes down `arrive:<seat>`.
+ */
+function joinWorld(presence?: WorldDefinition['presence']) {
+  const told: string[] = [];
+  const welcome = worldClockAction<Village>('welcome')
+    .prompt('The clock tells the world a seat was assigned')
+    .needs(() => [HEARTH])
+    .execute((args, ctx) => {
+      (ctx.world.partition(HEARTH) as Hearth).logs += 1;
+      told.push(`join:${String(args.seat)}:${String(args.inviterSeat)}`);
+    });
+  const greet = worldClockAction<Village>('greet')
+    .prompt('The clock tells the world a seat arrived')
+    .needs(() => [HEARTH])
+    .execute((args) => {
+      told.push(`arrive:${String(args.seat)}`);
+    });
+  const definition = bundle({
+    world: worldBlock({
+      actions: [...VILLAGE_ACTIONS, welcome, greet],
+      referral: { founding: 'chop', onGrant: 'burn', onJoin: 'welcome' },
+      ...(presence === undefined ? {} : { presence }),
+    }),
+  });
+  return { told, definition };
+}
+
+/**
+ * #1583: `boardsmith dev` HAS NO INVITATIONS, SO A JOIN NAMES NO INVITER.
+ *
+ * It runs `referral.onJoin` when it assigns a seat, with `inviterSeat: null`,
+ * once per assignment and before that seat's first view, so a game's join path
+ * runs locally as it does on the platform.
+ */
+describe('#1583: referral.onJoin runs once when a seat is assigned', () => {
+  it('runs with no inviter, before the seat is sent its first view', async () => {
+    const { told, definition } = joinWorld();
+    const { host, sent } = await attached({ dir, definition });
+
+    expect(told).toEqual(['join:1:null']);
+    const first = sent.find((s) => s.clientId === 'c1' && s.message.type === 'world_state');
+    expect(JSON.stringify(first?.message.view)).toContain('"logs":1');
+    await host.close();
+  });
+
+  it('does not run again for a second tab, a return, or a restart of the host', async () => {
+    const { told, definition } = joinWorld();
+    const first = await attached({ dir, definition });
+    await first.host.handleMessage('c2', { type: 'attach', seat: 1 });
+    await first.drop('c1');
+    await first.drop('c2');
+    await first.host.handleMessage('c3', { type: 'hello' });
+    await first.host.close();
+
+    const { host } = openHost({ dir, definition });
+    await host.start();
+    await host.handleMessage('c4', { type: 'hello' });
+    expect(told).toEqual(['join:1:null']);
+    await host.close();
+  });
+
+  it('runs for each seat a page is assigned through the seat switcher', async () => {
+    const { told, definition } = joinWorld();
+    const { host } = await attached({ dir, definition });
+
+    await host.handleMessage('c1', { type: 'attach', seat: 2 });
+    await host.handleMessage('c1', { type: 'attach', seat: 1 });
+    expect(told).toEqual(['join:1:null', 'join:2:null']);
+    await host.close();
+  });
+
+  it('runs before the seat arrives', async () => {
+    const { told, definition } = joinWorld({ onArrive: 'greet' });
+    const { host } = await attached({ dir, definition });
+
+    expect(told).toEqual(['join:1:null', 'arrive:1']);
+    await host.close();
+  });
+});
+
+/**
  * #284: A SOCKET THAT DIED ABRUPTLY COSTS THE SEATS THAT REMAIN NOTHING.
  *
  * The reported wedge: driver processes killed mid-command left a dev host whose

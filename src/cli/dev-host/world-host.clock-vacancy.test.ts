@@ -135,10 +135,20 @@ const greet = worldClockAction<Homestead>('greet')
     arrivals.push(Number(args.seat));
   });
 
-const HOMESTEAD_ACTIONS: readonly ActionDefinition[] = [build, abandon, reap, greet];
+/** Every seat assignment the world was told about, by seat (#1583). */
+const joins: number[] = [];
+const welcome = worldClockAction<Homestead>('welcome')
+  .prompt('The clock tells the world a seat was assigned')
+  .needs(({ args }) => [estate(Number(args.seat))])
+  .execute((args) => {
+    joins.push(Number(args.seat));
+  });
+
+const HOMESTEAD_ACTIONS: readonly ActionDefinition[] = [build, abandon, reap, greet, welcome];
 
 function bundle(
   presence?: WorldDefinition['presence'],
+  referral?: WorldDefinition['referral'],
 ): ConstructorParameters<typeof LocalWorldHost>[0]['definition'] {
   return {
     gameClass: Homestead,
@@ -155,6 +165,7 @@ function bundle(
       actions: HOMESTEAD_ACTIONS,
       vacateByClock: 'reap',
       presence,
+      referral,
     } as WorldDefinition,
   } as ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
 }
@@ -196,12 +207,14 @@ let dir: string;
 beforeEach(() => {
   dir = tempTree('bs-world-vacancy-');
   arrivals.length = 0;
+  joins.length = 0;
 });
 
 /** A launched world with one client watching through seat 1. */
 async function opened(
   budgets: WorldBudgets = worldBudgets(),
   presence?: WorldDefinition['presence'],
+  referral?: WorldDefinition['referral'],
 ): Promise<{
   host: LocalWorldHost;
   store: LocalWorldStore;
@@ -212,7 +225,7 @@ async function opened(
   const sent: Sent[] = [];
   const clock = testClock();
   const host = new LocalWorldHost({
-    definition: bundle(presence),
+    definition: bundle(presence, referral),
     worldName: 'Homestead',
     seed: 'seed',
     budgets,
@@ -368,6 +381,22 @@ describe('#278: a scheduled vacancy releases the seat it finalized', () => {
     await host.handleMessage('c1', { type: 'attach', seat: 1 });
 
     expect(arrivals).toEqual([1, 1]);
+    await host.close();
+  });
+
+  it('runs referral.onJoin again for the next page to take the freed chair, because it is a new assignment (#1583)', async () => {
+    const { host, clock } = await opened(worldBudgets(), undefined, {
+      founding: 'build',
+      onGrant: 'greet',
+      onJoin: 'welcome',
+    });
+
+    await send(host, 'abandon');
+    clock.advance(DAY);
+    await host.settled();
+    await host.handleMessage('c1', { type: 'attach', seat: 1 });
+
+    expect(joins).toEqual([1, 1]);
     await host.close();
   });
 });

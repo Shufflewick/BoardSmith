@@ -1,7 +1,7 @@
 {
-  "revision": 328,
+  "revision": 329,
   "surfaceHash": "9af900f6f4dfcaf8",
-  "payloadHash": "b5668c56bffc1321",
+  "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
     {
@@ -2567,6 +2567,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke walk answers an ordered list as it does a multi-select: one entry until Done is ready, then Done, rather than pressing Add until the 50-press cap (#1582)"
+    },
+    {
+      "revision": 329,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A world can declare referral.onJoin, a seatless verb a host runs once when it assigns a seat (before that seat's first view) with { seat, inviterSeat } from its own trusted evidence; ResidentWorld.seat answers whether it assigned the chair, and boardsmith dev runs onJoin at assignment with inviterSeat: null (#1583)"
     }
   ]
 }

@@ -313,6 +313,9 @@ export interface WorldDefinition {
    * chair. Its commit is what a host reports as the founding moment. `onGrant`
    * is the verb a reward is delivered AS, so a granted reward arrives as one of
    * this world's own moves and not as a host reaching into its state.
+   * `onJoin`, if declared, is the verb a seat ASSIGNMENT is delivered as, with
+   * the trusted inviter seat, so a game can place a referred player before the
+   * player sees the world (#1583).
    *
    * NOT VALIDATED HERE, and that is `presence`'s rule rather than `vacate`'s.
    * Whether a founding is worth a reward at all, what the reward is, and which
@@ -323,8 +326,8 @@ export interface WorldDefinition {
    *
    * The host is the one that checks it. ShufflewickPub does this in
    * `games/src/world-referral-policy.ts`, refusing a non-seated `founding` or a
-   * non-seatless `onGrant` at the world's first wake with a sentence the author
-   * can read.
+   * non-seatless `onGrant` or `onJoin` at the world's first wake with a
+   * sentence the author can read.
    *
    * NOTHING IN THIS ENGINE READS THE BLOCK. It is carried, and interpreted
    * elsewhere.
@@ -341,12 +344,19 @@ export interface WorldPresenceDeclaration {
   readonly departGraceMs?: number;
 }
 
-/** The two verbs a referral is attributed through (ShufflewickPub #473). */
+/** The verbs a referral is attributed through (ShufflewickPub #473, BoardSmith #1583). */
 export interface WorldReferralDeclaration {
   /** A SEATED action's name -- the verb a player founds with. Its COMMIT is what the host reports. */
   readonly founding: string;
   /** A SEATLESS (worldClockAction) action's name -- the verb a referral reward is delivered as. */
   readonly onGrant: string;
+  /**
+   * A SEATLESS (worldClockAction) action's name, run once when a seat is
+   * assigned, with `{ seat, inviterSeat: number | null }`. A host runs it before
+   * that seat's first view, and reads `inviterSeat` from its own evidence,
+   * never from the client.
+   */
+  readonly onJoin?: string;
 }
 
 /**

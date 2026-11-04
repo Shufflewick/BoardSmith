@@ -330,13 +330,14 @@ export class LocalWorldHost {
 
   async #attach(clientId: string, seat: number): Promise<void> {
     const player = devWorldPlayer(seat);
+    let assigned: boolean;
     try {
       // THE LIBRARY'S OWN DOOR, before anything durable is written. A seat past
       // the bundle's `maxPlayers` is a chair that does not exist, and seats are
       // never reused -- so a refusal here has to burn nothing. `seat` writes
       // the roster row too, with the instant a newcomer's idleness is measured
       // from (ShufflewickPub #423).
-      this.#world.seat(player, seat);
+      assigned = this.#world.seat(player, seat);
     } catch (error) {
       this.#notice(clientId, error);
       return;
@@ -348,6 +349,12 @@ export class LocalWorldHost {
     this.#attached.set(clientId, seat);
     if (previous !== undefined && previous !== seat && !this.#seatIsOpen(previous)) {
       this.#seatBecameAbsent(previous);
+    }
+    // A laptop has no invitations, so a join names no inviter (#1583). It runs
+    // before anything is pushed, so the seat's first view is already placed.
+    const joinHook = this.#world.joinHook;
+    if (assigned && joinHook !== undefined) {
+      await this.#clockCommand(joinHook, { seat, inviterSeat: null });
     }
     if (arriving) await this.#seatBecamePresent(seat);
     await this.#pushViews();
