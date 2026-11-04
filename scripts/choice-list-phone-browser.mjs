@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * THE BROWSER REGRESSION FOR A LONG MULTISELECT AT PHONE WIDTH (#1573).
+ * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580).
  *
  * MERC's artillery allocation offers eight checkboxes in the Action Panel. At
  * 390px only the first one or two showed and the rest sat below the screen
- * with no sign they were there, while at 1440px every one showed. jsdom lays
- * nothing out, so only a real browser can see which checkboxes are on screen.
+ * with no sign they were there, while at 1440px every one showed (#1573).
+ * Survival of the Fittest answers a text field, so its chip shows, then offers
+ * an optional choice: at 390px the chip and the title filled the bar and the
+ * prompt and the skip button sat below its edge (#1580). jsdom lays nothing
+ * out, so only a real browser can see which controls are on screen.
  *
  * Runs under `boardsmith test --browser`, or by hand with
- * `node scripts/multiselect-phone-browser.mjs`; a missing Chromium says to run
+ * `node scripts/choice-list-phone-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
 import {
@@ -66,6 +69,16 @@ const mortar = worldAction<Barrage>('mortar')
     ctx.world.emit(FIELD, { hits: (targets as string[]).length }, 'The mortar hits were allocated.');
   });
 
+/** A text field whose chip sits above an optional choice, with choices and with none (#1539, #1580). */
+const accuse = (name: string, choices: () => string[]) => worldAction<Barrage>(name)
+  .prompt('Accuse a rival of breaking the camp law')
+  .needs(() => [FIELD])
+  .enterText('charge', { prompt: 'What did they do?', maxLength: 40 })
+  .chooseFrom('who', { prompt: 'Who exactly?', choices, optional: true })
+  .execute((_args, ctx) => {
+    ctx.world.emit(FIELD, { accused: true }, 'A rival was accused.');
+  });
+
 export const gameDefinition: GameDefinition = {
   gameClass: Barrage,
   gameType: 'multiselect-phone-barrage',
@@ -74,7 +87,7 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ [FIELD]: (game as Barrage).create(Battery, 'battery') as GameElement }),
     view: () => [FIELD],
-    actions: [allocate, mortar],
+    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => [])],
   },
 };
 `;
@@ -89,9 +102,9 @@ export default defineComponent({
 
 await runBrowserRegression(
   {
-    script: 'multiselect-phone-browser.mjs',
+    script: 'choice-list-phone-browser.mjs',
     fixture: {
-      slug: 'multiselect-phone',
+      slug: 'choice-list-phone',
       displayName: 'Multiselect Phone',
       gameClass: 'Barrage',
       rules: RULES,
@@ -111,7 +124,7 @@ async function driveThrough({ launch, hostUrl }) {
   } finally {
     await browser.close();
   }
-  return summarise('for a long multiSelect in the Action Panel');
+  return summarise('for a choice list in the Action Panel');
 }
 
 async function onScreen(browser, hostUrl, viewport) {
@@ -183,5 +196,27 @@ async function onScreen(browser, hostUrl, viewport) {
         await close();
       }
     });
+
+    const skip = surface.locator('.skip-btn');
+    for (const [action, shown] of [['accuse', ['.choice-buttons .choice-btn:not(.skip-btn)']], ['accuseNobody', []]]) {
+      await check(`${size}: ${action}: a choice under a chip keeps the chip, the prompt and the skip button in view without scrolling`, async () => {
+        await surface.locator(`[data-bs-action="${action}"]`).click();
+        const field = surface.locator('.text-input input');
+        await field.fill('Stole the fire from the eastern camp');
+        await field.press('Enter');
+        await skip.waitFor({ timeout: 15_000 });
+        // The choices arrive after the pick does, so wait for them before measuring.
+        for (const selector of shown) await surface.locator(selector).first().waitFor({ timeout: 15_000 });
+        try {
+          const bar = await barGeometry(surface, ['.config-title', '.selected-value', '.selection-prompt', '.skip-btn', ...shown]);
+          assert(bar.outside.length === 0, `not in view inside the bar (${bar.height}px tall, top at ${bar.top}): ${bar.outside.join(', ')}`);
+          assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall), so part of the pick sits below its edge`);
+          assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
+        } finally {
+          await surface.locator('.cancel-btn').click();
+          await skip.waitFor({ state: 'detached', timeout: 10_000 });
+        }
+      });
+    }
   });
 }
