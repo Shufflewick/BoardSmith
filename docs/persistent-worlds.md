@@ -656,6 +656,33 @@ on it outlives the pass. Key on `world.partition(name)`, not on `game`: an
 memo of `game` would not see, while a root's contents cannot change during a
 read-only pass.
 
+**A callback shares that work with `world.passMemo` (#1584).** An action's
+`condition`, `disabled` and first-pick `choices`/`elements` run on the offer
+path against a projection, and inside a dispatch against the live root, which
+keeps its identity while `execute` changes it. So a `WeakMap` on
+`world.partition(name)` is safe in a declaration and stale in a callback, and a
+callback cannot tell which path it is on. Ask the engine instead:
+
+```ts
+const balance = (world: WorldFacilities) =>
+  world.passMemo("ledger", "balance", (root) => expensiveReadOnlySummary(root as Ledger).balance);
+
+worldAction("spend")
+  .needs(() => ["ledger"])
+  .condition({ "has funds": ({ world }) => balance(world) > 0 })
+  .execute((_, { world }) => {
+    (world.partition("ledger") as Ledger).balance -= 10;
+    balance(world); // computed afresh: a dispatch never memoizes
+  });
+```
+
+In one `offersFor` pass or one pick read, the first call for a partition and
+key computes and every later one gets that answer; the next pass computes
+again. In a dispatch every call computes. The partition must be one the step
+declared, as for `partition()`, and `compute` should read only the root it is
+handed, because its answer reaches every action in the pass, including ones
+that never declared anything else it read.
+
 ### And `world.now`: the instant the dispatch is happening at
 
 The declaration's `world` also carries the clock (#375):
