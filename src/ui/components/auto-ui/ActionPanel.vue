@@ -1019,10 +1019,11 @@ function categoryButton(group: { label: string; children: readonly unknown[] }) 
   };
 }
 
-/** A pick list's growth mark, left off while the board draws a candidate the grown bar would cover (#1573, #1580, #1587). */
+/** A pick list's growth mark, left off while the board draws a candidate the grown bar would cover (#1573, #1580, #1587, #1589). */
 const choiceListGrowth = computed(() => {
   const candidates = currentPick.value?.type === 'choice' ? offeredChoices.value : offeredElements.value;
-  return candidates.some((candidate) => (candidate.refs ?? []).length > 0) ? undefined : 'choices';
+  const drawn = candidates.some((candidate) => (candidate.refs ?? []).some(({ ref }) => boardInteraction?.isDrawn(ref)));
+  return drawn ? undefined : 'choices';
 });
 
 /** How many candidates the board handoff sends the player to. */

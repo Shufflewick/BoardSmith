@@ -41,6 +41,8 @@ import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
+import { tryUseBoardInteraction } from '../composables/useBoardInteraction.js';
+import { useDrawnBoardElements } from '../composables/useDrawnBoardElements.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
 /** What the adapter has to say about its own connection, on whichever axis it
@@ -347,6 +349,8 @@ watch(() => props.chromeHidden, async (hidden) => {
   boardRegionEl.value?.focus();
 });
 const zoomContainerEl = ref<HTMLElement | null>(null);
+// The Action Panel keeps the bar's cap only for a candidate the board really draws (#1589).
+useDrawnBoardElements(tryUseBoardInteraction(), zoomContainerEl);
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
 defineExpose({ boardRegionEl, zoomContainerEl, historyPanel });
