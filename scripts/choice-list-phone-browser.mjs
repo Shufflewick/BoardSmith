@@ -81,8 +81,8 @@ const accuse = (name: string, choices: () => string[]) => charge(name)
 const accuseInOrder = charge('accuseInOrder')
   .chooseFrom('who', { prompt: 'Who exactly, in order?', choices: () => ['Ana', 'Bo'], orderedList: { min: 1, max: 2 }, optional: true })
   .execute((_args, ctx) => ctx.world.emit(FIELD, { accused: true }, 'Rivals were accused.'));
-const accuseOnBoard = charge('accuseOnBoard')
-  .chooseElement('who', { prompt: 'Who exactly?', elements: () => [], optional: true })
+const accuseOnBoard = (name: string, elements: (ctx: { game: Barrage }) => GameElement[]) => charge(name)
+  .chooseElement('who', { prompt: 'Who exactly?', elements, optional: true })
   .execute((_args, ctx) => ctx.world.emit(FIELD, { accused: true }, 'A rival was accused.'));
 
 export const gameDefinition: GameDefinition = {
@@ -93,7 +93,7 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ [FIELD]: (game as Barrage).create(Battery, 'battery') as GameElement }),
     view: () => [FIELD],
-    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard],
+    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery))],
   },
 };
 `;
@@ -205,8 +205,8 @@ async function onScreen(browser, hostUrl, viewport) {
       ['accuse', ['.selection-prompt', '.choice-buttons .choice-btn:not(.skip-btn)']],
       ['accuseNobody', ['.selection-prompt']],
       ['accuseInOrder', ['.selection-prompt', '.ordered-list-add', '.ordered-list-choices .done-button']],
-      // An element pick with no candidate falls back to an instruction; one with candidates keeps the cap (#1587).
-      ['accuseOnBoard', ['.instruction-text']],
+      // An element pick with no candidate falls back to an instruction, and grows (#1587).
+      ['accuseNoElement', ['.instruction-text']],
     ];
     for (const [action, shown] of picks) {
       await check(`${size}: ${action}: a pick under a chip keeps the chip, the prompt and the skip button in view without scrolling`, async () => {
@@ -225,6 +225,25 @@ async function onScreen(browser, hostUrl, viewport) {
         }
       });
     }
+
+    // Its candidates are on the board, so the bar keeps its cap and scrolls rather than cover them (#1573, #1587).
+    await check(`${size}: an element pick under a chip keeps the cap, and its skip is reachable`, async () => {
+      await surface.locator('[data-bs-action="accuseElement"]').click();
+      const field = surface.locator('.text-input input');
+      await field.fill('Stole the fire from the eastern camp');
+      await field.press('Enter');
+      await surface.locator('.element-selection .element-btn').first().waitFor({ timeout: 15_000 });
+      try {
+        const bar = await barGeometry(surface);
+        assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}, covering the board`);
+        await skip.scrollIntoViewIfNeeded();
+        const end = await barGeometry(surface, ['.skip-btn']);
+        assert(end.outside.length === 0, `the skip button cannot be scrolled into view inside the bar (${end.height}px tall)`);
+      } finally {
+        await surface.locator('.cancel-btn').click();
+        await skip.waitFor({ state: 'detached', timeout: 10_000 });
+      }
+    });
   });
 }
 
