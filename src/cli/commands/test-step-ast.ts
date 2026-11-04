@@ -293,27 +293,37 @@ const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[in
 const wrapperArguments = (call: AstNode, name: string | undefined, wrappers: Wrappers): AstNode[] =>
   [...(wrappers.get(name ?? '') ?? [])].map((index) => argAt(call, index)).filter(isNode);
 
-/** Object literals bound to a local (`const request = { name, args }`), by the function binding them. */
-function objectBindings(ast: AstNode): Map<AstNode, Map<string, AstNode>> {
-  const scopes = new Map<AstNode, Map<string, AstNode>>();
-  walk(ast, (node, ancestors) => {
-    const name = node.type === 'VariableDeclarator' ? identifierName(node.id) : undefined;
-    if (name === undefined || !isNode(node.init) || node.init.type !== 'ObjectExpression') return;
-    const scope = [...ancestors].reverse().find(isFunction) ?? ast;
+/** A function's or the file's locals: the object literal each is bound to, or undefined for anything else. */
+type Scopes = Map<AstNode, Map<string, AstNode | undefined>>;
+
+/**
+ * Every local and parameter, by the function declaring it, with the object literal it is bound to
+ * (`const request = { name, args }`); a local or parameter bound to anything else shadows one outside.
+ */
+function objectBindings(ast: AstNode): Scopes {
+  const scopes: Scopes = new Map();
+  const bind = (scope: AstNode, name: string | undefined, value: AstNode | undefined) => {
+    if (name === undefined) return;
     if (!scopes.has(scope)) scopes.set(scope, new Map());
-    scopes.get(scope)!.set(name, node.init);
+    scopes.get(scope)!.set(name, value);
+  };
+  walk(ast, (node, ancestors) => {
+    if (isFunction(node)) paramNames(node).forEach((name) => bind(node, name, undefined));
+    if (node.type !== 'VariableDeclarator') return;
+    const init = isNode(node.init) && node.init.type === 'ObjectExpression' ? node.init : undefined;
+    bind([...ancestors].reverse().find(isFunction) ?? ast, identifierName(node.id), init);
   });
   return scopes;
 }
 
 /** Looks an identifier up from the innermost function around the call out to the file. */
-function resolver(scopes: ReadonlyMap<AstNode, ReadonlyMap<string, AstNode>>, ancestors: AstNode[], ast: AstNode): Resolve {
+function resolver(scopes: Scopes, ancestors: AstNode[], ast: AstNode): Resolve {
   return (node) => {
     const name = identifierName(node);
     if (name === undefined) return node;
     for (const scope of [...ancestors.filter(isFunction).reverse(), ast]) {
-      const bound = scopes.get(scope)?.get(name);
-      if (bound) return bound;
+      const locals = scopes.get(scope);
+      if (locals?.has(name)) return locals.get(name) ?? node;
     }
     return node;
   };
@@ -386,7 +396,7 @@ function findWrappers(
   verbArgument: VerbArgument,
   seedNames: readonly string[],
 ): { names: Map<string, Set<number>>; commands: Map<string, Set<number>> } {
-  const parsed = new Map<SourceFile, { ast: AstNode; scopes: Map<AstNode, Map<string, AstNode>> }>();
+  const parsed = new Map<SourceFile, { ast: AstNode; scopes: Scopes }>();
   const wrappers = { names: new Map<string, Set<number>>(), commands: new Map<string, Set<number>>() };
   const add = (kind: keyof Carried, name: string, index: number): boolean => {
     const indexes = wrappers[kind].get(name) ?? new Set<number>();
@@ -494,6 +504,9 @@ export const DISPATCH_FORMS =
   'or a helper of the project\'s own ' +
   'under tests/ that passes the verb name, or the whole command, it is given to one of these (or to the world engine\'s applyCommand)';
 
+/** Every name a built-in entry point is called by. */
+const ENTRY_POINT_NAMES = Object.freeze([...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'apply', 'send']);
+
 /** What a built-in entry point's call carries the verb in, if the call is one. */
 function entryPointArgument(call: AstNode, name: string, resolve: Resolve): { name?: AstNode; command?: AstNode } {
   if (name in DISPATCH_ENTRY_POINTS) return { name: argAt(call, DISPATCH_ENTRY_POINTS[name]) };
@@ -507,7 +520,10 @@ const dispatchArgument: VerbArgument = (call, wrappers, resolve) => {
   const name = calleeName(call.callee as AstNode);
   if (name === undefined) return { names: [], commands: [] };
   const entry = entryPointArgument(call, name, resolve);
-  const commands = [entry.command, ...wrapperArguments(call, name, wrappers.commands)].filter(isNode);
+  // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
+  const isEntryPointMember = (call.callee as AstNode).type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name);
+  const helpers = isEntryPointMember ? [] : wrapperArguments(call, name, wrappers.commands);
+  const commands = [entry.command, ...helpers].filter(isNode);
   const names = [
     entry.name,
     ...wrapperArguments(call, name, wrappers.names),
@@ -518,7 +534,7 @@ const dispatchArgument: VerbArgument = (call, wrappers, resolve) => {
 
 /** Every project function (a test harness, usually) that dispatches a verb named by a parameter, or a command it is given. */
 export function findDispatchWrappers(sources: readonly SourceFile[]): DispatchWrappers {
-  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'apply', 'send']);
+  return findWrappers(sources, dispatchArgument, ENTRY_POINT_NAMES);
 }
 
 /** A project with no dispatch helpers of its own. */

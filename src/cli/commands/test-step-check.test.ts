@@ -379,6 +379,30 @@ it('a', () => {
     ).toEqual(['u', 'v']);
   });
 
+  it("does not read a member call to an entry point's name as a command helper sharing it (#1588 review F3)", () => {
+    const harness = "async function apply(command: object, player: string) { return runner.apply({ command, player }); }\n";
+    const wrappers = findDispatchWrappers([{ path: 'tests/world.test.ts', text: harness }]);
+    expect(
+      findDispatchedVerbs("handler.apply({ name: 'notDispatched' }, []);\nawait apply({ name: 'w', args: {} }, 'p1');\n", 'tests/a.test.ts', wrappers),
+    ).toEqual(['w']);
+  });
+
+  it('does not resolve a parameter to an object of the same name bound outside its function (#1588 review F5)', () => {
+    const harness = "export function act(player: string, command: object) { return engine.applyCommand(player, command, {}); }\n";
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect(
+      findDispatchedVerbs(`
+const command = { name: 'notDispatched', args: {} };
+act('p1', { name: 'x', args: {} });
+const send = (command: object) => act('p1', command);
+function local() {
+  const command = makeCommand();
+  act('p1', command);
+}
+`, 'tests/a.test.ts', wrappers),
+    ).toEqual(['x']);
+  });
+
   it('counts a helper whose own name is a built-in entry point, such as apply (#1581)', () => {
     const harness = "export function apply(verb: string, seat: number) { return testGame.doAction(seat, verb); }\n";
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/table.ts', text: harness }]);
