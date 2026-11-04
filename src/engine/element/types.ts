@@ -244,6 +244,10 @@ export type ElementTree<T extends GameElement = GameElement> = {
   order: 'normal' | 'stacking';
   /** The token this element's placeholders are made from since a shuffle, or a card entering or leaving its hidden pile, reissued it; absent, its id is the token (#715). */
   placeholderToken?: number;
+  /** Dev mode: the stamp of the last outermost query that visited this element, so a walk spots a second visit without a Map (#1579). */
+  visit?: number;
+  /** Dev mode: the container that query first reached this element under (undefined: its roots), for a duplicate's report. */
+  visitedUnder?: GameElement;
 };
 
 /**

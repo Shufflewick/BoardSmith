@@ -5693,7 +5693,18 @@ export class Game<
     }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {
-      forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
+      forEachInSubtree(root, (element) => {
+        // Checked here, where it costs nothing, rather than by every query's walk (#1579).
+        const filed = this._ctx._elementsById.get(element._t.id);
+        if (filed !== undefined) {
+          throw new Error(
+            `This game state holds two elements with id ${element._t.id}: ${filed} and ${element}. ` +
+              `Every element's id must be its own, or a lookup by id answers either one.\n` +
+              `  Fix: the state is damaged; restore an earlier one, or start the game again.`
+          );
+        }
+        this._ctx._elementsById.set(element._t.id, element);
+      });
     }
 
     // Re-attach captured handlers to the rebuilt tree by element id
