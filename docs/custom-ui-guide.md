@@ -1381,11 +1381,14 @@ What follows for a custom board:
   the chosen items and wraps the prompt beside its control), and on a step with
   more than fits, it scrolls inside the cap. The exceptions are a typed
   editor (a text or number pick) and a choice list (a `chooseFrom` pick's
-  buttons or a multiSelect's checkboxes): while one is open the panel may grow
-  past the cap. A choice list may grow it to show every choice and its skip,
-  under any earlier choices, bounded at 60% of the screen's height, and scrolls
-  beyond that; one whose candidates your board draws keeps the cap, so it never
-  covers them.
+  buttons, an `orderedList`'s Adds, a multiSelect's checkboxes, or an element
+  pick's list): while one is open the panel may grow past the cap. A choice
+  list may grow it to show every choice and its skip, under any earlier
+  choices, bounded at 60% of the screen's height, and scrolls beyond that; one
+  whose candidates your board draws keeps the cap, so it never covers them.
+  Every element candidate is on the board, so an element pick's list keeps the
+  cap; an element pick with no candidate, which shows only its instruction and
+  skip, grows.
   A one-line or number field may grow it to what the field needs, bounded at
   60% of the screen's height: on a phone its label and hint stack above the
   field and submit, under any earlier choices, and a long prompt or a refusal
