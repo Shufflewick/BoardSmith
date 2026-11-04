@@ -1,5 +1,5 @@
 {
-  "revision": 325,
+  "revision": 326,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2543,6 +2543,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Dev-mode element queries mark visited elements with a stamp instead of an id Map, and a restore or partition adoption whose state holds one id twice is refused before it changes anything (#1579)."
+    },
+    {
+      "revision": 326,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A single chooseFrom pick's buttons in the Action Panel grow the action bar past its two-row cap, as a multiSelect's checkboxes do, so a chip above it cannot hide its prompt and skip at phone width (#1580)"
     }
   ]
 }

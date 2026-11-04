@@ -115,6 +115,36 @@ describe('a typed editor may grow the panel past the strip, and only while it is
     }
   });
 
+  it('marks a single choice pick as choices, with choices and with none, so a chip above it cannot push its skip below the bar (#1580)', () => {
+    // A chip, the prompt, the choices and Skip wrap to three rows at 390px; the strip holds two.
+    for (const choices of [[{ value: 'ana', display: 'Ana' }, { value: 'bo', display: 'Bo' }], []]) {
+      const controller = stubActionController({
+        currentAction: ref('accuse'),
+        currentArgs: ref({ charge: 'Stole the fire' }),
+        currentPick: ref({ name: 'who', type: 'choice', prompt: 'Who exactly?', optional: true }),
+        currentChoices: ref(choices),
+      });
+      const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
+      const marked = wrapper.findAll(MARK);
+      expect(marked, `${choices.length} choices`).toHaveLength(1);
+      expect(marked[0]!.attributes('data-bs-grows-panel')).toBe('choices');
+      expect(marked[0]!.find('.skip-btn').exists()).toBe(true);
+      wrapper.unmount();
+    }
+  });
+
+  it('leaves a single choice pick whose candidates are on the board unmarked, so the bar never covers them (#1580)', () => {
+    const controller = stubActionController({
+      currentAction: ref('accuse'),
+      currentPick: ref({ name: 'who', type: 'choice', prompt: 'Who exactly?' }),
+      currentChoices: ref([{ value: 'ana', display: 'Ana', refs: [{ ref: { id: 11 }, role: 'target' as const }] }, { value: 'bo', display: 'Bo' }]),
+    });
+    const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
+    expect(wrapper.findAll('.choice-btn').length).toBeGreaterThan(0);
+    expect(wrapper.find(MARK).exists()).toBe(false);
+    wrapper.unmount();
+  });
+
   it('drops the mark when the editor is cancelled', async () => {
     const { wrapper } = await mountPanelAt(setDescription);
     expect(wrapper.find(MARK).exists()).toBe(true);
