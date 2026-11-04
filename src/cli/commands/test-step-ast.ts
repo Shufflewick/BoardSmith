@@ -260,6 +260,15 @@ export function findTestBlocks(source: string, file?: string): TestBlock[] {
  */
 export type Wrappers = ReadonlyMap<string, ReadonlySet<number>>;
 
+/**
+ * A project's dispatch helpers: those that take the verb's name, and those that take a whole
+ * command `{ name, args }` and hand it on (`apply(command, player)` around the world runner).
+ */
+export interface DispatchWrappers {
+  names: Wrappers;
+  commands: Wrappers;
+}
+
 /** A file's project-relative path and text. */
 export interface SourceFile {
   path: string;
@@ -269,8 +278,14 @@ export interface SourceFile {
 /** The object literal an identifier is bound to where a call reads it, or the node itself. */
 type Resolve = (node: AstNode | undefined) => AstNode | undefined;
 
-/** Given the wrappers known so far, the expressions a call may pass as a verb name. */
-type VerbArgument = (call: AstNode, wrappers: Wrappers, resolve: Resolve) => AstNode[];
+/** What a call may pass a verb in: expressions that are its name, and command objects holding it. */
+interface Carried {
+  names: AstNode[];
+  commands: AstNode[];
+}
+
+/** Given the wrappers known so far, what a call may pass a verb in. */
+type VerbArgument = (call: AstNode, wrappers: DispatchWrappers, resolve: Resolve) => Carried;
 
 const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[index];
 
@@ -370,19 +385,19 @@ function findWrappers(
   sources: readonly SourceFile[],
   verbArgument: VerbArgument,
   seedNames: readonly string[],
-): Map<string, Set<number>> {
+): { names: Map<string, Set<number>>; commands: Map<string, Set<number>> } {
   const parsed = new Map<SourceFile, { ast: AstNode; scopes: Map<AstNode, Map<string, AstNode>> }>();
-  const wrappers = new Map<string, Set<number>>();
-  const add = (name: string, index: number): boolean => {
-    const indexes = wrappers.get(name) ?? new Set<number>();
+  const wrappers = { names: new Map<string, Set<number>>(), commands: new Map<string, Set<number>>() };
+  const add = (kind: keyof Carried, name: string, index: number): boolean => {
+    const indexes = wrappers[kind].get(name) ?? new Set<number>();
     if (indexes.has(index)) return false;
-    wrappers.set(name, indexes.add(index));
+    wrappers[kind].set(name, indexes.add(index));
     return true;
   };
   for (let changed = true; changed; ) {
     changed = false;
     for (const file of sources) {
-      if (!mentionsAny(file.text, [...seedNames, ...wrappers.keys()])) continue;
+      if (!mentionsAny(file.text, [...seedNames, ...wrappers.names.keys(), ...wrappers.commands.keys()])) continue;
       if (!parsed.has(file)) {
         const { ast } = parseSource(file.text, file.path);
         parsed.set(file, { ast, scopes: objectBindings(ast) });
@@ -390,14 +405,16 @@ function findWrappers(
       const { ast, scopes } = parsed.get(file)!;
       walk(ast, (node, ancestors) => {
         if (node.type !== 'CallExpression') return;
-        const names = verbArgument(node, wrappers, resolver(scopes, ancestors, ast)).map(identifierName);
+        const carried = verbArgument(node, wrappers, resolver(scopes, ancestors, ast));
         for (const ancestor of ancestors) {
           const named = namedFunction(ancestor);
           if (!named) continue;
           const params = paramNames(named.fn);
-          for (const name of names) {
-            const index = name === undefined ? -1 : params.indexOf(name);
-            if (index !== -1 && add(named.name, index)) changed = true;
+          for (const kind of ['names', 'commands'] as const) {
+            for (const name of carried[kind].map(identifierName)) {
+              const index = name === undefined ? -1 : params.indexOf(name);
+              if (index !== -1 && add(kind, named.name, index)) changed = true;
+            }
           }
         }
       });
@@ -418,8 +435,11 @@ function isActionCreate(callee: AstNode): boolean {
 /** The verb factories: `Action.create(name)`, `worldAction(name)`, and their wrappers. */
 const verbFactoryArgument: VerbArgument = (call, wrappers) => {
   const callee = call.callee as AstNode;
-  if (isActionCreate(callee) || identifierName(callee) === 'worldAction') return [argAt(call, 0)].filter(isNode);
-  return wrapperArguments(call, identifierName(callee), wrappers);
+  const names =
+    isActionCreate(callee) || identifierName(callee) === 'worldAction'
+      ? [argAt(call, 0)].filter(isNode)
+      : wrapperArguments(call, identifierName(callee), wrappers.names);
+  return { names, commands: [] };
 };
 
 /** The names a file must mention to define a verb itself. */
@@ -427,7 +447,7 @@ export const VERB_FACTORY_NAMES = Object.freeze(['Action.create', 'worldAction']
 
 /** Every project function that defines a verb named by one of its parameters. */
 export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
-  return findWrappers(sources, verbFactoryArgument, VERB_FACTORY_NAMES);
+  return findWrappers(sources, verbFactoryArgument, VERB_FACTORY_NAMES).names;
 }
 
 /** Every verb name the file defines (only on `onLines`, when given), in source order. */
@@ -441,7 +461,7 @@ export function findDefinedVerbs(
   walk(parseSource(source, file).ast, (node) => {
     if (node.type !== 'CallExpression') return;
     if (onLines && !onLines.has(node.loc.start.line)) return;
-    for (const arg of verbFactoryArgument(node, wrappers, (n) => n)) {
+    for (const arg of verbFactoryArgument(node, { ...NO_DISPATCH_WRAPPERS, names: wrappers }, (n) => n).names) {
       const name = literalText(arg);
       if (name !== undefined && !verbs.includes(name)) verbs.push(name);
     }
@@ -472,27 +492,37 @@ export const DISPATCH_FORMS =
   "world.take(seat, 'verb'), " +
   "runner.apply({ command: { name: 'verb', ... }, ... }) on the world runner, " +
   'or a helper of the project\'s own ' +
-  'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
+  'under tests/ that passes the verb name, or the whole command, it is given to one of these (or to the world engine\'s applyCommand)';
 
-/** The verb name a built-in entry point's call carries, if the call is one. */
-function entryPointArgument(call: AstNode, name: string, resolve: Resolve): AstNode | undefined {
-  if (name in DISPATCH_ENTRY_POINTS) return argAt(call, DISPATCH_ENTRY_POINTS[name]);
-  if (name === 'applyCommand') return nameProperty(resolve(argAt(call, 1)));
-  if (name === 'apply') return nameProperty(resolve(nameProperty(argAt(call, 0), 'command')));
-  if (name === 'send') return actionOpName(resolve(argAt(call, 1)));
-  return undefined;
+/** What a built-in entry point's call carries the verb in, if the call is one. */
+function entryPointArgument(call: AstNode, name: string, resolve: Resolve): { name?: AstNode; command?: AstNode } {
+  if (name in DISPATCH_ENTRY_POINTS) return { name: argAt(call, DISPATCH_ENTRY_POINTS[name]) };
+  if (name === 'applyCommand') return { command: argAt(call, 1) };
+  if (name === 'apply') return { command: nameProperty(argAt(call, 0), 'command') };
+  if (name === 'send') return { name: actionOpName(resolve(argAt(call, 1))) };
+  return {};
 }
 
 const dispatchArgument: VerbArgument = (call, wrappers, resolve) => {
   const name = calleeName(call.callee as AstNode);
-  if (name === undefined) return [];
-  return [entryPointArgument(call, name, resolve), ...wrapperArguments(call, name, wrappers)].filter(isNode);
+  if (name === undefined) return { names: [], commands: [] };
+  const entry = entryPointArgument(call, name, resolve);
+  const commands = [entry.command, ...wrapperArguments(call, name, wrappers.commands)].filter(isNode);
+  const names = [
+    entry.name,
+    ...wrapperArguments(call, name, wrappers.names),
+    ...commands.map((command) => nameProperty(resolve(command))),
+  ].filter(isNode);
+  return { names, commands };
 };
 
-/** Every project function (a test harness, usually) that dispatches a verb named by a parameter. */
-export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
+/** Every project function (a test harness, usually) that dispatches a verb named by a parameter, or a command it is given. */
+export function findDispatchWrappers(sources: readonly SourceFile[]): DispatchWrappers {
   return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'apply', 'send']);
 }
+
+/** A project with no dispatch helpers of its own. */
+export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ names: new Map(), commands: new Map() });
 
 /** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */
 function executedBuilderVerb(executeCallee: AstNode): string | undefined {
@@ -507,17 +537,17 @@ function executedBuilderVerb(executeCallee: AstNode): string | undefined {
 }
 
 /** The verbs one call dispatches through the engine. */
-function callVerbs(call: AstNode, wrappers: Wrappers, resolve: Resolve): Array<string | undefined> {
+function callVerbs(call: AstNode, wrappers: DispatchWrappers, resolve: Resolve): Array<string | undefined> {
   const callee = call.callee as AstNode;
   const builder = calleeName(callee) === 'execute' && callee.type === 'MemberExpression' ? [executedBuilderVerb(callee)] : [];
-  return [...builder, ...dispatchArgument(call, wrappers, resolve).map(literalText)];
+  return [...builder, ...dispatchArgument(call, wrappers, resolve).names.map(literalText)];
 }
 
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
 export function findDispatches(
   source: string,
   file?: string,
-  wrappers: Wrappers = new Map(),
+  wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS,
 ): Array<{ verb: string; line: number }> {
   const parsed = parseSource(source, file);
   const skippedRanges = collectBlocks(parsed)
@@ -538,7 +568,7 @@ export function findDispatches(
 }
 
 /** Every verb the file dispatches through the engine, outside skipped tests, in source order. */
-export function findDispatchedVerbs(source: string, file?: string, wrappers: Wrappers = new Map()): string[] {
+export function findDispatchedVerbs(source: string, file?: string, wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS): string[] {
   return [...new Set(findDispatches(source, file, wrappers).map((d) => d.verb))];
 }
 

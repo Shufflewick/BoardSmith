@@ -15,6 +15,7 @@ import {
   findTestBlocks,
   findUnreachableGuards,
   findVerbWrappers,
+  NO_DISPATCH_WRAPPERS,
   parseSource,
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -239,7 +240,7 @@ export function launch() {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/world.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
+    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
     expect(
       findDispatchedVerbs(
         "await world.run('bidOnItem', 2, {});\nawait world.offers(2);\nlistAuction(almanac, seller);\n",
@@ -280,7 +281,7 @@ export function act(session: Session, seat: number, verb: string) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/table.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['act', new Set([2])]]);
+    expect([...wrappers.names.entries()]).toEqual([['act', new Set([2])]]);
     expect(findDispatchedVerbs("await act(session, 1, 'k');\n", 'tests/a.test.ts', wrappers)).toEqual(['k']);
   });
 
@@ -300,7 +301,7 @@ async function run(name: string, args: object) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
+    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
     expect(findDispatchedVerbs("await run('m', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['m']);
   });
 
@@ -314,7 +315,7 @@ async function run(name: string, args: object, player = 'p1') {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
+    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
     expect(findDispatchedVerbs("await w.run('n', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['n']);
   });
 
@@ -341,8 +342,41 @@ it('b', async () => {
       { path: 'tests/b.test.ts', text: "async function run(name: string) { return runner.apply({ command: { name }, player: 'p1' }); }\n" },
     ];
     const wrappers = findDispatchWrappers(helpers);
-    expect([...wrappers.entries()]).toEqual([['run', new Set([1, 0])]]);
+    expect([...wrappers.names.entries()]).toEqual([['run', new Set([1, 0])]]);
     expect(findDispatchedVerbs("await run('q');\nawait run('p1', 'r');\n", 'tests/c.test.ts', wrappers)).toEqual(['q', 'r', 'p1']);
+  });
+
+  it("counts a helper that hands the whole command it is given to the world runner's apply (#1588)", () => {
+    const harness = `
+async function apply(command: { name: string; args: object }, player: string, now = 0) {
+  return runner.apply({ command, player, arrivedAt: now });
+}
+async function order(player: string, name: string, args: object) {
+  return apply({ name, args }, player);
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/world.test.ts', text: harness }]);
+    expect([...wrappers.commands.entries()]).toEqual([['apply', new Set([0])]]);
+    expect([...wrappers.names.entries()]).toEqual([['order', new Set([1])]]);
+    expect(
+      findDispatchedVerbs("await w.order('p1', 'recycle', {});\nawait apply({ name: 't', args: {} }, 'p1');\n", 'tests/a.test.ts', wrappers),
+    ).toEqual(['recycle', 't']);
+  });
+
+  it("counts a helper that hands the whole command it is given to the world engine's applyCommand, bound to a local or not (#1588)", () => {
+    const harness = "export function act(player: string, command: object) { return engine.applyCommand(player, command, {}); }\n";
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect([...wrappers.commands.entries()]).toEqual([['act', new Set([1])]]);
+    expect(
+      findDispatchedVerbs(`
+act('p1', { name: 'u', args: {} });
+it('a', () => {
+  const command = { name: 'v', args: {} };
+  act('p1', command);
+  act('notDispatched', {});
+});
+`, 'tests/a.test.ts', wrappers),
+    ).toEqual(['u', 'v']);
   });
 
   it('counts a helper whose own name is a built-in entry point, such as apply (#1581)', () => {
@@ -822,7 +856,7 @@ it('contrast', () => { expect(PALETTE[scheme].text).not.toBe(ACCENT_COLOR); });
   // Only the exact src/ui/ is trusted; on a case-sensitive disk a folder SRC/ui can sit beside it (#1053).
   it('reports a guard that imports literal theme constants from SRC/ui, in other letter case (#1053)', () => {
     const scripts = new Map([['src/ui/theme.ts', THEME], ['SRC/ui/theme.ts', THEME]]);
-    const context = { text: (path: string) => scripts.get(path), wrappers: new Map() };
+    const context = { text: (path: string) => scripts.get(path), wrappers: NO_DISPATCH_WRAPPERS };
     const run = (from: string) => findCodeRun(`import { PALETTE } from '${from}';\nvoid PALETTE;\n`, 'tests/guards/a.test.ts', context);
     expect(run('../../src/ui/theme.js')).toBeUndefined();
     expect(run('../../SRC/ui/theme.js')).toEqual({ line: 1, what: "imports SRC/ui/theme.ts from the game's src/" });
