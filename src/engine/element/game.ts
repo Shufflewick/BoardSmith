@@ -137,6 +137,27 @@ function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): voi
   }
 }
 
+/** Every id a saved game state brings in, with the id of the pile it is restored beside. */
+function savedStateIds(pile: GameElement, json: ElementJSON & { pile?: ElementJSON[] }): number[] {
+  const ids = [pile._t.id];
+  for (const root of [json, ...(json.pile ?? [])]) collectJsonIds(root, ids, []);
+  return ids;
+}
+
+/** Throw when `ids`, the ids stored bytes would bring into a game, hold one twice: a lookup by it would answer either element. */
+function refuseRepeatedId(ids: readonly number[], what: () => string, fix: string): void {
+  const seen = new Set<number>();
+  for (const id of ids) {
+    if (seen.has(id)) {
+      throw new Error(
+        `${what()} holds more than one element with id ${id}, so a lookup by that id would answer either one.\n` +
+          `  Fix: the state is damaged; ${fix}.`
+      );
+    }
+    seen.add(id);
+  }
+}
+
 /** The partition an element sits in: the nearest ancestor-or-self that is a
  *  declared partition root, or undefined for the game's own non-partitioned
  *  core. */
@@ -2192,6 +2213,7 @@ export class Game<
     collectJsonIds(json, adoptedIds, adoptedTokens);
     const worldIds = this._ctx._worldIds!;
 
+    refuseRepeatedId(adoptedIds, () => `Partition "${json.name ?? json.className}"`, 'adopt the partition from an earlier checkpoint');
     // The id index holds every element in the tree and the pile (#755).
     const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
@@ -5542,6 +5564,9 @@ export class Game<
           `engine whose ids were plain creation counts cannot be restored; start that game again.`
       );
     }
+
+    // Checked here, before anything changes, rather than by every query's walk (#1579).
+    refuseRepeatedId(savedStateIds(this.pile, json), () => 'This game state', 'restore an earlier one, or start the game again');
 
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player

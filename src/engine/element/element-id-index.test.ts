@@ -195,6 +195,21 @@ describe('the id index holds every element in the game tree and the pile', () =>
   });
 });
 
+describe('a world refuses a partition in which two elements share an id (#1579)', () => {
+  it('names the id and adopts nothing', () => {
+    const game = new IndexGame({ playerCount: 2, seed: 'id-index-repeat', worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const room = game.create(Zone, 'room');
+    room.createMany(2, Card, 'token');
+    game.definePartition(room.id);
+    const json = JSON.parse(JSON.stringify(room.toJSON())) as ElementJSON;
+    game.evictSubtree(room.id);
+    json.children![1].id = json.children![0].id;
+
+    expect(() => game.adoptSubtree(json)).toThrow(new RegExp(`id ${json.children![0].id}`));
+    expect(game.atId(json.id)).toBeUndefined();
+  });
+});
+
 /** A card whose own constructor throws after the base constructor has run (#1093). */
 class BrokenCard extends Card {
   constructor(ctx: ConstructorParameters<typeof Card>[0]) {

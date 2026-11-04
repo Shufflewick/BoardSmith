@@ -306,13 +306,27 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
       limit,
       fromEnd,
       result,
-      // DEV: where each visited id was first seen, to detect tree corruption
-      // and name BOTH places a duplicate is reachable from. One childless
-      // root cannot be visited twice, so it needs no map.
-      firstSeenUnder: (roots.length > 1 || roots[0]._t.children.length > 0) && isDevMode() ? new Map() : null,
+      stamp: 0,
+      firstSeenUnder: null,
       duplicates: [],
     };
-    walk(roots, query, 0, undefined);
+    // DEV: detect tree corruption. One childless root cannot be visited twice.
+    if ((roots.length > 1 || roots[0]._t.children.length > 0) && isDevMode()) {
+      // A query a finder runs inside this one would restamp what it walks and
+      // hide a duplicate from this one, so only the outermost query stamps.
+      if (stamping) query.firstSeenUnder = new Map();
+      else query.stamp = ++lastStamp;
+    }
+    if (query.stamp === 0) {
+      walk(roots, query, 0, undefined);
+    } else {
+      stamping = true;
+      try {
+        walk(roots, query, 0, undefined);
+      } finally {
+        stamping = false;
+      }
+    }
     // A duplicate visit is a proven invariant violation, not a diagnostic:
     // this result set feeds snapshots and player views, so returning it ships
     // the corruption onward and poisons every later restore (#45).
@@ -335,6 +349,10 @@ export function isElementClass<F extends GameElement>(value: unknown): value is 
 
 type Predicate = (el: GameElement) => boolean;
 
+/** Dev mode: the last stamp an outermost query took, and whether that query is walking now. */
+let lastStamp = 0;
+let stamping = false;
+
 const NO_PREDICATES: readonly Predicate[] = [];
 
 /** One query's walk state, so the recursive walk needs no closure per call. */
@@ -344,20 +362,22 @@ type Query = {
   limit: number;
   fromEnd: boolean;
   result: GameElement[];
-  /** Dev mode only: the container each visited id was first seen under (undefined: the roots). */
-  firstSeenUnder: Map<number, GameElement | undefined> | null;
+  /** Dev mode, outermost query: the stamp it marks each element it visits with (0: it marks none). */
+  stamp: number;
+  /** Dev mode, a query inside another: the container each visited element was first seen under (undefined: the roots). */
+  firstSeenUnder: Map<GameElement, GameElement | undefined> | null;
   duplicates: Array<{ id: number; name: string; depth: number; firstUnder: GameElement | undefined; under: GameElement | undefined }>;
 };
 
 /** Visit `elements` (children of `under`, or the roots) and their subtrees, collecting matches. */
 function walk(elements: readonly GameElement[], query: Query, depth: number, under: GameElement | undefined): void {
-  const { limit, fromEnd, result, firstSeenUnder } = query;
+  const { limit, fromEnd, result, stamp, firstSeenUnder } = query;
   const count = elements.length;
   for (let i = 0; i < count; i++) {
     if (result.length >= limit) return;
     const el = elements[fromEnd ? count - 1 - i : i];
     // DEV: an element visited twice is tree corruption; skip it so a cycle cannot loop.
-    if (firstSeenUnder && isRepeatVisit(query, firstSeenUnder, el, depth, under)) continue;
+    if ((stamp !== 0 || firstSeenUnder) && isRepeatVisit(query, el, depth, under)) continue;
     // Backwards, document order reversed meets an element after its children.
     if (fromEnd) {
       walkChildren(el, query, depth);
@@ -393,24 +413,24 @@ function matches({ className, predicates }: Query, el: GameElement): boolean {
 }
 
 /** Whether `el` was visited before in this query, recording the duplicate if so and the visit if not. */
-function isRepeatVisit(
-  query: Query,
-  firstSeenUnder: Map<number, GameElement | undefined>,
-  el: GameElement,
-  depth: number,
-  under: GameElement | undefined,
-): boolean {
-  if (!firstSeenUnder.has(el.id)) {
-    firstSeenUnder.set(el.id, under);
-    return false;
+function isRepeatVisit(query: Query, el: GameElement, depth: number, under: GameElement | undefined): boolean {
+  const { stamp, firstSeenUnder } = query;
+  let firstUnder: GameElement | undefined;
+  if (stamp !== 0) {
+    if (el._t.visit !== stamp) {
+      el._t.visit = stamp;
+      el._t.visitedUnder = under;
+      return false;
+    }
+    firstUnder = el._t.visitedUnder;
+  } else {
+    if (!firstSeenUnder!.has(el)) {
+      firstSeenUnder!.set(el, under);
+      return false;
+    }
+    firstUnder = firstSeenUnder!.get(el);
   }
-  query.duplicates.push({
-    id: el.id,
-    name: el.name ?? el.constructor.name,
-    depth,
-    firstUnder: firstSeenUnder.get(el.id),
-    under,
-  });
+  query.duplicates.push({ id: el.id, name: el.name ?? el.constructor.name, depth, firstUnder, under });
   return true;
 }
 
@@ -421,7 +441,7 @@ function treeCorruption(duplicates: Query['duplicates']): Error {
   return new Error(
     `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
     shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${containerLabel(d.firstUnder)}" and "${containerLabel(d.under)}" (depth ${d.depth})`).join('\n') + more + '\n' +
-    `  An element is parented in two places, or two elements share an id.\n` +
+    `  An element is parented in two places.\n` +
     `  The two container labels above are where to look.`
   );
 }

@@ -1,5 +1,5 @@
 {
-  "revision": 324,
+  "revision": 325,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2535,6 +2535,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "@vue/test-utils is a regular dependency of BoardSmith, so a game whose tests import boardsmith/testing type-checks without declaring it (#1578)"
+    },
+    {
+      "revision": 325,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Dev-mode element queries mark visited elements with a stamp instead of an id Map, and a restore or partition adoption whose state holds one id twice is refused before it changes anything (#1579)."
     }
   ]
 }

@@ -147,4 +147,46 @@ describe('traversal, on an element reachable twice', () => {
     expect(() => game.all(Token)).not.toThrow();
     expect(game.all(Token)).toHaveLength(3);
   });
+
+  it('is still caught when a finder runs its own query over the duplicate between the two visits', () => {
+    const token = game.left.first(Token)!;
+    (game.right as unknown as { _t: { children: unknown[] } })._t.children.push(token);
+
+    expect(() => game.all(Token, () => game.left.all(Token).length > 0)).toThrow(/TREE CORRUPTION/);
+  });
+
+  // In a world of 4,145 elements the id Map cost more than the walk it guarded (#1579).
+  it('looks no element id up in a map, in development mode', () => {
+    devModeState.override = true;
+    const has = vi.spyOn(Map.prototype, 'has');
+    const set = vi.spyOn(Map.prototype, 'set');
+    try {
+      game.all(Token);
+      expect(has).not.toHaveBeenCalled();
+      expect(set).not.toHaveBeenCalled();
+    } finally {
+      has.mockRestore();
+      set.mockRestore();
+    }
+  });
+});
+
+describe('restore, of a state in which two elements share an id', () => {
+  it('throws, naming the id, instead of building a tree whose lookups answer either one', () => {
+    const json = game.toJSON();
+    const tokens = json.children!.find((c) => c.name === 'left')!.children!;
+    tokens[1].id = tokens[0].id;
+
+    expect(() => game.loadSerializedState(json)).toThrow(new RegExp(`id ${tokens[0].id}`));
+  });
+
+  it('leaves the game as it was', () => {
+    const before = JSON.stringify(game.toJSON());
+    const json = game.toJSON();
+    const tokens = json.children!.find((c) => c.name === 'left')!.children!;
+    tokens[1].id = tokens[0].id;
+
+    expect(() => game.loadSerializedState(json)).toThrow();
+    expect(JSON.stringify(game.toJSON())).toBe(before);
+  });
 });

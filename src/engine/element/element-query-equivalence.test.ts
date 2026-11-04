@@ -98,7 +98,7 @@ function oracleFinder<F extends GameElement>(
     throw new Error(
       `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
       shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${d.firstPath}" and "${d.dupPath}" (depth ${d.depth})`).join('\n') + more + '\n' +
-      `  An element is parented in two places, or two elements share an id.\n` +
+      `  An element is parented in two places.\n` +
       `  The two container labels above are where to look.`
     );
   }
