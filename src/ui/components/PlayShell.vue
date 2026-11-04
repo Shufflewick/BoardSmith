@@ -714,16 +714,17 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-max: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
 
-  /* The exceptions to that cap: a typed editor (#229, #237) and a multiSelect's
-     checkboxes (#1573). While one is open the bar may grow past the strip and
+  /* The exceptions to that cap: a typed editor (#229, #237) and a choice
+     list (#1573, #1580). While one is open the bar may grow past the strip and
      cover more of the board, and the cap returns when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
 
      A one-line or number field stacks label, hint and field + Done in three
      rows on a phone (#1058), and an earlier choice's chips or a prompt that
      wraps add more, so no fixed row count holds it: it may grow the bar to
-     what it needs, bounded by the screen (#1481). A multiSelect's checkboxes
-     wrap to more rows than two on a phone, so they grow it the same way, unless
-     the board draws a candidate the grown bar would cover (#1573). */
+     what it needs, bounded by the screen (#1481). A multiSelect's checkboxes,
+     or a choice pick's buttons and skip under a chip, wrap to more rows than two
+     on a phone, so they grow it the same way, unless the board draws a candidate
+     the grown bar would cover (#1573, #1580). */
 
   /* A multi-line box cannot be written in two rows, so it may grow the bar to
      what it needs: its box plus everything around it that must stay
@@ -976,7 +977,7 @@ const mobileToggleLabel = computed(() => {
   overflow-y: auto;
 }
 
-/* While a typed editor or a multiSelect's checkboxes are open, and only then,
+/* While a typed editor or a choice list is open, and only then,
    the bar may grow past the strip (see --bsg-panel-editor-max). Keyed on the
    pick's own mark, so the exception lives exactly as long as the pick's DOM:
    submitting, cancelling or putting the bar down all unmount it and the strip
