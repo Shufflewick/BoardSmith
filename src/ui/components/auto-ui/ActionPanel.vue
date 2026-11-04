@@ -2077,8 +2077,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              `data-bs-pick` names the pick the field answers, which is how the
              smoke walk finds the value a spec's `inputs` gives that field (#470).
 
-             `data-bs-grows-panel` marks the editor as the one thing allowed to
-             grow the action bar past its two-row cap (issue
+             `data-bs-grows-panel` marks the editor, like a choice list, as a
+             pick allowed to grow the action bar past its two-row cap (issue
              444), and by how much: six rows of text cannot be written in two, so
              a "box" grows to the ceiling its box is sized from, while a
              one-line "field" stacks label, hint and field + Done on a phone
