@@ -146,15 +146,12 @@ async function onScreen(browser, hostUrl, viewport) {
       assert(count === 8, `the panel draws ${count} checkboxes, not 8`);
       // Tick three, as the ticket's player had, so the ticked boxes must stay in view too.
       for (const index of [0, 2, 5]) await choices.nth(index).click();
-      const bar = await barGeometry(surface, [
+      await assertAllInView(surface, [
         '.config-title',
         '.cancel-btn',
         '.multi-select-count',
         ...Array.from({ length: count }, (_, i) => `.multi-select-choice:nth-of-type(${i + 1})`),
       ]);
-      assert(bar.outside.length === 0, `not in view inside the bar (${bar.height}px tall, top at ${bar.top}): ${bar.outside.join(', ')}`);
-      assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall), so some choices sit below its edge`);
-      assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
     });
 
     await check(`${size}: closing the pick puts the bar back inside the strip`, async () => {
@@ -208,10 +205,7 @@ async function onScreen(browser, hostUrl, viewport) {
         // The choices arrive after the pick does, so wait for them before measuring.
         for (const selector of shown) await surface.locator(selector).first().waitFor({ timeout: 15_000 });
         try {
-          const bar = await barGeometry(surface, ['.config-title', '.selected-value', '.selection-prompt', '.skip-btn', ...shown]);
-          assert(bar.outside.length === 0, `not in view inside the bar (${bar.height}px tall, top at ${bar.top}): ${bar.outside.join(', ')}`);
-          assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall), so part of the pick sits below its edge`);
-          assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
+          await assertAllInView(surface, ['.config-title', '.selected-value', '.selection-prompt', '.skip-btn', ...shown]);
         } finally {
           await surface.locator('.cancel-btn').click();
           await skip.waitFor({ state: 'detached', timeout: 10_000 });
@@ -219,4 +213,12 @@ async function onScreen(browser, hostUrl, viewport) {
       });
     }
   });
+}
+
+/** Every one of `selectors` in view inside the bar, the bar not scrolling and its top on screen. */
+async function assertAllInView(surface, selectors) {
+  const bar = await barGeometry(surface, selectors);
+  assert(bar.outside.length === 0, `not in view inside the bar (${bar.height}px tall, top at ${bar.top}): ${bar.outside.join(', ')}`);
+  assert(!bar.scrolls, `the bar scrolls (${bar.height}px tall), so part of the pick sits below its edge`);
+  assert(bar.top >= 0, `the bar's top is at ${bar.top}, off the top of the screen`);
 }
