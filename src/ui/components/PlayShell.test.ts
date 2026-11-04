@@ -15,16 +15,17 @@
  * be left selecting on classes.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { h, nextTick } from 'vue';
+import { h, nextTick, Teleport } from 'vue';
 import PlayShell from './PlayShell.vue';
 import Toast from './Toast.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { useActionController } from '../composables/useActionController.js';
+import { anchorAttrs, BOARD_INTERACTION_KEY, createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { ref, computed } from 'vue';
 
 class PanelResizeObserver {
@@ -247,5 +248,37 @@ describe('the page\'s singletons belong to the root shell, not to PlayShell (#30
 
   it('mounts no disabled-reason tooltip of its own', () => {
     expect(mountShell().findComponent(DisabledReasonTooltip).exists()).toBe(false);
+  });
+});
+
+describe('what the board draws (#1589)', () => {
+  it('reports an element the game draws on the board or in the game modal host, and none drawn elsewhere', async () => {
+    const interaction = createBoardInteraction();
+    const ctl = controller();
+    const wrapper = mount(PlayShell, {
+      attachTo: document.body,
+      props: {
+        boardFailed: false,
+        players: [{ seat: 0, name: 'Ivy' }, { seat: 1, name: 'Rook' }],
+        playerSeat: 0,
+        messages: [],
+        mayAct: true,
+        availableActions: ['look'],
+        actionMetadata: { look: { name: 'look', prompt: 'Look around', selections: [] } },
+      },
+      slots: {
+        board: () => h('div', [
+          h('div', anchorAttrs({ id: 11 })),
+          h(Teleport, { to: '#bs-game-modal', defer: true }, [h('div', anchorAttrs({ id: 12 }))]),
+        ]),
+        'sidebar-extra': () => h('div', anchorAttrs({ id: 13 })),
+      },
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: ctl, [BOARD_INTERACTION_KEY as symbol]: interaction } },
+    });
+    await flushPromises();
+    expect(interaction.isDrawn({ id: 11 }), 'on the board').toBe(true);
+    expect(interaction.isDrawn({ id: 12 }), 'in the game modal host').toBe(true);
+    expect(interaction.isDrawn({ id: 13 }), 'in the sidebar').toBe(false);
+    wrapper.unmount();
   });
 });

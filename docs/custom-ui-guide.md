@@ -1386,9 +1386,10 @@ What follows for a custom board:
   list may grow it to show every choice and its skip, under any earlier
   choices, bounded at 60% of the screen's height, and scrolls beyond that; one
   whose candidates your board draws keeps the cap, so it never covers them.
-  "Draws" means the board has a node with the candidate's `anchorAttrs` on it:
-  the shell reads those anchors from the board whenever it changes and reports
-  them through `boardInteraction.isDrawn(ref)`. So an element pick over cards
+  "Draws" means the board, or a modal it Teleports to `#bs-game-modal`, has a
+  node with the candidate's `anchorAttrs` on it: the shell reads those anchors
+  whenever the board changes and reports them through
+  `boardInteraction.isDrawn(ref)`. So an element pick over cards
   your board leaves out, such as an opponent's hand, grows, and one over pieces
   it draws keeps the cap. Spread `anchorAttrs` (or `useSelectable`'s `attrs`)
   on every element you draw and this follows by itself. An element pick with no
