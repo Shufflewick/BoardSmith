@@ -144,6 +144,9 @@ import { PlayerFacingError, StaleAllocationStampError } from "../engine/errors.j
 /** The function one call projects through, so its reads share one identity (#1438). */
 type Projecting = ReturnType<typeof readOnlyScope>;
 
+/** `passMemo` answers, keyed on a pass's projected root, so they die with the pass that projected it (#1584). */
+const passMemos = new WeakMap<object, Map<string, unknown>>();
+
 /**
  * The authoring types below are EXPORTED, and that reverses the call this file
  * used to make.
@@ -2196,23 +2199,31 @@ export class BoardSmithWorldEngine implements WorldEngine {
           `watcher. Move the ${what}() into the action's execute().`,
       );
     };
+    const partition = (name: string): GameElement => {
+      assertDeclared(action, name, named);
+      // READ-ONLY, AND NOT BY PROMISE (ShufflewickPub #384). This accessor
+      // used to hand over the live root, so every callback an offer runs --
+      // `condition`, `disabled`, `choices`, `elements`, `display`, `prompt`
+      // -- could write to the world. It is the worst-placed instance of the
+      // #219 failure class: an offer runs once per watcher per refresh, on a
+      // path with NO rollback and NO checkpoint, so the write reached every
+      // watcher's next frame, was never made durable, and was reverted at the
+      // next hibernation with nobody told. `world-readonly.ts` carries the
+      // whole argument; this is the same projection a declaration is handed.
+      return project(this.rootOf(name));
+    };
     return {
       now: stamp.now,
       timing: null,
       presence: new Set(stamp.presence),
       activity: seatActivity(stamp.activity),
-      partition: (name: string) => {
-        assertDeclared(action, name, named);
-        // READ-ONLY, AND NOT BY PROMISE (ShufflewickPub #384). This accessor
-        // used to hand over the live root, so every callback an offer runs --
-        // `condition`, `disabled`, `choices`, `elements`, `display`, `prompt`
-        // -- could write to the world. It is the worst-placed instance of the
-        // #219 failure class: an offer runs once per watcher per refresh, on a
-        // path with NO rollback and NO checkpoint, so the write reached every
-        // watcher's next frame, was never made durable, and was reverted at the
-        // next hibernation with nobody told. `world-readonly.ts` carries the
-        // whole argument; this is the same projection a declaration is handed.
-        return project(this.rootOf(name));
+      partition,
+      passMemo: <T>(name: string, key: string, compute: (root: GameElement) => T): T => {
+        const root = partition(name);
+        let memos = passMemos.get(root);
+        if (memos === undefined) passMemos.set(root, (memos = new Map()));
+        if (!memos.has(key)) memos.set(key, compute(root));
+        return memos.get(key) as T;
       },
       // AN OFFER HAS NAMED NO CHAIR (ShufflewickPub #423), so there is nothing
       // to answer with. Refused rather than absent for the reason `schedule` is
@@ -2960,6 +2971,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
       return answered;
     };
+    const partition = (name: string): GameElement => {
+      const undeclared = declaredRefusal(action, name, named);
+      if (undeclared !== null) raise(undeclared);
+      const root = this.rootOf(name);
+      // THE ONE DOOR THE ENGINE CANNOT SEE (#295). The dirty-set comparison
+      // runs only over the partitions an action could have written, and
+      // BoardSmith knows that set because it marks every element its own
+      // queries and tree accessors hand out. This root did not come from one
+      // of those -- the world looked it up -- and `room.visits += 1` on it
+      // touches no accessor at all, so without this line the comparison would
+      // skip exactly the partition the action was about.
+      this.game.reachPartition(root.id);
+      return root;
+    };
     return {
       now: charge.now,
       timing,
@@ -3053,20 +3078,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
         ledger.vacated = { seat, player: holder };
       },
       convertCredits: (): never => raise(creditsUnavailable(action)),
-      partition: (name: string) => {
-        const undeclared = declaredRefusal(action, name, named);
-        if (undeclared !== null) raise(undeclared);
-        const root = this.rootOf(name);
-        // THE ONE DOOR THE ENGINE CANNOT SEE (#295). The dirty-set comparison
-        // runs only over the partitions an action could have written, and
-        // BoardSmith knows that set because it marks every element its own
-        // queries and tree accessors hand out. This root did not come from one
-        // of those -- the world looked it up -- and `room.visits += 1` on it
-        // touches no accessor at all, so without this line the comparison would
-        // skip exactly the partition the action was about.
-        this.game.reachPartition(root.id);
-        return root;
-      },
+      partition,
+      // A DISPATCH NEVER MEMOIZES (#1584): execute changes the live root in place, so a held answer would go stale.
+      passMemo: <T>(name: string, _key: string, compute: (root: GameElement) => T): T =>
+        compute(partition(name)),
       emit: (scope: string, payload: unknown, narration?: WorldNarrationLine) => {
         // HELD TO THE DECLARATION, not to residency (#933), so what an earlier
         // command or a wake left loaded cannot decide whether this is refused.

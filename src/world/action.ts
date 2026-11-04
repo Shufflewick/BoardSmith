@@ -144,6 +144,19 @@ export interface WorldFacilities {
   /** The resident root of a partition this step's declaration named. */
   partition(name: string): GameElement;
   /**
+   * READ-ONLY WORK SHARED ACROSS ONE OFFER PASS (#1584).
+   *
+   * Answers `compute(world.partition(name))`. On an offer, pick or quote read, every
+   * action's `condition`, `disabled` and first-pick `choices`/`elements` in one
+   * pass get the answer the first call computed for the same `name` and `key`,
+   * and the next pass computes afresh. Inside a dispatch it computes on every
+   * call, because `execute` changes the live root in place. `name` is refused
+   * unless this step declared it, as `partition()` is. `compute` should read
+   * only the root it is handed: an answer that read another partition would
+   * reach an action that never declared it.
+   */
+  passMemo<T>(name: string, key: string, compute: (root: GameElement) => T): T;
+  /**
    * SAY WHAT JUST HAPPENED, AND WHERE.
    *
    * A world's narration is its routed events. `scope` is either the reserved

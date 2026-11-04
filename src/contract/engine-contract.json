@@ -1,5 +1,5 @@
 {
-  "revision": 329,
+  "revision": 330,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2575,6 +2575,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A world can declare referral.onJoin, a seatless verb a host runs once when it assigns a seat (before that seat's first view) with { seat, inviterSeat } from its own trusted evidence; ResidentWorld.seat answers whether it assigned the chair, and boardsmith dev runs onJoin at assignment with inviterSeat: null (#1583)"
+    },
+    {
+      "revision": 330,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "ctx.world.passMemo(name, key, compute) shares read-only work across one offer pass: an offer's or pick read's condition, disabled and first-pick choices/elements get the first call's answer for that declared partition and key, the next pass computes afresh, and a dispatch computes on every call so execute never sees a stale answer (#1584)"
     }
   ]
 }

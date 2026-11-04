@@ -28,6 +28,7 @@ import { assertWorldEngineConformance } from "./engine-conformance.test-helper.j
 import { BoardSmithWorldEngine } from "./engine.js";
 import { seatView } from "../engine/element/seat-placeholders.js";
 import { worldAction, worldClockAction } from "./action.js";
+import type { WorldFacilities } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
@@ -2346,6 +2347,93 @@ describe("#1516 — one offer pass hands every action's declaration the same pro
     engine.offerPartitions("player-a", STAMP.now);
 
     expect(checks).toBe(1);
+  });
+});
+
+describe("#1584 — world.passMemo shares read-only work across one offer pass and never serves a dispatch", () => {
+  // A condition or a first pick's choices run on the offer path against a
+  // projection, and inside a dispatch against the live root, whose identity
+  // stays the same while execute changes what it holds. A WeakMap keyed on
+  // `world.partition(name)` is right on the first path and stale on the second,
+  // and a callback cannot tell which it is on, so the engine owns the memo.
+
+  /** `count` seat actions whose condition, greying rule and first pick all ask for one shared summary. */
+  function memoEngine(count: number, counted: { computes: number }): BoardSmithWorldEngine {
+    const tokens = (world: WorldFacilities) =>
+      world.passMemo(ROOM_ONE, "tokens", (root) => {
+        counted.computes += 1;
+        return root.all(Token).length;
+      });
+    const actions = Array.from({ length: count }, (_, index) =>
+      worldAction<WorldFixtureGame>(`spend${index}`)
+        .needs(() => [ROOM_ONE])
+        .condition({ "the room holds a token": ({ world }) => tokens(world) > 0 })
+        .disabled(({ world }) => (tokens(world) > 5 ? "too many" : false))
+        .chooseFrom("aim", { choices: ({ world }) => (tokens(world) > 0 ? ["room-one"] : []) })
+        .execute(() => {}),
+    );
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions,
+      view: () => [],
+    });
+  }
+
+  it("computes once for every action's condition, disabled and first pick in one offersFor pass, and again for the next pass", async () => {
+    const counted = { computes: 0 };
+    const engine = memoEngine(4, counted);
+    await engine.hydrate([ROOM_ONE]);
+
+    expect(await engine.offersFor("player-a", STAMP)).toHaveLength(4);
+    expect(counted.computes).toBe(1);
+
+    await engine.offersFor("player-a", STAMP);
+    expect(counted.computes).toBe(2);
+  });
+
+  it("recomputes inside a dispatch, so execute sees what it just wrote", async () => {
+    const seen: number[] = [];
+    const tokens = (world: WorldFacilities) => world.passMemo(ROOM_ONE, "tokens", (root) => root.all(Token).length);
+    const grow = worldAction<WorldFixtureGame>("grow")
+      .needs(() => [ROOM_ONE])
+      .condition({ "the room holds a token": ({ world }) => tokens(world) > 0 })
+      .execute((_, { world }) => {
+        seen.push(tokens(world));
+        (world.partition(ROOM_ONE) as Room).create(Token, "token-new");
+        seen.push(tokens(world));
+      });
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [grow],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "grow", args: {} }, STAMP);
+
+    expect(seen).toEqual([1, 2]);
+  });
+
+  it("refuses a partition the action did not declare, as partition() does", async () => {
+    const peek = worldAction<WorldFixtureGame>("peek")
+      .needs(() => [ROOM_ONE])
+      .condition({ "next door has tokens": ({ world }) => world.passMemo(ROOM_TWO, "tokens", () => 1) > 0 })
+      .execute(() => {});
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [peek],
+      view: () => [],
+    });
+    await engine.hydrate([ROOM_ONE, ROOM_TWO]);
+
+    const error = await engine.offersFor("player-a", STAMP).then(() => null, (thrown: unknown) => thrown);
+
+    expect(error).toMatchObject({ cause: { code: "undeclared-partition" } });
   });
 });
 
