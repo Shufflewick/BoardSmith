@@ -3,7 +3,7 @@
  */
 
 import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, isSeatUndo, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
-import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
+import { buildActionMetadata, buildPickMetadata, evaluatePrompt } from '../engine/element/action-metadata.js';
 import { formatElementCandidates, type AnnotatedCandidate } from '../engine/element/pick-candidates.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -176,7 +176,7 @@ export function buildSingleActionMetadata(
   // reason `suppressFromActionPanel` has never been emitted on this path.
   return {
     name: actionName,
-    prompt: actionDef.prompt,
+    prompt: evaluatePrompt(actionName, actionDef, { game, player, args: knownArgs ?? {} }),
     help: actionDef.help,
     ...(actionDef.manual ? { manual: true } : {}),
     selections: pickMetas,

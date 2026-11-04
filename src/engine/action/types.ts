@@ -671,8 +671,8 @@ export type ConditionConfig<G extends Game = Game, Args extends Record<string, u
 export interface ActionDefinition {
   /** Unique action name */
   name: string;
-  /** User-facing prompt */
-  prompt?: string;
+  /** User-facing prompt, evaluated for the seat when metadata is built. */
+  prompt?: string | ((context: ActionContext) => string);
   /** Selections required for this action */
   selections: Selection[];
   /**

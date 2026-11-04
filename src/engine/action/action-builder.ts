@@ -400,8 +400,8 @@ export class Action<
   /**
    * Set the user-facing prompt for this action
    */
-  prompt(prompt: string): this {
-    this.definition.prompt = prompt;
+  prompt(prompt: string | ((context: ActionContext<G>) => string)): this {
+    this.definition.prompt = prompt as ActionDefinition['prompt'];
     return this;
   }
 

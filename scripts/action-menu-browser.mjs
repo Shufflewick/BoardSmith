@@ -155,7 +155,7 @@ const skipMission = worldAction<Realm>('skipMission')
   });
 
 const renamePlanet = worldAction<Realm>('renamePlanet')
-  .prompt('Rename planet')
+  .prompt((ctx) => 'Rename planet for seat ' + ctx.player.seat)
   .group('More', 'Empire settings')
   .order(90)
   .needs(() => [EMPIRE])
@@ -502,10 +502,15 @@ async function anotherSeatMovesTheLevel({ browser, hostUrl }) {
   await check('a leaf with a selection walks the ordinary controller', async () => {
     await surfaceOf(page).locator('[data-bs-action-group="More"]').click();
     await surfaceOf(page).locator('[data-bs-action-group="Empire settings"]').click();
-    await surfaceOf(page).locator('[data-bs-action="renamePlanet"]').click();
+    const rename = surfaceOf(page).locator('[data-bs-action="renamePlanet"]');
+    const title = (await rename.textContent()).trim();
+    assert(/Rename planet for seat [12]/.test(title), 'the menu lost the dynamic action prompt: ' + title);
+    await rename.click();
     // The action's own form, drawn by the panel exactly as it is at the top
     // level: grouping stops at the start button.
     await surfaceOf(page).locator('.action-config input[type="text"]').waitFor({ timeout: 15_000 });
+    assert((await surfaceOf(page).locator('.config-title').textContent()).trim() === title,
+      'the open action lost the dynamic action prompt');
   });
 
   await check('cancelling returns the player to the level they started from', async () => {

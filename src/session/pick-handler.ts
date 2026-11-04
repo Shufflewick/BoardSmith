@@ -138,7 +138,7 @@ function deadEnd(action: ActionDefinition, selection: Selection, ctx: ActionCont
   return {
     success: false,
     error: deadEndPickMessage({
-      action: action.prompt ?? action.name,
+      action: evaluatePrompt(action.name, action, ctx) ?? action.name,
       pick: prompt ?? selection.name,
       args: ctx.args,
       seat: ctx.player.seat,
