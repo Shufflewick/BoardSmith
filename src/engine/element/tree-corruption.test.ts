@@ -179,4 +179,14 @@ describe('restore, of a state in which two elements share an id', () => {
 
     expect(() => game.loadSerializedState(json)).toThrow(new RegExp(`id ${tokens[0].id}`));
   });
+
+  it('leaves the game as it was', () => {
+    const before = JSON.stringify(game.toJSON());
+    const json = game.toJSON();
+    const tokens = json.children!.find((c) => c.name === 'left')!.children!;
+    tokens[1].id = tokens[0].id;
+
+    expect(() => game.loadSerializedState(json)).toThrow();
+    expect(JSON.stringify(game.toJSON())).toBe(before);
+  });
 });

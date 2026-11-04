@@ -364,8 +364,8 @@ type Query = {
   result: GameElement[];
   /** Dev mode, outermost query: the stamp it marks each element it visits with (0: it marks none). */
   stamp: number;
-  /** Dev mode, a query inside another: the container each visited id was first seen under (undefined: the roots). */
-  firstSeenUnder: Map<number, GameElement | undefined> | null;
+  /** Dev mode, a query inside another: the container each visited element was first seen under (undefined: the roots). */
+  firstSeenUnder: Map<GameElement, GameElement | undefined> | null;
   duplicates: Array<{ id: number; name: string; depth: number; firstUnder: GameElement | undefined; under: GameElement | undefined }>;
 };
 
@@ -424,11 +424,11 @@ function isRepeatVisit(query: Query, el: GameElement, depth: number, under: Game
     }
     firstUnder = el._t.visitedUnder;
   } else {
-    if (!firstSeenUnder!.has(el.id)) {
-      firstSeenUnder!.set(el.id, under);
+    if (!firstSeenUnder!.has(el)) {
+      firstSeenUnder!.set(el, under);
       return false;
     }
-    firstUnder = firstSeenUnder!.get(el.id);
+    firstUnder = firstSeenUnder!.get(el);
   }
   query.duplicates.push({ id: el.id, name: el.name ?? el.constructor.name, depth, firstUnder, under });
   return true;
@@ -441,7 +441,7 @@ function treeCorruption(duplicates: Query['duplicates']): Error {
   return new Error(
     `TREE CORRUPTION: ${duplicates.length} duplicate element visit(s) during traversal.\n` +
     shown.map(d => `  - ${d.name} (id: ${d.id}) reachable under BOTH "${containerLabel(d.firstUnder)}" and "${containerLabel(d.under)}" (depth ${d.depth})`).join('\n') + more + '\n' +
-    `  An element is parented in two places, or two elements share an id.\n` +
+    `  An element is parented in two places.\n` +
     `  The two container labels above are where to look.`
   );
 }

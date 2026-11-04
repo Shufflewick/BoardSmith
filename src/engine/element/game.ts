@@ -137,6 +137,16 @@ function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): voi
   }
 }
 
+/** The first id `ids` holds twice, if any. */
+function repeatedId(ids: readonly number[]): number | undefined {
+  const seen = new Set<number>();
+  for (const id of ids) {
+    if (seen.has(id)) return id;
+    seen.add(id);
+  }
+  return undefined;
+}
+
 /** The partition an element sits in: the nearest ancestor-or-self that is a
  *  declared partition root, or undefined for the game's own non-partitioned
  *  core. */
@@ -2192,6 +2202,14 @@ export class Game<
     collectJsonIds(json, adoptedIds, adoptedTokens);
     const worldIds = this._ctx._worldIds!;
 
+    const repeated = repeatedId(adoptedIds);
+    if (repeated !== undefined) {
+      throw new Error(
+        `Cannot adopt partition "${json.name ?? json.className}": it holds more than one element ` +
+          `with id ${repeated}, so a lookup by that id would answer either one. These bytes are ` +
+          `damaged; adopt the partition from an earlier checkpoint.`
+      );
+    }
     // The id index holds every element in the tree and the pile (#755).
     const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
@@ -5543,6 +5561,19 @@ export class Game<
       );
     }
 
+    // Checked here, before anything changes, rather than by every query's walk (#1579).
+    const stateIds: number[] = [this.pile._t.id];
+    collectJsonIds(json, stateIds, []);
+    for (const child of json.pile ?? []) collectJsonIds(child, stateIds, []);
+    const repeated = repeatedId(stateIds);
+    if (repeated !== undefined) {
+      throw new Error(
+        `This game state holds more than one element with id ${repeated}, so a lookup by that id ` +
+          `would answer either one.\n` +
+          `  Fix: the state is damaged; restore an earlier one, or start the game again.`
+      );
+    }
+
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
     // refs and Map/Set shapes resolved) by `resolveElementReferences(this)`
@@ -5693,18 +5724,7 @@ export class Game<
     }
     this._ctx._elementsById.clear();
     for (const root of [this, this.pile]) {
-      forEachInSubtree(root, (element) => {
-        // Checked here, where it costs nothing, rather than by every query's walk (#1579).
-        const filed = this._ctx._elementsById.get(element._t.id);
-        if (filed !== undefined) {
-          throw new Error(
-            `This game state holds two elements with id ${element._t.id}: ${filed} and ${element}. ` +
-              `Every element's id must be its own, or a lookup by id answers either one.\n` +
-              `  Fix: the state is damaged; restore an earlier one, or start the game again.`
-          );
-        }
-        this._ctx._elementsById.set(element._t.id, element);
-      });
+      forEachInSubtree(root, (element) => this._ctx._elementsById.set(element._t.id, element));
     }
 
     // Re-attach captured handlers to the rebuilt tree by element id
