@@ -1,5 +1,5 @@
 {
-  "revision": 333,
+  "revision": 334,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2607,6 +2607,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The verbs check counts a tests/ helper that takes a whole command and hands it to the world runner's apply or the world engine's applyCommand, so apply({ name: 'verb', args }, player), or a helper that builds { name } from its own name parameter, counts as dispatching that verb (#1588)"
+    },
+    {
+      "revision": 334,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel keeps the phone action bar's two-row cap for a pick list only while the board really draws one of its candidates, read from the board's anchorAttrs and reported through boardInteraction.isDrawn, so an element pick over elements a custom board leaves out (a hand) grows the bar and shows its skip at phone width (#1589)"
     }
   ]
 }

@@ -30,9 +30,17 @@ import { fileURLToPath } from 'node:url';
 import { mountPanelAt, submitText } from './action-panel-editor.test-helper.js';
 import { mountPanel, stubActionController } from './action-panel-controller.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
+import { BOARD_INTERACTION_KEY, createBoardInteraction, type ElementRef } from '../../composables/useBoardInteraction.js';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../PlayShell.vue');
+
+/** Mount options providing a board that draws exactly `drawn` (#1589). */
+function boardDrawing(drawn: ElementRef[]) {
+  const interaction = createBoardInteraction();
+  interaction.setDrawnElements(drawn);
+  return { provide: { [BOARD_INTERACTION_KEY as symbol]: interaction } };
+}
 
 const MARK = '[data-bs-grows-panel]';
 const BOX = '[data-bs-grows-panel="box"]';
@@ -99,19 +107,22 @@ describe('a typed editor may grow the panel past the strip, and only while it is
     }
   });
 
-  it('leaves a multiSelect whose candidates are on the board unmarked, so the bar never covers them (#1573)', () => {
+  it('leaves a multiSelect whose candidates the board draws unmarked, so the bar never covers them (#1573, #1589)', () => {
     const onBoard = [{ ref: { id: 11 }, role: 'target' as const }];
     for (const type of ['choice', 'elements']) {
-      const controller = stubActionController({
-        currentAction: ref('allocate'),
-        currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
-        currentChoices: ref([{ value: 'a', display: 'Adelheid', refs: onBoard }, { value: 'g', display: 'Genesis' }]),
-        validElements: ref([{ id: 11, display: 'Adelheid', refs: onBoard }, { id: 12, display: 'Genesis' }]),
-      });
-      const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true });
-      expect(wrapper.findAll('.multi-select-choice'), type).toHaveLength(2);
-      expect(wrapper.find(MARK).exists(), type).toBe(false);
-      wrapper.unmount();
+      for (const drawn of [true, false]) {
+        const controller = stubActionController({
+          currentAction: ref('allocate'),
+          currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
+          currentChoices: ref([{ value: 'a', display: 'Adelheid', refs: onBoard }, { value: 'g', display: 'Genesis' }]),
+          validElements: ref([{ id: 11, display: 'Adelheid', refs: onBoard }, { id: 12, display: 'Genesis' }]),
+        });
+        const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true }, boardDrawing(drawn ? [{ id: 11 }] : []));
+        const case_ = `${type}, ${drawn ? 'drawn' : 'not drawn'}`;
+        expect(wrapper.findAll('.multi-select-choice'), case_).toHaveLength(2);
+        expect(wrapper.find(MARK).exists(), case_).toBe(!drawn);
+        wrapper.unmount();
+      }
     }
   });
 
@@ -133,19 +144,22 @@ describe('a typed editor may grow the panel past the strip, and only while it is
     }
   });
 
-  it('leaves a single choice pick whose candidates are on the board unmarked, so the bar never covers them (#1580)', () => {
-    const controller = stubActionController({
-      currentAction: ref('accuse'),
-      currentPick: ref({ name: 'who', type: 'choice', prompt: 'Who exactly?' }),
-      currentChoices: ref([{ value: 'ana', display: 'Ana', refs: [{ ref: { id: 11 }, role: 'target' as const }] }, { value: 'bo', display: 'Bo' }]),
-    });
-    const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
-    expect(wrapper.findAll('.choice-btn').length).toBeGreaterThan(0);
-    expect(wrapper.find(MARK).exists()).toBe(false);
-    wrapper.unmount();
+  it('leaves a single choice pick whose candidates the board draws unmarked, so the bar never covers them (#1580, #1589)', () => {
+    for (const drawn of [true, false]) {
+      const controller = stubActionController({
+        currentAction: ref('accuse'),
+        currentPick: ref({ name: 'who', type: 'choice', prompt: 'Who exactly?' }),
+        currentChoices: ref([{ value: 'ana', display: 'Ana', refs: [{ ref: { id: 11 }, role: 'target' as const }] }, { value: 'bo', display: 'Bo' }]),
+      });
+      const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true }, boardDrawing(drawn ? [{ id: 11 }] : []));
+      expect(wrapper.findAll('.choice-btn').length).toBeGreaterThan(0);
+      expect(wrapper.find(MARK).exists(), drawn ? 'drawn' : 'not drawn').toBe(!drawn);
+      wrapper.unmount();
+    }
   });
 
-  it('marks an ordered list and a single element pick as choices unless the board draws a candidate (#1587)', () => {
+  it('marks an ordered list and an element pick as choices unless the board draws a candidate, a ref alone not counting (#1587, #1589)', () => {
+    // Every element candidate carries an id ref (pick-candidates.ts), drawn or not: a hand the board leaves out is not on it.
     const onBoard = [{ ref: { id: 11 }, role: 'highlight' as const }];
     const picks = [
       { label: 'ordered list', type: 'choice', orderedList: { min: 1, max: 3 }, row: '.ordered-list-choices' },
@@ -153,7 +167,7 @@ describe('a typed editor may grow the panel past the strip, and only while it is
       { label: 'elements', type: 'elements', row: '.element-selection' },
     ];
     for (const { label, row, ...pick } of picks) {
-      for (const refs of [undefined, onBoard]) {
+      for (const [refs, drawn] of [[undefined, false], [onBoard, false], [onBoard, true]] as const) {
         const controller = stubActionController({
           currentAction: ref('accuse'),
           currentArgs: ref({ charge: 'Stole the fire' }),
@@ -161,11 +175,11 @@ describe('a typed editor may grow the panel past the strip, and only while it is
           currentChoices: ref([{ value: 'ana', display: 'Ana', refs }, { value: 'bo', display: 'Bo' }]),
           validElements: ref([{ id: 11, display: 'Ana', refs }, { id: 12, display: 'Bo' }]),
         });
-        const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
-        const case_ = `${label}, ${refs ? 'on the board' : 'off it'}`;
+        const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true }, boardDrawing(drawn ? [{ id: 11 }] : []));
+        const case_ = `${label}, ${refs ? 'with a ref' : 'without one'}, ${drawn ? 'drawn' : 'not drawn'}`;
         expect(wrapper.find(`${row} .skip-btn`).exists(), case_).toBe(true);
-        expect(wrapper.find(MARK).exists(), case_).toBe(!refs);
-        if (!refs) expect(wrapper.find(row).attributes('data-bs-grows-panel'), case_).toBe('choices');
+        expect(wrapper.find(MARK).exists(), case_).toBe(!drawn);
+        if (!drawn) expect(wrapper.find(row).attributes('data-bs-grows-panel'), case_).toBe('choices');
         wrapper.unmount();
       }
     }

@@ -41,6 +41,8 @@ import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
+import { tryUseBoardInteraction } from '../composables/useBoardInteraction.js';
+import { useDrawnBoardElements } from '../composables/useDrawnBoardElements.js';
 import type { EnrichedActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
 /** What the adapter has to say about its own connection, on whichever axis it
@@ -347,6 +349,9 @@ watch(() => props.chromeHidden, async (hidden) => {
   boardRegionEl.value?.focus();
 });
 const zoomContainerEl = ref<HTMLElement | null>(null);
+// The Action Panel keeps the bar's cap only for a candidate the board, its overlays or the game modal host draws (#1589).
+const boardViewportEl = ref<HTMLElement | null>(null);
+useDrawnBoardElements(tryUseBoardInteraction(), boardViewportEl);
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
 
 defineExpose({ boardRegionEl, zoomContainerEl, historyPanel });
@@ -488,7 +493,7 @@ const mobileToggleLabel = computed(() => {
       <!-- Board region: hero; ~zero chrome padding; container-query-sized.
            It reserves one constant row for the Action Panel; rows beyond it
            float over the board (#1514, #1517). -->
-      <div class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
+      <div ref="boardViewportEl" class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
         <!-- Connection indicator: one dot, two sources. Surfaced only when the
              adapter has something to say — a persistent healthy dot over the
              board reads as a mystery speck (IA-01). The adapter names the tone

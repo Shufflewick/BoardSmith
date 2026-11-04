@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580, #1587).
+ * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580, #1587, #1589).
  *
  * MERC's artillery allocation offers eight checkboxes in the Action Panel. At
  * 390px only the first one or two showed and the rest sat below the screen
@@ -8,7 +8,8 @@
  * Survival of the Fittest answers a text field, so its chip shows, then offers
  * an optional choice: at 390px the chip and the title filled the bar and the
  * prompt and the skip button sat below its edge (#1580), and so did an
- * ordered list's and an empty element pick's (#1587). jsdom lays nothing
+ * ordered list's and an empty element pick's (#1587), and an element pick's
+ * whose candidates the board does not draw (#1589). jsdom lays nothing
  * out, so only a real browser can see which controls are on screen.
  *
  * Runs under `boardsmith test --browser`, or by hand with
@@ -32,11 +33,12 @@ import type { GameDefinition } from 'boardsmith/session';
 import { worldAction } from 'boardsmith/world';
 
 class Battery extends Space<Barrage> {}
+class Rival extends Space<Barrage> {}
 
 export class Barrage extends Game<Barrage, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Battery]);
+    this.registerElements([Battery, Rival]);
   }
 }
 
@@ -91,18 +93,29 @@ export const gameDefinition: GameDefinition = {
   displayName: 'Multiselect Phone Barrage',
   world: {
     maxPlayers: 2,
-    genesis: (game) => ({ [FIELD]: (game as Barrage).create(Battery, 'battery') as GameElement }),
+    genesis: (game) => {
+      const battery = (game as Barrage).create(Battery, 'battery');
+      battery.create(Rival, 'ana');
+      return { [FIELD]: battery as GameElement };
+    },
     view: () => [FIELD],
-    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery))],
+    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery)), accuseOnBoard('accuseRival', ({ game }) => game.all(Rival))],
   },
 };
 `;
 
+/** Draws the battery and not the rival inside it, as a board leaves out a hand (#1589). */
 const BOARD = `import { defineComponent, h } from 'vue';
+import { anchorAttrs, findElements } from 'boardsmith/ui';
 
 export default defineComponent({
   name: 'BarrageBoard',
-  setup: () => () => h('div', { class: 'barrage-board' }, 'The field'),
+  props: { gameView: { type: Object, default: null } },
+  setup: (props) => () => h('div', { class: 'barrage-board' }, [
+    'The field',
+    ...findElements(props.gameView, { className: 'Battery' }).map((battery) =>
+      h('div', { class: 'battery', ...anchorAttrs({ id: battery.id }) }, 'Battery')),
+  ]),
 });
 `;
 
@@ -207,6 +220,8 @@ async function onScreen(browser, hostUrl, viewport) {
       ['accuseInOrder', ['.selection-prompt', '.ordered-list-add', '.ordered-list-choices .done-button']],
       // An element pick with no candidate falls back to an instruction, and grows (#1587).
       ['accuseNoElement', ['.instruction-text']],
+      // Its candidate carries a board ref, but the board does not draw it, so the list grows (#1589).
+      ['accuseRival', ['.selection-prompt', '.element-selection .element-btn']],
     ];
     for (const [action, shown] of picks) {
       await check(`${size}: ${action}: a pick under a chip keeps the chip, the prompt and the skip button in view without scrolling`, async () => {
@@ -226,8 +241,9 @@ async function onScreen(browser, hostUrl, viewport) {
       });
     }
 
-    // Its candidates are on the board, so the bar keeps its cap and scrolls rather than cover them (#1573, #1587).
-    await check(`${size}: an element pick under a chip keeps the cap, and its skip is reachable`, async () => {
+    // The board draws its candidate, so the bar keeps its cap and scrolls rather than cover it (#1573, #1587, #1589).
+    await check(`${size}: an element pick the board draws under a chip keeps the cap, and its skip is reachable`, async () => {
+      await surface.locator('.barrage-board .battery').waitFor({ timeout: 15_000 });
       await surface.locator('[data-bs-action="accuseElement"]').click();
       const field = surface.locator('.text-input input');
       await field.fill('Stole the fire from the eastern camp');

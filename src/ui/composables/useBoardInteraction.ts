@@ -10,7 +10,7 @@
  * choice values using regex. This makes the system work with any notation
  * format, not just chess-style notation.
  */
-import { computed, reactive, provide, inject, type InjectionKey } from 'vue';
+import { computed, reactive, provide, inject, shallowRef, type InjectionKey } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 // THE ELEMENT REFERENCE SHAPE IS OWNED BY ../../types/protocol.js (#263).
@@ -267,6 +267,16 @@ export interface BoardInteractionActions {
    * current pick. Called when the panel hands a choice to the board (#172).
    */
   requestBoardFocus: () => void;
+
+  /**
+   * Report every element the board draws, by the identities its
+   * `data-bs-el-*` anchors carry (#1589). The shell calls it whenever the board's
+   * DOM changes, so a board that spreads {@link anchorAttrs} reports itself.
+   */
+  setDrawnElements: (elements: ElementRef[]) => void;
+
+  /** Whether the board draws the element `ref` names, as last reported by {@link BoardInteractionActions.setDrawnElements}. */
+  isDrawn: (ref: ElementRef) => boolean;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -304,6 +314,9 @@ export function createBoardInteraction(): BoardInteraction {
     currentPickName: null,
     boardFocusRequest: 0,
   });
+
+  // What the board draws, by every key an anchored element matches (#1589).
+  const drawnKeys = shallowRef<ReadonlySet<string>>(new Set());
 
   // Callback for when element is dropped on valid target
   let onDropCallback: ((elementId: number) => void) | null = null;
@@ -527,6 +540,17 @@ export function createBoardInteraction(): BoardInteraction {
       state.boardFocusRequest++;
     },
 
+    setDrawnElements(elements) {
+      const keys = new Set(elements.flatMap(elementKeys));
+      // The board reports on every DOM change; an unchanged set must not rerun what reads it.
+      if (keys.size !== drawnKeys.value.size || [...keys].some((key) => !drawnKeys.value.has(key))) drawnKeys.value = keys;
+    },
+
+    isDrawn(ref) {
+      const key = boardRefKey(ref);
+      return key !== undefined && drawnKeys.value.has(key.key);
+    },
+
     consumeLastDroppedElementId() {
       const id = state.lastDroppedElementId;
       state.lastDroppedElementId = null;
@@ -587,6 +611,18 @@ export function anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<s
     );
   }
   return attrs;
+}
+
+/** The attributes {@link anchorAttrs} writes an identity into, which {@link anchoredRefsIn} reads back. */
+export const ANCHOR_ATTRIBUTES = ['data-bs-el-id', 'data-bs-el-notation', 'data-bs-el-name'];
+
+/** The identity of every node under `container` that {@link anchorAttrs} anchored: what the board draws (#1589). */
+export function anchoredRefsIn(container: ParentNode): ElementRef[] {
+  const nodes = container.querySelectorAll(ANCHOR_ATTRIBUTES.map((name) => `[${name}]`).join(', '));
+  return Array.from(nodes, (node) => {
+    const [id, notation, name] = ANCHOR_ATTRIBUTES.map((attribute) => node.getAttribute(attribute) ?? undefined);
+    return { id: id === undefined ? undefined : Number(id), notation, name };
+  });
 }
 
 /**
