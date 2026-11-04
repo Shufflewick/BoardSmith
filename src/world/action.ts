@@ -146,7 +146,7 @@ export interface WorldFacilities {
   /**
    * READ-ONLY WORK SHARED ACROSS ONE OFFER PASS (#1584).
    *
-   * Answers `compute(world.partition(name))`. On an offer or a pick read, every
+   * Answers `compute(world.partition(name))`. On an offer, pick or quote read, every
    * action's `condition`, `disabled` and first-pick `choices`/`elements` in one
    * pass get the answer the first call computed for the same `name` and `key`,
    * and the next pass computes afresh. Inside a dispatch it computes on every

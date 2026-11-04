@@ -676,7 +676,7 @@ worldAction("spend")
   });
 ```
 
-In one `offersFor` pass or one pick read, the first call for a partition and
+In one `offersFor` pass, pick read or quote read, the first call for a partition and
 key computes and every later one gets that answer; the next pass computes
 again. In a dispatch every call computes. The partition must be one the step
 declared, as for `partition()`, and `compute` should read only the root it is
