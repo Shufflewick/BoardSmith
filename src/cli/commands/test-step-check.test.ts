@@ -304,6 +304,19 @@ async function run(name: string, args: object) {
     expect(findDispatchedVerbs("await run('m', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['m']);
   });
 
+  it('counts a helper whose command is an object it bound to a local first, as a cold-runner harness does (#1581)', () => {
+    const harness = `
+async function run(name: string, args: object, player = 'p1') {
+  const runner = createWorld(options).runner,
+    request = { name, args };
+  await runner.declare(request, player, {});
+  return runner.apply({ command: request, player, arrivedAt: 0 });
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect([...wrappers.entries()]).toEqual([['run', 0]]);
+  });
+
   it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {
     expect(
       findDispatchedVerbs(`

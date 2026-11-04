@@ -265,8 +265,14 @@ export interface SourceFile {
   text: string;
 }
 
-/** Given the wrappers known so far, the expression a call passes as a verb name, if any. */
-type VerbArgument = (call: AstNode, wrappers: Wrappers) => AstNode | undefined;
+/** Object literals a function binds to a local name: `const request = { name, args }`. */
+type Locals = ReadonlyMap<string, AstNode>;
+
+/**
+ * Given the wrappers known so far, and the enclosing function's locals when searching for
+ * wrappers, the expression a call passes as a verb name, if any.
+ */
+type VerbArgument = (call: AstNode, wrappers: Wrappers, locals?: Locals) => AstNode | undefined;
 
 const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[index];
 
@@ -327,6 +333,15 @@ export function mentionsAny(text: string, names: Iterable<string>): boolean {
   return false;
 }
 
+function objectLocals(fn: AstNode): Locals {
+  const locals = new Map<string, AstNode>();
+  walk(fn.body as AstNode, (node) => {
+    const name = node.type === 'VariableDeclarator' ? identifierName(node.id) : undefined;
+    if (name !== undefined && isNode(node.init) && node.init.type === 'ObjectExpression') locals.set(name, node.init);
+  });
+  return locals;
+}
+
 /**
  * Finds wrappers to a fixed point, so a wrapper around a wrapper is found too. Only files that
  * mention a name already known (`seedNames` or a wrapper found so far) are parsed at all, which
@@ -348,9 +363,10 @@ function findWrappers(
         const named = namedFunction(node);
         if (!named || wrappers.has(named.name)) return;
         const params = paramNames(named.fn);
+        const locals = objectLocals(named.fn);
         walk(named.fn.body as AstNode, (inner) => {
           if (inner.type !== 'CallExpression' || wrappers.has(named.name)) return;
-          const arg = verbArgument(inner, wrappers);
+          const arg = verbArgument(inner, wrappers, locals);
           if (arg?.type !== 'Identifier') return;
           const index = params.indexOf(arg.name as string);
           if (index === -1) return;
@@ -430,12 +446,16 @@ export const DISPATCH_FORMS =
   'or a helper of the project\'s own ' +
   'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
 
-const dispatchArgument: VerbArgument = (call, wrappers) => {
+const dispatchArgument: VerbArgument = (call, wrappers, locals = new Map()) => {
   const name = calleeName(call.callee as AstNode);
   if (name === undefined) return undefined;
+  const commandName = (command: AstNode | undefined) => {
+    const local = identifierName(command);
+    return nameProperty((local !== undefined && locals.get(local)) || command);
+  };
   if (name in DISPATCH_ENTRY_POINTS) return argAt(call, DISPATCH_ENTRY_POINTS[name]);
-  if (name === 'applyCommand') return nameProperty(argAt(call, 1));
-  if (name === 'apply') return nameProperty(nameProperty(argAt(call, 0), 'command'));
+  if (name === 'applyCommand') return commandName(argAt(call, 1));
+  if (name === 'apply') return commandName(nameProperty(argAt(call, 0), 'command'));
   if (name === 'send') return actionOpName(argAt(call, 1));
   return wrappers.has(name) ? argAt(call, wrappers.get(name)!) : undefined;
 };
