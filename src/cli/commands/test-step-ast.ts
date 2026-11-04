@@ -409,7 +409,8 @@ export function findDefinedVerbs(
  * The engine entry points a test can dispatch a verb through, and which argument carries the
  * verb's name. `assertActionFails` is deliberately absent: a verb only ever seen failing has not
  * been shown to work. `action(...)` counts only when the builder is `execute()`d, the world
- * engine's `applyCommand(player, { name, args })` carries the name inside its command object, and
+ * engine's `applyCommand(player, { name, args })` carries the name inside its command object, the
+ * world runner's `apply({ command: { name, args }, ... })` inside its request's command, and
  * the live session host's `send(seat, { type: 'action', actionName, ... })` inside its op.
  */
 const DISPATCH_ENTRY_POINTS: Readonly<Record<string, number>> = Object.freeze({
@@ -424,7 +425,9 @@ export const DISPATCH_FORMS =
   "testGame.doAction(seat, 'verb'), testGame.tryAction(seat, 'verb'), " +
   "testGame.action('verb', seat)...execute(), runner.performAction('verb', seat), " +
   "session.send(seat, { type: 'action', actionName: 'verb', ... }) on the live session host, " +
-  "world.take(seat, 'verb'), or a helper of the project's own " +
+  "world.take(seat, 'verb'), " +
+  "runner.apply({ command: { name: 'verb', ... }, ... }) on the world runner, " +
+  'or a helper of the project\'s own ' +
   'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
 
 const dispatchArgument: VerbArgument = (call, wrappers) => {
@@ -432,13 +435,14 @@ const dispatchArgument: VerbArgument = (call, wrappers) => {
   if (name === undefined) return undefined;
   if (name in DISPATCH_ENTRY_POINTS) return argAt(call, DISPATCH_ENTRY_POINTS[name]);
   if (name === 'applyCommand') return nameProperty(argAt(call, 1));
+  if (name === 'apply') return nameProperty(nameProperty(argAt(call, 0), 'command'));
   if (name === 'send') return actionOpName(argAt(call, 1));
   return wrappers.has(name) ? argAt(call, wrappers.get(name)!) : undefined;
 };
 
 /** Every project function (a test harness, usually) that dispatches a verb named by a parameter. */
 export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, number> {
-  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'send']);
+  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'apply', 'send']);
 }
 
 /** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */

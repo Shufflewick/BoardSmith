@@ -284,6 +284,26 @@ export function act(session: Session, seat: number, verb: string) {
     expect(findDispatchedVerbs("await act(session, 1, 'k');\n", 'tests/a.test.ts', wrappers)).toEqual(['k']);
   });
 
+  it("counts the world runner's apply, the verb as its command's literal name (#1581)", () => {
+    expect(
+      findDispatchedVerbs(`
+await runner.apply({ command: { name: 'l', args: {} }, player: 'p1', arrivedAt: 0 });
+fn.apply(null, [{ name: 'notACommand' }]);
+`),
+    ).toEqual(['l']);
+  });
+
+  it("counts a project helper that hands its verb parameter to the world runner's apply (#1581)", () => {
+    const harness = `
+async function run(name: string, args: object) {
+  return runner.apply({ command: { name, args }, player: 'p1', arrivedAt: 0 });
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect([...wrappers.entries()]).toEqual([['run', 0]]);
+    expect(findDispatchedVerbs("await run('m', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['m']);
+  });
+
   it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {
     expect(
       findDispatchedVerbs(`
