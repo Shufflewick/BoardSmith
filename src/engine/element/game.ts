@@ -137,14 +137,18 @@ function collectJsonIds(json: ElementJSON, ids: number[], tokens: number[]): voi
   }
 }
 
-/** The first id `ids` holds twice, if any. */
-function repeatedId(ids: readonly number[]): number | undefined {
+/** Throw when `ids`, the ids stored bytes would bring into a game, hold one twice: a lookup by it would answer either element. */
+function refuseRepeatedId(ids: readonly number[], what: string, fix: string): void {
   const seen = new Set<number>();
   for (const id of ids) {
-    if (seen.has(id)) return id;
+    if (seen.has(id)) {
+      throw new Error(
+        `${what} holds more than one element with id ${id}, so a lookup by that id would answer either one.\n` +
+          `  Fix: the state is damaged; ${fix}.`
+      );
+    }
     seen.add(id);
   }
-  return undefined;
 }
 
 /** The partition an element sits in: the nearest ancestor-or-self that is a
@@ -2202,14 +2206,7 @@ export class Game<
     collectJsonIds(json, adoptedIds, adoptedTokens);
     const worldIds = this._ctx._worldIds!;
 
-    const repeated = repeatedId(adoptedIds);
-    if (repeated !== undefined) {
-      throw new Error(
-        `Cannot adopt partition "${json.name ?? json.className}": it holds more than one element ` +
-          `with id ${repeated}, so a lookup by that id would answer either one. These bytes are ` +
-          `damaged; adopt the partition from an earlier checkpoint.`
-      );
-    }
+    refuseRepeatedId(adoptedIds, `Partition "${json.name ?? json.className}"`, 'adopt the partition from an earlier checkpoint');
     // The id index holds every element in the tree and the pile (#755).
     const clash = adoptedIds.find((id) => this._ctx._elementsById.has(id));
     if (clash !== undefined) {
@@ -5563,16 +5560,8 @@ export class Game<
 
     // Checked here, before anything changes, rather than by every query's walk (#1579).
     const stateIds: number[] = [this.pile._t.id];
-    collectJsonIds(json, stateIds, []);
-    for (const child of json.pile ?? []) collectJsonIds(child, stateIds, []);
-    const repeated = repeatedId(stateIds);
-    if (repeated !== undefined) {
-      throw new Error(
-        `This game state holds more than one element with id ${repeated}, so a lookup by that id ` +
-          `would answer either one.\n` +
-          `  Fix: the state is damaged; restore an earlier one, or start the game again.`
-      );
-    }
+    for (const root of [json, ...(json.pile ?? [])]) collectJsonIds(root, stateIds, []);
+    refuseRepeatedId(stateIds, 'This game state', 'restore an earlier one, or start the game again');
 
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
