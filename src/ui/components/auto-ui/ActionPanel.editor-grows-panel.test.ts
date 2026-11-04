@@ -145,6 +145,47 @@ describe('a typed editor may grow the panel past the strip, and only while it is
     wrapper.unmount();
   });
 
+  it('marks an ordered list and a single element pick as choices unless the board draws a candidate (#1587)', () => {
+    const onBoard = [{ ref: { id: 11 }, role: 'highlight' as const }];
+    const picks = [
+      { label: 'ordered list', type: 'choice', orderedList: { min: 1, max: 3 }, row: '.ordered-list-choices' },
+      { label: 'element', type: 'element', row: '.element-selection' },
+      { label: 'elements', type: 'elements', row: '.element-selection' },
+    ];
+    for (const { label, row, ...pick } of picks) {
+      for (const refs of [undefined, onBoard]) {
+        const controller = stubActionController({
+          currentAction: ref('accuse'),
+          currentArgs: ref({ charge: 'Stole the fire' }),
+          currentPick: ref({ name: 'who', prompt: 'Who exactly?', optional: true, ...pick }),
+          currentChoices: ref([{ value: 'ana', display: 'Ana', refs }, { value: 'bo', display: 'Bo' }]),
+          validElements: ref([{ id: 11, display: 'Ana', refs }, { id: 12, display: 'Bo' }]),
+        });
+        const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
+        const case_ = `${label}, ${refs ? 'on the board' : 'off it'}`;
+        expect(wrapper.find(`${row} .skip-btn`).exists(), case_).toBe(true);
+        expect(wrapper.find(MARK).exists(), case_).toBe(!refs);
+        if (!refs) expect(wrapper.find(row).attributes('data-bs-grows-panel'), case_).toBe('choices');
+        wrapper.unmount();
+      }
+    }
+  });
+
+  it('marks the element-pick fallback as choices, since it lists no candidate for the board to draw (#1587)', () => {
+    const controller = stubActionController({
+      currentAction: ref('accuse'),
+      currentArgs: ref({ charge: 'Stole the fire' }),
+      currentPick: ref({ name: 'who', type: 'element', prompt: 'Who exactly?', optional: true }),
+      validElements: ref([]),
+    });
+    const wrapper = mountPanel(controller, { availableActions: ['accuse'], isMyTurn: true });
+    const marked = wrapper.findAll(MARK);
+    expect(marked).toHaveLength(1);
+    expect(marked[0]!.classes()).toContain('element-instruction');
+    expect(marked[0]!.attributes('data-bs-grows-panel')).toBe('choices');
+    wrapper.unmount();
+  });
+
   it('drops the mark when the editor is cancelled', async () => {
     const { wrapper } = await mountPanelAt(setDescription);
     expect(wrapper.find(MARK).exists()).toBe(true);

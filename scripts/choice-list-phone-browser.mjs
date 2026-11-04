@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 /**
- * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580).
+ * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580, #1587).
  *
  * MERC's artillery allocation offers eight checkboxes in the Action Panel. At
  * 390px only the first one or two showed and the rest sat below the screen
  * with no sign they were there, while at 1440px every one showed (#1573).
  * Survival of the Fittest answers a text field, so its chip shows, then offers
  * an optional choice: at 390px the chip and the title filled the bar and the
- * prompt and the skip button sat below its edge (#1580). jsdom lays nothing
+ * prompt and the skip button sat below its edge (#1580), and so did an
+ * ordered list's and an empty element pick's (#1587). jsdom lays nothing
  * out, so only a real browser can see which controls are on screen.
  *
  * Runs under `boardsmith test --browser`, or by hand with
@@ -69,15 +70,20 @@ const mortar = worldAction<Barrage>('mortar')
     ctx.world.emit(FIELD, { hits: (targets as string[]).length }, 'The mortar hits were allocated.');
   });
 
-/** A text field whose chip sits above an optional choice, with choices and with none (#1539, #1580). */
-const accuse = (name: string, choices: () => string[]) => worldAction<Barrage>(name)
+/** A text field whose chip sits above an optional pick (#1539, #1580, #1587). */
+const charge = (name: string) => worldAction<Barrage>(name)
   .prompt('Accuse a rival of breaking the camp law')
   .needs(() => [FIELD])
-  .enterText('charge', { prompt: 'What did they do?', maxLength: 40 })
+  .enterText('charge', { prompt: 'What did they do?', maxLength: 40 });
+const accuse = (name: string, choices: () => string[]) => charge(name)
   .chooseFrom('who', { prompt: 'Who exactly?', choices, optional: true })
-  .execute((_args, ctx) => {
-    ctx.world.emit(FIELD, { accused: true }, 'A rival was accused.');
-  });
+  .execute((_args, ctx) => ctx.world.emit(FIELD, { accused: true }, 'A rival was accused.'));
+const accuseInOrder = charge('accuseInOrder')
+  .chooseFrom('who', { prompt: 'Who exactly, in order?', choices: () => ['Ana', 'Bo'], orderedList: { min: 1, max: 2 }, optional: true })
+  .execute((_args, ctx) => ctx.world.emit(FIELD, { accused: true }, 'Rivals were accused.'));
+const accuseOnBoard = (name: string, elements: (ctx: { game: Barrage }) => GameElement[]) => charge(name)
+  .chooseElement('who', { prompt: 'Who exactly?', elements, optional: true })
+  .execute((_args, ctx) => ctx.world.emit(FIELD, { accused: true }, 'A rival was accused.'));
 
 export const gameDefinition: GameDefinition = {
   gameClass: Barrage,
@@ -87,7 +93,7 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ [FIELD]: (game as Barrage).create(Battery, 'battery') as GameElement }),
     view: () => [FIELD],
-    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => [])],
+    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery))],
   },
 };
 `;
@@ -195,8 +201,15 @@ async function onScreen(browser, hostUrl, viewport) {
     });
 
     const skip = surface.locator('.skip-btn');
-    for (const [action, shown] of [['accuse', ['.choice-buttons .choice-btn:not(.skip-btn)']], ['accuseNobody', []]]) {
-      await check(`${size}: ${action}: a choice under a chip keeps the chip, the prompt and the skip button in view without scrolling`, async () => {
+    const picks = [
+      ['accuse', ['.selection-prompt', '.choice-buttons .choice-btn:not(.skip-btn)']],
+      ['accuseNobody', ['.selection-prompt']],
+      ['accuseInOrder', ['.selection-prompt', '.ordered-list-add', '.ordered-list-choices .done-button']],
+      // An element pick with no candidate falls back to an instruction, and grows (#1587).
+      ['accuseNoElement', ['.instruction-text']],
+    ];
+    for (const [action, shown] of picks) {
+      await check(`${size}: ${action}: a pick under a chip keeps the chip, the prompt and the skip button in view without scrolling`, async () => {
         await surface.locator(`[data-bs-action="${action}"]`).click();
         const field = surface.locator('.text-input input');
         await field.fill('Stole the fire from the eastern camp');
@@ -205,13 +218,32 @@ async function onScreen(browser, hostUrl, viewport) {
         // The choices arrive after the pick does, so wait for them before measuring.
         for (const selector of shown) await surface.locator(selector).first().waitFor({ timeout: 15_000 });
         try {
-          await assertAllInView(surface, ['.config-title', '.selected-value', '.selection-prompt', '.skip-btn', ...shown]);
+          await assertAllInView(surface, ['.config-title', '.selected-value', '.skip-btn', ...shown]);
         } finally {
           await surface.locator('.cancel-btn').click();
           await skip.waitFor({ state: 'detached', timeout: 10_000 });
         }
       });
     }
+
+    // Its candidates are on the board, so the bar keeps its cap and scrolls rather than cover them (#1573, #1587).
+    await check(`${size}: an element pick under a chip keeps the cap, and its skip is reachable`, async () => {
+      await surface.locator('[data-bs-action="accuseElement"]').click();
+      const field = surface.locator('.text-input input');
+      await field.fill('Stole the fire from the eastern camp');
+      await field.press('Enter');
+      await surface.locator('.element-selection .element-btn').first().waitFor({ timeout: 15_000 });
+      try {
+        const bar = await barGeometry(surface);
+        assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}, covering the board`);
+        await skip.scrollIntoViewIfNeeded();
+        const end = await barGeometry(surface, ['.skip-btn']);
+        assert(end.outside.length === 0, `the skip button cannot be scrolled into view inside the bar (${end.height}px tall)`);
+      } finally {
+        await surface.locator('.cancel-btn').click();
+        await skip.waitFor({ state: 'detached', timeout: 10_000 });
+      }
+    });
   });
 }
 

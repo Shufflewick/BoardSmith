@@ -1019,7 +1019,7 @@ function categoryButton(group: { label: string; children: readonly unknown[] }) 
   };
 }
 
-/** A choice list's growth mark, left off while the board draws a candidate the grown bar would cover (#1573, #1580). */
+/** A pick list's growth mark, left off while the board draws a candidate the grown bar would cover (#1573, #1580, #1587). */
 const choiceListGrowth = computed(() => {
   const candidates = currentPick.value?.type === 'choice' ? offeredChoices.value : offeredElements.value;
   return candidates.some((candidate) => (candidate.refs ?? []).length > 0) ? undefined : 'choices';
@@ -1784,7 +1784,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             {{ currentPick.prompt || (currentPick.type === 'element' ? `Select ${currentPick.elementClassName || 'element'}` : `Select ${currentPick.name}`) }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons element-selection">
+          <div class="choice-buttons element-selection" :data-bs-grows-panel="choiceListGrowth">
             <template v-for="node in elementLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : node.item.id">
               <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
               <button
@@ -1894,7 +1894,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               </button>
             </li>
           </ol>
-          <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices">
+          <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices" :data-bs-grows-panel="choiceListGrowth">
             <!-- #313 / #935: the candidates are on the board, so the handoff replaces
                  the Add buttons (id refs stay in filteredChoices); the entries above stay here. -->
             <button
@@ -2043,7 +2043,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </div>
 
         <!-- Element selection (fallback when no validElements and not loading) -->
-        <div v-else-if="currentPick.type === 'element' || currentPick.type === 'elements'" class="element-instruction">
+        <div v-else-if="currentPick.type === 'element' || currentPick.type === 'elements'" class="element-instruction" :data-bs-grows-panel="choiceListGrowth">
           <span class="instruction-text">
             Click on a {{ currentPick.elementClassName || 'element' }} to select it
           </span>
@@ -2083,8 +2083,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              a "box" grows to the ceiling its box is sized from, while a
              one-line "field" stacks label, hint and field + Done on a phone
              (#1058), under any chips and however the prompt wraps, and grows to
-             what it needs (#1481). A choice pick's buttons and a multiSelect's checkbox list grow the
-             same way as "choices" unless the board draws a candidate (#1573, #1580). The shell's bar reads the mark, so the
+             what it needs (#1481). Every other pick's list (buttons, checkboxes, an ordered list's
+             Adds, an element pick's fallback) grows the same way as "choices"
+             unless the board draws a candidate (#1573, #1580, #1587). The shell's bar reads the mark, so the
              exception ends when this unmounts. -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
