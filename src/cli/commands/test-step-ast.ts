@@ -386,6 +386,21 @@ export function mentionsAny(text: string, names: Iterable<string>): boolean {
   return false;
 }
 
+/** Each enclosing named function, and the position, of a parameter a call passes a verb or command in. */
+function parameterPositions(carried: Carried, ancestors: AstNode[]): Array<[keyof Carried, string, number]> {
+  const positions: Array<[keyof Carried, string, number]> = [];
+  const passed = (['names', 'commands'] as const).flatMap((kind) => carried[kind].map((n) => [kind, identifierName(n)] as const));
+  for (const named of ancestors.map(namedFunction)) {
+    if (!named) continue;
+    const params = paramNames(named.fn);
+    for (const [kind, name] of passed) {
+      const index = name === undefined ? -1 : params.indexOf(name);
+      if (index !== -1) positions.push([kind, named.name, index]);
+    }
+  }
+  return positions;
+}
+
 /**
  * Finds wrappers to a fixed point, so a wrapper around a wrapper is found too. Only files that
  * mention a name already known (`seedNames` or a wrapper found so far) are parsed at all, which
@@ -416,16 +431,8 @@ function findWrappers(
       walk(ast, (node, ancestors) => {
         if (node.type !== 'CallExpression') return;
         const carried = verbArgument(node, wrappers, resolver(scopes, ancestors, ast));
-        for (const ancestor of ancestors) {
-          const named = namedFunction(ancestor);
-          if (!named) continue;
-          const params = paramNames(named.fn);
-          for (const kind of ['names', 'commands'] as const) {
-            for (const name of carried[kind].map(identifierName)) {
-              const index = name === undefined ? -1 : params.indexOf(name);
-              if (index !== -1 && add(kind, named.name, index)) changed = true;
-            }
-          }
+        for (const [kind, name, index] of parameterPositions(carried, ancestors)) {
+          if (add(kind, name, index)) changed = true;
         }
       });
     }
