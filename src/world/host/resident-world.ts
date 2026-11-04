@@ -270,6 +270,7 @@ export class ResidentWorld {
   readonly #onChanged: () => Promise<void> | void;
   readonly #onVacated: (vacancy: { readonly seat: number; readonly player: string }) => void;
   readonly #presenceDeclaration: WorldPresenceDeclaration | undefined;
+  readonly #joinHook: string | undefined;
 
   /** Rebuilt whole by `wake`, which is what makes that control real. */
   #world: WorldRunner;
@@ -339,7 +340,9 @@ export class ResidentWorld {
     this.#onVacated = options.onVacated ?? (() => {});
     this.#skewMs = this.#store.clockSkewMs();
     this.#world = this.#build();
-    this.#presenceDeclaration = readWorldDefinition(options.definition).presence;
+    const declared = readWorldDefinition(options.definition);
+    this.#presenceDeclaration = declared.presence;
+    this.#joinHook = declared.referral?.onJoin;
   }
 
   /** How many seats this world's own rules declare. */
@@ -660,11 +663,16 @@ export class ResidentWorld {
    * idleness is measured from (ShufflewickPub #423): without it, a player who
    * joins a world that has been recording for four hundred days is found four
    * hundred days idle by the first sweep after they arrive.
+   *
+   * Answers whether this call ASSIGNED the chair, rather than re-seating its
+   * holder on a reconnect: an assignment is when a host runs `referral.onJoin`.
    */
-  seat(player: string, seat: number): void {
+  seat(player: string, seat: number): boolean {
     assertSeatWithinWorld(player, seat, this.#world.seatCount);
+    const assigned = this.#seatOf(player) !== seat;
     this.#world.runner.seat(player, seat);
     this.#store.seat(player, seat, this.now());
+    return assigned;
   }
 
   // ── what a seat sees ───────────────────────────────────────────────────────
@@ -965,6 +973,11 @@ export class ResidentWorld {
    *  departure policy is written against. */
   get presenceHooks(): WorldPresenceDeclaration | undefined {
     return this.#presenceDeclaration;
+  }
+
+  /** The bundle's `referral.onJoin` verb, which a host runs when it assigns a seat (#1583). */
+  get joinHook(): string | undefined {
+    return this.#joinHook;
   }
 
   /**
