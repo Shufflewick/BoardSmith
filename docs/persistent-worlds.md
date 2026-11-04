@@ -2503,11 +2503,11 @@ button that always refuses, and `boardsmith smoke` never walks into the
 refusal. Do not probe by calling `convertCredits` from a condition and catching
 the refusal; a condition asks a question, and this flag is the answer.
 
-It is `false` on every engine revision so far. A published world does not
-carry its engine (see [the engine contract](./engine-contract.md)): the
-platform runs it on a newer archived engine with the API it was built against,
-so the day a revision turns this `true`, the action starts being offered with
-no release of the game.
+It is `false` on every engine revision so far. The flag is read from the
+engine the platform runs, not from your bundle (see
+[the engine contract](./engine-contract.md)), so it is the platform's answer
+rather than one your build froze. What `convertCredits` will return once it
+works is not decided yet, so expect to update `execute` when it is.
 
 ## Ending a season
 

@@ -296,9 +296,8 @@ export interface WorldFacilities {
    *
    * The same value on the offer path and in a dispatch, so a `condition` on it
    * hides a credit-only action rather than offering a button that always
-   * refuses. False on every engine revision so far; the platform supplies the
-   * engine, so a world reaches the revision that turns it true with no release
-   * of its own.
+   * refuses. False on every engine revision so far, and read from the engine
+   * the platform runs rather than frozen into the bundle.
    */
   readonly creditConversionAvailable: boolean;
 }
