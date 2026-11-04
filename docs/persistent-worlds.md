@@ -2485,6 +2485,30 @@ The amount of game currency is absent from the request on purpose. It is the
 platform's answer, from a configured rate — a game that named it would be
 setting its own exchange rate from inside the isolate that benefits.
 
+### Hiding a credit-only action until conversion works
+
+```ts
+worldAction<MyGame>("purchaseEssentia")
+  .needs(() => ["vault"])
+  .condition({ "the platform can convert credits": ({ world }) => world.creditConversionAvailable })
+  .execute((_args, ctx) => {
+    ctx.world.convertCredits({ credits: 100 });
+  });
+```
+
+`ctx.world.creditConversionAvailable` says whether `convertCredits` can answer.
+It is read-only, and the same on the offer path and in a dispatch, so a
+`condition` on it keeps the action declared but unoffered: no player sees a
+button that always refuses, and `boardsmith smoke` never walks into the
+refusal. Do not probe by calling `convertCredits` from a condition and catching
+the refusal; a condition asks a question, and this flag is the answer.
+
+It is `false` on every engine revision so far. A published world does not
+carry its engine (see [the engine contract](./engine-contract.md)): the
+platform runs it on a newer archived engine with the API it was built against,
+so the day a revision turns this `true`, the action starts being offered with
+no release of the game.
+
 ## Ending a season
 
 `ctx.world.complete()` declares this season over. It takes no argument, so it cannot
