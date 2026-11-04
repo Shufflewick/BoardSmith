@@ -1,5 +1,5 @@
 {
-  "revision": 332,
+  "revision": 333,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2599,6 +2599,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "An ordered-list pick's Adds and an element pick's no-candidate fallback in the Action Panel grow the action bar past its two-row cap like a choice pick's buttons, unless the board draws a candidate, so a chip above them cannot hide their prompt, Done and skip at phone width; an element pick's list takes the same rule, and since every element candidate carries a board ref it keeps the cap (#1587)"
+    },
+    {
+      "revision": 333,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The verbs check counts a tests/ helper that takes a whole command and hands it to the world runner's apply or the world engine's applyCommand, so apply({ name: 'verb', args }, player), or a helper that builds { name } from its own name parameter, counts as dispatching that verb (#1588)"
     }
   ]
 }
