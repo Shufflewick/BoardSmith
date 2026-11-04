@@ -2437,6 +2437,33 @@ describe("#1584 — world.passMemo shares read-only work across one offer pass a
   });
 });
 
+describe("#1585 — world.creditConversionAvailable lets a game hide a credit-only action", () => {
+  it("is false on the offer path and in a dispatch, so a condition on it offers nothing", async () => {
+    const seen: boolean[] = [];
+    const purchase = worldAction<WorldFixtureGame>("purchase")
+      .needs(() => [ROOM_ONE])
+      .condition({ "the platform can convert credits": ({ world }) => world.creditConversionAvailable })
+      .execute(() => {});
+    const peek = worldAction<WorldFixtureGame>("peek")
+      .needs(() => [ROOM_ONE])
+      .execute((_, { world }) => {
+        seen.push(world.creditConversionAvailable);
+      });
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [purchase, peek],
+      view: () => [],
+    });
+    await engine.hydrate([ROOM_ONE]);
+
+    expect((await engine.offersFor("player-a", STAMP)).map((offer) => offer.name)).toEqual(["peek"]);
+    await engine.applyCommand("player-a", { name: "peek", args: {} }, STAMP);
+    expect(seen).toEqual([false]);
+  });
+});
+
 describe("#381 — a resident-root lookup is asked of the root table, not of the tree", () => {
   // `residentIds` resolves a declared name to an id in one map read, and then
   // the accessor spent the saving it had just made: it handed the id to

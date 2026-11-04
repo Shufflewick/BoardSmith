@@ -291,6 +291,15 @@ export interface WorldFacilities {
    * currency back into credits, and there is deliberately no method that could.
    */
   convertCredits(request: CreditConversion): never;
+  /**
+   * WHETHER `convertCredits` CAN ANSWER, read before calling it (#1585).
+   *
+   * The same value on the offer path and in a dispatch, so a `condition` on it
+   * hides a credit-only action rather than offering a button that always
+   * refuses. False on every engine revision so far, and read from the engine
+   * the platform runs rather than frozen into the bundle.
+   */
+  readonly creditConversionAvailable: boolean;
 }
 
 /**

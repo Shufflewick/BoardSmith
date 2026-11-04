@@ -501,6 +501,9 @@ function seatActivity(stamp: SeatActivityStamp | null): SeatActivity | null {
   return { ...stamp, inactiveSince: stamp.at ?? stamp.since };
 }
 
+/** What `ctx.world.creditConversionAvailable` reads in both facility builders, so an offer and a dispatch agree (#1585). */
+const CREDIT_CONVERSION_AVAILABLE = false;
+
 /**
  * THE ONE SENTENCE `convertCredits` EVER SAYS (ShufflewickPub #382).
  *
@@ -2241,6 +2244,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       convertCredits: (): never => {
         throw creditsUnavailable(action);
       },
+      creditConversionAvailable: CREDIT_CONVERSION_AVAILABLE,
       // AN OFFER FREES NO CHAIR (ShufflewickPub #475), for `schedule`'s reason
       // and more so: an offer runs once per watcher per refresh, on a path with
       // no checkpoint and no rollback, so a release here would be a seat handed
@@ -3078,6 +3082,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         ledger.vacated = { seat, player: holder };
       },
       convertCredits: (): never => raise(creditsUnavailable(action)),
+      creditConversionAvailable: CREDIT_CONVERSION_AVAILABLE,
       partition,
       // A DISPATCH NEVER MEMOIZES (#1584): execute changes the live root in place, so a held answer would go stale.
       passMemo: <T>(name: string, _key: string, compute: (root: GameElement) => T): T =>
