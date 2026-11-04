@@ -385,7 +385,8 @@ Validate starts once build is done, since it measures the bundle build wrote in
 The verbs check asks that every verb the game defines
 (`Action.create('<verb>')`, `worldAction('<verb>')` or a wrapper of the
 project's own) is dispatched through the engine by some test file, such as
-`testGame.doAction(seat, '<verb>')`; a test that calls the rules function
+`testGame.doAction(seat, '<verb>')` or, for a world game, the world runner's
+`runner.apply({ command: { name: '<verb>' }, ... })`; a test that calls the rules function
 directly does not count. A failing test is named as in a file the change
 touched since the main branch (or since `--base`), or in one it did not.
 

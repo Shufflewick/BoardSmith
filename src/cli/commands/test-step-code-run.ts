@@ -28,7 +28,7 @@
  */
 import { posix } from 'node:path';
 import { isSameOrInside, mayBeSameOrInside } from '../lib/path-inside.js';
-import { findDispatches, parseSource, walk, type AstNode } from './test-step-ast.js';
+import { findDispatches, parseSource, walk, type AstNode, type Wrappers } from './test-step-ast.js';
 
 /** Modules a scan never needs: they mount components or run a game. */
 const CODE_RUNNING_MODULES = new Set(['@vue/test-utils', 'boardsmith/testing']);
@@ -50,7 +50,7 @@ export interface CodeRunContext {
   /** The text of a project script (under `src/` or `tests/`), by project-relative path. */
   text(path: string): string | undefined;
   /** The project's own dispatch helpers (`findDispatchWrappers`). */
-  wrappers: ReadonlyMap<string, number>;
+  wrappers: Wrappers;
 }
 
 type Statement = AstNode & { importKind?: string; exportKind?: string };

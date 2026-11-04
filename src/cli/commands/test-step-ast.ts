@@ -255,9 +255,10 @@ export function findTestBlocks(source: string, file?: string): TestBlock[] {
  * verb factory, or to an engine entry point), keyed by function name to that parameter's index.
  * Games build both — `standingVerb('bidOnItem', ...)` around `worldAction(name)`, a test harness's
  * `world.run('bidOnItem', seat)` around the world engine's `applyCommand` — so a reader that knew
- * only the library's own names would miss every verb such a game has.
+ * only the library's own names would miss every verb such a game has. A name keeps every index
+ * any function by that name uses, since a game's test files declare many local `run` helpers.
  */
-type Wrappers = ReadonlyMap<string, number>;
+export type Wrappers = ReadonlyMap<string, ReadonlySet<number>>;
 
 /** A file's project-relative path and text. */
 export interface SourceFile {
@@ -265,10 +266,43 @@ export interface SourceFile {
   text: string;
 }
 
-/** Given the wrappers known so far, the expression a call passes as a verb name, if any. */
-type VerbArgument = (call: AstNode, wrappers: Wrappers) => AstNode | undefined;
+/** The object literal an identifier is bound to where a call reads it, or the node itself. */
+type Resolve = (node: AstNode | undefined) => AstNode | undefined;
+
+/** Given the wrappers known so far, the expressions a call may pass as a verb name. */
+type VerbArgument = (call: AstNode, wrappers: Wrappers, resolve: Resolve) => AstNode[];
 
 const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[index];
+
+/** The arguments a call to a wrapper passes at the wrapper's verb positions. */
+const wrapperArguments = (call: AstNode, name: string | undefined, wrappers: Wrappers): AstNode[] =>
+  [...(wrappers.get(name ?? '') ?? [])].map((index) => argAt(call, index)).filter(isNode);
+
+/** Object literals bound to a local (`const request = { name, args }`), by the function binding them. */
+function objectBindings(ast: AstNode): Map<AstNode, Map<string, AstNode>> {
+  const scopes = new Map<AstNode, Map<string, AstNode>>();
+  walk(ast, (node, ancestors) => {
+    const name = node.type === 'VariableDeclarator' ? identifierName(node.id) : undefined;
+    if (name === undefined || !isNode(node.init) || node.init.type !== 'ObjectExpression') return;
+    const scope = [...ancestors].reverse().find(isFunction) ?? ast;
+    if (!scopes.has(scope)) scopes.set(scope, new Map());
+    scopes.get(scope)!.set(name, node.init);
+  });
+  return scopes;
+}
+
+/** Looks an identifier up from the innermost function around the call out to the file. */
+function resolver(scopes: ReadonlyMap<AstNode, ReadonlyMap<string, AstNode>>, ancestors: AstNode[], ast: AstNode): Resolve {
+  return (node) => {
+    const name = identifierName(node);
+    if (name === undefined) return node;
+    for (const scope of [...ancestors.filter(isFunction).reverse(), ast]) {
+      const bound = scopes.get(scope)?.get(name);
+      if (bound) return bound;
+    }
+    return node;
+  };
+}
 
 /** The value of an object literal's `name` property: `{ name: command, args }`. */
 function nameProperty(node: AstNode | undefined, key = 'name'): AstNode | undefined {
@@ -336,27 +370,36 @@ function findWrappers(
   sources: readonly SourceFile[],
   verbArgument: VerbArgument,
   seedNames: readonly string[],
-): Map<string, number> {
-  const parsed = new Map<SourceFile, ParsedSource>();
-  const wrappers = new Map<string, number>();
+): Map<string, Set<number>> {
+  const parsed = new Map<SourceFile, { ast: AstNode; scopes: Map<AstNode, Map<string, AstNode>> }>();
+  const wrappers = new Map<string, Set<number>>();
+  const add = (name: string, index: number): boolean => {
+    const indexes = wrappers.get(name) ?? new Set<number>();
+    if (indexes.has(index)) return false;
+    wrappers.set(name, indexes.add(index));
+    return true;
+  };
   for (let changed = true; changed; ) {
     changed = false;
     for (const file of sources) {
       if (!mentionsAny(file.text, [...seedNames, ...wrappers.keys()])) continue;
-      if (!parsed.has(file)) parsed.set(file, parseSource(file.text, file.path));
-      walk(parsed.get(file)!.ast, (node) => {
-        const named = namedFunction(node);
-        if (!named || wrappers.has(named.name)) return;
-        const params = paramNames(named.fn);
-        walk(named.fn.body as AstNode, (inner) => {
-          if (inner.type !== 'CallExpression' || wrappers.has(named.name)) return;
-          const arg = verbArgument(inner, wrappers);
-          if (arg?.type !== 'Identifier') return;
-          const index = params.indexOf(arg.name as string);
-          if (index === -1) return;
-          wrappers.set(named.name, index);
-          changed = true;
-        });
+      if (!parsed.has(file)) {
+        const { ast } = parseSource(file.text, file.path);
+        parsed.set(file, { ast, scopes: objectBindings(ast) });
+      }
+      const { ast, scopes } = parsed.get(file)!;
+      walk(ast, (node, ancestors) => {
+        if (node.type !== 'CallExpression') return;
+        const names = verbArgument(node, wrappers, resolver(scopes, ancestors, ast)).map(identifierName);
+        for (const ancestor of ancestors) {
+          const named = namedFunction(ancestor);
+          if (!named) continue;
+          const params = paramNames(named.fn);
+          for (const name of names) {
+            const index = name === undefined ? -1 : params.indexOf(name);
+            if (index !== -1 && add(named.name, index)) changed = true;
+          }
+        }
       });
     }
   }
@@ -375,16 +418,15 @@ function isActionCreate(callee: AstNode): boolean {
 /** The verb factories: `Action.create(name)`, `worldAction(name)`, and their wrappers. */
 const verbFactoryArgument: VerbArgument = (call, wrappers) => {
   const callee = call.callee as AstNode;
-  if (isActionCreate(callee) || identifierName(callee) === 'worldAction') return argAt(call, 0);
-  const name = identifierName(callee);
-  return name !== undefined && wrappers.has(name) ? argAt(call, wrappers.get(name)!) : undefined;
+  if (isActionCreate(callee) || identifierName(callee) === 'worldAction') return [argAt(call, 0)].filter(isNode);
+  return wrapperArguments(call, identifierName(callee), wrappers);
 };
 
 /** The names a file must mention to define a verb itself. */
 export const VERB_FACTORY_NAMES = Object.freeze(['Action.create', 'worldAction']);
 
 /** Every project function that defines a verb named by one of its parameters. */
-export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, number> {
+export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
   return findWrappers(sources, verbFactoryArgument, VERB_FACTORY_NAMES);
 }
 
@@ -399,8 +441,10 @@ export function findDefinedVerbs(
   walk(parseSource(source, file).ast, (node) => {
     if (node.type !== 'CallExpression') return;
     if (onLines && !onLines.has(node.loc.start.line)) return;
-    const name = literalText(verbFactoryArgument(node, wrappers));
-    if (name !== undefined && !verbs.includes(name)) verbs.push(name);
+    for (const arg of verbFactoryArgument(node, wrappers, (n) => n)) {
+      const name = literalText(arg);
+      if (name !== undefined && !verbs.includes(name)) verbs.push(name);
+    }
   });
   return verbs;
 }
@@ -409,7 +453,8 @@ export function findDefinedVerbs(
  * The engine entry points a test can dispatch a verb through, and which argument carries the
  * verb's name. `assertActionFails` is deliberately absent: a verb only ever seen failing has not
  * been shown to work. `action(...)` counts only when the builder is `execute()`d, the world
- * engine's `applyCommand(player, { name, args })` carries the name inside its command object, and
+ * engine's `applyCommand(player, { name, args })` carries the name inside its command object, the
+ * world runner's `apply({ command: { name, args }, ... })` inside its request's command, and
  * the live session host's `send(seat, { type: 'action', actionName, ... })` inside its op.
  */
 const DISPATCH_ENTRY_POINTS: Readonly<Record<string, number>> = Object.freeze({
@@ -424,21 +469,29 @@ export const DISPATCH_FORMS =
   "testGame.doAction(seat, 'verb'), testGame.tryAction(seat, 'verb'), " +
   "testGame.action('verb', seat)...execute(), runner.performAction('verb', seat), " +
   "session.send(seat, { type: 'action', actionName: 'verb', ... }) on the live session host, " +
-  "world.take(seat, 'verb'), or a helper of the project's own " +
+  "world.take(seat, 'verb'), " +
+  "runner.apply({ command: { name: 'verb', ... }, ... }) on the world runner, " +
+  'or a helper of the project\'s own ' +
   'under tests/ that passes the verb name it is given to one of these (or to the world engine\'s applyCommand)';
 
-const dispatchArgument: VerbArgument = (call, wrappers) => {
-  const name = calleeName(call.callee as AstNode);
-  if (name === undefined) return undefined;
+/** The verb name a built-in entry point's call carries, if the call is one. */
+function entryPointArgument(call: AstNode, name: string, resolve: Resolve): AstNode | undefined {
   if (name in DISPATCH_ENTRY_POINTS) return argAt(call, DISPATCH_ENTRY_POINTS[name]);
-  if (name === 'applyCommand') return nameProperty(argAt(call, 1));
-  if (name === 'send') return actionOpName(argAt(call, 1));
-  return wrappers.has(name) ? argAt(call, wrappers.get(name)!) : undefined;
+  if (name === 'applyCommand') return nameProperty(resolve(argAt(call, 1)));
+  if (name === 'apply') return nameProperty(resolve(nameProperty(argAt(call, 0), 'command')));
+  if (name === 'send') return actionOpName(resolve(argAt(call, 1)));
+  return undefined;
+}
+
+const dispatchArgument: VerbArgument = (call, wrappers, resolve) => {
+  const name = calleeName(call.callee as AstNode);
+  if (name === undefined) return [];
+  return [entryPointArgument(call, name, resolve), ...wrapperArguments(call, name, wrappers)].filter(isNode);
 };
 
 /** Every project function (a test harness, usually) that dispatches a verb named by a parameter. */
-export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, number> {
-  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'send']);
+export function findDispatchWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
+  return findWrappers(sources, dispatchArgument, [...Object.keys(DISPATCH_ENTRY_POINTS), 'apply', 'send']);
 }
 
 /** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */
@@ -454,11 +507,10 @@ function executedBuilderVerb(executeCallee: AstNode): string | undefined {
 }
 
 /** The verbs one call dispatches through the engine. */
-function callVerbs(call: AstNode, wrappers: Wrappers): Array<string | undefined> {
+function callVerbs(call: AstNode, wrappers: Wrappers, resolve: Resolve): Array<string | undefined> {
   const callee = call.callee as AstNode;
-  const name = calleeName(callee);
-  if (name === 'execute' && callee.type === 'MemberExpression') return [executedBuilderVerb(callee)];
-  return [literalText(dispatchArgument(call, wrappers))];
+  const builder = calleeName(callee) === 'execute' && callee.type === 'MemberExpression' ? [executedBuilderVerb(callee)] : [];
+  return [...builder, ...dispatchArgument(call, wrappers, resolve).map(literalText)];
 }
 
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
@@ -474,10 +526,13 @@ export function findDispatches(
   const inSkipped = (node: AstNode) =>
     skippedRanges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
 
+  const scopes = objectBindings(parsed.ast);
   const dispatches: Array<{ verb: string; line: number }> = [];
-  walk(parsed.ast, (node) => {
+  walk(parsed.ast, (node, ancestors) => {
     if (node.type !== 'CallExpression' || inSkipped(node)) return;
-    for (const verb of callVerbs(node, wrappers)) if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
+    for (const verb of callVerbs(node, wrappers, resolver(scopes, ancestors, parsed.ast))) {
+      if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
+    }
   });
   return dispatches;
 }

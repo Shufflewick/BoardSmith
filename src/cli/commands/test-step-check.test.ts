@@ -195,7 +195,7 @@ const list = counter('auctionOffItem');
 const notAVerb = standingVerb;
 `;
     const wrappers = findVerbWrappers([{ path: 'src/rules/world.ts', text: rules }]);
-    expect([...wrappers.entries()]).toEqual([['standingVerb', 0], ['counter', 0]]);
+    expect([...wrappers.entries()]).toEqual([['standingVerb', new Set([0])], ['counter', new Set([0])]]);
     expect(findDefinedVerbs(rules, 'world.ts', wrappers)).toEqual(['look', 'bidOnItem', 'auctionOffItem']);
   });
 });
@@ -239,7 +239,7 @@ export function launch() {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/world.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['run', 0]]);
+    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
     expect(
       findDispatchedVerbs(
         "await world.run('bidOnItem', 2, {});\nawait world.offers(2);\nlistAuction(almanac, seller);\n",
@@ -280,8 +280,75 @@ export function act(session: Session, seat: number, verb: string) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/table.ts', text: harness }]);
-    expect([...wrappers.entries()]).toEqual([['act', 2]]);
+    expect([...wrappers.entries()]).toEqual([['act', new Set([2])]]);
     expect(findDispatchedVerbs("await act(session, 1, 'k');\n", 'tests/a.test.ts', wrappers)).toEqual(['k']);
+  });
+
+  it("counts the world runner's apply, the verb as its command's literal name (#1581)", () => {
+    expect(
+      findDispatchedVerbs(`
+await runner.apply({ command: { name: 'l', args: {} }, player: 'p1', arrivedAt: 0 });
+fn.apply(null, [{ name: 'notACommand' }]);
+`),
+    ).toEqual(['l']);
+  });
+
+  it("counts a project helper that hands its verb parameter to the world runner's apply (#1581)", () => {
+    const harness = `
+async function run(name: string, args: object) {
+  return runner.apply({ command: { name, args }, player: 'p1', arrivedAt: 0 });
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
+    expect(findDispatchedVerbs("await run('m', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['m']);
+  });
+
+  it('counts a helper whose command is an object it bound to a local first, as a cold-runner harness does (#1581)', () => {
+    const harness = `
+async function run(name: string, args: object, player = 'p1') {
+  const runner = createWorld(options).runner,
+    request = { name, args };
+  await runner.declare(request, player, {});
+  return runner.apply({ command: request, player, arrivedAt: 0 });
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
+    expect([...wrappers.entries()]).toEqual([['run', new Set([0])]]);
+    expect(findDispatchedVerbs("await w.run('n', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['n']);
+  });
+
+  it('counts a command a test bound to a local before handing it to the runner, read from its own scope (#1581)', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  const command = { name: 'o', args: {} };
+  await runner.apply({ command, player: 'p1', arrivedAt: 0 });
+  await engine.applyCommand('p1', command, {});
+});
+it('b', async () => {
+  const command = { name: 'notDispatched', args: {} };
+  const op = { type: 'action', actionName: 'p', player: 1, args: {} };
+  await session.send(1, op);
+});
+`),
+    ).toEqual(['o', 'p']);
+  });
+
+  it('keeps every verb position of helpers that share a name, so one file cannot hide another (#1581)', () => {
+    const helpers = [
+      { path: 'tests/a.test.ts', text: "async function run(player: string, name: string) { return runner.apply({ command: { name }, player }); }\n" },
+      { path: 'tests/b.test.ts', text: "async function run(name: string) { return runner.apply({ command: { name }, player: 'p1' }); }\n" },
+    ];
+    const wrappers = findDispatchWrappers(helpers);
+    expect([...wrappers.entries()]).toEqual([['run', new Set([1, 0])]]);
+    expect(findDispatchedVerbs("await run('q');\nawait run('p1', 'r');\n", 'tests/c.test.ts', wrappers)).toEqual(['q', 'r', 'p1']);
+  });
+
+  it('counts a helper whose own name is a built-in entry point, such as apply (#1581)', () => {
+    const harness = "export function apply(verb: string, seat: number) { return testGame.doAction(seat, verb); }\n";
+    const wrappers = findDispatchWrappers([{ path: 'tests/helpers/table.ts', text: harness }]);
+    expect(findDispatchedVerbs("apply('s', 1);\n", 'tests/a.test.ts', wrappers)).toEqual(['s']);
   });
 
   it('does not count the removed simulateAction / simulateActions / assertActionSucceeds helpers (#517)', () => {

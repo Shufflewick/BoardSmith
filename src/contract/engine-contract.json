@@ -1,5 +1,5 @@
 {
-  "revision": 326,
+  "revision": 327,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "b5668c56bffc1321",
   "formatHash": "ed115e27605f2ca7",
@@ -2551,6 +2551,14 @@
       "payloadHash": "b5668c56bffc1321",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A single chooseFrom pick's buttons in the Action Panel grow the action bar past its two-row cap, as a multiSelect's checkboxes do, so a chip above it cannot hide its prompt and skip at phone width (#1580)"
+    },
+    {
+      "revision": 327,
+      "date": "2026-11-04",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "b5668c56bffc1321",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The verbs check counts the world runner's runner.apply({ command: { name: 'verb' } }), and a tests/ helper that passes its verb parameter into it, as dispatching that verb, so a world game tested through the runner can publish (#1581)"
     }
   ]
 }
