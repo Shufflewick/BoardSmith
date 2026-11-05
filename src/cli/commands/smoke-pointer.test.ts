@@ -14,6 +14,7 @@ import {
   boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   candidateBoard,
+  PLAYERS_GET_THE_TABLE,
   smokeSpec,
 } from './smoke-fixtures.test-helper.js';
 
@@ -28,6 +29,7 @@ describe('boardsmith verify: the smoke check', () => {
       ['lifts when pointed at, and is followed until it settles', 'lifts'],
       ['never stands still, and is pressed where it is', 'restless'],
       ['is covered at its centre, and is pressed where it shows', 'partlyCovered'],
+      ['#1591: becomes covered at its centre after pointing, and is pressed at its edge', 'coveredAfterPointing'],
     ] as const)('claims a card that %s', async (_, kind) => {
       const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
@@ -61,6 +63,32 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
+  });
+
+  it('#1591: tries another point when a board control is covered after the pointer reaches its centre', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+const covered = ref(false);
+const rung = ref(false);
+</script>
+<template>
+  <div class="slot">
+    <button v-if="!rung" type="button" @pointerenter="covered = true" @click="rung = true">Ring the bell</button>
+    <div v-if="covered" class="cover">Clock</div>
+    <p v-if="rung">The bell rang.</p>
+  </div>
+</template>
+<style scoped>
+.slot { position: relative; width: 320px; height: 120px; }
+button { width: 320px; height: 120px; }
+.cover { position: absolute; left: 100px; top: 30px; width: 120px; height: 60px; }
+</style>`,
+      'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+    });
+
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
   });
 
   describe("#478: a board control the page around the game covers", () => {

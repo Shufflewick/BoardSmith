@@ -1006,21 +1006,20 @@ async function framesPass(frame: Frame): Promise<void> {
 
 /**
  * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
- * still on top there. A control that pointing at it removed (#464) or covered is not pressed. One
- * that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
+ * still on top there, else returns what covers it so the caller can aim elsewhere. A control that
+ * pointing at it removed (#464) is not pressed. One that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
  * one that never settles (a board that keeps panning) is clicked where it is once it has had its
  * looks. A click that would land on anything but the control, because the page moved something
  * else under the pointer at that instant, is stopped (`landsOnlyOn`), and the walk looks again.
  */
-async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
+async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void | Exclude<OnTop, 'it'>> {
   const page = control.frame.page();
   let pointer = at;
   for (let looks = 1; looks <= 2 * SETTLE_LOOKS; looks++) {
     await framesPass(control.frame);
     if ((await inPageTime(page, 'looking for the control', () => control.target.count())) === 0) throw new Error(GONE);
     const top = await onTopAt(control, x, y);
-    if (top === 'toast') throw new UnderAToast(COVERED);
-    if (top === 'other') throw new Error(COVERED);
+    if (top !== 'it') return top;
     const now = await placeOf(control, x, y);
     const still = Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX;
     if ((still || looks >= SETTLE_LOOKS) && (await landsOnlyOn(control, () => page.mouse.click(now.x, now.y)))) return;
@@ -1077,8 +1076,9 @@ async function clickWhereReachable(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
   for (const [x, y] of AIM_POINTS) {
     const at = await pointAt(control, x, y);
-    if (typeof at !== 'string') return clickAt(control, at, x, y);
-    covers.add(at);
+    const cover = typeof at === 'string' ? at : await clickAt(control, at, x, y);
+    if (cover === undefined) return;
+    covers.add(cover);
   }
   unreachable(covers);
 }
@@ -1107,13 +1107,16 @@ async function aimAndClick(control: Control): Promise<void> {
       covers.add(at);
       continue;
     }
-    reached++;
     const accepted = await withinPageTime(control.frame.page(), PRESS_MS, 'reading whether the control accepts the point aimed at', (timeout) =>
       control.target.evaluate((element) => element.getAttribute('aria-disabled') !== 'true' && element.hasAttribute('data-bs-candidate'), undefined, {
         timeout,
       }),
     );
-    if (accepted) return clickAt(control, at, x, y);
+    if (accepted) {
+      const cover = await clickAt(control, at, x, y);
+      if (cover === undefined) return;
+      covers.add(cover);
+    } else reached++;
   }
   if (reached > 0 && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
   unreachable(covers);

@@ -1044,7 +1044,7 @@ describe('the field game', () => {
 }
 
 /** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
-type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'covered' | 'toast';
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'covered' | 'toast';
 
 /** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
 const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
@@ -1062,6 +1062,11 @@ const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string
   partlyCovered: {
     template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
     style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; left: 0; top: 0; width: 160px; height: 60px; background: #888; }`,
+  },
+  // The pointer opens a tray over the centre, leaving the card's edges reachable (#1591).
+  coveredAfterPointing: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot" @pointerenter="choosing && $event.currentTarget.classList.add('covered')"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { display: none; position: absolute; left: 80px; top: 10px; width: 80px; height: 40px; background: #888; } .covered .tray { display: block; }`,
   },
   // A tray covers each card whole.
   covered: {
