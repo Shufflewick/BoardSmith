@@ -850,6 +850,18 @@ const POINTER_AIMED_SHAPES = {
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
+const POINTER_COVERS = {
+  none: { setup: '', aim: '', template: '', style: '' },
+  accepted: {
+    setup: '\nconst coverShown = ref(false);\n// Discovery aims once before the press; the tray opens when the player aims again.\nlet acceptedAims = 0;',
+    aim: `
+  if (choosing.value && !refused.value && ++acceptedAims >= 2) coverShown.value = true;`,
+    template: `
+    <div v-if="coverShown" class="cover"></div>`,
+    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
+  },
+};
+
 /**
  * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
  * cells, more than the panel lists, so it hands the pick to the board, and the board is one surface
@@ -873,19 +885,20 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
     underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
+    underACover: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
   };
-  const cover = options.accepts === 'underACover';
+  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : 'none'];
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];
   return {
-    ...fieldRules(options.accepts && refusals[options.accepts === 'underACover' ? 'underAToast' : options.accepts], shape.elements),
+    ...fieldRules(options.accepts && refusals[options.accepts], shape.elements),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: ${shape.opensOnRow}, col: 2 });${cover ? '\nconst coverShown = ref(false);\n// Discovery aims once before the press; the tray opens when the player aims again.\nlet acceptedAims = 0;' : ''}
+const cursor = ref({ row: ${shape.opensOnRow}, col: 2 });${cover.setup}
 const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
 // The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
@@ -895,8 +908,7 @@ const refused = computed(() => target.value === undefined || target.value.disabl
 function aim(event: PointerEvent) {
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const at = (offset: number, size: number) => Math.min(9, Math.max(0, ${toCell}((offset / size) * 10)));
-  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };${cover ? `
-  if (choosing.value && !refused.value && ++acceptedAims >= 2) coverShown.value = true;` : ''}
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };${cover.aim}
 }
 function claim() {
   if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
@@ -927,15 +939,14 @@ function hover() {
       @keydown.enter="claim"
     >
       Aimed at row {{ cursor.row }}, column {{ cursor.col }}
-    </div>${cover ? `
-    <div v-if="coverShown" class="cover"></div>` : ''}${toast ? `
+    </div>${cover.template}${toast ? `
     <div v-if="toastShown" class="toast info">Claim a cell.</div>` : ''}
   </div>
 </template>
 
 <style scoped>
 .board { position: relative; width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${cover ? '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }' : ''}${toast ? `
+.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${cover.style}${toast ? `
 .toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
 </style>
 `,
