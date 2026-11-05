@@ -850,6 +850,18 @@ const POINTER_AIMED_SHAPES = {
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
+const POINTER_COVERS = {
+  none: { setup: '', aim: '', template: '', style: '' },
+  accepted: {
+    setup: '\nconst coverShown = ref(false);\n// Discovery aims once before the press; the tray opens when the player aims again.\nlet acceptedAims = 0;',
+    aim: `
+  if (choosing.value && !refused.value && ++acceptedAims >= 2) coverShown.value = true;`,
+    template: `
+    <div v-if="coverShown" class="cover"></div>`,
+    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
+  },
+};
+
 /**
  * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
  * cells, more than the panel lists, so it hands the pick to the board, and the board is one surface
@@ -868,12 +880,14 @@ const POINTER_AIMED_SHAPES = {
  * 'twoRows' (#1521 review) has `claim` offer only rows 4 and 5, so the field names no cell (it has
  * no `data-bs-candidate`) over the other rows.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' | 'underACover'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
     underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
+    underACover: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
   };
+  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : 'none'];
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];
@@ -884,7 +898,7 @@ import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: ${shape.opensOnRow}, col: 2 });
+const cursor = ref({ row: ${shape.opensOnRow}, col: 2 });${cover.setup}
 const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
 // The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
@@ -894,7 +908,7 @@ const refused = computed(() => target.value === undefined || target.value.disabl
 function aim(event: PointerEvent) {
   const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
   const at = (offset: number, size: number) => Math.min(9, Math.max(0, ${toCell}((offset / size) * 10)));
-  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };${cover.aim}
 }
 function claim() {
   if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
@@ -925,14 +939,14 @@ function hover() {
       @keydown.enter="claim"
     >
       Aimed at row {{ cursor.row }}, column {{ cursor.col }}
-    </div>${toast ? `
+    </div>${cover.template}${toast ? `
     <div v-if="toastShown" class="toast info">Claim a cell.</div>` : ''}
   </div>
 </template>
 
 <style scoped>
 .board { position: relative; width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${toast ? `
+.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${cover.style}${toast ? `
 .toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
 </style>
 `,
@@ -1044,7 +1058,7 @@ describe('the field game', () => {
 }
 
 /** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
-type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'covered' | 'toast';
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'coveredWholeAfterPointing' | 'covered' | 'toast' | 'toastAfterPointing';
 
 /** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
 const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
@@ -1063,10 +1077,23 @@ const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string
     template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
     style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; left: 0; top: 0; width: 160px; height: 60px; background: #888; }`,
   },
+  // The pointer opens a tray over the centre, leaving the card's edges reachable (#1591).
+  coveredAfterPointing: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot" @pointerenter="choosing && $event.currentTarget.classList.add('covered')"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { display: none; position: absolute; left: 80px; top: 10px; width: 80px; height: 40px; background: #888; } .covered .tray { display: block; }`,
+  },
+  coveredWholeAfterPointing: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot" @pointerenter="choosing && $event.currentTarget.classList.add('covered')"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { display: none; position: absolute; inset: 0; background: #888; } .covered .tray { display: block; }`,
+  },
   // A tray covers each card whole.
   covered: {
     template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
     style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
+  },
+  toastAfterPointing: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button><div v-if="warning" class="toast error">The ravens are loud.</div>`,
+    style: `.card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
   },
   // The first time the bell, or a card, is pointed at, an error toast covers the board for a second
   // and a half, and a second one follows the moment the first goes, as a game that reports twice does.
@@ -1104,7 +1131,7 @@ function claim(cell: string) {
 }
 const warning = ref(false);
 let warned = 0;
-function warn() {
+function warn() {${kind === 'toastAfterPointing' ? '\n  if (!choosing.value) return;' : ''}
   if (warned >= 2 || warning.value) return;
   warned++;
   warning.value = true;

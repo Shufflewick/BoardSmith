@@ -14,6 +14,8 @@ import {
   boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   candidateBoard,
+  pointerAimedGame,
+  PLAYERS_GET_THE_TABLE,
   smokeSpec,
 } from './smoke-fixtures.test-helper.js';
 
@@ -28,6 +30,7 @@ describe('boardsmith verify: the smoke check', () => {
       ['lifts when pointed at, and is followed until it settles', 'lifts'],
       ['never stands still, and is pressed where it is', 'restless'],
       ['is covered at its centre, and is pressed where it shows', 'partlyCovered'],
+      ['#1591: becomes covered at its centre after pointing, and is pressed at its edge', 'coveredAfterPointing'],
     ] as const)('claims a card that %s', async (_, kind) => {
       const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
@@ -42,8 +45,8 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the far bell"');
     });
 
-    it('fails a card something covers whole, saying so', async () => {
-      const { outcome } = await smokeOf(false, { ...candidateBoard('covered'), ...spec });
+    it.each(['covered', 'coveredWholeAfterPointing'] as const)('fails a card something covers whole, saying so (%s)', async (kind) => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
       expect(outcome.passed).toBe(false);
       expect(outcome.summary).toContain(
@@ -51,16 +54,52 @@ describe('boardsmith verify: the smoke check', () => {
       );
     });
 
-    it('reads an error toast over a control, waits for it to go, and presses again', async () => {
-      const { outcome, steps } = await smokeOf(false, { ...candidateBoard('toast'), ...spec });
+    it.each(['toast', 'toastAfterPointing'] as const)('reads an error toast over a control, waits for it to go, and presses again (%s)', async (kind) => {
+      const { outcome, steps } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
       // The toast is an error, so it fails the walk; the presses it covered both landed.
       expect(outcome.summary).toBe(
         'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
       );
-      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
+  });
+
+  it('#1591: tries another point when a board control is covered after the pointer reaches its centre', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+const covered = ref(false);
+const rung = ref(false);
+</script>
+<template>
+  <div class="slot">
+    <button v-if="!rung" type="button" @pointerenter="covered = true" @click="rung = true">Ring the bell</button>
+    <div v-if="covered" class="cover">Clock</div>
+    <p v-if="rung">The bell rang.</p>
+  </div>
+</template>
+<style scoped>
+.slot { position: relative; width: 320px; height: 120px; }
+button { width: 320px; height: 120px; }
+.cover { position: absolute; left: 100px; top: 30px; width: 120px; height: 60px; }
+</style>`,
+      'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+    });
+
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+  });
+
+  it('#1591 F1: reports coverage when accepted points become covered and other points are refused', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'underACover' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('did not work: another element covers it, so a pointer cannot reach it.');
   });
 
   describe("#478: a board control the page around the game covers", () => {
