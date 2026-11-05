@@ -1,5 +1,5 @@
 {
-  "revision": 336,
+  "revision": 337,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2631,6 +2631,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Smoke presses try another reachable aim point when a board control becomes covered after pointing"
+    },
+    {
+      "revision": 337,
+      "date": "2026-11-05",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Smoke panel presses leave previous hover help before clicking the next action"
     }
   ]
 }
