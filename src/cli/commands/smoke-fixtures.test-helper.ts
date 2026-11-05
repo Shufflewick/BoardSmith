@@ -1058,10 +1058,10 @@ describe('the field game', () => {
 }
 
 /** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
-type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'coveredWholeAfterPointing' | 'covered' | 'toast' | 'toastAfterPointing';
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'coveredWholeAfterPointing' | 'covered' | 'toast' | 'toastAfterPointing' | 'restingHelp';
 
 /** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
-const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
+const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string; setup?: string }> = {
   // Each card lifts when pointed at, moving under the pointer for a third of a second.
   lifts: {
     template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
@@ -1091,6 +1091,17 @@ const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string
     template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
     style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
   },
+  restingHelp: {
+    setup: `import { onMounted, onUnmounted } from 'vue';
+const help = ref(false);
+function openHelp(event: MouseEvent) {
+  if ((event.target as Element).closest('[data-bs-action="claim"]')) help.value = true;
+}
+onMounted(() => document.addEventListener('click', openHelp));
+onUnmounted(() => document.removeEventListener('click', openHelp));`,
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><Teleport to="body"><div v-if="help" class="hover-help" role="tooltip" @pointerleave="help = false">Why this action is disabled</div></Teleport>`,
+    style: `.card { width: 120px; height: 60px; margin: 8px; } .hover-help { position: fixed; inset: 0; z-index: 10000; background: #eee; }`,
+  },
   toastAfterPointing: {
     template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button><div v-if="warning" class="toast error">The ravens are loud.</div>`,
     style: `.card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
@@ -1110,13 +1121,13 @@ const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string
  * as cards on the board, with `claim` handed to the board. See `CandidateBoard` for each kind.
  */
 export function candidateBoard(kind: CandidateBoard): Record<string, string> {
-  const { template, style } = CANDIDATE_BOARDS[kind];
+  const { template, style, setup = '' } = CANDIDATE_BOARDS[kind];
   return {
     ...fieldRules(),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
-
+${setup}
 const board = useBoardInteraction();
 const cells = ['r0c0', 'r1c1', 'r2c2'];
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
@@ -1324,16 +1335,17 @@ function lookAway() {
 }
 
 /** Help opened under the resting pointer by a panel redraw, or a cover that never leaves (#1592). */
-export function panelWithRestingPointerHelp(persistent = false): Record<string, string> {
+export function panelWithRestingPointerHelp(persistent = false, fromBoard = false): Record<string, string> {
   return {
     ...aceGame(),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
 
 const help = ref(false);
+const bells = ref(0);
 let shown = false;
 function afterPress(event: MouseEvent) {
-  if (shown || !(event.target as Element).closest('[data-bs-action="draw"]')) return;
+  if (shown || !(event.target as Element).closest('${fromBoard ? '[data-hover-source]' : '[data-bs-action="draw"]'}')) return;
   shown = true;
   help.value = true;
   console.log('Resting pointer opened help after draw.');
@@ -1342,9 +1354,9 @@ onMounted(() => document.addEventListener('click', afterPress));
 onUnmounted(() => document.removeEventListener('click', afterPress));
 </script>
 <template>
-  <div class="board">A board</div>
+  <div class="board">${fromBoard ? `<button v-if="bells === 0" type="button" data-hover-source @click="bells++">North bell</button><button v-if="bells === 1" type="button" @click="bells++">South bell</button>` : 'A board'}</div>
   <Teleport to="body">
-    <div v-if="help" class="hover-help" role="tooltip" @pointerleave="${persistent ? '' : 'help = false'}">Why this action is disabled</div>
+    <div v-if="help" class="hover-help" role="tooltip" ${persistent ? '' : '@pointerleave="help = false"'}>Why this action is disabled</div>
   </Teleport>
 </template>
 <style scoped>
@@ -1352,7 +1364,7 @@ onUnmounted(() => document.removeEventListener('click', afterPress));
 .hover-help { position: fixed; inset: 0; z-index: 10000; background: #eee; }
 </style>`,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
-    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 4, echo: 'Resting pointer opened help' }),
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: fromBoard ? 6 : 4, echo: 'Resting pointer opened help' }),
   };
 }
 

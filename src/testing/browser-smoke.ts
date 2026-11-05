@@ -859,13 +859,17 @@ async function handedBack(error: unknown, frame: Frame, wentByItself: (() => voi
 }
 
 /**
- * One attempt at pressing `control`, as `press` describes. A control off the board is clicked by
+ * One attempt at pressing `control`, as `press` describes. A pointer press first leaves the previous
+ * hover so its help cannot cover the next control. A control off the board is clicked by
  * Playwright, which waits for it to be visible, still and on top, for one look ({@link LOOK_MS}):
  * a panel that redraws its buttons as new elements takes the element away, and `press` finds the
  * control again rather than waiting on an element that is gone.
  */
-function pressOnce(control: Control): Promise<void> {
+async function pressOnce(control: Control): Promise<void> {
   if (control.keyboardOnly) return actWithinPageTime(control.frame.page(), PRESS_MS, 'pressing Enter on it', (timeout) => control.target.press('Enter', { timeout }));
+  const page = control.frame.page();
+  // Playwright waits for an uncovered target before moving there, so first leave the previous hover.
+  await inPageTime(page, 'leaving the previous hovered control', () => page.mouse.move(-1, -1));
   if (control.candidate) return aimAndClick(control);
   return control.onBoard ? clickWhereReachable(control) : clickInThePanel(control);
 }
@@ -877,9 +881,6 @@ function pressOnce(control: Control): Promise<void> {
  * action that is already taken (#562).
  */
 async function clickInThePanel(control: Control): Promise<void> {
-  const page = control.frame.page();
-  // Playwright waits for an uncovered target before moving there, so first leave the previous hover.
-  await inPageTime(page, 'leaving the previous hovered control', () => page.mouse.move(-1, -1));
   if (!(await landsOnlyOn(control, () => control.target.click({ timeout: LOOK_MS })))) throw new Error(COVERED);
 }
 

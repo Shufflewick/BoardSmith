@@ -20,6 +20,7 @@ import {
   panelThatGoesAwayAsItIsPressed,
   panelThatHangsOnThePointer,
   panelWithRestingPointerHelp,
+  candidateBoard,
   HUNG,
   smokeSpec,
 } from './smoke-fixtures.test-helper.js';
@@ -33,6 +34,23 @@ describe('boardsmith verify: the smoke check', () => {
     expect(said.some((line) => line.includes('Resting pointer opened help after draw.'))).toBe(true);
     expect(outcome.passed, outcome.summary).toBe(true);
     expect(outcome.summary).toContain('a seated player took "draw", "play"');
+  });
+
+  it('#1592 F1: leaves hover help before pressing the next board control', async () => {
+    const { outcome, steps } = await smokeOf(false, panelWithRestingPointerHelp(false, true));
+
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(steps).toContain('smoke step 2: pressing the board\'s "South bell"');
+  });
+
+  it('#1592 F1: leaves hover help before pressing a board candidate', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...candidateBoard('restingHelp'),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest'], undefined, { steps: 10 }),
+    });
+
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(outcome.summary).toContain('a seated player took "claim", "rest"');
   });
 
   it('#1592: still reports a permanent cover over the next panel action', async () => {
