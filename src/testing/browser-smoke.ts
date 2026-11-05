@@ -877,6 +877,9 @@ function pressOnce(control: Control): Promise<void> {
  * action that is already taken (#562).
  */
 async function clickInThePanel(control: Control): Promise<void> {
+  const page = control.frame.page();
+  // Playwright waits for an uncovered target before moving there, so first leave the previous hover.
+  await inPageTime(page, 'leaving the previous hovered control', () => page.mouse.move(-1, -1));
   if (!(await landsOnlyOn(control, () => control.target.click({ timeout: LOOK_MS })))) throw new Error(COVERED);
 }
 

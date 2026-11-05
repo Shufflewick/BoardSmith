@@ -1323,6 +1323,39 @@ function lookAway() {
   };
 }
 
+/** Help opened under the resting pointer by a panel redraw, or a cover that never leaves (#1592). */
+export function panelWithRestingPointerHelp(persistent = false): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue';
+
+const help = ref(false);
+let shown = false;
+function afterPress(event: MouseEvent) {
+  if (shown || !(event.target as Element).closest('[data-bs-action="draw"]')) return;
+  shown = true;
+  help.value = true;
+  console.log('Resting pointer opened help after draw.');
+}
+onMounted(() => document.addEventListener('click', afterPress));
+onUnmounted(() => document.removeEventListener('click', afterPress));
+</script>
+<template>
+  <div class="board">A board</div>
+  <Teleport to="body">
+    <div v-if="help" class="hover-help" role="tooltip" @pointerleave="${persistent ? '' : 'help = false'}">Why this action is disabled</div>
+  </Teleport>
+</template>
+<style scoped>
+.board { width: 320px; height: 200px; }
+.hover-help { position: fixed; inset: 0; z-index: 10000; background: #eee; }
+</style>`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 4, echo: 'Resting pointer opened help' }),
+  };
+}
+
 /**
  * A PANEL THAT REDRAWS A BUTTON AS IT IS PRESSED (#562 review): the first time the walk marks one
  * of the panel's action buttons to press it, the page puts a new element in its place, as a panel

@@ -19,6 +19,7 @@ import {
   PLAY_HOLD,
   panelThatGoesAwayAsItIsPressed,
   panelThatHangsOnThePointer,
+  panelWithRestingPointerHelp,
   HUNG,
   smokeSpec,
 } from './smoke-fixtures.test-helper.js';
@@ -26,6 +27,21 @@ import {
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
 describe('boardsmith verify: the smoke check', () => {
+  it('#1592: leaves help opened under the resting pointer before pressing the next panel action', async () => {
+    const { outcome, said } = await smokeOf(false, panelWithRestingPointerHelp());
+
+    expect(said.some((line) => line.includes('Resting pointer opened help after draw.'))).toBe(true);
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(outcome.summary).toContain('a seated player took "draw", "play"');
+  });
+
+  it('#1592: still reports a permanent cover over the next panel action', async () => {
+    const { outcome } = await smokeOf(false, panelWithRestingPointerHelp(true));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('another element covers it, so a pointer cannot reach it.');
+  });
+
   it('#464: a control that goes away before a press lands fails that press at once, saying so, and the walk goes on', async () => {
     const { outcome } = await smokeOf(false, boardWithAVanishingControl());
 
