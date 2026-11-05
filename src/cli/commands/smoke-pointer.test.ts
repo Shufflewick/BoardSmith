@@ -108,7 +108,7 @@ button { width: 320px; height: 120px; }
 
       expect(outcome.summary).not.toContain('Pressing the board');
       expect(outcome.passed).toBe(true);
-      if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
     });
 
     it('fails a press that something other than a toast in the page around the game takes, saying so', async () => {
