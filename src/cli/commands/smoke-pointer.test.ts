@@ -14,6 +14,7 @@ import {
   boardThatTakesFocusUnderThePress,
   boardUnderTheHostsCover,
   candidateBoard,
+  pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
   smokeSpec,
 } from './smoke-fixtures.test-helper.js';
@@ -44,8 +45,8 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the far bell"');
     });
 
-    it('fails a card something covers whole, saying so', async () => {
-      const { outcome } = await smokeOf(false, { ...candidateBoard('covered'), ...spec });
+    it.each(['covered', 'coveredWholeAfterPointing'] as const)('fails a card something covers whole, saying so (%s)', async (kind) => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
       expect(outcome.passed).toBe(false);
       expect(outcome.summary).toContain(
@@ -53,14 +54,14 @@ describe('boardsmith verify: the smoke check', () => {
       );
     });
 
-    it('reads an error toast over a control, waits for it to go, and presses again', async () => {
-      const { outcome, steps } = await smokeOf(false, { ...candidateBoard('toast'), ...spec });
+    it.each(['toast', 'toastAfterPointing'] as const)('reads an error toast over a control, waits for it to go, and presses again (%s)', async (kind) => {
+      const { outcome, steps } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
 
       // The toast is an error, so it fails the walk; the presses it covered both landed.
       expect(outcome.summary).toBe(
         'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
       );
-      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
   });
@@ -91,13 +92,23 @@ button { width: 320px; height: 120px; }
     expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
   });
 
+  it('#1591 F1: reports coverage when accepted points become covered and other points are refused', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'underACover' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('did not work: another element covers it, so a pointer cannot reach it.');
+  });
+
   describe("#478: a board control the page around the game covers", () => {
     it('waits for a toast in the page around the game to go, and presses again', async () => {
       const { outcome, steps } = await smokeOf(false, boardUnderTheHostsCover('toast'));
 
       expect(outcome.summary).not.toContain('Pressing the board');
       expect(outcome.passed).toBe(true);
-      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
     });
 
     it('fails a press that something other than a toast in the page around the game takes, saying so', async () => {

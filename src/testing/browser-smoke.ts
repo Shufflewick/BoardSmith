@@ -1007,8 +1007,9 @@ async function framesPass(frame: Frame): Promise<void> {
 /**
  * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
  * still on top there, else returns what covers it so the caller can aim elsewhere. A control that
- * pointing at it removed (#464) is not pressed. One that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
- * one that never settles (a board that keeps panning) is clicked where it is once it has had its
+ * pointing at it removed (#464) is not pressed. One that moves when pointed at (a card that lifts
+ * under the pointer) is followed until it settles, and one that never settles (a board that keeps
+ * panning) is clicked where it is once it has had its
  * looks. A click that would land on anything but the control, because the page moved something
  * else under the pointer at that instant, is stopped (`landsOnlyOn`), and the walk looks again.
  */
@@ -1070,7 +1071,8 @@ async function landsOnlyOn(control: Control, click: () => Promise<void>): Promis
 
 /**
  * Clicks a board control at the first of {@link AIM_POINTS} where it, not something on top of it, is
- * under the pointer (`clickAt`), as a player clicks the part of a card a tray leaves showing.
+ * under the pointer (`clickAt`), trying the next point if it becomes covered after pointing, as a
+ * player clicks the part of a card a tray leaves showing.
  */
 async function clickWhereReachable(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
@@ -1094,13 +1096,15 @@ function unreachable(covers: ReadonlySet<Exclude<OnTop, 'it'>>): never {
  * choice the game accepts (#468). A candidate that stands for one choice accepts the click at its
  * centre. One that stands for whatever lies under the pointer (a placement surface whose
  * `data-bs-candidate` follows the pointer) may be refused (`aria-disabled`) at its centre, so the
- * walk aims at other points on it ({@link FINE_AIM_POINTS}) until one is accepted, and clicks there.
+ * walk aims at other points on it ({@link FINE_AIM_POINTS}) until one is accepted and remains
+ * reachable after pointing, and clicks there.
  * None accepted while a toast covered some of them is an {@link UnderAToast}, which `press` waits
  * out before aiming again (#1478).
  */
 async function aimAndClick(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
   let reached = 0;
+  let acceptedButCovered = false;
   for (const [x, y] of FINE_AIM_POINTS) {
     const at = await pointAt(control, x, y);
     if (typeof at === 'string') {
@@ -1116,9 +1120,10 @@ async function aimAndClick(control: Control): Promise<void> {
       const cover = await clickAt(control, at, x, y);
       if (cover === undefined) return;
       covers.add(cover);
+      acceptedButCovered = true;
     } else reached++;
   }
-  if (reached > 0 && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
+  if (reached > 0 && !acceptedButCovered && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
   unreachable(covers);
 }
 
