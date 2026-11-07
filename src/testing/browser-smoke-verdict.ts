@@ -468,7 +468,7 @@ function excused(walk: SmokeWalk, name: string): boolean {
  * The listed actions the walk must take and has not: every one except an action the spec names in
  * `unreachable` that the walk never saw enabled.
  */
-export function requiredUntaken(walk: SmokeWalk): string[] {
+function requiredUntaken(walk: SmokeWalk): string[] {
   return walk.listed.filter((name) => !walk.taken.has(name) && !excused(walk, name));
 }
 

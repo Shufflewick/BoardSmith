@@ -75,7 +75,6 @@ import {
   readyToTake,
   recordGreyed,
   recordResolved,
-  requiredUntaken,
   SMOKE_ANNOTATION,
   SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
@@ -118,7 +117,9 @@ export interface SmokeTestOptions {
    * saying why: one offered only in a position play does not get to, such as a draw by threefold
    * repetition. The
    * walk does not require them unless it sees one enabled, which it then must take like any other;
-   * it fails if one fails. One it takes anyway is reported, so the declaration can be removed. An action that ends the game, or
+   * it fails if one fails. One it takes anyway is reported, so the declaration can be removed. A
+   * declaration never changes the walk (#1593), so one the walk never reaches has it walk all its
+   * {@link steps}. An action that ends the game, or
    * that needs another seat to act first, does not belong here: the walk starts a new game when a
    * game ends, acts for every seat at a table, and plays the {@link seats} a world's spec names.
    */
@@ -1662,11 +1663,13 @@ function endsTheGame(name: string, memory: WalkMemory): boolean {
 }
 
 /**
- * The required actions still to take, less those that failed when taken: the failure is already a
- * problem, and trying them again would only spend the steps the rest of the game needs.
+ * The listed actions still to take, less those that failed when taken: the failure is already a
+ * problem, and trying them again would only spend the steps the rest of the game needs. Declared
+ * `unreachable` ones count too, so a declaration never changes the walk (#1593): an action the
+ * walk takes with it declared is taken once the declaration is removed.
  */
 function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
-  return requiredUntaken(walk).filter((name) => !memory.failed.has(name));
+  return walk.listed.filter((name) => !walk.taken.has(name) && !memory.failed.has(name));
 }
 
 /** Whether `name` was put off for want of an input (#470) and no action has been taken since. */
