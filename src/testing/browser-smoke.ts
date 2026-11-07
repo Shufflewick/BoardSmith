@@ -1891,8 +1891,8 @@ async function waitOutAQuietWorld(plays: readonly SeatPlay[], walk: SmokeWalk, m
 /**
  * The game is over. Credits the action it ended on, then deals a new game when listed actions are
  * still to take, from the next seed of this walk's deal (`seed/2`, `seed/3`...), so the run repeats.
- * Returns false when the walk is over: everything required is taken, or it is a world's, which has
- * no new game.
+ * Returns false when the walk is over: every listed action is taken (or failed), or it is a world's,
+ * which has no new game.
  */
 async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
   if (memory.lastResolved !== undefined) memory.endings.set(memory.lastResolved, (memory.endings.get(memory.lastResolved) ?? 0) + 1);
@@ -2048,7 +2048,7 @@ async function walkOneStep(plays: readonly SeatPlay[], walk: SmokeWalk, memory: 
 
 /**
  * Walks the game a step at a time (`walkOneStep`) until the steps run out, the walk is over, or
- * every required action and every offer has been taken and a few more steps turned up nothing new.
+ * every listed action and every offer has been taken and a few more steps turned up nothing new.
  * A step that cannot go on (a page that stops answering, #464) is reported with the step it was,
  * and ends the walk of this deal.
  */
