@@ -552,8 +552,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   land, an open action that offers nothing or does not change, an offered action
   `actions` does not list, and a listed one it never takes.
 - It stops walking a deal when its `steps` (default 60 for each deal, counted
-  across that deal's games) run out, a game ends with every required action
-  taken, no seat is offered anything for 30 seconds, or every required action
+  across that deal's games) run out, a game ends with every listed action
+  taken, no seat is offered anything for 30 seconds, or every listed action
   and every offer has been taken and five more steps turned up nothing new. A
   listed action it never saw offered is reported with why the walk stopped: a
   deal that stopped because nothing was offered says so and where, since more
@@ -697,7 +697,12 @@ enabled (offered, not greyed out), the declaration no longer excuses it: the
 walk must take it like any other, so a declaration cannot hide an action that is
 offered and does nothing when pressed. It fails if taking one fails. When it
 takes a declared action, its passing summary names it and says to remove the
-declaration, so a declaration that is no longer true does not stay. The check
+declaration, so a declaration that is no longer true does not stay. A
+declaration never changes the walk: it goes after a declared action as after
+any other, dealing new games and skipping the step clock's wait for it, so an
+action it takes with the declaration in place it also takes once the
+declaration is removed (#1593). A walk with a declared action it never reaches
+therefore walks all its `steps`. The check
 fails a declaration whose reason is not a sentence (fewer than four words), one
 that names an action `actions` does not list, and a spec that declares every
 listed action.

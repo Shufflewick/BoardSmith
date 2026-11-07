@@ -1,5 +1,5 @@
 {
-  "revision": 337,
+  "revision": 338,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2639,6 +2639,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Smoke panel presses leave previous hover help before clicking the next action"
+    },
+    {
+      "revision": 338,
+      "date": "2026-11-07",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith smoke walks the same path whatever the spec declares unreachable, so an action it says to undeclare is still taken once undeclared (#1593)."
     }
   ]
 }

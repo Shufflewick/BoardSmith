@@ -17,4 +17,15 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
     expect(steps.some((line) => line.endsWith('skipping the step clock\'s wait, with "levelUp" still to take and greyed'))).toBe(true);
   });
+
+  it('#1593: walks as it would without an `unreachable` declaration, so the action it says to remove one for is still taken once it is removed', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...playbackGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], { levelUp: 'Greyed by the step clock for ten minutes, which a walk never waits out.' }, { steps: 8 }),
+    });
+
+    expect(steps.some((line) => line.endsWith('skipping the step clock\'s wait, with "levelUp" still to take and greyed'))).toBe(true);
+    expect(outcome.passed).toBe(true);
+    expect(outcome.summary).toMatch(/a seated player took "levelUp", "ready".*The walk took "levelUp", which .* remove it from `unreachable` there/);
+  });
 });
