@@ -1515,9 +1515,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 <template>
   <!-- ONE root, so attributes a parent puts on the panel (a test id, a class)
        land on it. `display: contents` keeps it out of the action bar's flow.
-       `data-bs-submitting` marks an action in flight, while every button is
-       greyed for it, so a reader can wait it out rather than read a panel that
-       offers nothing (the smoke walk, #474). -->
+       `data-bs-submitting` marks an action or a pick step in flight (#1595), so a
+       reader can wait it out rather than read a panel that offers nothing or
+       press a choice already sent (the smoke walk, #474). -->
   <div class="action-panel-root" :data-bs-submitting="isSubmitting || undefined">
   <!-- The host's deadline (#301), whatever else the panel is showing. A
        `timer` is not a live region, so the per-second change is never
