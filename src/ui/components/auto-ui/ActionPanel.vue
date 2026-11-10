@@ -1993,13 +1993,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              multi-select template above. Each choice template renders even with no choices,
              so its prompt, empty state and skip button always show (#1539). A click on
              a dependent pick's (filterBy or dependsOn) choice shows that choice on the board
-             before answering the pick (executeChoice). -->
+             before answering the pick (executeChoice). `data-bs-pick` names the pick, as on the
+             typed editor below, so the smoke walk can press the choice a spec's `inputs` give (#1598). -->
         <template v-else-if="currentPick.type === 'choice'">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
-          <div class="choice-buttons" :data-bs-grows-panel="choiceListGrowth">
+          <div class="choice-buttons" :data-bs-pick="currentPick.name" :data-bs-grows-panel="choiceListGrowth">
             <template v-for="node in choiceLevel.nodes" :key="node.kind === 'group' ? `group:${node.label}` : choiceValueKey(node.item.value)">
               <MenuGroupButton v-if="node.kind === 'group'" v-bind="categoryButton(node)" @click="enterCategory(node)" />
               <button

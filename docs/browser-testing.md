@@ -759,6 +759,23 @@ is in with `.you-badge`, so
 `texts('.player-name-row:not(:has(.you-badge)) .player-name')` reads the other
 seats' names. Fields `inputs` do not name keep the walk's own values.
 
+A pick of choices (`chooseFrom`) is answered the same way (#1598): the walk
+presses its first choice unless `inputs` names one, by the label the panel
+shows on it, and one inside a category by its path, as the panel heads the
+category: `'Dictators / Castro'`. When the choice decides which actions the game offers (a faction,
+a character), deal once for each choice and choose by the deal's seed, which
+the function is given as `seed` (null in a world):
+
+```ts
+defineSmokeTest({
+  actions: ['selectDictator', 'castroBonusHire', 'kimBonusMilitia' /* ... */],
+  seed: ['Castro', 'Kim'],
+  inputs: { selectDictator: { dictatorChoice: ({ seed }) => seed ?? undefined } },
+});
+```
+
+A label the pick does not offer fails the walk, naming the labels it does.
+
 The walk fails on everything it would fail on without them:
 
 - The game refusing a value from `inputs` fails the walk, as any failed action

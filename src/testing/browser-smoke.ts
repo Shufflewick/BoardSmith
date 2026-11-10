@@ -69,6 +69,7 @@ import {
 } from './browser-smoke-page.js';
 import {
   answered,
+  choiceNotOffered,
   DEFAULT_SMOKE_SEED,
   inputFor,
   note,
@@ -109,7 +110,9 @@ export interface SmokeTestOptions {
    * default is {@link DEFAULT_SMOKE_SEED}. Every run with the same seeds walks the same games, so a
    * failure is walked again exactly by `boardsmith smoke`. Choose a seed whose deal offers an action
    * that only some deals offer (the cards a player is dealt decide it, say), rather than naming that
-   * action in {@link unreachable}. A world is dealt by `boardsmith dev` from its own seed and takes none.
+   * action in {@link unreachable}. An input reads the deal's seed (`seed` in what it reads), so a deal
+   * can make its own choice, such as which character a player picks (#1598). A world is dealt by
+   * `boardsmith dev` from its own seed and takes none.
    */
   readonly seed?: string | readonly string[];
   /**
@@ -130,7 +133,8 @@ export interface SmokeTestOptions {
    * The values the walk types in an action's text or number fields, by action and then by pick
    * name, for a field whose value the game checks (#470): a name only another player has, a number
    * only the rules accept. Without one the walk types "smoke test" in a text field and the field's
-   * least number in a number field. A value is the text or number itself, or a function of what the
+   * least number in a number field. For a pick of choices, the value is the label of the choice to
+   * press (#1598); without one the walk presses the first. A value is the text or number itself, or a function of what the
    * page shows (`texts(selector)`), for a value known only once the game is under way, such as the
    * name of a player standing in the same square. A function that returns nothing has the walk
    * cancel the action and take it again once it gives a value, or once the game has moved on; it is
@@ -1253,7 +1257,8 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   const skip = answering.reopened ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
   if (skip !== undefined) return pressAnswer(skip, answering);
   await fillAnEmptyField(answering);
-  if (answering.stop !== undefined) return undefined;
+  const given = await pressGivenChoice(answering);
+  if (given !== NOT_GIVEN) return given;
   const shown = (selector: string) => inPageTime(frame.page(), 'looking for a list pick', () => frame.locator(selector).count());
   // An ordered list shows a multi-select's count too, marked as its own.
   if ((await shown('.action-config .ordered-list-count')) > 0) return answerListPick(answering, ORDERED_LIST);
@@ -1269,6 +1274,69 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
       '.action-config .skip-btn',
     ]));
   return target === undefined ? undefined : pressAnswer(target, answering);
+}
+
+/** {@link pressGivenChoice}'s answer when the spec's `inputs` give nothing for the open pick, so the walk answers it its own way. */
+const NOT_GIVEN = Symbol('not given');
+
+/** The open pick of choices, which `data-bs-pick` names (#1598). */
+const CHOICE_LIST = '.action-config .choice-buttons[data-bs-pick]';
+
+/** Its choices and categories (#1439), and those it anchors to the board, drawn outside the list. */
+const GIVEN_CHOICES = `${CHOICE_LIST} .choice-btn:not(.skip-btn), .action-config .anchored-choice-btn`;
+
+/** How a path to a choice names each level: as the panel heads a category it is in, "Dictators / Castro". */
+const PATH_SEPARATOR = ' / ';
+
+/**
+ * Presses the choice the spec's `inputs` give the open pick of choices (#1598), by the name the
+ * panel shows on it. A choice inside a category is given by its path, and each press takes one
+ * level of it: the deepest the panel shows. A choice the pick does not show stops the answering
+ * (`Answering.stop`), as {@link choiceGiven} may. Returns what it pressed, undefined when the choices
+ * have not arrived or the answering has stopped, or {@link NOT_GIVEN} when there is no such input.
+ */
+async function pressGivenChoice(answering: Answering): Promise<string | undefined | typeof NOT_GIVEN> {
+  const given = answering.stop === undefined ? await choiceGiven(answering) : undefined;
+  if (given === undefined || given === NOT_GIVEN) return given;
+  const offered = await choicesShown(answering.frame);
+  if (offered.length === 0) return undefined;
+  const path = given.value.split(PATH_SEPARATOR).map((level) => level.replace(/\s+/g, ' ').trim());
+  const next = path.reverse().flatMap((level) => offered.filter((choice) => choice.shown === level))[0];
+  if (next !== undefined) return pressAnswer(next.choice, answering);
+  answering.stop = { problem: choiceNotOffered(answering.name, given.pick, given.value, offered.map((choice) => choice.shown)) };
+  return undefined;
+}
+
+/**
+ * What the spec's `inputs` give the open pick of choices, by its pick name, recording the pick as
+ * met (`SmokeWalk.fieldsMet`): {@link NOT_GIVEN} when they give nothing for it, and undefined, with
+ * the answering stopped (`Answering.stop`), when the input gives none yet or fails.
+ */
+async function choiceGiven(answering: Answering): Promise<{ readonly pick: string; readonly value: string } | undefined | typeof NOT_GIVEN> {
+  const { frame, walk, memory, name, otherSeats } = answering;
+  if (!Object.hasOwn(walk.inputs, name)) return NOT_GIVEN;
+  const page = frame.page();
+  // Not held to being visible: with every choice anchored to the board, the list is empty and has no size.
+  const list = frame.locator(CHOICE_LIST);
+  if ((await inPageTime(page, 'looking for a pick of choices', () => list.count())) === 0) return NOT_GIVEN;
+  const pick = (await withinPageTime(page, PRESS_MS, 'reading which pick the choices answer', (timeout) => list.first().getAttribute('data-bs-pick', { timeout }))) ?? '';
+  walk.fieldsMet.get(name)?.set(pick, 'choice');
+  const given = await inputFor(walk.inputs, name, pick, 'choice', inputView(frame, otherSeats, memory.seed));
+  if (given === undefined) return NOT_GIVEN;
+  if ('value' in given) return { pick, value: given.value };
+  answering.stop = 'wanting' in given ? { wanting: pick } : given;
+  return undefined;
+}
+
+/** The open pick's choices a player can press, each with the name a player reads on it (#1598). */
+async function choicesShown(frame: Frame): Promise<Array<{ readonly choice: Control; readonly shown: string }>> {
+  // A category's own name, as its button also says what is in it, else the button's text.
+  const shown = await inPageTime(frame.page(), 'reading the choices', () =>
+    visibleMatches(frame, GIVEN_CHOICES).evaluateAll((buttons) =>
+      buttons.map((button) => ((button as HTMLElement).dataset.bsChoiceGroup ?? (button as HTMLElement).innerText).replace(/\s+/g, ' ').trim()),
+    ),
+  );
+  return (await controlsOf(frame, GIVEN_CHOICES)).filter((choice) => choice.enabled).map((choice) => ({ choice, shown: shown[choice.index] }));
 }
 
 /** A pick's candidates on the board. */
@@ -1323,13 +1391,14 @@ async function asItStandsNow(control: Control): Promise<Control> {
  * What a spec's `inputs` function reads of the game's frame (#470): the visible text a player reads,
  * and the other world seats the walk plays (#471).
  */
-function inputView(frame: Frame, otherSeats: readonly number[]): SmokeInputView {
+function inputView(frame: Frame, otherSeats: readonly number[], seed: string | null): SmokeInputView {
   return {
     texts: async (selector) =>
       (await inPageTime(frame.page(), `reading the texts of ${selector}`, () => frame.locator(selector).filter({ visible: true }).allInnerTexts()))
         .map((text) => text.replace(/\s+/g, ' ').trim())
         .filter((text) => text !== ''),
     otherSeats,
+    seed,
   };
 }
 
@@ -1368,7 +1437,7 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
   );
   const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
   walk.fieldsMet.get(name)?.set(pick, kind);
-  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats));
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed));
   if (given !== undefined) {
     if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
@@ -2043,7 +2112,7 @@ async function answerOrTake(
   }
   const choices = play === lead ? offers : await companionStep(play, lead, frame, offers, walk, memory, step);
   if (choices === true) return true;
-  return pressWhatThePanelOffers(play, frame, walk, memory, choices, step, inputView(frame, otherSeats));
+  return pressWhatThePanelOffers(play, frame, walk, memory, choices, step, inputView(frame, otherSeats, memory.seed));
 }
 
 /**

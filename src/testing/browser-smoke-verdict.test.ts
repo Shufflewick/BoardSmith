@@ -478,7 +478,7 @@ describe('recordGreyed: the reasons a greyed-out action was given (#472)', () =>
 });
 
 describe('readyToTake: an action whose input reads a value off the page now (#471)', () => {
-  const page = (shown: string[]): SmokeInputView => ({ texts: async () => shown, otherSeats: [4] });
+  const page = (shown: string[]): SmokeInputView => ({ texts: async () => shown, otherSeats: [4], seed: null });
   const reading = (inputs: SmokeWalk['inputs'], fieldsMet: SmokeWalk['fieldsMet'] = new Map()) => walk({ inputs, fieldsMet });
 
   it('is ready when every input of the action that reads the page gives a value', async () => {
@@ -505,6 +505,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   const page = (shown: Record<string, string[]> = {}, otherSeats: number[] = []): SmokeInputView => ({
     texts: async (selector) => shown[selector] ?? [],
     otherSeats,
+    seed: null,
   });
 
   it('gives no value for a field the spec names none for, so the walk types its own', async () => {
@@ -552,7 +553,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   });
 
   it('#618: lets the page having stopped answering while a function read it end the walk, not count as the input failing', async () => {
-    const frozen: SmokeInputView = { texts: () => Promise.reject(new PageFrozen()), otherSeats: [] };
+    const frozen: SmokeInputView = { texts: () => Promise.reject(new PageFrozen()), otherSeats: [], seed: null };
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
     await expect(inputFor(inputs, 'attack', 'target', 'text', frozen)).rejects.toBeInstanceOf(PageFrozen);
   });

@@ -2335,3 +2335,74 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
 `,
   };
 }
+
+/** The headings {@link harbourGame}'s `choose` offers, in the order its panel shows them. */
+const HEADINGS = ['North', 'South', 'East'] as const;
+
+/**
+ * THE HARBOUR GAME (#1598): actions a player's choice decides, as MERC's dictator brings its own.
+ * `choose` picks a heading, and only East chains into `sail` and only South into `row`, so a walk
+ * pressing each pick's first choice (North) never reaches either. `grouped` puts South and East in
+ * a "Warm waters" category (#1439); `anchored` anchors each heading to a board square by notation,
+ * so the panel draws it outside its list of choices, named by its square too.
+ */
+export function harbourGame(options: { grouped?: boolean; anchored?: boolean } = {}): Record<string, string> {
+  const group = options.grouped ? `, group: (heading) => (heading === 'North' ? [] : ['Warm waters'])` : '';
+  const anchor = options.anchored ? `, boardRefs: (heading) => ({ refs: [{ ref: { notation: \`\${String(heading)[0].toLowerCase()}1\` }, role: 'target' }] })` : '';
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+const AFTER: Record<string, string> = { East: 'sail', South: 'row' };
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('choose')
+      .prompt('Choose a heading')
+      .chooseFrom('heading', { prompt: 'Heading', choices: () => ${JSON.stringify(HEADINGS)}${group}${anchor} })
+      .execute(({ heading }) => ({ success: true, followUp: AFTER[heading as string] === undefined ? undefined : { action: AFTER[heading as string] } })),
+    Action.create('sail').prompt('Sail east').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),
+    Action.create('row').prompt('Row south').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['choose', 'draw'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+  };
+}
+
+/** A smoke spec for {@link harbourGame} dealt from `seed`, whose `inputs` are `inputs`, written as source. */
+export function harbourSpec(inputs: string, seed: readonly string[]): string {
+  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+
+defineSmokeTest({
+  actions: ['choose', 'draw', 'sail', 'row'],
+  seed: ${JSON.stringify(seed)},
+  steps: 12,
+  inputs: ${inputs},
+});
+`;
+}

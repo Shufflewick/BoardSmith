@@ -5,7 +5,16 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { smokeOf } from './smoke-walk.test-helper.js';
-import { fieldsGame, greetingsGame, greetingsSpec, NOBODY_CALLED_THAT, pointerAimedGame, smokeSpec } from './smoke-fixtures.test-helper.js';
+import {
+  fieldsGame,
+  greetingsGame,
+  greetingsSpec,
+  harbourGame,
+  harbourSpec,
+  NOBODY_CALLED_THAT,
+  pointerAimedGame,
+  smokeSpec,
+} from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -206,4 +215,52 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => /: entering "\d+" for "pledge"/.test(line))).toEqual([expect.stringMatching(/: entering "3" for "pledge", from `inputs`$/)]);
     },
   );
+
+  it(
+    "#1598: presses the choice a spec's `inputs` name for a pick by its label, reading which deal it walks, so each deal " +
+      'reaches the actions only its choice leads to',
+    async () => {
+      const { outcome, steps } = await smokeOf(false, {
+        ...harbourGame(),
+        'tests/browser/smoke.spec.ts': harbourSpec(`{ choose: { heading: ({ seed }) => (seed === 'east' ? 'East' : 'South') } }`, ['east', 'south']),
+      });
+
+      expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "east", then from seed "south", a seated player took "choose", "draw", "row", "sail"/);
+      expect(outcome.passed).toBe(true);
+      expect(steps.some((line) => line.endsWith('pressing "East" for "choose"'))).toBe(true);
+      expect(steps.some((line) => line.endsWith('pressing "South" for "choose"'))).toBe(true);
+      expect(steps.some((line) => line.endsWith('pressing "North" for "choose"'))).toBe(false);
+    },
+  );
+
+  it.each([
+    { layout: 'in a category, by its path', grouped: true, east: 'Warm waters /  East ', south: 'Warm waters / South' },
+    { layout: 'anchored to the board, by the text it shows', anchored: true, east: ' East', south: 'South' },
+  ])("#1598 review: presses a choice from the spec's `inputs` $layout, whatever whitespace the input gives", async ({ grouped, anchored, east, south }) => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...harbourGame({ grouped, anchored }),
+      'tests/browser/smoke.spec.ts': harbourSpec(
+        `{ choose: { heading: ({ seed }) => (seed === 'east' ? ${JSON.stringify(east)} : ${JSON.stringify(south)}) } }`,
+        ['east', 'south'],
+      ),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "east", then from seed "south", a seated player took "choose", "draw", "row", "sail"/);
+    expect(outcome.passed).toBe(true);
+    expect(steps.some((line) => /pressing "East( \(e1\))?" for "choose"/.test(line))).toBe(true);
+  });
+
+  it("#1598: fails on a choice from the spec's `inputs` the pick does not offer, naming the choices it does", async () => {
+    const { outcome } = await smokeOf(false, {
+      ...harbourGame(),
+      'tests/browser/smoke.spec.ts': harbourSpec(`{ choose: { heading: 'West' } }`, ['smoke']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      '- `inputs.choose.heading` in tests/browser/smoke.spec.ts gives "West", but the pick offers no choice labelled that: ' +
+        'it offers "North", "South", "East". Give the label of a choice as the panel shows it, and one in a category by its ' +
+        'path, such as "Dictators / Castro".',
+    );
+  });
 });
