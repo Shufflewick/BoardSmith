@@ -1,5 +1,5 @@
 {
-  "revision": 341,
+  "revision": 342,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2671,6 +2671,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke walk answers a follow-up that re-opens an action it has taken with that pick's Skip, so it moves on to the actions still to take (#1596)"
+    },
+    {
+      "revision": 342,
+      "date": "2026-11-10",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith dev deals every seat as a human player while someone follows the active seat, so the smoke walk is offered a game's human-only actions (#1597)"
     }
   ]
 }

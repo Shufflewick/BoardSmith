@@ -399,6 +399,29 @@ describe('MultiplayerHost — player configs', () => {
     expect(configs?.[1].isBot).toBe(true); // seat 2 = bot
     expect(configs?.[1].botLevel).toBe('hard');
   });
+
+  it('#1597: a game dealt while someone follows the active seat makes every seat human, since the follower plays them all', async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let startOptions: any = null;
+    const host = new MultiplayerHost({
+      playerCount: 2,
+      minPlayers: 2,
+      maxPlayers: def.maxPlayers,
+      makeSeed: () => 'mp',
+      executeOp: (gameOptions, snap, pend, op, hostOptions) => {
+        if (op.type === 'start') startOptions = gameOptions;
+        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+      },
+      send: (clientId, msg) => rememberRendered(clientId, msg),
+    });
+    await host.handleMessage('A', { type: 'hello' }); // A → seat 1; seat 2 open → bot
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+
+    await host.handleMessage('A', { type: 'restart' });
+
+    expect(startOptions.playerIsBot).toEqual([false, false]);
+    expect(startOptions.playerConfigs.map((config: { isBot: boolean }) => config.isBot)).toEqual([false, false]);
+  });
 });
 
 describe('MultiplayerHost — seat stability on reconnect', () => {
@@ -788,6 +811,19 @@ describe('MultiplayerHost — follow active seat', () => {
     await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 1 } });
 
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
+  });
+
+  it('#1597: when follow ends in a game it dealt every seat human, a bot still drives the open seat', async () => {
+    const { host, lastOfType, pass } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await host.handleMessage('A', { type: 'restart' });
+    await host.handleMessage('A', { type: 'follow', enabled: false });
+
+    // A passes as seat 1, then seat 2's bot passes and the game is over.
+    await pass('A', 'r1');
+    await host.settled();
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
   });
 
   it('#877: follow is refused while another person holds a seat, so nobody sees or plays their seat', async () => {
