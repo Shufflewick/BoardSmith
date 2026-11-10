@@ -2342,7 +2342,7 @@ const HEADINGS = ['North', 'South', 'East'] as const;
 /**
  * THE HARBOUR GAME (#1598): actions a player's choice decides, as MERC's dictator brings its own.
  * `choose` picks a heading, and only East chains into `sail` and only South into `row`, so a walk
- * pressing each pick's first choice (North) never reaches either. `grouped` puts South and East in
+ * pressing each pick's first choice (North) never reaches either. `sail` has no pick (#1599). `grouped` puts South and East in
  * a "Warm waters" category (#1439); `anchored` anchors each heading to a board square by notation,
  * so the panel draws it outside its list of choices, named by its square too.
  */
@@ -2363,7 +2363,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .prompt('Choose a heading')
       .chooseFrom('heading', { prompt: 'Heading', choices: () => ${JSON.stringify(HEADINGS)}${group}${anchor} })
       .execute(({ heading }) => ({ success: true, followUp: AFTER[heading as string] === undefined ? undefined : { action: AFTER[heading as string] } })),
-    Action.create('sail').prompt('Sail east').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),
+    Action.create('sail').prompt('Sail east').execute(() => ({ success: true })),
     Action.create('row').prompt('Row south').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),
     Action.create('draw')
       .prompt('Draw a card')

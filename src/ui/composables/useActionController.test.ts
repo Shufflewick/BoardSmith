@@ -2353,6 +2353,26 @@ describe('useActionController', () => {
       expect(lastCall[1]).toEqual({});
     });
 
+    it('sends a followUp that has no pick left to answer, since nothing else would (#1599)', async () => {
+      const sail: EnrichedActionMetadata = { name: 'sail', prompt: 'Sail east', selections: [] };
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
+      sendAction.mockResolvedValueOnce({ success: true, followUp: { action: 'sail', metadata: sail } });
+
+      await controller.execute('endTurn');
+
+      await vi.waitFor(() => expect(sendAction).toHaveBeenLastCalledWith('sail', {}));
+    });
+
+    it('sends a followUp whose args answer every pick (#1599)', async () => {
+      actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
+      sendAction.mockResolvedValueOnce({ success: true, followUp: { action: 'collectEquipment', args: { equipment: 'sword' } } });
+
+      await controller.execute('endTurn');
+
+      await vi.waitFor(() => expect(sendAction).toHaveBeenLastCalledWith('collectEquipment', { equipment: 'sword' }));
+    });
+
     it('starts the followUp an action with NO metadata hands back, as every send path does', async () => {
       // execute() sends an action without metadata on its own branch. That
       // branch used to drop a followUp the other two send paths start.
