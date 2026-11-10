@@ -379,8 +379,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   new game, so no bot moves in it, and the same seed walked the same way is the
   same game. See [Choosing the deal](#choosing-the-deal-seed).
 - Each step first waits for the panel to send the action in flight, if any
-  (the panel root carries `data-bs-submitting` while every button is greyed for
-  it), and for its offers to arrive (`[data-testid="bs-actions-pending"]`), so a
+  (the panel root carries `data-bs-submitting` while an action or a pick step
+  is out to the server, #1595), and for its offers to arrive (`[data-testid="bs-actions-pending"]`), so a
   world, whose offers come after its state in a frame of their own, is never
   read as offering nothing in between, and no step is spent waiting for them
   (#474). A panel found unsettled again by the time it is read (in a world,

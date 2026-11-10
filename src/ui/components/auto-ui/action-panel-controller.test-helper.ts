@@ -32,6 +32,7 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     // Refs the panel reads directly.
     currentAction: ref<string | null>(null),
     isExecuting: ref(false),
+    stepOutstanding: ref(false),
     isLoadingChoices: ref(false),
     actionSnapshot: ref(null),
     // Read around execute(): the panel clears the board afterwards only if no
