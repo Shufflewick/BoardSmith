@@ -19,5 +19,9 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed, outcome.summary).toBe(true);
     expect(outcome.summary).toContain('a seated player took "collect", "draw", "explore"');
     expect(steps).toContain('smoke step 3: pressing "Done collecting" for "collect"');
+    // Each "explore" the walk takes again still gets a real choice of "collect" before its Skip.
+    const turn = ['taking "explore"', 'pressing "rope" for "collect"', 'pressing "Done collecting" for "collect"'];
+    const presses = steps.flatMap((line) => turn.filter((said) => line.endsWith(`: ${said}`)));
+    expect(presses.slice(0, 6)).toEqual([...turn, ...turn]);
   });
 });

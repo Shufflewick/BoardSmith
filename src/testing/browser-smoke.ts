@@ -510,10 +510,15 @@ interface SeatPlay {
    * not close it leaves the next step finding the same dialog still open.
    */
   closing: { readonly dialog: string; readonly closer: string } | undefined;
+  /**
+   * The open action the walk last answered here until it resolved, until the walk next takes an
+   * action from the panel's buttons: the same action open again is a follow-up re-opening it (#1596).
+   */
+  resolvedOpen: string | undefined;
 }
 
 function newPlay(page: Page, seat: number | null): SeatPlay {
-  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Set(), inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined };
+  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Set(), inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined, resolvedOpen: undefined };
 }
 
 /**
@@ -1165,6 +1170,8 @@ interface Answering {
   readonly picked: Set<string>;
   /** The refused board candidates that name the same choice wherever they are pointed at (#468). */
   readonly refused: Set<string>;
+  /** Whether the action is a follow-up re-opening itself once the walk answered it (`SeatPlay.resolvedOpen`). */
+  readonly reopened: boolean;
   /**
    * Why the walk stops answering before the action resolves (#470): a field the spec's `inputs`
    * give no value for yet, or a spec input that failed.
@@ -1237,13 +1244,13 @@ async function answerListPick(answering: Answering, pick: ListPick): Promise<str
  * Answers one choice of the open action, as a player would: a multi-select or ordered list one choice at a
  * time, else the board's own candidate first (so the board's controls are pressed, not only the
  * panel's), then the panel's choices, a value for a number or text field, and the button that
- * finishes a step. An action the walk has taken already is skipped when its pick can be (#1596),
- * so a follow-up that re-opens it after every choice does not take the rest of the deal's steps.
+ * finishes a step. A follow-up re-opening the action it follows is skipped when its pick can be
+ * (#1596), so one that re-opens after every choice does not take the rest of the deal's steps.
  * Returns what it pressed, or undefined when there was nothing to answer.
  */
 async function answerOneChoice(answering: Answering): Promise<string | undefined> {
-  const { frame, walk, name } = answering;
-  const skip = walk.taken.has(name) ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
+  const { frame } = answering;
+  const skip = answering.reopened ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
   if (skip !== undefined) return pressAnswer(skip, answering);
   await fillAnEmptyField(answering);
   if (answering.stop !== undefined) return undefined;
@@ -1422,6 +1429,7 @@ async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: s
  * too many presses. `otherSeats` are the other world seats the walk plays, for the spec's `inputs`.
  */
 async function finishOpenAction(
+  play: SeatPlay,
   frame: Frame,
   walk: SmokeWalk,
   memory: WalkMemory,
@@ -1429,7 +1437,8 @@ async function finishOpenAction(
   step: number,
   otherSeats: readonly number[],
 ): Promise<void> {
-  const answering: Answering = { frame, walk, memory, name, step, otherSeats, picked: new Set(), refused: new Set() };
+  const reopened = play.resolvedOpen === name;
+  const answering: Answering = { frame, walk, memory, name, step, otherSeats, picked: new Set(), refused: new Set(), reopened };
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
   memory.typed.delete(name);
@@ -1443,7 +1452,10 @@ async function finishOpenAction(
     }
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
-    if ((await drainResolved(frame, walk, memory)) > 0) return;
+    if ((await drainResolved(frame, walk, memory)) > 0) {
+      play.resolvedOpen = name;
+      return;
+    }
     const problem = answered(trail, answer, await openActionState(frame), [...answering.picked]);
     if (problem !== undefined) return abandon(frame, walk, memory, name, problem);
   }
@@ -1837,6 +1849,7 @@ async function takeAction(
 ): Promise<void> {
   memory.times.set(name, (memory.times.get(name) ?? 0) + 1);
   play.took = { name, step };
+  play.resolvedOpen = undefined;
   narrate(step, said);
   const selector = `[data-bs-action=${JSON.stringify(name)}]`;
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
@@ -2025,7 +2038,7 @@ async function answerOrTake(
   const otherSeats = plays.flatMap((other) => (other === play || other.seat === null ? [] : [other.seat]));
   if (offers.open !== null) {
     narrate(step, `answering "${offers.open}"`);
-    await finishOpenAction(frame, walk, memory, offers.open, step, otherSeats);
+    await finishOpenAction(play, frame, walk, memory, offers.open, step, otherSeats);
     return true;
   }
   const choices = play === lead ? offers : await companionStep(play, lead, frame, offers, walk, memory, step);
