@@ -1237,10 +1237,14 @@ async function answerListPick(answering: Answering, pick: ListPick): Promise<str
  * Answers one choice of the open action, as a player would: a multi-select or ordered list one choice at a
  * time, else the board's own candidate first (so the board's controls are pressed, not only the
  * panel's), then the panel's choices, a value for a number or text field, and the button that
- * finishes a step. Returns what it pressed, or undefined when there was nothing to answer.
+ * finishes a step. An action the walk has taken already is skipped when its pick can be (#1596),
+ * so a follow-up that re-opens it after every choice does not take the rest of the deal's steps.
+ * Returns what it pressed, or undefined when there was nothing to answer.
  */
 async function answerOneChoice(answering: Answering): Promise<string | undefined> {
-  const { frame } = answering;
+  const { frame, walk, name } = answering;
+  const skip = walk.taken.has(name) ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
+  if (skip !== undefined) return pressAnswer(skip, answering);
   await fillAnEmptyField(answering);
   if (answering.stop !== undefined) return undefined;
   const shown = (selector: string) => inPageTime(frame.page(), 'looking for a list pick', () => frame.locator(selector).count());

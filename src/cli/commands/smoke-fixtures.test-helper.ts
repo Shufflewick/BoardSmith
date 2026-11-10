@@ -2285,3 +2285,53 @@ describe('the playback game', () => {
 `,
   };
 }
+
+/**
+ * THE STASH GAME (#1596): MERC's `collectEquipment`. `explore` chains into `collect`, an optional
+ * pick whose every choice chains into `collect` again, as swapping gear back into a stash keeps it
+ * full, so only its Skip leaves the chain and lets the turn pass to `draw`.
+ */
+export function stashGame(): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('explore')
+      .prompt('Explore')
+      .execute(() => ({ success: true, followUp: { action: 'collect' } })),
+    Action.create('collect')
+      .prompt('Collect from the stash')
+      .chooseFrom('item', { prompt: 'Swap for', choices: () => ['rope', 'lamp'], optional: 'Done collecting' })
+      .execute(({ item }) => ({ success: true, followUp: item ? { action: 'collect' } : undefined })),
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['explore', 'draw'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+  };
+}

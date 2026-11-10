@@ -399,7 +399,11 @@ markers this page documents, so it keeps up with any game without knowing it:
   moment with nothing open once the walk acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
-  panel), then the panel's choice, add, done and skip buttons.
+  panel), then the panel's choice, add, done and skip buttons. An action the
+  walk has taken already is answered with its skip button when its pick has
+  one, so a follow-up that re-opens itself after every choice, as a stash that
+  swaps gear back in never empties, does not take the rest of the deal's
+  steps (#1596).
 - A candidate is clicked the way a player clicks it: the walk moves the mouse
   onto it (checking that it, not something on top, is under the pointer), and
   clicks where it then stands for a choice the game accepts (#468). It does not
