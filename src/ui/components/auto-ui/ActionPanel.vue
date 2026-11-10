@@ -189,7 +189,8 @@ function skipAnimations(): void {
 
 // Use controller state directly (controller is required)
 const currentAction = actionController.currentAction;
-const isExecuting = actionController.isExecuting;
+// A pick step out to the server is a submission too, though it never sets isExecuting (#1595).
+const isSubmitting = computed(() => actionController.isExecuting.value || actionController.stepOutstanding.value);
 const isLoadingChoices = actionController.isLoadingChoices;
 
 // Repeating state from controller
@@ -1465,7 +1466,7 @@ function clearBoardSelection() {
  * none is. Shared by the action buttons and Undo.
  */
 const submissionInFlightReason = computed<DisabledReason>(() =>
-  isExecuting.value ? 'Finishing your last move — one moment.' : false
+  isSubmitting.value ? 'Finishing your last move — one moment.' : false
 );
 
 /**
@@ -1517,7 +1518,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
        `data-bs-submitting` marks an action in flight, while every button is
        greyed for it, so a reader can wait it out rather than read a panel that
        offers nothing (the smoke walk, #474). -->
-  <div class="action-panel-root" :data-bs-submitting="isExecuting || undefined">
+  <div class="action-panel-root" :data-bs-submitting="isSubmitting || undefined">
   <!-- The host's deadline (#301), whatever else the panel is showing. A
        `timer` is not a live region, so the per-second change is never
        announced; a reader finds it by moving to it. -->

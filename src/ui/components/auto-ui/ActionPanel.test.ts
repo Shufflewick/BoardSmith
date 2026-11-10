@@ -535,6 +535,17 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     wrapper.unmount();
   });
 
+  it('#1595: marks the panel submitting and greys Undo while a pick step is out to the server', () => {
+    const controller = stubActionController({ stepOutstanding: ref(true) });
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
+      props: { availableActions: ['build'], actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } }, isMyTurn: true, canUndo: true },
+    });
+    expect(wrapper.find('.action-panel-root').attributes('data-bs-submitting')).toBeDefined();
+    expect(wrapper.find('.undo-btn').attributes('aria-disabled')).toBe('true');
+    wrapper.unmount();
+  });
+
   it('#474: does not mark the panel as submitting while nothing is in flight', () => {
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: stubActionController() }, stubs: { Teleport: true } },
