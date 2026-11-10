@@ -125,11 +125,17 @@ export interface SmokeInputView {
    * walked from one seat.
    */
   readonly otherSeats: readonly number[];
+  /**
+   * The seed of the deal being walked, one of the spec's `seed` (#1598), so an input can choose
+   * differently in each deal, as a choice that decides which actions a game offers needs. Null in a
+   * world, which `boardsmith dev` deals itself.
+   */
+  readonly seed: string | null;
 }
 
 /**
- * The value the walk types in one text or number field (#470): the text or number itself, or a
- * function of what the page shows, for a value only known once the game is under way (the name of
+ * The value the walk types in one text or number field (#470), or the label of the choice it
+ * presses for a pick of choices (#1598): the text or number itself, or a function of what the page shows, for a value only known once the game is under way (the name of
  * a player standing in the same square). The function returns nothing when the page gives no value
  * yet; the walk then cancels the action and takes it again once it gives one, or once the game has
  * moved on. The walk may ask it before opening the action as well as when typing (#471), so it only
@@ -143,8 +149,8 @@ export type SmokeInput =
 /** The spec's `inputs`: for each action, by the name its rules give it, the value for each of its fields, by pick name. */
 export type SmokeInputs = Readonly<Record<string, Readonly<Record<string, SmokeInput>>>>;
 
-/** The two kinds of field the walk types in: the panel's text editor and its number editor. */
-type FieldKind = 'text' | 'number';
+/** The kinds of field a spec's `inputs` answer: the panel's text editor, its number editor, and a pick of choices. */
+type FieldKind = 'text' | 'number' | 'choice';
 
 /** What the walk typed in one field of an action, and whether the spec's `inputs` gave it or the walk chose it. */
 export interface TypedValue {
@@ -187,11 +193,19 @@ export async function inputFor(
 /** How the text an input gave answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
 function answerOf(text: string, kind: FieldKind, action: string, field: string): InputAnswer {
   if (text.trim() === '') return { wanting: true };
-  if (kind === 'text') return { value: text };
+  if (kind !== 'number') return { value: text };
   if (!Number.isFinite(Number(text))) {
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${text}" for a number field. Give a number, such as 7.` };
   }
   return { value: text.trim() };
+}
+
+/** Why the walk cannot press the choice `value` that `field` of `action` gives: the pick offers no choice labelled so, only `offered`. */
+export function choiceNotOffered(action: string, field: string, value: string, offered: readonly string[]): string {
+  return (
+    `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${value}", but the pick offers no choice labelled that: ` +
+    `it offers ${offered.length === 0 ? 'none' : quoted(offered)}. Give the label of a choice as the panel shows it.`
+  );
 }
 
 /**
