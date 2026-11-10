@@ -2342,9 +2342,10 @@ const HEADINGS = ['North', 'South', 'East'] as const;
 /**
  * THE HARBOUR GAME (#1598): actions a player's choice decides, as MERC's dictator brings its own.
  * `choose` picks a heading, and only East chains into `sail` and only South into `row`, so a walk
- * pressing each pick's first choice (North) never reaches either. `sail` has no pick (#1599). `grouped` puts South and East in
- * a "Warm waters" category (#1439); `anchored` anchors each heading to a board square by notation,
- * so the panel draws it outside its list of choices, named by its square too.
+ * pressing each pick's first choice (North) never reaches either; `sail` has no pick (#1599).
+ * `grouped` puts South and East in a "Warm waters" category (#1439); `anchored` anchors each heading
+ * to a board square by notation, so the panel draws it outside its list of choices, named by its
+ * square too.
  */
 export function harbourGame(options: { grouped?: boolean; anchored?: boolean } = {}): Record<string, string> {
   const group = options.grouped ? `, group: (heading) => (heading === 'North' ? [] : ['Warm waters'])` : '';

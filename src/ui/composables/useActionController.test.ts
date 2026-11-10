@@ -2363,6 +2363,21 @@ describe('useActionController', () => {
       await vi.waitFor(() => expect(sendAction).toHaveBeenLastCalledWith('sail', {}));
     });
 
+    it('runs the auto-execute hooks around a followUp it sends with no pick left (#1599 review F3)', async () => {
+      const sail: EnrichedActionMetadata = { name: 'sail', prompt: 'Sail east', selections: [] };
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
+      const before: string[] = [];
+      const after: boolean[] = [];
+      controller.onBeforeAutoExecute((actionName) => { before.push(actionName); });
+      controller.onAfterAutoExecute((result) => { after.push(result.success); });
+      sendAction.mockResolvedValueOnce({ success: true, followUp: { action: 'sail', metadata: sail } });
+
+      await controller.execute('endTurn');
+
+      await vi.waitFor(() => expect(after).toEqual([true]));
+      expect(before).toEqual(['sail']);
+    });
+
     it('sends a followUp whose args answer every pick (#1599)', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
       const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });

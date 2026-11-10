@@ -1714,17 +1714,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
-        && !isViewingHistoryValue()) {
-      const seq = actionStartTick.value;
-      const run = ++autoExecuteRuns;
-      await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
-      const result: ControllerActionResult = actionMovedOn(seq)
-        ? { success: false, error: 'Action was cancelled' }
-        : await executeCurrentAction();
-      notifyAfterAutoExecute(result, run);
-    }
+    if (ready && !pendingOnServer.value) await autoExecuteCurrentAction();
   });
+
+  /** Send the open action as auto-execute does, between its hooks, when auto-execute may run now. */
+  async function autoExecuteCurrentAction(): Promise<void> {
+    if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
+    const seq = actionStartTick.value;
+    const run = ++autoExecuteRuns;
+    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
+    const result: ControllerActionResult = actionMovedOn(seq)
+      ? { success: false, error: 'Action was cancelled' }
+      : await executeCurrentAction();
+    notifyAfterAutoExecute(result, run);
+  }
 
   /**
    * Call hooks before executing - allows capturing element positions for animations.
@@ -1840,7 +1843,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * The hooks run only when a pick completes an action under auto-execute
    * (the last selection fills in). They do not run for an explicit
    * `execute()` call, for actions the server completes step by step
-   * (follow-up actions, repeating selections, selections with
+   * (follow-up actions with a pick left, repeating selections, selections with
    * `onSelect: pendingOnServer`), or while viewing history.
    *
    * When called inside a component/effect scope (the normal case, a board
@@ -2138,7 +2141,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const selectionToFetch = meta?.selections.find(sel => initialArgs[sel.name] === undefined);
     // Only a pick sends a server-pending action, so one with no pick left is sent here (#1599).
     if (!selectionToFetch) {
-      if (getAutoExecute()) await executeCurrentAction();
+      await autoExecuteCurrentAction();
       return;
     }
     const seq = actionStartTick.value;
