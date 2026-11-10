@@ -2337,14 +2337,18 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
 }
 
 /** The headings {@link harbourGame}'s `choose` offers, in the order its panel shows them. */
-export const HEADINGS = ['North', 'South', 'East'] as const;
+const HEADINGS = ['North', 'South', 'East'] as const;
 
 /**
  * THE HARBOUR GAME (#1598): actions a player's choice decides, as MERC's dictator brings its own.
  * `choose` picks a heading, and only East chains into `sail` and only South into `row`, so a walk
- * pressing each pick's first choice (North) never reaches either.
+ * pressing each pick's first choice (North) never reaches either. `grouped` puts South and East in
+ * a "Warm waters" category (#1439); `anchored` anchors each heading to a board square by notation,
+ * so the panel draws it outside its list of choices, named by its square too.
  */
-export function harbourGame(): Record<string, string> {
+export function harbourGame(options: { grouped?: boolean; anchored?: boolean } = {}): Record<string, string> {
+  const group = options.grouped ? `, group: (heading) => (heading === 'North' ? [] : ['Warm waters'])` : '';
+  const anchor = options.anchored ? `, boardRefs: (heading) => ({ refs: [{ ref: { notation: \`\${String(heading)[0].toLowerCase()}1\` }, role: 'target' }] })` : '';
   return {
     ...aceGame(),
     'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
@@ -2357,7 +2361,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
   return [
     Action.create('choose')
       .prompt('Choose a heading')
-      .chooseFrom('heading', { prompt: 'Heading', choices: () => ${JSON.stringify(HEADINGS)} })
+      .chooseFrom('heading', { prompt: 'Heading', choices: () => ${JSON.stringify(HEADINGS)}${group}${anchor} })
       .execute(({ heading }) => ({ success: true, followUp: AFTER[heading as string] === undefined ? undefined : { action: AFTER[heading as string] } })),
     Action.create('sail').prompt('Sail east').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),
     Action.create('row').prompt('Row south').chooseFrom('pace', { choices: () => ['steady'] }).execute(() => ({ success: true })),

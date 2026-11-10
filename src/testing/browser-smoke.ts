@@ -1280,21 +1280,31 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
 /** {@link pressGivenChoice}'s answer when the spec's `inputs` give nothing for the open pick, so the walk answers it its own way. */
 const NOT_GIVEN = Symbol('not given');
 
-/** The choices of the open pick of choices, which `data-bs-pick` names (#1598). */
+/** The open pick of choices, which `data-bs-pick` names (#1598). */
 const CHOICE_LIST = '.action-config .choice-buttons[data-bs-pick]';
 
+/** Its choices and categories (#1439), and those it anchors to the board, drawn outside the list. */
+const GIVEN_CHOICES = `${CHOICE_LIST} .choice-btn:not(.skip-btn), .action-config .anchored-choice-btn`;
+
+/** How a path to a choice names each level: as the panel heads a category it is in, "Dictators / Castro". */
+const PATH_SEPARATOR = ' / ';
+
 /**
- * Presses the choice the spec's `inputs` give the open pick of choices (#1598), by its label,
- * recording the pick as met (`SmokeWalk.fieldsMet`). An input that gives none yet, or names a
- * choice the pick does not offer, stops the answering (`Answering.stop`). Returns what it pressed,
- * undefined when the choices have not arrived, or {@link NOT_GIVEN} when there is no such input.
+ * Presses the choice the spec's `inputs` give the open pick of choices (#1598), by the name the
+ * panel shows on it, recording the pick as met (`SmokeWalk.fieldsMet`). A choice inside a category
+ * is given by its path, and each press takes one level of it: the deepest the panel shows. An input
+ * that gives none yet, or names a choice the pick does not show, stops the answering
+ * (`Answering.stop`). Returns what it pressed, undefined when the choices have not arrived, or
+ * {@link NOT_GIVEN} when there is no such input.
  */
 async function pressGivenChoice(answering: Answering): Promise<string | undefined | typeof NOT_GIVEN> {
   const { frame, walk, memory, name, otherSeats } = answering;
-  const list = frame.locator(CHOICE_LIST).filter({ visible: true });
-  if ((await inPageTime(frame.page(), 'looking for a pick of choices', () => list.count())) === 0) return NOT_GIVEN;
-  const pick =
-    (await withinPageTime(frame.page(), PRESS_MS, 'reading which pick the choices answer', (timeout) => list.first().getAttribute('data-bs-pick', { timeout }))) ?? '';
+  if (!Object.hasOwn(walk.inputs, name)) return NOT_GIVEN;
+  const page = frame.page();
+  // Not held to being visible: with every choice anchored to the board, the list is empty and has no size.
+  const list = frame.locator(CHOICE_LIST);
+  if ((await inPageTime(page, 'looking for a pick of choices', () => list.count())) === 0) return NOT_GIVEN;
+  const pick = (await withinPageTime(page, PRESS_MS, 'reading which pick the choices answer', (timeout) => list.first().getAttribute('data-bs-pick', { timeout }))) ?? '';
   walk.fieldsMet.get(name)?.set(pick, 'choice');
   const given = await inputFor(walk.inputs, name, pick, 'choice', inputView(frame, otherSeats, memory.seed));
   if (given === undefined) return NOT_GIVEN;
@@ -1302,11 +1312,18 @@ async function pressGivenChoice(answering: Answering): Promise<string | undefine
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
     return undefined;
   }
-  const offered = (await controlsOf(frame, `${CHOICE_LIST} .choice-btn:not(.skip-btn)`)).filter((choice) => choice.enabled);
+  // The name a player reads on each: a category's own (its button also says what is in it), else its text.
+  const shown = await inPageTime(page, 'reading the choices', () =>
+    visibleMatches(frame, GIVEN_CHOICES).evaluateAll((buttons) =>
+      buttons.map((button) => ((button as HTMLElement).dataset.bsChoiceGroup ?? (button as HTMLElement).innerText).replace(/\s+/g, ' ').trim()),
+    ),
+  );
+  const offered = (await controlsOf(frame, GIVEN_CHOICES)).filter((choice) => choice.enabled).map((choice) => ({ choice, shown: shown[choice.index] }));
   if (offered.length === 0) return undefined;
-  const choice = offered.find((control) => control.label === given.value);
-  if (choice !== undefined) return pressAnswer(choice, answering);
-  answering.stop = { problem: choiceNotOffered(name, pick, given.value, offered.map(nameOf)) };
+  const path = given.value.split(PATH_SEPARATOR).map((level) => level.replace(/\s+/g, ' ').trim());
+  const next = path.reverse().flatMap((level) => offered.filter((choice) => choice.shown === level))[0];
+  if (next !== undefined) return pressAnswer(next.choice, answering);
+  answering.stop = { problem: choiceNotOffered(name, pick, given.value, offered.map((choice) => choice.shown)) };
   return undefined;
 }
 

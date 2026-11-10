@@ -761,7 +761,8 @@ seats' names. Fields `inputs` do not name keep the walk's own values.
 
 A pick of choices (`chooseFrom`) is answered the same way (#1598): the walk
 presses its first choice unless `inputs` names one, by the label the panel
-shows on it. When the choice decides which actions the game offers (a faction,
+shows on it, and one inside a category by its path, as the panel heads the
+category: `'Dictators / Castro'`. When the choice decides which actions the game offers (a faction,
 a character), deal once for each choice and choose by the deal's seed, which
 the function is given as `seed` (null in a world):
 

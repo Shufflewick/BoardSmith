@@ -204,7 +204,8 @@ function answerOf(text: string, kind: FieldKind, action: string, field: string):
 export function choiceNotOffered(action: string, field: string, value: string, offered: readonly string[]): string {
   return (
     `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${value}", but the pick offers no choice labelled that: ` +
-    `it offers ${offered.length === 0 ? 'none' : quoted(offered)}. Give the label of a choice as the panel shows it.`
+    `it offers ${offered.length === 0 ? 'none' : quoted(offered)}. Give the label of a choice as the panel shows it, and one in a ` +
+    'category by its path, such as "Dictators / Castro".'
   );
 }
 
