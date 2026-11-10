@@ -1714,17 +1714,20 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
-        && !isViewingHistoryValue()) {
-      const seq = actionStartTick.value;
-      const run = ++autoExecuteRuns;
-      await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
-      const result: ControllerActionResult = actionMovedOn(seq)
-        ? { success: false, error: 'Action was cancelled' }
-        : await executeCurrentAction();
-      notifyAfterAutoExecute(result, run);
-    }
+    if (ready && !pendingOnServer.value) await autoExecuteCurrentAction();
   });
+
+  /** Send the open action as auto-execute does, between its hooks, when auto-execute may run now. */
+  async function autoExecuteCurrentAction(): Promise<void> {
+    if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
+    const seq = actionStartTick.value;
+    const run = ++autoExecuteRuns;
+    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
+    const result: ControllerActionResult = actionMovedOn(seq)
+      ? { success: false, error: 'Action was cancelled' }
+      : await executeCurrentAction();
+    notifyAfterAutoExecute(result, run);
+  }
 
   /**
    * Call hooks before executing - allows capturing element positions for animations.
@@ -1840,7 +1843,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * The hooks run only when a pick completes an action under auto-execute
    * (the last selection fills in). They do not run for an explicit
    * `execute()` call, for actions the server completes step by step
-   * (follow-up actions, repeating selections, selections with
+   * (follow-up actions with a pick left, repeating selections, selections with
    * `onSelect: pendingOnServer`), or while viewing history.
    *
    * When called inside a component/effect scope (the normal case, a board
@@ -2090,13 +2093,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     actionStartTick.value++;
     clearArgs();
     clearAdvancedState();
-    // A followUp action is, by definition, NOT in availableActions (it's gated by
-    // args-only conditions the server already validated when it returned the
-    // followUp). The plain `action` path enforces the flow allow-list and would
-    // reject it; the selection-step / pending-action path does not. So mark the
-    // action server-pending: every selection (and the optional skip) routes
-    // through pickStep, which is the only path that can run a followUp action.
-    // This is why "explore -> take equipment" chains work transport-agnostically.
+    // A followUp action is, by definition, NOT in availableActions; the server
+    // offers it to this seat alone. Mark it server-pending so every selection (and
+    // the optional skip) routes through pickStep, which binds the followUp's args,
+    // and one with no pick left is sent whole below (#1599).
     pendingOnServer.value = true;
     Object.assign(currentArgs.value, initialArgs);
     lastError.value = null;
@@ -2138,42 +2138,30 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       });
     }
 
-    // If we have metadata with selections, fetch choices for the first unfilled selection
-    if (meta && meta.selections.length > 0) {
-      let selectionToFetch: EnrichedPickMetadata | undefined;
-      for (const sel of meta.selections) {
-        if (initialArgs[sel.name] === undefined) {
-          selectionToFetch = sel;
-          break;
-        }
-      }
+    const selectionToFetch = meta?.selections.find(sel => initialArgs[sel.name] === undefined);
+    // Only a pick sends a server-pending action, so one with no pick left is sent here (#1599).
+    if (!selectionToFetch) {
+      await autoExecuteCurrentAction();
+      return;
+    }
+    const seq = actionStartTick.value;
+    await fetchAndAutoFill(selectionToFetch);
+    if (actionMovedOn(seq)) return;
 
-      if (selectionToFetch) {
-        const seq = actionStartTick.value;
-        await fetchAndAutoFill(selectionToFetch);
-        if (actionMovedOn(seq)) return;
-
-        // R-04: If fetchAndAutoFill auto-filled ALL remaining selections (isReady),
-        // the auto-execute watcher is permanently blocked by pendingOnServer = true.
-        // Route the first auto-filled selection through handleOnSelectFill so the server
-        // processes the continuation (selection-step path), completing the multi-jump.
-        //
-        // Guard: only fires when truly all-auto-filled (isReady), auto-execute is on,
-        // not already executing, and pickStep is available (server-pending path requires it).
-        // Does NOT affect:
-        //   - followUps with multiple choices (isReady = false → guard blocks)
-        //   - non-followUp actions (pendingOnServer = false → auto-execute watcher fires normally)
-        //   - tutorial-suppressed selections (tryAutoFillSelection skips them → isReady stays false)
-        if (isReady.value && getAutoExecute() && !isExecuting.value && options.pickStep) {
-          const firstAutoFilled = meta.selections.find(s => initialArgs[s.name] === undefined);
-          if (firstAutoFilled) {
-            const autoFilledValue = currentArgs.value[firstAutoFilled.name];
-            if (autoFilledValue !== undefined) {
-              await handleOnSelectFill(firstAutoFilled, autoFilledValue);
-            }
-          }
-        }
-      }
+    // R-04: If fetchAndAutoFill auto-filled ALL remaining selections (isReady),
+    // the auto-execute watcher is permanently blocked by pendingOnServer = true.
+    // Route the auto-filled selection through handleOnSelectFill so the server
+    // processes the continuation (selection-step path), completing the multi-jump.
+    //
+    // Guard: only fires when truly all-auto-filled (isReady), auto-execute is on,
+    // not already executing, and pickStep is available (server-pending path requires it).
+    // Does NOT affect:
+    //   - followUps with multiple choices (isReady = false → guard blocks)
+    //   - non-followUp actions (pendingOnServer = false → auto-execute watcher fires normally)
+    //   - tutorial-suppressed selections (tryAutoFillSelection skips them → isReady stays false)
+    const autoFilledValue = currentArgs.value[selectionToFetch.name];
+    if (isReady.value && getAutoExecute() && !isExecuting.value && options.pickStep && autoFilledValue !== undefined) {
+      await handleOnSelectFill(selectionToFetch, autoFilledValue);
     }
   }
 
