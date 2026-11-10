@@ -1,5 +1,5 @@
 {
-  "revision": 343,
+  "revision": 344,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2687,6 +2687,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A smoke spec's inputs can press a pick's choice by its label (inside a category by its path), and an input reads the deal's seed to choose per deal; the Action Panel names a choice pick in data-bs-pick"
+    },
+    {
+      "revision": 344,
+      "date": "2026-11-10",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel now sends a follow-up action that has no pick left to answer, instead of showing only Cancel (#1599)"
     }
   ]
 }
