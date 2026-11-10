@@ -79,6 +79,7 @@ async function serveEmpty(
     config: { root: dir, configFile: false, logLevel: 'silent', ...config },
     port,
     host: '127.0.0.1',
+    watch: true,
     sockets: [claimed],
     release: () => claimed.close(),
   });
@@ -187,6 +188,25 @@ describe('a served Vite leaves the process alone (#382)', () => {
   }, 30000);
 });
 
+describe('a served Vite that is told not to watch watches nothing (#1594)', () => {
+  it('turns its file watcher off, even under a project vite.config, whose merge drops an inline `watch: null`', async () => {
+    dir = tempTree('bs-dev-no-watch-');
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+    writeFileSync(join(dir, 'vite.config.mjs'), 'export default {};\n');
+    const served = await serveVite({
+      config: { root: dir, logLevel: 'silent' },
+      port: await freePort(),
+      host: '127.0.0.1',
+      watch: false,
+      sockets: [],
+      release: () => {},
+    });
+    const teardown = teardownInOrder(served.resources);
+    stopServed = () => teardown.run();
+    expect(served.vite.config.server.watch).toBeNull();
+  }, 30000);
+});
+
 /**
  * #979: A PAGE STILL CONNECTED WHEN THE HOST STOPS.
  *
@@ -251,6 +271,7 @@ async function servedAlive(): Promise<number> {
     },
     port,
     host: '127.0.0.1',
+    watch: true,
     sockets: [],
     release: () => {},
   });

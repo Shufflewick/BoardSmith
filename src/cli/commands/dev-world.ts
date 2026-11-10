@@ -279,6 +279,8 @@ interface WorldDevServerOptions {
    */
   readonly holdings: HostHoldings;
   readonly openBrowser: boolean;
+  /** Whether Vite watches the project's files, which is how a rules save reaches the world. */
+  readonly watch: boolean;
   /**
    * READ THE PROJECT'S RULES AGAIN (#201).
    *
@@ -644,6 +646,7 @@ export async function startWorldDevServer(
         },
         port: options.port,
         host: options.host,
+        watch: options.watch,
         sockets: [worldSocket],
         release: () => teardownInOrder([...pages, closesWorld(run)]).run(),
       }),

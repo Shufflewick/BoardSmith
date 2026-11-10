@@ -11,7 +11,8 @@
  *      Vite's cache, the dev build) touches the designer's own `boardsmith dev` state;
  *   2. bundles `tests/browser/smoke.spec.ts` with `boardsmith/testing/browser`, BoardSmith's walk,
  *      so the game needs no Playwright of its own and runs BoardSmith's copy;
- *   3. starts `boardsmith dev` in the copy on a free port and waits for it to be ready;
+ *   3. starts `boardsmith dev --no-watch` in the copy on a free port and waits for it to be ready (nothing
+ *      edits the copy, and a sync client touching its fresh files made a watcher reload under the walk);
  *   4. runs the spec in Chromium with Playwright, and reads its verdict from Playwright's report;
  *   5. stops every process it started, and removes the copy, whether the run passed, failed or
  *      threw, and when this process is interrupted.
@@ -365,7 +366,7 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
     await fs.mkdir(work, { recursive: true });
     const spec = await bundleSpec(copy, work);
     if (typeof spec !== 'string') return { outcome: spec, pids: started.pids };
-    const baseURL = await startDev(started, copy, ['--bot-level', 'easy']);
+    const baseURL = await startDev(started, copy, ['--bot-level', 'easy', '--no-watch']);
     if (typeof baseURL !== 'string') return { outcome: baseURL, pids: started.pids };
     log(`boardsmith dev is serving a fresh copy of the game at ${baseURL}`);
     return { outcome: await runWalk(started, copy, work, baseURL, log, options.seeds), pids: started.pids };

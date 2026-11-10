@@ -1,5 +1,5 @@
 {
-  "revision": 338,
+  "revision": 339,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2647,6 +2647,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith smoke walks the same path whatever the spec declares unreachable, so an action it says to undeclare is still taken once undeclared (#1593)."
+    },
+    {
+      "revision": 339,
+      "date": "2026-11-10",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith dev takes --no-watch, and the smoke check serves its copy with it, so a sync client touching the copy's files reloads no rules or pages (#1594)"
     }
   ]
 }

@@ -135,6 +135,7 @@ async function startWorldHost(fixture: string, displayName: string, holdings: Ho
     // The build directory is inside the fixture, which is held whole.
     holdings,
     openBrowser: false,
+    watch: true,
     reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
   });
   // The host reports the URL Vite resolved, which is `localhost`; a check has
