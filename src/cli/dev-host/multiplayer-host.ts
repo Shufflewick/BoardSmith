@@ -1480,10 +1480,11 @@ export class MultiplayerHost {
     // human here: excluded from `botSeats` AND reported as human in
     // `playerIsBot`/`playerConfigs` below, so neither a bot nor a client drives
     // it and the first step needing that seat waits forever with nothing logged.
-    // A follower plays every seat, so the game deals them all as human (#1597).
     const humanSeats = new Set(
-      [...this.seats.values()].filter((s) => this.followerClientId !== null || this.heldByHuman(s.seat)).map((s) => s.seat),
+      [...this.seats.values()].filter((s) => this.heldByHuman(s.seat)).map((s) => s.seat),
     );
+    // A follower plays every seat, so the game deals them all as human (#1597).
+    const following = this.followerClientId !== null;
     // Seed the bot-seat list from the current open seats; the session starts
     // with it. Changed later as humans take over seats (removeBotSeat) or give
     // them up (addBotSeat), and announced to the host by `announceRoster`. A
@@ -1520,7 +1521,7 @@ export class MultiplayerHost {
           return {
             playerOptions: { ...seat?.playerOptions },
             color: colors[i],
-            isBot: !humanSeats.has(i + 1),
+            isBot: !following && !humanSeats.has(i + 1),
             botLevel: this.botLevel(i + 1),
             name: seatDisplayName(i + 1, seat?.name),
           };

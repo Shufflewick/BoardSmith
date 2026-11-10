@@ -813,6 +813,19 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
+  it('#1597: when follow ends in a game it dealt every seat human, a bot still drives the open seat', async () => {
+    const { host, lastOfType, pass } = makeAltHost();
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+    await host.handleMessage('A', { type: 'restart' });
+    await host.handleMessage('A', { type: 'follow', enabled: false });
+
+    // A passes as seat 1, then seat 2's bot passes and the game is over.
+    await pass('A', 'r1');
+    await host.settled();
+    expect(lastOfType('A', 'game_state').isComplete).toBe(true);
+  });
+
   it('#877: follow is refused while another person holds a seat, so nobody sees or plays their seat', async () => {
     const { host, lastOfType, has, pass, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' }); // A = seat 1
