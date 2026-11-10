@@ -39,6 +39,7 @@ async function reloadsOnSave(cwd: string, rulesDir: string): Promise<void> {
     host: '127.0.0.1',
     holdings: hostHoldings(),
     openBrowser: false,
+    watch: true,
     reloadRules,
   });
   try {

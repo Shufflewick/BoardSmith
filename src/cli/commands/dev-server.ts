@@ -334,6 +334,20 @@ export function reloadOnRulesEdit(args: {
   });
 }
 
+/**
+ * Turns Vite's file watcher off. Set in the `config` hook, by mutation, because merging a project's
+ * `vite.config` drops an inline `watch: null`.
+ */
+function noWatchPlugin(): VitePlugin {
+  return {
+    name: 'boardsmith-no-watch',
+    enforce: 'post',
+    config(config) {
+      config.server = { ...config.server, watch: null };
+    },
+  };
+}
+
 /** A dev host's Vite, served over the HTTP server the host owns. */
 interface ServedVite {
   readonly vite: ViteDevServer;
@@ -366,6 +380,8 @@ export async function serveVite(args: {
   readonly config: InlineConfig;
   readonly port: number;
   readonly host: string;
+  /** Whether Vite watches the project's files; `boardsmith dev --no-watch` turns it off (#1594). */
+  readonly watch: boolean;
   readonly sockets: readonly ClaimedWebSocketPath[];
   readonly release: () => Promise<void> | void;
 }): Promise<ServedVite> {
@@ -384,6 +400,7 @@ export async function serveVite(args: {
   try {
     vite = await createViteServer({
       ...args.config,
+      plugins: [...(args.config.plugins ?? []), ...(args.watch ? [] : [noWatchPlugin()])],
       server: { ...args.config.server, middlewareMode: true, hmr: { server: httpServer } },
     });
     await new Promise<void>((listening, reject) => {

@@ -86,6 +86,7 @@ describe('boardsmith dev on a taken port (#345)', () => {
           host: '127.0.0.1',
           holdings: hostHoldings(),
           openBrowser: false,
+          watch: true,
           reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
         }),
       ).rejects.toThrow(`Port ${held.port} is already in use`);

@@ -59,6 +59,8 @@ interface DevOptions {
   debug?: boolean;
   /** Commander's negatable `--no-open` sets this to `false`; unset/true auto-opens. */
   open?: boolean;
+  /** Commander's negatable `--no-watch` sets this to `false`; unset/true watches the project's files. */
+  watch?: boolean;
   /** D13/DEVHOST-01: repeatable `--game-option key=value`. */
   gameOption?: string[];
   /** D13/DEVHOST-01: `--preset name` applies a declared preset's whole bundle. */
@@ -672,6 +674,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       host,
       holdings,
       openBrowser: shouldOpenBrowser(options),
+      watch: options.watch !== false,
       // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
       // bundles the author's edited source into a new worker (#885).
       reloadRules: () => loadWorldRuntime(rulesPath, tempDir, context),
@@ -928,6 +931,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       },
       port,
       host,
+      watch: options.watch !== false,
       sockets: [hostSocket],
       release: () => hostSocket.close(),
     }), (opened) => [
