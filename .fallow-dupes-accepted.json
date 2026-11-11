@@ -1,6 +1,14 @@
 {
   "accepted": [
     {
+      "content": "04ac7c70ee2c955f",
+      "lines": 18,
+      "files": [
+        "src/session/testing/fixtures/collect-fixture.ts",
+        "src/session/testing/fixtures/collect-turns-fixture.ts"
+      ]
+    },
+    {
       "content": "1207ddfa1fa44b57",
       "lines": 8,
       "files": [
@@ -110,14 +118,6 @@
       "lines": 5,
       "files": [
         "src/engine/element/game.ts"
-      ]
-    },
-    {
-      "content": "f1de9c3d82c61083",
-      "lines": 18,
-      "files": [
-        "src/session/testing/fixtures/collect-fixture.ts",
-        "src/session/testing/fixtures/collect-turns-fixture.ts"
       ]
     },
     {
