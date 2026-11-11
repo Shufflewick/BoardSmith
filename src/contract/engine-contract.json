@@ -1,5 +1,5 @@
 {
-  "revision": 349,
+  "revision": 350,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2735,6 +2735,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The engine UI applies every :hover style only under (hover: hover), shows grid coordinates and debug buttons without a hover, and the action panel previews a choice's board pieces on keyboard focus and on a first touch tap, committing on the second (#1606)."
+    },
+    {
+      "revision": 350,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The long-press card zoom no longer blocks scrolling, cards suppress the context menu and iOS callout, and menus close on a touch tap outside them"
     }
   ]
 }

@@ -432,6 +432,46 @@ describe('useZoomPreview', () => {
     });
   });
 
+  describe('touch on a phone (#1607)', () => {
+    it('registers no touch listener that can block scrolling', () => {
+      const addSpy = vi.spyOn(document.body, 'addEventListener');
+      const { wrapper } = withPreview();
+      const touch = addSpy.mock.calls.filter(([type]) => type === 'touchstart' || type === 'touchmove');
+      expect(touch.map(([type]) => type).sort()).toEqual(['touchmove', 'touchstart']);
+      for (const [, , options] of touch) expect(options).toMatchObject({ passive: true });
+      wrapper.unmount();
+    });
+
+    it('cancels the context menu of a long press on a zoomable card, and nothing else (#1607 review F3)', () => {
+      const { wrapper } = withPreview();
+      const card = document.createElement('div');
+      card.classList.add('card');
+      const elsewhere = document.createElement('div');
+      document.body.append(card, elsewhere);
+      const touch = (type: string, target: HTMLElement) => {
+        const event = new Event(type, { bubbles: true, cancelable: true });
+        Object.defineProperty(event, 'touches', { value: type === 'touchstart' ? [{ clientX: 10, clientY: 10 }] : [] });
+        target.dispatchEvent(event);
+      };
+      const contextMenu = (target: HTMLElement) => {
+        const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+
+      expect(contextMenu(card)).toBe(false); // a right-click keeps the browser's menu
+      touch('touchstart', card);
+      expect(contextMenu(card)).toBe(true);
+      touch('touchend', card);
+      touch('touchstart', elsewhere);
+      expect(contextMenu(elsewhere)).toBe(false);
+      touch('touchend', elsewhere);
+      touch('touchstart', card);
+      wrapper.unmount();
+      expect(contextMenu(card)).toBe(false);
+    });
+  });
+
   describe('custom container', () => {
     it('listens on the container it was given', async () => {
       const container = document.createElement('div');

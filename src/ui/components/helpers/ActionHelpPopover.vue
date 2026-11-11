@@ -18,7 +18,7 @@
  *  - trigger: role=button, aria-label="Help for {triggerLabel}", aria-expanded, aria-controls
  *  - aria-describedby applied to trigger ONLY when popover is mounted (Pitfall 3)
  *  - popover: role=tooltip, aria-live=polite
- *  - Dismiss: outside mousedown, Escape key, the mouse leaving the trigger and the popover
+ *  - Dismiss: outside pointerdown, Escape key, the mouse leaving the trigger and the popover
  *  - Help taller than the room scrolls inside the popover: by mouse over it, by
  *    arrow and Page keys on the trigger (#1454)
  *  - Reduced motion: `.bs-reduce-motion` → transition: none
@@ -149,7 +149,7 @@ function scrollPopover(event: KeyboardEvent) {
 // ── Outside-click + Escape dismiss ───────────────────────────────────────────
 // Pattern from ControlsMenu.vue lines 102-118.
 
-function handleOutsideClick(event: MouseEvent) {
+function handleOutsideClick(event: PointerEvent) {
   const target = event.target as Node;
   const trigger = triggerRef.value;
   // If the click is inside the trigger button, let the @click handler manage state
@@ -166,12 +166,12 @@ function handleKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', handleOutsideClick);
+  document.addEventListener('pointerdown', handleOutsideClick);
   document.addEventListener('keydown', handleKeydown);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('mousedown', handleOutsideClick);
+  document.removeEventListener('pointerdown', handleOutsideClick);
   document.removeEventListener('keydown', handleKeydown);
 });
 </script>
