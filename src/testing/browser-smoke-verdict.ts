@@ -108,12 +108,13 @@ const WALK_STEP_MS = 10_000;
 const LONGEST_TIMER_MS = 2_147_483_647;
 
 /**
- * The longest a walk of `deals` deals of at most `steps` steps each, played by `seats` seats, may run
- * before Playwright ends it (#1601). A hang guard sized to the walk the spec asks for; the walk's own
- * checks catch a stuck game sooner.
+ * The longest a walk of `deals` deals of at most `steps` steps each, played by the world `seats` the
+ * spec names (one seat at a table, which names none), may run before Playwright ends it (#1601). A hang
+ * guard sized to the walk the spec asks for; the walk's own checks catch a stuck game sooner.
  */
-export function smokeWalkLimit(deals: number, steps: number, seats: number): number {
-  return Math.min(LONGEST_TIMER_MS, WALK_BASE_MS + deals * seats * (WALK_DEAL_MS + steps * WALK_STEP_MS));
+export function smokeWalkLimit(deals: number, steps: number, seats: readonly number[] | undefined): number {
+  const played = deals * (seats?.length ?? 1);
+  return Math.min(LONGEST_TIMER_MS, WALK_BASE_MS + played * (WALK_DEAL_MS + steps * WALK_STEP_MS));
 }
 
 /** The spec's `steps`, once it is a positive whole number: with none, the walk takes no step and passes any game that loads (#924). */
