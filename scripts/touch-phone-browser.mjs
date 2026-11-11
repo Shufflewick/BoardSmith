@@ -136,6 +136,8 @@ export function createGameFlow(): FlowDefinition<TableFixtureGame> {
 
 const gameFrame = (page) => page.frameLocator('.dev-host__frame');
 const MY_PAWN = '.piece[data-bs-candidate]';
+/** This page's own hand: the first page of a run is seat 1, and later pages reclaim it. */
+const MY_HAND = '[data-bs-el-name="hand-1"]';
 const myPawnReady = (page) => gameFrame(page).locator(MY_PAWN).first().waitFor({ timeout: 60_000 });
 
 /** The name of a pawn of mine the move will take, and an empty square as far from it as the board allows. */
@@ -177,6 +179,7 @@ async function touchDrag(page, engine, frame, { pawn: name, to }, whileOver) {
       await whileOver();
     } finally {
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await cdp.detach();
     }
     return;
   }
@@ -219,7 +222,7 @@ await runBrowserRegression(
           const frame = gameFrame(page);
 
           await check(`${size}: the shell, the action bar, the hand and the board all show, and the page does not scroll sideways`, async () => {
-            const measure = () => frame.locator('body').evaluate((body) => {
+            const measure = () => frame.locator('body').evaluate((body, hand) => {
               const doc = body.ownerDocument;
               const shown = (selector) => {
                 const box = doc.querySelector(selector)?.getBoundingClientRect();
@@ -228,22 +231,22 @@ await runBrowserRegression(
               return {
                 shell: shown('.game-shell'),
                 bar: shown('[data-testid="bs-actionbar"]'),
-                hand: shown('.hand-cards'),
-                cards: doc.querySelectorAll('.hand-card').length,
+                hand: shown(`${hand} .hand-cards`),
+                cards: doc.querySelectorAll(`${hand} .hand-card`).length,
                 board: shown('.board-grid'),
                 squares: doc.querySelectorAll('.grid-cell').length,
                 sideways: doc.scrollingElement.scrollWidth - innerWidth,
               };
-            });
-            const seen = await waitUntil(measure, (now) => now.shell && now.bar && now.hand && now.cards >= 5 && now.board && now.squares === 16 && now.sideways <= 0);
+            }, MY_HAND);
+            const seen = await waitUntil(measure, (now) => now.shell && now.bar && now.hand && now.cards === 5 && now.board && now.squares === 16 && now.sideways <= 0);
             assert(seen.shell && seen.bar, `the shell or the action bar is not on screen: ${JSON.stringify(seen)}`);
-            assert(seen.hand && seen.cards >= 5, `the hand is not on screen with its five cards: ${JSON.stringify(seen)}`);
+            assert(seen.hand && seen.cards === 5, `my hand is not on screen with its five cards: ${JSON.stringify(seen)}`);
             assert(seen.board && seen.squares === 16, `the board is not on screen with its 16 squares: ${JSON.stringify(seen)}`);
             assert(seen.sideways <= 0, `the page scrolls ${seen.sideways}px sideways`);
           });
 
           await knownFailure(`${size}: a tapped card shows no hover style`, { issue: '#1606', because: HOVER_STUCK }, async () => {
-            const card = frame.locator('.hand-card').last();
+            const card = frame.locator(`${MY_HAND} .hand-card`).last();
             // Without transitions the hover style shows the moment the tap lands, so one read after it is the answer.
             await frame.locator('head').evaluate((head) => head.appendChild(head.ownerDocument.createElement('style')).append('* { transition: none !important; }'));
             const look = () => card.evaluate((el) => ({ transform: getComputedStyle(el).transform, zIndex: getComputedStyle(el).zIndex, hover: el.matches(':hover') }));

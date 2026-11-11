@@ -61,6 +61,7 @@ const WIDTHS = [1440, 390];
 await runBrowserRegression(
   {
     script: 'auto-renderer-loading-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'auto-renderer-loading',
       displayName: 'AutoRenderer Loading',

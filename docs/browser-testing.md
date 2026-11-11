@@ -352,7 +352,7 @@ A script runs in Chromium unless its `runBrowserRegression` call names its
 browsers: `engines: ['chromium', 'webkit']` runs the whole script once in each,
 each run with a fixture of its own, and the summary names the browser. WebKit
 is where iOS Safari's behaviour shows. Every script that lays a page out at a
-phone size (a width from 300 to 439, 844, or `hasTouch`) must name them, and
+phone size (a width from 300 to 439, a side of 844, or `hasTouch`) must name them, and
 `scripts/browser-harness.test.mjs` fails one that does not; a script that WebKit
 cannot run names `['chromium']` with a comment saying why (classic scrollbars,
 the DevTools protocol, or an open WebKit defect's issue). The body is handed

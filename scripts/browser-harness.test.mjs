@@ -119,7 +119,7 @@ describe('every browser regression launches the one Chromium build the harness p
 describe('#1604: a regression that lays a page out at phone size names its browsers', () => {
   it.each(browserScripts())('%s names its engines when it uses a phone viewport or touch', (name) => {
     const source = read(name);
-    if (!/width: (3\d\d|4[0-3]\d|844)\b|hasTouch/.test(source)) return;
+    if (!/width: (3\d\d|4[0-3]\d)\b|\b844\b|hasTouch/.test(source)) return;
     expect(
       source,
       `${name} lays a page out at phone size, so its runBrowserRegression call must name the browsers it runs in: ` +

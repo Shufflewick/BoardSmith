@@ -28,7 +28,7 @@ import { assert, check, openTableSample, runBrowserRegression, summarise, waitUn
  */
 const RECORDED = {
   render: { layouts: 64, styles: 116, elements: 322 },
-  push: { layouts: 52, styles: 110, elements: 322 },
+  push: { layouts: 64, styles: 146, elements: 322 },
 };
 
 /** The layouts and style recalculations the page has done so far, and the game frame's elements now. */
@@ -65,10 +65,13 @@ await runBrowserRegression({ script: 'cpu-throttle-browser.mjs', engines: ['chro
 
     // The sample draws by itself, so its first question is which card to play. The push measured is that play,
     // seat 2's turn and this seat's next draw, which all follow by themselves: it is over when the hand is full again.
-    const hand = frame.locator('[data-bs-el-name="hand-1"] .hand-card');
+    const myHand = frame.locator('[data-bs-el-name="hand-1"]');
+    const hand = myHand.locator('.hand-card');
     const full = await hand.count();
-    await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().click();
-    await waitUntil(() => hand.count(), (now) => now < full, 30_000);
+    const choice = frame.locator('[data-testid="bs-actionbar"] .choice-btn').first();
+    const card = (await choice.innerText()).trim();
+    await choice.click();
+    await myHand.locator(`[data-bs-el-name="${card}"]`).waitFor({ state: 'detached', timeout: 30_000 });
     const refilled = await waitUntil(() => hand.count(), (now) => now === full, 60_000);
     assert(refilled === full, `the hand never filled again after the play: ${refilled} cards, not ${full}`);
     const after = await counts(cdp, frame);

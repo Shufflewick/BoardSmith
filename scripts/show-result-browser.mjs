@@ -46,7 +46,7 @@ export default defineGameUIs({ Stuck: defaultUI(Stuck) });
 const WIDTHS = [1440, 390];
 
 await runBrowserRegression(
-  { script: 'show-result-browser.mjs', table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Stuck.vue': STUCK_BOARD } } },
+  { script: 'show-result-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Stuck.vue': STUCK_BOARD } } },
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {

@@ -23,7 +23,7 @@ import {
 
 const WIDTHS = [1440, 390];
 
-await runBrowserRegression({ script: 'gameover-debug-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'gameover-debug-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const context = await browser.newContext({ viewport: { width: WIDTHS[0], height: 900 } });
