@@ -839,11 +839,11 @@ describe('FlowEngine', () => {
     it('should throw an actionable error when switchOn has no matching case and no default', () => {
       const flow: FlowDefinition = {
         root: switchOn({
-          on: () => 'combatt',
+          on: () => 'duell',
           cases: {
             draw: setVar('result', 'case-draw'),
             play: setVar('result', 'case-play'),
-            combat: setVar('result', 'case-combat'),
+            duel: setVar('result', 'case-duel'),
           },
         }),
       };
@@ -851,10 +851,10 @@ describe('FlowEngine', () => {
       const engine = new FlowEngine(game, flow);
 
       expect(() => engine.start()).toThrow(/no matching case/);
-      expect(() => engine.start()).toThrow(/combatt/);
+      expect(() => engine.start()).toThrow(/duell/);
       expect(() => engine.start()).toThrow(/draw/);
       expect(() => engine.start()).toThrow(/play/);
-      expect(() => engine.start()).toThrow(/combat/);
+      expect(() => engine.start()).toThrow(/duel/);
     });
 
     it('should execute the matched branch when switchOn has a matching case (control)', () => {
@@ -864,7 +864,7 @@ describe('FlowEngine', () => {
           cases: {
             draw: setVar('result', 'case-draw'),
             play: setVar('result', 'case-play'),
-            combat: setVar('result', 'case-combat'),
+            duel: setVar('result', 'case-duel'),
           },
         }),
       };
@@ -878,11 +878,11 @@ describe('FlowEngine', () => {
     it('should execute the default branch when switchOn has no matching case but has a default (control)', () => {
       const flow: FlowDefinition = {
         root: switchOn({
-          on: () => 'combatt',
+          on: () => 'duell',
           cases: {
             draw: setVar('result', 'case-draw'),
             play: setVar('result', 'case-play'),
-            combat: setVar('result', 'case-combat'),
+            duel: setVar('result', 'case-duel'),
           },
           default: setVar('result', 'default'),
         }),
@@ -1502,9 +1502,9 @@ describe('Named Phases', () => {
   });
 
   it('should create phase node', () => {
-    const node = phase('combat', { do: noop() });
+    const node = phase('duel', { do: noop() });
     expect(node.type).toBe('phase');
-    expect(node.config.name).toBe('combat');
+    expect(node.config.name).toBe('duel');
   });
 
   it('should track current phase in state', () => {
@@ -2064,7 +2064,7 @@ describe('Action Chaining with followUp in FlowState', () => {
         success: true,
         followUp: {
           action: 'collect',
-          args: { mercId: 42, sectorId: 'A1' },
+          args: { heroId: 42, roomId: 'A1' },
         },
       }));
 
@@ -2093,7 +2093,7 @@ describe('Action Chaining with followUp in FlowState', () => {
     // FlowState should include followUp
     expect(state.followUps).toBeDefined();
     expect(state.followUps?.[0]?.action).toBe('collect');
-    expect(state.followUps?.[0]?.args).toEqual({ mercId: 42, sectorId: 'A1' });
+    expect(state.followUps?.[0]?.args).toEqual({ heroId: 42, roomId: 'A1' });
   });
 
   it('should not include followUp in FlowState when action does not return one', () => {
@@ -2205,7 +2205,7 @@ describe('Action Chaining with followUp in FlowState', () => {
     let chainDepth = 0;
     const maxChainDepth = 5;
 
-    // Action that chains to itself (like MERC's applyImpact pattern)
+    // Action that chains to itself (like an applyImpact pattern)
     const chainAction = Action.create('chain')
       .execute(() => {
         chainDepth++;

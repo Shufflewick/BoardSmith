@@ -380,12 +380,12 @@ export class Action<
    * @example
    * ```typescript
    * Action.create<MyGame>('collectEquipment')
-   *   .followUpArgs<{ sector: Sector }>()
+   *   .followUpArgs<{ room: Room }>()
    *   .chooseElement('equipment', {
    *     elementClass: Equipment,
-   *     filter: (item, ctx) => ctx.args.sector?.stash.contains(item) ?? false,
+   *     filter: (item, ctx) => ctx.args.room?.stash.contains(item) ?? false,
    *   })
-   *   .execute(({ sector, equipment }) => { ... });
+   *   .execute(({ room, equipment }) => { ... });
    * ```
    */
   followUpArgs<F extends Record<string, unknown>>(
@@ -864,7 +864,7 @@ export class Action<
    * Value encoding is the same either way: values are element IDs (numbers),
    * custom UIs send the ID directly (`props.action('move', { piece: 42 })`),
    * and the execute handler receives the resolved Element object. Display
-   * names auto-disambiguate (e.g., "Militia #1", "Militia #2").
+   * names auto-disambiguate (e.g., "Guards #1", "Guards #2").
    *
    * @param name - Argument name that will be passed to the execute handler
    * @param options - Configuration for the element selection
@@ -904,7 +904,7 @@ export class Action<
    * action('attack')
    *   .chooseElement('target', {
    *     prompt: 'Choose a target',
-   *     elements: (ctx) => ctx.game.combat.validTargets,
+   *     elements: (ctx) => ctx.game.duel.validTargets,
    *   })
    *   .execute(({ target }) => {
    *     target.takeDamage(10);

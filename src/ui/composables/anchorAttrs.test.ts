@@ -44,17 +44,17 @@ describe('anchorAttrs', () => {
   });
 
   it('name-only ref emits only data-bs-el-name', () => {
-    const attrs = anchorAttrs({ name: 'Militia' });
-    expect(attrs).toEqual({ 'data-bs-el-name': 'Militia' });
+    const attrs = anchorAttrs({ name: 'Guards' });
+    expect(attrs).toEqual({ 'data-bs-el-name': 'Guards' });
   });
 
   it('all-three ref emits all three present keys', () => {
-    const attrs = anchorAttrs({ id: 5, notation: 'd4', name: 'Militia' });
+    const attrs = anchorAttrs({ id: 5, notation: 'd4', name: 'Guards' });
     expect(attrs).toEqual({
       'data-bs-el-id': '5',
       'data-element-id': '5',
       'data-bs-el-notation': 'd4',
-      'data-bs-el-name': 'Militia',
+      'data-bs-el-name': 'Guards',
     });
   });
 

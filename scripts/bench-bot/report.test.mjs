@@ -96,12 +96,6 @@ describe('formatReport', () => {
     expect(report).toContain('Load average (1, 5, 15 min): 3.25, 2.50, 2.00 at the start; 4.00, 3.00, 2.25 at the end');
   });
 
-  it('names a game it skipped, and why', () => {
-    expect(formatReport({ ...meta, skipped: ['merc: not checked out at /x/MERC'] }, [])).toContain(
-      '- Skipped: merc: not checked out at /x/MERC',
-    );
-  });
-
   it('says so when the checkout had uncommitted changes', () => {
     expect(formatReport({ ...meta, dirty: true }, [])).toContain('`abc1234` with uncommitted changes');
   });

@@ -1098,7 +1098,7 @@ export async function collectGameApiSurface(projectDir: string): Promise<GameApi
 /**
  * The most declaration text one translation payload carries (about 15k tokens). Every example's
  * payload carries the game's whole printed API, so this bounds a very large game's payloads; the
- * listing itself is never cut. The largest game measured when this was set, MERC, prints 42k.
+ * listing itself is never cut. The largest game measured when this was set prints 42k.
  */
 export const TRANSLATION_DECLARATION_BUDGET = 60_000;
 

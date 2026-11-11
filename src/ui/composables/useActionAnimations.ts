@@ -49,10 +49,10 @@
  *   animations: [
  *     // Movement animation (element moves to a different destination)
  *     {
- *       action: 'assignToSquad',
- *       elementSelection: 'combatantName',
- *       elementSelector: '[data-combatant="{combatantName}"]',
- *       destinationSelector: '[data-squad="{targetSquad}"]',
+ *       action: 'assignToCrew',
+ *       elementSelection: 'duelistName',
+ *       elementSelector: '[data-duelist="{duelistName}"]',
+ *       destinationSelector: '[data-crew="{targetCrew}"]',
  *       duration: 500,
  *       elementSize: { width: 40, height: 60 },
  *     },
@@ -137,8 +137,8 @@ export interface ActionAnimationConfig {
    * The value of this selection will be interpolated into the elementSelector.
    *
    * @example
-   * // If elementSelection is 'combatantName' and the user selects 'merc-001',
-   * // then {combatantName} in elementSelector will be replaced with 'merc-001'.
+   * // If elementSelection is 'duelistName' and the user selects 'hero-001',
+   * // then {duelistName} in elementSelector will be replaced with 'hero-001'.
    */
   elementSelection: string;
 
@@ -152,7 +152,7 @@ export interface ActionAnimationConfig {
    * elementSelector: '[data-card-id="42"]'
    *
    * // Dynamic selector using selection value
-   * elementSelector: '[data-combatant="{combatantName}"]'
+   * elementSelector: '[data-duelist="{duelistName}"]'
    *
    * // Multiple placeholders
    * elementSelector: '[data-player="{player}"][data-piece="{piece}"]'
@@ -172,7 +172,7 @@ export interface ActionAnimationConfig {
    *
    * @example
    * // CSS selector with placeholder
-   * destinationSelector: '[data-squad="{targetSquad}"]'
+   * destinationSelector: '[data-crew="{targetCrew}"]'
    *
    * // Flip-in-place (same as elementSelector)
    * destinationSelector: '[data-card-id="{card}"]'

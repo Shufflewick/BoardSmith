@@ -206,7 +206,7 @@ describe('useActionAnimations', () => {
     });
 
     it.each([
-      ["MERC's template", { elementSelector: '[data-combatant="{combatantName}"]', destinationSelector: () => null }],
+      ["a data-attribute template", { elementSelector: '[data-duelist="{duelistName}"]', destinationSelector: () => null }],
       ['several attributes and operators', { elementSelector: '.card[data-player="{player}"][data-piece^="{piece}"]' }],
       ['an escaped quote inside the value', { elementSelector: '[data-card-id="a\\"{cardId}"]' }],
       ['a :not(...) around the attribute', { elementSelector: '.card:not([data-card-id="{cardId}"])' }],

@@ -221,7 +221,7 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
   const display = { ...owned.display };
   for (const [name, label] of Object.entries(player ? elementArgLabels(game, player, followUp) : {})) display[name] ??= label;
   if (Object.keys(display).length > 0) followUp.display = display;
-  // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
+  // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a room's name).
   const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;
   return { ...followUp, metadata };
 }
@@ -240,8 +240,8 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
  * rule -- never as "guess from history."
  *
  * This correctly handles games with phases where the same player can act at
- * the end of one phase and start of the next (e.g., MERC where Rebel Player
- * acts at end of Day 1 and start of Day 2): moveCount resets to 0 for the new
+ * the end of one phase and start of the next (e.g., an Outlaw player who
+ * acts at the end of Day 1 and the start of Day 2): moveCount resets to 0 for the new
  * action-step frame, so undo is (correctly) bounded to that frame and cannot
  * reach back across the phase boundary into the prior one.
  *
@@ -342,7 +342,7 @@ function isSimultaneousParticipant(flowState: UndoFlowState | undefined, seat: n
  * step-wide total across every seat, not this seat's own scope).
  *
  * **Step-window bound (load-bearing, D4 plan-check WARNING -- the
- * simultaneous analogue of the MERC same-player-across-phases guard
+ * simultaneous analogue of the same-player-across-phases guard
  * `computeUndoInfo`'s doc comment calls out for the sequential path):** the
  * search for the seat's own action is bounded to
  * `[actionHistory.length - moveCount, actionHistory.length)` -- the CURRENT

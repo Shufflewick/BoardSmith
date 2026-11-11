@@ -11,7 +11,7 @@
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:166-180|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:34-47",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
-    "src/session/testing/fixtures/collect-fixture.ts:66-83|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
+    "src/session/testing/fixtures/collect-fixture.ts:65-82|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/engine/element/game-element.ts:1164-1170|src/engine/element/game-element.ts:1225-1231",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
@@ -31,7 +31,7 @@
     "dup:caa5a85b:2",
     "dup:3e4d18b1:2",
     "dup:58325c49:2",
-    "dup:fdaae9f8:2",
+    "dup:55865142:2",
     "dup:e68013f8:2",
     "dup:56a4b332:2",
     "dup:3647c322:2",
@@ -49,15 +49,15 @@
     "dup:77bc4cad:2",
     "dup:c77b3abb6f87acd9-r12:2",
     "dup:c77b3abb6f87acd9-r11:2",
-    "dup:c77b3abb6f87acd9-r1:2",
+    "dup:c77b3abb6f87acd9-r2:2",
     "dup:c77b3abb6f87acd9-r15:2",
-    "dup:c77b3abb6f87acd9-r3:2",
+    "dup:c77b3abb6f87acd9-r1:2",
     "dup:c77b3abb6f87acd9-r4:2",
     "dup:c77b3abb6f87acd9-r10:2",
     "dup:c77b3abb6f87acd9-r6:2",
     "dup:c77b3abb6f87acd9-r13:2",
     "dup:c77b3abb6f87acd9-r7:2",
     "dup:c77b3abb6f87acd9-r8:2",
-    "dup:c77b3abb6f87acd9-r2:2"
+    "dup:c77b3abb6f87acd9-r3:2"
   ]
 }

@@ -149,7 +149,7 @@ describe('deriveManifest', () => {
       default: 'easy',
       choices: [{ value: 'easy', label: 'Easy' }],
     };
-    const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last', choices: [{ value: 'd', label: 'D' }] };
+    const role = { type: 'exclusive' as const, label: 'Sheriff', default: 'last', choices: [{ value: 'd', label: 'D' }] };
     const gameDefinition: GameDefinition = {
       ...makeGameDefinition(2, 4),
       playerOptions: { role, color: createColorOption() },
@@ -170,7 +170,7 @@ describe('deriveManifest', () => {
   });
 
   it.each([
-    ['an exclusive option with no choices', { type: 'exclusive', label: 'Dictator', default: 'last' }, /"choices"/],
+    ['an exclusive option with no choices', { type: 'exclusive', label: 'Sheriff', default: 'last' }, /"choices"/],
     ['a select with plain string choices', { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] }, /"choices"/],
     ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
     ['a text option', { type: 'text', label: 'Name' }, /type "text"/],

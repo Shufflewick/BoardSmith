@@ -356,7 +356,7 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
     expect(option.choices).toContainEqual({ value: '#2c3e50', label: 'Black' });
   });
 
-  it('refuses a code colour option that differs from boardsmith.json\'s colorPalette (MERC\'s case)', () => {
+  it('refuses a code colour option that differs from boardsmith.json\'s colorPalette', () => {
     expect(() => resolveColorOption({ playerOptions: { color: createColorOption() } }, configPalette)).toThrow(
       /playerOptions\.color.*boardsmith\.json's "colorPalette".*remove/s,
     );
@@ -398,7 +398,7 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
 });
 
 describe('dev and the live lobby offer the same player options (#992)', () => {
-  const role = { type: 'exclusive' as const, label: 'Dictator', default: 'last', choices: [{ value: 'd', label: 'D' }] };
+  const role = { type: 'exclusive' as const, label: 'Sheriff', default: 'last', choices: [{ value: 'd', label: 'D' }] };
   const botLevel = {
     id: 'botLevel',
     type: 'select',
@@ -440,7 +440,7 @@ describe('dev and the live lobby offer the same player options (#992)', () => {
   });
 
   it.each([
-    ['an exclusive option with no choices', { type: 'exclusive', label: 'Dictator', default: 'last' }, /"choices"/],
+    ['an exclusive option with no choices', { type: 'exclusive', label: 'Sheriff', default: 'last' }, /"choices"/],
     ['a select with plain string choices', { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] }, /"choices"/],
     ['a select with no default', { type: 'select', label: 'Side', choices: [{ value: 'a', label: 'A' }] }, /"default"/],
     ['a text option', { type: 'text', label: 'Name' }, /type "text"/],
@@ -487,7 +487,7 @@ describe('resolvePreset (D13: --preset names a preset the game declares)', () =>
 
 describe('seatsUnderFlags (#1544: --bot and --bot-level beat the seats a preset sets up)', () => {
   const seats = [
-    { playerOptions: { role: 'dictator' }, color: '#95a5a6', isBot: false },
+    { playerOptions: { role: 'sheriff' }, color: '#95a5a6', isBot: false },
     { playerOptions: {}, isBot: true, botLevel: 'hard' },
   ];
 

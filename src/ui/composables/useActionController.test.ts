@@ -2327,18 +2327,18 @@ describe('useActionController', () => {
       });
 
       // Simulate followUp starting with pre-filled args
-      // This is what happens when Action A returns { followUp: { action: 'collectEquipment', args: { combatantId: 42, sectorId: 7 } } }
+      // This is what happens when Action A returns { followUp: { action: 'collectEquipment', args: { duelistId: 42, roomId: 7 } } }
       sendAction.mockResolvedValueOnce({
         success: true,
         followUp: {
           action: 'collectEquipment',
-          args: { combatantId: 42, sectorId: 7 },
+          args: { duelistId: 42, roomId: 7 },
         },
       });
 
       // Execute the first action which triggers the followUp
       await controller.execute('endTurn');
-      await expectFollowUpOpened(controller, { combatantId: 42, sectorId: 7 });
+      await expectFollowUpOpened(controller, { duelistId: 42, roomId: 7 });
 
       // Now skip the optional equipment selection
       controller.skip('equipment');
@@ -2346,7 +2346,7 @@ describe('useActionController', () => {
       await nextTick(); // Extra tick for auto-execute watch
 
       // The auto-execute sends the action's picks (here none: equipment was
-      // skipped). The followUp's combatantId and sectorId name no pick, so the
+      // skipped). The followUp's duelistId and roomId name no pick, so the
       // server refuses them from a client and binds its own (#662).
       const lastCall = sendAction.mock.calls[sendAction.mock.calls.length - 1];
       expect(lastCall[0]).toBe('collectEquipment');
@@ -2397,12 +2397,12 @@ describe('useActionController', () => {
       const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
       sendAction.mockResolvedValueOnce({
         success: true,
-        followUp: { action: 'collectEquipment', args: { sectorId: 7 } },
+        followUp: { action: 'collectEquipment', args: { roomId: 7 } },
       });
 
       const result = await controller.execute('searchRuins');
       expect(result.success).toBe(true);
-      await expectFollowUpOpened(controller, { sectorId: 7 });
+      await expectFollowUpOpened(controller, { roomId: 7 });
     });
 
     it('buildServerArgs should exclude skipped selections', async () => {
@@ -2475,7 +2475,7 @@ describe('useActionController', () => {
 
       // Draft holds the in-progress values...
       expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: [1, 2], copies: [0, 0] });
-      // ...but currentArgs stays undefined until confirm (MERC relies on this).
+      // ...but currentArgs stays undefined until confirm (games rely on this).
       expect(controller.currentArgs.value.cards).toBeUndefined();
       expect(controller.isReady.value).toBe(false);
       expect(sendAction).not.toHaveBeenCalled();

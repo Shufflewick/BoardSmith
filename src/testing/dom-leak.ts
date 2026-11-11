@@ -210,7 +210,7 @@ function loadTableSeatModules(): Promise<
 // project's own test files resolve it, and it then loads the project's `vue`.
 // It is loaded on first use, never at import time, so a consumer of the
 // `boardsmith/testing` barrel that never renders needs no `@vue/test-utils`
-// installed at all (MERC has none). The resolving takes Node, so it lives in
+// installed at all (a game may have none). The resolving takes Node, so it lives in
 // `project-test-utils.node.ts`, which a game's compiler never sees (#411).
 // ---------------------------------------------------------------------------
 let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;

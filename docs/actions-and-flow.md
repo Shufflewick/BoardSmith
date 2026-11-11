@@ -385,17 +385,17 @@ see [Full Example: Draw, Then Pick](#full-example-draw-then-pick).
 >
 > ```typescript
 > // ❌ WRONG - This will NOT work!
-> let exploredSectorId: number | undefined;
+> let exploredRoomId: number | undefined;
 >
 > Action.create('explore')
->   .chooseElement('sector', { elementClass: Sector })
+>   .chooseElement('room', { elementClass: Room })
 >   .execute((args) => {
->     exploredSectorId = args.sector.id;  // Set in one action...
+>     exploredRoomId = args.room.id;  // Set in one action...
 >   });
 >
 > Action.create('collectLoot')
 >   .chooseElement('loot', {
->     elements: (ctx) => ctx.game.getElementById(exploredSectorId!)!.all(Equipment),  // ...unset in the next
+>     elements: (ctx) => ctx.game.getElementById(exploredRoomId!)!.all(Equipment),  // ...unset in the next
 >   });
 > ```
 >
@@ -411,14 +411,14 @@ never from a candidate callback.
 <!-- typecheck: game src/rules/loot.ts -->
 ```typescript
 import { Action, actionTempState, type ActionDefinition } from 'boardsmith';
-import { Equipment, Sector } from './collect.js';
+import { Equipment, Room } from './collect.js';
 import type { MyGame } from './game.js';
 
-export function createExploreSectorAction(): ActionDefinition {
+export function createExploreRoomAction(): ActionDefinition {
   return Action.create<MyGame>('explore')
-    .chooseElement('sector', { elementClass: Sector })
+    .chooseElement('room', { elementClass: Room })
     .execute((args, ctx) => {
-      actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+      actionTempState(ctx, 'explore').set('roomId', args.room.id);
     });
 }
 
@@ -426,9 +426,9 @@ export function createCollectLootAction(): ActionDefinition {
   return Action.create<MyGame>('collectLoot')
     .chooseElement('loot', {
       elements: (ctx) => {
-        const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
-        if (sectorId === undefined) return [];  // Asked before anything was explored
-        return ctx.game.getElementById(sectorId)!.all(Equipment);
+        const roomId = actionTempState(ctx, 'explore').get<number>('roomId');
+        if (roomId === undefined) return [];  // Asked before anything was explored
+        return ctx.game.getElementById(roomId)!.all(Equipment);
       },
     })
     .execute((args, ctx) => {
@@ -461,37 +461,37 @@ UI already shows it.
 
 ```typescript
 // game.ts
-mercDeck = this.create(Deck, 'mercDeck');
-mercOffer = this.create(Space, 'mercOffer');
+heroDeck = this.create(Deck, 'heroDeck');
+heroOffer = this.create(Space, 'heroOffer');
 
-Action.create('hireFirstMerc')
-  .prompt('Choose a MERC to hire')
-  .chooseElement('merc', {
-    elementClass: Merc,
-    from: (ctx) => ctx.game.mercOffer,
+Action.create('hireFirstHero')
+  .prompt('Choose a hero to hire')
+  .chooseElement('hero', {
+    elementClass: Hero,
+    from: (ctx) => ctx.game.heroOffer,
   })
   .execute((args, ctx) => {
-    args.merc.putInto(ctx.player.team);
-    // Return unused mercs to the bottom of the deck
-    for (const merc of ctx.game.mercOffer.all(Merc)) {
-      merc.putInto(ctx.game.mercDeck, { position: 'last' });
+    args.hero.putInto(ctx.player.team);
+    // Return unused heroes to the bottom of the deck
+    for (const hero of ctx.game.heroOffer.all(Hero)) {
+      hero.putInto(ctx.game.heroDeck, { position: 'last' });
     }
   });
 
 // flow.ts
 sequence(
   // The player now sees these cards, so undo must not reach back and redraw.
-  execute((ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3), { irreversible: true }),
-  actionStep({ actions: ['hireFirstMerc'] }),
+  execute((ctx) => ctx.game.heroDeck.drawTo(ctx.game.heroOffer, 3), { irreversible: true }),
+  actionStep({ actions: ['hireFirstHero'] }),
 )
 ```
 
 **How it works:**
-1. The flow's `execute` step draws 3 MERCs from the deck into `mercOffer`.
-2. The flow offers `hireFirstMerc`. Its pick offers the MERCs in `mercOffer`:
+1. The flow's `execute` step draws 3 heroes from the deck into `heroOffer`.
+2. The flow offers `hireFirstHero`. Its pick offers the heroes in `heroOffer`:
    the Action Panel lists them as buttons, and a custom UI shows the space and
-   sends the id of the MERC the player clicks. Nothing in the pick changes the
-   game, so every question about it gets the same three MERCs.
+   sends the id of the hero the player clicks. Nothing in the pick changes the
+   game, so every question about it gets the same three heroes.
 3. The player picks one. The engine checks it against the same three, and
    `execute` moves it to the team and returns the other two to the deck.
 
@@ -551,7 +551,7 @@ Action.create('placeStone')
 Action.create('attack')
   .chooseElement('target', {
     prompt: 'Choose a target',
-    elements: (ctx) => ctx.game.combat.validTargets,
+    elements: (ctx) => ctx.game.duel.validTargets,
     display: (unit, ctx, allUnits) => unit.name,  // Optional: custom display
     boardRef: (unit) => ({ id: unit.id }),
   })
@@ -568,7 +568,7 @@ Action.create('attack')
 | Feature | `chooseFrom` | `chooseElement` |
 |---------|-------------|----------------|
 | Value type | String (manual) | Element ID (automatic) |
-| Custom UI sends | `"Militia #1"` (must match exactly) | `42` (element ID) |
+| Custom UI sends | `"Guards #1"` (must match exactly) | `42` (element ID) |
 | Display names | Manual | Auto-disambiguated |
 | Execute receives | Raw value | Resolved Element |
 
@@ -584,8 +584,8 @@ function attackTarget(targetId: number) {
 
 **Auto-disambiguation:**
 When multiple elements share the same name, display names are automatically suffixed:
-- "Militia" (if unique)
-- "Militia #1", "Militia #2" (if duplicates exist)
+- "Guards" (if unique)
+- "Guards #1", "Guards #2" (if duplicates exist)
 
 #### `chooseElements` - Choose multiple game elements
 
@@ -596,7 +596,7 @@ pick one or more.
 
 ```typescript
 .chooseElements('targets', {
-  elements: (ctx) => ctx.game.combat.validTargets,
+  elements: (ctx) => ctx.game.duel.validTargets,
   multiSelect: { min: 1, max: 3 },  // Select 1-3 targets
 })
 .execute((args) => {
@@ -815,15 +815,15 @@ names it, when none does:
 
 ```typescript
 Action.create('dropEquipment')
-  .chooseElement('merc', {
-    elements: (ctx) => [...ctx.game.all(Merc)],
+  .chooseElement('hero', {
+    elements: (ctx) => [...ctx.game.all(Hero)],
   })
   .chooseElement('equipment', {
-    dependsOn: 'merc',  // check every merc for equipment before offering
+    dependsOn: 'hero',  // check every hero for equipment before offering
     elements: (ctx) => {
-      const merc = ctx.args.merc as Merc | undefined;
-      if (merc === undefined) return [];
-      return [...merc.equipment.all(Equipment)];
+      const hero = ctx.args.hero as Hero | undefined;
+      if (hero === undefined) return [];
+      return [...hero.equipment.all(Equipment)];
     },
   })
 ```
@@ -1655,37 +1655,37 @@ follow-up starts with on the action it starts, with `.followUpArgs<...>()`:
 import { Action, Piece, Space, type ActionDefinition } from 'boardsmith';
 import type { MyGame } from './game.js';
 
-export class Sector extends Space<MyGame> {}
+export class Room extends Space<MyGame> {}
 export class Equipment extends Piece<MyGame> {}
 
 export function createExploreAction(): ActionDefinition {
   return Action.create<MyGame>('explore')
-    .chooseElement('sector', { elementClass: Sector })
-    .execute(({ sector }) => ({
+    .chooseElement('room', { elementClass: Room })
+    .execute(({ room }) => ({
       success: true,
       // Chain to collect. The UI sees the state this action left first.
       followUp: {
         action: 'collectEquipment',
-        // The {id, className} shape: it reaches the follow-up as the Sector.
-        args: { sector: { id: sector.id, className: sector.constructor.name } },
+        // The {id, className} shape: it reaches the follow-up as the Room.
+        args: { room: { id: room.id, className: room.constructor.name } },
       },
     }));
 }
 
 export function createCollectAction(): ActionDefinition {
   return Action.create<MyGame>('collectEquipment')
-    // ctx.args.sector is a declared key from here on; a misspelt one is an error.
-    .followUpArgs<{ sector: Sector }>()
+    // ctx.args.room is a declared key from here on; a misspelt one is an error.
+    .followUpArgs<{ room: Room }>()
     .chooseElement('equipment', {
       // Possibly undefined here: the engine also asks before any follow-up exists.
-      prompt: (ctx) => `Take equipment from ${ctx.args.sector?.name ?? 'the sector'}`,
+      prompt: (ctx) => `Take equipment from ${ctx.args.room?.name ?? 'the room'}`,
       elementClass: Equipment,
-      filter: (item, ctx) => item.parent === ctx.args.sector,
+      filter: (item, ctx) => item.parent === ctx.args.room,
       optional: 'Done taking equipment',
     })
-    .execute(({ sector, equipment }, ctx) => {
+    .execute(({ room, equipment }, ctx) => {
       if (equipment) {
-        ctx.game.message(`Took ${equipment.name} from ${sector.name}`);
+        ctx.game.message(`Took ${equipment.name} from ${room.name}`);
         equipment.remove();
       }
       return { success: true };
@@ -1717,13 +1717,13 @@ Only chain to follow-up when a condition is met:
 
 ```typescript
 .execute((args, ctx) => {
-  const sector = performExploration(args, ctx);
+  const room = performExploration(args, ctx);
 
   return {
     success: true,
     // Only chain if there's equipment to collect
-    followUp: sector.stashZone.count() > 0
-      ? { action: 'collectEquipment', args: { sector: { id: sector.id, className: 'Sector' } } }
+    followUp: room.stashZone.count() > 0
+      ? { action: 'collectEquipment', args: { room: { id: room.id, className: 'Room' } } }
       : undefined,
   };
 })
@@ -1815,7 +1815,7 @@ Don't use `followUp` when:
 
 ### Displaying followUp Args
 
-When followUp args are displayed in the action panel (as chips showing context), plain IDs like `mercId: 51` display as "51" which isn't user-friendly.
+When followUp args are displayed in the action panel (as chips showing context), plain IDs like `heroId: 51` display as "51" which isn't user-friendly.
 
 An arg that pre-fills a `chooseElement` or `chooseElements` pick of the follow-up action with element ids needs neither option below: the chip reads what that pick's own choices would, its `display()`, else the element's notation or name (#1378). A `display` you pass still wins. The options are for every other arg, such as an id carried in a `chooseFrom` pick or in args no pick reads.
 
@@ -1828,11 +1828,11 @@ return {
     action: 'collectEquipment',
     args: {
       // Plain ID - displays as "51" ❌
-      // mercId: merc.id,
+      // heroId: hero.id,
 
-      // Object with name - displays as "Bronson" ✓
-      mercId: { id: merc.id, name: merc.mercName },
-      sectorId: { id: sector.id, name: sector.sectorName },
+      // Object with name - displays as "Brann" ✓
+      heroId: { id: hero.id, name: hero.heroName },
+      roomId: { id: room.id, name: room.roomName },
     },
   },
 };
@@ -1845,11 +1845,11 @@ field is ordinary data and is not read, and neither is a `value` field, so
 handle both formats:
 
 ```typescript
-function getMerc(ctx: ActionContext): Merc {
-  const arg = ctx.args.mercId;
+function getHero(ctx: ActionContext): Hero {
+  const arg = ctx.args.heroId;
   // Handle both plain ID and object format
   const id = typeof arg === 'object' && arg !== null ? (arg as { id: number }).id : arg;
-  return ctx.game.first(Merc, m => m.id === id)!;
+  return ctx.game.first(Hero, m => m.id === id)!;
 }
 ```
 
@@ -1863,12 +1863,12 @@ return {
   followUp: {
     action: 'collectEquipment',
     args: {
-      mercId: merc.id,
-      sectorId: sector.id,
+      heroId: hero.id,
+      roomId: room.id,
     },
     display: {
-      mercId: merc.mercName,      // "Bronson"
-      sectorId: sector.sectorName, // "Diamond Industry"
+      heroId: hero.heroName,      // "Brann"
+      roomId: room.roomName, // "Silver Mine"
     },
   },
 };
@@ -2966,7 +2966,7 @@ the valid choices) is written to the dev log:
   error: 'That choice is no longer available. Things changed while you were choosing, so please choose again.'
 }
 // Dev log:
-// [BoardSmith] Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis] ...
+// [BoardSmith] Invalid selection for "target": "invalid-value". Valid choices: [Guards #1, Guards #2, genesis] ...
 ```
 
 A game can replace the player's sentence with the selection's `unavailable`
@@ -2985,8 +2985,8 @@ option; see [`unavailable`](#unavailable--a-choice-that-is-no-longer-listed).
     name: 'target',
     type: 'element',  // Single-select uses 'element' type
     validElements: [
-      { id: 42, display: 'Militia #1', ref: { id: 42 } },
-      { id: 43, display: 'Militia #2', ref: { id: 43 } },
+      { id: 42, display: 'Guards #1', ref: { id: 42 } },
+      { id: 43, display: 'Guards #2', ref: { id: 43 } },
     ]
   }]
 }
@@ -2998,8 +2998,8 @@ option; see [`unavailable`](#unavailable--a-choice-that-is-no-longer-listed).
     type: 'elements',  // Multi-select uses 'elements' type
     multiSelect: { min: 1, max: 3 },
     validElements: [
-      { id: 42, display: 'Militia #1', ref: { id: 42 } },
-      { id: 43, display: 'Militia #2', ref: { id: 43 } },
+      { id: 42, display: 'Guards #1', ref: { id: 42 } },
+      { id: 43, display: 'Guards #2', ref: { id: 43 } },
     ]
   }]
 }

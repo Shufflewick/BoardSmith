@@ -22,7 +22,7 @@ class AllocateGame extends Game<AllocateGame, Player> {
     this.registerAction(
       Action.create('allocate')
         .chooseFrom('allocations', {
-          choices: () => ['squidhead'],
+          choices: () => ['wyvern'],
           multiSelect: () => ({ min: 0, max: 0 }),
         })
         .execute((args, ctx) => {

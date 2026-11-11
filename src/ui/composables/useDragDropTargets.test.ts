@@ -379,11 +379,11 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
 
   it('DRAG-TO-START: a name-only drag starts the action with the candidate anchored by that name (#945)', async () => {
     const { controller, boardInteraction, sendAction } = await twoActions([
-      { id: 42, refs: [{ ref: { name: 'Squad A' }, role: 'highlight' }] },
-      { id: 43, refs: [{ ref: { name: 'Squad B' }, role: 'highlight' }] },
+      { id: 42, refs: [{ ref: { name: 'Crew A' }, role: 'highlight' }] },
+      { id: 43, refs: [{ ref: { name: 'Crew B' }, role: 'highlight' }] },
     ]);
 
-    boardInteraction.startDrag({ name: 'Squad B' });
+    boardInteraction.startDrag({ name: 'Crew B' });
     await flushAll();
     expect(controller.currentArgs.value).toEqual({ piece: 43 });
 

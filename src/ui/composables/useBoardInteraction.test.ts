@@ -27,17 +27,17 @@ describe('createBoardInteraction', () => {
 
     // The valid element's ref carries BOTH a precise id and a colliding name.
     const validElements: BoardTarget[] = [
-      { id: 5, ref: { id: 5, name: 'Militia' } },
+      { id: 5, ref: { id: 5, name: 'Guards' } },
     ];
     interaction.setValidElements(validElements, onSelect);
 
-    // Clicking a DIFFERENT element that shares the name 'Militia' but has a
+    // Clicking a DIFFERENT element that shares the name 'Guards' but has a
     // different id must NOT trigger selection of element 5.
-    interaction.triggerElementSelect({ id: 8, name: 'Militia' });
+    interaction.triggerElementSelect({ id: 8, name: 'Guards' });
     expect(onSelect).not.toHaveBeenCalled();
 
     // Clicking the element with the matching id selects it.
-    interaction.triggerElementSelect({ id: 5, name: 'Militia' });
+    interaction.triggerElementSelect({ id: 5, name: 'Guards' });
     expect(onSelect).toHaveBeenCalledTimes(1);
     expect(onSelect).toHaveBeenCalledWith(5);
   });
@@ -277,7 +277,7 @@ describe('drop-target lookups on a large drag (#858)', () => {
     interaction.startDrag({ id: 1 });
     interaction.setDropTargets(
       [
-        { id: 5, ref: { id: 5, name: 'Militia' } },
+        { id: 5, ref: { id: 5, name: 'Guards' } },
         { id: -1, ref: { notation: 'a1' } },
         { id: -2, ref: { name: 'north-gate' } },
         { id: -3, ref: {} },
@@ -286,7 +286,7 @@ describe('drop-target lookups on a large drag (#858)', () => {
     );
 
     expect(interaction.isDropTarget({ id: 5 })).toBe(true);
-    expect(interaction.isDropTarget({ id: 6, name: 'Militia' })).toBe(false);
+    expect(interaction.isDropTarget({ id: 6, name: 'Guards' })).toBe(false);
     expect(interaction.isDropTarget({ notation: 'a1' })).toBe(true);
     expect(interaction.isDropTarget({ id: 9, name: 'north-gate' })).toBe(true);
     expect(interaction.isDropTarget({ id: 9, notation: 'b2', name: 'south-gate' })).toBe(false);

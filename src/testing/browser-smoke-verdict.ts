@@ -101,7 +101,7 @@ const WALK_BASE_MS = 600_000;
 /** What each seat gets on each deal besides its steps: to load and seat it, deal, and settle at the end. */
 const WALK_DEAL_MS = 90_000;
 
-/** What each seat gets for each step it may take: some 15 times what a step of MERC, a heavy game, takes. */
+/** What each seat gets for each step it may take: some 15 times what a step of a heavy game takes. */
 const WALK_STEP_MS = 10_000;
 
 /** The longest delay a timer can wait: Node fires a longer one at once. */
@@ -227,7 +227,7 @@ export function choiceNotOffered(action: string, field: string, value: string, o
   return (
     `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${value}", but the pick offers no choice labelled that: ` +
     `it offers ${offered.length === 0 ? 'none' : quoted(offered)}. Give the label of a choice as the panel shows it, and one in a ` +
-    'category by its path, such as "Dictators / Castro".'
+    'category by its path, such as "Sheriffs / Hale".'
   );
 }
 

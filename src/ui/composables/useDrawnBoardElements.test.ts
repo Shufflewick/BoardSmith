@@ -33,11 +33,11 @@ function mountBoard(drawn: ElementRef[]) {
 
 describe('useDrawnBoardElements', () => {
   it('reports every element the board anchors, by any identity it carries', async () => {
-    const { interaction, wrapper } = mountBoard([{ id: 11 }, { notation: 'a5' }, { id: 12, name: 'Genesis' }]);
+    const { interaction, wrapper } = mountBoard([{ id: 11 }, { notation: 'a5' }, { id: 12, name: 'Rowan' }]);
     await flushPromises();
     expect(interaction.isDrawn({ id: 11 })).toBe(true);
     expect(interaction.isDrawn({ notation: 'a5' })).toBe(true);
-    expect(interaction.isDrawn({ name: 'Genesis' })).toBe(true);
+    expect(interaction.isDrawn({ name: 'Rowan' })).toBe(true);
     expect(interaction.isDrawn({ id: 13 })).toBe(false);
     expect(interaction.isDrawn({ name: 'a5' })).toBe(false);
     wrapper.unmount();

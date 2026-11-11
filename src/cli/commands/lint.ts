@@ -61,10 +61,10 @@ const LINT_RULES = {
 
   // Direct element equality is DELIBERATELY not checked here (#34).
   //
-  // The check used to be `/===\s*(?:card|piece|element|merc|squad|sector)/gi`,
-  // a raw-text match for a domain word anywhere to the right of `===`. It
-  // therefore fired on `m.id === merc.id`, `c.id === card.id` and
-  // `s.sectorId === sectorId` — the exact `.id` comparison its own message
+  // The check used to be `/===\s*(?:card|piece|element)/gi` plus a game's own
+  // domain words, a raw-text match for a domain word anywhere to the right of
+  // `===`. It therefore fired on `c.id === card.id` and
+  // `p.pieceId === pieceId` — the exact `.id` comparison its own message
   // recommends — producing 111 warnings on a clean codebase and burying every
   // real one. No amount of tightening fixes it: text cannot tell `a === b` on
   // two elements from `a === b` on two numbers.
@@ -76,7 +76,7 @@ const LINT_RULES = {
   // indexOf on element arrays. The trailing `\b(?!\w*[Ii]d\b)` keeps
   // `ids.indexOf(cardId)` out of it — comparing ids IS the recommended form.
   'element-indexof': {
-    pattern: /\.indexOf\s*\(\s*(?:card|piece|element|merc|squad|sector)\w*\b(?<![Ii]d)\s*\)/gi,
+    pattern: /\.indexOf\s*\(\s*(?:card|piece|element)\w*\b(?<![Ii]d)\s*\)/gi,
     severity: 'warning' as const,
     message: 'indexOf() on elements may fail - use .findIndex(e => e.id === target.id)',
     suggestion: 'Replace with .findIndex(e => e.id === target.id)',
@@ -110,7 +110,7 @@ const LINT_RULES = {
 
   // Element reference on player
   'player-element-ref': {
-    pattern: /class\s+\w+Player[^{]*\{[^}]*:\s*(?:Card|Piece|Element|Squad|Merc|Sector)(?:\s*\||\s*;|\s*=)/g,
+    pattern: /class\s+\w+Player[^{]*\{[^}]*:\s*(?:Card|Piece|Element)(?:\s*\||\s*;|\s*=)/g,
     severity: 'info' as const,
     message: 'Storing element reference on Player class - may not survive serialization',
     suggestion: 'Store element ID instead: selectedCardId: number, then use game.getElementById()',

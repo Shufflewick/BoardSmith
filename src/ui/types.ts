@@ -54,8 +54,8 @@ export interface BaseElementAttributes {
  * ```typescript
  * {
  *   id: 42,                    // Top-level! NOT in attributes
- *   className: 'Merc',
- *   name: 'Squad Leader',
+ *   className: 'Hero',
+ *   name: 'Crew Leader',
  *   attributes: {
  *     health: 10,
  *     equipmentName: 'Laser Rifle'
@@ -72,7 +72,7 @@ export interface BaseElementAttributes {
  *
  * // When you have the element's own name but need its ID.
  * // `name` matches the element's top-level name, never a value in `attributes`.
- * const equipment = findElement(merc, { name: 'Laser Rifle' });
+ * const equipment = findElement(hero, { name: 'Laser Rifle' });
  * await actionController.execute('drop', { equipment: equipment.id });  // Pass ID
  * ```
  */

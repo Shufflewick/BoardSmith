@@ -49,11 +49,10 @@ const rulesFor = (code: string): string[] =>
 
 describe('element identity comparison is left to the AST rule (#34)', () => {
   it.each([
-    'const same = m.id === merc.id;',
     'const same = c.id === card.id;',
-    'const same = s.sectorId === sectorId;',
+    'const same = p.pieceId === pieceId;',
     'const same = a.id === piece.id;',
-    'const found = squads.find((s) => s.id === squad.id);',
+    'const found = hands.find((h) => h.id === hand.id);',
   ])('does not flag the .id comparison it recommends: %s', (code) => {
     expect(rulesFor(code)).not.toContain('element-equality');
   });
@@ -73,7 +72,7 @@ describe('element-indexof stays narrow', () => {
 
   it('does not flag indexOf on an id, which is a value comparison', () => {
     expect(rulesFor('const i = ids.indexOf(cardId);')).not.toContain('element-indexof');
-    expect(rulesFor('const i = ids.indexOf(sectorId);')).not.toContain('element-indexof');
+    expect(rulesFor('const i = ids.indexOf(pieceId);')).not.toContain('element-indexof');
   });
 });
 

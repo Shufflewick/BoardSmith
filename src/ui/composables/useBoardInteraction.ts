@@ -35,7 +35,7 @@ interface BoardRefKey {
 /**
  * How the board matches a ref, in the one place that says it: by its id if it
  * carries one, else its notation, else its name. A precise id wins outright, so a
- * ref carrying both an id and a name ({ id: 5, name: 'Militia' }) never matches a
+ * ref carrying both an id and a name ({ id: 5, name: 'Guards' }) never matches a
  * different element that happens to share the name.
  *
  * Every question the board answers about a ref goes through this: whether an

@@ -260,7 +260,7 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toContain(
       '- `inputs.choose.heading` in tests/browser/smoke.spec.ts gives "West", but the pick offers no choice labelled that: ' +
         'it offers "North", "South", "East". Give the label of a choice as the panel shows it, and one in a category by its ' +
-        'path, such as "Dictators / Castro".',
+        'path, such as "Sheriffs / Hale".',
     );
   });
 });

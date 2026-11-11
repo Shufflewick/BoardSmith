@@ -11,8 +11,7 @@ import { succeeded, refused } from '../op-result.test-helper.js';
 
 /**
  * Parity contract: drives the SAME SnapshotSessionHost + executeOp snapshot
- * round-trip that production uses, through the collect-equipment flow that
- * mirrors MERC. Diagnoses whether the known prod bugs reproduce through the
+ * round-trip that production uses, through the collect-equipment flow. Diagnoses whether the known prod bugs reproduce through the
  * shared stateless core.
  */
 

@@ -5,7 +5,7 @@
  * A host hands `playerConfigs` to the game only on the `start` op (the dev host
  * and the platform build it from their lobby); every later op rebuilds the game
  * from the snapshot. So constructor-time logic that reads `playerConfigs` (a
- * role such as MERC's dictator, a per-seat bot flag) must find them in the
+ * role such as a sheriff, a per-seat bot flag) must find them in the
  * snapshot's own constructor options, or the rebuilt game silently diverges
  * from the one that started: after a process restart, and on every op.
  */
@@ -28,7 +28,7 @@ class RestoreTestGame extends Game {
     super(options);
     capturedPlayerConfigs = options.playerConfigs;
 
-    const leader = options.playerConfigs?.find((c) => c.isDictator === true);
+    const leader = options.playerConfigs?.find((c) => c.isSheriff === true);
     if (leader) this.leaderSeat = options.playerConfigs!.indexOf(leader) + 1;
 
     this.registerAction(Action.create('pass').execute(() => ({ success: true })));
@@ -44,9 +44,9 @@ const def = {
 } satisfies GameDefinitionLike;
 
 const playerConfigs: PlayerConfig[] = [
-  { name: 'Alice', isDictator: false },
-  { name: 'Bob', isDictator: false },
-  { name: 'Charlie', isDictator: true },
+  { name: 'Alice', isSheriff: false },
+  { name: 'Bob', isSheriff: false },
+  { name: 'Charlie', isSheriff: true },
 ];
 
 /** Adapters the way a host builds them: lobby options on `start`, the bare seat count after. */

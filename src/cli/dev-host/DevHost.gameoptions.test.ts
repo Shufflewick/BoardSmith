@@ -444,7 +444,7 @@ const SEAT_OPTIONS_CONFIG: DevHostConfig = {
     { id: 'side', type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
     { id: 'handicap', type: 'number', label: 'Handicap', default: 2, min: 0, max: 5, step: 1 },
     { id: 'ready', type: 'boolean', label: 'Ready', default: false },
-    { id: 'dictator', type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+    { id: 'sheriff', type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] },
   ],
 };
 const personalDefaults = { side: 'north', handicap: 2, ready: false };
@@ -452,7 +452,7 @@ const SEAT_OPTIONS_LOBBY = {
   type: 'lobby',
   seats: [
     { seat: 1, held: true, mine: true, name: 'Ann', connected: true, bot: false, playerOptions: personalDefaults },
-    { seat: 2, held: false, mine: false, name: 'Seat 2', connected: false, bot: true, playerOptions: { ...personalDefaults, dictator: 'dictator' } },
+    { seat: 2, held: false, mine: false, name: 'Seat 2', connected: false, bot: true, playerOptions: { ...personalDefaults, sheriff: 'sheriff' } },
   ],
   gameOptions: {},
 };
@@ -478,7 +478,7 @@ describe("DevHost: Table setup sets each seat's player options (#1323, #1325)", 
     expect(field(wrapper, 2, 'handicap').max).toBe('5');
     expect(field(wrapper, 2, 'handicap').step).toBe('1');
     expect(field(wrapper, 1, 'ready').checked).toBe(false);
-    expect([field(wrapper, 1, 'dictator').checked, field(wrapper, 2, 'dictator').checked]).toEqual([false, true]);
+    expect([field(wrapper, 1, 'sheriff').checked, field(wrapper, 2, 'sheriff').checked]).toEqual([false, true]);
     expect(wrapper.find('[data-testid="seat-option-1-color"]').exists()).toBe(false);
   });
 
@@ -487,7 +487,7 @@ describe("DevHost: Table setup sets each seat's player options (#1323, #1325)", 
     await wrapper.find('[data-testid="seat-option-1-side"]').setValue('south');
     await wrapper.find('[data-testid="seat-option-2-handicap"]').setValue('4');
     await wrapper.find('[data-testid="seat-option-2-ready"]').setValue(true);
-    await wrapper.find('[data-testid="seat-option-1-dictator"]').setValue(true);
+    await wrapper.find('[data-testid="seat-option-1-sheriff"]').setValue(true);
     mockWsInstance!.send.mockClear();
 
     await wrapper.find('[data-testid="apply-player-options"]').trigger('click');
@@ -497,7 +497,7 @@ describe("DevHost: Table setup sets each seat's player options (#1323, #1325)", 
       {
         type: 'setPlayerOptions',
         playerOptions: [
-          { side: 'south', handicap: 2, ready: false, dictator: 'dictator' },
+          { side: 'south', handicap: 2, ready: false, sheriff: 'sheriff' },
           { side: 'north', handicap: 4, ready: true },
         ],
       },

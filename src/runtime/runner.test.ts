@@ -541,7 +541,7 @@ describe('GameRunner', () => {
       // Inject an extra action that would be INVALID to replay from the restored
       // position (player 1 is no longer awaiting). The old replay-based restore
       // re-ran the whole actionHistory and could mis-position or throw — the exact
-      // MERC "Player N is not awaiting action" crash class. The authoritative
+      // "Player N is not awaiting action" crash class. The authoritative
       // restore must IGNORE the history for positioning and land on player 2.
       snapshot.actionHistory.push({ ...snapshot.actionHistory[0] });
 
@@ -554,7 +554,7 @@ describe('GameRunner', () => {
     });
 
     it('restores a pending-action-gated flow (selection-step mutations) without throwing', async () => {
-      // Drive the MERC-shaped collect flow through the real stateless path to a
+      // Drive the collect flow through the real stateless path to a
       // mid-collect snapshot: explore -> collect one item via a selection step.
       // The item move happens inside a pending execute (recorded in NEITHER
       // command nor action history). Restoring that snapshot directly via
@@ -589,7 +589,7 @@ describe('GameRunner', () => {
 
       // No throw, flow is intact, and the collected item moved out of the stash.
       expect(restored.game.getFlowState()).toBeDefined();
-      const stashCount = restored.game.sector.stash.all(Equipment).length;
+      const stashCount = restored.game.room.stash.all(Equipment).length;
       const heldCount = restored.game.held.all(Equipment).length;
       expect(stashCount).toBe(itemsBefore.length - 1);
       expect(heldCount).toBe(1);

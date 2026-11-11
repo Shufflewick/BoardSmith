@@ -95,8 +95,8 @@ describe('a typed editor may grow the panel past the strip, and only while it is
       const controller = stubActionController({
         currentAction: ref('allocate'),
         currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
-        currentChoices: ref([{ value: 'a', display: 'Adelheid' }, { value: 'g', display: 'Genesis' }]),
-        validElements: ref([{ id: 11, display: 'Adelheid' }, { id: 12, display: 'Genesis' }]),
+        currentChoices: ref([{ value: 'a', display: 'Isolde' }, { value: 'g', display: 'Rowan' }]),
+        validElements: ref([{ id: 11, display: 'Isolde' }, { id: 12, display: 'Rowan' }]),
       });
       const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true });
       const marked = wrapper.findAll(MARK);
@@ -114,8 +114,8 @@ describe('a typed editor may grow the panel past the strip, and only while it is
         const controller = stubActionController({
           currentAction: ref('allocate'),
           currentPick: ref({ name: 'targets', type, prompt: 'Take the hits', multiSelect: { min: 1, max: 4 } }),
-          currentChoices: ref([{ value: 'a', display: 'Adelheid', refs: onBoard }, { value: 'g', display: 'Genesis' }]),
-          validElements: ref([{ id: 11, display: 'Adelheid', refs: onBoard }, { id: 12, display: 'Genesis' }]),
+          currentChoices: ref([{ value: 'a', display: 'Isolde', refs: onBoard }, { value: 'g', display: 'Rowan' }]),
+          validElements: ref([{ id: 11, display: 'Isolde', refs: onBoard }, { id: 12, display: 'Rowan' }]),
         });
         const wrapper = mountPanel(controller, { availableActions: ['allocate'], isMyTurn: true }, boardDrawing(drawn ? [{ id: 11 }] : []));
         const case_ = `${type}, ${drawn ? 'drawn' : 'not drawn'}`;

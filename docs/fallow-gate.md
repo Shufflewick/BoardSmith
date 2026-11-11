@@ -49,7 +49,7 @@ were the ones the work actually surfaced and they were real:
   its only consumer. No shim module was introduced.
 - `combinationsOfSize` and `parseMultiSelect` became module-private. Both were
   public API with **no consumer anywhere** — not here, not in
-  `~/BoardSmithGames`, not in MERC (checked, not assumed).
+  `~/BoardSmithGames`, not in any other game (checked, not assumed).
   `combinationsOfSize`'s docblock claimed it was "exported for bot import +
   testability"; no bot and no test had ever imported it, so the export was the
   stale half of that sentence rather than a contract.

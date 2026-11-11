@@ -422,7 +422,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // In-progress multiSelect selection, shared between the auto ActionPanel and custom
   // UIs so they stay in parity. This is SEPARATE from currentArgs — currentArgs[name]
   // stays undefined until confirmMultiSelect() runs the fill() path with the COMPLETE
-  // array (a MERC composable relies on currentArgs[name] === undefined mid-selection).
+  // array (a game composable relies on currentArgs[name] === undefined mid-selection).
   const multiSelectDraft = ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>(null);
 
   // === Editor draft (shared source of truth) ===
@@ -3074,9 +3074,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @example
    * ```typescript
    * // Get the display for a filled selection
-   * const merc = actionController.getCollectedPick('merc');
-   * if (merc) {
-   *   console.log(`Selected: ${merc.display}`); // "Selected: John Smith"
+   * const hero = actionController.getCollectedPick('hero');
+   * if (hero) {
+   *   console.log(`Selected: ${hero.display}`); // "Selected: John Smith"
    * }
    * ```
    */

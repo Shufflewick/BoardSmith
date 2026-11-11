@@ -18,7 +18,7 @@ import { createDevHostClient } from '../../client/dev-host-client.js';
 // Each run bundles the project's rules and starts Vite. A hang guard, not a budget.
 vi.setConfig({ testTimeout: 120_000 });
 
-const ROLE = { id: 'role', type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] };
+const ROLE = { id: 'role', type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] };
 const PALETTE = [
   { hex: '#e74c3c', label: 'Red' },
   { hex: '#3498db', label: 'Blue' },
@@ -77,10 +77,10 @@ async function tableOf(cwd: string, flags: string[]): Promise<{ started: Started
 describe('boardsmith dev --preset sets up each seat (#1544)', () => {
   it('gives the exclusive option, colours and bots to the seats the preset names', async () => {
     const cwd = await projectWithPresets(
-      `[{ name: 'Play as Dictator', players: [{ color: '#95a5a6', playerOptions: { role: 'dictator' } }, { color: '#e74c3c', isBot: true, botLevel: 'easy' }] }]`,
+      `[{ name: 'Play as Sheriff', players: [{ color: '#95a5a6', playerOptions: { role: 'sheriff' } }, { color: '#e74c3c', isBot: true, botLevel: 'easy' }] }]`,
     );
 
-    const { started, seats, output } = await tableOf(cwd, ['--preset', 'Play as Dictator']);
+    const { started, seats, output } = await tableOf(cwd, ['--preset', 'Play as Sheriff']);
 
     expect(output).toContain('Seats: 2 (open seats play as bot, level medium; seats left to bots: 2 at easy).');
 
@@ -89,7 +89,7 @@ describe('boardsmith dev --preset sets up each seat (#1544)', () => {
       { seat: 2, color: '#e74c3c' },
     ]);
     expect(seats.map(({ seat, bot, playerOptions }) => ({ seat, bot, playerOptions }))).toEqual([
-      { seat: 1, bot: false, playerOptions: { role: 'dictator' } },
+      { seat: 1, bot: false, playerOptions: { role: 'sheriff' } },
       { seat: 2, bot: true, playerOptions: {} },
     ]);
   });

@@ -2287,7 +2287,7 @@ describe('the playback game', () => {
 }
 
 /**
- * THE STASH GAME (#1596): MERC's `collectEquipment`. `explore` chains into `collect`, an optional
+ * THE STASH GAME (#1596): a `collectEquipment` flow. `explore` chains into `collect`, an optional
  * pick whose every choice chains into `collect` again, as swapping gear back into a stash keeps it
  * full, so only its Skip leaves the chain and lets the turn pass to `draw`.
  */
@@ -2340,7 +2340,7 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
 const HEADINGS = ['North', 'South', 'East'] as const;
 
 /**
- * THE HARBOUR GAME (#1598): actions a player's choice decides, as MERC's dictator brings its own.
+ * THE HARBOUR GAME (#1598): actions a player's choice decides, as a sheriff seat brings its own.
  * `choose` picks a heading, and only East chains into `sail` and only South into `row`, so a walk
  * pressing each pick's first choice (North) never reaches either; `sail` has no pick (#1599).
  * `grouped` puts South and East in a "Warm waters" category (#1439); `anchored` anchors each heading

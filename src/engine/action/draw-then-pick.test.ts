@@ -16,30 +16,30 @@ function start<G extends Game>(GameClass: new (options: GameOptions) => G): Game
   return runner;
 }
 
-class Merc extends Piece<HireGame> {}
+class Hero extends Piece<HireGame> {}
 class Pile extends Space<HireGame> {}
 
 /** The "Full Example: Draw, Then Pick" of docs/actions-and-flow.md. */
 class HireGame extends Game<HireGame, Player> {
-  mercDeck = this.create(Deck<HireGame>, 'mercDeck');
-  mercOffer = this.create(Pile, 'mercOffer');
+  heroDeck = this.create(Deck<HireGame>, 'heroDeck');
+  heroOffer = this.create(Pile, 'heroOffer');
   team = this.create(Pile, 'team');
 
   constructor(options: GameOptions) {
     super(options);
-    this.mercDeck.createMany(10, Merc, 'merc');
+    this.heroDeck.createMany(10, Hero, 'hero');
     this.registerAction(
-      Action.create<HireGame>('hireFirstMerc')
-        .chooseElement('merc', { elementClass: Merc, from: (ctx) => ctx.game.mercOffer })
+      Action.create<HireGame>('hireFirstHero')
+        .chooseElement('hero', { elementClass: Hero, from: (ctx) => ctx.game.heroOffer })
         .execute((args, ctx) => {
-          args.merc.putInto(ctx.game.team);
-          for (const merc of ctx.game.mercOffer.all(Merc)) merc.putInto(ctx.game.mercDeck, { position: 'last' });
+          args.hero.putInto(ctx.game.team);
+          for (const hero of ctx.game.heroOffer.all(Hero)) hero.putInto(ctx.game.heroDeck, { position: 'last' });
         }),
     );
     this.setFlow({
       root: sequence(
-        execute((ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3), { irreversible: true }),
-        actionStep({ actions: ['hireFirstMerc'] }),
+        execute((ctx) => ctx.game.heroDeck.drawTo(ctx.game.heroOffer, 3), { irreversible: true }),
+        actionStep({ actions: ['hireFirstHero'] }),
       ),
     });
   }
@@ -49,25 +49,25 @@ describe('draw in an earlier step, then pick (#674)', () => {
   it('offers the three drawn cards on every question, hires the one picked and returns the others', () => {
     const runner = start(HireGame);
     const game = runner.game;
-    const offered = game.mercOffer.all(Merc);
+    const offered = game.heroOffer.all(Hero);
     expect(offered).toHaveLength(3);
-    expect(game.mercDeck.all(Merc)).toHaveLength(7);
+    expect(game.heroDeck.all(Hero)).toHaveLength(7);
 
-    const pick = game.getAction('hireFirstMerc')!.selections[0];
-    const ask = () => game.getActionExecutor().getChoices(pick, game.getPlayer(1)!, {}, 'hireFirstMerc').map((c) => (c.value as Merc).id);
+    const pick = game.getAction('hireFirstHero')!.selections[0];
+    const ask = () => game.getActionExecutor().getChoices(pick, game.getPlayer(1)!, {}, 'hireFirstHero').map((c) => (c.value as Hero).id);
     expect(ask()).toEqual(offered.map((m) => m.id));
     expect(ask()).toEqual(offered.map((m) => m.id));
     expect(enumerateLegalMoves(game, 1)).toHaveLength(3);
-    expect(game.mercDeck.all(Merc)).toHaveLength(7);
+    expect(game.heroDeck.all(Hero)).toHaveLength(7);
 
-    expect(runner.performAction('hireFirstMerc', 1, { merc: offered[1].id }).success).toBe(true);
-    expect(game.team.all(Merc).map((m) => m.id)).toEqual([offered[1].id]);
-    expect(game.mercOffer.all(Merc)).toHaveLength(0);
-    expect(game.mercDeck.all(Merc)).toHaveLength(9);
+    expect(runner.performAction('hireFirstHero', 1, { hero: offered[1].id }).success).toBe(true);
+    expect(game.team.all(Hero).map((m) => m.id)).toEqual([offered[1].id]);
+    expect(game.heroOffer.all(Hero)).toHaveLength(0);
+    expect(game.heroDeck.all(Hero)).toHaveLength(9);
   });
 });
 
-class Sector extends Space<LootGame> {}
+class Room extends Space<LootGame> {}
 class Equipment extends Piece<LootGame> {}
 class Stash extends Space<LootGame> {}
 
@@ -78,22 +78,22 @@ class LootGame extends Game<LootGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     for (const name of ['north', 'south']) {
-      this.create(Sector, name).createMany(2, Equipment, `${name}-gear`);
+      this.create(Room, name).createMany(2, Equipment, `${name}-gear`);
     }
     this.registerAction(
       Action.create<LootGame>('explore')
-        .chooseElement('sector', { elementClass: Sector })
+        .chooseElement('room', { elementClass: Room })
         .execute((args, ctx) => {
-          actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+          actionTempState(ctx, 'explore').set('roomId', args.room.id);
         }),
     );
     this.registerAction(
       Action.create<LootGame>('collectLoot')
         .chooseElement('loot', {
           elements: (ctx) => {
-            const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
-            if (sectorId === undefined) return [];
-            return ctx.game.getElementById(sectorId)!.all(Equipment);
+            const roomId = actionTempState(ctx, 'explore').get<number>('roomId');
+            if (roomId === undefined) return [];
+            return ctx.game.getElementById(roomId)!.all(Equipment);
           },
         })
         .execute((args, ctx) => {
@@ -108,11 +108,11 @@ class LootGame extends Game<LootGame, Player> {
 }
 
 describe('actionTempState carries a value from one action to the next (#674)', () => {
-  it('offers the loot of the sector the first action explored, then clears', () => {
+  it('offers the loot of the room the first action explored, then clears', () => {
     const runner = start(LootGame);
     const game = runner.game;
-    const south = game.first(Sector, 'south')!;
-    expect(runner.performAction('explore', 1, { sector: south.id }).success).toBe(true);
+    const south = game.first(Room, 'south')!;
+    expect(runner.performAction('explore', 1, { room: south.id }).success).toBe(true);
 
     const loot = game.getAction('collectLoot')!.selections[0];
     const offered = game.getActionExecutor().getChoices(loot, game.getPlayer(1)!, {}, 'collectLoot').map((c) => (c.value as Equipment).id);
@@ -120,6 +120,6 @@ describe('actionTempState carries a value from one action to the next (#674)', (
 
     expect(runner.performAction('collectLoot', 1, { loot: offered[0] }).success).toBe(true);
     expect(game.stash.all(Equipment).map((e) => e.id)).toEqual([offered[0]]);
-    expect(actionTempState(game, game.getPlayer(1)!, 'explore').get('sectorId')).toBeUndefined();
+    expect(actionTempState(game, game.getPlayer(1)!, 'explore').get('roomId')).toBeUndefined();
   });
 });

@@ -1036,24 +1036,24 @@ While the palette has a colour for every seat, `boardsmith dev` keeps seats' col
 
 ### Exclusive Player Options
 
-For asymmetric games where exactly one player must have a specific role (e.g., 1 Dictator vs many Rebels), use the `exclusive` type in `playerOptions`:
+For asymmetric games where exactly one player must have a specific role (e.g., 1 Sheriff vs many Outlaws), use the `exclusive` type in `playerOptions`:
 
 ```json
 {
   "playerOptions": [
     {
-      "id": "isDictator",
+      "id": "isSheriff",
       "type": "exclusive",
-      "label": "Dictator",
-      "description": "Select which player is the dictator",
+      "label": "Sheriff",
+      "description": "Select which player is the sheriff",
       "default": "last",
-      "choices": [{ "value": "dictator", "label": "Dictator" }]
+      "choices": [{ "value": "sheriff", "label": "Sheriff" }]
     }
   ]
 }
 ```
 
-The platform needs `choices` and a string `default`. The default names the seat that holds the option when the table opens: `"last"` is the last seat, a seat number is that seat, and anything else is the first seat; the host can then give it to another seat. At start, the holder's `playerOptions[id]` is the first choice's value (here `"dictator"`), no other seat has the key, and the game options carry `exclusiveSeats`, mapping each exclusive option's id to its holder's seat. `boardsmith dev` starts a table the same way, and its Table setup sets each seat's player options and which seat holds each exclusive option, refusing a value the platform's lobby would refuse. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
+The platform needs `choices` and a string `default`. The default names the seat that holds the option when the table opens: `"last"` is the last seat, a seat number is that seat, and anything else is the first seat; the host can then give it to another seat. At start, the holder's `playerOptions[id]` is the first choice's value (here `"sheriff"`), no other seat has the key, and the game options carry `exclusiveSeats`, mapping each exclusive option's id to its holder's seat. `boardsmith dev` starts a table the same way, and its Table setup sets each seat's player options and which seat holds each exclusive option, refusing a value the platform's lobby would refuse. The `ExclusivePlayerOption` and `StandardPlayerOption` types require the same shape in code, and `NumberPlayerOption` and `BooleanPlayerOption` type the `number` and `boolean` options.
 
 ### Presets
 
@@ -1067,9 +1067,9 @@ presets: [
     options: { boardSize: 7 },
   },
   {
-    name: 'Play as Dictator',
+    name: 'Play as Sheriff',
     players: [
-      { color: '#95a5a6', playerOptions: { role: 'dictator' } },
+      { color: '#95a5a6', playerOptions: { role: 'sheriff' } },
       { color: '#e74c3c', isBot: true, botLevel: 'medium' },
     ],
   },
@@ -1081,11 +1081,11 @@ presets: [
 - `color`: a colour from `colorPalette`, each seat its own. A seat without one is dealt the first palette colour no other seat has.
 - `isBot`: `true` leaves the seat to a bot. `boardsmith dev` seats no one there, and a person already sitting there when the preset is applied moves to a free seat the preset leaves to people, if there is one.
 - `botLevel`: the bot's level (`easy`, `medium`, `hard` or an iteration count), on a bot seat only. A bot seat without one plays at `--bot-level`.
-- `playerOptions`: the seat's player options by id. An option a seat leaves out takes its default. An exclusive option is set on the one seat that holds it, to its choice (`role: 'dictator'` above); when no seat sets it, the seat its default names holds it, as at the platform's lobby.
+- `playerOptions`: the seat's player options by id. An option a seat leaves out takes its default. An exclusive option is set on the one seat that holds it, to its choice (`role: 'sheriff'` above); when no seat sets it, the seat its default names holds it, as at the platform's lobby.
 
 `boardsmith dev` refuses, when the game loads, a preset the platform's lobby would refuse: a game option no player can choose, a seat field other than these four, a colour outside the palette, a bot level that is not one, a `botLevel` on a seat that is not a bot, or player options Table setup would refuse (such as an exclusive option given to two seats). `--game-option`, `--bot` and `--bot-level` beat what the preset sets, and `--players` may only repeat its number of seats.
 
-To test that a preset seats players where its name says, start a test game from it: `createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Dictator'))` (`boardsmith/testing`) starts it with the seats `boardsmith dev --preset` gives it.
+To test that a preset seats players where its name says, start a test game from it: `createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Sheriff'))` (`boardsmith/testing`) starts it with the seats `boardsmith dev --preset` gives it.
 
 ### Receiving Options in Game Constructor
 

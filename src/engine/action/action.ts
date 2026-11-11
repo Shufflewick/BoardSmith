@@ -558,7 +558,7 @@ export class ActionExecutor {
     const resolved: Record<string, unknown> = {};
     const selectionNames = new Set(action.selections.map(s => s.name));
     // Resolve non-selection args that unambiguously represent element
-    // references. This handles followUp args like { sectorId: { id: 145, className: 'Sector' } }.
+    // references. This handles followUp args like { roomId: { id: 145, className: 'Room' } }.
     // Bare numbers are NEVER coerced here -- a non-selection arg was never declared
     // element-typed by the developer, so a plain number that happens to collide with a
     // live element's id must survive as a number (ENG-05: ambiguous, corruption-prone
@@ -2000,7 +2000,7 @@ export class ActionExecutor {
    * with the repeating selection bound to its picks so far.
    *
    * Element/player IDs are resolved first because a choices function (e.g.
-   * equipment) may depend on a previously selected element (e.g. actingMerc).
+   * equipment) may depend on a previously selected element (e.g. actingHero).
    */
   private repeatingSelectionArgs(
     action: ActionDefinition,

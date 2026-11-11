@@ -970,7 +970,7 @@ animationEvents?.registerHandler('banner', async (_event, { signal }) => {
 
 <template>
   <GameOverlay :active="showBanner" @closed="bannerClosed()">
-    <div>Combat Detected</div>
+    <div>Duel Detected</div>
   </GameOverlay>
 </template>
 ```
@@ -1085,7 +1085,7 @@ boardInteraction.currentPickIndex // number
 boardInteraction.currentPickName  // string | null
 ```
 
-**Example: Detecting when "Hire First MERC" is clicked**
+**Example: Detecting when "Hire First Hero" is clicked**
 
 <!-- typecheck: board -->
 ```vue
@@ -1098,27 +1098,27 @@ const props = defineProps<TableBoardProps>();
 const boardInteraction = useBoardInteraction();
 
 // Detect when hiring action is active
-const isHiringMerc = computed(() => boardInteraction.currentAction === 'hireFirstMerc');
+const isHiringHero = computed(() => boardInteraction.currentAction === 'hireFirstHero');
 
-// Get drawn mercs from game settings (stored by on-demand choices callback)
-const drawnMercs = computed(() => {
-  if (!isHiringMerc.value) return [];
+// Get drawn heroes from game settings (stored by on-demand choices callback)
+const drawnHeroes = computed(() => {
+  if (!isHiringHero.value) return [];
 
-  const ids = props.gameView?.settings._drawnMercsForHiring as number[] | undefined;
+  const ids = props.gameView?.settings._drawnHeroesForHiring as number[] | undefined;
   if (!ids?.length) return [];
 
   // Find the elements by ID in the game view
   return ids
     .map((id) => findElement(props.gameView, { id }))
-    .filter((merc): merc is GameViewElement => merc !== undefined);
+    .filter((hero): hero is GameViewElement => hero !== undefined);
 });
 
 // React to action changes
 watch(() => boardInteraction.currentAction, (action, prevAction) => {
-  if (action === 'hireFirstMerc') {
-    console.log('Player started hiring a MERC');
+  if (action === 'hireFirstHero') {
+    console.log('Player started hiring a hero');
   }
-  if (prevAction === 'hireFirstMerc' && !action) {
+  if (prevAction === 'hireFirstHero' && !action) {
     console.log('Hiring action completed or cancelled');
   }
 });
@@ -1126,11 +1126,11 @@ watch(() => boardInteraction.currentAction, (action, prevAction) => {
 
 <template>
   <div class="game-board">
-    <!-- Show drawn MERC cards when hiring -->
-    <div v-if="isHiringMerc && drawnMercs.length" class="hiring-overlay">
-      <h3>Choose a MERC to hire:</h3>
-      <div class="drawn-mercs">
-        <div v-for="merc in drawnMercs" :key="merc.id" class="merc-card">{{ merc.name }}</div>
+    <!-- Show drawn hero cards when hiring -->
+    <div v-if="isHiringHero && drawnHeroes.length" class="hiring-overlay">
+      <h3>Choose a hero to hire:</h3>
+      <div class="drawn-heroes">
+        <div v-for="hero in drawnHeroes" :key="hero.id" class="hero-card">{{ hero.name }}</div>
       </div>
     </div>
   </div>
@@ -1304,7 +1304,7 @@ Or use your own class names alongside the library classes:
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.
-- Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Militia'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
+- Matching is **precedence-based**, not OR-based: if `id` is present it is the sole criterion (`name`/`notation` are ignored); otherwise `notation` is tried, then `name`. This prevents duplicate-named elements (e.g. several `'Guards'` pieces) from cross-talking — a ref carrying a precise `id` always resolves to exactly that element. Use `id` for unambiguous selection; reserve bare `name`/`notation` refs for when you genuinely want to match every element sharing that property.
 - A board click (`selectElement`) or drag (`startDrag`) starts an action by the same rule: it starts the first action whose first element pick has a candidate that is the ref's element, or whose board ref the element matches as above. So a name-only ref starts an action exactly when the candidate's board ref is that name (#945). With no action open, the client asks the server for each available action's first-pick candidates (`actionController.startCandidates`), so this works when a turn offers several actions and opens none, as Chess does (#1192).
 - In the AutoUI, while a pick is open, a piece standing on a square that is one of that pick's candidates is draggable, and its drag carries the square, so it chooses that square's candidate (#943). Checkers is the case: its move action opens on its own, and each piece's board ref is its square's notation. With no action open, the board offers each action's first-pick candidates instead, so a piece is clickable and draggable when it, or the square it stands on, can start an action (#1192).
 
@@ -1377,7 +1377,7 @@ When building custom game boards with drag-and-drop, use `useDragDrop`. ActionPa
 3. Sets up valid drop targets from filtered choices
 4. Executes the action when dropped on a valid target
 
-**Example: Assigning Combatants to Squads**
+**Example: Assigning Duelists to Crews**
 
 <!-- typecheck: board -->
 ```vue
@@ -1385,40 +1385,40 @@ When building custom game boards with drag-and-drop, use `useDragDrop`. ActionPa
 import { useDragDrop } from 'boardsmith/ui';
 import 'boardsmith/ui/animation/drag-drop.css';
 
-interface Squad {
+interface Crew {
   id: number;
   name: string;
-  combatants: { id: number; name: string }[];
+  duelists: { id: number; name: string }[];
 }
 
 defineProps<{
-  squads: Squad[];
+  crews: Crew[];
 }>();
 
 const { drag, drop } = useDragDrop();
 
-// Drag is always enabled for combatants in this simple example
+// Drag is always enabled for duelists in this simple example
 const canDrag = () => true;
 </script>
 
 <template>
-  <div class="squad-assignment">
+  <div class="crew-assignment">
     <div
-      v-for="squad in squads"
-      :key="squad.id"
-      class="squad"
-      v-bind="drop({ id: squad.id }).props"
-      :class="drop({ id: squad.id }).classes"
+      v-for="crew in crews"
+      :key="crew.id"
+      class="crew"
+      v-bind="drop({ id: crew.id }).props"
+      :class="drop({ id: crew.id }).classes"
     >
-      <h3>{{ squad.name }}</h3>
+      <h3>{{ crew.name }}</h3>
       <div
-        v-for="combatant in squad.combatants"
-        :key="combatant.id"
-        class="combatant"
-        v-bind="drag({ id: combatant.id }, { when: canDrag() }).props"
-        :class="drag({ id: combatant.id }, { when: canDrag() }).classes"
+        v-for="duelist in crew.duelists"
+        :key="duelist.id"
+        class="duelist"
+        v-bind="drag({ id: duelist.id }, { when: canDrag() }).props"
+        :class="drag({ id: duelist.id }, { when: canDrag() }).classes"
       >
-        {{ combatant.name }}
+        {{ duelist.name }}
       </div>
     </div>
   </div>
@@ -1525,10 +1525,10 @@ const actionAnimations = useActionAnimations({
   animations: [
     // Movement animation (element moves to a different destination)
     {
-      action: 'assignToSquad',
-      elementSelection: 'combatantName',
-      elementSelector: '[data-combatant="{combatantName}"]',
-      destinationSelector: '[data-squad="{targetSquad}"]',
+      action: 'assignToCrew',
+      elementSelection: 'duelistName',
+      elementSelector: '[data-duelist="{duelistName}"]',
+      destinationSelector: '[data-crew="{targetCrew}"]',
       duration: 500,
     },
     // Flip-in-place (auto-detected: same selector = flip animation)
@@ -1944,11 +1944,11 @@ Use `game.animate(type, data)` to emit pure data animation events during action 
 
 ```typescript
 // In action execute() or game logic
-execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
+execute({ attacker, target }: { attacker: Duelist; target: Duelist }) {
   const damage = attacker.attack - target.defense;
 
   // Emit the animation event as pure data
-  game.animate('combat', {
+  game.animate('duel', {
     attackerId: attacker.id,
     targetId: target.id,
     damage,
@@ -1965,11 +1965,11 @@ execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
 **Callback convenience form (co-locates game logic with the event):**
 
 ```typescript
-execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
+execute({ attacker, target }: { attacker: Duelist; target: Duelist }) {
   const damage = attacker.attack - target.defense;
 
   // Callback runs immediately as normal game code
-  game.animate('combat', {
+  game.animate('duel', {
     attackerId: attacker.id,
     targetId: target.id,
     damage,
@@ -1986,7 +1986,7 @@ execute({ attacker, target }: { attacker: Combatant; target: Combatant }) {
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
-| `type` | `string` | Event type identifier (e.g., 'combat', 'score', 'cardFlip') |
+| `type` | `string` | Event type identifier (e.g., 'duel', 'score', 'cardFlip') |
 | `data` | `Record<string, unknown>` | Event-specific payload: plain data, elements and players (see "Elements in event data" below) |
 | `callback` | `() => void` | Optional. Runs immediately as normal game code. Convenience for co-locating game logic with the event it describes. Mutations are NOT captured on the event. |
 
@@ -2070,12 +2070,12 @@ const animations = useAnimationEvents();
 // The handler's second argument provides a signal for cooperative skip support.
 // The third says what skipAll() does to it: 'run' calls it with the signal already
 // aborted (for cleanup that must happen), 'drop' discards the event. It is required.
-const unregister = animations?.registerHandler('combat', async (event, { signal }) => {
+const unregister = animations?.registerHandler('duel', async (event, { signal }) => {
   const { attackerId, targetId, damage, outcome } = event.data;
 
   // Find DOM elements
-  const attackerEl = document.querySelector(`[data-combatant-id="${attackerId}"]`);
-  const targetEl = document.querySelector(`[data-combatant-id="${targetId}"]`);
+  const attackerEl = document.querySelector(`[data-duelist-id="${attackerId}"]`);
+  const targetEl = document.querySelector(`[data-duelist-id="${targetId}"]`);
 
   // Play attack animation
   await playAttackAnimation(attackerEl, targetEl);
@@ -2131,8 +2131,8 @@ const { fly, flyingElements, flyOnAppear } = useFlyingElements();
 
 // Animation events for custom handlers
 const animationEvents = useAnimationEvents();
-animationEvents?.registerHandler('combat', async (event, { signal }) => {
-  await playCombatAnimation(event.data);
+animationEvents?.registerHandler('duel', async (event, { signal }) => {
+  await playDuelAnimation(event.data);
   if (signal.aborted) return; // skip support
 }, { skip: 'drop' });
 ```
@@ -2627,7 +2627,7 @@ The `gameView` prop contains serialized game state. Each element has this struct
 ```typescript
 interface GameViewElement {
   id: number;              // Unique element ID - use this for action args!
-  className: string;       // Element class name (e.g., 'Merc', 'Card')
+  className: string;       // Element class name (e.g., 'Hero', 'Card')
   name?: string;           // Optional element name
   attributes: {            // Game-specific properties
     rank?: string;
@@ -2643,10 +2643,10 @@ interface GameViewElement {
 
 ```typescript
 // Correct - ID is at top level
-const mercId = merc.id;  // ✓
+const heroId = hero.id;  // ✓
 
 // Wrong - ID is not in attributes
-const mercId = merc.attributes.id;  // ✗ undefined
+const heroId = hero.attributes.id;  // ✗ undefined
 ```
 
 ### Finding Elements by ID vs by Attributes
@@ -2662,7 +2662,7 @@ const selectedEquipment = { name: 'Laser Rifle', damage: 10 };
 // How do you find the ID?
 ```
 
-**The Solution:** Use `findElement` to search the merc's subtree. Its `name` criterion compares the element's own top-level `name` (the name the game gave the element when it created it), never anything in `attributes`. So this works only when the equipment element's `name` is the same string the UI is showing:
+**The Solution:** Use `findElement` to search the hero's subtree. Its `name` criterion compares the element's own top-level `name` (the name the game gave the element when it created it), never anything in `attributes`. So this works only when the equipment element's `name` is the same string the UI is showing:
 
 <!-- typecheck: game src/ui/drop-equipment.ts -->
 ```typescript
@@ -2670,16 +2670,16 @@ import { findElement, getElementId, type GameViewElement, type UseActionControll
 
 export async function dropEquipment(
   actionController: UseActionControllerReturn,
-  merc: GameViewElement,
+  hero: GameViewElement,
   selectedEquipment: { name: string },
 ): Promise<void> {
   // Only right when the element's own `name` equals the displayed name
-  const equipment = findElement(merc, { name: selectedEquipment.name });
+  const equipment = findElement(hero, { name: selectedEquipment.name });
   const equipmentId = getElementId(equipment);
 
   if (equipmentId) {
     await actionController.execute('dropEquipment', {
-      actingMerc: merc.id,
+      actingHero: hero.id,
       equipment: equipmentId,
     });
   }
@@ -2705,17 +2705,17 @@ The `boardsmith/ui` package provides several helpers for finding elements:
 // User selects equipment from a modal showing equipment data
 const selectedEquipmentName = 'Plasma Cannon';
 
-// Find the merc that has this equipment
-const merc = findElement(gameView, { className: 'Merc' });
+// Find the hero that has this equipment
+const hero = findElement(gameView, { className: 'Hero' });
 
-// Find the equipment element by name within the merc.
+// Find the equipment element by name within the hero.
 // This assumes each equipment element's own `name` is its display name.
-const equipment = findElement(merc, { name: selectedEquipmentName });
+const equipment = findElement(hero, { name: selectedEquipmentName });
 
 if (equipment) {
   console.log('Found equipment ID:', equipment.id);  // e.g., 42
   await actionController.execute('dropEquipment', {
-    actingMerc: merc.id,
+    actingHero: hero.id,
     equipment: equipment.id  // Use the numeric ID
   });
 }
@@ -2724,24 +2724,24 @@ if (equipment) {
 **Example: Finding Any Element by Name**
 
 ```typescript
-// Find a sector anywhere in the game by its unique name.
-// The game must have created the sector with the name 'alpha-3'.
-const sector = findElement(gameView, { name: 'alpha-3' });
-if (sector) {
-  await actionController.execute('moveTo', { destination: sector.id });
+// Find a room anywhere in the game by its unique name.
+// The game must have created the room with the name 'alpha-3'.
+const room = findElement(gameView, { name: 'alpha-3' });
+if (room) {
+  await actionController.execute('moveTo', { destination: room.id });
 }
 ```
 
 **Example: Finding an Element by an Attribute**
 
-When the value you have is stored in an attribute rather than in the element's `name` (here a `sectorId` attribute), `{ name }` will not find it. Filter on the attribute instead:
+When the value you have is stored in an attribute rather than in the element's `name` (here a `roomId` attribute), `{ name }` will not find it. Filter on the attribute instead:
 
 ```typescript
-// Every sector, then the one whose sectorId attribute matches
-const sector = findElements(gameView, { className: 'Sector' })
-  .find(el => el.attributes?.sectorId === 'alpha-3');
-if (sector) {
-  await actionController.execute('moveTo', { destination: sector.id });
+// Every room, then the one whose roomId attribute matches
+const room = findElements(gameView, { className: 'Room' })
+  .find(el => el.attributes?.roomId === 'alpha-3');
+if (room) {
+  await actionController.execute('moveTo', { destination: room.id });
 }
 ```
 
@@ -2792,7 +2792,7 @@ actionController.start('move', { args: { piece: clickedPiece.id } });
 
 // Pattern 5: Pre-fill dependent selection (auto-fills when reached)
 actionController.start('dropEquipment', {
-  args: { actingMerc: merc.id },
+  args: { actingHero: hero.id },
   prefill: { equipment: equipmentId }  // Applied when 'equipment' step activates
 });
 ```
@@ -2807,7 +2807,7 @@ When calling `actionController.execute()` or `actionController.fill()`, pass **n
 ```typescript
 // For chooseElement / chooseElements selections, pass the element ID
 await actionController.execute('dropEquipment', {
-  actingMerc: merc.id,       // number (e.g., 42)
+  actingHero: hero.id,       // number (e.g., 42)
   equipment: equipment.id,   // number (e.g., 17)
 });
 
@@ -2823,18 +2823,18 @@ The framework automatically converts element IDs to actual element objects befor
 
 ```typescript
 // 1. Find elements in gameView
-const myMercs = computed(() =>
-  findElements(props.gameView, { className: 'Merc' })
+const myHeroes = computed(() =>
+  findElements(props.gameView, { className: 'Hero' })
     .filter(m => m.attributes?.player?.seat === props.playerSeat)
 );
 
-// 2. User clicks a merc
-async function onMercClick(merc: GameViewElement) {
+// 2. User clicks a hero
+async function onHeroClick(hero: GameViewElement) {
   if (!props.availableActions.includes('dropEquipment')) return;
 
-  // 3. Start wizard mode with merc pre-selected
+  // 3. Start wizard mode with hero pre-selected
   await props.actionController.start('dropEquipment', {
-    args: { actingMerc: merc.id }  // Pass numeric ID
+    args: { actingHero: hero.id }  // Pass numeric ID
   });
 }
 

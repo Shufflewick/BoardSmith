@@ -52,7 +52,7 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
   name. BoardSmith's own source and docs are cited from the installed package
   (`../node_modules/boardsmith/src/engine/element/game.ts`), which is the copy this project runs,
   and every check reads it there. A path in any other repository is written `<repo>:<path>`
-  (`MERC:src/rules/combat.ts`) so it is not read as this game's.
+  (`other-game:src/rules/duel.ts`) so it is not read as this game's.
   The design-review screenshots in `chunks/<slug>/shots/` are committed evidence of the same kind.
 - **A repro that proves a fix is a regression test, not evidence.** Scripts are split by purpose
   (designer ruling, 2026-10-03, #485). A repro that proves a fix goes in `tests/` with a Spec
