@@ -165,6 +165,29 @@ export async function onFreshPage(browser, hostUrl, contextOptions, ready, body)
 }
 
 /**
+ * Run `body(page, size)` on a fresh phone page, touch and reduced motion, at
+ * 390x844 and then 844x390 (#1604). Later pages reclaim the first page's seat
+ * with the same client id; a new one would be a second, unseated player.
+ * Returns that seat's storage state, for a later page to reclaim it too.
+ *
+ * @param browser a launched browser, from `launch()`
+ * @param hostUrl the dev host's URL
+ * @param ready   awaited with the page once it has loaded
+ * @param body    called with `(page, size)`, `size` being e.g. `'390x844'`
+ */
+export async function onEachPhone(browser, hostUrl, ready, body) {
+  let player;
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
+    await onFreshPage(browser, hostUrl, phone, ready, async (page) => {
+      player ??= await page.context().storageState();
+      await body(page, `${viewport.width}x${viewport.height}`);
+    });
+  }
+  return player;
+}
+
+/**
  * WHERE THE ACTION BAR SITS AGAINST ITS OWN CAP (#444, #1514).
  *
  * The bar floats over the board and is capped at `--bsg-panel-max` (two rows),

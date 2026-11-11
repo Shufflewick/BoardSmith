@@ -19,7 +19,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/tap-floor-phone-browser.mjs`.
  */
-import { assert, check, onFreshPage, runBrowserRegression, summarise, tapSizes, waitUntil } from './browser-harness.mjs';
+import { assert, check, onEachPhone, onFreshPage, runBrowserRegression, summarise, tapSizes, waitUntil } from './browser-harness.mjs';
 
 const ELEMENTS = `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Grid, GridCell, HexGrid, HexCell, Piece, Space } from 'boardsmith';
 
@@ -152,40 +152,34 @@ await runBrowserRegression(
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      let player;
-      for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
-        const size = `${viewport.width}x${viewport.height}`;
-        const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
-        await onFreshPage(browser, hostUrl, phone, boardReady, async (page) => {
-          player ??= await page.context().storageState();
-          const frame = gameFrame(page);
-          const seen = await waitUntil(() => tapSizes(frame, TARGETS), (now) => Object.values(now.targets).every((t) => t.smallest >= FLOOR));
-          for (const [name, { selector, count }] of Object.entries(TARGETS)) {
-            await check(`${size}: every one of the ${count} ${name} is at least 44px on its shorter side`, () => {
-              const target = seen.targets[name];
-              assert(target.count === count, `found ${target.count} of ${selector}, not ${count}`);
-              assert(target.smallest >= FLOOR, `the smallest of ${selector} is ${target.smallest}px on its shorter side, under the 44px tap floor`);
-            });
-          }
-          await check(`${size}: the board region scrolls sideways for the 20x20 grid, and the page does not`, () => {
-            assert(seen.region.sideways > 0, `the board region does not scroll sideways (${JSON.stringify(seen.region)}), so the grid was shrunk to fit it`);
-            assert(seen.page.sideways <= 0, `the page scrolls ${seen.page.sideways}px sideways`);
+      const player = await onEachPhone(browser, hostUrl, boardReady, async (page, size) => {
+        const frame = gameFrame(page);
+        const seen = await waitUntil(() => tapSizes(frame, TARGETS), (now) => Object.values(now.targets).every((t) => t.smallest >= FLOOR));
+        for (const [name, { selector, count }] of Object.entries(TARGETS)) {
+          await check(`${size}: every one of the ${count} ${name} is at least 44px on its shorter side`, () => {
+            const target = seen.targets[name];
+            assert(target.count === count, `found ${target.count} of ${selector}, not ${count}`);
+            assert(target.smallest >= FLOOR, `the smallest of ${selector} is ${target.smallest}px on its shorter side, under the 44px tap floor`);
           });
-          if (size !== '390x844') return;
-          await check(`${size}: at 200% the squares are twice the size, and a tap on one far down the board moves my pawn there`, async () => {
-            const before = seen.targets.squares.smallest;
-            await frame.getByRole('button', { name: 'Game controls' }).tap();
-            await frame.getByRole('slider', { name: 'Zoom' }).fill('2');
-            await frame.getByRole('slider', { name: 'Zoom' }).press('Escape');
-            const zoomed = await waitUntil(() => tapSizes(frame, { squares: TARGETS.squares }), (now) => now.targets.squares.smallest > before * 1.9);
-            assert(Math.abs(zoomed.targets.squares.smallest - before * 2) < 0.5, `at 200% the squares are ${zoomed.targets.squares.smallest}px, not twice their ${before}px`);
-            const target = frame.locator('[data-bs-el-name="square-17-17"]');
-            await target.tap();
-            const moved = await waitUntil(() => target.locator('.piece').count(), (pieces) => pieces === 1, 10_000);
-            assert(moved === 1, 'tapping the square at 200% did not move my pawn onto it');
-          });
+        }
+        await check(`${size}: the board region scrolls sideways for the 20x20 grid, and the page does not`, () => {
+          assert(seen.region.sideways > 0, `the board region does not scroll sideways (${JSON.stringify(seen.region)}), so the grid was shrunk to fit it`);
+          assert(seen.page.sideways <= 0, `the page scrolls ${seen.page.sideways}px sideways`);
         });
-      }
+        if (size !== '390x844') return;
+        await check(`${size}: at 200% the squares are twice the size, and a tap on one far down the board moves my pawn there`, async () => {
+          const before = seen.targets.squares.smallest;
+          await frame.getByRole('button', { name: 'Game controls' }).tap();
+          await frame.getByRole('slider', { name: 'Zoom' }).fill('2');
+          await frame.getByRole('slider', { name: 'Zoom' }).press('Escape');
+          const zoomed = await waitUntil(() => tapSizes(frame, { squares: TARGETS.squares }), (now) => now.targets.squares.smallest > before * 1.9);
+          assert(Math.abs(zoomed.targets.squares.smallest - before * 2) < 0.5, `at 200% the squares are ${zoomed.targets.squares.smallest}px, not twice their ${before}px`);
+          const target = frame.locator('[data-bs-el-name="square-17-17"]');
+          await target.tap();
+          const moved = await waitUntil(() => target.locator('.piece').count(), (pieces) => pieces === 1, 10_000);
+          assert(moved === 1, 'tapping the square at 200% did not move my pawn onto it');
+        });
+      });
       await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', storageState: player }, boardReady, async (page) => {
         const seen = await waitUntil(() => tapSizes(gameFrame(page), { squares: TARGETS.squares }), (now) => now.targets.squares.count === 400);
         await check('1440x900: the 20x20 grid shrinks its squares to fit the board region, which does not scroll sideways', () => {
