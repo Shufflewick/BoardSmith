@@ -120,7 +120,7 @@ const warnNoProvider = (): void =>
  * from scrolling under a finger are there only while the element may drag.
  */
 export interface DragProps {
-  onClick: () => void;
+  onClick: (e: MouseEvent) => void;
   onPointerdown?: (e: PointerEvent) => void;
   style?: { touchAction: 'none'; userSelect: 'none' };
 }
@@ -131,7 +131,7 @@ export interface DragProps {
  * it, the tap path.
  */
 export interface DropProps {
-  onClick: () => void;
+  onClick: (e: MouseEvent) => void;
   [anchorAttribute: `data-${string}`]: string;
 }
 
@@ -232,9 +232,11 @@ export function useDragDrop(): UseDragDropReturn {
 
   const dragProps = (ref: ElementRef, options?: DragOptions): DragProps => propsFor(ref, mayDrag(ref, options), options);
 
-  /** Choose the element, as a click on it would on any board: the tap path. */
-  const choose = (ref: ElementRef) => () => {
+  /** Choose the element, as a click on it would on any board: the tap path. The innermost candidate tapped is the one chosen. */
+  const choose = (ref: ElementRef) => (e: MouseEvent) => {
     if (!boardInteraction) return warnNoProvider();
+    if (!boardInteraction.isSelectableElement(ref) || boardInteraction.isDisabledElement(ref)) return;
+    e.stopPropagation();
     boardInteraction.triggerElementSelect(ref);
   };
 

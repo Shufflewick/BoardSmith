@@ -30,13 +30,19 @@ function dropTargetAt(doc: Document, x: number, y: number, board: BoardInteracti
   return null;
 }
 
+/** The pointerdown a draggable has already claimed: a press on a draggable inside another drags the inner one alone. */
+const claimed = new WeakSet<Event>();
+
 /**
- * A copy of `source` laid over it, that the pointer cannot hit. It carries no
- * id or `data-*` identity, so nothing that looks the board up finds it; Vue's
- * scoped-style `data-v-*` attributes stay, so it keeps the source's look.
+ * An upright copy of `source`, at its own size and centred on it, that the
+ * pointer cannot hit. It carries no id or `data-*` identity, so nothing that
+ * looks the board up finds it; Vue's scoped-style `data-v-*` attributes stay,
+ * so it keeps the source's look.
  */
 function ghostOf(source: HTMLElement): HTMLElement {
   const rect = source.getBoundingClientRect();
+  const width = source.offsetWidth || rect.width;
+  const height = source.offsetHeight || rect.height;
   const ghost = source.cloneNode(true) as HTMLElement;
   for (const node of [ghost, ...ghost.querySelectorAll('*')]) {
     for (const { name } of [...node.attributes]) {
@@ -44,18 +50,15 @@ function ghostOf(source: HTMLElement): HTMLElement {
     }
   }
   ghost.setAttribute('aria-hidden', 'true');
-  // A board zoomed by a transform draws the source at a scale its own size does not show.
-  const scale = source.offsetWidth ? rect.width / source.offsetWidth : 1;
   Object.assign(ghost.style, {
     position: 'fixed',
-    left: `${rect.left}px`,
-    top: `${rect.top}px`,
-    width: `${source.offsetWidth || rect.width}px`,
-    height: `${source.offsetHeight || rect.height}px`,
+    left: `${rect.left + (rect.width - width) / 2}px`,
+    top: `${rect.top + (rect.height - height) / 2}px`,
+    width: `${width}px`,
+    height: `${height}px`,
     margin: '0',
     boxSizing: 'border-box',
-    transformOrigin: '0 0',
-    transform: `scale(${scale})`,
+    transform: 'none',
     transition: 'none',
     pointerEvents: 'none',
     zIndex: '2147483647',
@@ -70,7 +73,8 @@ function ghostOf(source: HTMLElement): HTMLElement {
  * since the element rendered starts nothing.
  */
 export function startPointerDrag(press: PointerEvent, dragged: ElementRef, board: BoardInteraction, hooks: PointerDragHooks = {}): void {
-  if (!press.isPrimary || press.button !== 0) return;
+  if (!press.isPrimary || press.button !== 0 || claimed.has(press)) return;
+  claimed.add(press);
   const source = press.currentTarget as HTMLElement;
   const doc = source.ownerDocument;
   const win = doc.defaultView!;
@@ -88,6 +92,8 @@ export function startPointerDrag(press: PointerEvent, dragged: ElementRef, board
 
   const move = (e: PointerEvent) => {
     if (e.pointerId !== press.pointerId) return;
+    // No button held: the release happened where this window could not see it.
+    if (e.buttons === 0) return finish();
     at = { x: e.clientX, y: e.clientY };
     const dx = at.x - press.clientX;
     const dy = at.y - press.clientY;
@@ -124,17 +130,19 @@ export function startPointerDrag(press: PointerEvent, dragged: ElementRef, board
     win.removeEventListener('pointermove', move);
     win.removeEventListener('pointerup', up);
     win.removeEventListener('pointercancel', cancel);
+    win.removeEventListener('blur', finish);
     doc.removeEventListener('dragstart', noNativeDrag, true);
     if (!ghost) return;
     stopWatch();
     ghost.remove();
-    if (board.isDragging) board.endDrag();
     hooks.onDragEnd?.();
+    if (board.isDragging) board.endDrag();
   }
 
   win.addEventListener('pointermove', move);
   win.addEventListener('pointerup', up);
   win.addEventListener('pointercancel', cancel);
+  win.addEventListener('blur', finish);
   doc.addEventListener('dragstart', noNativeDrag, true);
 }
 

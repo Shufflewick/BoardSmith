@@ -382,6 +382,11 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   scroll-snap-align: center;
 }
 
+/* A sideways swipe scrolls the fan; a drag that sets off up or down picks the card up (#1605). */
+.hand-cards-wrapper.has-fan .hand-card.is-draggable {
+  touch-action: pan-x;
+}
+
 /* Overlap mode */
 .hand-cards-wrapper.has-overlap .hand-cards {
   gap: 0;

@@ -39,7 +39,7 @@ function board(): GameElement {
 function startDragging(element: Element) {
   document.elementFromPoint = () => null;
   const at = (type: string, x: number) =>
-    element.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, isPrimary: true, button: 0, clientX: x, clientY: 0 }));
+    element.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, isPrimary: true, button: 0, buttons: 1, clientX: x, clientY: 0 }));
   at('pointerdown', 0);
   at('pointermove', 40);
 }

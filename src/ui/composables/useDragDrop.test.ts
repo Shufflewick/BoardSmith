@@ -61,8 +61,8 @@ function pointerOver(element: Element | null) {
   document.elementFromPoint = () => element;
 }
 
-function pointer(type: string, target: Element, x: number, y = 0) {
-  target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'touch', button: 0, clientX: x, clientY: y }));
+function pointer(type: string, target: Element, x: number, buttons = type === 'pointerup' ? 0 : 1) {
+  target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'touch', button: 0, buttons, clientX: x, clientY: 0 }));
 }
 
 /** Press the piece, move the pointer onto the zone, and leave it held there. */
@@ -95,6 +95,55 @@ describe('useDragDrop — a board wired only with drag() and drop() plays by tap
     await board.zone.trigger('click');
 
     expect(chosen).toEqual([1, 5]);
+  });
+});
+
+/** A custom board with a draggable token inside a draggable card inside a drop zone. */
+function mountNested(bi: BoardInteractionInstance) {
+  const TOKEN: ElementRef = { id: 2 };
+  const Board = defineComponent({
+    setup() {
+      const { drag, drop } = useDragDrop();
+      return () =>
+        h('div', { class: 'zone', ...drop(ZONE).props }, [
+          h('div', { class: 'card', ...drag(PIECE).props }, [h('div', { class: 'token', ...drag(TOKEN).props }, 'token')]),
+        ]);
+    },
+  });
+  const Shell = defineComponent({
+    setup() {
+      provideBoardInteraction(bi);
+      return () => h(Board);
+    },
+  });
+  wrapper = mount(Shell, { attachTo: document.body });
+  return { token: wrapper.find('.token'), TOKEN };
+}
+
+describe('useDragDrop — nested elements', () => {
+  it('a tap chooses the innermost element that is a candidate, and only that one', async () => {
+    const bi = createBoardInteraction();
+    const chosen: number[] = [];
+    bi.setValidElements([{ id: 1, ref: PIECE }, { id: 5, ref: ZONE }], (id) => chosen.push(id));
+    const { token } = mountNested(bi);
+
+    await token.trigger('click');
+
+    expect(chosen).toEqual([1]);
+  });
+
+  it('a press on a draggable inside a draggable drags the inner one alone', () => {
+    const bi = createBoardInteraction();
+    const { token, TOKEN } = mountNested(bi);
+    const before = document.body.childElementCount;
+
+    pointer('pointerdown', token.element, 0);
+    pointerOver(null);
+    pointer('pointermove', token.element, 30);
+
+    expect(bi.draggedElement).toEqual(TOKEN);
+    expect(document.body.childElementCount).toBe(before + 1);
+    pointer('pointerup', token.element, 30);
   });
 });
 
@@ -187,6 +236,24 @@ describe('useDragDrop — pointer drag', () => {
     expect(onDrop).not.toHaveBeenCalled();
     expect(bi.isDragging).toBe(false);
     expect(onDragEnd).toHaveBeenCalledTimes(1);
+  });
+
+  it('a pointer whose release was missed, moving with no button held, ends the drag and drops nothing', () => {
+    const { piece, zone } = mountDragging();
+    dragOntoZone(piece.element, zone.element);
+    pointer('pointermove', piece.element, 40, 0);
+    expect(bi.isDragging).toBe(false);
+    pointer('pointerup', piece.element, 40);
+    expect(onDrop).not.toHaveBeenCalled();
+  });
+
+  it('the window losing focus mid-drag ends the drag and drops nothing', () => {
+    const { piece, zone } = mountDragging();
+    dragOntoZone(piece.element, zone.element);
+    window.dispatchEvent(new Event('blur'));
+    expect(bi.isDragging).toBe(false);
+    pointer('pointerup', piece.element, 40);
+    expect(onDrop).not.toHaveBeenCalled();
   });
 
   it('a cancelled pointer ends the drag and drops nothing', () => {

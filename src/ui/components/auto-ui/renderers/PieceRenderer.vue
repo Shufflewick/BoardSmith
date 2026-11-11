@@ -265,6 +265,7 @@ watch(effectivePieceImage, () => {
   cursor: grab;
   /* A finger on a draggable drags it; the page still scrolls everywhere else (#1605). */
   touch-action: none;
+  -webkit-user-select: none;
   user-select: none;
 }
 

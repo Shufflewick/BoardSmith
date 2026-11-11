@@ -8,7 +8,8 @@ now `{ onClick, onPointerdown, style: { touchAction: 'none', userSelect: 'none' 
 `{ onClick, ...anchorAttrs(ref) }`. `DragProps` and `DropProps` changed shape,
 and `InertDragProps` is removed. Every custom board that spreads these props is
 affected: each `onClick` chooses the element, so a board wired only with
-`drag()` and `drop()` plays by tap, and a board that also binds its own click
+`drag()` and `drop()` plays by tap (a tap chooses the innermost candidate under
+it and stops there), and a board that also binds its own click
 handler calling `triggerElementSelect` on the same element now chooses twice.
 Remove that handler. A drop target is found by hit-testing the `data-bs-el-*`
 anchors under the pointer, which `drop().props` writes. The AutoUI renderers
