@@ -10,7 +10,7 @@
  * `node scripts/default-ui-phone-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, onTablePage, runBrowserRegression, summarise, textsAt } from './browser-harness.mjs';
 
 const TABLE = `<template>
   <p class="layout-board">{{ formFactor }} {{ orientation }}</p>
@@ -33,17 +33,15 @@ await runBrowserRegression(
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-      const frame = await openTableSample(page, hostUrl);
-      for (const [viewport, expected] of [[{ width: 390, height: 844 }, 'compact portrait'], [{ width: 1440, height: 900 }, 'wide landscape']]) {
-        await check(`at ${viewport.width}x${viewport.height} it renders the default UI, told it is ${expected}`, async () => {
-          await page.setViewportSize(viewport);
-          const boards = frame.locator('.layout-board');
-          await boards.filter({ hasText: expected }).waitFor({ timeout: 10_000 });
-          const texts = await boards.allTextContents();
-          assert(texts.length === 1, `expected one board, found ${JSON.stringify(texts)}`);
-        });
-      }
+      const sizes = [[{ width: 1440, height: 900 }, 'wide landscape'], [{ width: 390, height: 844 }, 'compact portrait']];
+      await onTablePage(browser, hostUrl, sizes[0][0], async (page, frame) => {
+        for (const [viewport, expected] of sizes) {
+          await check(`at ${viewport.width}x${viewport.height} it renders the default UI, told it is ${expected}`, async () => {
+            const boards = await textsAt(page, frame.locator('.layout-board'), viewport, expected);
+            assert(boards.length === 1, `expected one board, found ${JSON.stringify(boards)}`);
+          });
+        }
+      });
     } finally {
       await browser.close();
     }

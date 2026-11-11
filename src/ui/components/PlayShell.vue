@@ -215,6 +215,10 @@ const expanded = computed({
   get: () => props.mobileExpanded,
   set: (value: boolean) => emit('update:mobileExpanded', value),
 });
+// Leaving compact closes the phone overlay, so it cannot stay stuck open on a wider screen.
+watch(() => props.isCompact, (compact) => {
+  if (!compact && expanded.value) expanded.value = false;
+});
 
 /**
  * PUTTING THE ACTION BAR DOWN (#230), AND WHY IT IS NOT QUITE THE SIDEBAR'S RAIL.

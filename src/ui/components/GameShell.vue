@@ -204,6 +204,10 @@ const registry = computed(() => withDevAutoUI(props.uis));
 // The one reading of the viewport's tier: the chrome's compact layout, the
 // board's layout props and the phone UI all follow it.
 const layout = useLayoutSize();
+// True on phones (≤639px). Mobile uses its own compact-strip + overlay layout and
+// must NOT inherit the desktop rail state — otherwise a rail collapsed on desktop
+// would make the mobile overlay show icons (and hide the log) instead of the full panel.
+const { isCompact } = layout;
 // Both shells resolve a registry the same way since #170, so the two lines that
 // do it live in `game-uis.ts` beside the registry itself.
 const uiNames = computed(() => devUiNames(registry.value));
@@ -258,7 +262,7 @@ const historyPanel = computed(() => playShell.value?.historyPanel ?? null);
 const autoEndTurn = ref(true); // Auto-end turn after making a move
 
 // IA-06: Sidebar rail state, starting where the game asks (#1529). Phones ignore it
-// and show their own strip (see isCompact below).
+// and show their own strip (see isCompact above).
 const sidebarRail = ref(props.sidebarStartsCollapsed);
 // #230: the player's own action-bar preference, held exactly where the sidebar
 // rail's is. Not persisted, for the same reason the rail is not: two answers to
@@ -267,14 +271,6 @@ const actionBarMinimized = ref(props.actionBarStartsCollapsed);
 // Mobile only: the sidebar defaults to a compact one-line player strip; this opens
 // the full players + log as an overlay over the board (board stays the hero).
 const mobileExpanded = ref<boolean>(false);
-// True on phones (≤639px). Mobile uses its own compact-strip + overlay layout and
-// must NOT inherit the desktop rail state — otherwise a rail collapsed on desktop
-// would make the mobile overlay show icons (and hide the log) instead of the full panel.
-const isCompact = computed(() => layout.formFactor.value === 'compact');
-// Leaving compact closes the mobile overlay, so it cannot stay stuck open on a wider screen.
-watch(isCompact, (compact) => {
-  if (!compact) mobileExpanded.value = false;
-});
 
 // The board is never zoomed to fit: it reflows to the region, and the zoom is
 // the player's magnifier (#1608).

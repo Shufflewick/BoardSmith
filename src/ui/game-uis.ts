@@ -213,24 +213,11 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
   const phoneNames = names.filter((name) => isPhone(entries[name]));
   const defaultNames = names.filter((name) => !entries[name].devOnly && !isPhone(entries[name]));
 
-  // The compiler already rejects zero-or-many defaults, but a game can reach
-  // here from untyped JS or a stale build. Fail loudly in dev, where the author
-  // can act on it — NEVER throw in production, where the person who sees it is
-  // a player who cannot fix it. `boardsmith validate` catches it before publish.
-  if (import.meta.env.DEV && defaultNames.length !== 1) {
-    const found = defaultNames.length === 0 ? 'none' : defaultNames.join(', ');
-    throw new Error(
-      `src/ui/uis.ts must mark exactly one UI with defaultUI() — found ${found}. `
-      + `Declared UIs: ${names.join(', ') || '(none)'}. `
-      + `Wrap the board you want production to render in defaultUI(), and every other one in devUI().`,
-    );
-  }
-  if (import.meta.env.DEV && phoneNames.length > 1) {
-    throw new Error(
-      `src/ui/uis.ts may mark at most one UI with phoneUI() — found ${phoneNames.join(', ')}. `
-      + 'Keep phoneUI() on the board phones should render, and mark every other one devUI().',
-    );
-  }
+  // The compiler already rejects these, but a game can reach here from untyped
+  // JS or a stale build. Fail loudly in dev, where the author can act on it —
+  // NEVER throw in production, where the person who sees it is a player who
+  // cannot fix it. `boardsmith validate` catches it before publish.
+  if (import.meta.env.DEV) refuseMalformed(names, defaultNames, phoneNames);
 
   return {
     names,
@@ -240,6 +227,23 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
     phoneName: phoneNames[0] ?? null,
     entries,
   };
+}
+
+function refuseMalformed(names: string[], defaultNames: string[], phoneNames: string[]): void {
+  if (defaultNames.length !== 1) {
+    const found = defaultNames.length === 0 ? 'none' : defaultNames.join(', ');
+    throw new Error(
+      `src/ui/uis.ts must mark exactly one UI with defaultUI() — found ${found}. `
+      + `Declared UIs: ${names.join(', ') || '(none)'}. `
+      + `Wrap the board you want production to render in defaultUI(), and every other one in devUI().`,
+    );
+  }
+  if (phoneNames.length > 1) {
+    throw new Error(
+      `src/ui/uis.ts may mark at most one UI with phoneUI() — found ${phoneNames.join(', ')}. `
+      + 'Keep phoneUI() on the board phones should render, and mark every other one devUI().',
+    );
+  }
 }
 
 function isPhone(entry: GameUIEntry): boolean {

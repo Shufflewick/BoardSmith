@@ -212,6 +212,7 @@ const { play, controller: actionController, disabledActions, menuCommands, hideC
 // The one reading of the viewport's tier: the chrome's compact layout, the
 // board's layout props and the phone UI all follow it.
 const layout = useLayoutSize();
+const { isCompact } = layout;
 
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
 const boardProps = computed(() => worldBoardProps(seat, layout, host));
@@ -295,10 +296,6 @@ const sidebarRail = ref(props.sidebarStartsCollapsed);
 // rail's is, and not persisted for the same reason.
 const actionBarMinimized = ref(props.actionBarStartsCollapsed);
 const mobileExpanded = ref(false);
-const isCompact = computed(() => layout.formFactor.value === 'compact');
-watch(isCompact, (compact) => {
-  if (!compact) mobileExpanded.value = false;
-});
 
 /**
  * WHETHER THE MODAL HOST A BOARD TELEPORTS INTO IS IN THE DOCUMENT YET (#204).

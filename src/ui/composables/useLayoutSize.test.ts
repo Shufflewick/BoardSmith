@@ -26,6 +26,7 @@ describe('useLayoutSize (#1610)', () => {
     for (const [width, formFactor] of [[390, 'compact'], [639, 'compact'], [640, 'medium'], [1023, 'medium'], [1024, 'wide'], [1440, 'wide']] as const) {
       const { layout, scope } = measure({ width, height: 900 });
       expect(layout.formFactor.value, `at ${width}px`).toBe(formFactor);
+      expect(layout.isCompact.value, `at ${width}px`).toBe(formFactor === 'compact');
       scope.stop();
       viewport!.restore();
     }

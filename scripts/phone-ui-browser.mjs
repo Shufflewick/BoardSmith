@@ -14,7 +14,7 @@
  * `node scripts/phone-ui-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, onTablePage, runBrowserRegression, summarise, textsAt } from './browser-harness.mjs';
 
 /** A board that says which it is and the layout size it was handed. */
 const board = (kind) => `<template>
@@ -41,25 +41,21 @@ await runBrowserRegression(
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
-      const frame = await openTableSample(page, hostUrl);
-      /** Resize to `viewport`, then expect exactly the one board saying `expected`. */
-      const at = async (viewport, expected) => {
-        await page.setViewportSize(viewport);
-        const boards = frame.locator('.layout-board');
-        await boards.filter({ hasText: expected }).waitFor({ timeout: 10_000 });
-        const texts = await boards.allTextContents();
-        assert(texts.length === 1, `expected only "${expected}", found ${JSON.stringify(texts)}`);
-      };
-
-      await check('a 390x844 phone renders the phone UI, told it is compact and portrait', () =>
-        at({ width: 390, height: 844 }, 'phone compact portrait'));
-      await check('rotating it to 844x390 swaps to the default UI, told it is medium and landscape', () =>
-        at({ width: 844, height: 390 }, 'default medium landscape'));
-      await check('rotating it back renders the phone UI again', () =>
-        at({ width: 390, height: 844 }, 'phone compact portrait'));
-      await check('a 1440x900 desktop renders the default UI, told it is wide and landscape', () =>
-        at({ width: 1440, height: 900 }, 'default wide landscape'));
+      await onTablePage(browser, hostUrl, { width: 390, height: 844 }, async (page, frame) => {
+        /** Resize to `viewport`, then expect exactly the one board saying `expected`. */
+        const at = async (viewport, expected) => {
+          const boards = await textsAt(page, frame.locator('.layout-board'), viewport, expected);
+          assert(boards.length === 1, `expected only "${expected}", found ${JSON.stringify(boards)}`);
+        };
+        await check('a 390x844 phone renders the phone UI, told it is compact and portrait', () =>
+          at({ width: 390, height: 844 }, 'phone compact portrait'));
+        await check('rotating it to 844x390 swaps to the default UI, told it is medium and landscape', () =>
+          at({ width: 844, height: 390 }, 'default medium landscape'));
+        await check('rotating it back renders the phone UI again', () =>
+          at({ width: 390, height: 844 }, 'phone compact portrait'));
+        await check('a 1440x900 desktop renders the default UI, told it is wide and landscape', () =>
+          at({ width: 1440, height: 900 }, 'default wide landscape'));
+      });
     } finally {
       await browser.close();
     }

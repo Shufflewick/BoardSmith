@@ -174,6 +174,12 @@ describe('seat identity and presence', () => {
     expect(wrapper.find('[data-testid="bs-log"]').exists()).toBe(true);
   });
 
+  it('closes the phone overlay when the screen widens past compact, so it cannot stay stuck open (#1610)', async () => {
+    const wrapper = mountShell({ isCompact: true, mobileExpanded: true });
+    await wrapper.setProps({ isCompact: false });
+    expect(wrapper.emitted('update:mobileExpanded')).toEqual([[false]]);
+  });
+
   it('leaves both seat strips as they were when the game does not fill #player-strip-extra (#1513)', () => {
     const seats = mountShell({ sidebarRail: true }).findAll('.seat-strip .pt');
 
