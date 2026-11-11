@@ -161,8 +161,8 @@ need this.
 
 #### Board props
 
-The board component (the registry's default UI, or the dev switcher's
-selection) receives one typed set of props. Declare it by importing the type
+The board component (the registry's default UI, its phone UI on a phone, or
+the dev switcher's selection) receives one typed set of props. Declare it by importing the type
 rather than restating the list:
 
 <!-- typecheck: board -->
@@ -193,6 +193,8 @@ attribute.
 | `availableActions` | `string[]` | Actions this seat may take now |
 | `actionController` | `UseActionControllerReturn` | The one write path: start, fill, execute, cancel. Read the current selection from `actionController.currentArgs` |
 | `disabledActions` | `Record<string, string> \| undefined` | Action name → why it is disabled, for greying a control WITH its reason |
+| `formFactor` | `'compact' \| 'medium' \| 'wide'` | The viewport's size tier: compact below 640px, medium below 1024px, wide from there (`BREAKPOINTS`). Updates on resize and rotation |
+| `orientation` | `'portrait' \| 'landscape'` | The viewport's shape: portrait when it is at least as tall as it is wide. Updates on rotation |
 
 `TableBoardProps` adds:
 
@@ -752,13 +754,33 @@ export default defineGameUIs({
 
 Exactly one entry is `defaultUI()`: that is the board a production build
 renders. `devUI()` entries exist only under `boardsmith dev`.
+
+The default is one responsive board at every size: read the `formFactor` and
+`orientation` props to lay it out, rather than a `matchMedia` of your own, so
+the board and the shell's chrome always agree on the size. A game that wants a
+different board on a phone opts in with at most one `phoneUI()` entry:
+
+```ts
+// src/ui/uis.ts: phoneUI also comes from 'boardsmith/ui'
+
+export default defineGameUIs({
+  HeirloomTable: defaultUI(HeirloomTable),
+  HeirloomPocket: phoneUI(HeirloomPocket),
+});
+```
+
+The shell renders the phone UI at the compact size (below 640px) and the
+default everywhere else, swapping as the viewport crosses the line. It ships,
+so like `defaultUI()` it takes the component itself. Under `boardsmith dev`,
+choosing the default in the UI dropdown shows what ships (the phone UI on a
+phone), and choosing the phone UI by name shows it at any size.
 `defaultUI()` takes the board component itself, not a loader and not a bare
 functional component (wrap one in `defineComponent`), and refuses a function
 both when compiling and when running.
 
 Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
 renders the running game, without restarting. It lists every entry in the
-registry, in declared order, and then **Auto**, the built-in auto-UI, which
+registry, the default first and the rest in declared order, and then **Auto**, the built-in auto-UI, which
 `GameShell` adds itself in dev builds. Do not list it in `uis.ts`. A game that
 declares its own entry named `Auto` (an auto-UI game whose default IS the
 auto-UI) keeps that entry, and no second one is added.

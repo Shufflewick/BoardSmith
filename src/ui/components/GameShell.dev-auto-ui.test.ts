@@ -46,14 +46,14 @@ describe('the Auto UI under boardsmith dev (#525)', () => {
     const registry = withDevAutoUI(defineGameUIs({ Board: defaultUI(Board) }));
     expect(registry.names).toEqual(['Board', 'Auto']);
     expect(registry.entries.Auto.devOnly).toBe(true);
-    expect(resolveUiComponent(registry, 'Auto', true)).not.toBe(Board);
-    expect(resolveUiComponent(registry, 'Auto', true)).not.toBeNull();
+    expect(resolveUiComponent(registry, 'Auto', true, 'wide')).not.toBe(Board);
+    expect(resolveUiComponent(registry, 'Auto', true, 'wide')).not.toBeNull();
   });
 
   it("leaves a game's own entry named Auto alone, so an auto-UI game is not offered it twice", () => {
     const registry = withDevAutoUI(defineGameUIs({ Auto: defaultUI(Board), Other: devUI(async () => ({ default: Other })) }));
     expect(registry.names).toEqual(['Auto', 'Other']);
-    expect(resolveUiComponent(registry, 'Auto', true)).toBe(Board);
+    expect(resolveUiComponent(registry, 'Auto', true, 'wide')).toBe(Board);
   });
 });
 
@@ -65,6 +65,6 @@ describe('the Auto UI in a production build (#525)', () => {
 
     expect(registry.names).toEqual(['Board']);
     expect(registry.entries.Auto).toBeUndefined();
-    expect(resolveUiComponent(registry, 'Auto', false)).toBe(Board);
+    expect(resolveUiComponent(registry, 'Auto', false, 'wide')).toBe(Board);
   });
 });

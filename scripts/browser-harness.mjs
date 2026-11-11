@@ -124,6 +124,23 @@ export async function openTableSample(page, hostUrl) {
 }
 
 /**
+ * Open the table sample on one page of `browser` at `viewport` and run
+ * `body(page, frame)`. One page for every size, because a page in a fresh
+ * context is a second, unseated player.
+ */
+export async function onTablePage(browser, hostUrl, viewport, body) {
+  const page = await browser.newPage({ viewport });
+  await body(page, await openTableSample(page, hostUrl));
+}
+
+/** Resize `page` to `viewport`, then the text of everything `locator` matches once one of them says `expected`. */
+export async function textsAt(page, locator, viewport, expected) {
+  await page.setViewportSize(viewport);
+  await locator.filter({ hasText: expected }).first().waitFor({ timeout: 10_000 });
+  return locator.allTextContents();
+}
+
+/**
  * Play the table sample's first offered choice until the game-over card shows;
  * true once it does. The draw needs no choice, so it runs itself; clicks go
  * through the DOM because driving is not under test.

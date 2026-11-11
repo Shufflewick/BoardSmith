@@ -27,6 +27,7 @@ import type { TableSeat } from './composables/useTableSeat.js';
 import type { WorldSeat } from './world/useWorldSeat.js';
 import type { WorldSeatHost } from './world/useWorldHost.js';
 import type { WorldNarration, WorldPhase } from './world/worldProtocol.js';
+import type { FormFactor, LayoutSize, Orientation } from './composables/useLayoutSize.js';
 
 /** What both shells give a board. The same fields `usePlayContext()` publishes, as plain values. */
 export interface BoardBaseProps {
@@ -46,6 +47,10 @@ export interface BoardBaseProps {
   actionController: UseActionControllerReturn;
   /** Action name to the reason it is disabled. None while a table shows history. */
   disabledActions?: Record<string, string>;
+  /** The viewport's size tier: compact below 640px, medium below 1024px, wide from there (`BREAKPOINTS`). */
+  formFactor: FormFactor;
+  /** The viewport's shape: portrait when it is at least as tall as it is wide. */
+  orientation: Orientation;
 }
 
 /**
@@ -102,7 +107,7 @@ interface TableShellBoardInput {
  * is the seat's gated value, the same instance the chrome and the Action Panel
  * are handed, so the board cannot offer what the panel withholds.
  */
-export function tableBoardProps(seat: TableSeat, shell: TableShellBoardInput): TableBoardProps {
+export function tableBoardProps(seat: TableSeat, layout: LayoutSize, shell: TableShellBoardInput): TableBoardProps {
   return {
     gameView: shell.gameView,
     players: shell.players,
@@ -112,6 +117,8 @@ export function tableBoardProps(seat: TableSeat, shell: TableShellBoardInput): T
     availableActions: seat.gatedAvailableActions.value,
     actionController: seat.controller,
     disabledActions: seat.gatedDisabledActions.value,
+    formFactor: layout.formFactor.value,
+    orientation: layout.orientation.value,
     state: shell.state,
     isViewingHistory: shell.isViewingHistory,
     canUndo: seat.gatedCanUndo.value,
@@ -123,6 +130,7 @@ export function tableBoardProps(seat: TableSeat, shell: TableShellBoardInput): T
 /** The object `WorldShell` binds onto a world's board. */
 export function worldBoardProps(
   seat: WorldSeat,
+  layout: LayoutSize,
   host: Pick<WorldSeatHost, 'presence' | 'events' | 'worldName' | 'phase'>,
 ): WorldBoardProps {
   const { play } = seat;
@@ -135,6 +143,8 @@ export function worldBoardProps(
     availableActions: play.availableActions.value,
     actionController: seat.controller,
     disabledActions: seat.disabledActions.value,
+    formFactor: layout.formFactor.value,
+    orientation: layout.orientation.value,
     presence: host.presence.value,
     events: host.events.value,
     worldName: host.worldName.value,

@@ -666,7 +666,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
   it('names the fix rather than rendering blank when the registry resolves to nothing', async () => {
     const wrapper = mount(WorldShell, {
       props: {
-        uis: { names: ['Broken'], defaultName: 'Broken', entries: { Broken: { component: null, devOnly: false } } },
+        uis: { names: ['Broken'], defaultName: 'Broken', phoneName: null, entries: { Broken: { component: null, devOnly: false } } },
         displayName: 'Gloamhall',
       },
     });
