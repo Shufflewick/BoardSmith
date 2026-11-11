@@ -31,21 +31,9 @@ const {
   isActionSelectable,
   isDisabled,
   isDropTarget,
+  isDropHover,
 } = useElementBoardState(() => props.element);
 
-// Drop handlers — space zones are valid drop targets
-function handleDragOver(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-  if (!isDropTarget.value) return;
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'move';
-}
-
-function handleDrop(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-  event.preventDefault();
-  boardInteraction.triggerDrop(elementIdentity());
-}
 
 // useSelectable — keyboard + click wiring (A11Y-01)
 const { onActivate: onClick, onKeydown, attrs: selectableAttrs } = useSelectable(
@@ -131,13 +119,12 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
       'is-board-highlighted': isBoardHighlighted,
       'is-board-selected': isBoardSelected,
       'is-drop-target': isDropTarget,
+        'is-drop-hover': isDropHover,
       'is-disabled': isDisabled,
     }"
     :style="layoutStyles"
     @click="onClick"
     @keydown="onKeydown"
-    @dragover="handleDragOver"
-    @drop="handleDrop"
   >
     <!-- Optional header — only shown when element has a name -->
     <div v-if="element.name" class="space-header">
@@ -208,7 +195,7 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   outline-offset: 2px;
 }
 
-.space-container.is-drop-target:hover {
+.space-container.is-drop-hover {
   background: var(--bsg-droptarget-hover);
 }
 

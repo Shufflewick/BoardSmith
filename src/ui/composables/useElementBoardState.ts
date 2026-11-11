@@ -38,6 +38,8 @@ export function useElementBoardState(element: () => BoardElement) {
   const canStartDrag = computed(() => !!boardInteraction && boardInteraction.canStartDrag(identity()));
   const isDropTarget = computed(() => boardInteraction?.isDropTarget(identity()) ?? false);
   const isDragged = computed(() => boardInteraction?.isDraggedElement(identity()) ?? false);
+  // The drop target under the pointer: a finger has no :hover to show it (#1605).
+  const isDropHover = computed(() => boardInteraction?.isHoveredDropTarget(identity()) ?? false);
 
   return {
     boardInteraction,
@@ -50,5 +52,6 @@ export function useElementBoardState(element: () => BoardElement) {
     canStartDrag,
     isDropTarget,
     isDragged,
+    isDropHover,
   };
 }

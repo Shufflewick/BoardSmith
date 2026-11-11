@@ -148,25 +148,11 @@ const {
   isCellSelected,
   isCellActionSelectable,
   isCellDropTarget,
+  isCellDropHover,
   isCellDisabled,
   cellStateLabel,
 } = boardCellStates(boardInteraction);
 
-// A `drop` only fires on an element whose `dragover` called preventDefault().
-// Without this handler the browser silently rejects every drop on a hex cell —
-// mirrors GridBoardRenderer.handleDragOver for Custom-UI/Action-Panel parity.
-function handleHexDragOver(event: DragEvent, cell: GameElement) {
-  if (!boardInteraction?.isDragging) return;
-  if (!isCellDropTarget(cell)) return;
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'move';
-}
-
-function handleHexDrop(event: DragEvent, cell: GameElement) {
-  if (!boardInteraction?.isDragging) return;
-  event.preventDefault();
-  boardInteraction.triggerDrop(cellIdentity(cell));
-}
 
 const presentationEntry = usePresentationEntry(() => props.element);
 
@@ -323,8 +309,6 @@ function hexCellAriaLabel(cell: GameElement): string {
         :aria-disabled="isCellDisabled(cell) || undefined"
         :transform="`translate(${placeOf(cell).x}, ${placeOf(cell).y})`"
         @click="handleHexActivate(cell)"
-        @dragover="handleHexDragOver($event, cell)"
-        @drop="handleHexDrop($event, cell)"
       >
         <!-- Hex polygon with board-interaction state classes (all six required states) -->
         <polygon
@@ -336,6 +320,7 @@ function hexCellAriaLabel(cell: GameElement): string {
             'is-board-highlighted': isCellHighlighted(cell),
             'is-board-selected': isCellSelected(cell),
             'is-drop-target': isCellDropTarget(cell),
+            'is-drop-hover': isCellDropHover(cell),
             'is-disabled': isCellDisabled(cell),
           }"
         />
@@ -471,6 +456,10 @@ function hexCellAriaLabel(cell: GameElement): string {
   stroke: var(--bsg-accent-2);
   stroke-width: 2;
   stroke-dasharray: 3 2;
+}
+
+.hex-polygon.is-drop-hover {
+  fill: var(--bsg-droptarget-hover);
 }
 
 /* Disabled state — stroke-dasharray pattern for SVG (A11Y-09: non-color cue).

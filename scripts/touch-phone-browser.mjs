@@ -13,9 +13,10 @@
  *   3. Tapping a card leaves no hover style on it. A tapped element keeps
  *      `:hover` until the next tap elsewhere, in both browsers, so the hand's
  *      hover lift sticks until #1606 gates hover styles on `(hover: hover)`.
- *   4. Dragging my pawn onto a square by touch marks the drop targets while it
- *      is dragged and moves it there. Drag is native HTML5 drag, which touch
- *      never starts, until #1605 makes it pointer-event drag.
+ *   4. Dragging my pawn onto a square by touch marks the drop targets, and the
+ *      square under the finger, while it is dragged, and moves it there. Drag is
+ *      pointer-event drag (#1605); native HTML5 drag never starts from touch.
+ *   5. At 1440x900 the same drag by mouse still works.
  *
  * Chromium's drag is real touch, sent through CDP. WebKit has no way to move a
  * touch, so its drag is `PointerEvent`s dispatched in the page, with no live
@@ -201,6 +202,36 @@ async function touchDrag(page, engine, frame, { pawn: name, to }, whileOver) {
   }
 }
 
+/** Press the pawn with the mouse, move onto the square at `to` in steps, then let go. */
+async function mouseDrag(page, frame, { pawn, to }, whileOver) {
+  // hover() waits for the pawn to stop moving, as the board settles its fit after the page loads.
+  await pawnNamed(frame, pawn).hover();
+  const box = await cellAt(frame, to).boundingBox();
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2, { steps: 6 });
+  try {
+    await whileOver();
+  } finally {
+    await page.mouse.up();
+  }
+}
+
+/** Drag a pawn of mine onto an empty square with `drag`, asserting the drop feedback while it is held there and the move after. */
+async function dragsAndDrops(frame, drag) {
+  const move = await aMove(frame);
+  await drag(move, async () => {
+    const marked = await waitUntil(
+      () => cellAt(frame, move.to).evaluate((cell) => ({ targets: cell.parentElement.querySelectorAll('.grid-cell.is-drop-target').length, under: cell.classList.contains('is-drop-hover') })),
+      (now) => now.targets > 0 && now.under,
+      5_000,
+    );
+    assert(marked.targets > 0, 'the drag never started: no square was marked as a drop target with the pointer over one');
+    assert(marked.under, 'the square under the pointer is not marked as the one the pawn will drop on');
+  });
+  const now = await waitUntil(() => squareOf(frame, move.pawn), (at) => at === move.to, 5_000);
+  assert(now === move.to, `the drop left my pawn on square ${now}, not square ${move.to}`);
+}
+
 const HOVER_STUCK = 'still shows its hover style after the tap';
 
 await runBrowserRegression(
@@ -259,14 +290,8 @@ await runBrowserRegression(
             );
           });
 
-          await knownFailure(`${size}: dragging my pawn onto a square by touch marks the drop targets and moves it there`, { issue: '#1605', because: 'the drag never started' }, async () => {
-            const move = await aMove(frame);
-            await touchDrag(page, engine, frame, move, async () => {
-              const marked = await waitUntil(() => frame.locator('.grid-cell.is-drop-target').count(), (count) => count > 0, 5_000);
-              assert(marked > 0, 'the drag never started: no square was marked as a drop target with the finger over one');
-            });
-            const now = await waitUntil(() => squareOf(frame, move.pawn), (at) => at === move.to, 5_000);
-            assert(now === move.to, `the drop left my pawn on square ${now}, not square ${move.to}`);
+          await check(`${size}: dragging my pawn onto a square by touch marks the drop targets and the square under my finger, and moves it there`, async () => {
+            await dragsAndDrops(frame, (move, whileOver) => touchDrag(page, engine, frame, move, whileOver));
           });
 
           await check(`${size}: tapping my pawn, then an empty square, moves it`, async () => {
@@ -278,6 +303,12 @@ await runBrowserRegression(
           });
         });
       }
+      await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
+        const frame = gameFrame(page);
+        await check('1440x900: dragging my pawn onto a square by mouse marks the drop targets and the square under the pointer, and moves it there', async () => {
+          await dragsAndDrops(frame, (move, whileOver) => mouseDrag(page, frame, move, whileOver));
+        });
+      });
     } finally {
       await browser.close();
     }

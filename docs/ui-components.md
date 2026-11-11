@@ -1209,6 +1209,8 @@ bridge underneath is not exported: see the migration guide, contract r106.
 
 Composable for drag-and-drop in custom UIs. Call once at setup, get functions that work with any element. ActionPanel automatically orchestrates drag-drop by detecting when drag starts, finding matching actions, and executing on drop.
 
+Drag is pointer-event drag, so it works by mouse, pen and touch (#1605). A press that moves a few pixels starts the drag and a copy of the element follows the pointer; the drop target under it gets `.bs-drop-hover`, and letting go drops there. `drag().props` sets `touch-action: none` on the draggable element only, so the page still scrolls under a finger everywhere else. A press that does not move is a click, and both `drag().props` and `drop().props` carry an `onClick` that chooses the element, so a board wired only with them is played by tap too: tap the piece, then the zone. A tap chooses the innermost candidate under it and goes no further, so a piece inside a zone chooses the piece. Do not add your own click handler beside them, or one tap chooses twice. `drop().props` also writes the target's `data-bs-el-*` anchors, which the drag hit-tests to find it.
+
 #### Quick Start (Recommended)
 
 Use the pit-of-success API with the library's CSS for minimal boilerplate:
@@ -1294,13 +1296,13 @@ Or use your own class names alongside the library classes:
 | `drop` | `(ref) => { props, classes }` | **Recommended.** Combined helper for drop targets |
 | `dragClasses` | `(ref, options?) => DragClasses` | Just the CSS classes for draggable elements |
 | `dropClasses` | `(ref) => DropClasses` | Just the CSS classes for drop targets |
-| `dragProps` | `(ref) => DragProps` | Low-level: just the drag props |
-| `dropProps` | `(ref) => DropProps` | Low-level: just the drop props |
+| `dragProps` | `(ref, options?) => DragProps` | Low-level: just the drag props (`onClick`, and `onPointerdown` and `style` while it may drag) |
+| `dropProps` | `(ref) => DropProps` | Low-level: just the drop props (`onClick` and the anchor attributes) |
 | `isDragging` | `(ref) => boolean` | Check if element is being dragged |
 | `isDropTarget` | `(ref) => boolean` | Check if element is valid drop target |
 
 **DragOptions:**
-- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, props are inert and `.bs-draggable` is not applied. A disabled candidate of the pick in progress is never draggable, whatever `when` says, as a click on it chooses nothing; the auto-filled source of the pick still drags on (#1299).
+- `when?: boolean | (() => boolean)` - Condition for enabling drag. When false, the props carry only the click handler and `.bs-draggable` is not applied. A disabled candidate of the pick in progress is never draggable, whatever `when` says, as a click on it chooses nothing; the auto-filled source of the pick still drags on (#1299).
 
 **ElementRef:**
 - Can include `id`, `name`, or `notation` to identify the element.

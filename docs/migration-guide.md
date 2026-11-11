@@ -1,5 +1,21 @@
 # Migration Guide
 
+## `useDragDrop` and the AutoUI drag by pointer events, and `drag()`/`drop()` carry the tap path (#1605)
+
+Native HTML5 drag is gone: it never starts from a touch. `drag(ref).props` is
+now `{ onClick, onPointerdown, style: { touchAction: 'none', userSelect: 'none' } }`
+(only `{ onClick }` while the element may not drag), and `drop(ref).props` is
+`{ onClick, ...anchorAttrs(ref) }`. `DragProps` and `DropProps` changed shape,
+and `InertDragProps` is removed. Every custom board that spreads these props is
+affected: each `onClick` chooses the element, so a board wired only with
+`drag()` and `drop()` plays by tap (a tap chooses the innermost candidate under
+it and stops there), and a board that also binds its own click
+handler calling `triggerElementSelect` on the same element now chooses twice.
+Remove that handler. A drop target is found by hit-testing the `data-bs-el-*`
+anchors under the pointer, which `drop().props` writes. The AutoUI renderers
+mark the drop target under the pointer with `.is-drop-hover`, in place of
+`.is-drop-target:hover`.
+
 ## A simultaneous step can undo per seat: `simultaneousActionStep({ seatUndo: true })` (#1526)
 
 A step declared `seatUndo: true` lets each seat take back its own last action,
