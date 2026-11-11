@@ -368,7 +368,7 @@ names it says so and exits non-zero.
   the same drag by mouse does too. A tapped card shows no hover style, the
   squares show their coordinates, and a first tap on a pawn's action-bar
   button highlights the pawn while a second chooses it (#1606). No touch or wheel
-  listener on the window, document or body can block scrolling, a card cancels
+  listener on the window, document or body can block scrolling, a long press on a card cancels
   its context menu and is not selectable, and in Chromium a long press on one
   zooms it (#1607). Chromium's touch drag is
   real touch, sent through the DevTools protocol; WebKit has no way to move a

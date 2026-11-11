@@ -182,6 +182,8 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   // Long press support for mobile
   let longPressTimer: ReturnType<typeof setTimeout> | null = null;
   let touchStartPos: { x: number; y: number } | null = null;
+  /** The zoomable element a finger is on, whose long-press context menu is cancelled. */
+  let pressedCard: HTMLElement | null = null;
   const LONG_PRESS_DURATION = 400; // ms to trigger long press
   const TOUCH_MOVE_THRESHOLD = 10; // pixels - cancel if finger moves too far
 
@@ -498,6 +500,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   function handleTouchStart(event: TouchEvent) {
     const touch = event.touches[0];
     const cardElement = findCardElement(event.target);
+    pressedCard = cardElement;
 
     if (cardElement) {
       cancelLongPress();
@@ -543,13 +546,14 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   }
 
   function handleTouchEnd() {
+    pressedCard = null;
     cancelLongPress();
     hidePreview();
   }
 
-  // A long press opens the context menu on Android; on a zoomable element it shows the zoom instead.
+  // A long press opens the context menu on Android; on a zoomable element it shows the zoom instead. A right-click keeps its menu.
   function handleContextMenu(event: MouseEvent) {
-    if (findCardElement(event.target)) event.preventDefault();
+    if (pressedCard && findCardElement(event.target) === pressedCard) event.preventDefault();
   }
 
   // Per instance: two instances on one container must not share one cleanup (#749).
@@ -602,6 +606,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       container.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', checkAlt);
       window.removeEventListener('keyup', checkAlt);
+      pressedCard = null;
       cancelLongPress();
     };
   });

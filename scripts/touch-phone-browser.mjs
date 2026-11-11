@@ -19,8 +19,8 @@
  *      pointer-event drag (#1605); native HTML5 drag never starts from touch.
  *   5. At 1440x900 the same drag by mouse still works.
  *   6. No touch or wheel listener on the window, document or body can block
- *      scrolling, a long press on a card zooms it, and a card cancels its
- *      context menu and iOS callout while a square does not (#1607).
+ *      scrolling, a long press on a card zooms it, and a long press on a card
+ *      cancels its context menu and iOS callout while one on a square does not (#1607).
  *
  * Chromium's drag is real touch, sent through CDP. WebKit has no way to move a
  * touch, so its drag is `PointerEvent`s dispatched in the page, with no live
@@ -245,7 +245,7 @@ function recordPageListeners() {
     const target = this === window ? 'window' : this === document ? 'document' : this === document.body ? 'body' : null;
     // Playwright's own InjectedScript adds a touchstart listener to the window; it is not the page's.
     if (target && /^(touchstart|touchmove|wheel|mousewheel)$/.test(type) && !/InjectedScript/.test(new Error().stack)) {
-      added.push({ target, type, passive: typeof options === 'object' ? options.passive : undefined });
+      added.push({ target, type, passive: options && typeof options === 'object' ? options.passive : undefined });
     }
     return add.call(this, type, listener, options);
   };
@@ -371,12 +371,20 @@ await runBrowserRegression(
           assert(blocking.length === 0, `these page-level listeners make every touch wait for the main thread before scrolling: ${JSON.stringify(blocking)}`);
         });
 
-        await check('390x844: a card cancels its context menu and the iOS callout, and a square does not', async () => {
+        await check('390x844: a long press on a card cancels its context menu and the iOS callout, and one on a square does not', async () => {
           const card = frame.locator(`${MY_HAND} .hand-card`).first();
           const square = frame.locator('.grid-cell').first();
+          // A finger held down, then the context menu Android opens for a long press, then the finger lifted.
           const look = (locator) => locator.evaluate((el) => {
+            const touch = (type) => {
+              const event = new Event(type, { bubbles: true, cancelable: true });
+              Object.defineProperty(event, 'touches', { value: type === 'touchstart' ? [{ clientX: 1, clientY: 1 }] : [] });
+              el.dispatchEvent(event);
+            };
+            touch('touchstart');
             const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
             el.dispatchEvent(event);
+            touch('touchend');
             const style = getComputedStyle(el);
             return { cancelled: event.defaultPrevented, callout: CSS.supports('-webkit-touch-callout', 'none') ? style.getPropertyValue('-webkit-touch-callout') : 'unsupported', select: style.userSelect || style.webkitUserSelect };
           });
