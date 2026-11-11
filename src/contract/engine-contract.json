@@ -1,5 +1,5 @@
 {
-  "revision": 344,
+  "revision": 345,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2695,6 +2695,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel now sends a follow-up action that has no pick left to answer, instead of showing only Cancel (#1599)"
+    },
+    {
+      "revision": 345,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The in-browser smoke walk's time limit now grows with the deals, steps and world seats a spec asks for, instead of one 600 s cap on the whole run."
     }
   ]
 }
