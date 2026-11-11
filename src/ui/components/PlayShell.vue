@@ -928,6 +928,8 @@ const mobileToggleLabel = computed(() => {
   container-type: inline-size;
   /* regionWidth reads the computed width as the content box, whatever a game sets globally (#1343). */
   box-sizing: content-box;
+  /* Pinch and pan here are useBoardZoom's: iOS will not let a page turn its own pinch off (#1609). */
+  touch-action: none;
   padding: var(--bsg-s1);
   /* The row reserved for the bar (#1517, #1518). It changes only on the player's
      own toggle, so the board never moves with a pick. */

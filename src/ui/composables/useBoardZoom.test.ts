@@ -23,7 +23,7 @@ function mountShellWithBoard() {
   });
   const Shell = defineComponent({
     setup() {
-      shell = useBoardZoom();
+      shell = useBoardZoom({ regionEl: ref(null), boardEl: ref(null) });
       return () => h(Board);
     },
   });

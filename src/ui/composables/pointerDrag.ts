@@ -14,7 +14,7 @@ import { watch } from 'vue';
 import { ANCHOR_SELECTOR, anchoredRef, type BoardInteraction, type ElementRef } from './useBoardInteraction.js';
 
 /** How far, in CSS pixels, a press must move before it is a drag rather than a tap. */
-const DRAG_THRESHOLD = 6;
+export const DRAG_THRESHOLD = 6;
 
 export interface PointerDragHooks {
   onDragStart?: () => void;
@@ -32,6 +32,9 @@ function dropTargetAt(doc: Document, x: number, y: number, board: BoardInteracti
 
 /** The pointerdown a draggable has already claimed: a press on a draggable inside another drags the inner one alone. */
 const claimed = new WeakSet<Event>();
+
+/** Whether a draggable claimed this pointerdown, so the board's pan leaves it to the drag. */
+export const claimedByDrag = (press: Event): boolean => claimed.has(press);
 
 /**
  * An upright copy of `source`, at its own size and centred on it, that the
