@@ -91,7 +91,7 @@
  * ```
  */
 
-import { ref, computed, watch, onUnmounted, onScopeDispose, isRef, type Ref, type ComputedRef } from 'vue';
+import { ref, shallowRef, shallowReactive, computed, watch, onUnmounted, onScopeDispose, isRef, type Ref, type ComputedRef } from 'vue';
 import { prefersReducedMotion } from './reducedMotion.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
@@ -493,7 +493,8 @@ export function useFlyingElements(
     elementSize: defaultElementSize = DEFAULT_ELEMENT_SIZE,
   } = options;
 
-  const flyingCards = ref<FlyingCard[]>([]);
+  // Shallow: a frame replaces one card's style, never the array or a deep copy of every card.
+  const flyingCards = shallowRef<FlyingCard[]>([]);
   const activeAnimations = new Map<string, { cancel: () => void }>();
   const isAnimating = ref(false);
   const boardInteraction = tryUseBoardInteraction();
@@ -588,8 +589,9 @@ export function useFlyingElements(
     // Determine starting flip state based on cardData.faceUp
     const startFlipped = cardData.faceUp === false;
 
-    // Create the flying element at start position
-    const flyingCard: FlyingCard = {
+    // Created at the start position, which it keeps: the flight moves it by its
+    // transform alone, so no frame makes the page lay out again.
+    const flyingCard = shallowReactive<FlyingCard>({
       id,
       cardData,
       style: {
@@ -605,7 +607,7 @@ export function useFlyingElements(
       },
       isFlipped: startFlipped,
       progress: 0,
-    };
+    });
 
     flyingCards.value = [...flyingCards.value, flyingCard];
     isAnimating.value = true;
@@ -653,28 +655,15 @@ export function useFlyingElements(
         const currentCenterX = startCenterX + (endCenterX - startCenterX) * progress;
         const currentCenterY = startCenterY + (endCenterY - startCenterY) * progress;
 
-        const currentX = currentCenterX - cardWidth / 2;
-        const currentY = currentCenterY - cardHeight / 2;
-
         // Flip rotation
         const flipRotation = flip ? progress * 180 : 0;
 
-        // Update the card
-        const cardIndex = flyingCards.value.findIndex((c) => c.id === id);
-        if (cardIndex >= 0) {
-          const updated = [...flyingCards.value];
-          updated[cardIndex] = {
-            ...updated[cardIndex],
-            style: {
-              ...updated[cardIndex].style,
-              left: `${currentX}px`,
-              top: `${currentY}px`,
-              transform: `rotateY(${flipRotation}deg)`,
-            },
-            progress,
-          };
-          flyingCards.value = updated;
-        }
+        // A new style object: Vue skips a style it has already applied by reference.
+        flyingCard.style = {
+          ...flyingCard.style,
+          transform: `translate(${currentCenterX - startCenterX}px, ${currentCenterY - startCenterY}px) rotateY(${flipRotation}deg)`,
+        };
+        flyingCard.progress = progress;
 
         if (rawProgress < 1) {
           animationFrameId = requestAnimationFrame(animate);
@@ -693,7 +682,7 @@ export function useFlyingElements(
             const holdStartTime = performance.now();
 
             // `hold*` names throughout: this frame callback is nested inside
-            // `animate`, so reusing `currentTime`/`cardIndex` would shadow the
+            // `animate`, so reusing `currentTime` would shadow the
             // position phase's own values and make the two phases hard to tell
             // apart at a glance.
             function animateHold(holdTime: number) {
@@ -703,18 +692,7 @@ export function useFlyingElements(
               const holdProgress = Math.min(holdElapsed / holdDuration, 1);
               const opacity = 1 - holdProgress;
 
-              const holdCardIndex = flyingCards.value.findIndex((c) => c.id === id);
-              if (holdCardIndex >= 0) {
-                const updated = [...flyingCards.value];
-                updated[holdCardIndex] = {
-                  ...updated[holdCardIndex],
-                  style: {
-                    ...updated[holdCardIndex].style,
-                    opacity,
-                  },
-                };
-                flyingCards.value = updated;
-              }
+              flyingCard.style = { ...flyingCard.style, opacity };
 
               if (holdProgress < 1) {
                 animationFrameId = requestAnimationFrame(animateHold);

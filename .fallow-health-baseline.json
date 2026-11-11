@@ -608,7 +608,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/composables/useFocusTrap.ts": {

@@ -262,6 +262,14 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
       const css = readBundleCss(distUi);
       expect(css, 'AutoUI scoped styles must not appear in custom-UI bundle').not.toMatch(/\.auto-ui[\s{[]/);
       expect(css, 'AutoRenderer scoped styles must not appear in custom-UI bundle').not.toContain('.auto-renderer');
+
+      // The debug panel renders only under `boardsmith dev`, so a player must not download it (#1612).
+      expect(bundle, 'DebugPanel JS must not ship').not.toContain('Ctrl/Cmd+D to toggle');
+      expect(css, 'DebugPanel CSS must not ship').not.toContain('.debug-panel');
+      expect(
+        (readdirSync(distUi, { recursive: true } as never) as unknown as string[]).filter((f) => String(f).includes('Debug')),
+        'DebugPanel must not emit a code-split chunk',
+      ).toEqual([]);
     },
   );
 

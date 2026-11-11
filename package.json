@@ -34,6 +34,10 @@
       "types": "./src/ui/components/dice/index.ts",
       "import": "./src/ui/components/dice/index.ts"
     },
+    "./ui/debug": {
+      "types": "./src/ui/debug.ts",
+      "import": "./src/ui/debug.ts"
+    },
     "./session": {
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"

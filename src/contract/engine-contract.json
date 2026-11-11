@@ -1,5 +1,5 @@
 {
-  "revision": 354,
+  "revision": 355,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2775,6 +2775,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Hosts post { type: 'safe_area', top, right, bottom, left } in CSS px on load and on change; the shell pads its chrome by --bsg-safe-* (0 until sent) instead of env(), and shell controls are at least 44px under pointer: coarse (#1611)"
+    },
+    {
+      "revision": 355,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Player bundles no longer carry the debug panel (DebugPanel moves from boardsmith/ui to boardsmith/ui/debug), flying cards move by transform, and dice render at no more than 2x pixel ratio (#1612)."
     }
   ]
 }

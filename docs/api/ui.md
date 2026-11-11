@@ -26,7 +26,6 @@ import {
 ### Core Components
 
 - `GameShell` - Main game container with panels and layout; runs inside a host's iframe
-- `DebugPanel` - Developer debug tools
 - `GameHistory` - Action history display
 - `PlayersPanel` - Player list and scores
 - `Toast` - Toast notification component
@@ -50,6 +49,12 @@ From `boardsmith/ui/auto-ui`, so a game that draws its own board does not bundle
 - `AutoUI` - Automatic game UI from state (also the entry's default export)
 - `AutoRenderer` - Automatic element rendering
 - `ActionPanel` - Action selection panel (also exported from `boardsmith/ui`)
+
+### Debug Panel
+
+From `boardsmith/ui/debug`, for a test that drives the panel `GameShell` mounts under `boardsmith dev`:
+
+- `DebugPanel` - Developer debug tools
 
 ### Composables
 

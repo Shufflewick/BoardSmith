@@ -1,4 +1,4 @@
-import { mount } from '@vue/test-utils';
+import { flushPromises, mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick, type Component, type FunctionalComponent } from 'vue';
 import GameShell from './GameShell.vue';
 import DebugPanel from './DebugPanel.vue';
@@ -145,8 +145,8 @@ export async function mountTableWithDebugPanel(
     },
     winners: [],
   });
-  await nextTick();
-  await nextTick();
+  // The shell loads the panel with a dynamic import, so wait for that to settle too.
+  await flushPromises();
   const debugPanel = wrapper.findComponent(DebugPanel);
   if (!debugPanel.exists()) throw new Error('the debug panel did not open; the shell never saw dev-debug-toggle');
   return { wrapper, debugPanel, posted };

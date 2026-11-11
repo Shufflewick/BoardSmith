@@ -602,7 +602,8 @@ function initScene() {
   renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
   countDieContext(1);
   renderer.setSize(props.size, props.size);
-  renderer.setPixelRatio(window.devicePixelRatio);
+  // A 3x screen draws 2.25 times the pixels of 2x with no visible gain on a die.
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setClearColor(0x000000, 0);
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   containerRef.value.appendChild(renderer.domElement);
