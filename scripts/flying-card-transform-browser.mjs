@@ -11,7 +11,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/flying-card-transform-browser.mjs`.
  */
-import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, onTablePage, runBrowserRegression, summarise } from './browser-harness.mjs';
 
 // The flight is long so it is still under way for every frame sampled, however busy the machine is.
 const FLIGHT_BOARD = `<template>
@@ -67,18 +67,18 @@ await runBrowserRegression(
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {
-      const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
-      const frame = await openTableSample(page, hostUrl);
-      await frame.locator('.fly').click();
-      await frame.locator('.flying-card').waitFor({ timeout: 10_000 });
-      const frames = await sampleFrames(frame, 12);
-      console.log(`  first: ${JSON.stringify(frames[0])}, last: ${JSON.stringify(frames.at(-1))}`);
-      await check('a flying card keeps its left and top for the whole flight, and moves by its transform', async () => {
-        assert(frames.every(Boolean), `the card left flight early: ${JSON.stringify(frames)}`);
-        const positions = new Set(frames.map(({ left, top }) => `${left},${top}`));
-        assert(positions.size === 1, `left and top were rewritten during the flight: ${[...positions].join(' then ')}`);
-        const transforms = new Set(frames.map(({ transform }) => transform));
-        assert(transforms.size > 1, `the transform never changed over ${frames.length} frames: ${[...transforms][0]}`);
+      await onTablePage(browser, hostUrl, { width: 1440, height: 900 }, async (_page, frame) => {
+        await frame.locator('.fly').click();
+        await frame.locator('.flying-card').waitFor({ timeout: 10_000 });
+        const frames = await sampleFrames(frame, 12);
+        console.log(`  first: ${JSON.stringify(frames[0])}, last: ${JSON.stringify(frames.at(-1))}`);
+        await check('a flying card keeps its left and top for the whole flight, and moves by its transform', async () => {
+          assert(frames.every(Boolean), `the card left flight early: ${JSON.stringify(frames)}`);
+          const positions = new Set(frames.map(({ left, top }) => `${left},${top}`));
+          assert(positions.size === 1, `left and top were rewritten during the flight: ${[...positions].join(' then ')}`);
+          const transforms = new Set(frames.map(({ transform }) => transform));
+          assert(transforms.size > 1, `the transform never changed over ${frames.length} frames: ${[...transforms][0]}`);
+        });
       });
     } finally {
       await browser.close();
