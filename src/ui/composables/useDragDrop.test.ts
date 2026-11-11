@@ -1,32 +1,14 @@
 // @vitest-environment jsdom
 /**
- * useDragDrop direct unit tests (ANIM-02)
+ * useDragDrop drives a custom board by pointer and by tap (#1605).
  *
- * Two levels of coverage per 128-CONTEXT.md:
- *   1. API-level parity path — drive the shared BoardInteraction contract
- *      (startDrag/setDropTargets/triggerDrop) that both dragProps/dropProps
- *      handlers and the keyboard/drag parity suite consume.
- *   2. Event-level path — call dragProps(ref).onDragstart / dropProps(ref)
- *      .onDragover/.onDrop directly with a hand-built plain object shaped
- *      like the subset of DragEvent the handlers actually read. jsdom has no
- *      DragEvent/DataTransfer constructors (RESEARCH probe), so a real
- *      `new DragEvent(...)` cannot be used here.
- *
- * Also proves the deliberate degrade-gracefully design (RESEARCH Pitfall 4,
- * useDragDrop.ts:93-107): with no <GameShell> provider, handlers devWarn
- * once and do NOT throw. useDragDrop.ts itself is NOT modified by this plan.
- *
- * NOTE: provideBoardInteraction()/tryUseBoardInteraction() are Vue provide()/
- * inject(), which only work inside a real component setup() context — calling
- * them as bare functions warns and silently no-ops. Every test below therefore
- * mounts a minimal component (mirrors drag-keyboard-parity.test.ts) instead of
- * calling provide/useDragDrop directly at module scope.
+ * The board below is wired ONLY with drag() and drop(), the way a game author
+ * writes one, and mounted for real inside a provider. Drag is pointer events:
+ * a press that moves past a few pixels starts the drag, the drop target under
+ * the pointer is found by hit-testing (jsdom has no layout, so
+ * `elementFromPoint` is stubbed to name the element under the pointer), and the
+ * release drops there. A press that does not move is a click, the tap path.
  */
-
-// jsdom lacks matchMedia/ResizeObserver; modules that read them at import
-// time would throw. Stubs MUST be installed before the composable imports
-// below, since useBoardInteraction/useDragDrop transitively read matchMedia
-// at module load (Pitfall 1).
 import { vi } from 'vitest';
 
 vi.stubGlobal(
@@ -38,209 +20,226 @@ vi.stubGlobal(
   })),
 );
 
-vi.stubGlobal(
-  'ResizeObserver',
-  vi.fn(() => ({
-    observe: vi.fn(),
-    unobserve: vi.fn(),
-    disconnect: vi.fn(),
-  })),
-);
-
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { defineComponent, h } from 'vue';
-import { mount } from '@vue/test-utils';
-import {
-  createBoardInteraction,
-  provideBoardInteraction,
-  type ElementRef,
-} from './useBoardInteraction.js';
-import { useDragDrop, type UseDragDropReturn, type DragProps } from './useDragDrop.js';
+import { defineComponent, h, type PropType } from 'vue';
+import { mount, type VueWrapper } from '@vue/test-utils';
+import { createBoardInteraction, provideBoardInteraction, type ElementRef } from './useBoardInteraction.js';
+import { useDragDrop, type DragOptions, type UseDragDropReturn } from './useDragDrop.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 
 type BoardInteractionInstance = ReturnType<typeof createBoardInteraction>;
 
-/** Build a fake DragEvent-shaped plain object with only the fields the
- * useDragDrop handlers read (dataTransfer.setData/getData/effectAllowed/
- * dropEffect, preventDefault, currentTarget, relatedTarget). */
-function makeFakeDragEvent(overrides: Partial<{
-  currentTarget: unknown;
-  relatedTarget: unknown;
-}> = {}) {
-  return {
-    dataTransfer: {
-      setData: vi.fn(),
-      getData: vi.fn(),
-      setDragImage: vi.fn(),
-      effectAllowed: '',
-      dropEffect: '',
-    },
-    preventDefault: vi.fn(),
-    currentTarget: overrides.currentTarget ?? document.createElement('div'),
-    relatedTarget: overrides.relatedTarget ?? null,
-  };
-}
+const PIECE: ElementRef = { id: 1 };
+const ZONE: ElementRef = { id: 5 };
 
-/** Number of console.warn calls whose message contains `needle` (filters out
- * Vue's own dev "injection not found" warning, which is unrelated noise from
- * the no-provider scenario and not part of useDragDrop's own devWarn contract). */
-function warnCallsContaining(warnSpy: ReturnType<typeof vi.spyOn>, needle: string): number {
-  return warnSpy.mock.calls.filter((call) => String(call[0]).includes(needle)).length;
-}
-
-/**
- * Mount a Parent/Child pair: Parent provides `bi` (if given), Child calls
- * useDragDrop(). Vue's inject() reads from the PARENT instance's provides,
- * not the same instance's own provide() call — so provide+inject must live
- * in different components in the tree (mirrors mountCard() in
- * drag-keyboard-parity.test.ts, where the Wrapper provides and CardRenderer
- * injects).
- */
-function mountDragDrop(bi?: BoardInteractionInstance) {
-  let exposedApi!: UseDragDropReturn;
-  const Child = defineComponent({
-    setup() {
-      exposedApi = useDragDrop();
-      return {};
-    },
-    render() {
-      return h('div');
+/** A custom board: one draggable piece and one drop zone, wired only with drag() and drop(). */
+function mountBoard(bi?: BoardInteractionInstance, options: DragOptions = {}) {
+  let api!: UseDragDropReturn;
+  const Board = defineComponent({
+    props: { options: { type: Object as PropType<DragOptions>, required: true } },
+    setup(props) {
+      api = useDragDrop();
+      return () =>
+        h('div', [
+          h('div', { class: ['piece', api.drag(PIECE, props.options).classes], ...api.drag(PIECE, props.options).props }, 'piece'),
+          h('div', { class: ['zone', api.drop(ZONE).classes], ...api.drop(ZONE).props }, 'zone'),
+        ]);
     },
   });
-  const Parent = defineComponent({
+  const Shell = defineComponent({
     setup() {
       if (bi) provideBoardInteraction(bi);
-      return {};
-    },
-    render() {
-      return h(Child);
+      return () => h(Board, { options });
     },
   });
-  const wrapper = mount(Parent);
-  return { wrapper, api: exposedApi };
+  const wrapper = mount(Shell, { attachTo: document.body });
+  return { wrapper, api, piece: wrapper.find('.piece'), zone: wrapper.find('.zone') };
 }
 
-// ---------------------------------------------------------------------------
-// 1. API-level parity path
-// ---------------------------------------------------------------------------
+/** Name the element the pointer is over; jsdom does no layout. */
+function pointerOver(element: Element | null) {
+  document.elementFromPoint = () => element;
+}
 
-describe('useDragDrop — API-level parity path (shared BoardInteraction contract)', () => {
+function pointer(type: string, target: Element, x: number, y = 0) {
+  target.dispatchEvent(new PointerEvent(type, { bubbles: true, cancelable: true, pointerId: 1, isPrimary: true, pointerType: 'touch', button: 0, clientX: x, clientY: y }));
+}
+
+/** Press the piece, move the pointer onto the zone, and leave it held there. */
+function dragOntoZone(piece: Element, zone: Element) {
+  pointer('pointerdown', piece, 0);
+  pointerOver(zone);
+  pointer('pointermove', piece, 30);
+  pointer('pointermove', piece, 40);
+}
+
+let wrapper: VueWrapper | undefined;
+afterEach(() => {
+  wrapper?.unmount();
+  wrapper = undefined;
+  document.body.replaceChildren();
+});
+
+describe('useDragDrop — a board wired only with drag() and drop() plays by tap', () => {
+  it('a tap on the piece and then on the zone completes the action', async () => {
+    const bi = createBoardInteraction();
+    const chosen: number[] = [];
+    bi.setValidElements([{ id: 1, ref: PIECE }], (id) => {
+      chosen.push(id);
+      bi.setValidElements([{ id: 5, ref: ZONE }], (next) => chosen.push(next));
+    });
+    const board = mountBoard(bi);
+    wrapper = board.wrapper;
+
+    await board.piece.trigger('click');
+    await board.zone.trigger('click');
+
+    expect(chosen).toEqual([1, 5]);
+  });
+});
+
+describe('useDragDrop — pointer drag', () => {
   let bi: BoardInteractionInstance;
+  let onDrop: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
     bi = createBoardInteraction();
+    onDrop = vi.fn();
   });
 
-  it('startDrag → setDropTargets → triggerDrop fires onDrop and resets drag state', () => {
-    const onDropSpy = vi.fn();
-    const dropTarget = { id: 42, ref: { id: 42 } };
+  /** Mount the board and wire the zone as the drop target once the drag starts, as GameShell's orchestration does. */
+  function mountDragging(options: DragOptions = {}) {
+    const board = mountBoard(bi, options);
+    wrapper = board.wrapper;
+    const startDrag = bi.startDrag.bind(bi);
+    bi.startDrag = (ref) => {
+      const started = startDrag(ref);
+      if (started) bi.setDropTargets([{ id: 5, ref: ZONE }], onDrop);
+      return started;
+    };
+    return board;
+  }
 
-    bi.startDrag({ id: 1 });
-    expect(bi.isDragging).toBe(true);
+  it('the piece takes the pointer itself, so the page still scrolls elsewhere', () => {
+    const { piece, zone } = mountDragging();
+    expect((piece.element as HTMLElement).style.touchAction).toBe('none');
+    expect((zone.element as HTMLElement).style.touchAction).toBe('');
+  });
 
-    bi.setDropTargets([dropTarget], onDropSpy);
-    expect(bi.isDropTarget({ id: 42 })).toBe(true);
+  it('dragging the piece onto the zone marks it under the pointer, and releasing drops it there', async () => {
+    const onDragStart = vi.fn();
+    const onDragEnd = vi.fn();
+    const { piece, zone } = mountDragging({ onDragStart, onDragEnd });
 
-    bi.triggerDrop({ id: 42 });
+    dragOntoZone(piece.element, zone.element);
+    await wrapper!.vm.$nextTick();
 
-    expect(onDropSpy).toHaveBeenCalledTimes(1);
-    expect(onDropSpy).toHaveBeenCalledWith(42);
+    expect(bi.isDraggedElement(PIECE)).toBe(true);
+    expect(onDragStart).toHaveBeenCalledTimes(1);
+    expect(zone.classes()).toEqual(expect.arrayContaining(['bs-drop-target', 'bs-drop-hover']));
+    expect(piece.classes()).toContain('bs-dragging');
+
+    pointer('pointerup', piece.element, 40);
+
+    expect(onDrop).toHaveBeenCalledWith(5);
     expect(bi.isDragging).toBe(false);
-    expect(bi.dropTargets).toEqual([]);
+    expect(onDragEnd).toHaveBeenCalledTimes(1);
   });
 
-  it('dragProps(ref).onDragstart calls boardInteraction.startDrag with the ref', () => {
-    const { api } = mountDragDrop(bi);
-    const ref: ElementRef = { id: 7 };
-    const fakeEvent = makeFakeDragEvent();
+  it('a drag shows a copy of the piece under the pointer, and takes it away on release', () => {
+    const { piece, zone } = mountDragging();
+    dragOntoZone(piece.element, zone.element);
+    const ghost = document.body.lastElementChild as HTMLElement;
+    expect(ghost.textContent).toBe('piece');
+    expect(ghost.style.pointerEvents).toBe('none');
 
-    (api.dragProps(ref) as DragProps).onDragstart(fakeEvent as unknown as DragEvent);
-
-    expect(bi.isDragging).toBe(true);
-    expect(bi.isDraggedElement(ref)).toBe(true);
+    pointer('pointerup', piece.element, 40);
+    expect(ghost.isConnected).toBe(false);
   });
 
-  it('dropProps(ref).onDrop calls boardInteraction.triggerDrop when a drag is active', () => {
-    const onDropSpy = vi.fn();
-    bi.startDrag({ id: 1 });
-    bi.setDropTargets([{ id: 5, ref: { id: 5 } }], onDropSpy);
-
-    const { api } = mountDragDrop(bi);
-    const fakeEvent = makeFakeDragEvent();
-    api.dropProps({ id: 5 }).onDrop(fakeEvent as unknown as DragEvent);
-
-    expect(onDropSpy).toHaveBeenCalledTimes(1);
-    expect(onDropSpy).toHaveBeenCalledWith(5);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 2. Event-level path — hand-built drag-event-shaped objects
-// ---------------------------------------------------------------------------
-
-describe('useDragDrop — event-level path (drag-event-shaped plain objects)', () => {
-  let bi: BoardInteractionInstance;
-
-  beforeEach(() => {
-    bi = createBoardInteraction();
+  it('the click a drag ends in does not also choose what it lands on', async () => {
+    const chosen: number[] = [];
+    bi.setValidElements([{ id: 5, ref: ZONE }], (id) => chosen.push(id));
+    const { piece, zone } = mountDragging();
+    dragOntoZone(piece.element, zone.element);
+    pointer('pointerup', zone.element, 40);
+    await zone.trigger('click');
+    expect(onDrop).toHaveBeenCalledTimes(1);
+    expect(chosen).toEqual([]);
   });
 
-  it('dragProps(ref).onDragstart sets dataTransfer payload + effectAllowed', () => {
-    const { api } = mountDragDrop(bi);
-    const el = document.createElement('div');
-    const fakeEvent = makeFakeDragEvent({ currentTarget: el });
-
-    (api.dragProps({ id: 3 }) as DragProps).onDragstart(fakeEvent as unknown as DragEvent);
-
-    expect(fakeEvent.dataTransfer.setData).toHaveBeenCalledWith(
-      'boardsmith/element',
-      JSON.stringify({ id: 3 }),
-    );
-    expect(fakeEvent.dataTransfer.effectAllowed).toBe('move');
+  it('a press that barely moves is a tap: it starts no drag', () => {
+    const { piece } = mountDragging();
+    pointer('pointerdown', piece.element, 0);
+    pointer('pointermove', piece.element, 2);
+    pointer('pointerup', piece.element, 2);
+    expect(bi.draggedElement).toBeNull();
   });
 
-  it('dropProps(ref).onDragover calls preventDefault and sets dropEffect when the ref is a valid target', () => {
-    bi.startDrag({ id: 1 });
-    bi.setDropTargets([{ id: 9, ref: { id: 9 } }], vi.fn());
-
-    const { api } = mountDragDrop(bi);
-    const fakeEvent = makeFakeDragEvent();
-
-    api.dropProps({ id: 9 }).onDragover(fakeEvent as unknown as DragEvent);
-
-    expect(fakeEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(fakeEvent.dataTransfer.dropEffect).toBe('move');
+  it('releasing off every drop target ends the drag and drops nothing', () => {
+    const onDragEnd = vi.fn();
+    const { piece, zone } = mountDragging({ onDragEnd });
+    dragOntoZone(piece.element, zone.element);
+    pointerOver(document.body);
+    pointer('pointermove', piece.element, 200);
+    expect(bi.hoveredDropTarget).toBeNull();
+    pointer('pointerup', piece.element, 200);
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(bi.isDragging).toBe(false);
+    expect(onDragEnd).toHaveBeenCalledTimes(1);
   });
 
-  it('dropProps(ref).onDragover does NOT preventDefault when no drag is active', () => {
-    const { api } = mountDragDrop(bi);
-    const fakeEvent = makeFakeDragEvent();
-
-    api.dropProps({ id: 9 }).onDragover(fakeEvent as unknown as DragEvent);
-
-    expect(fakeEvent.preventDefault).not.toHaveBeenCalled();
-  });
-
-  it('dropProps(ref).onDrop calls preventDefault and triggers the drop', () => {
-    const onDropSpy = vi.fn();
-    bi.startDrag({ id: 1 });
-    bi.setDropTargets([{ id: 9, ref: { id: 9 } }], onDropSpy);
-
-    const { api } = mountDragDrop(bi);
-    const fakeEvent = makeFakeDragEvent();
-
-    api.dropProps({ id: 9 }).onDrop(fakeEvent as unknown as DragEvent);
-
-    expect(fakeEvent.preventDefault).toHaveBeenCalledTimes(1);
-    expect(onDropSpy).toHaveBeenCalledWith(9);
+  it('a cancelled pointer ends the drag and drops nothing', () => {
+    const { piece, zone } = mountDragging();
+    dragOntoZone(piece.element, zone.element);
+    pointer('pointercancel', piece.element, 40);
+    expect(onDrop).not.toHaveBeenCalled();
+    expect(bi.isDragging).toBe(false);
   });
 });
 
-// ---------------------------------------------------------------------------
-// 3. Degrade-gracefully: no provider warns, never throws (Pitfall 4)
-// ---------------------------------------------------------------------------
+describe('useDragDrop — what may drag', () => {
+  it('a disabled candidate gets no drag handler and no bs-draggable class (#1299)', () => {
+    const bi = createBoardInteraction();
+    bi.setValidElements([{ id: 1, ref: { id: 1 }, disabled: 'Too expensive' }, { id: 2, ref: { id: 2 } }], () => {});
+    const { api, wrapper: mounted } = mountBoard(bi);
+    wrapper = mounted;
 
-describe('useDragDrop — no-provider degrade-gracefully path (unchanged design)', () => {
+    expect('onPointerdown' in api.dragProps({ id: 1 })).toBe(false);
+    expect(api.drag({ id: 1 }).classes['bs-draggable']).toBe(false);
+    expect(api.dragClasses({ id: 1 })['bs-draggable']).toBe(false);
+    expect(typeof api.drag({ id: 2 }).props.onPointerdown).toBe('function');
+    expect(api.drag({ id: 2 }).classes['bs-draggable']).toBe(true);
+  });
+
+  it('a candidate disabled after its props were bound starts no drag and runs no onDragStart', () => {
+    const bi = createBoardInteraction();
+    bi.setValidElements([{ id: 1, ref: PIECE }], () => {});
+    const onDragStart = vi.fn();
+    const board = mountBoard(bi, { onDragStart });
+    wrapper = board.wrapper;
+    bi.setValidElements([{ id: 1, ref: PIECE, disabled: 'Too expensive' }], () => {});
+
+    dragOntoZone(board.piece.element, board.zone.element);
+
+    expect(bi.isDragging).toBe(false);
+    expect(onDragStart).not.toHaveBeenCalled();
+  });
+
+  it('`when: false`, as a value or a function asked once, gives no drag handler', () => {
+    const bi = createBoardInteraction();
+    const { api, wrapper: mounted } = mountBoard(bi);
+    wrapper = mounted;
+    const when = vi.fn(() => false);
+
+    expect('onPointerdown' in api.dragProps({ id: 1 }, { when: false })).toBe(false);
+    expect('onPointerdown' in api.drag({ id: 1 }, { when }).props).toBe(false);
+    expect(when).toHaveBeenCalledTimes(1);
+    expect(typeof api.dragProps({ id: 1 }, { when: true }).onPointerdown).toBe('function');
+  });
+});
+
+describe('useDragDrop — no provider warns and never throws', () => {
   let warnSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
@@ -248,194 +247,20 @@ describe('useDragDrop — no-provider degrade-gracefully path (unchanged design)
     warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
+  afterEach(() => warnSpy.mockRestore());
 
-  it('dragProps(ref).onDragstart with no provider warns once and does not throw', () => {
-    // No `bi` passed to mountDragDrop — simulates a component rendered
-    // outside <GameShell> (no board-interaction provider in the tree).
-    const { api } = mountDragDrop();
-    const fakeEvent = makeFakeDragEvent();
+  const warnings = () => warnSpy.mock.calls.filter((call) => String(call[0]).includes('useDragDrop')).length;
 
-    expect(() =>
-      (api.dragProps({ id: 1 }) as DragProps).onDragstart(fakeEvent as unknown as DragEvent),
-    ).not.toThrow();
+  it('a press, a drag and a tap with no provider warn once and do not throw', async () => {
+    const board = mountBoard();
+    wrapper = board.wrapper;
+    warnSpy.mockClear();
+    _clearShownWarnings();
 
-    expect(warnCallsContaining(warnSpy, 'useDragDrop')).toBe(1);
-  });
+    expect(() => dragOntoZone(board.piece.element, board.zone.element)).not.toThrow();
+    pointer('pointerup', board.piece.element, 40);
+    await board.piece.trigger('click');
 
-  it('isDragging(ref) with no provider warns and returns false without throwing', () => {
-    const { api } = mountDragDrop();
-
-    let result: boolean | undefined;
-    expect(() => {
-      result = api.isDragging({ id: 1 });
-    }).not.toThrow();
-
-    expect(result).toBe(false);
-    expect(warnCallsContaining(warnSpy, 'useDragDrop')).toBe(1);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. dragProps() honors the documented `when` option (UIX-04, Plan 134-03 Task 3)
-//
-// Prior behavior: dragProps() always returned { draggable: true, ... } and
-// silently ignored options.when — a developer calling
-// dragProps(ref, { when: canDrag(card) }) (the documented "Full API" pattern)
-// got an element that stayed draggable regardless of `when`. dragProps() now
-// reuses the existing evalCondition() helper (already used by dragClasses()/
-// drag()) to gate on `when`, returning inert props when it evaluates false.
-// ---------------------------------------------------------------------------
-
-describe('useDragDrop — a disabled candidate is not draggable (#1299)', () => {
-  let bi: BoardInteractionInstance;
-
-  beforeEach(() => {
-    bi = createBoardInteraction();
-    bi.setValidElements([{ id: 1, ref: { id: 1 }, disabled: 'Too expensive' }, { id: 2, ref: { id: 2 } }], () => {});
-  });
-
-  it('dragProps and drag() give a disabled candidate inert props and no bs-draggable class', () => {
-    const { api } = mountDragDrop(bi);
-
-    expect(api.dragProps({ id: 1 }).draggable).toBe(false);
-    expect('onDragstart' in api.drag({ id: 1 }).props).toBe(false);
-    expect(api.drag({ id: 1 }).classes['bs-draggable']).toBe(false);
-    expect(api.dragClasses({ id: 1 })['bs-draggable']).toBe(false);
-
-    expect(api.drag({ id: 2 }).props.draggable).toBe(true);
-    expect(api.drag({ id: 2 }).classes['bs-draggable']).toBe(true);
-  });
-
-  it('drag() asks `when` once for both its props and its classes', () => {
-    const { api } = mountDragDrop(bi);
-    const when = vi.fn(() => true);
-
-    api.drag({ id: 2 }, { when });
-
-    expect(when).toHaveBeenCalledTimes(1);
-  });
-
-  it('a candidate disabled after its props were bound cancels the browser drag and runs no onDragStart', () => {
-    const { api } = mountDragDrop(bi);
-    const onDragStart = vi.fn();
-    const props = api.dragProps({ id: 2 }, { onDragStart }) as DragProps;
-    bi.setValidElements([{ id: 2, ref: { id: 2 }, disabled: 'Too expensive' }], () => {});
-    const fakeEvent = makeFakeDragEvent();
-
-    props.onDragstart(fakeEvent as unknown as DragEvent);
-
-    expect(fakeEvent.preventDefault).toHaveBeenCalled();
-    expect(fakeEvent.dataTransfer.setData).not.toHaveBeenCalled();
-    expect(onDragStart).not.toHaveBeenCalled();
-    expect(bi.isDragging).toBe(false);
-  });
-});
-
-describe('useDragDrop — dragProps() honors the `when` option (UIX-04)', () => {
-  let bi: BoardInteractionInstance;
-
-  beforeEach(() => {
-    bi = createBoardInteraction();
-  });
-
-  it('dragProps(ref, { when: false }) returns inert props: not draggable, no onDragstart, onDragend retained (WR-06)', () => {
-    const { api } = mountDragDrop(bi);
-    const result = api.dragProps({ id: 1 }, { when: false });
-
-    expect(result.draggable).toBe(false);
-    // No dragstart — a NEW drag can never begin from an inert element...
-    expect('onDragstart' in result).toBe(false);
-    // ...but dragend stays attached so a `when` flip mid-drag still cleans up.
-    expect(typeof result.onDragend).toBe('function');
-  });
-
-  it('dragProps(ref, { when: () => false }) returns inert props (function form evaluated via evalCondition)', () => {
-    const { api } = mountDragDrop(bi);
-    const whenFn = vi.fn(() => false);
-    const result = api.dragProps({ id: 1 }, { when: whenFn });
-
-    expect(result.draggable).toBe(false);
-    expect('onDragstart' in result).toBe(false);
-    expect(whenFn).toHaveBeenCalledTimes(1);
-  });
-
-  it('a `when` flip mid-drag still ends the drag: inert dragProps retain onDragend (WR-06)', () => {
-    const { api } = mountDragDrop(bi);
-
-    // Drag starts while `when` is true...
-    const active = api.dragProps({ id: 1 }, { when: true }) as DragProps;
-    active.onDragstart(makeFakeDragEvent() as unknown as DragEvent);
-    expect(bi.isDragging).toBe(true);
-
-    // ...then a broadcast tears down the in-progress action mid-drag, the
-    // caller's canDrag computed flips false, and the component re-renders,
-    // v-binding the INERT props onto the (still-dragging) source element.
-    const inert = api.dragProps({ id: 1 }, { when: false });
-    expect((inert as { draggable: boolean }).draggable).toBe(false);
-    const onDragend = (inert as { onDragend?: () => void }).onDragend;
-    expect(typeof onDragend).toBe('function');
-
-    // When the user releases, dragend fires on the source element — without a
-    // retained handler, endDrag() never runs and isDragging/highlights wedge.
-    onDragend!();
-    expect(bi.isDragging).toBe(false);
-  });
-
-  it('a `when` flip mid-drag still ends the drag for drag().props too (WR-06 parity)', () => {
-    const { api } = mountDragDrop(bi);
-
-    const active = api.drag({ id: 1 }, { when: true }).props as DragProps;
-    active.onDragstart(makeFakeDragEvent() as unknown as DragEvent);
-    expect(bi.isDragging).toBe(true);
-
-    const inert = api.drag({ id: 1 }, { when: false }).props;
-    const onDragend = (inert as { onDragend?: () => void }).onDragend;
-    expect(typeof onDragend).toBe('function');
-
-    onDragend!();
-    expect(bi.isDragging).toBe(false);
-  });
-
-  it('the inert onDragend is a no-op when no drag is in flight (does not fire user onDragEnd)', () => {
-    const { api } = mountDragDrop(bi);
-    const onDragEnd = vi.fn();
-
-    const inert = api.dragProps({ id: 1 }, { when: false, onDragEnd });
-    const handler = (inert as { onDragend?: () => void }).onDragend;
-    expect(typeof handler).toBe('function');
-
-    // No drag in flight — a stray dragend must not run user cleanup or endDrag.
-    handler!();
-    expect(onDragEnd).not.toHaveBeenCalled();
-    expect(bi.isDragging).toBe(false);
-  });
-
-  it('dragProps(ref) with no options returns the full draggable props unchanged', () => {
-    const { api } = mountDragDrop(bi);
-    const result = api.dragProps({ id: 1 }) as DragProps;
-
-    expect(result.draggable).toBe(true);
-    expect(typeof result.onDragstart).toBe('function');
-    expect(typeof result.onDragend).toBe('function');
-  });
-
-  it('dragProps(ref, { when: true }) returns the full draggable props unchanged', () => {
-    const { api } = mountDragDrop(bi);
-    const result = api.dragProps({ id: 1 }, { when: true }) as DragProps;
-
-    expect(result.draggable).toBe(true);
-    expect(typeof result.onDragstart).toBe('function');
-    expect(typeof result.onDragend).toBe('function');
-  });
-
-  it('dragProps(ref, { when: () => true }) returns the full draggable props unchanged', () => {
-    const { api } = mountDragDrop(bi);
-    const result = api.dragProps({ id: 1 }, { when: () => true }) as DragProps;
-
-    expect(result.draggable).toBe(true);
-    expect(typeof result.onDragstart).toBe('function');
+    expect(warnings()).toBe(1);
   });
 });

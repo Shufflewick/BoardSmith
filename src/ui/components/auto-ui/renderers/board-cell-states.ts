@@ -51,6 +51,8 @@ export function boardCellStates(boardInteraction: BoardInteraction | undefined) 
     isCellHighlighted: (cell: BoardCell): boolean => boardInteraction?.isHighlighted(cellIdentity(cell)) ?? false,
     isCellActionSelectable,
     isCellDropTarget,
+    // The drop target under the pointer: a finger has no :hover to show it (#1605).
+    isCellDropHover: (cell: BoardCell): boolean => boardInteraction?.isHoveredDropTarget(cellIdentity(cell)) ?? false,
     isCellDisabled,
     cellStateLabel,
   };

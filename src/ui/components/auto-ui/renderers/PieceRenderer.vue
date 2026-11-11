@@ -15,7 +15,7 @@ import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
-import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
+import { startPointerDrag } from '../../../composables/pointerDrag.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
 
@@ -77,25 +77,9 @@ const ariaLabel = computed(() => {
 const { attrs: selectableAttrs, onActivate, onKeydown } =
   useSelectable(elementIdentity, boardInteraction, isActionSelectable, isDisabled, 'piece');
 
-// ── Drag-and-drop handlers ────────────────────────────────────────────────────
-function handleDragStart(event: DragEvent) {
+function handlePointerdown(event: PointerEvent) {
   const dragged = dragIdentity.value;
-  if (!boardInteraction || !dragged || !boardInteraction.startDrag(dragged)) {
-    event.preventDefault();
-    return;
-  }
-  setTransformAwareDragImage(event, event.currentTarget as HTMLElement);
-  event.dataTransfer?.setData('boardsmith/element', JSON.stringify({
-    id: props.element.id,
-    name: props.element.name,
-  }));
-  event.dataTransfer!.effectAllowed = 'move';
-}
-
-function handleDragEnd() {
-  if (boardInteraction?.isDragging) {
-    boardInteraction.endDrag();
-  }
+  if (boardInteraction && dragged) startPointerDrag(event, dragged, boardInteraction);
 }
 
 // ---------------------------------------------------------------------------
@@ -149,14 +133,12 @@ watch(effectivePieceImage, () => {
       },
     ]"
     :data-animatable="true"
-    :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onKeydown"
-    @dragstart="handleDragStart"
-    @dragend="handleDragEnd"
+    @pointerdown="handlePointerdown"
   >
     <!-- Overlay render override: full component replacement (D-04) -->
     <component
@@ -281,6 +263,9 @@ watch(effectivePieceImage, () => {
 
 .piece.is-draggable {
   cursor: grab;
+  /* A finger on a draggable drags it; the page still scrolls everywhere else (#1605). */
+  touch-action: none;
+  user-select: none;
 }
 
 .piece.is-dragging {

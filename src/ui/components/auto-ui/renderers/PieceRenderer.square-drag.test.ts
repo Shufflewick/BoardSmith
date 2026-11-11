@@ -35,7 +35,14 @@ function board(): GameElement {
   };
 }
 
-const dataTransfer = { setData() {}, setDragImage() {}, effectAllowed: '' };
+/** Press the element and move the pointer far enough to start a drag; jsdom does no layout, so nothing is under it. */
+function startDragging(element: Element) {
+  document.elementFromPoint = () => null;
+  const at = (type: string, x: number) =>
+    element.dispatchEvent(new PointerEvent(type, { bubbles: true, pointerId: 1, isPrimary: true, button: 0, clientX: x, clientY: 0 }));
+  at('pointerdown', 0);
+  at('pointermove', 40);
+}
 
 describe('PieceRenderer on a candidate square (#943)', () => {
   it('is draggable, and its drag carries the square', async () => {
@@ -44,10 +51,11 @@ describe('PieceRenderer on a candidate square (#943)', () => {
     const { wrapper } = mountBoardRenderer(GridBoardRenderer, board(), interaction);
 
     const [onCandidate, offCandidate] = wrapper.findAll('.piece');
-    expect(onCandidate.attributes('draggable')).toBe('true');
-    expect(offCandidate.attributes('draggable')).toBe('false');
+    expect(onCandidate.classes()).toContain('is-draggable');
+    expect(offCandidate.classes()).not.toContain('is-draggable');
 
-    await onCandidate.trigger('dragstart', { dataTransfer });
+    startDragging(onCandidate.element);
+    await wrapper.vm.$nextTick();
     expect(interaction.draggedElement).toEqual({ id: 300, name: 'd4', notation: 'd4' });
     expect(onCandidate.classes()).toContain('is-dragging');
     wrapper.unmount();
@@ -62,9 +70,10 @@ describe('PieceRenderer on a candidate square (#943)', () => {
     const { wrapper } = mountBoardRenderer(GridBoardRenderer, board(), interaction);
 
     for (const piece of wrapper.findAll('.piece')) {
-      expect(piece.attributes('draggable')).toBe('false');
       expect(piece.classes()).not.toContain('is-draggable');
+      startDragging(piece.element);
     }
+    expect(interaction.isDragging).toBe(false);
     wrapper.unmount();
   });
 
@@ -77,8 +86,8 @@ describe('PieceRenderer on a candidate square (#943)', () => {
     const { wrapper } = mountBoardRenderer(GridBoardRenderer, board(), interaction);
 
     const [piece] = wrapper.findAll('.piece');
-    expect(piece.attributes('draggable')).toBe('true');
-    await piece.trigger('dragstart', { dataTransfer });
+    expect(piece.classes()).toContain('is-draggable');
+    startDragging(piece.element);
     expect(interaction.draggedElement).toEqual({ id: 300, name: 'd4', notation: 'd4' });
     wrapper.unmount();
   });
@@ -92,7 +101,9 @@ describe('CardRenderer for a disabled candidate (#1190)', () => {
 
     const card = wrapper.find('.card-container');
     expect(card.classes()).toContain('is-disabled');
-    expect(card.attributes('draggable')).toBe('false');
+    expect(card.classes()).not.toContain('is-draggable');
+    startDragging(card.element);
+    expect(interaction.isDragging).toBe(false);
     wrapper.unmount();
   });
 
@@ -103,8 +114,8 @@ describe('CardRenderer for a disabled candidate (#1190)', () => {
     const { wrapper } = mountBoardRenderer(CardRenderer, { id: 7, className: 'Card', name: 'ace', attributes: {} }, interaction);
 
     const card = wrapper.find('.card-container');
-    expect(card.attributes('draggable')).toBe('true');
-    await card.trigger('dragstart', { dataTransfer });
+    expect(card.classes()).toContain('is-draggable');
+    startDragging(card.element);
     expect(interaction.isDragging).toBe(true);
     wrapper.unmount();
   });

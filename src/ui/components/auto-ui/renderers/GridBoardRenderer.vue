@@ -93,6 +93,7 @@ const {
   isCellSelected,
   isCellActionSelectable,
   isCellDropTarget,
+  isCellDropHover,
   isCellDisabled,
   cellStateLabel,
 } = boardCellStates(boardInteraction);
@@ -164,19 +165,6 @@ function cellAriaLabel(cell: GameElement): string {
   const coord = cell.name ?? toAlgebraicNotation(row, col, { rows: rowsRef.value });
   return `${coord}, ${cellStateLabel(cell)}`;
 }
-
-function handleDragOver(event: DragEvent, cell: GameElement) {
-  if (!boardInteraction?.isDragging) return;
-  if (!isCellDropTarget(cell)) return;
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'move';
-}
-
-function handleDrop(event: DragEvent, cell: GameElement) {
-  if (!boardInteraction?.isDragging) return;
-  event.preventDefault();
-  boardInteraction.triggerDrop(cellIdentity(cell));
-}
 </script>
 
 <template>
@@ -239,12 +227,11 @@ function handleDrop(event: DragEvent, cell: GameElement) {
               'is-board-highlighted': isCellHighlighted(cell),
               'is-board-selected': isCellSelected(cell),
               'is-drop-target': isCellDropTarget(cell),
+              'is-drop-hover': isCellDropHover(cell),
               'is-disabled': isCellDisabled(cell),
             }"
             :title="cell.name ?? undefined"
             @click.stop="handleCellActivate(cell)"
-            @dragover="handleDragOver($event, cell)"
-            @drop="handleDrop($event, cell)"
           >
             <!-- Coordinate notation label (shown on hover) -->
             <span v-if="cell.name" class="cell-notation">{{ cell.name }}</span>
@@ -383,7 +370,7 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   box-shadow: var(--bsg-ring);
 }
 
-.grid-cell.is-drop-target:hover {
+.grid-cell.is-drop-hover {
   background: var(--bsg-droptarget-hover);
 }
 

@@ -20,7 +20,7 @@
 import { computed, inject, ref, watch, type Ref } from 'vue';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
-import { setTransformAwareDragImage } from '../../../composables/dragImage.js';
+import { startPointerDrag } from '../../../composables/pointerDrag.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { isHiddenPlaceholder } from '../../../../engine/element/hidden-placeholder.js';
 import { getSpriteStyle, parseImageInfo, type ImageInfo } from '../../../utils/image.js';
@@ -47,6 +47,7 @@ const {
   canStartDrag,
   isDropTarget,
   isDragged,
+  isDropHover,
 } = useElementBoardState(() => props.element);
 
 // A card can be dragged, so it also offers the auto-filled first pick to drag on.
@@ -141,38 +142,8 @@ watch(
 // ---------------------------------------------------------------------------
 // Drag handlers
 // ---------------------------------------------------------------------------
-function handleDragStart(event: DragEvent) {
-  if (!boardInteraction || !canDrag.value || !boardInteraction.startDrag(elementIdentity())) {
-    event.preventDefault();
-    return;
-  }
-
-  setTransformAwareDragImage(event, event.currentTarget as HTMLElement);
-
-  event.dataTransfer?.setData('boardsmith/element', JSON.stringify(elementIdentity()));
-  event.dataTransfer!.effectAllowed = 'move';
-}
-
-function handleDragEnd() {
-  if (boardInteraction?.isDragging) {
-    boardInteraction.endDrag();
-  }
-}
-
-function handleDragOver(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-  if (!isDropTarget.value) return;
-
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'move';
-}
-
-function handleDrop(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-
-  event.preventDefault();
-
-  boardInteraction.triggerDrop(elementIdentity());
+function handlePointerdown(event: PointerEvent) {
+  if (boardInteraction && canDrag.value) startPointerDrag(event, elementIdentity(), boardInteraction);
 }
 
 
@@ -191,20 +162,17 @@ function handleDrop(event: DragEvent) {
         'is-draggable': canDrag,
         'is-dragging': isDragged,
         'is-drop-target': isDropTarget,
+        'is-drop-hover': isDropHover,
         'has-image': !!(effectiveCardImage || presentationEntry?.image),
       },
     ]"
     :data-animatable="true"
-    :draggable="canDrag"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isBoardSelected || undefined"
     @click="onActivate"
     @keydown="onSelectKey"
-    @dragstart="handleDragStart"
-    @dragend="handleDragEnd"
-    @dragover="handleDragOver"
-    @drop="handleDrop"
+    @pointerdown="handlePointerdown"
   >
     <!-- Overlay render override: full component replacement (D-04) -->
     <component
@@ -317,6 +285,12 @@ function handleDrop(event: DragEvent) {
   box-shadow: none;
 }
 
+.card-container.is-draggable {
+  /* A finger on a draggable drags it; the page still scrolls everywhere else (#1605). */
+  touch-action: none;
+  user-select: none;
+}
+
 /* Dragging state — consume CSS vars from drag-drop.css, never redefine */
 .card-container.is-dragging {
   opacity: var(--bsg-dragging-opacity);
@@ -329,7 +303,7 @@ function handleDrop(event: DragEvent) {
   outline-offset: 2px;
 }
 
-.card-container.is-drop-target:hover {
+.card-container.is-drop-hover {
   background: var(--bsg-droptarget-hover);
 }
 

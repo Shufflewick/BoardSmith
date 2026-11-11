@@ -616,13 +616,18 @@ export function anchorAttrs(ref: ElementRef, type: string = 'unknown'): Record<s
 /** The attributes {@link anchorAttrs} writes an identity into, which {@link anchoredRefsIn} reads back. */
 export const ANCHOR_ATTRIBUTES = ['data-bs-el-id', 'data-bs-el-notation', 'data-bs-el-name'];
 
+/** Matches a node {@link anchorAttrs} anchored. */
+export const ANCHOR_SELECTOR = ANCHOR_ATTRIBUTES.map((name) => `[${name}]`).join(', ');
+
+/** The identity {@link anchorAttrs} wrote onto `node`. */
+export function anchoredRef(node: Element): ElementRef {
+  const [id, notation, name] = ANCHOR_ATTRIBUTES.map((attribute) => node.getAttribute(attribute) ?? undefined);
+  return { id: id === undefined ? undefined : Number(id), notation, name };
+}
+
 /** The identity of every node under `container` that {@link anchorAttrs} anchored: what the board draws (#1589). */
 export function anchoredRefsIn(container: ParentNode): ElementRef[] {
-  const nodes = container.querySelectorAll(ANCHOR_ATTRIBUTES.map((name) => `[${name}]`).join(', '));
-  return Array.from(nodes, (node) => {
-    const [id, notation, name] = ANCHOR_ATTRIBUTES.map((attribute) => node.getAttribute(attribute) ?? undefined);
-    return { id: id === undefined ? undefined : Number(id), notation, name };
-  });
+  return Array.from(container.querySelectorAll(ANCHOR_SELECTOR), anchoredRef);
 }
 
 /**

@@ -41,6 +41,7 @@ const {
   isActionSelectable,
   isDisabled,
   isDropTarget,
+  isDropHover,
 } = useElementBoardState(() => props.element);
 
 const presentationEntry = usePresentationEntry(() => props.element);
@@ -166,19 +167,6 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   'hand',
 );
 
-// Drop handler — hand zones are valid drop targets (Go Fish "ask" target, etc.)
-function handleDragOver(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-  if (!isDropTarget.value) return;
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'move';
-}
-
-function handleDrop(event: DragEvent) {
-  if (!boardInteraction?.isDragging) return;
-  event.preventDefault();
-  boardInteraction.triggerDrop(elementIdentity());
-}
 </script>
 
 <template>
@@ -193,6 +181,7 @@ function handleDrop(event: DragEvent) {
         'is-board-highlighted': isBoardHighlighted,
         'is-board-selected': isBoardSelected,
         'is-drop-target': isDropTarget,
+        'is-drop-hover': isDropHover,
         'is-disabled': isDisabled,
       },
     ]"
@@ -200,8 +189,6 @@ function handleDrop(event: DragEvent) {
     :data-zone-id="element.id"
     @click="handleSelect"
     @keydown="onKeydown"
-    @dragover="handleDragOver"
-    @drop="handleDrop"
   >
     <!-- Header: overlay label wins, then element.name, then ownership fallback (CF-2 + D-04) -->
     <div class="hand-header">
@@ -316,7 +303,7 @@ function handleDrop(event: DragEvent) {
   outline-offset: 2px;
 }
 
-.hand-container.is-drop-target:hover {
+.hand-container.is-drop-hover {
   background: var(--bsg-droptarget-hover);
 }
 

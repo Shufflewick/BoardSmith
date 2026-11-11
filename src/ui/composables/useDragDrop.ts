@@ -3,6 +3,11 @@
  *
  * Call once at setup, returns functions that work with any element.
  *
+ * Drag is pointer-event drag (#1605), so it works by mouse, pen and touch, and
+ * `drag()` and `drop()` also carry a click handler that chooses the element, so
+ * a board wired only with them plays by tap too. Spread `props` and nothing
+ * else for the click: a second click handler on the same element chooses twice.
+ *
  * Drop targets are wired automatically: GameShell sets up a single shared
  * drag-drop orchestration (see {@link ./useDragDropTargets}) that watches
  * `isDragging` and derives drop targets generically from the action controller's
@@ -88,8 +93,8 @@
  *      :class="{ 'is-dragging': isDragging({ id: card.id }) }">
  * ```
  */
-import { tryUseBoardInteraction, type ElementRef } from './useBoardInteraction.js';
-import { setTransformAwareDragImage } from './dragImage.js';
+import { anchorAttrs, tryUseBoardInteraction, type ElementRef } from './useBoardInteraction.js';
+import { startPointerDrag } from './pointerDrag.js';
 import { devWarn } from '../../utils/dev.js';
 import { syncReducedMotionClass } from './reducedMotion.js';
 
@@ -109,30 +114,25 @@ const warnNoProvider = (): void =>
       '(or use tryUseBoardInteraction() directly if drag-and-drop is optional here).'
   );
 
+/**
+ * What `drag()` spreads onto a draggable element. `onClick` chooses it, the tap
+ * path, and is always there; `onPointerdown` and the style that keeps the browser
+ * from scrolling under a finger are there only while the element may drag.
+ */
 export interface DragProps {
-  draggable: true;
-  onDragstart: (e: DragEvent) => void;
-  onDragend: () => void;
+  onClick: () => void;
+  onPointerdown?: (e: PointerEvent) => void;
+  style?: { touchAction: 'none'; userSelect: 'none' };
 }
 
 /**
- * Inert props returned when a drag `when` condition is false. onDragend is
- * RETAINED (WR-06): if `when` flips false while a drag is in flight (e.g. a
- * broadcast tears down the in-progress action mid-drag) and the component
- * re-renders, the release must still end the drag — otherwise
- * boardInteraction.isDragging and the drop-target/hover highlights wedge.
- * No onDragstart is attached, so no NEW drag can begin.
+ * What `drop()` spreads onto a drop target: its anchor attributes, which the
+ * drag hit-tests to find the target under the pointer, and a click that chooses
+ * it, the tap path.
  */
-export interface InertDragProps {
-  draggable: false;
-  onDragend: () => void;
-}
-
 export interface DropProps {
-  onDragover: (e: DragEvent) => void;
-  onDragenter: (e: DragEvent) => void;
-  onDragleave: (e: DragEvent) => void;
-  onDrop: (e: DragEvent) => void;
+  onClick: () => void;
+  [anchorAttribute: `data-${string}`]: string;
 }
 
 /**
@@ -173,9 +173,8 @@ export interface DropClasses {
  * Combined result from drag() helper - includes props and classes.
  */
 export interface DragResult {
-  /** Props to spread onto the element (inert props if condition is false —
-   * draggable:false with onDragend retained, see InertDragProps/WR-06) */
-  props: DragProps | InertDragProps;
+  /** Props to spread onto the element: no drag handler while it may not drag. */
+  props: DragProps;
   /** Classes to apply to the element */
   classes: DragClasses;
 }
@@ -194,9 +193,9 @@ export interface UseDragDropReturn {
   /**
    * Returns props to make an element draggable. Honors `options.when` (UIX-04)
    * and the board's rule that a disabled candidate drags for nothing (#1299):
-   * when either refuses, returns inert `{ draggable: false }` with no dragstart.
+   * when either refuses, it returns only the click handler.
    */
-  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps | InertDragProps;
+  dragProps: (ref: ElementRef, options?: DragOptions) => DragProps;
   /** Returns props to make an element a drop target */
   dropProps: (ref: ElementRef) => DropProps;
   /** Check if an element is currently being dragged */
@@ -231,83 +230,27 @@ export function useDragDrop(): UseDragDropReturn {
   syncReducedMotionClass();
   const boardInteraction = tryUseBoardInteraction();
 
-  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps | InertDragProps => {
-    return mayDrag(ref, options) ? dragPropsInner(ref, options) : inertDragProps(options);
+  const dragProps = (ref: ElementRef, options?: DragOptions): DragProps => propsFor(ref, mayDrag(ref, options), options);
+
+  /** Choose the element, as a click on it would on any board: the tap path. */
+  const choose = (ref: ElementRef) => () => {
+    if (!boardInteraction) return warnNoProvider();
+    boardInteraction.triggerElementSelect(ref);
   };
 
-  /** Shared inert shape for both dragProps() and drag() (WR-06): draggable is
-   * off and no dragstart is attached, but onDragend stays wired so a `when`
-   * flip mid-drag still ends the in-flight drag on release. */
-  const inertDragProps = (options?: DragOptions): InertDragProps => ({
-    draggable: false,
-    onDragend: () => {
-      // Only act when a drag is actually in flight — a stray dragend on an
-      // element that never started a drag must not run user cleanup.
-      if (!boardInteraction?.isDragging) return;
-      options?.onDragEnd?.();
-      boardInteraction.endDrag();
-    },
-  });
+  const propsFor = (ref: ElementRef, draggable: boolean, options?: DragOptions): DragProps =>
+    draggable
+      ? {
+          onClick: choose(ref),
+          onPointerdown: (e: PointerEvent) => {
+            if (!boardInteraction) return warnNoProvider();
+            startPointerDrag(e, ref, boardInteraction, options);
+          },
+          style: { touchAction: 'none', userSelect: 'none' },
+        }
+      : { onClick: choose(ref) };
 
-  const dragPropsInner = (ref: ElementRef, options?: DragOptions): DragProps => ({
-    draggable: true,
-    onDragstart: (e: DragEvent) => {
-      if (!boardInteraction) {
-        warnNoProvider();
-        return;
-      }
-      // The props may predate a broadcast that disabled this candidate.
-      if (!boardInteraction.startDrag(ref)) {
-        e.preventDefault();
-        return;
-      }
-      const target = e.currentTarget as HTMLElement;
-
-      // Transform-aware drag ghost (shared with auto-UI element renderers for visual parity).
-      setTransformAwareDragImage(e, target);
-
-      e.dataTransfer?.setData('boardsmith/element', JSON.stringify(ref));
-      e.dataTransfer!.effectAllowed = 'move';
-      options?.onDragStart?.();
-    },
-    onDragend: () => {
-      options?.onDragEnd?.();
-      if (boardInteraction?.isDragging) {
-        boardInteraction.endDrag();
-      }
-    },
-  });
-
-  const dropProps = (ref: ElementRef): DropProps => ({
-    onDragover: (e: DragEvent) => {
-      if (!boardInteraction?.isDragging) return;
-      if (!boardInteraction.isDropTarget(ref)) return;
-      e.preventDefault();
-      e.dataTransfer!.dropEffect = 'move';
-    },
-    onDragenter: (e: DragEvent) => {
-      if (!boardInteraction?.isDragging) return;
-      if (!boardInteraction.isDropTarget(ref)) return;
-      e.preventDefault();
-      boardInteraction.setHoveredDropTarget(ref);
-    },
-    onDragleave: (e: DragEvent) => {
-      if (!boardInteraction?.isDragging) return;
-      // Only clear hover if we're actually leaving this element (not entering a child)
-      const relatedTarget = e.relatedTarget as Node | null;
-      const currentTarget = e.currentTarget as HTMLElement;
-      if (relatedTarget && currentTarget.contains(relatedTarget)) return;
-      // Only clear if this element is the currently hovered one
-      if (boardInteraction.isHoveredDropTarget(ref)) {
-        boardInteraction.setHoveredDropTarget(null);
-      }
-    },
-    onDrop: (e: DragEvent) => {
-      if (!boardInteraction?.isDragging) return;
-      e.preventDefault();
-      boardInteraction.triggerDrop(ref);
-    },
-  });
+  const dropProps = (ref: ElementRef): DropProps => ({ ...anchorAttrs(ref, 'drop-target'), onClick: choose(ref) });
 
   const isDragging = (ref: ElementRef): boolean => {
     if (!boardInteraction) {
@@ -368,17 +311,10 @@ export function useDragDrop(): UseDragDropReturn {
     'bs-drop-hover': isOver(ref),
   });
 
-  /**
-   * Combined helper for draggable elements - returns props and classes.
-   * Props are conditional (inert — draggable:false but onDragend retained —
-   * when the condition is false; see inertDragProps/WR-06).
-   */
+  /** Combined helper for draggable elements - returns props and classes, asking `when` once. */
   const drag = (ref: ElementRef, options?: DragOptions): DragResult => {
     const draggable = mayDrag(ref, options);
-    return {
-      props: draggable ? dragPropsInner(ref, options) : inertDragProps(options),
-      classes: classesFor(ref, draggable),
-    };
+    return { props: propsFor(ref, draggable, options), classes: classesFor(ref, draggable) };
   };
 
   /**

@@ -363,11 +363,12 @@ names it says so and exits non-zero.
 - **`touch-phone-browser.mjs`** plays the auto-UI by touch (`hasTouch`,
   `isMobile`) at 390x844 and 844x390, in both browsers: the shell, action bar,
   hand and square-grid board show without sideways scrolling, and a tap on a
-  pawn then a square moves it. It also holds two defects open as known
-  failures: a tapped card keeps its hover style (#1606), and a touch drag never
-  starts, because drag is native HTML5 drag, which touch cannot start (#1605).
-  Chromium's drag is real touch, sent through the DevTools protocol; WebKit has
-  no way to move a touch, so its drag is `PointerEvent`s dispatched in the page.
+  pawn then a square moves it, and so does dragging it there by touch, which
+  marks the drop targets and the square under the finger (#1605); at 1440x900
+  the same drag by mouse does too. It holds one defect open as a known
+  failure: a tapped card keeps its hover style (#1606). Chromium's touch drag is
+  real touch, sent through the DevTools protocol; WebKit has no way to move a
+  touch, so its drag is `PointerEvent`s dispatched in the page.
 - **`cpu-throttle-browser.mjs`** renders the table sample at 390x844 with the CPU
   slowed fourfold (`Emulation.setCPUThrottlingRate`, Chromium only), then plays
   a card, and holds the layouts, style recalculations and game-frame elements
