@@ -24,7 +24,7 @@ import SoundMenuItems from './SoundMenuItems.vue';
 import type { MenuCommand } from '../composables/menuCommands.js';
 import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
-import { ZOOM_MIN, ZOOM_MAX } from '../composables/useAutoZoom';
+import { ZOOM_MIN, ZOOM_MAX } from '../composables/useBoardZoom';
 
 const props = withDefaults(defineProps<{
   /**
@@ -34,10 +34,8 @@ const props = withDefaults(defineProps<{
   play?: {
     /** Current auto-end-turn state */
     autoEndTurn: boolean;
-    /** Current zoom level; a fitted board can sit below the slider's minimum (#1162). */
+    /** The player's magnifier, 1 to 2 (#1608). */
     zoom: number;
-    /** False where the browser has no CSS zoom, so the menu offers none (#1361). */
-    zoomSupported: boolean;
     /** Whether the undo action is currently available */
     canUndo: boolean;
   };
@@ -112,8 +110,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{
   'update:autoEndTurn': [value: boolean];
   'update:zoom': [value: number];
-  /** One-shot re-fit of the board to the available space. */
-  'fit-zoom': [];
+  /** Put the magnifier back to 100%. */
+  'reset-zoom': [];
   'undo': [];
   /**
    * Emitted when the user selects a Teaching group item, a Tutorial item, or
@@ -280,9 +278,8 @@ function runCommand(command: MenuCommand) {
           Undo last action
         </button>
 
-        <!-- Zoom: fitted once at game startup; the slider adjusts manually and
-             "Fit" re-fits the board to the available space on demand. -->
-        <div v-if="play.zoomSupported" class="mi zoom-mi" role="group" aria-label="Zoom">
+        <!-- Zoom: a magnifier the player sets; the board itself reflows to fit (#1608). -->
+        <div class="mi zoom-mi" role="group" aria-label="Zoom">
           <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M11 8v6M8 11h6M21 21l-4-4" stroke-linecap="round"/></svg>
           Zoom
           <span class="r">
@@ -299,12 +296,12 @@ function runCommand(command: MenuCommand) {
             />
             <button
               type="button"
-              class="zoom-fit"
+              class="zoom-reset"
               role="menuitem"
-              title="Fit board to available space"
-              @click="emit('fit-zoom')"
+              title="Back to 100%"
+              @click="emit('reset-zoom')"
             >
-              Fit
+              100%
             </button>
           </span>
         </div>
@@ -510,7 +507,7 @@ function runCommand(command: MenuCommand) {
   accent-color: var(--bsg-accent);
   width: 84px;
 }
-.zoom-fit {
+.zoom-reset {
   border: 1px solid var(--bsg-line-2);
   border-radius: var(--bsg-r-pill);
   background: none;
@@ -522,7 +519,7 @@ function runCommand(command: MenuCommand) {
   flex: none;
 }
 @media (hover: hover) {
-  .zoom-fit:hover {
+  .zoom-reset:hover {
     border-color: var(--bsg-accent);
     color: var(--bsg-accent);
   }

@@ -319,9 +319,9 @@ watch(actionBarCollapsed, async (down) => {
 /**
  * THE THREE ELEMENTS THE ADAPTER STILL HAS TO REACH.
  *
- * The board region is what the zoom fit measures and what the board focus
- * handoff returns focus to; the zoom container is the element the fit scales and
- * the drag-drop substrate anchors against; the log is what the debug panel
+ * The board region is what the board focus handoff returns focus to; the zoom
+ * container is the element the magnifier scales and the drag-drop substrate
+ * anchors against; the log is what the debug panel
  * copies and clears. All three are chrome this component owns and behaviour the
  * adapter drives, so they are exposed rather than duplicated.
  */
@@ -349,6 +349,21 @@ watch(() => props.chromeHidden, async (hidden) => {
   boardRegionEl.value?.focus();
 });
 const zoomContainerEl = ref<HTMLElement | null>(null);
+/** The board's own layout size, unrounded, which a transform leaves as it was, so the frame around the magnified board is sized from it. */
+const boardSize = ref({ width: 0, height: 0 });
+watch(zoomContainerEl, (board, _previous, onCleanup) => {
+  if (!board) return;
+  const observer = new ResizeObserver(([entry]) => {
+    boardSize.value = { width: entry!.contentRect.width, height: entry!.contentRect.height };
+  });
+  observer.observe(board);
+  onCleanup(() => observer.disconnect());
+}, { flush: 'post' });
+/** At 100% the frame is the board's own box; magnified, it is the magnified box, so the region scrolls to all of it. */
+const zoomFrameStyle = computed(() => containerZoom.value === 1 ? {} : {
+  width: `${boardSize.value.width * containerZoom.value}px`,
+  height: `${boardSize.value.height * containerZoom.value}px`,
+});
 // The Action Panel keeps the bar's cap only for a candidate the board, its overlays or the game modal host draws (#1589).
 const boardViewportEl = ref<HTMLElement | null>(null);
 useDrawnBoardElements(tryUseBoardInteraction(), boardViewportEl);
@@ -517,17 +532,19 @@ const mobileToggleLabel = computed(() => {
           ref="boardRegionEl"
           data-testid="bs-board"
         >
-          <div
-            class="game-shell__zoom-container"
-            ref="zoomContainerEl"
-            :style="{ '--zoom-level': containerZoom }"
-          >
-            <!-- ONE render path for the board: the registry's default UI, or the
-                 dev switcher's selection. There is no second slot for naming a
-                 default board — a second way would be a second thing to disagree
-                 with `src/ui/uis.ts`, and props drifted between the two paths for
-                 real while both existed. -->
-            <slot name="board"></slot>
+          <div class="game-shell__zoom-frame" :style="zoomFrameStyle">
+            <div
+              class="game-shell__zoom-container"
+              ref="zoomContainerEl"
+              :style="{ '--zoom-level': containerZoom }"
+            >
+              <!-- ONE render path for the board: the registry's default UI, or the
+                   dev switcher's selection. There is no second slot for naming a
+                   default board — a second way would be a second thing to disagree
+                   with `src/ui/uis.ts`, and props drifted between the two paths for
+                   real while both existed. -->
+              <slot name="board"></slot>
+            </div>
           </div>
         </main>
         <!-- The adapter's own overlays, in one layer over the visible board:
@@ -696,7 +713,7 @@ const mobileToggleLabel = computed(() => {
 
      The board region reserves one row for the panel, or only the line while the
      player has it put down, and the rows above it float over the board (#1514,
-     #1517, #1518), so the fitted board never depends on the panel's live height
+     #1517, #1518), so the board never depends on the panel's live height
      (issue #13). These tokens are derived from the
      panel's own control metrics, so there is one definition of a "row" for the
      reserve, the bar's cap and the collapsed bar. */
@@ -705,7 +722,7 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-pad: 9px;    /* .actionbar vertical padding */
 
   /* What the board region reserves under the board: ONE row of bar (#1517), so a
-     one-row bar sits under the fitted board and only rows beyond it cover it.
+     one-row bar sits under the board and only rows beyond it cover it.
      The bar fills it (`min-height`), so a bar shorter than a row leaves no band. */
   --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
                              + env(safe-area-inset-bottom));
@@ -754,8 +771,8 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Put down by the player (#1518): the region reserves only the line, so the board
-   refits once to reach it. Keyed on the preference, not on what is showing, so a
-   question opening the bar over it refits nothing (#13). */
+   reaches it. Keyed on the preference, not on what is showing, so a question
+   opening the bar over it moves nothing (#13). */
 .game-shell__game.action-bar-minimized {
   --bsg-panel-reserved: var(--bsg-action-bar-collapsed);
 }
@@ -877,12 +894,11 @@ const mobileToggleLabel = computed(() => {
 .conn-dot.connecting { background: var(--bsg-away); }
 
 /* Board region: hero; container-query-sized; ~zero chrome padding (IA-05).
-   The board renders at its NATURAL size, pinned top-left; at startup a
-   one-shot fit (useAutoZoom) zooms it to fill this region's visible height,
-   clamped to the 0.5–2.0 slider range, then leaves it alone. Whenever the
-   board — grown mid-game, clamped, or manually zoomed — is larger than the
-   region, this region scrolls (both axes): scroll is the contract after
-   startup, never clipping and never auto-rescaling. */
+   The board renders at its NATURAL size, pinned top-left, and the auto-UI sizes
+   its cells and cards from this region's width (`cqw`), down to the tap floor
+   (issue 1608). Whenever the board, at that floor or magnified by the player, is
+   larger than the region, this region scrolls (both axes): never clipping and
+   never shrinking it to fit. */
 /* Keep game modals anchored to the visible board, outside its scrolling content. */
 .board-viewport {
   flex: 1;
@@ -904,26 +920,24 @@ const mobileToggleLabel = computed(() => {
   align-items: flex-start;
   justify-content: flex-start;
   overflow: auto;
-  /* Reserve scrollbar space so a fit landing near the overflow boundary can't
-     toggle the scrollbar on/off, which would change clientWidth/clientHeight
-     and create a resize-observer feedback path into useAutoZoom's re-fit. */
+  /* Reserve scrollbar space so a board reflowing near the overflow boundary can't
+     toggle the scrollbar on/off and change the width it reflows to. */
   scrollbar-gutter: stable;
-  /* A size container, so useBoardSize can cap a board's pin at 100cqw, this
-     content box at layout time, and a stale pin cannot overflow it (#1336). */
+  /* A size container: the auto-UI's renderers size from 100cqw (issue 1608), and
+     useBoardSize caps a board's pin at it, so a stale pin cannot overflow it (#1336). */
   container-type: inline-size;
   /* regionWidth reads the computed width as the content box, whatever a game sets globally (#1343). */
   box-sizing: content-box;
   padding: var(--bsg-s1);
   /* The row reserved for the bar (#1517, #1518). It changes only on the player's
-     own toggle, so the fit, which reads this content box, never follows a pick. */
+     own toggle, so the board never moves with a pick. */
   padding-bottom: var(--bsg-panel-reserved);
   /* WCAG 2.4.11: a control scrolled into view by focus lands above the floating bar, grown or not. */
   scroll-padding-bottom: max(var(--bsg-panel-max), var(--bsg-bar-clearance));
 }
 
 /* Scroll room after the board, so the player can scroll what the rows beyond the
-   reserved one cover into view. The fit reads the region's clientHeight, never its
-   scroll height, so this never sizes the board. The bar's cap, not its live height:
+   reserved one cover into view. The bar's cap, not its live height:
    room that changed as the bar re-wrapped would clamp the scroll and move the board
    under the cursor. */
 .boardregion::after {
@@ -931,7 +945,7 @@ const mobileToggleLabel = computed(() => {
   flex: none;
   height: calc(var(--bsg-panel-max) - var(--bsg-panel-reserved));
 }
-/* Down until the player's own toggle, which refits: only the reserved line covers the board, so no room (#1525). */
+/* Down until the player's own toggle: only the reserved line covers the board, so no room (#1525). */
 .action-bar-stays-down .boardregion::after {
   height: 0;
 }
@@ -1299,23 +1313,24 @@ const mobileToggleLabel = computed(() => {
   }
 }
 
+/* The magnified board's box in the region's flow, so the region scrolls to all of it. */
+.game-shell__zoom-frame {
+  flex: none;
+}
+
 .game-shell__zoom-container {
   --zoom-level: 1;
   /* Size to the board's NATURAL content (not stretched to the region), so the board
      keeps its intrinsic size top-left and the region scrolls when it's bigger. */
-  flex: none;
   width: max-content;
   max-width: none;
-  /* Use the `zoom` property (not transform): it scales the LAYOUT box, so a
-     zoomed-up board genuinely overflows .boardregion and becomes scrollable in both
-     axes (the board has an intrinsic size to multiply) — unlike transform:scale,
-     which only shifts the paint and left the board un-scrollable / drifting sideways. */
-  zoom: var(--zoom-level);
-
-  /* CONTAINMENT: Prevents position:fixed from escaping to viewport.
-     Any fixed-position elements inside will behave like absolute positioning
-     relative to this container - they cannot cover the navbar or ActionPanel. */
-  contain: layout;
+  /* A transform, not CSS `zoom`: every browser reports and hit-tests the scaled boxes
+     the same way through getBoundingClientRect (issue 1608). The frame holds its layout room.
+     Even at scale(1) it makes this the containing block for position:fixed, so a fixed
+     overlay inside the board cannot cover the navbar or ActionPanel. Not `contain: layout`,
+     which does that too but keeps a board wider than the region from scrolling it. */
+  transform: scale(var(--zoom-level));
+  transform-origin: 0 0;
 }
 
 /* The adapter's overlays (see the template). Clicks pass through the empty

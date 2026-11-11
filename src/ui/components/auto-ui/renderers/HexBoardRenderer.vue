@@ -46,9 +46,8 @@ const boardInteraction = tryUseBoardInteraction();
 
 // ── Hex grid configuration from element attributes ──────────────────────────
 const hexSize = computed(() => (props.element.attributes?.$hexSize as number) ?? 50);
-// $hexSize is an abstract viewBox unit (games pick anything, e.g. 50 or 150). Render
-// each hex at a consistent NATURAL pixel size regardless, so the board isn't fit to
-// the viewport — it renders at its natural size and the board area scrolls if bigger.
+// $hexSize is an abstract viewBox unit (games pick anything, e.g. 50 or 150). Each hex
+// is at most this NATURAL pixel size, whatever the unit, and shrinks with the region.
 const NATURAL_HEX_PX = 52;
 const renderScale = computed(() => NATURAL_HEX_PX / hexSize.value);
 const orientation = computed(
@@ -112,6 +111,12 @@ const svgBounds = computed(() => {
     height: maxY - minY + padding * 2,
   };
 });
+
+/** The board's natural width, and how many hexes wide it is measured across their flats (√3 × size), for the tap floor. */
+const svgSize = computed(() => ({
+  '--natural-width': `${svgBounds.value.width * renderScale.value}px`,
+  '--hexes-across': svgBounds.value.width / (Math.sqrt(3) * hexSize.value),
+}));
 
 const viewBox = computed(
   () =>
@@ -281,8 +286,7 @@ function hexCellAriaLabel(cell: GameElement): string {
       class="hex-board-svg"
       :key="`hex-svg-${element.id}`"
       :viewBox="viewBox"
-      :width="svgBounds.width * renderScale"
-      :height="svgBounds.height * renderScale"
+      :style="svgSize"
       preserveAspectRatio="xMidYMid meet"
       role="grid"
       :aria-label="displayLabel"
@@ -385,10 +389,13 @@ function hexCellAriaLabel(cell: GameElement): string {
   flex: none;
 }
 
-/* ── SVG: renders at its natural size (width/height attrs); the board area scrolls
-   when it's larger than the viewport (and zoom multiplies it). ── */
+/* ── SVG: the board region's width less the panel's padding, between the width at which
+   each hex is the tap floor across its flats and its natural width; the height follows the
+   viewBox. Below the floor the region scrolls instead (issue 1608). ── */
 .hex-board-svg {
   display: block;
+  width: clamp(calc(var(--hexes-across) * max(24px, var(--bsg-tap-min))), 100cqw - 32px, var(--natural-width));
+  height: auto;
 }
 
 .hex-cell-group {

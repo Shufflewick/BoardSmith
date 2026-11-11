@@ -2,9 +2,9 @@
   "kind": "dupes",
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
-    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:100-114|src/ui/composables/useHexGrid.ts:300-315",
-    "src/ui/components/auto-ui/renderers/HandRenderer.vue:431-437|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:254-260",
-    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:119-137|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:210-228",
+    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:99-113|src/ui/composables/useHexGrid.ts:300-315",
+    "src/ui/components/auto-ui/renderers/HandRenderer.vue:432-438|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:255-261",
+    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:215-233",
     "src/session/stateless-ops.ts:1117-1133|src/session/stateless-ops.ts:1206-1220",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",

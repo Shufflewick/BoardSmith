@@ -137,7 +137,8 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 <style scoped>
 /* Container baseline — natural card token (IA-05) */
 .deck-container {
-  --card-w: var(--bsg-card-w);
+  /* A fifth of the board region's width, between the tap floor and the natural width (issue 1608). */
+  --card-w: clamp(max(24px, var(--bsg-tap-min)), 20cqw, var(--bsg-card-w));
   --card-h: calc(var(--card-w) * 1.4);
   display: flex;
   flex-direction: column;

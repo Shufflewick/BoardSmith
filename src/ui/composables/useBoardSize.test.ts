@@ -18,7 +18,7 @@
  *         (v-if / new game) still gets measured — and tears down observers
  *         on unmount.
  *   BS-5: zoom is 1 outside a GameShell (the shell case is tested in
- *         useAutoZoom.pinned-board.test.ts).
+ *         useBoardZoom.test.ts).
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { defineComponent, h, ref, nextTick, type Ref } from 'vue';

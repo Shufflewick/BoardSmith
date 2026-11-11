@@ -26,7 +26,7 @@ import {
   mountTableWithDebugPanel,
 } from './GameShell.platform-mount.test-helper.js';
 import { watchLiveRegion } from '../../testing/live-region.js';
-import { SETTLE_MS } from '../composables/useAutoZoom.js';
+import { SETTLE_MS } from './board-settle.js';
 
 function postState(state: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', {

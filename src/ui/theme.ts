@@ -146,11 +146,13 @@ const STATIC_TOKENS = `
   --bsg-rail: 64px;
   --bsg-side: 286px;
 
-  /* Board element natural sizes. Boards render at these intrinsic sizes (NOT fit to
-     the viewport); the board area scrolls when larger, and zoom multiplies them.
-     Games/themes can override per board. */
+  /* Board element sizes. The auto-UI sizes cells, pieces and cards from the board
+     region's width (cqw), never above these and never below the tap floor; the
+     region scrolls when a board cannot fit at the floor, and the player's zoom
+     magnifies (issue 1608). Games/themes can override per board. */
   --bsg-cell-size: 64px; /* grid/space cell edge (the cell's colours are --bsg-cell and --bsg-cell-line) */
   --bsg-card-w: 72px;    /* hand/deck card width (height via aspect-ratio) */
+  --bsg-tap-min: 44px;   /* the tap floor (WCAG 2.5.5); a dense board may lower it, never below 24px (WCAG 2.5.8) */
 
   /* Type scale (1.25 ratio, 16px body) */
   --bsg-text-xs: .75rem;

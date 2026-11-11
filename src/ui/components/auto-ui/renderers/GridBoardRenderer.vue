@@ -49,9 +49,8 @@ const gridStyle = computed(() => {
   return { 'grid-template-columns': `repeat(${gridResult.value.cols}, 1fr)` };
 });
 
-// Natural sizing: expose --cols and --rows as CSS custom properties on the board wrapper.
-// The grid renders at its natural size (--cell: var(--bsg-cell-size)); the board area scrolls
-// when larger than the viewport rather than shrinking cells to fit.
+// Expose --cols and --rows as CSS custom properties on the board wrapper, which sizes
+// --cell from them and the board region's width (#1608).
 const boardSizeStyle = computed(() => {
   if (!gridResult.value.ok) return {};
   return {
@@ -269,12 +268,11 @@ function cellAriaLabel(cell: GameElement): string {
   gap: 4px;
 }
 
-/* ── Natural sizing: --cell driven by the --bsg-cell-size token ──
-   --cols and --rows are set as CSS custom properties via :style binding from gridResult
-   (used for grid-template-columns). The board renders at its natural cell size; the
-   board area scrolls when larger than the viewport rather than fitting to the container. */
+/* ── Reflow: --cell fills the board region's width (100cqw) less the panel's padding,
+   the row labels and the gaps, between the tap floor and --bsg-cell-size. --cols comes
+   from gridResult via :style. Below the floor the region scrolls instead (issue 1608). */
 .board-with-labels {
-  --cell: var(--bsg-cell-size);
+  --cell: clamp(max(24px, var(--bsg-tap-min)), (100cqw - 34px - var(--cols) * 2px) / (var(--cols) + 0.4), var(--bsg-cell-size));
 }
 
 /* ── Row/column labels ── */

@@ -48,12 +48,11 @@ function describeKey(key: PropertyKey): string {
 }
 
 /**
- * What a shell provides only for itself. The board-region pin is how a board
- * tells the shell's auto-zoom that it scrolls instead of scaling; `renderAsSeat`
- * has no zoom to tell, and a board with no shell above it registers into nothing
- * (see boardRegionPin.ts).
+ * What a shell provides only for itself. The board zoom is the player's
+ * magnifier; `renderAsSeat` has none, and a board with no shell above it reads
+ * a zoom of 1 (see boardRegionPin.ts).
  */
-const SHELL_ONLY = new Set(['boardsmith:board-region-pin']);
+const SHELL_ONLY = new Set(['boardsmith:board-zoom']);
 
 /** The keys in `from` that `other` lacks, by name, leaving out what a shell provides only for itself. */
 function keysMissingFrom(from: Set<PropertyKey>, other: Set<PropertyKey>): string[] {

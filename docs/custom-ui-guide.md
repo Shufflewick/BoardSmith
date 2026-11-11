@@ -1222,16 +1222,20 @@ out actions for now with `useActionHolds`, with a reason shown like a rule's
 
 ## Board Sizing
 
-GameShell fits the board to the available screen space at startup by
-measuring the board's **intrinsic** (natural) size and then zooming it to
-fit. To measure an intrinsic size at all, the element that wraps your
-board — `.game-shell__zoom-container` — is styled
-`width: max-content`. This is deliberate and load-bearing: it's what lets
-`useAutoZoom` ask "how big does this board *want* to be?" for boards of any
-shape (square grids, wide card rows, tall hex boards) without you declaring a
-fixed size anywhere. **Do not override this CSS from a custom board** — a
-definite-width ancestor breaks the fit formula for every board, not just
-yours.
+GameShell never shrinks the board to fit the screen. The board renders at
+its **intrinsic** (natural) size, top-left in the board region (`.boardregion`),
+and the region scrolls when the board is bigger. The auto-UI's cells, pieces
+and cards size themselves from the region's width with `cqw` units, never
+below the `--bsg-tap-min` tap floor (44px; a dense board may lower it, never
+below 24px), and a board that cannot fit at that floor scrolls. Size a
+custom board the same way: `.boardregion` is an inline-size container, so
+`100cqw` in your board is the region's width. The player's zoom is only a
+magnifier, from 100% to 200%.
+
+The element that wraps your board — `.game-shell__zoom-container` — is
+styled `width: max-content`, so the board keeps its natural size and the
+region, not the board, scrolls. **Do not override this CSS from a custom
+board.**
 
 ### The failure mode: a 0×0 board
 
@@ -1273,9 +1277,8 @@ ancestor GameShell sizes to the visible viewport) and pins your board root to
 the region's available width, so wrapping works and growth is
 vertical-scroll only. It re-measures on region resize and window resize.
 The width is the one the region has with its vertical scrollbar showing,
-whether or not it shows, and the zoom fit reads the same width, so in a
-browser without `scrollbar-gutter` (Safari before 18.2) a scrollbar coming
-or going moves neither the pin nor the zoom.
+whether or not it shows, so in a browser without `scrollbar-gutter` (Safari
+before 18.2) a scrollbar coming or going does not move the pin.
 The pin is capped at `100cqw` (`.boardregion` is an inline-size container),
 so while the region narrows, as it does while the sidebar opens, the board
 never runs past it in the frames before the pin is re-measured. Where the
@@ -1284,15 +1287,6 @@ vertical scrollbar were not there, so the cap takes that scrollbar's width off
 (`calc(100cqw - 15px)`, say). The same
 container is what a `cqw` unit or an unnamed `@container` query in your board
 resolves against when nothing closer is a container.
-
-Calling it also tells GameShell which model your board is in, so the startup
-zoom-fit stops fitting your board's **height**: a pinned board that grows
-taller than the region scrolls — it is never scaled down to avoid that
-scrollbar (which would shrink every glyph on the board below its declared
-size). Width is still fitted, but never above 100%: the board *is* the
-region's width, so it renders at 100% unless its content overflows sideways,
-which scales it down. You do not wire this up; calling
-`useBoardSize()` is the whole opt-in.
 
 <!-- typecheck: board -->
 ```vue
@@ -1309,10 +1303,9 @@ const { boardStyle } = useBoardSize(boardRef);
 </template>
 ```
 
-`useBoardSize()` also returns `zoom`, a read-only ref holding the zoom
-GameShell applies to the board (the controls-menu slider or the fit; 1 outside
-GameShell, and 1 in a browser without CSS `zoom`, such as Firefox before 126,
-where the shell applies no zoom and offers no slider). The region is not zoomed and your board is, so a board that fits
+`useBoardSize()` also returns `zoom`, a read-only ref holding the player's
+magnifier, the controls-menu slider (1 outside GameShell). The region is not
+zoomed and your board is, so a board that fits
 more of itself to the region, such as its height, divides region pixels by
 `zoom` to get its own. Watch `zoom` to re-fit: a zoom change does not resize
 anything a `ResizeObserver` can see.
@@ -1338,12 +1331,11 @@ Pick the model that matches your board:
 
 | Board type | Example | Sizing |
 |---|---|---|
-| Fixed intrinsic size | grid, hex map | Nothing — max-content + auto-zoom fits it (both axes) |
-| Content-driven width | card hands, wrapping rows | `useBoardSize()` on the board root (width-fit only; grows by scrolling) |
+| Sized from the region | grid, hex map | Cells in `cqw`, clamped between `--bsg-tap-min` and their natural size; the region scrolls past that |
+| Content-driven width | card hands, wrapping rows | `useBoardSize()` on the board root (grows by scrolling) |
 
-Do not use `useBoardSize()` on a fixed-intrinsic board: pinning it to the
-region accomplishes nothing (its natural size doesn't change), and the
-startup zoom-fit already handles it.
+Do not use `useBoardSize()` on a board whose size does not follow its
+content: pinning it to the region accomplishes nothing.
 
 ### The Action Panel floats over the board
 
@@ -1353,15 +1345,9 @@ it. Rows beyond the first float over the bottom of the board. While the player
 has the panel put down to its thin line, the reserve is only that line, so the
 board reaches it; a game that passes `action-bar-starts-collapsed` starts that
 way. The reserve changes only on the player's own toggle, never on a pick, so
-your board's size never depends on the panel's live height: the startup fit is
-a pure function of the region box and your board's natural size, and the panel
-showing, growing or shrinking never moves or refits the board. Putting the
-panel down or bringing it back up refits it once, as resizing the window does.
-A question that brings the panel up by itself while it is put down floats over
-the board and refits nothing. For one game state on one viewport, two loads produce identical geometry. (It did not used to be: the fit once reserved the panel's
-*measured* height, frozen at whatever it happened to be ~300ms after the board
-stopped changing, so the same card measured 220px on one load and 202px on the
-next.)
+your board never depends on the panel's live height: the panel showing,
+growing or shrinking never moves the board. A question that brings the panel
+up by itself while it is put down floats over the board.
 
 What follows for a custom board:
 

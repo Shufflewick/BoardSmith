@@ -43,7 +43,7 @@ describe('ControlsMenu sound', () => {
   });
 
   it('sets the volume from the slider, remembered for the next visit', async () => {
-    const wrapper = await openMenu({ play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false } });
+    const wrapper = await openMenu({ play: { autoEndTurn: false, zoom: 1, canUndo: false } });
     const slider = volumeSlider();
     expect(slider.value).toBe('0.5');
     expect(slider.getAttribute('aria-valuetext')).toBe('50%');

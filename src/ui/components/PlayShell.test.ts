@@ -30,10 +30,10 @@ import { ref, computed } from 'vue';
 
 class PanelResizeObserver {
   static instances: PanelResizeObserver[] = [];
-  callback: () => void;
+  callback: (entries: Array<Partial<ResizeObserverEntry>>) => void;
   observed?: Element;
   disconnect = vi.fn();
-  constructor(callback: () => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
+  constructor(callback: (entries: Array<Partial<ResizeObserverEntry>>) => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
   observe(el: Element) { this.observed = el; }
 }
 beforeEach(() => { PanelResizeObserver.instances = []; vi.stubGlobal('ResizeObserver', PanelResizeObserver); });
@@ -97,6 +97,21 @@ describe('the layout', () => {
     expect(zoom()).toBe('1.27');
   });
 
+  it('magnifies the board by a transform, in a frame the size of the magnified board, so the region scrolls to all of it (#1608)', async () => {
+    const wrapper = mountShell({ zoomLevel: 2 });
+    await nextTick();
+    const container = wrapper.get('.game-shell__zoom-container').element as HTMLElement;
+    const frame = wrapper.get('.game-shell__zoom-frame').element as HTMLElement;
+    expect(container.parentElement).toBe(frame);
+    const observer = PanelResizeObserver.instances.find((o) => o.observed === container)!;
+    // The board's layout size, which the transform leaves as it was; a cqw-sized board is rarely a whole pixel.
+    observer.callback([{ contentRect: { width: 300.25, height: 200.5 } as DOMRectReadOnly }]);
+    await nextTick();
+    expect([frame.style.width, frame.style.height]).toEqual(['600.5px', '401px']);
+    await wrapper.setProps({ zoomLevel: 1 });
+    expect([frame.style.width, frame.style.height], 'at 100% the frame is the board\'s own size').toEqual(['', '']);
+  });
+
   it('keeps the modal host outside the board scroller and zoom container', () => {
     const wrapper = mountShell();
     const modal = wrapper.get('#bs-game-modal').element;
@@ -112,13 +127,13 @@ describe('the layout', () => {
     const observer = PanelResizeObserver.instances.find(o => o.observed === bar);
     expect(observer).toBeDefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:260} as DOMRect);
-    observer!.callback(); await nextTick();
+    observer!.callback([]); await nextTick();
     // The clearance is set where both the modal host and the game-over scrim inherit it (#1346).
     const viewport = wrapper.get('.board-viewport');
     expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 260px');
     expect(wrapper.get('[data-testid="bs-board"]').attributes('style')).toBeUndefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:80} as DOMRect);
-    observer!.callback(); await nextTick();
+    observer!.callback([]); await nextTick();
     expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 80px');
     wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });

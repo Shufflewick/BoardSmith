@@ -585,11 +585,6 @@
         "count": 1
       }
     },
-    "src/ui/composables/useAutoZoom.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/composables/useBoardActionBridge.ts": {
       "complexity_high": {
         "count": 1

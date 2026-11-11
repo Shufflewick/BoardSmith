@@ -5,7 +5,7 @@
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
-import { SETTLE_MS } from '../composables/useAutoZoom.js';
+import { SETTLE_MS } from './board-settle.js';
 import { leaveIframe, mountTableWithDebugPanel } from './GameShell.platform-mount.test-helper.js';
 
 const Board = defineComponent({ setup: () => () => h('div', 'board') });

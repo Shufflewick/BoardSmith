@@ -165,6 +165,29 @@ export async function onFreshPage(browser, hostUrl, contextOptions, ready, body)
 }
 
 /**
+ * Run `body(page, size)` on a fresh phone page, touch and reduced motion, at
+ * 390x844 and then 844x390 (#1604). Later pages reclaim the first page's seat
+ * with the same client id; a new one would be a second, unseated player.
+ * Returns that seat's storage state, for a later page to reclaim it too.
+ *
+ * @param browser a launched browser, from `launch()`
+ * @param hostUrl the dev host's URL
+ * @param ready   awaited with the page once it has loaded
+ * @param body    called with `(page, size)`, `size` being e.g. `'390x844'`
+ */
+export async function onEachPhone(browser, hostUrl, ready, body) {
+  let player;
+  for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
+    const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
+    await onFreshPage(browser, hostUrl, phone, ready, async (page) => {
+      player ??= await page.context().storageState();
+      await body(page, `${viewport.width}x${viewport.height}`);
+    });
+  }
+  return player;
+}
+
+/**
  * WHERE THE ACTION BAR SITS AGAINST ITS OWN CAP (#444, #1514).
  *
  * The bar floats over the board and is capped at `--bsg-panel-max` (two rows),
@@ -307,6 +330,33 @@ export async function waitUntil(read, accept, timeoutMs = 20_000) {
     seen = await read();
   }
   return seen;
+}
+
+/**
+ * HOW BIG A FINGER'S TARGETS ARE, AND WHAT SCROLLS (#1608).
+ *
+ * For each of `targets` (`{ name: { selector } }`, looked up in the game frame):
+ * how many there are and the smallest and largest shorter side of their boxes,
+ * on screen, so a zoom or transform counts. With how far the board region and
+ * the page scroll each way. A measurement, not an assertion.
+ *
+ * @param frame   the game frame
+ * @param targets each named target's selector
+ */
+export function tapSizes(frame, targets) {
+  return frame.locator('body').evaluate((body, targets) => {
+    const doc = body.ownerDocument;
+    const scrolls = (el) => ({ down: el.scrollHeight - el.clientHeight, sideways: el.scrollWidth - el.clientWidth });
+    const measured = {};
+    for (const [name, { selector }] of Object.entries(targets)) {
+      const sides = [...doc.querySelectorAll(selector)].map((el) => {
+        const box = el.getBoundingClientRect();
+        return Math.min(box.width, box.height);
+      });
+      measured[name] = { count: sides.length, smallest: Math.min(...sides), largest: Math.max(...sides) };
+    }
+    return { targets: measured, region: scrolls(doc.querySelector('.boardregion')), page: scrolls(doc.scrollingElement) };
+  }, targets);
 }
 
 /**

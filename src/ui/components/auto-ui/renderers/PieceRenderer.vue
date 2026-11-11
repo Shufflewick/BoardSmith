@@ -200,8 +200,10 @@ watch(effectivePieceImage, () => {
  * Carry-forward #2: single shadow here — never on inner .piece-token or image element.
  */
 .piece {
-  width: 40px;
-  height: 40px;
+  /* At least the tap floor; under it only inside a cell smaller than 40px, which is itself at least the floor (issue 1608). */
+  --piece: max(max(24px, var(--bsg-tap-min)), min(40px, var(--cell, 40px)));
+  width: var(--piece);
+  height: var(--piece);
   background: transparent;
   border-radius: 50%;
   display: flex;

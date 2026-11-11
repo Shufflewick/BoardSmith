@@ -87,7 +87,6 @@ const chromeElements = computed(() =>
     "board"
     "hand";
   height: 100%;
-  overflow: hidden;
 }
 
 /* Chrome slot: peripheral zones (decks, scores) — auto height, collapses when empty */
@@ -97,19 +96,25 @@ const chromeElements = computed(() =>
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 
-/* Board slot: DOMINANT area — the focal grid/hex board.
-   The board renders at its natural size; this slot scrolls (overflow:auto) when the
-   board is larger than the available space rather than fitting it to the container.
-   min-height:0 lets the slot shrink within the grid track. */
+/* Board slot: DOMINANT area — the focal grid/hex board, its cells sized from the
+   region's width. A second board wraps below at the region's width; a board that
+   cannot fit at the tap floor widens the slot, and the board region scrolls to it.
+   `safe` keeps a board's left edge reachable (issue 1608). */
 .grid-board-template__board {
   grid-area: board;
   min-height: 0;
-  overflow: auto;
+  max-width: 100cqw;
+  min-width: min-content;
   display: flex;
-  align-items: stretch;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: safe center;
 }
 
 /* Hand strip: docked at bottom — fluid clamp replaces fixed 30vh viewport unit */
@@ -120,5 +125,8 @@ const chromeElements = computed(() =>
   display: flex;
   gap: 8px;
   padding: 8px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 </style>

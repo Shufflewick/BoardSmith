@@ -3,8 +3,8 @@
  * GameOverlay - Modal overlay constrained to the game content area
  *
  * This overlay renders in-place (no Teleport) and uses `position: fixed`.
- * When rendered inside GameShell's zoom-container (which has `contain: layout`),
- * the fixed positioning is trapped within that container. This keeps the
+ * When rendered inside GameShell's zoom-container (whose transform makes it the
+ * containing block for `position: fixed`), the fixed positioning is trapped within that container. This keeps the
  * header and ActionPanel accessible while the overlay is shown.
  *
  * ## Usage
@@ -39,7 +39,7 @@
  *
  * ## Important
  *
- * - Must be rendered inside a container with `contain: layout` (like GameShell)
+ * - Must be rendered inside a container that contains `position: fixed`, as GameShell's zoom container does
  * - Use `@click.stop` on content to prevent backdrop clicks from closing
  * - The `@click` event fires when clicking the backdrop (outside content)
  * - The `@closed` event fires once the fade-out has finished after `active` turns false
@@ -99,7 +99,7 @@ const backdropStyle = computed(() => ({
 <style scoped>
 .game-overlay {
   /*
-   * Renders in-place (no Teleport). When inside a container with `contain: layout`,
+   * Renders in-place (no Teleport). When inside a container that contains fixed boxes (GameShell's),
    * position: fixed is trapped within that container instead of covering the viewport.
    * This keeps header and ActionPanel accessible.
    */

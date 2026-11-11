@@ -895,7 +895,7 @@ Overlay for card flight animations between positions. Teleports to body to rende
 
 Modal overlay that stays **constrained within the game content area**, keeping the players panel and ActionPanel accessible. Unlike FlyingCardsOverlay, this does NOT teleport to body.
 
-**How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (which has `contain: layout`), the fixed positioning is trapped within that container.
+**How it works:** GameOverlay uses `position: fixed` but renders in-place (no Teleport). When inside GameShell's zoom-container (whose transform makes it the containing block for `position: fixed`), the fixed positioning is trapped within that container.
 
 <!-- typecheck: board -->
 ```vue
@@ -1902,6 +1902,7 @@ Common tokens (the full set lives in `src/ui/theme.ts`, the single source of tru
 | `--bsg-seat-1` … `--bsg-seat-6` | Per-seat player colors |
 | `--bsg-cell`, `--bsg-cell-line` | Board cell fill and gridline colors |
 | `--bsg-cell-size`, `--bsg-card-w` | Natural size of a grid cell edge and of a card's width (lengths, not colors) |
+| `--bsg-tap-min` | The tap floor the auto-UI never sizes a cell, piece or card below (44px; lower it for a dense board, never under 24px) |
 | `--bsg-font`, `--bsg-display`, `--bsg-mono` | Font stacks |
 | `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
 | `--bsg-host-corner-width`, `--bsg-host-corner-height` | The frame's top-right corner left to the host page (below) |

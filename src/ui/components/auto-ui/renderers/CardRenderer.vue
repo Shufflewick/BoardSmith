@@ -236,7 +236,8 @@ function handlePointerdown(event: PointerEvent) {
 <style scoped>
 /* Card container — natural card token (IA-05) */
 .card-container {
-  --card-w: var(--bsg-card-w);
+  /* A fifth of the board region's width, between the tap floor and the natural width (issue 1608). */
+  --card-w: clamp(max(24px, var(--bsg-tap-min)), 20cqw, var(--bsg-card-w));
   --card-h: calc(var(--card-w) * 1.4);
   display: inline-block;
   transition: transform var(--bsg-dur-base) var(--bsg-ease);

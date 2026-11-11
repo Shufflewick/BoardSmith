@@ -30,7 +30,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/touch-phone-browser.mjs`.
  */
-import { assert, check, onFreshPage, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, onEachPhone, onFreshPage, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const ELEMENTS = `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Grid, GridCell, Piece, Space } from 'boardsmith';
 
@@ -253,6 +253,8 @@ function recordPageListeners() {
 
 /** Hold a finger on `locator` until `until` is true, then lift it. Chromium only: WebKit has no way to hold a touch. */
 async function longPress(page, locator, until) {
+  // Clear of the floating action bar, which covers the bottom of the board region.
+  await locator.evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
   const box = await locator.boundingBox();
   const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   const cdp = await page.context().newCDPSession(page);
@@ -274,89 +276,84 @@ await runBrowserRegression(
   async ({ launch, engine, hostUrl }) => {
     const browser = await launch();
     try {
-      let player;
-      for (const viewport of [{ width: 390, height: 844 }, { width: 844, height: 390 }]) {
-        const size = `${viewport.width}x${viewport.height}`;
-        const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
-        await onFreshPage(browser, hostUrl, phone, myPawnReady, async (page) => {
-          // Later pages reclaim this seat with the same client id; a new one would be a second, unseated player.
-          player ??= await page.context().storageState();
-          const frame = gameFrame(page);
+      const player = await onEachPhone(browser, hostUrl, myPawnReady, async (page, size) => {
+        const frame = gameFrame(page);
 
-          await check(`${size}: the shell, the action bar, the hand and the board all show, and the page does not scroll sideways`, async () => {
-            const measure = () => frame.locator('body').evaluate((body, hand) => {
-              const doc = body.ownerDocument;
-              const shown = (selector) => {
-                const box = doc.querySelector(selector)?.getBoundingClientRect();
-                return !!box && box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
-              };
-              return {
-                shell: shown('.game-shell'),
-                bar: shown('[data-testid="bs-actionbar"]'),
-                hand: shown(`${hand} .hand-cards`),
-                cards: doc.querySelectorAll(`${hand} .hand-card`).length,
-                board: shown('.board-grid'),
-                squares: doc.querySelectorAll('.grid-cell').length,
-                sideways: doc.scrollingElement.scrollWidth - innerWidth,
-              };
-            }, MY_HAND);
-            const seen = await waitUntil(measure, (now) => now.shell && now.bar && now.hand && now.cards === 5 && now.board && now.squares === 16 && now.sideways <= 0);
-            assert(seen.shell && seen.bar, `the shell or the action bar is not on screen: ${JSON.stringify(seen)}`);
-            assert(seen.hand && seen.cards === 5, `my hand is not on screen with its five cards: ${JSON.stringify(seen)}`);
-            assert(seen.board && seen.squares === 16, `the board is not on screen with its 16 squares: ${JSON.stringify(seen)}`);
-            assert(seen.sideways <= 0, `the page scrolls ${seen.sideways}px sideways`);
-          });
-
-          await check(`${size}: a tapped card shows no hover style`, async () => {
-            const card = frame.locator(`${MY_HAND} .hand-card`).last();
-            // Without transitions the hover style shows the moment the tap lands, so one read after it is the answer.
-            await frame.locator('head').evaluate((head) => head.appendChild(head.ownerDocument.createElement('style')).append('* { transition: none !important; }'));
-            const look = () => card.evaluate((el) => ({ transform: getComputedStyle(el).transform, zIndex: getComputedStyle(el).zIndex, hover: el.matches(':hover') }));
-            const before = await look();
-            await card.tap();
-            const after = await look();
-            assert(
-              after.transform === before.transform && after.zIndex === before.zIndex,
-              `the tapped card still shows its hover style after the tap: transform ${before.transform} became ${after.transform} and z-index ${before.zIndex} became ${after.zIndex}, with :hover ${after.hover}`,
-            );
-          });
-
-          await check(`${size}: the squares show their coordinates without a hover`, async () => {
-            const labels = await frame.locator('.cell-notation').evaluateAll((all) => ({ all: all.length, hidden: all.filter((label) => getComputedStyle(label).opacity !== '1').length }));
-            assert(labels.all === 16, `the board shows ${labels.all} square coordinates, not one on each of its 16 squares`);
-            assert(labels.hidden === 0, `${labels.hidden} square coordinates are hidden until hovered, which a finger cannot do`);
-          });
-
-          await check(`${size}: dragging my pawn onto a square by touch marks the drop targets and the square under my finger, and moves it there`, async () => {
-            await dragsAndDrops(frame, (move, whileOver) => touchDrag(page, engine, frame, move, whileOver));
-          });
-
-          await check(`${size}: a first tap on a pawn's button in the action bar highlights the pawn, and a second tap chooses it`, async () => {
-            const { pawn } = await aMove(frame);
-            const button = frame.locator('.element-btn', { hasText: pawn });
-            const state = () => frame.locator('body').evaluate((body, pawn) => ({
-              highlighted: !!body.querySelector(`.piece[data-bs-el-name="${pawn}"].is-board-highlighted`),
-              prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
-            }), pawn);
-            await button.tap();
-            const previewed = await waitUntil(state, (now) => now.highlighted);
-            assert(previewed.highlighted && previewed.prompt === 'Select your pawn', `the first tap did not just highlight ${pawn}: ${JSON.stringify(previewed)}`);
-            await button.tap();
-            const chosen = await waitUntil(state, (now) => now.prompt === 'Select an empty square');
-            assert(chosen.prompt === 'Select an empty square', `the second tap did not choose ${pawn}: ${JSON.stringify(chosen)}`);
-            await frame.locator('.cancel-btn').tap();
-            await waitUntil(state, (now) => now.prompt === 'Select your pawn');
-          });
-
-          await check(`${size}: tapping my pawn, then an empty square, moves it`, async () => {
-            const { pawn, to } = await aMove(frame);
-            await pawnNamed(frame, pawn).tap();
-            await cellAt(frame, to).tap();
-            const now = await waitUntil(() => squareOf(frame, pawn), (at) => at === to, 10_000);
-            assert(now === to, `my pawn is on square ${now}, not the tapped square ${to}`);
-          });
+        await check(`${size}: the shell, the action bar, the hand and the board all show, the hand once the board region scrolls to it, and the page does not scroll sideways`, async () => {
+          const measure = () => frame.locator('body').evaluate((body, hand) => {
+            const doc = body.ownerDocument;
+            // The board is never shrunk to fit, so on a short screen the hand is below it (#1608).
+            doc.querySelector(`${hand} .hand-cards`)?.scrollIntoView({ block: 'nearest' });
+            const shown = (selector) => {
+              const box = doc.querySelector(selector)?.getBoundingClientRect();
+              return !!box && box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
+            };
+            return {
+              shell: shown('.game-shell'),
+              bar: shown('[data-testid="bs-actionbar"]'),
+              hand: shown(`${hand} .hand-cards`),
+              cards: doc.querySelectorAll(`${hand} .hand-card`).length,
+              board: shown('.board-grid'),
+              squares: doc.querySelectorAll('.grid-cell').length,
+              sideways: doc.scrollingElement.scrollWidth - innerWidth,
+            };
+          }, MY_HAND);
+          const seen = await waitUntil(measure, (now) => now.shell && now.bar && now.hand && now.cards === 5 && now.board && now.squares === 16 && now.sideways <= 0);
+          assert(seen.shell && seen.bar, `the shell or the action bar is not on screen: ${JSON.stringify(seen)}`);
+          assert(seen.hand && seen.cards === 5, `my hand is not on screen with its five cards: ${JSON.stringify(seen)}`);
+          assert(seen.board && seen.squares === 16, `the board is not on screen with its 16 squares: ${JSON.stringify(seen)}`);
+          assert(seen.sideways <= 0, `the page scrolls ${seen.sideways}px sideways`);
         });
-      }
+
+        await check(`${size}: a tapped card shows no hover style`, async () => {
+          const card = frame.locator(`${MY_HAND} .hand-card`).last();
+          // Without transitions the hover style shows the moment the tap lands, so one read after it is the answer.
+          await frame.locator('head').evaluate((head) => head.appendChild(head.ownerDocument.createElement('style')).append('* { transition: none !important; }'));
+          const look = () => card.evaluate((el) => ({ transform: getComputedStyle(el).transform, zIndex: getComputedStyle(el).zIndex, hover: el.matches(':hover') }));
+          const before = await look();
+          await card.tap();
+          const after = await look();
+          assert(
+            after.transform === before.transform && after.zIndex === before.zIndex,
+            `the tapped card still shows its hover style after the tap: transform ${before.transform} became ${after.transform} and z-index ${before.zIndex} became ${after.zIndex}, with :hover ${after.hover}`,
+          );
+        });
+
+        await check(`${size}: the squares show their coordinates without a hover`, async () => {
+          const labels = await frame.locator('.cell-notation').evaluateAll((all) => ({ all: all.length, hidden: all.filter((label) => getComputedStyle(label).opacity !== '1').length }));
+          assert(labels.all === 16, `the board shows ${labels.all} square coordinates, not one on each of its 16 squares`);
+          assert(labels.hidden === 0, `${labels.hidden} square coordinates are hidden until hovered, which a finger cannot do`);
+        });
+
+        await check(`${size}: dragging my pawn onto a square by touch marks the drop targets and the square under my finger, and moves it there`, async () => {
+          await dragsAndDrops(frame, (move, whileOver) => touchDrag(page, engine, frame, move, whileOver));
+        });
+
+        await check(`${size}: a first tap on a pawn's button in the action bar highlights the pawn, and a second tap chooses it`, async () => {
+          const { pawn } = await aMove(frame);
+          const button = frame.locator('.element-btn', { hasText: pawn });
+          const state = () => frame.locator('body').evaluate((body, pawn) => ({
+            highlighted: !!body.querySelector(`.piece[data-bs-el-name="${pawn}"].is-board-highlighted`),
+            prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
+          }), pawn);
+          await button.tap();
+          const previewed = await waitUntil(state, (now) => now.highlighted);
+          assert(previewed.highlighted && previewed.prompt === 'Select your pawn', `the first tap did not just highlight ${pawn}: ${JSON.stringify(previewed)}`);
+          await button.tap();
+          const chosen = await waitUntil(state, (now) => now.prompt === 'Select an empty square');
+          assert(chosen.prompt === 'Select an empty square', `the second tap did not choose ${pawn}: ${JSON.stringify(chosen)}`);
+          await frame.locator('.cancel-btn').tap();
+          await waitUntil(state, (now) => now.prompt === 'Select your pawn');
+        });
+
+        await check(`${size}: tapping my pawn, then an empty square, moves it`, async () => {
+          const { pawn, to } = await aMove(frame);
+          await pawnNamed(frame, pawn).tap();
+          await cellAt(frame, to).tap();
+          const now = await waitUntil(() => squareOf(frame, pawn), (at) => at === to, 10_000);
+          assert(now === to, `my pawn is on square ${now}, not the tapped square ${to}`);
+        });
+      });
       await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
         // The listeners are added as the game loads, so record them from a reload that keeps this seat.
         await page.addInitScript(recordPageListeners);
@@ -407,6 +404,10 @@ await runBrowserRegression(
       });
       await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
         const frame = gameFrame(page);
+        await check('1440x900: the squares keep their 64px (#1608)', async () => {
+          const sides = await frame.locator('.grid-cell').evaluateAll((cells) => cells.map((cell) => cell.getBoundingClientRect().width));
+          assert(sides.length === 16 && sides.every((side) => Math.abs(side - 64) < 0.5), `the squares are ${JSON.stringify(sides)}px wide, not 64px`);
+        });
         await check('1440x900: dragging my pawn onto a square by mouse marks the drop targets and the square under the pointer, and moves it there', async () => {
           await dragsAndDrops(frame, (move, whileOver) => mouseDrag(page, frame, move, whileOver));
         });

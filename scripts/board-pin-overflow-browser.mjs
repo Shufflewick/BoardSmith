@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * A PINNED BOARD NEVER OVERFLOWS ITS REGION SIDEWAYS WHILE THE REGION NARROWS (#1336),
- * AND ITS WIDTH AND ZOOM DO NOT DEPEND ON THE REGION'S VERTICAL SCROLLBAR (#1343).
+ * AND ITS WIDTH DOES NOT DEPEND ON THE REGION'S VERTICAL SCROLLBAR (#1343).
  *
  * `useBoardSize` pins a board to `.boardregion`'s width, and the pin is
  * re-measured by a ResizeObserver, which runs after layout. When the region
@@ -13,10 +13,8 @@
  * In a browser without `scrollbar-gutter` (Safari before 18.2) and with classic
  * scrollbars, the region loses the scrollbar's width while its vertical
  * scrollbar shows. The pin followed that width, so it changed as the scrollbar
- * came and went, and the zoom fit read a pin from the other scrollbar state, at
- * about 0.98 or 1.02. That zoom moved the board across the region's overflow
- * point, so the pin and the zoom flipped every frame. Both now measure the
- * region with its vertical scrollbar showing, whether or not it shows.
+ * came and went. It now measures the region with its vertical scrollbar
+ * showing, whether or not it shows.
  *
  * Without a gutter, Chromium and WebKit also resolve `100cqw` as if the
  * region's vertical scrollbar were not there, so the #1336 cap was a scrollbar
@@ -67,8 +65,8 @@ export default defineGameUIs({ Pinned: defaultUI(Pinned) });
  * With the region's gutter off, make the board just shorter, just taller, then
  * just shorter than the region's room for it, and last give it an aspect ratio
  * that makes it taller than that room at the region's full width and shorter at
- * that width less a scrollbar. Ten frames after each, read the pin, the zoom,
- * and whether the region scrolls either way. Puts the gutter and the board back.
+ * that width less a scrollbar. Ten frames after each, read the pin and whether
+ * the region scrolls either way. Puts the gutter and the board back.
  */
 function crossTheOverflowPoint(frame) {
   return frame.locator('body').evaluate(async (body) => {
@@ -76,7 +74,6 @@ function crossTheOverflowPoint(frame) {
     const win = doc.defaultView;
     const region = doc.querySelector('.boardregion');
     const board = doc.querySelector('.pinned-board');
-    const zoomed = doc.querySelector('.game-shell__zoom-container');
     const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
     const noGutter = doc.createElement('style');
     noGutter.textContent = '.boardregion { scrollbar-gutter: auto !important; }';
@@ -105,7 +102,6 @@ function crossTheOverflowPoint(frame) {
         await nextFrame();
         frames.push({
           pin: board.style.width,
-          zoom: win.getComputedStyle(zoomed).zoom,
           down: region.scrollHeight > region.clientHeight,
           sideways: region.scrollWidth > region.clientWidth,
         });
@@ -166,11 +162,9 @@ function narrowTheRegion(frame, scrolling = false) {
 }
 
 /**
- * Narrow the sidebar in three steps, one a frame, each before the zoom's queued
- * re-fit runs, so that re-fit reads the wider region against the last pin, as
- * when the sidebar's width transition or a host frame widens the region (#1357).
- * The last step is under half a percent of the region. Read the zoom every
- * frame, and ten frames later whether the region scrolls sideways.
+ * Narrow the sidebar in three steps, one a frame, so the region widens with no
+ * resize event (#1357); the last step is under half a percent of the region.
+ * Ten frames later, read whether the region scrolls sideways.
  */
 function widenTheRegionInSteps(frame) {
   return frame.locator('body').evaluate(async (body) => {
@@ -178,54 +172,19 @@ function widenTheRegionInSteps(frame) {
     const win = doc.defaultView;
     const region = doc.querySelector('.boardregion');
     const sidebar = doc.querySelector('.sidebar');
-    const zoomed = doc.querySelector('.game-shell__zoom-container');
     const nextFrame = () => new Promise((settle) => win.requestAnimationFrame(settle));
     sidebar.style.transition = 'none';
     const start = sidebar.getBoundingClientRect().width;
     const regionBefore = region.clientWidth;
-    const zooms = [];
     for (const narrowedBy of [50, 60, 62]) {
       await nextFrame();
-      zooms.push(win.getComputedStyle(zoomed).zoom);
       sidebar.style.width = `${start - narrowedBy}px`;
     }
-    for (let i = 0; i < 10; i++) {
-      await nextFrame();
-      zooms.push(win.getComputedStyle(zoomed).zoom);
-    }
+    for (let i = 0; i < 10; i++) await nextFrame();
     return {
       widenedBy: region.clientWidth - regionBefore,
-      zooms: [...new Set(zooms)],
       sideways: region.scrollWidth > region.clientWidth,
     };
-  });
-}
-
-/**
- * Make the board one pixel wider than its pin and the region a pixel narrower,
- * so the fit drops a hair under 1; then clear the overflow and widen the region
- * back (#1374). Ten frames after each, read the zoom.
- */
-function overflowBrieflyThenClear(frame) {
-  return frame.locator('body').evaluate(async (body) => {
-    const doc = body.ownerDocument;
-    const win = doc.defaultView;
-    const sidebar = doc.querySelector('.sidebar');
-    const board = doc.querySelector('.pinned-board');
-    const zoomed = doc.querySelector('.game-shell__zoom-container');
-    const tenFrames = async () => {
-      for (let i = 0; i < 10; i++) await new Promise((settle) => win.requestAnimationFrame(settle));
-    };
-    sidebar.style.transition = 'none';
-    const start = sidebar.getBoundingClientRect().width;
-    board.style.minWidth = `${board.getBoundingClientRect().width + 1}px`;
-    sidebar.style.width = `${start + 1}px`;
-    await tenFrames();
-    const during = win.getComputedStyle(zoomed).zoom;
-    board.style.minWidth = '';
-    sidebar.style.width = `${start}px`;
-    await tenFrames();
-    return { during, after: win.getComputedStyle(zoomed).zoom };
   });
 }
 
@@ -256,16 +215,12 @@ await runBrowserRegression(
       const crossing = await crossTheOverflowPoint(frame);
       const frames = crossing.seen.flatMap((step) => step.frames);
       const pins = [...new Set(frames.map((f) => f.pin))];
-      const zooms = [...new Set(frames.map((f) => f.zoom))];
       await check('without a gutter, the region scrolls down only while the board is taller than its room', async () => {
         const shows = crossing.seen.slice(0, 3).map((step) => step.frames.at(-1).down);
         assert(shows.join() === 'false,true,false', `the region scrolled down: ${shows.join(', ')}`);
       });
       await check('without a gutter, the pin stays the same whether or not the vertical scrollbar shows', async () => {
         assert(pins.length === 1, `the pin was ${pins.join(', then ')}`);
-      });
-      await check('without a gutter, the zoom stays at 1, even for a board whose height follows its width', async () => {
-        assert(zooms.length === 1 && zooms[0] === '1', `the zoom was ${zooms.join(', then ')}`);
       });
       await check('without a gutter, the region never scrolls sideways', async () => {
         const at = frames.findIndex((f) => f.sideways);
@@ -296,16 +251,9 @@ await runBrowserRegression(
         assert(Math.abs(settled.board - settled.available) <= 1, `the board is ${settled.board}px wide in ${settled.available}px of region`);
       });
       const widened = await widenTheRegionInSteps(frame);
-      await check('while the region widens in steps, the zoom stays at 1 and the region does not scroll sideways', async () => {
-        assert(widened.widenedBy >= 60 && widened.zooms.join() === '1' && !widened.sideways,
-          `the region widened by ${widened.widenedBy}px and the zoom was ${widened.zooms.join(', then ')}${widened.sideways ? ', and the region scrolls sideways' : ''}`);
-      });
-
-      const overflow = await overflowBrieflyThenClear(frame);
-      await check('a pinned board fitted a hair under 1 by a brief sideways overflow returns to 1 once it clears', async () => {
-        const during = Number(overflow.during);
-        assert(during < 1 && during > 0.995 && overflow.after === '1',
-          `the zoom was ${overflow.during} during the overflow and ${overflow.after} after it cleared`);
+      await check('while the region widens in steps, the region does not scroll sideways', async () => {
+        assert(widened.widenedBy >= 60 && !widened.sideways,
+          `the region widened by ${widened.widenedBy}px${widened.sideways ? ', and the region scrolls sideways' : ''}`);
       });
 
       await frame.getByRole('button', { name: 'Game controls' }).click();

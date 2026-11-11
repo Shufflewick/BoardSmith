@@ -71,6 +71,9 @@ const peripheralElements = computed(() =>
   flex-wrap: wrap;
   gap: 16px;
   padding: 16px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 
 /* Hand zone: DOMINANT — hands fill remaining vertical space */
@@ -80,6 +83,9 @@ const peripheralElements = computed(() =>
   flex-wrap: wrap;
   gap: 16px;
   padding: 16px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
   align-items: center;
   justify-content: center;
   overflow: auto;

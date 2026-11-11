@@ -35,7 +35,7 @@ vi.stubGlobal('ResizeObserver', vi.fn(() => ({
 function mountMenu(props: Record<string, unknown> = {}) {
   return mount(ControlsMenu, {
     props: {
-      play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+      play: { autoEndTurn: false, zoom: 1, canUndo: false },
       hasTutorial: true,
       ...props,
     },

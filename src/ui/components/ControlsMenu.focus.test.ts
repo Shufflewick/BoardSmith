@@ -36,7 +36,7 @@ describe('ControlsMenu focus', () => {
   });
 
   describe('arrow keys (#1458)', () => {
-    const ITEMS = ['Auto end turn', 'Undo last action', 'Fit', 'Deal', 'Shuffle', 'Reduce motion', 'Show action help', 'Sound', 'Full', 'Slow'];
+    const ITEMS = ['Auto end turn', 'Undo last action', '100%', 'Deal', 'Shuffle', 'Reduce motion', 'Show action help', 'Sound', 'Full', 'Slow'];
 
     async function openMenu() {
       localStorage.clear();
@@ -45,7 +45,7 @@ describe('ControlsMenu focus', () => {
       });
       const wrapper = mount(ControlsMenu, {
         props: {
-          play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+          play: { autoEndTurn: false, zoom: 1, canUndo: false },
           commands: [{ label: 'Deal', run: () => {} }, { label: 'Shuffle', enabled: false, run: () => {} }],
           preferences,
         },
@@ -123,7 +123,7 @@ describe('ControlsMenu focus', () => {
       const run = vi.fn();
       const wrapper = mount(ControlsMenu, {
         props: {
-          play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+          play: { autoEndTurn: false, zoom: 1, canUndo: false },
           showHint: true,
           hintDisabled: true,
           commands: [{ label: 'Shuffle', enabled: false, run }],

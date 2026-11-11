@@ -207,7 +207,6 @@ useAutoRendererAnimations(animationEvents, { fly });
 .auto-renderer {
   position: relative;
   height: 100%;
-  overflow: hidden;
 }
 
 /* CF-3: null gameView loading state — skeleton + retry */
