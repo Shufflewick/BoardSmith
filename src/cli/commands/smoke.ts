@@ -41,8 +41,8 @@ import { readIfExists } from '../lib/read-if-exists.js';
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
 
-/** The longest the walk may run under Playwright before Playwright ends it. A hang guard. */
-const WALK_LIMIT_MS = 600_000;
+/** The longest Playwright may take to reach the walk, which then sets its own limit from its deals and steps (#1601). */
+const WALK_START_LIMIT_MS = 600_000;
 
 /** The command that installs the browser, as every message names it. */
 const INSTALL_BROWSER = '`boardsmith install-browser`';
@@ -207,8 +207,7 @@ export function playwrightConfig(work: string, baseURL: string): string {
     testDir: work,
     testMatch: 'smoke.spec.mjs',
     outputDir: join(work, 'results'),
-    timeout: WALK_LIMIT_MS,
-    globalTimeout: WALK_LIMIT_MS,
+    timeout: WALK_START_LIMIT_MS,
     workers: 1,
     retries: 0,
     reporter: [['list'], ['json', { outputFile: join(work, 'report.json') }]],

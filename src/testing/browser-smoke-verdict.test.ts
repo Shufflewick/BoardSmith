@@ -24,6 +24,7 @@ import {
   smokeSeeds,
   smokeSummary,
   smokeSteps,
+  smokeWalkLimit,
   smokeWorldSeats,
   type ResolvedMemory,
   type SmokeInputView,
@@ -117,6 +118,28 @@ describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
 
   it.each([0, -1, Number.NaN, 0.5])('refuses %s, which would walk no step and pass any game that loads', (steps) => {
     expect(() => smokeSteps(steps)).toThrow(`\`steps\` in ${SMOKE_SPEC_PATH} takes a positive whole number, got "${steps}".`);
+  });
+});
+
+describe('smokeWalkLimit: the hang guard on a whole walk (#1601)', () => {
+  it('never gives a walk less than the 600 s every walk had before it grew with the walk', () => {
+    expect(smokeWalkLimit(1, 1, undefined)).toBeGreaterThanOrEqual(600_000);
+  });
+
+  it('grows with every deal, every step and every world seat (a table plays one), so a spec that asks for more walking gets the time for it', () => {
+    const one = smokeWalkLimit(1, 60, undefined);
+    expect(smokeWalkLimit(11, 60, undefined) - one).toBe(10 * (smokeWalkLimit(2, 60, undefined) - one));
+    expect(smokeWalkLimit(1, 120, undefined)).toBeGreaterThan(one);
+    expect(smokeWalkLimit(1, 60, [1, 2])).toBeGreaterThan(one);
+    expect(smokeWalkLimit(1, 60, [1, 2, 3, 4]) - one).toBe(3 * (smokeWalkLimit(1, 60, [1, 2]) - one));
+  });
+
+  it("gives MERC's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
+    expect(smokeWalkLimit(11, 300, undefined)).toBeGreaterThan(2 * 2_200_000);
+  });
+
+  it('stops at the longest delay a timer can wait, past which Node fires it at once', () => {
+    expect(smokeWalkLimit(22, 10_000, [1, 2, 3, 4])).toBe(2_147_483_647);
   });
 });
 

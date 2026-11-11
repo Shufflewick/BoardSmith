@@ -205,6 +205,14 @@ describe('playwrightConfig (#464)', () => {
     expect(config.use.actionTimeout).toBe(15_000);
     expect(config.use.navigationTimeout).toBe(90_000);
   });
+
+  it('sets no limit on the whole run, which the walk sets itself from its deals and steps (#1601)', async () => {
+    const tree = tempTree('bs-smoke-config-');
+    await writeFiles(tree, { 'playwright.config.mjs': playwrightConfig(tree, 'http://127.0.0.1:5173') });
+    // Dynamic import: the config module the test just wrote.
+    const { default: config } = (await import(pathToFileURL(join(tree, 'playwright.config.mjs')).href)) as { default: { globalTimeout?: number } };
+    expect(config.globalTimeout).toBeUndefined();
+  });
 });
 
 describe('playwrightChromium', () => {
