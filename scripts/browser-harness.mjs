@@ -246,8 +246,8 @@ const findAttr = (node: Node | undefined, key: string): unknown => {
 
 const results = [];
 
-/** The engine the checks being recorded run in, named in the summary when a script runs in more than one. */
-let engineLabel = '';
+/** The browser the checks being recorded run in, which the summary names. */
+let engineName = 'chromium';
 
 /** Run one named check, recording its outcome rather than throwing. */
 export async function check(name, body) {
@@ -316,7 +316,7 @@ export async function waitUntil(read, accept, timeoutMs = 20_000) {
  */
 export function summarise(what) {
   const failed = results.filter((result) => result.error);
-  console.log(`\n${results.length - failed.length}/${results.length} checks passed${engineLabel} ${what}`);
+  console.log(`\n${results.length - failed.length}/${results.length} checks passed in ${engineName} ${what}`);
   return failed.length === 0 ? 0 : 1;
 }
 
@@ -390,25 +390,33 @@ export async function runBrowserRegression(run, body) {
   if (run.table !== undefined && (table === null || typeof table !== 'object')) {
     throw new Error(`${run.script}: \`table\` is \`true\` or \`{ files: { <path in the project>: <text> } }\`, not ${JSON.stringify(run.table)}.`);
   }
-  const engines = run.engines ?? ['chromium'];
-  const unknown = engines.filter((engine) => engine !== 'chromium' && engine !== 'webkit');
-  if (engines.length === 0 || unknown.length > 0) {
-    throw new Error(`${run.script}: \`engines\` lists 'chromium' and/or 'webkit', not ${JSON.stringify(run.engines)}.`);
-  }
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
-  const launchers = {};
-  for (const engine of engines) {
-    launchers[engine] = engine === 'chromium' ? launchChromium.bind(null, await loadChromium()) : launchWebkit.bind(null, await loadWebkit(run.script));
-  }
   let code = 0;
-  for (const engine of engines) {
+  for (const [engine, launch] of Object.entries(await launchersFor(run))) {
     results.length = 0;
-    engineLabel = engines.length > 1 ? ` in ${engine}` : '';
-    if (engines.length > 1) console.log(`\n${engine}:`);
-    const drive = ({ hostUrl, fixture }) => body({ launch: launchers[engine], engine, hostUrl, fixture });
+    engineName = engine;
+    console.log(`\n${engine}:`);
+    const drive = ({ hostUrl, fixture }) => body({ launch, engine, hostUrl, fixture });
     code = Math.max(code, await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
   }
   process.exit(code);
+}
+
+/** How each browser a script may name is found and launched. */
+const ENGINES = {
+  chromium: async () => launchChromium.bind(null, await loadChromium()),
+  webkit: async (script) => launchWebkit.bind(null, await loadWebkit(script)),
+};
+
+/** A launch for each browser `run.engines` names, in order (Chromium when it names none). */
+async function launchersFor(run) {
+  const engines = run.engines ?? ['chromium'];
+  if (engines.length === 0 || engines.some((engine) => !Object.hasOwn(ENGINES, engine))) {
+    throw new Error(`${run.script}: \`engines\` lists 'chromium' and/or 'webkit', not ${JSON.stringify(run.engines)}.`);
+  }
+  const launchers = {};
+  for (const engine of engines) launchers[engine] = await ENGINES[engine](run.script);
+  return launchers;
 }
 
 /**

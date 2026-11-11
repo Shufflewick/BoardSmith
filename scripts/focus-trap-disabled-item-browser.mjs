@@ -20,7 +20,7 @@
 import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
 
 // Chromium only until #1618: WebKit fires no focusout when the focused item is removed.
-await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', engines: ['chromium'], table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', table: true, engines: ['chromium'] }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage();
