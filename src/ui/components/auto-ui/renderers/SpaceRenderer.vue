@@ -165,8 +165,10 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   background: var(--bsg-selectable);
 }
 
-.space-container.action-selectable:hover {
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .space-container.action-selectable:hover {
+    background: var(--bsg-selectable);
+  }
 }
 
 .space-container.is-board-highlighted {
@@ -206,8 +208,10 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   cursor: not-allowed;
 }
 
-.space-container.is-disabled:hover {
-  background: var(--bsg-surface);
+@media (hover: hover) {
+  .space-container.is-disabled:hover {
+    background: var(--bsg-surface);
+  }
 }
 
 .space-header {

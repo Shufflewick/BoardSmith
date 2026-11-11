@@ -48,9 +48,11 @@ const emit = defineEmits<{
   transition: all 0.2s;
 }
 
-.done-button:hover:not([aria-disabled='true']) {
-  transform: translateY(-1px);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .done-button:hover:not([aria-disabled='true']) {
+    transform: translateY(-1px);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 .done-button[aria-disabled='true'] {

@@ -97,7 +97,9 @@ const isDev = import.meta.env.DEV;
   text-decoration: underline;
 }
 
-.unsupported-topology-panel__dev-link:hover {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .unsupported-topology-panel__dev-link:hover {
+    color: var(--bsg-ink);
+  }
 }
 </style>

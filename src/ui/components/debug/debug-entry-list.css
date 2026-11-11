@@ -56,8 +56,10 @@
   border-left: 3px solid transparent;
   transition: all 0.2s;
 }
-.history-item:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .history-item:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 .history-item.current {
   border-left-color: var(--bsg-accent-2);

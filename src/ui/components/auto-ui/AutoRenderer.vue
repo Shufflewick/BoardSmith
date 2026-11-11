@@ -276,7 +276,9 @@ useAutoRendererAnimations(animationEvents, { fly });
   cursor: pointer;
 }
 
-.auto-renderer-retry__btn:hover {
-  background: var(--bsg-field);
+@media (hover: hover) {
+  .auto-renderer-retry__btn:hover {
+    background: var(--bsg-field);
+  }
 }
 </style>

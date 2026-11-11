@@ -79,9 +79,11 @@ const { toasts, remove } = useToast();
   line-height: 1;
 }
 
-.toast-dismiss:hover {
-  opacity: 1;
-  background: rgba(255, 255, 255, 0.15);
+@media (hover: hover) {
+  .toast-dismiss:hover {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.15);
+  }
 }
 
 .toast.success {

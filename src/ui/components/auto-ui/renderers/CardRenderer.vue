@@ -253,10 +253,12 @@ function handlePointerdown(event: PointerEvent) {
   box-shadow: var(--bsg-ring);
 }
 
-.card-container.action-selectable:hover {
-  outline-color: var(--bsg-accent-2);
-  outline-width: 3px;
-  transform: translateY(-8px);
+@media (hover: hover) {
+  .card-container.action-selectable:hover {
+    outline-color: var(--bsg-accent-2);
+    outline-width: 3px;
+    transform: translateY(-8px);
+  }
 }
 
 /* Board interaction highlights */
@@ -280,9 +282,11 @@ function handlePointerdown(event: PointerEvent) {
   cursor: not-allowed;
 }
 
-.card-container.is-disabled:hover {
-  transform: none;
-  box-shadow: none;
+@media (hover: hover) {
+  .card-container.is-disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 .card-container.is-draggable {

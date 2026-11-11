@@ -53,6 +53,7 @@ import MenuGroupButton from './MenuGroupButton.vue';
 // this graph -- `verbatimModuleSyntax` erases the import outright.
 import type { HistoryMessage } from '../GameHistory.vue';
 import { vDisabledReason, isDisabled, type DisabledReason } from '../../directives/vDisabledReason.js';
+import { isKeyboardModality, trackInputModality } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // Inject the action controller from GameShell (REQUIRED)
@@ -836,6 +837,7 @@ function dropPutOffRepair(): void {
 }
 
 onMounted(() => {
+  trackInputModality(document);
   window.addEventListener('focus', repairPutOffFocus);
   window.addEventListener('pointerdown', dropPutOffRepair, true);
 });
@@ -1163,17 +1165,17 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
   setSelectionValue(selectionName, choice.value, choice.display);
 }
 
-// Hover handlers for element buttons (highlight on board)
-function handleElementHover(element: EnrichedValidElement) {
+// Hover handlers for element buttons (highlight on board); true when the board has something to show.
+function handleElementHover(element: EnrichedValidElement): boolean {
   const highlightRef = (element.refs ?? []).find(r => r.role === 'highlight')?.ref;
-  if (boardInteraction && highlightRef) {
-    boardInteraction.setHoveredChoice({
-      value: element.id,
-      display: element.display || String(element.id),
-      sourceRefs: [highlightRef],
-      targetRefs: [],
-    });
-  }
+  if (!boardInteraction || !highlightRef) return false;
+  boardInteraction.setHoveredChoice({
+    value: element.id,
+    display: element.display || String(element.id),
+    sourceRefs: [highlightRef],
+    targetRefs: [],
+  });
+  return true;
 }
 
 function handleElementLeave() {
@@ -1430,14 +1432,42 @@ async function setSelectionValue(name: string, value: unknown, display?: string)
   }
 }
 
-// Hover handlers for choice buttons
-function handleChoiceHover(choice: ChoiceWithRefs) {
+// Hover handlers for choice buttons; true when the board has something to show.
+function handleChoiceHover(choice: ChoiceWithRefs): boolean {
   boardInteraction?.setHoveredChoice({
     value: choice.value,
     display: choice.display,
     sourceRefs: (choice.refs ?? []).filter(r => r.role === 'source').map(r => r.ref),
     targetRefs: (choice.refs ?? []).filter(r => r.role === 'target' || r.role === 'highlight').map(r => r.ref),
   });
+  return !!boardInteraction && !!choice.refs?.length;
+}
+
+// ── Board previews without a mouse (#1606) ──────────────────────────────────
+// A tap fires its compatibility mouse events in the same gesture as its click,
+// so hover alone never shows a touch player what a choice points at before it
+// is taken. Keyboard focus previews; a first tap previews and a second commits.
+let lastPointerType = '';
+let previewedByTap: EventTarget | null = null;
+
+function onPanelPointerdown(event: PointerEvent): void {
+  lastPointerType = event.pointerType;
+}
+
+/** True when this click is a first tap on a button with board pieces to show, which shows them instead of committing. */
+function previewsInsteadOfCommitting(event: MouseEvent, preview: () => boolean): boolean {
+  const firstTap = event.detail > 0 && lastPointerType === 'touch' && previewedByTap !== event.currentTarget;
+  previewedByTap = firstTap && preview() ? event.currentTarget : null;
+  return previewedByTap !== null;
+}
+
+// Only focus the player moved: the panel puts focus back into itself after every redraw (#261).
+function previewOnFocus(preview: () => unknown): void {
+  if (isKeyboardModality()) preview();
+}
+
+function clearOnBlur(clear: () => void): void {
+  if (isKeyboardModality()) clear();
 }
 
 function handleChoiceLeave() {
@@ -1542,6 +1572,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     data-bs-panel
     v-else-if="showActionPanel"
     @keydown="onPanelKeydown"
+    @pointerdown.capture="onPanelPointerdown"
   >
     <!-- What a screen reader is told when a menu level moved under the player
          (#228). OUTSIDE the keyed list below on purpose: that list re-mounts
@@ -1793,9 +1824,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 v-else
                 class="choice-btn element-btn"
                 v-disabled-reason="node.item.disabled"
-                @click="selectElement(node.item.id)"
+                @click="previewsInsteadOfCommitting($event, () => handleElementHover(node.item)) || selectElement(node.item.id)"
                 @mouseenter="handleElementHover(node.item)"
                 @mouseleave="handleElementLeave"
+                @focus="previewOnFocus(() => handleElementHover(node.item))"
+                @blur="clearOnBlur(handleElementLeave)"
               >
                 {{ node.item.display || node.item.id }}
               </button>
@@ -1832,6 +1865,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-disabled-reason="multiSelectDisabledReason(element.disabled, element.id)"
               @mouseenter="handleElementHover(element)"
               @mouseleave="handleElementLeave"
+              @focusin="previewOnFocus(() => handleElementHover(element))"
+              @focusout="clearOnBlur(handleElementLeave)"
             >
               <input
                 type="checkbox"
@@ -1922,6 +1957,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 @click="addListEntry(currentPick.name, choice.value)"
                 @mouseenter="handleChoiceHover(choice)"
                 @mouseleave="handleChoiceLeave"
+                @focus="previewOnFocus(() => handleChoiceHover(choice))"
+                @blur="clearOnBlur(handleChoiceLeave)"
               >
                 {{ choice.display }}
               </button>
@@ -1958,6 +1995,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-disabled-reason="multiSelectDisabledReason(choice.disabled, choice.value, choiceCopies[i])"
               @mouseenter="handleChoiceHover(choice)"
               @mouseleave="handleChoiceLeave"
+              @focusin="previewOnFocus(() => handleChoiceHover(choice))"
+              @focusout="clearOnBlur(handleChoiceLeave)"
             >
               <input
                 type="checkbox"
@@ -2008,9 +2047,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 class="choice-btn"
                 :class="{ 'filtered-choice-btn': isDependentChoicePick }"
                 v-disabled-reason="node.item.disabled"
-                @click="isDependentChoicePick ? executeChoice(currentPick.name, node.item) : setSelectionValue(currentPick.name, node.item.value, node.item.display)"
+                @click="previewsInsteadOfCommitting($event, () => handleChoiceHover(node.item)) || (isDependentChoicePick ? executeChoice(currentPick.name, node.item) : setSelectionValue(currentPick.name, node.item.value, node.item.display))"
                 @mouseenter="handleChoiceHover(node.item)"
                 @mouseleave="handleChoiceLeave"
+                @focus="previewOnFocus(() => handleChoiceHover(node.item))"
+                @blur="clearOnBlur(handleChoiceLeave)"
               >
                 {{ node.item.display }}
               </button>
@@ -2195,9 +2236,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
             :aria-label="choiceSpokenName(choice)"
-            @click="executeChoice(currentPick.name, choice)"
+            @click="previewsInsteadOfCommitting($event, () => handleChoiceHover(choice)) || executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"
+            @focus="previewOnFocus(() => handleChoiceHover(choice))"
+            @blur="clearOnBlur(handleChoiceLeave)"
           >
             {{ choice.display }}
           </button>
@@ -2297,9 +2340,11 @@ button {
   transition: all 0.2s;
 }
 
-.action-btn:hover:not([aria-disabled='true']) {
-  transform: translateY(-1px);
-  box-shadow: var(--bsg-shadow);
+@media (hover: hover) {
+  .action-btn:hover:not([aria-disabled='true']) {
+    transform: translateY(-1px);
+    box-shadow: var(--bsg-shadow);
+  }
 }
 
 /* Destructive verbs (issue 268) -- the one verb in the bar that permanently ends
@@ -2349,9 +2394,11 @@ button {
   box-shadow: none;
 }
 
-.undo-btn:hover:not([aria-disabled='true']) {
-  background: var(--bsg-surface-3);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .undo-btn:hover:not([aria-disabled='true']) {
+    background: var(--bsg-surface-3);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Menu chrome (issue 228): Back and the current-level label.
@@ -2380,9 +2427,11 @@ button {
   box-shadow: none;
 }
 
-.menu-back-btn:hover:not([aria-disabled='true']) {
-  background: var(--bsg-surface-3);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .menu-back-btn:hover:not([aria-disabled='true']) {
+    background: var(--bsg-surface-3);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Action configuration - horizontal flow layout */
@@ -2423,8 +2472,10 @@ button {
   min-width: 24px;
 }
 
-.cancel-btn:hover {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .cancel-btn:hover {
+    color: var(--bsg-ink);
+  }
 }
 
 .selected-values {
@@ -2506,8 +2557,10 @@ button {
   min-width: 24px;
 }
 
-.clear-selection-btn:hover {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .clear-selection-btn:hover {
+    color: var(--bsg-ink);
+  }
 }
 
 /* Selection input - flows inline */
@@ -2554,9 +2607,11 @@ button {
   cursor: not-allowed;
 }
 
-.choice-btn:hover:not([aria-disabled='true']) {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .choice-btn:hover:not([aria-disabled='true']) {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 
 /* Element selection buttons */
@@ -2578,9 +2633,11 @@ button {
   border-color: var(--bsg-line-2);
 }
 
-.filtered-choice-btn:hover:not([aria-disabled='true']) {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .filtered-choice-btn:hover:not([aria-disabled='true']) {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 
 /* A11Y-02: notation-anchored choices now flow inline as flow buttons (see template).
@@ -2590,8 +2647,10 @@ button {
   border-color: var(--bsg-accent);
 }
 
-.anchored-choice-btn:hover:not([aria-disabled='true']) {
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .anchored-choice-btn:hover:not([aria-disabled='true']) {
+    background: var(--bsg-selectable);
+  }
 }
 
 /* Issue 172: the one control that stands in for a candidate set too large to
@@ -2600,8 +2659,10 @@ button {
   border-color: var(--bsg-accent);
 }
 
-.board-handoff-btn:hover {
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .board-handoff-btn:hover {
+    background: var(--bsg-selectable);
+  }
 }
 
 .no-choices {
@@ -2864,9 +2925,11 @@ button {
   cursor: not-allowed;
 }
 
-.multi-select-choice:hover:not([aria-disabled='true']) {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .multi-select-choice:hover:not([aria-disabled='true']) {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 
 .multi-select-choice.selected {
@@ -2963,8 +3026,10 @@ button {
   font-size: 0.875rem;
 }
 
-.skip-btn:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .skip-btn:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 
 /* THE PRICE OF THE DRAFT (issue 248).

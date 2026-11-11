@@ -168,8 +168,10 @@ const titleText = computed(() => {
   border-radius: var(--bsg-r-sm);
 }
 
-.goc-close:hover {
-  background: color-mix(in srgb, var(--bsg-ink) 10%, transparent);
+@media (hover: hover) {
+  .goc-close:hover {
+    background: color-mix(in srgb, var(--bsg-ink) 10%, transparent);
+  }
 }
 
 .game-over-title {

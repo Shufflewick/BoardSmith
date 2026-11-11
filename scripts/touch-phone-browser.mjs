@@ -11,8 +11,9 @@
  *      does not scroll sideways.
  *   2. Tapping my pawn, then an empty square, moves it: the tap path works.
  *   3. Tapping a card leaves no hover style on it. A tapped element keeps
- *      `:hover` until the next tap elsewhere, in both browsers, so the hand's
- *      hover lift sticks until #1606 gates hover styles on `(hover: hover)`.
+ *      `:hover` until the next tap elsewhere, in both browsers, so every hover
+ *      style applies only under `(hover: hover)` (#1606). The squares show their
+ *      coordinates, which a mouse player sees on hover.
  *   4. Dragging my pawn onto a square by touch marks the drop targets, and the
  *      square under the finger, while it is dragged, and moves it there. Drag is
  *      pointer-event drag (#1605); native HTML5 drag never starts from touch.
@@ -26,7 +27,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/touch-phone-browser.mjs`.
  */
-import { assert, check, knownFailure, onFreshPage, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, onFreshPage, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const ELEMENTS = `import { Card as BaseCard, Hand as BaseHand, Deck as BaseDeck, Grid, GridCell, Piece, Space } from 'boardsmith';
 
@@ -232,7 +233,6 @@ async function dragsAndDrops(frame, drag) {
   assert(now === move.to, `the drop left my pawn on square ${now}, not square ${move.to}`);
 }
 
-const HOVER_STUCK = 'still shows its hover style after the tap';
 
 await runBrowserRegression(
   {
@@ -276,7 +276,7 @@ await runBrowserRegression(
             assert(seen.sideways <= 0, `the page scrolls ${seen.sideways}px sideways`);
           });
 
-          await knownFailure(`${size}: a tapped card shows no hover style`, { issue: '#1606', because: HOVER_STUCK }, async () => {
+          await check(`${size}: a tapped card shows no hover style`, async () => {
             const card = frame.locator(`${MY_HAND} .hand-card`).last();
             // Without transitions the hover style shows the moment the tap lands, so one read after it is the answer.
             await frame.locator('head').evaluate((head) => head.appendChild(head.ownerDocument.createElement('style')).append('* { transition: none !important; }'));
@@ -286,12 +286,35 @@ await runBrowserRegression(
             const after = await look();
             assert(
               after.transform === before.transform && after.zIndex === before.zIndex,
-              `the tapped card ${HOVER_STUCK}: transform ${before.transform} became ${after.transform} and z-index ${before.zIndex} became ${after.zIndex}, with :hover ${after.hover}`,
+              `the tapped card still shows its hover style after the tap: transform ${before.transform} became ${after.transform} and z-index ${before.zIndex} became ${after.zIndex}, with :hover ${after.hover}`,
             );
+          });
+
+          await check(`${size}: the squares show their coordinates without a hover`, async () => {
+            const labels = await frame.locator('.cell-notation').evaluateAll((all) => ({ all: all.length, hidden: all.filter((label) => getComputedStyle(label).opacity !== '1').length }));
+            assert(labels.all === 16, `the board shows ${labels.all} square coordinates, not one on each of its 16 squares`);
+            assert(labels.hidden === 0, `${labels.hidden} square coordinates are hidden until hovered, which a finger cannot do`);
           });
 
           await check(`${size}: dragging my pawn onto a square by touch marks the drop targets and the square under my finger, and moves it there`, async () => {
             await dragsAndDrops(frame, (move, whileOver) => touchDrag(page, engine, frame, move, whileOver));
+          });
+
+          await check(`${size}: a first tap on a pawn's button in the action bar highlights the pawn, and a second tap chooses it`, async () => {
+            const { pawn } = await aMove(frame);
+            const button = frame.locator('.element-btn', { hasText: pawn });
+            const state = () => frame.locator('body').evaluate((body, pawn) => ({
+              highlighted: !!body.querySelector(`.piece[data-bs-el-name="${pawn}"].is-board-highlighted`),
+              prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
+            }), pawn);
+            await button.tap();
+            const previewed = await waitUntil(state, (now) => now.highlighted);
+            assert(previewed.highlighted && previewed.prompt === 'Select your pawn', `the first tap did not just highlight ${pawn}: ${JSON.stringify(previewed)}`);
+            await button.tap();
+            const chosen = await waitUntil(state, (now) => now.prompt === 'Select an empty square');
+            assert(chosen.prompt === 'Select an empty square', `the second tap did not choose ${pawn}: ${JSON.stringify(chosen)}`);
+            await frame.locator('.cancel-btn').tap();
+            await waitUntil(state, (now) => now.prompt === 'Select your pawn');
           });
 
           await check(`${size}: tapping my pawn, then an empty square, moves it`, async () => {

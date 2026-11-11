@@ -414,9 +414,11 @@ function runCommand(command: MenuCommand) {
   font-family: inherit;
   cursor: pointer;
 }
-.menubtn:hover {
-  color: var(--bsg-ink);
-  border-color: var(--bsg-line-2);
+@media (hover: hover) {
+  .menubtn:hover {
+    color: var(--bsg-ink);
+    border-color: var(--bsg-line-2);
+  }
 }
 
 /* Popover — teleported to <body>; position is set inline (fixed) from the
@@ -466,8 +468,10 @@ function runCommand(command: MenuCommand) {
   cursor: pointer;
   text-align: left;
 }
-.menu :deep(.mi:hover) {
-  background: var(--bsg-surface-2);
+@media (hover: hover) {
+  .menu :deep(.mi:hover) {
+    background: var(--bsg-surface-2);
+  }
 }
 .menu :deep(.mi[aria-disabled='true']) {
   background: var(--bsg-disabled-surface);
@@ -517,9 +521,11 @@ function runCommand(command: MenuCommand) {
   cursor: pointer;
   flex: none;
 }
-.zoom-fit:hover {
-  border-color: var(--bsg-accent);
-  color: var(--bsg-accent);
+@media (hover: hover) {
+  .zoom-fit:hover {
+    border-color: var(--bsg-accent);
+    color: var(--bsg-accent);
+  }
 }
 
 /* Section separator */

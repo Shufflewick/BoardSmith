@@ -434,8 +434,10 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !isViewin
   cursor: pointer;
   transition: background 0.2s;
 }
-.deck-header:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .deck-header:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 .deck-arrow {
   color: var(--bsg-ink-3);
@@ -463,8 +465,10 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !isViewin
   padding: 2px 6px !important;
   line-height: 1;
 }
-.deck-action-btn:hover:not(:disabled) {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .deck-action-btn:hover:not(:disabled) {
+    color: var(--bsg-ink);
+  }
 }
 .deck-action-btn:disabled {
   background: var(--bsg-disabled-surface);
@@ -495,8 +499,10 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !isViewin
   transition: all 0.2s;
   font-size: 11px;
 }
-.card-item:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .card-item:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 .card-item.selected {
   background: color-mix(in srgb, var(--bsg-ink-2) 20%, transparent);
@@ -539,10 +545,18 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !isViewin
   display: flex;
   gap: 2px;
   margin-left: auto;
-  opacity: 0;
   transition: opacity 0.2s;
 }
-.card-item:hover .card-actions {
+/* Hidden until hovered only where a fine pointer hovers: some touch devices wrongly match (hover: hover) alone. */
+@media (hover: hover) and (pointer: fine) {
+  .card-actions {
+    opacity: 0;
+  }
+  .card-item:hover .card-actions {
+    opacity: 1;
+  }
+}
+.card-actions:focus-within {
   opacity: 1;
 }
 .card-action-btn {
@@ -562,10 +576,12 @@ const transferDialogShown = computed(() => transferDialogOpen.value && !isViewin
   justify-content: center;
   transition: all 0.2s;
 }
-.card-action-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bsg-accent-2) 20%, transparent);
-  border-color: color-mix(in srgb, var(--bsg-accent-2) 30%, transparent);
-  color: var(--bsg-accent-2);
+@media (hover: hover) {
+  .card-action-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bsg-accent-2) 20%, transparent);
+    border-color: color-mix(in srgb, var(--bsg-accent-2) 30%, transparent);
+    color: var(--bsg-accent-2);
+  }
 }
 .card-action-btn:disabled {
   background: var(--bsg-disabled-surface);

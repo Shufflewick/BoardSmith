@@ -73,8 +73,10 @@ const preferenceItems = computed(() => Object.entries(props.preferences.declarat
   text-align: left;
   cursor: pointer;
 }
-.pref-toggle:hover {
-  background: var(--bsg-surface-2);
+@media (hover: hover) {
+  .pref-toggle:hover {
+    background: var(--bsg-surface-2);
+  }
 }
 .pref-choice {
   padding: 10px 10px 4px 39px;

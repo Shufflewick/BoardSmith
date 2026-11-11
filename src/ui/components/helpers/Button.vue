@@ -129,9 +129,11 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-accent-ink);
 }
 
-.btn--primary:hover:not([aria-disabled='true']) {
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .btn--primary:hover:not([aria-disabled='true']) {
+    transform: translateY(-2px);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Secondary variant - subtle outline */
@@ -141,9 +143,11 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-ink);
 }
 
-.btn--secondary:hover:not([aria-disabled='true']) {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .btn--secondary:hover:not([aria-disabled='true']) {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 
 /* Danger variant - destructive actions */
@@ -153,9 +157,11 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-bg);
 }
 
-.btn--danger:hover:not([aria-disabled='true']) {
-  background: color-mix(in srgb, var(--bsg-danger) 85%, black);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .btn--danger:hover:not([aria-disabled='true']) {
+    background: color-mix(in srgb, var(--bsg-danger) 85%, black);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Ghost variant - transparent with hover */
@@ -166,8 +172,10 @@ function handleClick(event: MouseEvent) {
   padding: 4px 8px;
 }
 
-.btn--ghost:hover:not([aria-disabled='true']) {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .btn--ghost:hover:not([aria-disabled='true']) {
+    color: var(--bsg-ink);
+  }
 }
 
 /* Icon variant - compact icon buttons */
@@ -180,10 +188,12 @@ function handleClick(event: MouseEvent) {
   color: var(--bsg-ink-3);
 }
 
-.btn--icon:hover:not([aria-disabled='true']) {
-  background: var(--bsg-selectable);
-  border-color: color-mix(in srgb, var(--bsg-accent) 30%, transparent);
-  color: var(--bsg-accent-2);
+@media (hover: hover) {
+  .btn--icon:hover:not([aria-disabled='true']) {
+    background: var(--bsg-selectable);
+    border-color: color-mix(in srgb, var(--bsg-accent) 30%, transparent);
+    color: var(--bsg-accent-2);
+  }
 }
 
 .btn--icon.btn--small {

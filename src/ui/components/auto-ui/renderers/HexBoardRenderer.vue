@@ -417,9 +417,11 @@ function hexCellAriaLabel(cell: GameElement): string {
   transition: all 0.15s ease;
 }
 
-.hex-polygon:hover {
-  fill: var(--bsg-selectable);
-  stroke: var(--bsg-accent);
+@media (hover: hover) {
+  .hex-polygon:hover {
+    fill: var(--bsg-selectable);
+    stroke: var(--bsg-accent);
+  }
 }
 
 .hex-polygon.has-children {
@@ -434,8 +436,10 @@ function hexCellAriaLabel(cell: GameElement): string {
   stroke-dasharray: 4 2;
 }
 
-.hex-polygon.action-selectable:hover {
-  fill: var(--bsg-droptarget-hover);
+@media (hover: hover) {
+  .hex-polygon.action-selectable:hover {
+    fill: var(--bsg-droptarget-hover);
+  }
 }
 
 .hex-polygon.is-board-highlighted {
@@ -473,9 +477,11 @@ function hexCellAriaLabel(cell: GameElement): string {
   cursor: not-allowed;
 }
 
-.hex-polygon.is-disabled:hover {
-  fill: var(--bsg-cell);
-  stroke: var(--bsg-ink-3);
+@media (hover: hover) {
+  .hex-polygon.is-disabled:hover {
+    fill: var(--bsg-cell);
+    stroke: var(--bsg-ink-3);
+  }
 }
 
 /* ── Hex piece groups ── */
@@ -492,8 +498,10 @@ function hexCellAriaLabel(cell: GameElement): string {
   transition: transform 0.15s ease;
 }
 
-.hex-piece-group:hover .hex-piece-circle {
-  transform: scale(1.05);
+@media (hover: hover) {
+  .hex-piece-group:hover .hex-piece-circle {
+    transform: scale(1.05);
+  }
 }
 
 /* ── Non-color seat glyph (A11Y WCAG 1.4.1 Use of Color) ── */
