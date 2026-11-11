@@ -387,7 +387,7 @@ describe('ActionPanel interaction tests', () => {
   type Offer = Pick<EnrichedActionMetadata['selections'][number], 'type' | 'choices' | 'validElements'>;
   it.each<{ pick: string; max: number; offer: Offer }>([
     { pick: 'min-0 max-3 choice (#1555)', max: 3, offer: { type: 'choice', choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })) } },
-    { pick: 'min-0 max-0 choice (#1568)', max: 0, offer: { type: 'choice', choices: [{ value: 'squidhead', display: 'squidhead' }] } },
+    { pick: 'min-0 max-0 choice (#1568)', max: 0, offer: { type: 'choice', choices: [{ value: 'wyvern', display: 'wyvern' }] } },
     { pick: 'min-0 max-0 empty elements (#1568)', max: 0, offer: { type: 'elements', validElements: [] } },
   ])('Done on a $pick multiSelect with nothing ticked submits the empty set and moves on', async ({ max, offer }) => {
     const hire: EnrichedActionMetadata = {

@@ -1287,7 +1287,7 @@ const CHOICE_LIST = '.action-config .choice-buttons[data-bs-pick]';
 /** Its choices and categories (#1439), and those it anchors to the board, drawn outside the list. */
 const GIVEN_CHOICES = `${CHOICE_LIST} .choice-btn:not(.skip-btn), .action-config .anchored-choice-btn`;
 
-/** How a path to a choice names each level: as the panel heads a category it is in, "Dictators / Castro". */
+/** How a path to a choice names each level: as the panel heads a category it is in, "Sheriffs / Hale". */
 const PATH_SEPARATOR = ' / ';
 
 /**

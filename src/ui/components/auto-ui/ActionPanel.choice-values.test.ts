@@ -225,7 +225,7 @@ describe('a chooseFrom value is the same on every path (#509)', () => {
  */
 const SHAPES: unknown[] = [
   { value: 'skip', label: 'Skip it' },
-  { id: 7, name: 'Bronson' },
+  { id: 7, name: 'Brann' },
   'plain',
   { id: 9, name: 'Ada', display: 'Lovelace' },
 ];
@@ -316,7 +316,7 @@ describe('the panel labels a pick it holds the way its button did (#509)', () =>
     await settle();
 
     expect(buttonLabels(t, '.choice-buttons .choice-btn:not(.skip-btn)').map((b) => b.label))
-      .toEqual(['Skip it', 'Bronson', 'plain', 'Ada']);
+      .toEqual(['Skip it', 'Brann', 'plain', 'Ada']);
   });
 
   it('shows a made pick as its button read', async () => {
@@ -342,7 +342,7 @@ describe('the panel labels a pick it holds the way its button did (#509)', () =>
     const pressed: string[] = [];
     for (const index of SHAPES.keys()) {
       const buttons = buttonLabels(t, '.choice-buttons .choice-btn:not(.skip-btn)');
-      expect(buttons.map((b) => b.label)).toEqual(['Skip it', 'Bronson', 'plain', 'Ada', STOP]);
+      expect(buttons.map((b) => b.label)).toEqual(['Skip it', 'Brann', 'plain', 'Ada', STOP]);
       await t.controller.fill('picks', asCustomUiHoldsIt(buttons[index]!.value));
       await settle();
       pressed.push(buttons[index]!.label);

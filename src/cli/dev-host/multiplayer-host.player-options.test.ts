@@ -29,7 +29,7 @@ const def = { gameClass: PassGame, gameType: 'pass', minPlayers: 1, maxPlayers: 
 const playerOptions: Record<string, PlayerOptionDefinition> = {
   handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5 },
   ready: { type: 'boolean', label: 'Ready', default: false },
-  dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+  sheriff: { type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] },
 };
 const personal = { handicap: 2, ready: false };
 const colorPalette = [
@@ -40,15 +40,15 @@ const colorPalette = [
 ];
 const presets = [
   {
-    name: 'Play as Dictator',
+    name: 'Play as Sheriff',
     players: [
-      { color: '#95a5a6', playerOptions: { dictator: 'dictator' } },
+      { color: '#95a5a6', playerOptions: { sheriff: 'sheriff' } },
       { color: '#e74c3c', isBot: true, botLevel: 'hard', playerOptions: { handicap: 4 } },
     ],
   },
   { name: 'Two people and a bot', players: [{}, { isBot: true }, {}] },
   // A game written in plain JavaScript, or cast, can still hand the host a field a seat does not take.
-  { name: 'Unknown field', players: [{ dictator: true }, {}] } as unknown as GamePreset,
+  { name: 'Unknown field', players: [{ sheriff: true }, {}] } as unknown as GamePreset,
 ];
 
 function table(playerCount = 3, seating: Pick<MultiplayerHostOptions, 'colorPalette' | 'presets' | 'reconnectTimer'> = {}) {
@@ -77,23 +77,23 @@ describe('MultiplayerHost — each seat\'s player options (#1323, #1325)', () =>
     await host.handleMessage('A', { type: 'hello' });
 
     const start = starts[0];
-    expect(start.playerOptions).toEqual([personal, personal, { ...personal, dictator: 'dictator' }]);
-    expect(start.playerOptions.filter((seat: Record<string, unknown>) => 'dictator' in seat)).toHaveLength(1);
-    expect(start.exclusiveSeats).toEqual({ dictator: 3 });
-    expect(start.playerConfigs[2]).toMatchObject({ dictator: 'dictator' });
+    expect(start.playerOptions).toEqual([personal, personal, { ...personal, sheriff: 'sheriff' }]);
+    expect(start.playerOptions.filter((seat: Record<string, unknown>) => 'sheriff' in seat)).toHaveLength(1);
+    expect(start.exclusiveSeats).toEqual({ sheriff: 3 });
+    expect(start.playerConfigs[2]).toMatchObject({ sheriff: 'sheriff' });
     expect(lastLobby().seats.map((s) => s.playerOptions)).toEqual(start.playerOptions);
   });
 
   it('deals a new game with the options each seat was given', async () => {
     const { host, starts, lastLobby } = table();
     await host.handleMessage('A', { type: 'hello' });
-    const chosen = [{ handicap: 0, ready: true, dictator: 'dictator' }, { handicap: 5, ready: false }, personal];
+    const chosen = [{ handicap: 0, ready: true, sheriff: 'sheriff' }, { handicap: 5, ready: false }, personal];
 
     await host.handleMessage('A', { type: 'setPlayerOptions', playerOptions: chosen });
 
     expect(starts).toHaveLength(2);
     expect(starts[1].playerOptions).toEqual(chosen);
-    expect(starts[1].exclusiveSeats).toEqual({ dictator: 1 });
+    expect(starts[1].exclusiveSeats).toEqual({ sheriff: 1 });
     expect(starts[1].playerConfigs[1]).toMatchObject({ handicap: 5, ready: false });
     expect(lastLobby().seats.map((s) => s.playerOptions)).toEqual(chosen);
 
@@ -108,7 +108,7 @@ describe('MultiplayerHost — each seat\'s player options (#1323, #1325)', () =>
 
     await host.handleMessage('A', {
       type: 'setPlayerOptions',
-      playerOptions: [{ ...personal, handicap: 9, dictator: 'dictator' }, personal, personal],
+      playerOptions: [{ ...personal, handicap: 9, sheriff: 'sheriff' }, personal, personal],
     });
 
     expect(sent.at(-1)).toEqual({ type: 'error', message: 'Seat 1: Handicap must be between 0 and 5, not 9.' });
@@ -120,13 +120,13 @@ describe('MultiplayerHost — each seat\'s player options (#1323, #1325)', () =>
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', {
       type: 'setPlayerOptions',
-      playerOptions: [{ ...personal, dictator: 'dictator' }, personal, personal],
+      playerOptions: [{ ...personal, sheriff: 'sheriff' }, personal, personal],
     });
 
     await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 2 } });
 
-    expect(starts.at(-1)!.playerOptions).toEqual([personal, { ...personal, dictator: 'dictator' }]);
-    expect(starts.at(-1)!.exclusiveSeats).toEqual({ dictator: 2 });
+    expect(starts.at(-1)!.playerOptions).toEqual([personal, { ...personal, sheriff: 'sheriff' }]);
+    expect(starts.at(-1)!.exclusiveSeats).toEqual({ sheriff: 2 });
   });
 });
 
@@ -135,15 +135,15 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
     const { host, starts, sent } = table(3, { colorPalette, presets });
     await host.handleMessage('A', { type: 'hello' });
 
-    await host.handleMessage('A', { type: 'configure', preset: 'Play as Dictator' });
+    await host.handleMessage('A', { type: 'configure', preset: 'Play as Sheriff' });
 
     expect(sent.filter((m) => m.type === 'error')).toEqual([]);
     const start = starts.at(-1)!;
     expect(start.playerOptions).toEqual([
-      { ...personal, dictator: 'dictator', color: '#95a5a6' },
+      { ...personal, sheriff: 'sheriff', color: '#95a5a6' },
       { ...personal, handicap: 4, color: '#e74c3c' },
     ]);
-    expect(start.exclusiveSeats).toEqual({ dictator: 1 });
+    expect(start.exclusiveSeats).toEqual({ sheriff: 1 });
     expect(start.colors).toEqual(['#95a5a6', '#e74c3c']);
     expect(start.playerIsBot).toEqual([false, true]);
     expect(start.playerConfigs[1]).toMatchObject({ isBot: true, botLevel: 'hard' });
@@ -188,7 +188,7 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
       colorPalette,
       seatSetup: [
         { playerOptions: personal, isBot: false },
-        { playerOptions: { ...personal, dictator: 'dictator' }, color: '#27ae60', isBot: true, botLevel: 'easy' },
+        { playerOptions: { ...personal, sheriff: 'sheriff' }, color: '#27ae60', isBot: true, botLevel: 'easy' },
         { playerOptions: personal, isBot: false },
       ],
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
@@ -200,7 +200,7 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
 
     await host.handleMessage('A', { type: 'hello' });
 
-    expect(starts[0].exclusiveSeats).toEqual({ dictator: 2 });
+    expect(starts[0].exclusiveSeats).toEqual({ sheriff: 2 });
     // Seat 3 names no colour, so it is dealt the first one no seat takes (#1569).
     expect(starts[0].colors).toEqual(['#e74c3c', '#27ae60', '#3498db']);
     expect(starts[0].playerIsBot).toEqual([false, true, true]);
@@ -216,9 +216,9 @@ describe('MultiplayerHost — a preset sets up each seat (#1544)', () => {
     expect(sent.at(-1)).toEqual({
       type: 'error',
       message:
-        'This game\'s preset "Unknown field" cannot be used: seat 1 sets "dictator", which a preset seat does not take. ' +
+        'This game\'s preset "Unknown field" cannot be used: seat 1 sets "sheriff", which a preset seat does not take. ' +
         'A seat takes color, isBot, botLevel and playerOptions, and a player option goes in playerOptions, ' +
-        'e.g. { playerOptions: { "dictator": ... } }. Correct the preset.',
+        'e.g. { playerOptions: { "sheriff": ... } }. Correct the preset.',
     });
     expect(starts).toHaveLength(1);
   });

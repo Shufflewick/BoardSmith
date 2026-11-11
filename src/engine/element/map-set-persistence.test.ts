@@ -15,8 +15,8 @@ import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
  * Map and Set are not plain objects: Object.entries() returns [] for them, so the
  * attribute serializer used to flatten them to {} — losing every entry AND their
  * methods (.set/.has/.add). Restored state would carry a truthy {} that defeated
- * `if (!x) x = new Map()` guards, then throw "x.set is not a function" (the MERC
- * combat `retreatDecisions` lockup). These tests prove Map/Set now round-trip as
+ * `if (!x) x = new Map()` guards, then throw "x.set is not a function" (a
+ * duel `retreatDecisions` lockup). These tests prove Map/Set now round-trip as
  * real Map/Set, including element references stored inside them.
  */
 async function createTestGame<G extends Game>(GameClass: new (o: GameOptions) => G): Promise<G> {
@@ -62,17 +62,17 @@ describe('Map/Set persistence', () => {
     expect(() => restored.processed.add('c')).not.toThrow();
   });
 
-  it('a Map nested inside an object attribute survives (activeCombat shape)', async () => {
-    class CombatGame extends Game<CombatGame, Player> {
-      activeCombat: { round: number; decisions: Map<string, string> } | null = null;
+  it('a Map nested inside an object attribute survives (activeDuel shape)', async () => {
+    class DuelGame extends Game<DuelGame, Player> {
+      activeDuel: { round: number; decisions: Map<string, string> } | null = null;
     }
-    const game = await createTestGame(CombatGame);
-    game.activeCombat = { round: 1, decisions: new Map([['1', 'continue']]) };
+    const game = await createTestGame(DuelGame);
+    game.activeDuel = { round: 1, decisions: new Map([['1', 'continue']]) };
 
-    const restored = await serializedRoundTrip(game, CombatGame);
+    const restored = await serializedRoundTrip(game, DuelGame);
 
-    expect(restored.activeCombat?.decisions).toBeInstanceOf(Map);
-    expect(restored.activeCombat?.decisions.get('1')).toBe('continue');
+    expect(restored.activeDuel?.decisions).toBeInstanceOf(Map);
+    expect(restored.activeDuel?.decisions.get('1')).toBe('continue');
   });
 
   it('element references stored as Map values resolve to the live elements', async () => {
@@ -102,16 +102,16 @@ describe('Map/Set persistence', () => {
       pendingLoot = this.persistentMap<string, string[]>('pendingLoot');
     }
     const game = await createTestGame(LootGame);
-    game.pendingLoot.set('sector1', ['gold']);
+    game.pendingLoot.set('room1', ['gold']);
 
     const restored = await serializedRoundTrip(game, LootGame);
 
     // The field must still be the live view onto settings, not the `{}` the
     // attribute bag used to carry back over it.
     expect(restored.pendingLoot).toBeInstanceOf(PersistentMap);
-    expect(restored.pendingLoot.get('sector1')).toEqual(['gold']);
-    restored.pendingLoot.set('sector2', ['silver']);
-    expect(restored.settings.pendingLoot).toEqual({ sector1: ['gold'], sector2: ['silver'] });
+    expect(restored.pendingLoot.get('room1')).toEqual(['gold']);
+    restored.pendingLoot.set('room2', ['silver']);
+    expect(restored.settings.pendingLoot).toEqual({ room1: ['gold'], room2: ['silver'] });
   });
   // #149: `PersistentMap` stringified every key on the way in (`String(key)`)
   // and asserted them back to `K` on the way out with `k as unknown as K`. A

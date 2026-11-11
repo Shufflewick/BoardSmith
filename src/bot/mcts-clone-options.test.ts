@@ -5,7 +5,7 @@
  * receives the same constructor options as the original (including custom
  * options like playerConfigs).
  *
- * Bug report: MERC team reported that MCTS clones receive empty playerConfigs,
+ * Bug report: MCTS clones receive empty playerConfigs,
  * causing player roles to be assigned incorrectly in simulations.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
@@ -58,7 +58,7 @@ describe('MCTS Game Clone Constructor Options', () => {
   });
 
   it('should preserve playerConfigs in MCTS game clones', () => {
-    // Create game with custom playerConfigs (like MERC's dictator config)
+    // Create game with custom playerConfigs (like a sheriff seat config)
     const playerConfigs: TestPlayerConfig[] = [
       { name: 'Player 1', isLeader: true },
       { name: 'Player 2', isLeader: false },
@@ -104,17 +104,17 @@ describe('MCTS Game Clone Constructor Options', () => {
   it('should preserve complex nested options in MCTS game clones', () => {
     // Test with more complex nested options
     const playerConfigs: TestPlayerConfig[] = [
-      { name: 'Dictator', isLeader: true },
-      { name: 'Rebel 1', isLeader: false },
-      { name: 'Rebel 2', isLeader: false },
-      { name: 'Rebel 3', isLeader: false },
-      { name: 'Rebel 4', isLeader: false },
+      { name: 'Sheriff', isLeader: true },
+      { name: 'Outlaw 1', isLeader: false },
+      { name: 'Outlaw 2', isLeader: false },
+      { name: 'Outlaw 3', isLeader: false },
+      { name: 'Outlaw 4', isLeader: false },
     ];
 
     const game = new ConfigTestGame({
       playerCount: 5,
       playerNames: playerConfigs.map(c => c.name),
-      seed: 'merc-seed',
+      seed: 'hero-seed',
       playerConfigs,
     });
     game.startFlow();

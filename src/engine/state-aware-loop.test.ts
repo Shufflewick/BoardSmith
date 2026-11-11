@@ -2,9 +2,9 @@
  * `stateAwareLoop` can serve the shape its own docs cite (#35).
  *
  * The builder exists to encode "this loop must not exit while async game state
- * is still unresolved", and its documented example is MERC-shaped. But its body
+ * is still unresolved", and its documented example has this shape. But its body
  * was a bare `actionStep` with no composite body, no `player` override and no
- * `skipIf` — and every loop in MERC with exactly this shape needs at least one
+ * `skipIf` — and every loop with exactly this shape needs at least one
  * of the three, so none could adopt it. The pattern the builder was added for
  * was the one pattern it could not express.
  */
@@ -24,7 +24,7 @@ import {
 import { GameRunner } from '../runtime/runner.js';
 
 class PhaseGame extends Game<PhaseGame, Player> {
-  pendingCombat: string | null = null;
+  pendingDuel: string | null = null;
   resolved: string[] = [];
   actionsLeft = 2;
   drained: string[] = [];
@@ -38,7 +38,7 @@ class PhaseGame extends Game<PhaseGame, Player> {
         const game = ctx.game as PhaseGame;
         game.actionsLeft--;
         game.resolved.push(`strike:${ctx.player.seat}`);
-        if (game.actionsLeft === 1) game.pendingCombat = 'ambush';
+        if (game.actionsLeft === 1) game.pendingDuel = 'ambush';
       }),
       Action.create<PhaseGame>('hold').prompt('Hold').execute((_a, ctx) => {
         (ctx.game as PhaseGame).actionsLeft--;
@@ -47,11 +47,11 @@ class PhaseGame extends Game<PhaseGame, Player> {
   }
 }
 
-/** The MERC shape: a composite body, a fixed actor, and a skip. */
+/** The shape: a composite body, a fixed actor, and a skip. */
 function buildFlow(options: { skip?: boolean } = {}): FlowDefinition {
   return {
     root: stateAwareLoop({
-      name: 'rebel-phase',
+      name: 'outlaw-phase',
       maxIterations: 12,
       while: (ctx) => {
         const game = ctx.game as PhaseGame;
@@ -60,7 +60,7 @@ function buildFlow(options: { skip?: boolean } = {}): FlowDefinition {
         if (options.skip) return game.iterations++ < 2;
         return game.actionsLeft > 0;
       },
-      pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingCombat],
+      pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingDuel],
       skipIf: () => options.skip === true,
       // A sequence, not a single actionStep — the case that blocked adoption.
       // With a composite body the steps own their own actors, so `player` goes
@@ -69,15 +69,15 @@ function buildFlow(options: { skip?: boolean } = {}): FlowDefinition {
         actionStep({
           actions: ['strike', 'hold'],
           player: (ctx) => ctx.game.getPlayer(2)!,
-          // The MERC shape: one seat's phase is one turn, however many passes
+          // The shape: one seat's phase is one turn, however many passes
           // round the loop it takes, so undo reaches back over the whole run.
           turnScope: 'continue',
         }),
         execute((ctx) => {
           const game = ctx.game as PhaseGame;
-          if (game.pendingCombat) {
-            game.drained.push(game.pendingCombat);
-            game.pendingCombat = null;
+          if (game.pendingDuel) {
+            game.drained.push(game.pendingDuel);
+            game.pendingDuel = null;
           }
         }),
       ),
@@ -112,7 +112,7 @@ describe('a composite body', () => {
     // actionsLeft hit 0, so `while` is false — but the loop still ran the body
     // that drained the pending state rather than exiting with it unresolved.
     expect(runner.game.actionsLeft).toBe(0);
-    expect(runner.game.pendingCombat).toBeNull();
+    expect(runner.game.pendingDuel).toBeNull();
   });
 });
 
@@ -193,7 +193,7 @@ describe('the simple form still works exactly as before', () => {
           actions: ['strike', 'hold'],
           maxIterations: 12,
           while: (ctx: FlowContext) => (ctx.game as PhaseGame).actionsLeft > 0,
-          pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingCombat],
+          pendingStates: (ctx) => [(ctx.game as PhaseGame).pendingDuel],
           turnScope: 'continue',
         }),
       }

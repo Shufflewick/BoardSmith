@@ -10,9 +10,9 @@ import { createColorOption, type PlayerOptionDefinition } from '../../session/in
 
 const role: PlayerOptionDefinition = {
   type: 'exclusive',
-  label: 'Dictator',
+  label: 'Sheriff',
   default: 'last',
-  choices: [{ value: 'dictator', label: 'Dictator' }],
+  choices: [{ value: 'sheriff', label: 'Sheriff' }],
 };
 const botLevel = {
   type: 'select',
@@ -31,16 +31,16 @@ describe('mergePlayerOptions', () => {
   });
 
   it('does not count an undefined field or a different field order as a difference', () => {
-    const reordered = { id: 'role', choices: role.choices, default: 'last', label: 'Dictator', type: 'exclusive' };
+    const reordered = { id: 'role', choices: role.choices, default: 'last', label: 'Sheriff', type: 'exclusive' };
     expect(mergePlayerOptions({ role: { ...role, description: undefined } }, [reordered])).toEqual({
-      role: { type: 'exclusive', label: 'Dictator', default: 'last', choices: role.choices },
+      role: { type: 'exclusive', label: 'Sheriff', default: 'last', choices: role.choices },
     });
   });
 
   it('refuses a key declared differently in both, naming the key and both declarations', () => {
     const merge = () => mergePlayerOptions({ role }, [{ id: 'role', ...role, label: 'Tyrant' }]);
     expect(merge).toThrow(/player option "role"/);
-    expect(merge).toThrow(/"label":"Dictator"/);
+    expect(merge).toThrow(/"label":"Sheriff"/);
     expect(merge).toThrow(/"label":"Tyrant"/);
     expect(merge).toThrow(/Declare "role" in one place/);
   });
@@ -83,10 +83,10 @@ describe('mergePlayerOptions refuses an option the platform\'s manifest cannot c
   });
 
   it('needs an exclusive option to list its choices, whatever its default', () => {
-    expect(refused({ type: 'exclusive', label: 'Dictator', default: 'last' })).toThrow(
+    expect(refused({ type: 'exclusive', label: 'Sheriff', default: 'last' })).toThrow(
       /"odd" needs "choices": a non-empty list of \{ "value", "label" \} strings/,
     );
-    expect(refused({ type: 'exclusive', label: 'Dictator', default: 2, choices: role.choices })).toThrow(
+    expect(refused({ type: 'exclusive', label: 'Sheriff', default: 2, choices: role.choices })).toThrow(
       /"odd" needs a string "default"/,
     );
   });
@@ -123,9 +123,9 @@ describe('the code types take only shapes the platform\'s manifest can carry (#9
   it('does not compile the shapes the platform refuses', () => {
     const refused: PlayerOptionDefinition[] = [
       // @ts-expect-error an exclusive option needs choices
-      { type: 'exclusive', label: 'Dictator', default: 'last' },
+      { type: 'exclusive', label: 'Sheriff', default: 'last' },
       // @ts-expect-error a seat number is not a default the platform carries
-      { type: 'exclusive', label: 'Dictator', default: 2, choices: [{ value: 'd', label: 'D' }] },
+      { type: 'exclusive', label: 'Sheriff', default: 2, choices: [{ value: 'd', label: 'D' }] },
       // @ts-expect-error choices are value and label pairs
       { type: 'select', label: 'Side', default: 'a', choices: ['a', 'b'] },
       // @ts-expect-error a select needs a default
@@ -154,13 +154,13 @@ const declared: Record<string, PlayerOptionDefinition> = {
   side: { type: 'select', label: 'Side', default: 'north', choices: [{ value: 'north', label: 'North' }, { value: 'south', label: 'South' }] },
   handicap: { type: 'number', label: 'Handicap', default: 2, min: 0, max: 5, step: 2 },
   ready: { type: 'boolean', label: 'Ready', default: false },
-  dictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+  sheriff: { type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] },
 };
 const personal = { side: 'north', handicap: 2, ready: false };
 
 describe('defaultSeatOptions (#1304, #1325)', () => {
   it("gives each seat every select, number and boolean default, and an exclusive option's value to the seat its default names", () => {
-    expect(defaultSeatOptions(declared, 3)).toEqual([personal, personal, { ...personal, dictator: 'dictator' }]);
+    expect(defaultSeatOptions(declared, 3)).toEqual([personal, personal, { ...personal, sheriff: 'sheriff' }]);
   });
 
   it.each([
@@ -171,7 +171,7 @@ describe('defaultSeatOptions (#1304, #1325)', () => {
     ['0', 1],
     ['anyone', 1],
   ])('names the holder of an exclusive option whose default is "%s" as the platform does: seat %i', (initial, holder) => {
-    const options: Record<string, PlayerOptionDefinition> = { lead: { ...declared.dictator, default: initial } as PlayerOptionDefinition };
+    const options: Record<string, PlayerOptionDefinition> = { lead: { ...declared.sheriff, default: initial } as PlayerOptionDefinition };
     expect(exclusiveSeats(options, defaultSeatOptions(options, 3))).toEqual({ lead: holder });
   });
 });
@@ -180,10 +180,10 @@ describe('seatOptionsRefusal (#1323)', () => {
   const table = (...seats: unknown[]) => seats;
 
   it('accepts one set of declared values per seat, with each exclusive option held by one seat', () => {
-    expect(seatOptionsRefusal(declared, table({ ...personal, side: 'south', ready: true }, { ...personal, dictator: 'dictator' }), 2)).toBeUndefined();
+    expect(seatOptionsRefusal(declared, table({ ...personal, side: 'south', ready: true }, { ...personal, sheriff: 'sheriff' }), 2)).toBeUndefined();
   });
 
-  const holder = { ...personal, dictator: 'dictator' };
+  const holder = { ...personal, sheriff: 'sheriff' };
   const constructorOption = Object.fromEntries<PlayerOptionDefinition>([
     ['constructor', { type: 'boolean', label: 'Constructor', default: false }],
   ]);
@@ -192,17 +192,17 @@ describe('seatOptionsRefusal (#1323)', () => {
     ['a table that is not a list', { 1: holder, 2: personal }, /one set of player options for each of the 2 seats/],
     ['a seat that is not a set of options', table(holder, 'south'), /Seat 2's player options must be a set of option values/],
     ['a seat missing an option', table(holder, { side: 'north', handicap: 2 }), /Seat 2 has no value for Ready\. Give each seat a value for every player option\./],
-    ['an undeclared option', table(holder, { ...personal, speed: 3 }), /Seat 2: "speed" is not a player option of this game; its player options are side, handicap, ready, dictator\./],
+    ['an undeclared option', table(holder, { ...personal, speed: 3 }), /Seat 2: "speed" is not a player option of this game; its player options are side, handicap, ready, sheriff\./],
     ['colour, which is chosen with the seat', table({ ...holder, color: '#fff' }, personal), /Seat 1: "color" is not a player option/],
     ['a number off its step', table(holder, { ...personal, handicap: 3 }), /Seat 2: Handicap must be in steps of 2 from 0 \(0, 2, 4, \.\.\.\), not 3\./],
     ['a number outside its range', table(holder, { ...personal, handicap: 6 }), /Seat 2: Handicap must be between 0 and 5, not 6\./],
     ['a number that is not one', table({ ...holder, handicap: '3' }, personal), /Seat 1: Handicap must be a number, not "3"\./],
     ['a boolean that is not one', table({ ...holder, ready: 'yes' }, personal), /Seat 1: Ready must be true or false, not "yes"\./],
     ['a select value among none of its choices', table({ ...holder, side: 'west' }, personal), /Seat 1: Side is "west", which is none of its choices \(north, south\)\./],
-    ['an exclusive value among none of its choices', table({ ...holder, dictator: 'king' }, personal), /Seat 1: Dictator is "king", which is none of its choices \(dictator\)\./],
-    ['an exclusive option no seat holds', table(personal, personal), /Give Dictator to one seat\./],
+    ['an exclusive value among none of its choices', table({ ...holder, sheriff: 'king' }, personal), /Seat 1: Sheriff is "king", which is none of its choices \(sheriff\)\./],
+    ['an exclusive option no seat holds', table(personal, personal), /Give Sheriff to one seat\./],
     ['an option a seat left out whose id an object has anyway', table(holder, personal), /Seat 1 has no value for Constructor\./, constructorOption],
-    ['an exclusive option two seats hold', table(holder, holder), /Dictator is given to seats 1 and 2; give it to one seat\./],
+    ['an exclusive option two seats hold', table(holder, holder), /Sheriff is given to seats 1 and 2; give it to one seat\./],
   ])('refuses %s', (_case, seats, message, more = {}) => {
     expect(seatOptionsRefusal({ ...declared, ...more }, seats, 2)).toMatch(message);
   });
@@ -218,8 +218,8 @@ describe('presetSeatSetup (#1544)', () => {
   });
 
   it('gives an exclusive option to the seat that sets it, and every option a seat leaves out its default', () => {
-    expect(setup([{ playerOptions: { role: 'dictator' } }, { isBot: true, botLevel: '750', playerOptions: { level: 'hard' } }])()).toEqual([
-      { playerOptions: { role: 'dictator', level: 'easy' }, isBot: false },
+    expect(setup([{ playerOptions: { role: 'sheriff' } }, { isBot: true, botLevel: '750', playerOptions: { level: 'hard' } }])()).toEqual([
+      { playerOptions: { role: 'sheriff', level: 'easy' }, isBot: false },
       { playerOptions: { level: 'hard' }, isBot: true, botLevel: '750' },
     ]);
   });
@@ -229,14 +229,14 @@ describe('presetSeatSetup (#1544)', () => {
   });
 
   it('leaves an exclusive option no seat sets on the seat its default names', () => {
-    expect(setup([{}, {}])()!.map((seat) => seat.playerOptions)).toEqual([{ level: 'easy' }, { level: 'easy', role: 'dictator' }]);
+    expect(setup([{}, {}])()!.map((seat) => seat.playerOptions)).toEqual([{ level: 'easy' }, { level: 'easy', role: 'sheriff' }]);
   });
 
   it.each([
     [[{ color: '#000000' }, {}], 'seat 1\'s color "#000000" is not in the game\'s colorPalette (#e74c3c, #3498db).'],
     [[{}, { botLevel: 'hard' }], 'seat 2 sets a botLevel but is not a bot. Give it isBot: true, or remove its botLevel.'],
     [[{}, { isBot: true, botLevel: 'expert' }], 'seat 2: Unknown bot level "expert". Use one of: easy, medium, hard, or a positive iteration count such as 750.'],
-    [[{ playerOptions: { role: 'dictator' } }, { playerOptions: { role: 'dictator' } }], 'Dictator is given to seats 1 and 2; give it to one seat.'],
+    [[{ playerOptions: { role: 'sheriff' } }, { playerOptions: { role: 'sheriff' } }], 'Sheriff is given to seats 1 and 2; give it to one seat.'],
     [[{ playerOptions: { level: 'expert' } }, {}], 'Seat 1: Difficulty is "expert", which is none of its choices (easy, hard).'],
     [[{ color: '#e74c3c' }, { color: '#e74c3c' }], 'seats 1 and 2 both take the color #e74c3c; give each seat its own.'],
   ])('refuses %j', (players, reason) => {

@@ -4,7 +4,7 @@
 
 When using `chooseElement`, `fromElements`, or `chooseFrom` in action definitions, the `filter` function only supports two states: included (visible + selectable) or excluded (hidden). There's no way to show an item as visible but disabled/unselectable.
 
-**Use case (MERC):** The character Apeiron has a passive ability preventing grenade/mortar use. Currently, these items are hidden from equipment selection. The desired UX is to show them greyed out with a tooltip explaining why they can't be selected.
+**Use case:** The character Corwin has a passive ability preventing heavy weapon use. Currently, these items are hidden from equipment selection. The desired UX is to show them greyed out with a tooltip explaining why they can't be selected.
 
 ## API Design
 
@@ -32,11 +32,11 @@ disabled?: (choice: T, context: ActionContext) => string | false
 `disabled` only runs on items that passed `filter`. No hidden precedence rules.
 
 ```ts
-// MERC example
+// Example
 .fromElements('equipment', {
   elements: (ctx) => stash.all(Equipment),
   filter: (e) => e.location === 'stash',
-  disabled: (e) => e.isExplosive ? "Apeiron cannot use explosives" : false,
+  disabled: (e) => e.isExplosive ? "Corwin cannot use explosives" : false,
 })
 ```
 

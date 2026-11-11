@@ -40,7 +40,7 @@ export function projectColorOptions(playerCount: number): { colors?: string[]; c
  *
  * @example
  * ```typescript
- * const { game } = createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Dictator'));
+ * const { game } = createTestGame(MyGame, presetStartOptions(gameDefinition, 'Play as Sheriff'));
  * ```
  *
  * Each seat a preset gives no `botLevel` plays at dev's default level, as

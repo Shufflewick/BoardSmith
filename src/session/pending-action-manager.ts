@@ -101,7 +101,7 @@ export class PendingActionManager<G extends Game = Game> {
    * Auto-creates the pending action if it doesn't exist.
    * @param initialArgs - The picks the client made before this one, made as
    *   their own steps would be when this step starts the pending action (e.g.,
-   *   actingMerc before equipment), and, for a repeating pick, its earlier
+   *   actingHero before equipment), and, for a repeating pick, its earlier
    *   answers, whose count tells a fresh start from a continued one (#1556)
    */
   async processSelectionStep(

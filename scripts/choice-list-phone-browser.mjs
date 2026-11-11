@@ -2,7 +2,7 @@
 /**
  * THE BROWSER REGRESSION FOR A CHOICE LIST IN THE ACTION BAR AT PHONE WIDTH (#1573, #1580, #1587, #1589).
  *
- * MERC's artillery allocation offers eight checkboxes in the Action Panel. At
+ * An artillery allocation offers eight checkboxes in the Action Panel. At
  * 390px only the first one or two showed and the rest sat below the screen
  * with no sign they were there, while at 1440px every one showed (#1573).
  * Survival of the Fittest answers a text field, so its chip shows, then offers
@@ -26,7 +26,7 @@ import {
   waitForAction,
 } from './browser-harness.mjs';
 
-/** MERC's artillery allocation: one checkbox per hit a unit can take, some offered more than once. */
+/** An artillery allocation: one checkbox per hit a unit can take, some offered more than once. */
 const RULES = `import { Game, Player, Space } from 'boardsmith';
 import type { GameElement, GameOptions } from 'boardsmith';
 import type { GameDefinition } from 'boardsmith/session';
@@ -50,9 +50,9 @@ const allocate = worldAction<Barrage>('allocate')
   .chooseFrom('targets', {
     prompt: 'Choose which units take the artillery hits',
     choices: () => [
-      "P1's militia", "P1's militia",
-      'Adelheid', 'Adelheid', 'Adelheid',
-      'Genesis', 'Genesis', 'Genesis',
+      "P1's guards", "P1's guards",
+      'Isolde', 'Isolde', 'Isolde',
+      'Rowan', 'Rowan', 'Rowan',
     ],
     multiSelect: { min: 4, max: 4 },
   })
@@ -65,7 +65,7 @@ const mortar = worldAction<Barrage>('mortar')
   .needs(() => [FIELD])
   .chooseFrom('targets', {
     prompt: 'Choose which units take the mortar hits',
-    choices: () => [...Array(3).fill('Kim'), ...Array(20).fill('Dictator Militia')],
+    choices: () => [...Array(3).fill('Kim'), ...Array(20).fill('Sheriff Guards')],
     multiSelect: { min: 3, max: 3 },
   })
   .execute(({ targets }, ctx) => {

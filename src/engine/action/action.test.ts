@@ -1337,7 +1337,7 @@ describe('Action Executor', () => {
     });
 
     it('should preserve non-selection followUp args when optional selection is null', () => {
-      // followUp pre-fills args like { combatantId: 42, sectorId: 7 } alongside selections.
+      // followUp pre-fills args like { duelistId: 42, roomId: 7 } alongside selections.
       // When equipment is skipped (null), the pre-filled args should still be in ctx.args.
       let receivedCtx: ActionContext | undefined;
       const action = Action.create('test')
@@ -1353,12 +1353,12 @@ describe('Action Executor', () => {
         action,
         game.getPlayer(1)!,
         { equipment: null },
-        { followUp: { action: 'test', args: { combatantId: 42, sectorId: 7 } } },
+        { followUp: { action: 'test', args: { duelistId: 42, roomId: 7 } } },
       );
 
       expect(result.success).toBe(true);
-      expect(receivedCtx!.args.combatantId).toBe(42);
-      expect(receivedCtx!.args.sectorId).toBe(7);
+      expect(receivedCtx!.args.duelistId).toBe(42);
+      expect(receivedCtx!.args.roomId).toBe(7);
     });
 
     describe('ENG-05 followUp arg resolution', () => {
@@ -1389,17 +1389,17 @@ describe('Action Executor', () => {
         const deck = game.create(Deck, 'deck');
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 
-        let receivedSectorId: unknown;
-        const action = Action.create('test').followUpArgs<{ sectorId: Card }>().execute((_args, ctx) => {
-          receivedSectorId = ctx.args.sectorId;
+        let receivedRoomId: unknown;
+        const action = Action.create('test').followUpArgs<{ roomId: Card }>().execute((_args, ctx) => {
+          receivedRoomId = ctx.args.roomId;
         });
 
         const result = executor.executeAction(action, game.getPlayer(1)!, {}, {
-          followUp: { action: 'test', args: { sectorId: { id: card.id, className: 'Card' } } },
+          followUp: { action: 'test', args: { roomId: { id: card.id, className: 'Card' } } },
         });
 
         expect(result.success).toBe(true);
-        expect(receivedSectorId).toBe(card);
+        expect(receivedRoomId).toBe(card);
       });
 
       it('leaves a {id, className} followUp arg unresolved when className does not match the element (Test D)', () => {
@@ -1411,19 +1411,19 @@ describe('Action Executor', () => {
         const deck = game.create(Deck, 'deck');
         const card = deck.create(Card, 'card', { rank: 'A', suit: 'spades', value: 10 });
 
-        let receivedSectorId: unknown;
-        const action = Action.create('test').followUpArgs<{ sectorId: Card }>().execute((_args, ctx) => {
-          receivedSectorId = ctx.args.sectorId;
+        let receivedRoomId: unknown;
+        const action = Action.create('test').followUpArgs<{ roomId: Card }>().execute((_args, ctx) => {
+          receivedRoomId = ctx.args.roomId;
         });
 
-        const claimed = { id: card.id, className: 'Sector' };
+        const claimed = { id: card.id, className: 'Room' };
         const result = executor.executeAction(action, game.getPlayer(1)!, {}, {
-          followUp: { action: 'test', args: { sectorId: claimed } },
+          followUp: { action: 'test', args: { roomId: claimed } },
         });
 
         expect(result.success).toBe(true);
-        expect(receivedSectorId).not.toBe(card);
-        expect(receivedSectorId).toEqual(claimed);
+        expect(receivedRoomId).not.toBe(card);
+        expect(receivedRoomId).toEqual(claimed);
       });
 
       it('still resolves a bare numeric id for a named element selection arg (Test C, control)', () => {
@@ -1648,99 +1648,99 @@ describe('Dependent Selection with dependsOn', () => {
     game = new TestGame({ playerCount: 2 });
     executor = new ActionExecutor(game);
 
-    // Create mercs with equipment
-    const merc1 = game.create(Space, 'merc1');
-    merc1.createMany(2, Card, 'equipment', (i) => ({
+    // Create heroes with equipment
+    const hero1 = game.create(Space, 'hero1');
+    hero1.createMany(2, Card, 'equipment', (i) => ({
       suit: 'H',
       rank: String(i + 1),
       value: i + 1,
     }));
 
-    const merc2 = game.create(Space, 'merc2');
-    merc2.createMany(3, Card, 'equipment', (i) => ({
+    const hero2 = game.create(Space, 'hero2');
+    hero2.createMany(3, Card, 'equipment', (i) => ({
       suit: 'S',
       rank: String(i + 1),
       value: i + 1,
     }));
 
-    // Create a merc with no equipment
-    game.create(Space, 'merc3');
+    // Create a hero with no equipment
+    game.create(Space, 'hero3');
   });
 
   it('should make action available when dependsOn is used and upstream choices exist', () => {
-    // This is the MERC team pattern: select merc, then select equipment from that merc
-    const mercs = [...game.all(Space)];
+    // This is the team pattern: select hero, then select equipment from that hero
+    const heroes = [...game.all(Space)];
 
     const action = Action.create('dropEquipment')
-      .chooseElement('merc', {
-        elements: () => mercs,
+      .chooseElement('hero', {
+        elements: () => heroes,
       })
       .chooseElement('equipment', {
-        dependsOn: 'merc',
+        dependsOn: 'hero',
         elements: (ctx) => {
-          const merc = ctx.args.merc as Space;
-          return [...merc.all(Card)];
+          const hero = ctx.args.hero as Space;
+          return [...hero.all(Card)];
         },
       })
       .execute(() => {});
 
-    // Action should be available because merc1 and merc2 have equipment
+    // Action should be available because hero1 and hero2 have equipment
     expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
   });
 
   it('should make action unavailable when no upstream choice leads to valid downstream choices', () => {
-    // Only merc3 (no equipment) is available
-    const merc3 = game.first(Space, (s) => s.name === 'merc3')!;
+    // Only hero3 (no equipment) is available
+    const hero3 = game.first(Space, (s) => s.name === 'hero3')!;
 
     const action = Action.create('dropEquipment')
-      .chooseElement('merc', {
-        elements: () => [merc3],
+      .chooseElement('hero', {
+        elements: () => [hero3],
       })
       .chooseElement('equipment', {
-        dependsOn: 'merc',
+        dependsOn: 'hero',
         elements: (ctx) => {
-          const merc = ctx.args.merc as Space;
-          return [...merc.all(Card)];
+          const hero = ctx.args.hero as Space;
+          return [...hero.all(Card)];
         },
       })
       .execute(() => {});
 
-    // Action should NOT be available because merc3 has no equipment
+    // Action should NOT be available because hero3 has no equipment
     expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(false);
   });
 
   it('should be available when at least one upstream choice leads to valid path', () => {
-    // Mix of mercs with and without equipment
-    const mercs = [...game.all(Space)]; // merc1, merc2 have equipment; merc3 doesn't
+    // Mix of heroes with and without equipment
+    const heroes = [...game.all(Space)]; // hero1, hero2 have equipment; hero3 doesn't
 
     const action = Action.create('dropEquipment')
-      .chooseElement('merc', {
-        elements: () => mercs,
+      .chooseElement('hero', {
+        elements: () => heroes,
       })
       .chooseElement('equipment', {
-        dependsOn: 'merc',
+        dependsOn: 'hero',
         elements: (ctx) => {
-          const merc = ctx.args.merc as Space;
-          return [...merc.all(Card)];
+          const hero = ctx.args.hero as Space;
+          return [...hero.all(Card)];
         },
       })
       .execute(() => {});
 
-    // Action should be available because merc1 and merc2 have equipment
+    // Action should be available because hero1 and hero2 have equipment
     expect(executor.isActionAvailable(action, game.getPlayer(1)!)).toBe(true);
   });
 
   it('should work with chooseElement selections', () => {
-    const mercs = [...game.all(Space)];
+    const heroes = [...game.all(Space)];
 
     const action = Action.create('dropEquipment')
-      .chooseElement('merc', {
+      .chooseElement('hero', {
         from: game,
         elementClass: Space,
       })
       .chooseElement('equipment', {
-        dependsOn: 'merc',
-        from: (ctx) => ctx.args.merc as Space,
+        dependsOn: 'hero',
+        from: (ctx) => ctx.args.hero as Space,
         elementClass: Card,
       })
       .execute(() => {});
@@ -1750,18 +1750,18 @@ describe('Dependent Selection with dependsOn', () => {
   });
 
   it('should work with dynamic choice selections', () => {
-    const mercs = [...game.all(Space)];
+    const heroes = [...game.all(Space)];
 
     const action = Action.create('dropEquipment')
-      .chooseFrom('merc', {
-        choices: () => mercs.map((m) => m.name),
+      .chooseFrom('hero', {
+        choices: () => heroes.map((m) => m.name),
       })
       .chooseFrom('equipment', {
-        dependsOn: 'merc',
+        dependsOn: 'hero',
         choices: (ctx) => {
-          const mercName = ctx.args.merc as string;
-          const merc = game.first(Space, (s) => s.name === mercName)!;
-          return [...merc.all(Card)].map((c) => c.name);
+          const heroName = ctx.args.hero as string;
+          const hero = game.first(Space, (s) => s.name === heroName)!;
+          return [...hero.all(Card)].map((c) => c.name);
         },
       })
       .execute(() => {});
@@ -2050,7 +2050,7 @@ describe('Action Chaining with followUp', () => {
         success: true,
         followUp: {
           action: 'collect',
-          args: { mercId: 42 },
+          args: { heroId: 42 },
         },
       }));
 
@@ -2061,7 +2061,7 @@ describe('Action Chaining with followUp', () => {
     expect(result.success).toBe(true);
     expect(result.followUp).toBeDefined();
     expect(result.followUp?.action).toBe('collect');
-    expect(result.followUp?.args).toEqual({ mercId: 42 });
+    expect(result.followUp?.args).toEqual({ heroId: 42 });
   });
 
   it('should not include followUp when action returns undefined for it', () => {

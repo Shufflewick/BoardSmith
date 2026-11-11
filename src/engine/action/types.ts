@@ -349,7 +349,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
    *
    * @example
    * // Dynamic based on game state
-   * multiSelect: (ctx) => ({ min: 1, max: ctx.game.activeCombat?.maxTargets ?? 1 })
+   * multiSelect: (ctx) => ({ min: 1, max: ctx.game.activeDuel?.maxTargets ?? 1 })
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig);
   /**
@@ -450,7 +450,7 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
   elements: T[] | ((context: ActionContext) => T[]);
   /**
    * Custom display function. If not provided, uses element.name with
-   * automatic disambiguation (e.g., "Militia #1", "Militia #2"). Not shown
+   * automatic disambiguation (e.g., "Guards #1", "Guards #2"). Not shown
    * when a candidate or `args` holds a card the player cannot see (#1293).
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
@@ -830,8 +830,8 @@ export interface FollowUpAction {
    * ```typescript
    * followUp: {
    *   action: 'collectEquipment',
-   *   args: { mercId: merc.id, sectorId: sector.id },
-   *   display: { mercId: 'Bronson', sectorId: 'Diamond Industry' },
+   *   args: { heroId: hero.id, roomId: room.id },
+   *   display: { heroId: 'Brann', roomId: 'Silver Mine' },
    * }
    * ```
    */
@@ -878,17 +878,17 @@ export interface ExecuteResult {
    * @example
    * ```typescript
    * Action.create('explore')
-   *   .chooseElement('merc', { ... })
+   *   .chooseElement('hero', { ... })
    *   .execute((args, ctx) => {
-   *     const sector = args.merc.getCurrentSector();
-   *     drawEquipmentToStash(sector);
-   *     sector.explored = true;
+   *     const room = args.hero.getCurrentRoom();
+   *     drawEquipmentToStash(room);
+   *     room.explored = true;
    *
    *     return {
    *       success: true,
-   *       followUp: sector.stashCount > 0 ? {
+   *       followUp: room.stashCount > 0 ? {
    *         action: 'collectEquipment',
-   *         args: { mercId: args.merc.id, sectorId: sector.id }
+   *         args: { heroId: args.hero.id, roomId: room.id }
    *       } : undefined
    *     };
    *   });
@@ -1010,7 +1010,7 @@ export interface ValidationResult {
  * Used when game developers opt-in to detailed condition tracing.
  */
 export interface ConditionDetail {
-  /** Human-readable label (e.g., "hasStash(primarySquad)") */
+  /** Human-readable label (e.g., "hasStash(primaryCrew)") */
   label: string;
   /** The actual value that was checked */
   value: unknown;

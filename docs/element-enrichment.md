@@ -109,7 +109,7 @@ The `element` property is optional because the element might not exist in the cu
 
 When this happens, a console warning is logged (once per element):
 ```
-[actionController] Element 43 (Sarge) not found in gameView.
+[actionController] Element 43 (Tamsin) not found in gameView.
 This can happen if the element was removed after selection metadata was built.
 ```
 

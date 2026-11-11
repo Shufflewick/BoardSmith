@@ -41,7 +41,7 @@ const gameOptions = [
   { id: 'lootScale', type: 'number', label: 'Loot scale', default: 1, designerOnly: true },
 ];
 
-/** MERC's palette, whose fourth colour is not the engine default's fourth (#1552). */
+/** A game palette whose fourth colour is not the engine default's fourth (#1552). */
 const colorPalette = [
   { id: 'red', hex: '#E74C3C', label: 'Red' },
   { id: 'blue', hex: '#3498DB', label: 'Blue' },

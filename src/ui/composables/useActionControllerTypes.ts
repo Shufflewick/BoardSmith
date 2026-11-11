@@ -328,9 +328,9 @@ export interface UseActionControllerOptions {
    * const controller = useActionController({
    *   // ...
    *   onBeforeAutoExecute: async (actionName, args) => {
-   *     if (actionName === 'assignToSquad') {
+   *     if (actionName === 'assignToCrew') {
    *       // Capture element position before DOM updates
-   *       const el = document.querySelector(`[data-combatant="${args.combatantName}"]`);
+   *       const el = document.querySelector(`[data-duelist="${args.duelistName}"]`);
    *       startRect = el?.getBoundingClientRect();
    *     }
    *   },
@@ -522,9 +522,9 @@ export interface UseActionControllerReturn {
    * ```typescript
    * // Start 'move' action, auto-fill 'destination' when we reach that selection
    * await actionController.start('move', {
-   *   prefill: { destination: sectorId }
+   *   prefill: { destination: roomId }
    * });
-   * // User selects squad, then destination auto-fills with sectorId
+   * // User selects crew, then destination auto-fills with roomId
    * ```
    */
   /**

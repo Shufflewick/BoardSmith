@@ -869,7 +869,7 @@ describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
   function wireTwoActions(validElements: EnrichedValidElement[]) {
     const board = createBoardInteraction();
     const { controller, start } = makeController({
-      pick: null, action: null, startCandidates: { assign: { pick: 'squad', elements: validElements } },
+      pick: null, action: null, startCandidates: { assign: { pick: 'crew', elements: validElements } },
     });
     useBoardActionBridge({
       controller,
@@ -877,7 +877,7 @@ describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
       isMyTurn: ref(true),
       autoEndTurn: ref(false),
       actionMetadata: ref({
-        assign: { name: 'assign', selections: [{ name: 'squad', type: 'element' }] },
+        assign: { name: 'assign', selections: [{ name: 'crew', type: 'element' }] },
         pass: { name: 'pass', selections: [] },
       }),
       availableActions: ref(['assign', 'pass']),
@@ -889,20 +889,20 @@ describe('useBoardActionBridge refs a click starts an action by (#945)', () => {
 
   it('starts the action from a name-only ref when the candidate is anchored by that name', async () => {
     const { board, start } = wireTwoActions([
-      { id: 5, refs: [{ ref: { name: 'Squad A' }, role: 'highlight' }] },
-      { id: 6, refs: [{ ref: { name: 'Squad B' }, role: 'highlight' }] },
+      { id: 5, refs: [{ ref: { name: 'Crew A' }, role: 'highlight' }] },
+      { id: 6, refs: [{ ref: { name: 'Crew B' }, role: 'highlight' }] },
     ]);
 
-    board.selectElement({ name: 'Squad B' });
+    board.selectElement({ name: 'Crew B' });
     await nextTick();
-    expect(start).toHaveBeenCalledWith('assign', { args: { squad: 6 } });
+    expect(start).toHaveBeenCalledWith('assign', { args: { crew: 6 } });
   });
 
   it('does not start from a name when the candidate is anchored by its id, as the open pick would not take it', async () => {
     const { board, start } = wireTwoActions([
       { id: 5, refs: [{ ref: { id: 5 }, role: 'highlight' }] },
     ]);
-    board.selectElement({ name: 'Squad A' });
+    board.selectElement({ name: 'Crew A' });
     await nextTick();
     expect(start).not.toHaveBeenCalled();
   });

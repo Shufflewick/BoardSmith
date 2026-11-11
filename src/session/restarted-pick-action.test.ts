@@ -6,7 +6,7 @@
  *
  * Driven through a long-lived PendingActionManager and the live session host
  * (`SnapshotSessionHost` over `executeOp`), with the action both offered
- * directly and held as a follow-up, the shape MERC's hire takes.
+ * directly and held as a follow-up, the shape a hire takes.
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
@@ -32,10 +32,10 @@ class HireGame extends Game<HireGame, Player> {
     for (const name of ['ann', 'bob']) this.pool.create(Token, name);
     const hire = (action: Action<HireGame>) =>
       action
-        .chooseFrom('merc', {
+        .chooseFrom('hero', {
           choices: ['ann', 'bob'],
-          onSelect: (merc) => { this.pool.first(Token, merc as string)?.putInto(this.team); },
-          onCancel: () => { for (const merc of this.team.all(Token)) merc.putInto(this.pool); },
+          onSelect: (hero) => { this.pool.first(Token, hero as string)?.putInto(this.team); },
+          onCancel: () => { for (const hero of this.team.all(Token)) hero.putInto(this.pool); },
         })
         .chooseFrom('gear', { choices: ['rifle', 'medkit'] })
         .execute((args) => { this.hired.push({ ...args }); });
@@ -111,31 +111,31 @@ describe('a restarted pick-by-pick action answers its first pick again (#1556)',
       it(`restarts '${action}' from its first pick, undoing the dropped pick's onSelect, on the ${name} route`, async () => {
         const seat = await route(action);
         if (followUp) expect((await seat.scout()).success).toBe(true);
-        expect((await seat.pick('merc', 'ann')).success).toBe(true);
+        expect((await seat.pick('hero', 'ann')).success).toBe(true);
         expect(seat.table().team).toEqual(['ann']);
 
         // The reloaded page starts the action again at its first pick.
-        const again = await seat.pick('merc', 'bob');
+        const again = await seat.pick('hero', 'bob');
 
         expect(again).toMatchObject({ success: true, actionComplete: false });
         expect(seat.table()).toMatchObject({ team: ['bob'], pool: ['ann'] });
         const done = await seat.pick('gear', 'medkit');
         expect(done).toMatchObject({ success: true, actionComplete: true });
         expect(seat.table().hired).toEqual([
-          { merc: 'bob', gear: 'medkit', ...(followUp && { by: 1 }) },
+          { hero: 'bob', gear: 'medkit', ...(followUp && { by: 1 }) },
         ]);
       });
     }
 
     it(`keeps the open action as it was when the restarting pick is refused, on the ${name} route`, async () => {
       const seat = await route('hire');
-      expect((await seat.pick('merc', 'ann')).success).toBe(true);
+      expect((await seat.pick('hero', 'ann')).success).toBe(true);
 
-      expect((await seat.pick('merc', 'zed')).success).toBe(false);
+      expect((await seat.pick('hero', 'zed')).success).toBe(false);
 
       expect(seat.table()).toMatchObject({ team: ['ann'], pool: ['bob'] });
       expect(await seat.pick('gear', 'rifle')).toMatchObject({ success: true, actionComplete: true });
-      expect(seat.table().hired).toEqual([{ merc: 'ann', gear: 'rifle' }]);
+      expect(seat.table().hired).toEqual([{ hero: 'ann', gear: 'rifle' }]);
     });
 
     it(`restarts 'haul' at its repeating pick when the step holds fewer of its answers, on the ${name} route`, async () => {

@@ -126,17 +126,17 @@ export function settingsForSeat(settings: Record<string, unknown>, seat: number 
  * import { actionTempState } from 'boardsmith';
  *
  * Action.create('explore')
- *   .chooseElement('sector', { elementClass: Sector })
+ *   .chooseElement('room', { elementClass: Room })
  *   .execute((args, ctx) => {
- *     actionTempState(ctx, 'explore').set('sectorId', args.sector.id);
+ *     actionTempState(ctx, 'explore').set('roomId', args.room.id);
  *   });
  *
  * Action.create('collectLoot')
  *   .chooseElement('loot', {
  *     elements: (ctx) => {
- *       const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');
- *       if (sectorId === undefined) return [];
- *       return ctx.game.getElementById(sectorId)!.all(Equipment);
+ *       const roomId = actionTempState(ctx, 'explore').get<number>('roomId');
+ *       if (roomId === undefined) return [];
+ *       return ctx.game.getElementById(roomId)!.all(Equipment);
  *     },
  *   })
  *   .execute((args, ctx) => {
@@ -250,17 +250,17 @@ export interface DependentFilterOptions<T, TPrev> {
  * @example
  * ```typescript
  * Action.create('move')
- *   .chooseElement('squad', { ... })
+ *   .chooseElement('crew', { ... })
  *   .chooseElement('destination', {
  *     filter: dependentFilter({
- *       dependsOn: 'squad',
- *       whenUndefined: (sector, ctx) => {
- *         // Return true if ANY movable squad can reach this sector
- *         return getMovableSquads().some(s => isAdjacent(s.sectorId, sector.id));
+ *       dependsOn: 'crew',
+ *       whenUndefined: (room, ctx) => {
+ *         // Return true if ANY movable crew can reach this room
+ *         return getMovableCrews().some(s => isAdjacent(s.roomId, room.id));
  *       },
- *       whenSelected: (sector, squad, ctx) => {
- *         // Return true if the selected squad can reach this sector
- *         return isAdjacent(squad.sectorId, sector.id);
+ *       whenSelected: (room, crew, ctx) => {
+ *         // Return true if the selected crew can reach this room
+ *         return isAdjacent(crew.roomId, room.id);
  *       },
  *     }),
  *   })

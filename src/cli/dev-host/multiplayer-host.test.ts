@@ -371,7 +371,7 @@ describe('MultiplayerHost (always-live)', () => {
 
 describe('MultiplayerHost — player configs', () => {
   it('passes playerConfigs with per-seat isBot to the game (production parity, drives in-flow bot)', async () => {
-    // Games like MERC read options.playerConfigs[seat-1].isBot to decide whether a
+    // Some games read options.playerConfigs[seat-1].isBot to decide whether a
     // seat is bot-controlled in their own flow. The production lobby supplies this;
     // the dev host must too, or the game treats the bot seat as a human and the
     // dev host's MCTS later finds "No available moves".

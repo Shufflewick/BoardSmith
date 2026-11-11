@@ -112,8 +112,8 @@ assume otherwise:
 ```typescript
 // WRONG - throws the moment it is evaluated with nothing bound
 elements: (ctx) => {
-  const merc = ctx.args.merc as Merc;
-  return [...merc.equipment.all(Equipment)];  // merc is undefined -> CRASH
+  const hero = ctx.args.hero as Hero;
+  return [...hero.equipment.all(Equipment)];  // hero is undefined -> CRASH
 }
 ```
 
@@ -125,21 +125,21 @@ leaves B with something to pick -- dropping the action when none does:
 
 ```typescript
 Action.create('dropEquipment')
-  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
+  .chooseElement('hero', { elements: () => [...game.all(Hero)] })
   .chooseElement('equipment', {
-    dependsOn: 'merc',
+    dependsOn: 'hero',
     elements: (ctx) => {
-      const merc = ctx.args.merc as Merc | undefined;
-      if (merc === undefined) return [];
-      return [...merc.equipment.all(Equipment)];
+      const hero = ctx.args.hero as Hero | undefined;
+      if (hero === undefined) return [];
+      return [...hero.equipment.all(Equipment)];
     },
   })
 ```
 
 **How it works:**
-- During the availability check the engine iterates every choice for `merc`
-- For each one it re-asks `equipment` with that merc bound
-- The action is available if at least one merc has equipment
+- During the availability check the engine iterates every choice for `hero`
+- For each one it re-asks `equipment` with that hero bound
+- The action is available if at least one hero has equipment
 - If none does, the action is dropped **and says so** with a warning naming the
   action, the step and the dependency
 
@@ -218,8 +218,8 @@ const pieces = player.board.all(Piece);
 const canMove = pieces.every(p => p.canMove);  // False if any dead piece exists
 
 // WRONG - dead element with 0 actions breaks the check
-const mercs = squad.all(Merc);
-const allHaveActions = mercs.every(m => m.actionsRemaining >= 1);  // Always false!
+const heroes = crew.all(Hero);
+const allHaveActions = heroes.every(m => m.actionsRemaining >= 1);  // Always false!
 ```
 
 ### The Solution
@@ -232,15 +232,15 @@ const livingPieces = player.board.all(Piece).filter(p => !p.isDead);
 const canMove = livingPieces.every(p => p.canMove);
 
 // CORRECT - create a helper method
-class Squad extends Space {
-  getLivingMercs(): MercCard[] {
-    return this.all(MercCard).filter(m => !m.isDead);
+class Crew extends Space {
+  getLivingHeroes(): HeroCard[] {
+    return this.all(HeroCard).filter(m => !m.isDead);
   }
 }
 
 // Then use it consistently
-const mercs = squad.getLivingMercs();
-const allHaveActions = mercs.every(m => m.actionsRemaining >= 1);
+const heroes = crew.getLivingHeroes();
+const allHaveActions = heroes.every(m => m.actionsRemaining >= 1);
 ```
 
 ### Best Practice
@@ -266,7 +266,7 @@ Action.create('equip')
   .chooseElement('equipment', {
     repeat: { max: 3 },
     onEach: (equipment, ctx) => {
-      merc.useAction(1);  // Called 3 times if player selects 3 items!
+      hero.useAction(1);  // Called 3 times if player selects 3 items!
     }
   })
   .execute((args) => { ... });
@@ -284,12 +284,12 @@ Action.create('equip')
   })
   .execute((args, ctx) => {
     // Charge action cost once
-    merc.useAction(1);
+    hero.useAction(1);
 
     // Process all selected equipment
     const items = args.equipment as Equipment[];
     for (const item of items) {
-      merc.equip(item);
+      hero.equip(item);
     }
   });
 ```
@@ -306,7 +306,7 @@ Custom data on Player objects may not serialize correctly, especially complex ob
 // PROBLEMATIC - element references on player
 class MyPlayer extends Player {
   selectedCard?: Card;  // May not survive serialization
-  squadRefs: Squad[] = [];  // Array of element refs is tricky
+  crewRefs: Crew[] = [];  // Array of element refs is tricky
 }
 ```
 
@@ -318,7 +318,7 @@ Store element references by ID or use game-level storage:
 // CORRECT - store IDs instead of references
 class MyPlayer extends Player {
   selectedCardId?: number;
-  squadIds: number[] = [];
+  crewIds: number[] = [];
 
   getSelectedCard(): Card | undefined {
     if (!this.selectedCardId) return undefined;
@@ -719,9 +719,9 @@ every run:
 
 ```typescript
 // WRONG - Draws 3 more cards every time anything asks about the pick!
-Action.create('hireFirstMerc')
-  .chooseElement('merc', {
-    elements: (ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3),  // Side effect!
+Action.create('hireFirstHero')
+  .chooseElement('hero', {
+    elements: (ctx) => ctx.game.heroDeck.drawTo(ctx.game.heroOffer, 3),  // Side effect!
   })
 ```
 
@@ -739,22 +739,22 @@ the same answer:
 
 ```typescript
 // CORRECT - The flow draws once; the pick offers what was drawn
-Action.create('hireFirstMerc')
-  .chooseElement('merc', {
-    elementClass: Merc,
-    from: (ctx) => ctx.game.mercOffer,
+Action.create('hireFirstHero')
+  .chooseElement('hero', {
+    elementClass: Hero,
+    from: (ctx) => ctx.game.heroOffer,
   })
   .execute((args, ctx) => {
-    args.merc.putInto(ctx.player.team);
-    for (const merc of ctx.game.mercOffer.all(Merc)) {
-      merc.putInto(ctx.game.mercDeck, { position: 'last' });
+    args.hero.putInto(ctx.player.team);
+    for (const hero of ctx.game.heroOffer.all(Hero)) {
+      hero.putInto(ctx.game.heroDeck, { position: 'last' });
     }
   });
 
 // flow.ts
 sequence(
-  execute((ctx) => ctx.game.mercDeck.drawTo(ctx.game.mercOffer, 3), { irreversible: true }),
-  actionStep({ actions: ['hireFirstMerc'] }),
+  execute((ctx) => ctx.game.heroDeck.drawTo(ctx.game.heroOffer, 3), { irreversible: true }),
+  actionStep({ actions: ['hireFirstHero'] }),
 )
 ```
 
@@ -774,17 +774,17 @@ it, but the value is missing when the later action runs:
 
 ```typescript
 // ❌ WRONG - Module-level caching will NOT work!
-let exploredSectorId: number | undefined;
+let exploredRoomId: number | undefined;
 
 Action.create('explore')
-  .chooseElement('sector', { elementClass: Sector })
+  .chooseElement('room', { elementClass: Room })
   .execute((args) => {
-    exploredSectorId = args.sector.id;  // Set here...
+    exploredRoomId = args.room.id;  // Set here...
   });
 
 Action.create('collectLoot')
   .chooseElement('loot', {
-    elements: (ctx) => ctx.game.getElementById(exploredSectorId!)!.all(Equipment),  // ...undefined here!
+    elements: (ctx) => ctx.game.getElementById(exploredRoomId!)!.all(Equipment),  // ...undefined here!
   });
 ```
 
@@ -803,17 +803,17 @@ Module-level variables don't survive across these boundaries.
 // Action and actionTempState come from 'boardsmith'
 
 Action.create('explore')
-  .chooseElement('sector', { elementClass: Sector })
+  .chooseElement('room', { elementClass: Room })
   .execute((args, ctx) => {
-    actionTempState(ctx, 'explore').set('sectorId', args.sector.id);  // Store in game state
+    actionTempState(ctx, 'explore').set('roomId', args.room.id);  // Store in game state
   });
 
 Action.create('collectLoot')
   .chooseElement('loot', {
     elements: (ctx) => {
-      const sectorId = actionTempState(ctx, 'explore').get<number>('sectorId');  // ✓ Works!
-      if (sectorId === undefined) return [];
-      return ctx.game.getElementById(sectorId)!.all(Equipment);
+      const roomId = actionTempState(ctx, 'explore').get<number>('roomId');  // ✓ Works!
+      if (roomId === undefined) return [];
+      return ctx.game.getElementById(roomId)!.all(Equipment);
     },
   })
   .execute((args, ctx) => {
@@ -836,7 +836,7 @@ See [Using actionTempState()](./actions-and-flow.md#using-actiontempstate-for-te
 
 > **Lint guard:** the `no-element-array-state` ESLint rule flags a
 > `GameElement[]`-typed class field on any class, element classes such as
-> the `Sector` below included, and flags
+> the `Room` below included, and flags
 > assigning `game.all(...)`/`.first(...)`/etc. results onto a `this.*`
 > property. It reports only (no auto-fix, since "store IDs" vs "query at
 > point of use" is a judgment call) — see the correct patterns below.
@@ -853,7 +853,7 @@ and the references dangle:
 
 ```typescript
 // SMELL - the array is the only thing "holding" the equipment
-class Sector extends Space {
+class Room extends Space {
   stash: Equipment[] = [];
 
   addToStash(equipment: Equipment): void {
@@ -894,7 +894,7 @@ Store elements as **children** in the element tree, not as property arrays:
 
 ```typescript
 // CORRECT - Elements as children serialize fully
-class Sector extends Space {
+class Room extends Space {
   // Create a child Space to hold stash items
   stashZone!: Space;
 
@@ -983,35 +983,35 @@ return {
   success: true,
   followUp: {
     action: 'collectEquipment',
-    args: { mercId: merc.id, sectorId: sector.id }  // Passing numeric IDs
+    args: { heroId: hero.id, roomId: room.id }  // Passing numeric IDs
   }
 };
 
 // In collectEquipment filter():
 filter: (element, ctx) => {
-  // ctx.args.sectorId IS a number here — bare numeric non-selection args are
+  // ctx.args.roomId IS a number here — bare numeric non-selection args are
   // never coerced into elements. Resolve it explicitly.
-  const sector = ctx.game.getElementById(ctx.args.sectorId as number);
-  return element.container === sector;
+  const room = ctx.game.getElementById(ctx.args.roomId as number);
+  return element.container === room;
 }
 ```
 
 If you want the server to resolve a followUp arg to an element automatically, pass a
-serialized-element object shape (`{ id: sector.id, className: 'Sector' }`) instead of
+serialized-element object shape (`{ id: room.id, className: 'Room' }`) instead of
 a bare number:
 
 ```typescript
-args: { mercId: merc.id, sectorId: { id: sector.id, className: sector.constructor.name } }
+args: { heroId: hero.id, roomId: { id: room.id, className: room.constructor.name } }
 
-// In collectEquipment filter() - ctx.args.sectorId is already the resolved Sector element:
+// In collectEquipment filter() - ctx.args.roomId is already the resolved Room element:
 filter: (element, ctx) => {
-  return element.container === ctx.args.sectorId;
+  return element.container === ctx.args.roomId;
 }
 ```
 
 Either way, declare the args on the follow-up action so `ctx.args` knows them:
-`.followUpArgs<{ sectorId: number }>()` for a bare id,
-`.followUpArgs<{ sectorId: Sector }>()` for the resolved shape (see #15).
+`.followUpArgs<{ roomId: number }>()` for a bare id,
+`.followUpArgs<{ roomId: Room }>()` for the resolved shape (see #15).
 
 Named element-typed selections (`chooseElement`/`chooseElements`) are unaffected by
 this — a bare numeric ID sent for a declared `element`/`elements` selection still
@@ -1036,14 +1036,14 @@ Computed getters on element classes are **not included in serialization**. The U
 
 ```typescript
 // Server-side element class
-class Sector extends Space {
+class Room extends Space {
   get stash(): Equipment[] {
     return [...this.stashZone.all(Equipment)];  // Computed from children
   }
 }
 
 // UI code - WRONG:
-const stash = getAttr(sectorElement, 'stash', []);  // Returns [] - not serialized!
+const stash = getAttr(roomElement, 'stash', []);  // Returns [] - not serialized!
 ```
 
 The UI receives the raw element tree, not computed properties.
@@ -1054,9 +1054,9 @@ In UI code, query the element tree directly instead of expecting computed proper
 
 ```typescript
 // UI code - CORRECT:
-function getStashFromSector(sectorElement: any): Equipment[] {
+function getStashFromRoom(roomElement: any): Equipment[] {
   // Find the stash zone child
-  const stashZone = sectorElement.children?.find((c: any) =>
+  const stashZone = roomElement.children?.find((c: any) =>
     c.className === 'Space' && getAttr(c, 'name', '') === 'stash'
   );
 
@@ -1085,7 +1085,7 @@ If you need a computed value available to the UI, store it as an attribute:
 
 ```typescript
 // Server-side
-class Sector extends Space {
+class Room extends Space {
   updateStashCount(): void {
     // Store as explicit attribute for UI access
     this.stashCount = this.stashZone.count(Equipment);
@@ -1098,7 +1098,7 @@ class Sector extends Space {
 }
 
 // UI can now access directly
-const count = getAttr(sectorElement, 'stashCount', 0);
+const count = getAttr(roomElement, 'stashCount', 0);
 ```
 
 ---
@@ -1117,7 +1117,7 @@ The engine provides a built-in debugging method that explains exactly why an act
 // In your game code or browser console:
 const debug = game.debugActionAvailability('equipItem', player);
 console.log(debug.reason);
-// "Selection 'equipment' has no valid choices (Depends on 'actingMerc' - no valid combinations found)"
+// "Selection 'equipment' has no valid choices (Depends on 'actingHero' - no valid combinations found)"
 
 // For detailed breakdown:
 console.log('Condition passed:', debug.details.conditionPassed);
@@ -1126,10 +1126,10 @@ for (const sel of debug.details.selections) {
   console.log(`${status} ${sel.name}: ${sel.choices} choices`);
   if (sel.note) console.log(`    ${sel.note}`);
 }
-// ✓ actingMerc: 3 choices
+// ✓ actingHero: 3 choices
 //     3 valid choices
 // ✗ equipment: 0 choices
-//     Depends on 'actingMerc' - no valid combinations found
+//     Depends on 'actingHero' - no valid combinations found
 ```
 
 ### Common Issues and What to Look For
@@ -1173,14 +1173,14 @@ expect(debug.available).toBe(true);
 On the **server side** (engine), you access elements via methods like `first()`, `all()`, and properties:
 ```typescript
 // Server-side - returns GameElement with ._t.id
-const weapon = merc.first(Equipment, e => e.equippedSlot === 'weapon');
+const weapon = hero.first(Equipment, e => e.equippedSlot === 'weapon');
 console.log(weapon?.id); // 42 (numeric ID from _t.id)
 ```
 
 On the **client side** (UI), you access elements via the serialized `gameView` tree:
 ```typescript
 // Client-side - gameView has { id, className, attributes, children }
-const weapon = merc.children?.find(c =>
+const weapon = hero.children?.find(c =>
   c.className === 'Equipment' && c.attributes?.equippedSlot === 'weapon'
 );
 console.log(weapon?.id); // 42 (numeric ID at top level)
@@ -1190,11 +1190,11 @@ console.log(weapon?.id); // 42 (numeric ID at top level)
 
 ```typescript
 // WRONG - Accessing an attribute that might store element DATA (not the element)
-const slot = merc.attributes.weaponSlot;
+const slot = hero.attributes.weaponSlot;
 // Returns: { equipmentId: "45-caliber...", ... } - plain object, NO id!
 
 // CORRECT - Find in children array
-const slot = merc.children?.find(c =>
+const slot = hero.children?.find(c =>
   c.attributes?.equippedSlot === 'weapon'
 );
 // Returns: { id: 42, className: 'Equipment', attributes: {...} }
@@ -1228,8 +1228,8 @@ the engine puts it, in `attributes`:
 ```typescript
 import { isHiddenPlaceholder, type GameViewElement } from 'boardsmith/ui';
 
-export function visibleEquipment(merc: GameViewElement): GameViewElement[] {
-  return (merc.children ?? []).filter((c) => c.className === 'Equipment' && !isHiddenPlaceholder(c));
+export function visibleEquipment(hero: GameViewElement): GameViewElement[] {
+  return (hero.children ?? []).filter((c) => c.className === 'Equipment' && !isHiddenPlaceholder(c));
 }
 ```
 
@@ -1312,19 +1312,19 @@ After refactoring, the flow references old action names:
 
 ```typescript
 // Old code had separate actions
-actions: ['dictatorMove', 'dictatorAttack']
+actions: ['sheriffMove', 'sheriffAttack']
 
 // After consolidation, actions are unified
 // But flow still references old names!
-this.registerActions(Action.create('move')...)  // 'dictatorMove' no longer exists
+this.registerActions(Action.create('move')...)  // 'sheriffMove' no longer exists
 ```
 
 **Fix:** Update flow to use new action names. `startFlow()`'s static validation throws
 immediately for any action referenced by an `actionStep`/`simultaneousActionStep` that
 was never registered (see 14.5 below):
 ```
-Error: Flow references action 'dictatorMove' that is not registered. Call
-this.registerActions(Action.create('dictatorMove')...) in your game's constructor before
+Error: Flow references action 'sheriffMove' that is not registered. Call
+this.registerActions(Action.create('sheriffMove')...) in your game's constructor before
 startFlow(), or fix the typo in the actionStep(...) that references it.
 ```
 
@@ -1333,7 +1333,7 @@ Use a function for conditional action lists:
 
 ```typescript
 actionStep<MyGame>({
-  name: 'merc-action',
+  name: 'hero-action',
   actions: (ctx) => {
     const baseActions = ['move', 'attack', 'endTurn'];
     // ctx.player is MyPlayer here, derived from the game type on the builder.
@@ -1354,7 +1354,7 @@ actionStep<MyGame>({
 Different phases allow different actions:
 
 ```typescript
-const combatPhase = phase('combat', {
+const duelPhase = phase('duel', {
   do: actionStep({
     actions: ['attack', 'defend', 'retreat'],
   }),
@@ -1460,8 +1460,8 @@ When using `followUp` to chain actions, the args passed in `followUp.args` need 
 Action.create<MyGame>('collectEquipment')
   .chooseElement('equipment', {
     elementClass: Equipment,
-    // Error: Property 'sector' does not exist. Nothing declared it.
-    filter: (item, ctx) => item.parent === ctx.args.sector,
+    // Error: Property 'room' does not exist. Nothing declared it.
+    filter: (item, ctx) => item.parent === ctx.args.room,
   })
 ```
 
@@ -1474,23 +1474,23 @@ pass elements in the `{id, className}` shape:
 
 ```typescript
 Action.create<MyGame>('collectEquipment')
-  .followUpArgs<{ sector: Sector }>()
+  .followUpArgs<{ room: Room }>()
   .chooseElement('equipment', {
     // Possibly undefined in a pick's callbacks: the engine also evaluates them
     // before any follow-up exists, to decide whether the action is offered.
-    prompt: (ctx) => `Select from ${ctx.args.sector?.name ?? 'the sector'}`,
+    prompt: (ctx) => `Select from ${ctx.args.room?.name ?? 'the room'}`,
     elementClass: Equipment,
-    filter: (item, ctx) => item.parent === ctx.args.sector,
+    filter: (item, ctx) => item.parent === ctx.args.room,
   })
-  .execute(({ sector, equipment }) => {
-    // args.sector (and ctx.args.sector) is the resolved Sector here.
-    sector.stash.remove(equipment);
+  .execute(({ room, equipment }) => {
+    // args.room (and ctx.args.room) is the resolved Room here.
+    room.stash.remove(equipment);
     if (moreItemsAvailable) {
       return {
         followUp: {
           action: 'collectEquipment',
           // Pass the {id, className} shape (or the element itself) -- NOT a bare id
-          args: { sector: { id: sector.id, className: sector.constructor.name } }
+          args: { room: { id: room.id, className: room.constructor.name } }
         }
       };
     }
@@ -1510,9 +1510,9 @@ Only the explicit serialized-element shape resolves. When you return `followUp.a
    works — `GameElement.toJSON` serializes it to `{id, className, ...}` and it
    resolves on the way back.
 2. **Bare numeric IDs are NEVER resolved** (ENG-05): a plain number stays a plain
-   number in every callback, so declare it as one (`sectorId: number`) and
-   resolve it yourself with `ctx.game.getElementById(ctx.args.sectorId)`.
-   Declaring it as an element would make `element.container === ctx.args.sectorId`
+   number in every callback, so declare it as one (`roomId: number`) and
+   resolve it yourself with `ctx.game.getElementById(ctx.args.roomId)`.
+   Declaring it as an element would make `element.container === ctx.args.roomId`
    compile and always be false; better, pass the `{id, className}` shape.
 3. **Consistent args**: the same resolved `ctx.args` is available in prompt, filter, and execute.
 
@@ -1540,7 +1540,7 @@ BoardSmith resolves only unambiguous element references through the action lifec
    - Bare numbers pass through untouched — declared `chooseElement`/`chooseElements`
      selection args are the only place a bare numeric ID resolves, because those
      args are explicitly element-typed by the developer
-4. **Consistent element access**: `ctx.args.sector` is the same value in prompt, filter, and execute
+4. **Consistent element access**: `ctx.args.room` is the same value in prompt, filter, and execute
 
 ---
 
@@ -1580,7 +1580,7 @@ console.log(treeInfo.summary);
 // "Total: 15698 elements in tree, 12 in pile, sequence at 15710"
 
 console.log(treeInfo.byClass);
-// { Equipment: 15690, Sector: 5, Player: 2, Space: 3 }
+// { Equipment: 15690, Room: 5, Player: 2, Space: 3 }
 
 if (treeInfo.issues.length > 0) {
   console.log('Issues:', treeInfo.issues);
@@ -1596,7 +1596,7 @@ if (treeInfo.issues.length > 0) {
 // WRONG - creates elements on every iteration!
 .execute((args, ctx) => {
   // This creates a new Equipment every time the action runs
-  const newItem = sector.create(Equipment, 'Item', { ... });
+  const newItem = room.create(Equipment, 'Item', { ... });
 
   return {
     followUp: { action: 'sameAction', args: { ... } }
@@ -1608,8 +1608,8 @@ if (treeInfo.issues.length > 0) {
 
 ```typescript
 // WRONG - if this runs on hot reload, it creates duplicates
-game.all(Sector).forEach(sector => {
-  sector.create(Equipment, 'Loot1');  // Runs again on HMR!
+game.all(Room).forEach(room => {
+  room.create(Equipment, 'Loot1');  // Runs again on HMR!
 });
 ```
 
@@ -1621,8 +1621,8 @@ game.all(Sector).forEach(sector => {
 
 ```typescript
 // CORRECT - check before creating
-if (!sector.first(Equipment, { name: 'Loot1' })) {
-  sector.create(Equipment, 'Loot1');
+if (!room.first(Equipment, { name: 'Loot1' })) {
+  room.create(Equipment, 'Loot1');
 }
 ```
 
@@ -1667,11 +1667,11 @@ hidden, live and at a past action (#898, #1071).
 
 ### The Problem
 
-Your flow loop's `while` condition only checks action availability, but doesn't account for async game state (like combat) that needs resolution:
+Your flow loop's `while` condition only checks action availability, but doesn't account for async game state (like duel) that needs resolution:
 
 ```typescript
-// WRONG - Exits when actions are depleted, even if combat is pending
-loop<MercGame>({
+// WRONG - Exits when actions are depleted, even if duel is pending
+loop<HeroGame>({
   while: (ctx) => {
     return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
   },
@@ -1681,10 +1681,10 @@ loop<MercGame>({
 
 **What happens:**
 1. Player uses their last action to attack
-2. Attack triggers combat that requires target selection
+2. Attack triggers duel that requires target selection
 3. Loop's `while` returns `false` (no actions left)
-4. Loop exits before combat is resolved
-5. Combat state is orphaned or cleared by the next game phase
+4. Loop exits before duel is resolved
+5. Duel state is orphaned or cleared by the next game phase
 
 ### The Solution
 
@@ -1693,13 +1693,13 @@ Use `stateAwareLoop()` to automatically check for pending state before exiting:
 ```typescript
 // stateAwareLoop comes from 'boardsmith'
 
-stateAwareLoop<MercGame>({
-  name: 'combat-action-loop',
+stateAwareLoop<HeroGame>({
+  name: 'duel-action-loop',
   actions: ['move', 'attack', 'endTurn'],
   while: (ctx) => ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false,
   pendingStates: (ctx) => [
-    ctx.game.activeCombat,    // Keep looping while combat pending
-    ctx.game.pendingCombat,   // Keep looping while combat about to start
+    ctx.game.activeDuel,    // Keep looping while duel pending
+    ctx.game.pendingDuel,   // Keep looping while duel about to start
   ],
 })
 ```
@@ -1707,23 +1707,23 @@ stateAwareLoop<MercGame>({
 **How it works:**
 - `pendingStates` returns an array of values to check
 - If ANY are truthy, the loop continues even if `while` returns false
-- This ensures async state (combat, animations, etc.) resolves before the loop exits
+- This ensures async state (duel, animations, etc.) resolves before the loop exits
 
 ### Alternative: Manual Check
 
 You can also add checks directly in a regular `loop`:
 
 ```typescript
-loop<MercGame>({
+loop<HeroGame>({
   while: (ctx) => {
     const game = ctx.game;
 
     // Always stop if game is finished
     if (game.isFinished()) return false;
 
-    // Keep looping while combat needs resolution
-    if (game.activeCombat) return true;
-    if (game.pendingCombat) return true;
+    // Keep looping while duel needs resolution
+    if (game.activeDuel) return true;
+    if (game.pendingDuel) return true;
 
     // Then check normal action availability
     return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
@@ -1744,7 +1744,7 @@ loop({
     // 1. Check game completion
     if (ctx.game.isFinished()) return false;
 
-    // 2. Check for pending async state (combat, animations, etc.)
+    // 2. Check for pending async state (duel, animations, etc.)
     if (hasPendingAsyncState(ctx)) return true;
 
     // 3. Check normal loop condition (action availability, etc.)
@@ -1765,7 +1765,7 @@ You get choices from `getChoices()` and pass the entire choice object to `fill()
 ```typescript
 // WRONG - passing the choice object
 const choices = actionController.getChoices(currentPick);
-const selectedChoice = choices.find(c => c.value === sectorId);
+const selectedChoice = choices.find(c => c.value === roomId);
 await actionController.fill(selection.name, selectedChoice);  // ❌
 // selectedChoice = { value: 142, display: "Wilderness" }
 ```
@@ -1833,12 +1833,12 @@ Observed:
 
 **Element -> Element**
 ```typescript
-Action.create('assignToSquad')
-  .chooseElement('combatant', {
-    elements: (ctx) => [...ctx.game.all(Combatant)],
+Action.create('assignToCrew')
+  .chooseElement('duelist', {
+    elements: (ctx) => [...ctx.game.all(Duelist)],
   })
-  .chooseElement('targetSquad', {
-    elements: (ctx) => [...ctx.game.all(Squad)],
+  .chooseElement('targetCrew', {
+    elements: (ctx) => [...ctx.game.all(Crew)],
   })
 ```
 
@@ -2123,7 +2123,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | Element comparison | `array.includes(element)` | `array.some(e => e.id === element.id)` |
 | Element equality | `el1 === el2` | `el1.equals(el2)` |
 | Multi-step filter | `args.previous.prop` | `args?.previous?.prop` with fallback |
-| Dead elements | `squad.all(Merc)` | `squad.getLivingMercs()` |
+| Dead elements | `crew.all(Hero)` | `crew.getLivingHeroes()` |
 | Action costs | In `onEach` callback | In `execute` block |
 | Element refs on Player | `selectedCard: Card` | `selectedCardId: number` |
 | Loop safety | No `maxIterations` (now a construction-time throw) | `loop({ maxIterations: 100, ... })` |

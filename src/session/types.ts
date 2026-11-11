@@ -227,12 +227,12 @@ export interface BooleanPlayerOption {
  * @example
  * ```typescript
  * playerOptions: {
- *   isDictator: {
+ *   isSheriff: {
  *     type: 'exclusive',
- *     label: 'Dictator',
- *     description: 'Select which player is the dictator',
+ *     label: 'Sheriff',
+ *     description: 'Select which player is the sheriff',
  *     default: 'last',
- *     choices: [{ value: 'dictator', label: 'Dictator' }],
+ *     choices: [{ value: 'sheriff', label: 'Sheriff' }],
  *   },
  * }
  * ```

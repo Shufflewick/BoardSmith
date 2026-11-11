@@ -134,7 +134,7 @@ describe('smokeWalkLimit: the hang guard on a whole walk (#1601)', () => {
     expect(smokeWalkLimit(1, 60, [1, 2, 3, 4]) - one).toBe(3 * (smokeWalkLimit(1, 60, [1, 2]) - one));
   });
 
-  it("gives MERC's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
+  it("gives a heavy game's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
     expect(smokeWalkLimit(11, 300, undefined)).toBeGreaterThan(2 * 2_200_000);
   });
 

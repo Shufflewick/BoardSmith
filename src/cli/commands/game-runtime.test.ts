@@ -142,20 +142,20 @@ describe('importRuntimeBundle: a crash names the line in the game it came from (
 });
 
 // A game whose element class shares its name with another top-level class in the bundle,
-// which esbuild renames apart (MERC's `Sector` came out `_Sector`, #1549).
+// which esbuild renames apart (a game's `Room` came out `_Room`, #1549).
 const sameNameGame = game(() => {});
-writeFileSync(join(sameNameGame, 'src', 'rules', 'other.ts'), `export class Sector { readonly label = 'not an element'; }`);
+writeFileSync(join(sameNameGame, 'src', 'rules', 'other.ts'), `export class Room { readonly label = 'not an element'; }`);
 writeFileSync(
   join(sameNameGame, 'src', 'rules', 'index.ts'),
   [
     `import { Game, Space } from 'boardsmith';`,
-    `import { Sector as OtherSector } from './other.js';`,
-    `export class Sector extends Space<SameNameGame> {}`,
+    `import { Room as OtherRoom } from './other.js';`,
+    `export class Room extends Space<SameNameGame> {}`,
     `class SameNameGame extends Game<SameNameGame> {`,
     `  constructor(options: any) {`,
     `    super(options);`,
-    `    this.registerElements([Sector]);`,
-    `    this.create(Sector, new OtherSector().label);`,
+    `    this.registerElements([Room]);`,
+    `    this.create(Room, new OtherRoom().label);`,
     `  }`,
     `}`,
     `export const gameDefinition = { gameClass: SameNameGame, gameType: 'same-name', displayName: 'Same name', minPlayers: 2, maxPlayers: 2 };`,
@@ -175,7 +175,7 @@ describe('buildRuntimeBundle: element classes keep their names (#1549)', () => {
   it('names an element in a snapshot by its class as the author wrote it, as every other runner does', () => {
     const Runner = sameNameRuntime.GameRunner as typeof GameRunner;
     const runner = new Runner({ GameClass: sameNameRuntime.gameDefinition.gameClass, gameType: 'same-name', gameOptions: { playerCount: 2 } });
-    const classNames = [...JSON.stringify(runner.getSnapshot()).matchAll(/"className":"(\w*Sector\w*)"/g)].map((m) => m[1]);
-    expect(classNames).toEqual(['Sector']);
+    const classNames = [...JSON.stringify(runner.getSnapshot()).matchAll(/"className":"(\w*Room\w*)"/g)].map((m) => m[1]);
+    expect(classNames).toEqual(['Room']);
   });
 });

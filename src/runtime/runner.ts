@@ -1544,7 +1544,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * three of which are now restored authoritatively below. Crucially, replay was
    * also unsound: selection-step / pending-completed actions are not recorded
    * in action history, so replaying an incomplete actionHistory
-   * mis-positioned the flow and crashed real games (e.g. MERC's bot dictator
+   * mis-positioned the flow and crashed real games (e.g. a bot sheriff
    * Day-1 turn: "Player N is not awaiting action"). Restoring state directly
    * sidesteps that entire class of bug.
    *

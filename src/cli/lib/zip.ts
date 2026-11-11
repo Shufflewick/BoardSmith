@@ -100,7 +100,7 @@ export function readDistDir(distDir: string): Map<string, Uint8Array> {
   // All files under ui/ -> strip ui/ prefix
   collectFiles(join(distDir, 'ui'), fileMap);
 
-  // Public assets at dist root (equipment/, dictators/, etc.), keeping their paths;
+  // Public assets at dist root (equipment/, sheriffs/, etc.), keeping their paths;
   // the known build subdirectories and manifest.json were taken above
   for (const absPath of listFiles(distDir, { sourceTree: false })) {
     const relPath = relative(distDir, absPath);

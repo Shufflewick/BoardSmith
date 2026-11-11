@@ -703,13 +703,13 @@ describe('playerView Function', () => {
 
 describe('Game Restoration', () => {
   // Test class with element references
-  class Squad extends Space<TestGame> {
-    sectorId?: number;
-    linkedSquad?: Squad;
+  class Crew extends Space<TestGame> {
+    roomId?: number;
+    linkedCrew?: Crew;
   }
 
-  class RebelPlayer extends Space<TestGame> {
-    primarySquad?: Squad;
+  class OutlawPlayer extends Space<TestGame> {
+    primaryCrew?: Crew;
   }
 
   class RefTestGame extends Game<RefTestGame, Player> {}
@@ -717,36 +717,36 @@ describe('Game Restoration', () => {
   it('should resolve element references after restoration', async () => {
     // Create original game with element references
     const game = new RefTestGame({ playerCount: 2 });
-    game._ctx.classRegistry.set('Squad', Squad);
-    game._ctx.classRegistry.set('RebelPlayer', RebelPlayer);
+    game._ctx.classRegistry.set('Crew', Crew);
+    game._ctx.classRegistry.set('OutlawPlayer', OutlawPlayer);
 
-    const rebel = game.create(RebelPlayer, 'rebel1');
-    const squad1 = game.create(Squad, 'squad1', { sectorId: 5 });
-    const squad2 = game.create(Squad, 'squad2', { sectorId: 10 });
+    const outlaw = game.create(OutlawPlayer, 'outlaw1');
+    const crew1 = game.create(Crew, 'crew1', { roomId: 5 });
+    const crew2 = game.create(Crew, 'crew2', { roomId: 10 });
 
     // Set element references
-    rebel.primarySquad = squad1;
-    squad1.linkedSquad = squad2;
+    outlaw.primaryCrew = crew1;
+    crew1.linkedCrew = crew2;
 
     // Serialize
     const json = game.toJSON();
 
     // Verify serialization encoded references correctly
-    const rebelJson = json.children?.find(c => c.name === 'rebel1');
-    // With 2 players as children (indices 0, 1), then rebel (2), squad1 (3), squad2 (4)
-    expect(rebelJson?.attributes.primarySquad).toEqual({ __elementRef: '3' }); // squad1 is at index 3
+    const outlawJson = json.children?.find(c => c.name === 'outlaw1');
+    // With 2 players as children (indices 0, 1), then outlaw (2), crew1 (3), crew2 (4)
+    expect(outlawJson?.attributes.primaryCrew).toEqual({ __elementRef: '3' }); // crew1 is at index 3
 
     const restored = await serializedRoundTrip(game, RefTestGame);
 
     // Verify references were resolved
-    const restoredRebel = restored.first({ name: 'rebel1' }) as RebelPlayer;
-    const restoredSquad1 = restored.first({ name: 'squad1' }) as Squad;
-    const restoredSquad2 = restored.first({ name: 'squad2' }) as Squad;
+    const restoredOutlaw = restored.first({ name: 'outlaw1' }) as OutlawPlayer;
+    const restoredCrew1 = restored.first({ name: 'crew1' }) as Crew;
+    const restoredCrew2 = restored.first({ name: 'crew2' }) as Crew;
 
-    expect(restoredRebel.primarySquad).toBe(restoredSquad1);
-    expect(restoredSquad1.linkedSquad).toBe(restoredSquad2);
-    expect(restoredSquad1.sectorId).toBe(5);
-    expect(restoredSquad2.sectorId).toBe(10);
+    expect(restoredOutlaw.primaryCrew).toBe(restoredCrew1);
+    expect(restoredCrew1.linkedCrew).toBe(restoredCrew2);
+    expect(restoredCrew1.roomId).toBe(5);
+    expect(restoredCrew2.roomId).toBe(10);
   });
 
   it('should resolve nested element references in objects', async () => {
@@ -761,11 +761,11 @@ describe('Game Restoration', () => {
 
     const game = new RefTestGame({ playerCount: 2 });
     game._ctx.classRegistry.set('DataHolder', DataHolder);
-    game._ctx.classRegistry.set('Squad', Squad);
+    game._ctx.classRegistry.set('Crew', Crew);
 
     const holder = game.create(DataHolder, 'holder');
-    const target1 = game.create(Squad, 'target1');
-    const target2 = game.create(Squad, 'target2');
+    const target1 = game.create(Crew, 'target1');
+    const target2 = game.create(Crew, 'target2');
 
     holder.data = {
       target: target1,
@@ -776,8 +776,8 @@ describe('Game Restoration', () => {
 
     const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredHolder = restored.first({ name: 'holder' }) as DataHolder;
-    const restoredTarget1 = restored.first({ name: 'target1' }) as Squad;
-    const restoredTarget2 = restored.first({ name: 'target2' }) as Squad;
+    const restoredTarget1 = restored.first({ name: 'target1' }) as Crew;
+    const restoredTarget2 = restored.first({ name: 'target2' }) as Crew;
 
     expect(restoredHolder.data?.target).toBe(restoredTarget1);
     expect(restoredHolder.data?.nested?.anotherTarget).toBe(restoredTarget2);
@@ -785,23 +785,23 @@ describe('Game Restoration', () => {
 
   it('should resolve element references in arrays', async () => {
     class Container extends Space<TestGame> {
-      items?: Squad[];
+      items?: Crew[];
     }
 
     const game = new RefTestGame({ playerCount: 2 });
     game._ctx.classRegistry.set('Container', Container);
-    game._ctx.classRegistry.set('Squad', Squad);
+    game._ctx.classRegistry.set('Crew', Crew);
 
     const container = game.create(Container, 'container');
-    const item1 = game.create(Squad, 'item1');
-    const item2 = game.create(Squad, 'item2');
+    const item1 = game.create(Crew, 'item1');
+    const item2 = game.create(Crew, 'item2');
 
     container.items = [item1, item2];
 
     const restored = await serializedRoundTrip(game, RefTestGame);
     const restoredContainer = restored.first({ name: 'container' }) as Container;
-    const restoredItem1 = restored.first({ name: 'item1' }) as Squad;
-    const restoredItem2 = restored.first({ name: 'item2' }) as Squad;
+    const restoredItem1 = restored.first({ name: 'item1' }) as Crew;
+    const restoredItem2 = restored.first({ name: 'item2' }) as Crew;
 
     expect(restoredContainer.items).toHaveLength(2);
     expect(restoredContainer.items?.[0]).toBe(restoredItem1);
@@ -823,21 +823,21 @@ describe('PersistentMap', () => {
   it('should store and retrieve values', () => {
     const game = new GameWithPersistentMap({ playerCount: 2 });
 
-    game.pendingLoot.set('sector1', ['gold', 'silver']);
-    game.pendingLoot.set('sector2', ['bronze']);
+    game.pendingLoot.set('room1', ['gold', 'silver']);
+    game.pendingLoot.set('room2', ['bronze']);
 
-    expect(game.pendingLoot.get('sector1')).toEqual(['gold', 'silver']);
-    expect(game.pendingLoot.get('sector2')).toEqual(['bronze']);
+    expect(game.pendingLoot.get('room1')).toEqual(['gold', 'silver']);
+    expect(game.pendingLoot.get('room2')).toEqual(['bronze']);
     expect(game.pendingLoot.size).toBe(2);
   });
 
   it('should persist data in game.settings', () => {
     const game = new GameWithPersistentMap({ playerCount: 2 });
 
-    game.pendingLoot.set('sector1', ['gold']);
+    game.pendingLoot.set('room1', ['gold']);
 
     // Data should be stored in settings
-    expect(game.settings.pendingLoot).toEqual({ sector1: ['gold'] });
+    expect(game.settings.pendingLoot).toEqual({ room1: ['gold'] });
   });
 
   it('should support Map operations', () => {
@@ -876,13 +876,13 @@ describe('PersistentMap', () => {
   it('should survive serialization/deserialization via settings', () => {
     const game = new GameWithPersistentMap({ playerCount: 2 });
 
-    game.pendingLoot.set('sector1', ['gold', 'silver']);
+    game.pendingLoot.set('room1', ['gold', 'silver']);
 
     // Serialize
     const json = game.toJSON();
 
     // Verify settings contains the data
-    expect(json.settings.pendingLoot).toEqual({ sector1: ['gold', 'silver'] });
+    expect(json.settings.pendingLoot).toEqual({ room1: ['gold', 'silver'] });
 
     // In HMR scenario, a new game is created and settings are restored
     // We simulate this by creating a new game and copying settings
@@ -890,7 +890,7 @@ describe('PersistentMap', () => {
     newGame.settings = { ...json.settings };
 
     // PersistentMap should read from settings
-    expect(newGame.pendingLoot.get('sector1')).toEqual(['gold', 'silver']);
+    expect(newGame.pendingLoot.get('room1')).toEqual(['gold', 'silver']);
   });
 
   it('should return same instance for same name', () => {

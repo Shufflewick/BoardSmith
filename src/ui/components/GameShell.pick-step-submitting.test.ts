@@ -64,7 +64,7 @@ describe('GameShell sending a pick step (#1595)', () => {
     fromHost({
       type: 'server_response',
       requestId: requests('resolve_choices')[0].requestId,
-      result: { success: true, choices: [{ value: 'kit', display: 'Medical Kit' }, { value: 'smaw', display: 'SMAW' }] },
+      result: { success: true, choices: [{ value: 'kit', display: 'Medical Kit' }, { value: 'longbow', display: 'Longbow' }] },
     });
     await flushPromises();
 

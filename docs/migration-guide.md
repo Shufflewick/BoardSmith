@@ -251,14 +251,14 @@ a `select` or `exclusive` needs a string `default` and `choices` given as
 match: `ExclusivePlayerOption` now requires `choices` and a string `default`
 (no seat number), and `StandardPlayerOption` is a `select` with a required
 `default` and `{ value, label }` choices, with no `text` or plain-string form.
-A `color` option is typed as `ColorOptionDefinition`. MERC's `isDictator` is an
-example (Shufflewick/MERC#72):
+A `color` option is typed as `ColorOptionDefinition`. An `isSheriff` option is an
+example:
 
 ```typescript
 // Before: refused, it has no choices
-isDictator: { type: 'exclusive', label: 'Dictator', default: 'last' }
+isSheriff: { type: 'exclusive', label: 'Sheriff', default: 'last' }
 // After
-isDictator: { type: 'exclusive', label: 'Dictator', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] }
+isSheriff: { type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] }
 ```
 
 ## `shuffle()` clears the visibility of what it shuffles (#962)
@@ -836,12 +836,12 @@ Callbacks still run immediately as normal game code. The only change is that mut
 
 ```typescript
 // Before -- mutations captured on event for theatre view
-game.animate('combat', data, () => {
+game.animate('duel', data, () => {
   target.putInto(graveyard);
 });
 
 // After -- mutations happen via normal code, event is pure data
-game.animate('combat', data);
+game.animate('duel', data);
 target.putInto(graveyard);
 ```
 
@@ -910,13 +910,13 @@ A later release made a third argument required: `{ skip: 'run' }` calls the hand
 
 ```typescript
 // Before
-animations.registerHandler('combat', async (event) => {
+animations.registerHandler('duel', async (event) => {
   await playAttack(event.data);
   await showDamage(event.data);
 });
 
 // After (adds skip support)
-animations.registerHandler('combat', async (event, { signal }) => {
+animations.registerHandler('duel', async (event, { signal }) => {
   await playAttack(event.data);
   if (signal.aborted) return;
   await showDamage(event.data);

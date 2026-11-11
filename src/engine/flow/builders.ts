@@ -40,7 +40,7 @@ export function sequence<G extends Game = Game>(...steps: FlowNode<G>[]): FlowNo
  * Create a named game phase
  *
  * Phases are named sections of the flow that can be displayed in the UI
- * (e.g., "Combat Phase", "Income Phase"). The onEnterPhase/onExitPhase
+ * (e.g., "Duel Phase", "Income Phase"). The onEnterPhase/onExitPhase
  * hooks of the flow definition are called when entering/exiting phases.
  *
  * @example
@@ -49,7 +49,7 @@ export function sequence<G extends Game = Game>(...steps: FlowNode<G>[]): FlowNo
  *   phase('setup', {
  *     do: simultaneousActionStep({ actions: ['chooseCharacter'] })
  *   }),
- *   phase('combat', {
+ *   phase('duel', {
  *     do: eachPlayer({ do: actionStep({ actions: ['attack', 'defend'] }) })
  *   }),
  *   phase('income', {
@@ -544,10 +544,10 @@ export function setVar<G extends Game = Game>(
  * ```typescript
  * // With all options
  * turnLoop({
- *   name: 'rebel-action-loop',
+ *   name: 'outlaw-action-loop',
  *   actions: ['move', 'explore', 'train', 'endTurn'],
  *   while: (ctx) => {
- *     const player = ctx.player as RebelPlayer;
+ *     const player = ctx.player as OutlawPlayer;
  *     return player.team.some(m => m.actionsRemaining > 0);
  *   },
  *   maxIterations: 30,
@@ -610,26 +610,26 @@ export function turnLoop<G extends Game = Game>(config: {
  * A state-aware loop that checks for pending async game state before exiting.
  *
  * Use this instead of loop() or turnLoop() when your game has async state
- * (like combat resolution) that must complete before the loop can exit.
+ * (like duel resolution) that must complete before the loop can exit.
  *
  * The key insight: A regular loop's `while` condition might become false
  * (e.g., player has no actions left), but there could be pending game state
- * (e.g., active combat) that needs resolution first. This helper ensures
+ * (e.g., active duel) that needs resolution first. This helper ensures
  * the loop continues until all pending states are resolved.
  *
  * @example
  * ```typescript
- * // Combat game - keep looping while combat is pending, even if no actions left
+ * // Duel game - keep looping while duel is pending, even if no actions left
  * stateAwareLoop({
- *   name: 'merc-action-loop',
+ *   name: 'hero-action-loop',
  *   actions: ['move', 'attack', 'endTurn'],
  *   while: (ctx) => {
- *     const player = ctx.player as MercPlayer;
+ *     const player = ctx.player as HeroPlayer;
  *     return player.team.some(m => m.actionsRemaining > 0);
  *   },
  *   pendingStates: (ctx) => [
- *     (ctx.game as MercGame).activeCombat,    // Combat waiting for resolution
- *     (ctx.game as MercGame).pendingCombat,   // Combat about to start
+ *     (ctx.game as HeroGame).activeDuel,    // Duel waiting for resolution
+ *     (ctx.game as HeroGame).pendingDuel,   // Duel about to start
  *   ],
  * })
  * ```
@@ -646,15 +646,15 @@ export function turnLoop<G extends Game = Game>(config: {
  * @example
  * ```typescript
  * // A composite body: act, then drain whatever the action queued (#35). This
- * // is the shape the MERC-style example above actually needs — a bare
+ * // is the shape the example above actually needs — a bare
  * // actionStep cannot both take the action and resolve what it produced.
  * stateAwareLoop({
- *   name: 'rebel-phase',
- *   while: (ctx) => (ctx.game as MercGame).rebelsHaveActions(),
- *   pendingStates: (ctx) => [(ctx.game as MercGame).pendingCombat],
+ *   name: 'outlaw-phase',
+ *   while: (ctx) => (ctx.game as HeroGame).rebelsHaveActions(),
+ *   pendingStates: (ctx) => [(ctx.game as HeroGame).pendingDuel],
  *   do: sequence(
  *     actionStep({ actions: ['move', 'attack'], player: (ctx) => ctx.game.getPlayer(1)! }),
- *     execute((ctx) => (ctx.game as MercGame).drainPendingCombat()),
+ *     execute((ctx) => (ctx.game as HeroGame).drainPendingDuel()),
  *   ),
  * })
  * ```
@@ -695,7 +695,7 @@ export function stateAwareLoop<G extends Game = Game>(config: {
   /**
    * Return an array of pending state values to check.
    * If ANY of these are truthy, the loop continues even if `while` returns false.
-   * This ensures async game state (like combat) is resolved before the loop exits.
+   * This ensures async game state (like duel) is resolved before the loop exits.
    */
   pendingStates?: (context: FlowContext<G>) => unknown[];
   /**

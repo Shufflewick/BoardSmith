@@ -374,10 +374,8 @@ node scripts/bench-bot/run.mjs --out docs/bot-speed-baseline.md
 ```
 
 The catalogue is checkers, chess, cribbage, go-fish (4 players), hex at 11 and
-19, and seven (7 players), plus MERC (at its smallest table) when it is checked
-out at `~/Dropbox/MERC/BoardSmith/MERC`. When it is not, a run prints that it
-skipped MERC and the report says so. The games are only read, and every game's
-`boardsmith` imports are bundled from this checkout, MERC's included, whatever
+19, and seven (7 players). The games are only read, and every game's
+`boardsmith` imports are bundled from this checkout, whatever
 copy of BoardSmith the game itself uses.
 
 For each game it plays one seeded game of random moves, picks an early, a

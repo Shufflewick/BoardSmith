@@ -49,12 +49,12 @@ function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
         },
       ],
     },
-    assignSquad: {
-      name: 'assignSquad',
+    assignCrew: {
+      name: 'assignCrew',
       prompt: 'Assign operatives',
       selections: [
         {
-          name: 'squad',
+          name: 'crew',
           type: 'choice',
           prompt: 'Which operatives?',
           multiSelect: { min: 1, max: 2 },
@@ -62,12 +62,12 @@ function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
         },
       ],
     },
-    guardedSquad: {
-      name: 'guardedSquad',
+    guardedCrew: {
+      name: 'guardedCrew',
       prompt: 'Assign operatives',
       selections: [
         {
-          name: 'squad',
+          name: 'crew',
           type: 'choice',
           prompt: 'Which operatives?',
           multiSelect: { min: 1, max: 2 },
@@ -78,8 +78,8 @@ function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
         },
       ],
     },
-    orderSquad: {
-      name: 'orderSquad',
+    orderCrew: {
+      name: 'orderCrew',
       prompt: 'Order operatives',
       selections: [
         {
@@ -122,7 +122,7 @@ describe('JSON-valued choices survive the wire (#219)', () => {
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
+      availableActions: ref(['assignSpy', 'assignCrew', 'guardedCrew', 'orderCrew', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -156,8 +156,8 @@ describe('JSON-valued choices survive the wire (#219)', () => {
   });
 
   it('accepts a multiSelect array of deserialized copies', async () => {
-    const result = await controller.execute('assignSquad', {
-      squad: overTheWire(OPERATIVES),
+    const result = await controller.execute('assignCrew', {
+      crew: overTheWire(OPERATIVES),
     });
 
     expect(result.error).toBeUndefined();
@@ -222,7 +222,7 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
     sendAction = createMockSendAction();
     controller = useActionController({
       sendAction,
-      availableActions: ref(['assignSpy', 'assignSquad', 'guardedSquad', 'orderSquad', 'guardedAssign']),
+      availableActions: ref(['assignSpy', 'assignCrew', 'guardedCrew', 'orderCrew', 'guardedAssign']),
       actionMetadata: ref(assignSpyMetadata()),
       isMyTurn: ref(true),
       autoFill: false,
@@ -231,18 +231,18 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
   });
 
   it('a second toggle of a copied object deselects it', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
-    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[0]));
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', overTheWire(OPERATIVES[0]));
+    await controller.toggleMultiSelect('crew', overTheWire(OPERATIVES[0]));
 
     expect(controller.multiSelectDraft.value?.values).toEqual([]);
   });
 
   it('reports a copied object as selected while the draft holds it', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', overTheWire(OPERATIVES[1]));
 
-    expect(controller.isMultiSelectSelected('squad', overTheWire(OPERATIVES[1]))).toBe(true);
+    expect(controller.isMultiSelectSelected('crew', overTheWire(OPERATIVES[1]))).toBe(true);
   });
 
   it('applies a prefill holding a copied object, as fill does', async () => {
@@ -262,68 +262,68 @@ describe('the draft and prefills judge a pick value by the same rule as fill (#8
   });
 
   it('holds the offered value when a toggle names a choice by shorthand', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Vex');
 
     expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);
-    expect(controller.isMultiSelectSelected('squad', OPERATIVES[1])).toBe(true);
+    expect(controller.isMultiSelectSelected('crew', OPERATIVES[1])).toBe(true);
   });
 
   it('refuses a toggle that names no offered choice, as fill does', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Nobody');
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Nobody');
 
     expect(controller.multiSelectDraft.value).toBe(null);
-    expect(controller.lastError.value).toBe('Invalid selection for "squad"');
+    expect(controller.lastError.value).toBe('Invalid selection for "crew"');
   });
 
   it('reports a toggled item as selected by either shorthand', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Vex');
 
-    expect(controller.isMultiSelectSelected('squad', 'Agent Vex')).toBe(true);
-    expect(controller.isMultiSelectSelected('squad', 'operative:1:2')).toBe(true);
-    expect(controller.isMultiSelectSelected('squad', 'Agent Null')).toBe(false);
+    expect(controller.isMultiSelectSelected('crew', 'Agent Vex')).toBe(true);
+    expect(controller.isMultiSelectSelected('crew', 'operative:1:2')).toBe(true);
+    expect(controller.isMultiSelectSelected('crew', 'Agent Null')).toBe(false);
   });
 
   it('removes an entry added as an object when toggled by its display text', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', overTheWire(OPERATIVES[1]));
-    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', overTheWire(OPERATIVES[1]));
+    await controller.toggleMultiSelect('crew', 'Agent Vex');
 
     expect(controller.multiSelectDraft.value?.values).toEqual([]);
   });
 
   it('removes an entry added by display text when toggled by its id', async () => {
-    await controller.start('assignSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Vex');
-    await controller.toggleMultiSelect('squad', 'operative:1:2');
+    await controller.start('assignCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Vex');
+    await controller.toggleMultiSelect('crew', 'operative:1:2');
 
     expect(controller.multiSelectDraft.value?.values).toEqual([]);
   });
 
   it('refuses a toggle naming a disabled choice, and says why', async () => {
-    await controller.start('guardedSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Null');
+    await controller.start('guardedCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Null');
 
     expect(controller.multiSelectDraft.value).toBe(null);
     expect(controller.lastError.value).toBe('Selection disabled: Already deployed');
   });
 
   it('never refuses removing an entry whose choice was disabled after it was added', async () => {
-    await controller.start('guardedSquad');
-    await controller.toggleMultiSelect('squad', 'Agent Vex');
+    await controller.start('guardedCrew');
+    await controller.toggleMultiSelect('crew', 'Agent Vex');
     const vex = controller.currentChoices.value.find((c) => c.display === 'Agent Vex')!;
     vex.disabled = 'Called away';
 
-    await controller.toggleMultiSelect('squad', 'operative:1:2');
+    await controller.toggleMultiSelect('crew', 'operative:1:2');
 
     expect(controller.multiSelectDraft.value?.values).toEqual([]);
     expect(controller.lastError.value).toBe(null);
   });
 
   it('holds the offered value when a list entry names a choice by shorthand', async () => {
-    await controller.start('orderSquad');
+    await controller.start('orderCrew');
     await controller.appendListEntry('order', 'operative:1:2');
 
     expect(controller.multiSelectDraft.value?.values).toEqual([OPERATIVES[1]]);

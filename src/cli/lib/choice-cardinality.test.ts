@@ -58,7 +58,7 @@ describe('observeChoiceStep', () => {
   });
 
   it('treats dependsOn as a dependent filter', () => {
-    const o = observeChoiceStep('drop', { name: 'item', type: 'element', dependsOn: 'merc' }, 40);
+    const o = observeChoiceStep('drop', { name: 'item', type: 'element', dependsOn: 'hero' }, 40);
     expect(o.dependent).toBe(true);
     expect(o.boardAnchored).toBe(false);
   });

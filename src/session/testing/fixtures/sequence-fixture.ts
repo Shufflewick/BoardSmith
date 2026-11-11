@@ -1,20 +1,20 @@
 /**
- * Minimal fixture that faithfully mirrors MERC's "Day 1 landing" turn opening.
+ * Minimal fixture that mirrors a two-step turn opening: make camp, then recruit.
  *
  * Faithfulness that matters for the regression:
- *  - `placeLanding` and `hireFirstMerc` are BOTH offered by the SAME
- *    `simultaneousActionStep` (MERC's `rebel-landing-actions`), wrapped in a
+ *  - `chooseCamp` and `recruitFirstHero` are BOTH offered by the SAME
+ *    `simultaneousActionStep`, wrapped in a
  *    `loop`. They are NOT two sequential `actionStep`s.
  *  - Which of the two is "available" is decided per-player by each action's
- *    `condition` (placeLanding requires not-yet-landed; hireFirstMerc requires
- *    landed-but-not-hired). After `placeLanding` executes, the simultaneous step
- *    must RE-EVALUATE the player's available actions to `[hireFirstMerc]`.
- *  - `placeLanding` carries a required element selection (`sector`), so the
- *    client sends it as a normal `action placeLanding {sector:<id>}` op.
+ *    `condition` (chooseCamp requires not-yet-camped; recruitFirstHero requires
+ *    camped-but-not-recruited). After `chooseCamp` executes, the simultaneous step
+ *    must RE-EVALUATE the player's available actions to `[recruitFirstHero]`.
+ *  - `chooseCamp` carries a required element selection (`site`), so the
+ *    client sends it as a normal `action chooseCamp {site:<id>}` op.
  *
  * The regression: across the executeOp -> getSnapshot -> fromSnapshot round-trip,
- * the post-`placeLanding` available actions must advance to `[hireFirstMerc]`,
- * not stay stuck on `[placeLanding]`.
+ * the post-`chooseCamp` available actions must advance to `[recruitFirstHero]`,
+ * not stay stuck on `[chooseCamp]`.
  */
 
 import {
@@ -31,71 +31,70 @@ import {
 } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 
-/** A landing-zone sector the player picks during placeLanding. */
-class Sector extends Space<SequenceGame> {}
+/** A campsite the player picks during chooseCamp. */
+class Site extends Space<SequenceGame> {}
 
-/** A mercenary piece created by hireFirstMerc. */
-class Merc extends Piece<SequenceGame> {}
+/** A hero piece created by recruitFirstHero. */
+class Hero extends Piece<SequenceGame> {}
 
-/** A rebel player who must land, then hire. */
-class RebelPlayer extends Player<SequenceGame, RebelPlayer> {
-  landed = false;
-  hired = false;
+/** An explorer who must make camp, then recruit. */
+class ExplorerPlayer extends Player<SequenceGame, ExplorerPlayer> {
+  camped = false;
+  recruited = false;
 }
 
-class SequenceGame extends Game<SequenceGame, RebelPlayer> {
-  static PlayerClass = RebelPlayer;
+class SequenceGame extends Game<SequenceGame, ExplorerPlayer> {
+  static PlayerClass = ExplorerPlayer;
 
   board!: Space;
 
   constructor(options: GameOptions) {
     super(options);
 
-    // `Merc` is created mid-flow (hireFirstMerc), not in this constructor, so
+    // `Hero` is created mid-flow (recruitFirstHero), not in this constructor, so
     // it would otherwise never reach a restored game's class registry and the
-    // fixture's snapshot would be unrestorable once a merc exists.
-    this.registerElements([Merc]);
+    // fixture's snapshot would be unrestorable once a hero exists.
+    this.registerElements([Hero]);
 
     this.board = this.create(Space, 'board');
-    this.board.create(Sector, 'sector-A');
-    this.board.create(Sector, 'sector-B');
-    this.board.create(Sector, 'sector-C');
+    this.board.create(Site, 'site-A');
+    this.board.create(Site, 'site-B');
+    this.board.create(Site, 'site-C');
 
-    // placeLanding: gated to "not yet landed". Required element selection.
+    // chooseCamp: gated to "not yet camped". Required element selection.
     this.registerAction(
-      Action.create('placeLanding')
+      Action.create('chooseCamp')
         .condition({
-          'has not landed yet': (ctx) => !(ctx.player as RebelPlayer).landed,
+          'has not camped yet': (ctx) => !(ctx.player as ExplorerPlayer).camped,
         })
-        .chooseElement('sector', {
-          elementClass: Sector,
+        .chooseElement('site', {
+          elementClass: Site,
           filter: (el) => el.parent === this.board,
         })
         .execute((_args, ctx) => {
-          (ctx.player as RebelPlayer).landed = true;
+          (ctx.player as ExplorerPlayer).camped = true;
           return { success: true };
         }),
     );
 
-    // hireFirstMerc: gated to "landed but not hired". No selection.
+    // recruitFirstHero: gated to "camped but not recruited". No selection.
     this.registerAction(
-      Action.create('hireFirstMerc')
+      Action.create('recruitFirstHero')
         .condition({
-          'landed but not hired': (ctx) => {
-            const p = ctx.player as RebelPlayer;
-            return p.landed && !p.hired;
+          'camped but not recruited': (ctx) => {
+            const p = ctx.player as ExplorerPlayer;
+            return p.camped && !p.recruited;
           },
         })
         .execute((_args, ctx) => {
-          (ctx.player as RebelPlayer).hired = true;
-          this.create(Merc, 'merc-1');
+          (ctx.player as ExplorerPlayer).recruited = true;
+          this.create(Hero, 'hero-1');
           return { success: true };
         }),
     );
 
     // IMPORTANT: the awaiting `simultaneousActionStep` sits inside a `loop` that
-    // is a NON-LAST child of the root `sequence` (steps[1] of 3). This mirrors
-    // MERC, whose landing phase is a non-last child of the root sequence — the
+    // is a NON-LAST child of the root `sequence` (steps[1] of 3). This is the
     // shape that exercises the flow-position restore() off-by-one. (A flow whose
     // awaiting node is the LAST child of every enclosing sequence accidentally
     // round-trips fine and would NOT reproduce the bug.)
@@ -105,17 +104,17 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
         execute(() => {
           this.message('setup');
         }),
-        // step 1 (NON-LAST): the landing loop.
+        // step 1 (NON-LAST): the camp loop.
         loop({
-          name: 'rebel-landing',
-          while: () => this.players.some((p) => !(p.landed && p.hired)),
+          name: 'camp-setup',
+          while: () => this.players.some((p) => !(p.camped && p.recruited)),
           maxIterations: 50,
           do: simultaneousActionStep({
-            name: 'rebel-landing-actions',
+            name: 'camp-setup-actions',
             players: () => this.players,
-            actions: ['placeLanding', 'hireFirstMerc'],
-            playerDone: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
-            skipPlayer: (_ctx, p) => (p as RebelPlayer).landed && (p as RebelPlayer).hired,
+            actions: ['chooseCamp', 'recruitFirstHero'],
+            playerDone: (_ctx, p) => (p as ExplorerPlayer).camped && (p as ExplorerPlayer).recruited,
+            skipPlayer: (_ctx, p) => (p as ExplorerPlayer).camped && (p as ExplorerPlayer).recruited,
           }),
         }),
         // step 2: a trailing execute so the loop is a non-last sibling.
@@ -127,7 +126,7 @@ class SequenceGame extends Game<SequenceGame, RebelPlayer> {
   }
 }
 
-export { SequenceGame, RebelPlayer, Sector, Merc };
+export { SequenceGame, ExplorerPlayer, Site, Hero };
 
 export const sequenceFixtureDefinition: GameDefinitionLike = {
   gameClass: SequenceGame,

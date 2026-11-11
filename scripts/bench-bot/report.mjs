@@ -71,8 +71,7 @@ export const loads = (load) => load.map((value) => value.toFixed(2)).join(', ');
  * The baseline as Markdown.
  *
  * @param meta where and how it was measured: `date`, `commit`, `dirty`, `node`,
- *   `devMode`, `loadBefore`, `loadAfter`, `cpus`, `cpuModel`, and `skipped`, a reason
- *   for each catalogue game it left out.
+ *   `devMode`, `loadBefore`, `loadAfter`, `cpus` and `cpuModel`.
  * @param games one entry per game: `name`, `commit`, `playerCount`, `plies`,
  *   and `positions`, each with `name`, `ply`, `seat`, `presets`, `fixed` and `profile`.
  */
@@ -109,7 +108,6 @@ export function formatReport(meta, games) {
     '- Mode: production (`isDevMode()` is false in the bundled engine, as in a worker child)',
     `- Machine: ${meta.cpus} x ${meta.cpuModel}`,
     `- Load average (1, 5, 15 min): ${loads(meta.loadBefore)} at the start; ${loads(meta.loadAfter)} at the end`,
-    ...(meta.skipped ?? []).map((reason) => `- Skipped: ${reason}`),
     `- Games: ${games.map((game) => `${game.name} at ${checkout(game)} (${game.playerCount} players, ${game.plies} plies played)`).join('; ')}`,
     '',
     '## Difficulty presets',

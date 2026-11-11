@@ -156,8 +156,8 @@ ruleTester.run('no-element-array-state', rule, {
     // The docs/common-pitfalls.md "Player Data Serialization" example.
     ...['GameElement', 'Piece'].map((base) => ({
       code: `
-        class Squad extends ${base} {}
-        class MyPlayer extends Player { squadRefs: Squad[] = []; }
+        class Crew extends ${base} {}
+        class MyPlayer extends Player { crewRefs: Crew[] = []; }
       `,
       errors: [{ messageId: 'elementArrayField' as const }],
     })),
@@ -181,7 +181,7 @@ ruleTester.run('no-element-array-state', rule, {
     {
       code: `
         import { Piece as BasePiece } from 'boardsmith';
-        class Tracker { militia: BasePiece[] = []; }
+        class Tracker { guards: BasePiece[] = []; }
       `,
       errors: [{ messageId: 'elementArrayField' as const }],
     },
@@ -189,7 +189,7 @@ ruleTester.run('no-element-array-state', rule, {
     ...['Space', 'Piece', 'GameElement'].map((base) => ({
       code: `
         class Equipment extends Piece {}
-        class Sector extends ${base} { stash: Equipment[] = []; }
+        class Room extends ${base} { stash: Equipment[] = []; }
       `,
       errors: [{ messageId: 'elementArrayField' as const }],
     })),

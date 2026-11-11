@@ -4,8 +4,8 @@
  *
  *   node scripts/bench-bot/run.mjs [game ...] [--out <file>]
  *
- * With no game it runs the catalogue table games below, from ~/BoardSmithGames,
- * and MERC when it is checked out (all read only). A game is a catalogue name (`chess`, `hex-19`) or the directory
+ * With no game it runs the catalogue table games below, from ~/BoardSmithGames
+ * (all read only). A game is a catalogue name (`chess`, `hex-19`) or the directory
  * of any game project. For each game it plays a seeded game of random moves to
  * an early, a middle and a late position, and there runs every difficulty
  * preset and a fixed-step search, against the BoardSmith in THIS checkout. It
@@ -28,8 +28,7 @@ const GAMES_DIR = join(homedir(), 'BoardSmithGames');
 
 /**
  * The catalogue table games, with the table sizes the 2026-10-10 measurement
- * used (#628). MERC is run when it is checked out, and left out with a note
- * when it is not.
+ * used (#628).
  */
 const CATALOGUE = [
   { name: 'checkers', dir: join(GAMES_DIR, 'checkers'), playerCount: 2 },
@@ -39,7 +38,6 @@ const CATALOGUE = [
   { name: 'hex-11', dir: join(GAMES_DIR, 'hex'), playerCount: 2, options: { boardSize: 11 } },
   { name: 'hex-19', dir: join(GAMES_DIR, 'hex'), playerCount: 2, options: { boardSize: 19 } },
   { name: 'seven', dir: join(GAMES_DIR, 'seven'), playerCount: 7 },
-  { name: 'merc', dir: join(homedir(), 'Dropbox', 'MERC', 'BoardSmith', 'MERC'), whereCheckedOut: true },
 ];
 
 const isGameProject = (dir) => existsSync(join(dir, 'boardsmith.json'));
@@ -59,9 +57,7 @@ function setupFor(arg) {
     if (!isGameProject(listed.dir)) {
       throw new Error(
         `${listed.name} is not checked out at ${listed.dir}. ` +
-          (listed.whereCheckedOut
-            ? 'Check it out there, or name only the games you have.'
-            : 'Clone the catalogue with bash ~/ShufflewickPub/scripts/clone-game-catalogue.sh, or name only the games you have.'),
+          'Clone the catalogue with bash ~/ShufflewickPub/scripts/clone-game-catalogue.sh, or name only the games you have.',
       );
     }
     return listed;
@@ -86,27 +82,13 @@ export function checkout(dir) {
   }
 }
 
-/**
- * The games named, or with none named the whole catalogue less any game that
- * is run only where it is checked out and is not, with why each was skipped.
- */
-function selectGames(games) {
-  if (games.length > 0) return { setups: games.map(setupFor), skipped: [] };
-  const missing = CATALOGUE.filter((entry) => entry.whereCheckedOut && !isGameProject(entry.dir));
-  return {
-    setups: CATALOGUE.filter((entry) => !missing.includes(entry)).map((entry) => setupFor(entry.name)),
-    skipped: missing.map((entry) => `${entry.name}, which is not checked out at ${entry.dir}`),
-  };
-}
-
 async function main() {
   // Production mode, as in a worker child, where `isDevMode()` is false. The
   // engine reads it when it loads, so it holds for the bundles loaded below; the
   // bundles report what the engine saw, and the report refuses anything else.
   process.env.NODE_ENV = 'production';
   const { out, games } = parseArgs(process.argv.slice(2));
-  const { setups, skipped } = selectGames(games);
-  for (const reason of skipped) process.stderr.write(`bench-bot: skipping ${reason}\n`);
+  const setups = (games.length > 0 ? games : CATALOGUE.map((entry) => entry.name)).map(setupFor);
 
   await import('tsx');
   const { importRuntimeBundle } = await import('../../src/cli/commands/game-runtime.ts');
@@ -149,7 +131,6 @@ async function main() {
       loadAfter: loadavg(),
       cpus: cpus().length,
       cpuModel: cpus()[0]?.model ?? 'unknown CPU',
-      skipped,
     },
     results,
   );

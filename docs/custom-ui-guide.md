@@ -193,7 +193,7 @@ await actionController.start('move', {
 
 // Pre-fill a later selection (auto-applied when that step activates)
 await actionController.start('dropEquipment', {
-  args: { merc: mercId },
+  args: { hero: heroId },
   prefill: { equipment: equipmentId },
 });
 ```
@@ -221,23 +221,23 @@ Use `prefill` for dependent selections where the choice isn't available until a 
 
 ### Common Pattern: Button → Board Selection
 
-A common pattern in custom UIs is a button that triggers an action requiring the user to select an element on the game board. For example, a "Retreat" button that requires selecting a destination sector.
+A common pattern in custom UIs is a button that triggers an action requiring the user to select an element on the game board. For example, a "Retreat" button that requires selecting a destination room.
 
 **The Wrong Way (easy mistake):**
 ```typescript
-// CombatPanel.vue
+// DuelPanel.vue
 function handleRetreat() {
-  // WRONG: execute() without the required 'retreatSector' parameter
-  // The action needs wizard mode to let the user select a sector!
+  // WRONG: execute() without the required 'retreatRoom' parameter
+  // The action needs wizard mode to let the user select a room!
   await actionController.execute('retreat', {});  // ❌ Fails silently
 }
 ```
 
 **The Right Way:**
 ```typescript
-// CombatPanel.vue
+// DuelPanel.vue
 function handleRetreat() {
-  // Start wizard mode - BoardSmith will enable sector selection
+  // Start wizard mode - BoardSmith will enable room selection
   actionController.start('retreat');  // ✓
 }
 ```
@@ -255,12 +255,12 @@ After calling `start()`, BoardSmith:
 ```vue
 <template>
   <div
-    v-for="sector in sectors"
-    :key="sector.id"
-    :class="{ selectable: boardInteraction.isSelectableElement(sector) }"
-    @click="onSectorClick(sector)"
+    v-for="room in rooms"
+    :key="room.id"
+    :class="{ selectable: boardInteraction.isSelectableElement(room) }"
+    @click="onRoomClick(room)"
   >
-    {{ sector.name }}
+    {{ room.name }}
   </div>
 </template>
 
@@ -271,11 +271,11 @@ import { findElements, useBoardInteraction, type GameViewElement, type TableBoar
 const props = defineProps<TableBoardProps>();
 const boardInteraction = useBoardInteraction();
 
-const sectors = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Sector' }) : []));
+const rooms = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Room' }) : []));
 
-function onSectorClick(sector: GameViewElement) {
-  if (boardInteraction.isSelectableElement(sector)) {
-    boardInteraction.triggerElementSelect(sector);
+function onRoomClick(room: GameViewElement) {
+  if (boardInteraction.isSelectableElement(room)) {
+    boardInteraction.triggerElementSelect(room);
   }
 }
 </script>
@@ -295,7 +295,7 @@ export function retreat(actionController: UseActionControllerReturn): void {
 
   if (check.needed) {
     console.log(check.reason);
-    // "Selection 'retreatSector' requires element selection from the game board"
+    // "Selection 'retreatRoom' requires element selection from the game board"
     actionController.start('retreat');
   } else {
     actionController.execute('retreat', {});
@@ -488,7 +488,7 @@ one thing to avoid.
 
 **Note:** `fill()` takes `choice.value`, never the `{ value, display }` choice object. A choice object is refused like any other value that is not on offer.
 
-Every controller call that takes a pick value (`fill()`, `execute()`, `start()`'s `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('squad', 'Agent Vex')` followed by `isMultiSelectSelected('squad', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
+Every controller call that takes a pick value (`fill()`, `execute()`, `start()`'s `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('crew', 'Agent Vex')` followed by `isMultiSelectSelected('crew', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
 
 `start()`'s `args` are the exception: the controller has not fetched that pick's choices yet, so they are sent as given and judged by the server, and the breadcrumb shows the value itself. The controller refuses only a list for a pick that takes one element. Pass the value under `prefill` instead when the breadcrumb should read as the choice's label.
 
@@ -754,18 +754,18 @@ any capturing listener, runs before they have marked the event.
 
 ## Step 6: Handling Dependent Selections
 
-When selection B depends on selection A (e.g., "select merc, then select their equipment"):
+When selection B depends on selection A (e.g., "select hero, then select their equipment"):
 
 ### Engine Side (for reference)
 
 ```typescript
 Action.create('dropEquipment')
-  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
+  .chooseElement('hero', { elements: () => [...game.all(Hero)] })
   .chooseElement('equipment', {
-    dependsOn: 'merc',  // Tells framework this depends on merc
+    dependsOn: 'hero',  // Tells framework this depends on hero
     elements: (ctx) => {
-      const merc = ctx.args.merc as Merc;
-      return [...merc.equipment.all(Equipment)];
+      const hero = ctx.args.hero as Hero;
+      return [...hero.equipment.all(Equipment)];
     }
   })
 ```
@@ -773,11 +773,11 @@ Action.create('dropEquipment')
 ### UI Side: Using prefill
 
 ```typescript
-// User clicks on a piece of equipment on a merc
-function onEquipmentClick(merc: any, equipment: any) {
+// User clicks on a piece of equipment on a hero
+function onEquipmentClick(hero: any, equipment: any) {
   // Start the action with both values
   actionController.start('dropEquipment', {
-    args: { merc: merc.id },
+    args: { hero: hero.id },
     prefill: { equipment: equipment.id },  // Auto-fills when equipment step activates
   });
 }
@@ -790,7 +790,7 @@ function onEquipmentClick(merc: any, equipment: any) {
 import { watch } from 'vue';
 import type { UseActionControllerReturn } from 'boardsmith/ui';
 
-// When merc selection changes, equipment choices update automatically
+// When hero selection changes, equipment choices update automatically
 export function logEquipmentChoices(actionController: UseActionControllerReturn): void {
   watch(
     () => actionController.validElements.value,
@@ -843,17 +843,17 @@ The `actionController.currentArgs` ref contains all args for the in-progress act
 ```typescript
 // computed comes from 'vue'
 
-// Get sector ID from current action (if any)
-const actionContextSectorId = computed(() => {
+// Get room ID from current action (if any)
+const actionContextRoomId = computed(() => {
   const args = actionController.currentArgs.value;
-  if (!args?.sectorId) return null;
+  if (!args?.roomId) return null;
 
   // Handle both plain ID and {id, name} object formats
-  const sectorId = args.sectorId;
-  if (typeof sectorId === 'object' && sectorId !== null) {
-    return (sectorId as { id: number }).id;
+  const roomId = args.roomId;
+  if (typeof roomId === 'object' && roomId !== null) {
+    return (roomId as { id: number }).id;
   }
-  return sectorId as number;
+  return roomId as number;
 });
 ```
 
@@ -1005,7 +1005,7 @@ error in the game frame's console naming the missing field.
 
 ### Example: Auto-Opening a Detail Panel
 
-When a sector-related action starts (either from ActionPanel or via followUp), automatically show the sector's detail panel:
+When a room-related action starts (either from ActionPanel or via followUp), automatically show the room's detail panel:
 
 <!-- typecheck: board -->
 ```vue
@@ -1015,47 +1015,47 @@ import type { UseActionControllerReturn } from 'boardsmith/ui';
 
 const props = defineProps<{
   actionController: UseActionControllerReturn;
-  sectors: Array<{ id: number; name: string }>;
+  rooms: Array<{ id: number; name: string }>;
 }>();
 
-// Sector selected by clicking on map
-const selectedSectorId = ref<number | null>(null);
+// Room selected by clicking on map
+const selectedRoomId = ref<number | null>(null);
 
-// Sector from action context (e.g., followUp.args.sectorId)
-const actionContextSectorId = computed(() => {
+// Room from action context (e.g., followUp.args.roomId)
+const actionContextRoomId = computed(() => {
   const args = props.actionController.currentArgs.value;
-  if (!args?.sectorId) return null;
+  if (!args?.roomId) return null;
 
   // Handle both plain ID and {id, name} object formats
-  const sectorId = args.sectorId;
-  if (typeof sectorId === 'object' && sectorId !== null) {
-    return (sectorId as { id: number }).id;
+  const roomId = args.roomId;
+  if (typeof roomId === 'object' && roomId !== null) {
+    return (roomId as { id: number }).id;
   }
-  return sectorId as number;
+  return roomId as number;
 });
 
-// Show panel if either source has a sector
-const activeSectorId = computed(() =>
-  selectedSectorId.value ?? actionContextSectorId.value
+// Show panel if either source has a room
+const activeRoomId = computed(() =>
+  selectedRoomId.value ?? actionContextRoomId.value
 );
 
-const activeSector = computed(() =>
-  props.sectors.find(s => s.id === activeSectorId.value)
+const activeRoom = computed(() =>
+  props.rooms.find(s => s.id === activeRoomId.value)
 );
 </script>
 
 <template>
   <div class="game-layout">
     <GameMap
-      :sectors="sectors"
-      @sector-click="selectedSectorId = $event"
+      :rooms="rooms"
+      @room-click="selectedRoomId = $event"
     />
 
-    <!-- Panel shows for clicked sector OR action context sector -->
-    <SectorPanel
-      v-if="activeSector"
-      :sector="activeSector"
-      @close="selectedSectorId = null"
+    <!-- Panel shows for clicked room OR action context room -->
+    <RoomPanel
+      v-if="activeRoom"
+      :room="activeRoom"
+      @close="selectedRoomId = null"
     />
   </div>
 </template>

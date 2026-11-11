@@ -30,7 +30,7 @@ const config = {
     { id: 'peek', type: 'boolean', label: 'Peek', default: false, designerOnly: true },
   ],
   playerOptions: [
-    { id: 'role', type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+    { id: 'role', type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] },
     { id: 'handicap', type: 'number', label: 'Handicap', default: 0 },
   ],
   colorPalette: [
@@ -42,9 +42,9 @@ const config = {
 
 const presets: GamePreset[] = [
   {
-    name: 'Play as Dictator',
+    name: 'Play as Sheriff',
     options: { rounds: 5 },
-    players: [{ playerOptions: { role: 'dictator' } }, { isBot: true, botLevel: 'hard', color: '#27AE60' }],
+    players: [{ playerOptions: { role: 'sheriff' } }, { isBot: true, botLevel: 'hard', color: '#27AE60' }],
   },
   { name: 'Long game', options: { rounds: 9 } },
   { name: 'Peeking', options: { peek: true }, players: [{}, {}] },
@@ -64,21 +64,21 @@ function inProject(): void {
 describe('presetStartOptions starts a test game as a preset starts it (#1565)', () => {
   it('seats each player as the preset says, with its game options', () => {
     inProject();
-    const { game } = createTestGame(RoleGame, presetStartOptions(def, 'Play as Dictator'));
+    const { game } = createTestGame(RoleGame, presetStartOptions(def, 'Play as Sheriff'));
 
     expect(game.players.length).toBe(2);
     expect(game.started).toMatchObject({
       rounds: 5,
       exclusiveSeats: { role: 1 },
       playerOptions: [
-        { role: 'dictator', handicap: 0, color: '#E74C3C' },
+        { role: 'sheriff', handicap: 0, color: '#E74C3C' },
         { handicap: 0, color: '#27AE60' },
       ],
       playerIsBot: [false, true],
       colors: ['#E74C3C', '#27AE60'],
     });
     expect(game.started.playerConfigs).toEqual([
-      { role: 'dictator', handicap: 0, color: '#E74C3C', name: 'Player 1', isBot: false, botLevel: DEV_BOT_LEVEL },
+      { role: 'sheriff', handicap: 0, color: '#E74C3C', name: 'Player 1', isBot: false, botLevel: DEV_BOT_LEVEL },
       { handicap: 0, color: '#27AE60', name: 'Player 2', isBot: true, botLevel: 'hard' },
     ]);
   });
@@ -108,10 +108,10 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
     });
     await host.handleMessage('A', { type: 'hello' });
 
-    await host.handleMessage('A', { type: 'configure', preset: 'Play as Dictator' });
+    await host.handleMessage('A', { type: 'configure', preset: 'Play as Sheriff' });
 
     expect(errors).toEqual([]);
-    const options = presetStartOptions(def, 'Play as Dictator');
+    const options = presetStartOptions(def, 'Play as Sheriff');
     const { rounds: _rounds, ...seatFields } = options;
     expect(Object.fromEntries(Object.keys(seatFields).map((key) => [key, starts.at(-1)![key]]))).toEqual(seatFields);
   });
@@ -130,22 +130,22 @@ describe('presetStartOptions starts a test game as a preset starts it (#1565)', 
       minPlayers: 2,
       maxPlayers: 3,
       playerOptions: {
-        role: { type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'dictator', label: 'Dictator' }] },
+        role: { type: 'exclusive', label: 'Role', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] },
       },
       colorPalette: [
         { id: 'red', hex: '#E74C3C', label: 'Red' },
         { id: 'blue', hex: '#3498DB', label: 'Blue' },
         { id: 'green', hex: '#27AE60', label: 'Green' },
       ],
-      presets: [{ name: 'Play as Dictator', players: [{ playerOptions: { role: 'dictator' } }, { isBot: true }] }],
+      presets: [{ name: 'Play as Sheriff', players: [{ playerOptions: { role: 'sheriff' } }, { isBot: true }] }],
     } as const;
-    expect(presetStartOptions(scaffolded, 'Play as Dictator').playerCount).toBe(2);
+    expect(presetStartOptions(scaffolded, 'Play as Sheriff').playerCount).toBe(2);
   });
 
   it('refuses a preset the game does not declare, naming the ones it does', () => {
     inProject();
-    expect(() => presetStartOptions(def, 'Play as Rebel')).toThrow(
-      'This game declares no preset "Play as Rebel"; its presets are Play as Dictator, Long game, Peeking, Crowd.',
+    expect(() => presetStartOptions(def, 'Play as Outlaw')).toThrow(
+      'This game declares no preset "Play as Outlaw"; its presets are Play as Sheriff, Long game, Peeking, Crowd.',
     );
   });
 

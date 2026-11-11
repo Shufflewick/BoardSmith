@@ -5,7 +5,7 @@ import { assertCloneable, toCloneablePayload } from './platformRequestClone.js';
 describe('assertCloneable', () => {
   it('does not throw for a plain cloneable payload', () => {
     expect(() =>
-      assertCloneable('action', { combatantId: 64, sectorId: 140 })
+      assertCloneable('action', { duelistId: 64, roomId: 140 })
     ).not.toThrow();
   });
 
