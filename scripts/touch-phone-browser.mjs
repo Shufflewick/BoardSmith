@@ -21,6 +21,10 @@
  *   6. No touch or wheel listener on the window, document or body can block
  *      scrolling, a long press on a card zooms it, and a long press on a card
  *      cancels its context menu and iOS callout while one on a square does not (#1607).
+ *   7. Two fingers pinch the board to 200% about the point between them, one
+ *      finger on an empty square pans it, and one on my pawn drags it instead,
+ *      and a tap on my pawn still chooses it (#1609). Chromium only, since a
+ *      pinch needs two real touches.
  *
  * Chromium's drag is real touch, sent through CDP. WebKit has no way to move a
  * touch, so its drag is `PointerEvent`s dispatched in the page, with no live
@@ -251,6 +255,83 @@ function recordPageListeners() {
   };
 }
 
+/** Put a finger on each of `from`, move each in steps to its `to`, run `whileHeld`, then lift them all. Chromium only: real touch through CDP. */
+async function touchGesture(page, from, to, whileHeld = async () => {}) {
+  const points = (step) => from.map((start, id) => ({ id, x: start.x + ((to[id].x - start.x) * step) / 8, y: start.y + ((to[id].y - start.y) * step) / 8 }));
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: points(0) });
+  try {
+    for (let step = 1; step <= 8; step++) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: points(step) });
+    await whileHeld();
+  } finally {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+}
+
+/** The board's scale, how far the board region is scrolled each way, and the board element under the outer page's point `at`. */
+const boardView = (page, frame, at) =>
+  frame.locator('.boardregion').evaluate((region, at) => {
+    const board = region.querySelector('.game-shell__zoom-container');
+    const frameBox = window.frameElement.getBoundingClientRect();
+    const under = at && region.ownerDocument.elementFromPoint(at.x - frameBox.x, at.y - frameBox.y)?.closest('[data-bs-el-name]');
+    return { scale: board.getBoundingClientRect().width / board.offsetWidth, left: region.scrollLeft, top: region.scrollTop, under: under?.dataset.bsElName };
+  }, at);
+
+/** The centre, in the outer page, of the first square with no piece on it. */
+const anEmptySquare = (frame) =>
+  frame.locator('.board-grid .grid-cell:not(:has(.piece))').first().evaluate((cell) => {
+    cell.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    const box = cell.getBoundingClientRect();
+    const frameBox = window.frameElement.getBoundingClientRect();
+    return { x: frameBox.x + box.x + box.width / 2, y: frameBox.y + box.y + box.height / 2 };
+  });
+
+/** Two fingers pinch, one pans on an empty square, one on my pawn drags it, and a tap on my pawn chooses it (#1609). */
+async function pinchesAndPans(page, frame) {
+  await check('390x844: two fingers spread on the board magnify it to 200%, keeping the square between them under them', async () => {
+    const centre = await anEmptySquare(frame);
+    const before = await boardView(page, frame, centre);
+    await touchGesture(page, [{ x: centre.x - 10, y: centre.y }, { x: centre.x + 10, y: centre.y }], [{ x: centre.x - 60, y: centre.y }, { x: centre.x + 60, y: centre.y }]);
+    const after = await waitUntil(() => boardView(page, frame, centre), (now) => now.scale > 1.99);
+    assert(Math.abs(after.scale - 2) < 0.01, `the pinch left the board at ${after.scale}x, not the 2x it is capped at`);
+    assert(after.under === before.under, `the pinch moved ${before.under} out from between the fingers; ${after.under} is there now`);
+  });
+
+  await check('390x844: one finger on an empty square pans the magnified board', async () => {
+    await frame.locator('.boardregion').evaluate((region) => region.scrollTo(0, 0));
+    const start = await anEmptySquare(frame);
+    const before = await boardView(page, frame);
+    await touchGesture(page, [start], [{ x: start.x - 60, y: start.y - 60 }]);
+    const after = await waitUntil(() => boardView(page, frame), (now) => now.left !== before.left && now.top !== before.top);
+    assert(Math.abs(after.left - before.left - 60) < 2 && Math.abs(after.top - before.top - 60) < 2, `panning 60px up and left scrolled the board from ${JSON.stringify(before)} to ${JSON.stringify(after)}`);
+    assert(after.scale === before.scale, `panning changed the board's scale from ${before.scale} to ${after.scale}`);
+  });
+
+  await check('390x844: a tap on my pawn on the magnified board still chooses it', async () => {
+    const { pawn } = await aMove(frame);
+    await pawnNamed(frame, pawn).tap();
+    const prompt = () => frame.locator('body').evaluate((body) => body.querySelector('.selection-prompt')?.textContent.trim() ?? body.querySelector('[data-testid="bs-actionbar"]')?.textContent.trim());
+    const now = await waitUntil(prompt, (text) => text === 'Select an empty square');
+    assert(now === 'Select an empty square', `tapping my pawn left the action bar at "${now}"`);
+    await frame.locator('.cancel-btn').tap();
+    await waitUntil(prompt, (text) => text === 'Select your pawn');
+  });
+
+  await check('390x844: one finger on my pawn drags it rather than panning the board', async () => {
+    const { pawn } = await aMove(frame);
+    const box = await pawnNamed(frame, pawn).boundingBox();
+    const start = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const before = await boardView(page, frame);
+    await touchGesture(page, [start], [{ x: start.x + 60, y: start.y + 60 }], async () => {
+      const dragging = await waitUntil(() => frame.locator('.grid-cell.is-drop-target').count(), (targets) => targets > 0, 5_000);
+      assert(dragging > 0, 'the drag never started: no square was marked as a drop target');
+      const held = await boardView(page, frame);
+      assert(held.left === before.left && held.top === before.top, `dragging my pawn panned the board from ${JSON.stringify(before)} to ${JSON.stringify(held)}`);
+    });
+  });
+}
+
 /** Hold a finger on `locator` until `until` is true, then lift it. Chromium only: WebKit has no way to hold a touch. */
 async function longPress(page, locator, until) {
   // Clear of the floating action bar, which covers the bottom of the board region.
@@ -353,6 +434,8 @@ await runBrowserRegression(
           const now = await waitUntil(() => squareOf(frame, pawn), (at) => at === to, 10_000);
           assert(now === to, `my pawn is on square ${now}, not the tapped square ${to}`);
         });
+
+        if (engine === 'chromium' && size === '390x844') await pinchesAndPans(page, frame);
       });
       await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
         // The listeners are added as the game loads, so record them from a reload that keeps this seat.

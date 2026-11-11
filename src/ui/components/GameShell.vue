@@ -282,7 +282,7 @@ const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null)
 const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
 // No boundary mounted means no board, so nothing has failed.
 const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
-const { zoomLevel, setZoom, resetZoom } = useBoardZoom();
+const { zoomLevel, setZoom, resetZoom } = useBoardZoom({ regionEl: boardregionEl, boardEl: zoomContainerEl });
 
 // Connection health (IA-01): driven by the host's postMessage heartbeat.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a

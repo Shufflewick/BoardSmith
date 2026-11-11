@@ -14,7 +14,7 @@ import { watch } from 'vue';
 import { ANCHOR_SELECTOR, anchoredRef, type BoardInteraction, type ElementRef } from './useBoardInteraction.js';
 
 /** How far, in CSS pixels, a press must move before it is a drag rather than a tap. */
-const DRAG_THRESHOLD = 6;
+export const DRAG_THRESHOLD = 6;
 
 export interface PointerDragHooks {
   onDragStart?: () => void;

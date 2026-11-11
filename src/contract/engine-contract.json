@@ -1,5 +1,5 @@
 {
-  "revision": 351,
+  "revision": 352,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2751,6 +2751,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Auto-UI boards reflow to the board region's width with a 44px tap floor (--bsg-tap-min) and scroll when they cannot fit, instead of being zoomed to fit; the zoom is a 100-200% magnifier applied by transform (#1608)"
+    },
+    {
+      "revision": 352,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Touch players pinch-zoom the board 100-200% and pan it with one finger inside the board region, which is touch-action: none; a press on a draggable still drags and a still press still taps (#1609)"
     }
   ]
 }
