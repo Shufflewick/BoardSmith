@@ -83,8 +83,9 @@ interface GameShellProps {
    * Required, and the ONLY way to supply a board. GameShell has no slot
    * for the board: two ways to name the default UI is two things that can
    * disagree, and the manifest's old `"ui"` key already proved how that ends.
-   * A production build renders `registry.defaultName`; every other entry exists
-   * only under `boardsmith dev` and is stripped from the bundle entirely.
+   * A production build renders `registry.defaultName`, or `registry.phoneName`
+   * at the compact size; every devUI() entry exists only under `boardsmith dev`
+   * and is stripped from the bundle entirely.
    */
   uis: GameUIRegistry;
   /**
@@ -756,6 +757,8 @@ const boardPrompt = ref<string | null>(null);
 function setBoardPrompt(prompt: string | null): void {
   boardPrompt.value = prompt;
 }
+// A board swap (the phone UI, the dev switcher) unmounts the board that set it.
+watch(selectedUiComponent, () => setBoardPrompt(null));
 
 // Undo actions back to turn start (called by ActionPanel and the board's `undo`)
 async function handleUndo(): Promise<void> {

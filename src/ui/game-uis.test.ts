@@ -10,13 +10,17 @@
  * stays one responsive board; a game that wants a different board on a phone
  * marks it `phoneUI()`, and the shell renders it at the compact size only.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, h } from 'vue';
-import { defineGameUIs, defaultUI, devUI, phoneUI, resolveUiComponent } from './game-uis.js';
+import { defineGameUIs, defaultUI, devUI, devUiNames, phoneUI, resolveUiComponent } from './game-uis.js';
 
 const Board = defineComponent({ name: 'Board', render: () => h('div') });
 const Phone = defineComponent({ name: 'Phone', render: () => h('div', 'phone') });
 const Other = defineComponent({ name: 'Other', render: () => h('div', 'other') });
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe('defaultUI', () => {
   it('takes a component', () => {
@@ -57,6 +61,17 @@ describe('defineGameUIs with a phone UI (#1610)', () => {
     ).toThrow(/exactly one UI with defaultUI\(\) — found none/);
   });
 
+  it('never falls back to the phone UI as the default in a production build missing its default', () => {
+    vi.stubEnv('DEV', false);
+    const broken = defineGameUIs(
+      // @ts-expect-error -- exactly one UI must be defaultUI()
+      { Pocket: phoneUI(Phone), Old: devUI(async () => ({ default: Other })) },
+    );
+    expect(broken.defaultName).toBe('Old');
+    expect(resolveUiComponent(broken, '', false, 'wide')).toBeNull();
+    expect(resolveUiComponent(broken, '', false, 'compact')).toBe(Phone);
+  });
+
   it('refuses a loader, since a phone board that fails to load leaves a phone with no game', () => {
     expect(() =>
       // @ts-expect-error -- phoneUI() takes the board component itself
@@ -84,6 +99,11 @@ describe('resolveUiComponent picks the phone UI only at the compact size (#1610)
   it('treats the dev switcher choosing the default as what ships, so a phone still sees the phone UI', () => {
     expect(resolveUiComponent(registry, 'Board', true, 'compact')).toBe(Phone);
     expect(resolveUiComponent(registry, 'Board', true, 'wide')).toBe(Board);
+  });
+
+  it('offers the default first, since the dev host selects the first offer and the default is what ships', () => {
+    const phoneFirst = defineGameUIs({ Pocket: phoneUI(Phone), Old: devUI(async () => ({ default: Other })), Board: defaultUI(Board) });
+    expect(devUiNames(phoneFirst)).toEqual(['Board', 'Pocket', 'Old']);
   });
 
   it('renders exactly what the dev switcher names otherwise, at any size', () => {

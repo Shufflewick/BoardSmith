@@ -9,12 +9,13 @@
  * resize or rotation.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { defineComponent, h, nextTick } from 'vue';
+import { defineComponent, h, nextTick, onMounted } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './world/WorldShell.vue';
 import { WORLD_HOST_SOURCE } from './world/worldProtocol.js';
 import { defineGameUIs, defaultUI, phoneUI, type GameUIRegistry } from './game-uis.js';
 import { enterIframe, leaveIframe, mountPlatformShell } from './components/GameShell.platform-mount.test-helper.js';
+import PlayShell from './components/PlayShell.vue';
 import { fakeViewport } from './composables/fake-viewport.test-helper.js';
 
 const layoutProps = { formFactor: { type: String, required: true }, orientation: { type: String, required: true } };
@@ -104,5 +105,25 @@ describe.each([['GameShell', table], ['WorldShell', world]] as const)('%s and th
     expect(drawn(wrapper)).toEqual(['phone: compact portrait']);
     wrapper.unmount();
     expect(viewport!.listening()).toBe(0);
+  });
+});
+
+describe('GameShell swapping to the phone UI (#1610)', () => {
+  it("drops the prompt the unmounted board set, so the phone UI does not sit under it", async () => {
+    const Prompting = defineComponent({
+      name: 'Prompting',
+      props: { setBoardPrompt: { type: Function, required: true } },
+      setup: (props) => {
+        onMounted(() => props.setBoardPrompt('Drag a card to the river'));
+        return () => h('div', { class: 'board' });
+      },
+    });
+    const wrapper = await table(defineGameUIs({ Board: defaultUI(Prompting), Pocket: phoneUI(Phone) }), DESKTOP);
+    expect(wrapper.findComponent(PlayShell).props('prompt')).toBe('Drag a card to the river');
+    viewport!.resize(PHONE);
+    await nextTick();
+    expect(drawn(wrapper)).toEqual(['phone: compact portrait']);
+    expect(wrapper.findComponent(PlayShell).props('prompt')).toBeUndefined();
+    wrapper.unmount();
   });
 });

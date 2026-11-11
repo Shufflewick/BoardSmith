@@ -915,7 +915,7 @@ async function wireTableSeat(
   let tableSeat!: TableSeat;
   let layout!: LayoutSize;
   scope.run(() => {
-    // The page's own size, read as GameShell reads it, so a test can render a board at a phone's.
+    // The size the page's matchMedia reports, read as GameShell reads it; jsdom's stub reports wide.
     layout = useLayoutSize();
     tableSeat = useTableSeat({
       state: ref(frame),

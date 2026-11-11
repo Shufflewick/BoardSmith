@@ -780,7 +780,7 @@ both when compiling and when running.
 
 Under `boardsmith dev`, the dev host shows a **UI dropdown** to switch which UI
 renders the running game, without restarting. It lists every entry in the
-registry, in declared order, and then **Auto**, the built-in auto-UI, which
+registry, the default first and the rest in declared order, and then **Auto**, the built-in auto-UI, which
 `GameShell` adds itself in dev builds. Do not list it in `uis.ts`. A game that
 declares its own entry named `Auto` (an auto-UI game whose default IS the
 auto-UI) keeps that entry, and no second one is added.

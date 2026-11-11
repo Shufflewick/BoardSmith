@@ -117,7 +117,7 @@ type AtMostOnePhone<T> =
 
 /** A resolved registry: every declared UI, plus which one is the default. */
 export interface GameUIRegistry {
-  /** Declared order is preserved — it drives the dev UI-switcher's ordering. */
+  /** Declared order is preserved — it orders the dev UI-switcher after the default. */
   readonly names: readonly string[];
   readonly defaultName: string;
   /** The UI shipped for the compact size, or null when the default renders at every size. */
@@ -234,9 +234,9 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
 
   return {
     names,
-    // In the degraded non-dev case above, fall back to the first declared UI so
-    // a player still sees a board rather than an empty stage.
-    defaultName: defaultNames[0] ?? names[0] ?? '',
+    // In the degraded non-dev case above, fall back to the first declared UI
+    // that is not the phone's, so a desktop never gets a phone board.
+    defaultName: defaultNames[0] ?? names.find((name) => !isPhone(entries[name])) ?? names[0] ?? '',
     phoneName: phoneNames[0] ?? null,
     entries,
   };
@@ -272,17 +272,20 @@ export function withDevAutoUI(registry: GameUIRegistry): GameUIRegistry {
 }
 
 /**
- * The UIs a dev switcher may offer, in declared order.
+ * The UIs a dev switcher may offer: the default first, because the dev host
+ * selects the first offer and the default is what ships, then the rest in
+ * declared order.
  *
- * In a production build every non-default entry has a `null` component, so
+ * In a production build every devUI entry has a `null` component, so
  * listing only the resolvable ones keeps the switcher honest if it is ever
- * shown outside dev. Only the table shell has a switcher; a world renders its
- * default UI (#896).
+ * shown outside dev. Only the table shell has a switcher; a world renders what
+ * ships (#896).
  */
 export function devUiNames(registry: GameUIRegistry): string[] {
-  return registry.names.filter(
-    (name) => name === registry.defaultName || registry.entries[name]?.component,
-  );
+  const isDefault = (name: string): number => Number(name === registry.defaultName);
+  return registry.names
+    .filter((name) => isDefault(name) || registry.entries[name]?.component)
+    .sort((a, b) => isDefault(b) - isDefault(a));
 }
 
 /**
