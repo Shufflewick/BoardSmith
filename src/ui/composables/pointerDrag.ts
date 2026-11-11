@@ -33,9 +33,6 @@ function dropTargetAt(doc: Document, x: number, y: number, board: BoardInteracti
 /** The pointerdown a draggable has already claimed: a press on a draggable inside another drags the inner one alone. */
 const claimed = new WeakSet<Event>();
 
-/** Whether a draggable claimed this pointerdown, so the board's pan leaves it to the drag. */
-export const claimedByDrag = (press: Event): boolean => claimed.has(press);
-
 /**
  * An upright copy of `source`, at its own size and centred on it, that the
  * pointer cannot hit. It carries no id or `data-*` identity, so nothing that

@@ -1232,8 +1232,11 @@ custom board the same way: `.boardregion` is an inline-size container, so
 `100cqw` in your board is the region's width. The player's zoom is only a
 magnifier, from 100% to 200%, set from the controls menu or, on a touch
 screen, by pinching the board region. The region is `touch-action: none`, so
-the shell pans it under one finger too: a press on a draggable element drags
-it, a press anywhere else pans, and a press that does not move is a tap.
+the shell pans it under one finger or a pen too, and a press that does not
+move is a tap. A press on an element that sets its own `touch-action` (every
+draggable does) or on a form control is that element's: neither it nor any
+finger put down while it is held pans or pinches the board. Give a custom
+gesture of your own `touch-action: none` to keep it.
 
 The element that wraps your board — `.game-shell__zoom-container` — is
 styled `width: max-content`, so the board keeps its natural size and the
