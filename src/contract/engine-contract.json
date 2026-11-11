@@ -1,6 +1,6 @@
 {
-  "revision": 356,
-  "surfaceHash": "9af900f6f4dfcaf8",
+  "revision": 357,
+  "surfaceHash": "675cd495a6885e94",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2791,6 +2791,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The custom UI guide gains a Playing on a Phone section: touch input, hover gating, the tap floor, the layout size and phone UI, safe areas, and the real-phone checks"
+    },
+    {
+      "revision": 357,
+      "date": "2026-11-11",
+      "surfaceHash": "675cd495a6885e94",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A pushed seat view's log carries only the lines its seat was not sent: messages start at the new PlayerGameState.messagesFrom, and a page rebuilds the whole log with mergeMessageLog from boardsmith/client before handing it to GameShell. StatePushGate.shouldPush is now toPush, returning the frame to send, and its playerState option is gone (a frame's player state is its view.state). Views handed to record still carry the whole log (#1614)."
     }
   ]
 }

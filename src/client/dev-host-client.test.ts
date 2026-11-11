@@ -44,3 +44,19 @@ describe('createDevHostClient onMessage listeners (#741)', () => {
     consoleError.mockRestore();
   });
 });
+
+// #1614: the host pushes only the log lines a connection was not sent; a
+// subscriber is handed the whole log.
+describe('createDevHostClient game_state log', () => {
+  it('hands subscribers each game_state with the whole log', async () => {
+    const client = createDevHostClient('ws://test', { wsImplementation: FakeSocket as unknown as typeof WebSocket });
+    await client.opened;
+    const logs: unknown[] = [];
+    client.onMessage((msg) => {
+      if (msg.type === 'game_state') logs.push((msg.view as { state: { messages?: unknown[] } }).state.messages);
+    });
+    FakeSocket.last.receive({ type: 'game_state', view: { state: { messages: [{ text: 'a' }] } } });
+    FakeSocket.last.receive({ type: 'game_state', view: { state: { messages: [{ text: 'b' }], messagesFrom: 1 } } });
+    expect(logs).toEqual([[{ text: 'a' }], [{ text: 'a' }, { text: 'b' }]]);
+  });
+});

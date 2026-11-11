@@ -11,6 +11,7 @@
  */
 
 import { resolveWsCtor } from './ws-ctor.js';
+import { mergeViewLog } from './message-log.js';
 
 /** Default timeout for requestId-correlated requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -41,7 +42,7 @@ export interface DevHostLobbyReply {
   gameOptions: Record<string, unknown>;
 }
 
-/** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast. */
+/** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast with its whole log. */
 export interface DevHostStateReply {
   view: unknown;
   isComplete: boolean;
@@ -166,6 +167,9 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     { once: true },
   );
 
+  /** The view of the last `game_state` this connection got, whole log and all. */
+  let lastView: unknown;
+
   socket.addEventListener('message', (event: MessageEvent) => {
     let msg: DevHostInboundMessage;
     try {
@@ -184,6 +188,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       );
       return;
     }
+    if (msg.type === 'game_state' && !mergeLog(msg)) return;
     settlePending(msg);
     // #741: a throwing listener must not stop the other listeners or escape into the socket's event loop.
     for (const listener of listeners) {
@@ -197,6 +202,18 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       }
     }
   });
+
+  /** Give a `game_state` its whole log, as the host pushes only the lines this connection was not sent (#1614); false drops it. */
+  function mergeLog(msg: DevHostInboundMessage): boolean {
+    try {
+      msg.view = mergeViewLog(lastView, msg.view);
+    } catch (error) {
+      console.error(`createDevHostClient: dropping a game_state frame: ${error instanceof Error ? error.message : String(error)}`);
+      return false;
+    }
+    lastView = msg.view;
+    return true;
+  }
 
   function settlePending(msg: DevHostInboundMessage): void {
     const requestId = msg.requestId;

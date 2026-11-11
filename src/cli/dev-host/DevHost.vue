@@ -20,6 +20,7 @@ import { applyTheme } from '../../ui/theme.js';
 import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
+import { mergeViewLog } from '../../client/message-log.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
 import { handleEscape } from '../../ui/utils/escape.js';
 import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
@@ -261,11 +262,13 @@ function connect(): void {
     wsSend({ type: 'hello', clientId, loadId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
   );
   ws.addEventListener('message', (ev) => {
+    let msg: Record<string, unknown>;
     try {
-      onHostMessage(JSON.parse(ev.data as string));
+      msg = JSON.parse(ev.data as string);
     } catch {
-      /* ignore malformed frames */
+      return; // ignore malformed frames
     }
+    onHostMessage(msg);
   });
   ws.addEventListener('close', () => {
     if (closedByUs) return;
@@ -320,7 +323,8 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'game_state':
       lastGameState = {
         type: 'game_state',
-        view: msg.view,
+        // The host pushes only the log lines this page was not sent (#1614); the game is handed the whole log.
+        view: mergeViewLog(lastGameState?.view, msg.view),
         isComplete: msg.isComplete,
         winners: msg.winners,
         // isDraw is the D10 draw-vs-unknown signal — it MUST be relayed to the

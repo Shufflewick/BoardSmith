@@ -507,10 +507,7 @@ export class MultiplayerHost {
    * here instead. Frames that reset it (`reinitSeat`) or answer it
    * (`getState`) are recorded, not asked.
    */
-  private readonly followerGate = new StatePushGate<string, GameStateFrame>({
-    playerState: (frame) => (frame.view as { state?: unknown } | undefined)?.state,
-    perPushFields: ['serverNow'],
-  });
+  private readonly followerGate = new StatePushGate<string, GameStateFrame>({ perPushFields: ['serverNow'] });
   /**
    * Each in-flight request by the id the host gave it, with the client that
    * sent it and that client's own id for it, so the `server_response` goes back
@@ -1807,7 +1804,8 @@ export class MultiplayerHost {
       this.send(clientId, frame);
       return;
     }
-    if (this.followerGate.shouldPush(clientId, frame)) this.send(clientId, frame);
+    const push = this.followerGate.toPush(clientId, frame);
+    if (push) this.send(clientId, push);
   }
 
   /**

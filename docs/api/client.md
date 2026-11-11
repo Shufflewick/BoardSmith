@@ -20,6 +20,7 @@ Import from `boardsmith/client` when you want to:
 ### Functions
 
 - `createDevHostClient(url, options?)` - A WebSocket client for the `boardsmith dev` host. See [Agent control](../agent-control.md#createdevhostclient--drive-the-dev-host-from-node).
+- `mergeMessageLog(held, pushed)` - A seat's state with its whole game log, from the state the page holds and a pushed one, whose log carries only the lines the page was not sent (`messagesFrom`). A page relaying pushed state to `GameShell` calls it on every `game_state` and relays what it returns. It throws when the page does not hold the lines before `messagesFrom`, which means it was not served the state of record first. See [Session](./session.md).
 
 ### Audio
 

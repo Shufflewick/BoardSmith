@@ -304,6 +304,16 @@ const host = new SnapshotSessionHost({
 });
 ```
 
+A pushed view's log carries only the lines its seat was not already pushed
+(#1614): `state.messages` then starts at line `state.messagesFrom`, the first
+line that differs from what the seat was sent (an undo takes lines back), and
+the page keeps the lines it holds before it. The page rebuilds the whole log
+with `mergeMessageLog` from `boardsmith/client` and hands `GameShell` the
+merged state, never the pushed one. That needs every page of a seat to get
+every push for it, after it was served the view of record from `record`: a page
+that connects, reconnects or changes seat is served from `record` first, and
+the views `record` is handed always carry the whole log.
+
 Stamp per-push fields such as a send time in `push`, after the host has
 compared. `meta.cause` says why the host published: `change` when the game
 changed, `republish` when it restated an unchanged game (a hint, a demo frame,
@@ -346,17 +356,18 @@ interface Frame {
   serverNow: number;
 }
 
+// The frame's PlayerGameState sits at `view.state`.
 const gate = new StatePushGate<string, Frame>({
-  // Where the PlayerGameState sits in your frame.
-  playerState: (frame) => frame.view.state,
   // Fields you stamp fresh on every push. They never make two frames differ,
   // so they advance only when something else does.
   perPushFields: ['serverNow'],
 });
 
-// The push path, per socket:
+// The push path, per socket. Send the frame the gate returns, not your own:
+// its log carries only the lines the socket was not sent.
 export function push(socketId: string, socket: WebSocket, frame: Frame): void {
-  if (gate.shouldPush(socketId, frame)) socket.send(JSON.stringify(frame));
+  const sent = gate.toPush(socketId, frame);
+  if (sent) socket.send(JSON.stringify(sent));
 }
 
 // A frame sent outside the push path (connect, reconnect, an answer to a
@@ -371,6 +382,8 @@ export function closed(socketId: string): void {
   gate.forget(socketId);
 }
 ```
+
+The log is cut the same way `SnapshotSessionHost`'s `push` cuts it (below).
 
 Animation events are compared by id, not by content: the engine empties its
 buffer at the start of every action, so a buffer emptied by another seat's
