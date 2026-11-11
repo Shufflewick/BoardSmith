@@ -1453,8 +1453,8 @@ for the same reason. Set `touch-action` on nothing else: on a large container
 it turns pan and pinch off over all of it. The details are in
 [`useDragDrop`](./ui-components.md#usedragdrop).
 
-Shown working by [the drag-drop unit tests](../src/ui/composables/useDragDrop.test.ts)
-and [the touch regression](../scripts/touch-phone-browser.mjs), which taps and
+Shown working by [the drag-drop unit tests](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/composables/useDragDrop.test.ts)
+and [the touch regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/touch-phone-browser.mjs), which taps and
 drags a pawn by touch in Chromium and WebKit.
 
 ### Hover is a bonus, never the only way
@@ -1477,9 +1477,9 @@ on hover, focus and tap ([above](#understanding-getchoices-return-values)). The
 engine's own UI follows the same rule: the Action Panel previews a choice's
 pieces on focus, and on touch a first tap previews and a second commits.
 
-Shown working by [the hover gate](../src/ui/hover-gated.test.ts), which holds
+Shown working by [the hover gate](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/hover-gated.test.ts), which holds
 every `:hover` in the engine's UI inside `@media (hover: hover)`, and
-[the tap-preview tests](../src/ui/components/auto-ui/ActionPanel.tap-preview.test.ts).
+[the tap-preview tests](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/components/auto-ui/ActionPanel.tap-preview.test.ts).
 
 ### Responsive boards and the tap floor
 
@@ -1503,8 +1503,8 @@ the `max(24px, …)` holds. Anything a finger must hit gets at least that size,
 including the gaps you leave between targets. A content-driven board (a hand, a
 wrapping row) pins itself to the region with `useBoardSize()` instead.
 
-Shown working by [the phone tap-floor regression](../scripts/tap-floor-phone-browser.mjs)
-and [the fluid card test](../src/ui/components/auto-ui/renderers/CardRenderer.fluid.test.ts).
+Shown working by [the phone tap-floor regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/tap-floor-phone-browser.mjs)
+and [the fluid card test](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/components/auto-ui/renderers/CardRenderer.fluid.test.ts).
 
 ### The layout size and a phone UI
 
@@ -1523,9 +1523,9 @@ the default everywhere else, swapping as the viewport crosses the line. See
 [the UI registry](./ui-components.md#dev-time-ui-switcher) for the dev
 switcher's handling of it.
 
-Shown working by [the layout-size tests](../src/ui/composables/useLayoutSize.test.ts),
-[the phone UI shell tests](../src/ui/phone-ui.shells.test.ts) and
-[the phone UI regression](../scripts/phone-ui-browser.mjs).
+Shown working by [the layout-size tests](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/composables/useLayoutSize.test.ts),
+[the phone UI shell tests](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/phone-ui.shells.test.ts) and
+[the phone UI regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/phone-ui-browser.mjs).
 
 ### Safe areas come from the host
 
@@ -1539,8 +1539,8 @@ An element of yours positioned against the frame's edge (a `position: fixed`
 tray, say) pads itself by these tokens, never by `env(safe-area-inset-*)`. The host's
 side is in [the host's safe areas](./ui-components.md#the-hosts-safe-areas).
 
-Shown working by [the safe-area shell tests](../src/ui/components/GameShell.safe-area.test.ts)
-and [the safe-area regression](../scripts/safe-area-browser.mjs), on a phone
+Shown working by [the safe-area shell tests](https://github.com/Shufflewick/BoardSmith/blob/main/src/ui/components/GameShell.safe-area.test.ts)
+and [the safe-area regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/safe-area-browser.mjs), on a phone
 held both ways.
 
 ### Check it on a real phone
@@ -1559,8 +1559,8 @@ held both ways, and check what no emulator can show:
   mid-range phone.
 
 [Browser testing](./browser-testing.md#phones-webkit-touch-pointer-drag-and-a-slow-cpu-1604)
-lists what the emulated runs cover, shown in [the touch regression](../scripts/touch-phone-browser.mjs)
-and [the CPU-throttled regression](../scripts/cpu-throttle-browser.mjs), and why
+lists what the emulated runs cover, shown in [the touch regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/touch-phone-browser.mjs)
+and [the CPU-throttled regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/cpu-throttle-browser.mjs), and why
 each item above stays a manual check.
 
 ## Debugging

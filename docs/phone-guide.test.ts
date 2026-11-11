@@ -5,8 +5,9 @@
  * `custom-ui-guide.md`. Every API it names in a code span must be real: a
  * `--bsg-*` token the theme defines, a class the shell's markup carries, a name
  * `boardsmith/ui` exports, or a member of the exported API that declares it.
- * Every subsection links at least one test or browser regression, and every
- * link in the section resolves, file and heading alike.
+ * Every subsection links at least one test or browser regression on GitHub
+ * (a game's install packs no tests, so a relative link would lead nowhere),
+ * and every link in the section resolves, file and heading alike.
  */
 import { describe, it, expect } from 'vitest';
 import ts from 'typescript';
@@ -15,6 +16,7 @@ import { themeCSS } from '../src/ui/theme.js';
 
 const sources = import.meta.glob<string>(['/src/ui/**/*.{ts,vue}', '!/src/ui/**/*.test.ts', '!/src/ui/**/*.test-helper.ts'], { query: '?raw', import: 'default', eager: true });
 const docs = import.meta.glob<string>('/docs/*.md', { import: 'default', eager: true });
+const REPO = 'https://github.com/Shufflewick/BoardSmith/blob/main';
 const proofFiles = new Set(Object.keys(import.meta.glob(['/src/**/*.test.ts', '/scripts/*-browser.mjs'])));
 
 const SUBSECTIONS = [
@@ -74,7 +76,7 @@ const anchorsOf = (text: string) => new Set([...text.matchAll(/^#+ (.+)$/gm)].ma
 /** Why a link target does not resolve from docs/custom-ui-guide.md, or null when it does. */
 function brokenLink(target: string): string | null {
   const [path, anchor] = target.split('#');
-  if (path.startsWith('../')) return proofFiles.has(path.slice(2)) ? null : 'no such test or browser regression';
+  if (path.startsWith('https:')) return path.startsWith(`${REPO}/`) && proofFiles.has(path.slice(REPO.length)) ? null : `not a test or browser regression under ${REPO}`;
   const text = path === '' ? guide : docs[`/docs/${path.replace(/^\.\//, '')}`];
   if (text === undefined) return 'no such page in docs/';
   return anchor === undefined || anchorsOf(text).has(anchor) ? null : 'no such heading';
@@ -106,7 +108,7 @@ describe('custom-ui-guide.md "Playing on a Phone" (#1613)', () => {
 
   it.each(SUBSECTIONS)('"%s" links a test or browser regression', (title) => {
     const body = subsections.find((sub) => sub.title === title)?.body ?? '';
-    const proofs = [...body.matchAll(/\]\(\.\.(\/[^)#\s]+)/g)].map(([, path]) => path).filter((path) => proofFiles.has(path));
+    const proofs = [...body.matchAll(/\]\(([^)#\s]+)/g)].map(([, url]) => url.slice(REPO.length)).filter((path) => proofFiles.has(path));
     expect(proofs, `"${title}" links no test or browser regression`).not.toEqual([]);
   });
 });
