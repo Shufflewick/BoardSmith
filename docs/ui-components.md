@@ -793,8 +793,9 @@ entry reach the bundle, JS or CSS (see SHIP-02 and `treeshake-bundle.test.ts`).
 
 Development tool for inspecting game state, history, and debugging. `GameShell`
 mounts it itself under `boardsmith dev`, where the dev header's Debug button
-toggles it. It is not exported: it talks to the dev host through the shell, and a
-production build drops it, its tabs and its styles from the bundle.
+toggles it, and a production build drops it, its tabs and its styles from the
+bundle. A test that drives it imports it from `boardsmith/ui/debug`, not
+`boardsmith/ui`, so the barrel never carries its stylesheet into a player bundle.
 
 ## Game Setup
 

@@ -50,6 +50,12 @@ From `boardsmith/ui/auto-ui`, so a game that draws its own board does not bundle
 - `AutoRenderer` - Automatic element rendering
 - `ActionPanel` - Action selection panel (also exported from `boardsmith/ui`)
 
+### Debug Panel
+
+From `boardsmith/ui/debug`, for a test that drives the panel `GameShell` mounts under `boardsmith dev`:
+
+- `DebugPanel` - Developer debug tools
+
 ### Composables
 
 #### Board Interaction

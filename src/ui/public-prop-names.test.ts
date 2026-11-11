@@ -17,6 +17,7 @@ import { camelize } from 'vue';
 import * as ui from './index.js';
 import * as autoUi from './components/auto-ui/index.js';
 import * as dice from './components/dice/index.js';
+import * as debug from './debug.js';
 
 /**
  * The kebab form of a camelCase name as a template author writes it: one
@@ -62,6 +63,7 @@ const entries: Record<string, Record<string, unknown>> = {
   'boardsmith/ui': ui,
   'boardsmith/ui/auto-ui': autoUi,
   'boardsmith/ui/dice': dice,
+  'boardsmith/ui/debug': debug,
 };
 
 const publicComponents: Array<{ where: string; component: ComponentLike }> = [];

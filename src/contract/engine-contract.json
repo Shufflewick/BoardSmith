@@ -2782,7 +2782,7 @@
       "surfaceHash": "9af900f6f4dfcaf8",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "Player bundles no longer carry the debug panel (boardsmith/ui stops exporting DebugPanel), flying cards move by transform, and dice render at no more than 2x pixel ratio (#1612)."
+      "summary": "Player bundles no longer carry the debug panel (DebugPanel moves from boardsmith/ui to boardsmith/ui/debug), flying cards move by transform, and dice render at no more than 2x pixel ratio (#1612)."
     }
   ]
 }
