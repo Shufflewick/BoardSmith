@@ -24,6 +24,7 @@ import {
   smokeSeeds,
   smokeSummary,
   smokeSteps,
+  smokeWalkLimit,
   smokeWorldSeats,
   type ResolvedMemory,
   type SmokeInputView,
@@ -117,6 +118,18 @@ describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
 
   it.each([0, -1, Number.NaN, 0.5])('refuses %s, which would walk no step and pass any game that loads', (steps) => {
     expect(() => smokeSteps(steps)).toThrow(`\`steps\` in ${SMOKE_SPEC_PATH} takes a positive whole number, got "${steps}".`);
+  });
+});
+
+describe('smokeWalkLimit: the hang guard on a whole walk (#1601)', () => {
+  it('grows with every deal and every step, so a spec that asks for more walking gets the time for it', () => {
+    const one = smokeWalkLimit(1, 60);
+    expect(smokeWalkLimit(11, 60) - one).toBe(10 * (smokeWalkLimit(2, 60) - one));
+    expect(smokeWalkLimit(1, 120) - one).toBe(smokeWalkLimit(2, 60) - one);
+  });
+
+  it("gives MERC's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
+    expect(smokeWalkLimit(11, 300)).toBeGreaterThan(2 * 2_200_000);
   });
 });
 
