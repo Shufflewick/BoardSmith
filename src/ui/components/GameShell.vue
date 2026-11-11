@@ -38,7 +38,8 @@ import { tableBoardProps, type DisplayedGameState } from '../board-props.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { exposeDevtoolsSnapshot } from './GameShell.devtools.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
-import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
+import { useBoardZoom } from '../composables/useBoardZoom';
+import { SETTLE_MS } from './board-settle';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
 import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
@@ -242,9 +243,8 @@ const devDebugAvailable = devDebugGate.available;
  * THE CHROME, REACHED THROUGH ITS ONE HANDLE.
  *
  * The board region, the zoom container and the log all live in `PlayShell` now,
- * and the table's own behaviour still drives them: the zoom fit measures the
- * region and scales the container, the focus handoff returns focus to the
- * board, and the debug panel copies and clears the log. Reaching them through
+ * and the table's own behaviour still drives them: the focus handoff returns
+ * focus to the board, and the debug panel copies and clears the log. Reaching them through
  * the shell's exposed refs keeps ONE definition of each element -- a second
  * element here would be a second thing to disagree with the first.
  */
@@ -275,22 +275,14 @@ function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
   if (!mql.matches) mobileExpanded.value = false;
 }
 
-// Startup zoom fit: when a game (re)mounts, the board is zoomed once to fill
-// the board region (clamped to the 0.5–2.0 slider range) and then left alone —
-// mid-game content growth and window resizes never move the zoom. The user
-// adjusts with the slider, or re-fits on demand via the header percent button
-// / menu "Fit".
+// The board is never zoomed to fit: it reflows to the region, and the zoom is
+// the player's magnifier (#1608).
 const boardregionEl = computed(() => playShell.value?.boardRegionEl ?? null);
 const zoomContainerEl = computed(() => playShell.value?.zoomContainerEl ?? null);
 const boardBoundary = ref<InstanceType<typeof BoardErrorBoundary> | null>(null);
 // No boundary mounted means no board, so nothing has failed.
 const boardFailed = computed(() => boardBoundary.value?.failed ?? false);
-const { zoomLevel, zoomSupported, setZoom, fitZoom } = useAutoZoom({
-  boardEl: zoomContainerEl,
-  boardUi: selectedUiComponent,
-  regionEl: boardregionEl,
-  boardFailed,
-});
+const { zoomLevel, setZoom, resetZoom } = useBoardZoom();
 
 // Connection health (IA-01): driven by the host's postMessage heartbeat.
 // Starts 'connecting'; a valid heartbeat sets it to 'connected' and rearms a
@@ -1292,9 +1284,8 @@ watch(actionController.holdNotice, (notice) => {
 
 // UIX-03: dev-mode diagnostic when a responsive custom board silently collapses
 // to 0×0 inside the zoom container (`.game-shell__zoom-container { width:
-// max-content }` — DO NOT modify that CSS, the structural fix is rejected per
-// 134-RESEARCH.md: a definite-width ancestor breaks useAutoZoom's fit formula
-// for every board, not just percentage-width ones). Fires ONCE per session
+// max-content }` — DO NOT modify that CSS: the board keeps its natural size
+// and the region scrolls when it is bigger). Fires ONCE per session
 // (WR-01 latch — this reports a structural CSS bug, so re-logging on every
 // state broadcast while collapsed would flood the console in bot-vs-bot dev
 // games); gated on game state having arrived (non-null gameView), the slot
@@ -1627,10 +1618,10 @@ defineExpose({
           class="actionbar-controls"
           open-up
           align="left"
-          :play="{ autoEndTurn, zoom: zoomLevel, zoomSupported, canUndo: gatedCanUndo }"
+          :play="{ autoEndTurn, zoom: zoomLevel, canUndo: gatedCanUndo }"
           @update:auto-end-turn="autoEndTurn = $event"
           @update:zoom="setZoom"
-          @fit-zoom="fitZoom"
+          @reset-zoom="resetZoom"
           :show-hint="showHintProp"
           :hint-disabled="hintDisabledProp"
           :is-demo-running="isDemoRunning"

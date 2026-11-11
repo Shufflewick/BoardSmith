@@ -310,6 +310,33 @@ export async function waitUntil(read, accept, timeoutMs = 20_000) {
 }
 
 /**
+ * HOW BIG A FINGER'S TARGETS ARE, AND WHAT SCROLLS (#1608).
+ *
+ * For each of `targets` (`{ name: { selector } }`, looked up in the game frame):
+ * how many there are and the smallest and largest shorter side of their boxes,
+ * on screen, so a zoom or transform counts. With how far the board region and
+ * the page scroll each way. A measurement, not an assertion.
+ *
+ * @param frame   the game frame
+ * @param targets each named target's selector
+ */
+export function tapSizes(frame, targets) {
+  return frame.locator('body').evaluate((body, targets) => {
+    const doc = body.ownerDocument;
+    const scrolls = (el) => ({ down: el.scrollHeight - el.clientHeight, sideways: el.scrollWidth - el.clientWidth });
+    const measured = {};
+    for (const [name, { selector }] of Object.entries(targets)) {
+      const sides = [...doc.querySelectorAll(selector)].map((el) => {
+        const box = el.getBoundingClientRect();
+        return Math.min(box.width, box.height);
+      });
+      measured[name] = { count: sides.length, smallest: Math.min(...sides), largest: Math.max(...sides) };
+    }
+    return { targets: measured, region: scrolls(doc.querySelector('.boardregion')), page: scrolls(doc.scrollingElement) };
+  }, targets);
+}
+
+/**
  * Report what the run found and answer with the process's exit code.
  *
  * @param what how to finish the sentence "N/M checks passed …"

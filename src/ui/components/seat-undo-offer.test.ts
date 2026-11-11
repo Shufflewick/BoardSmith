@@ -44,7 +44,7 @@ async function seatTable() {
 async function menuUndoDisabled(state: PlayerGameState): Promise<string | null> {
   document.body.innerHTML = '';
   const wrapper = mount(ControlsMenu, {
-    props: { play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: state.canUndo ?? false } },
+    props: { play: { autoEndTurn: false, zoom: 1, canUndo: state.canUndo ?? false } },
     attachTo: document.body,
   });
   await wrapper.find('button.menubtn').trigger('click');

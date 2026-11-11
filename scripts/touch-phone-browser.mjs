@@ -253,6 +253,8 @@ function recordPageListeners() {
 
 /** Hold a finger on `locator` until `until` is true, then lift it. Chromium only: WebKit has no way to hold a touch. */
 async function longPress(page, locator, until) {
+  // Clear of the floating action bar, which covers the bottom of the board region.
+  await locator.evaluate((el) => el.scrollIntoView({ block: 'nearest' }));
   const box = await locator.boundingBox();
   const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
   const cdp = await page.context().newCDPSession(page);
@@ -283,9 +285,11 @@ await runBrowserRegression(
           player ??= await page.context().storageState();
           const frame = gameFrame(page);
 
-          await check(`${size}: the shell, the action bar, the hand and the board all show, and the page does not scroll sideways`, async () => {
+          await check(`${size}: the shell, the action bar, the hand and the board all show, the hand once the board region scrolls to it, and the page does not scroll sideways`, async () => {
             const measure = () => frame.locator('body').evaluate((body, hand) => {
               const doc = body.ownerDocument;
+              // The board is never shrunk to fit, so on a short screen the hand is below it (#1608).
+              doc.querySelector(`${hand} .hand-cards`)?.scrollIntoView({ block: 'nearest' });
               const shown = (selector) => {
                 const box = doc.querySelector(selector)?.getBoundingClientRect();
                 return !!box && box.width > 0 && box.height > 0 && box.top < innerHeight && box.bottom > 0;
@@ -407,6 +411,10 @@ await runBrowserRegression(
       });
       await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
         const frame = gameFrame(page);
+        await check('1440x900: the squares keep their 64px (#1608)', async () => {
+          const sides = await frame.locator('.grid-cell').evaluateAll((cells) => cells.map((cell) => cell.getBoundingClientRect().width));
+          assert(sides.length === 16 && sides.every((side) => Math.abs(side - 64) < 0.5), `the squares are ${JSON.stringify(sides)}px wide, not 64px`);
+        });
         await check('1440x900: dragging my pawn onto a square by mouse marks the drop targets and the square under the pointer, and moves it there', async () => {
           await dragsAndDrops(frame, (move, whileOver) => mouseDrag(page, frame, move, whileOver));
         });

@@ -154,7 +154,8 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
   border: 1px solid var(--bsg-line);
   border-radius: 8px;
   padding: 12px;
-  min-height: 60px;
+  min-width: max(24px, var(--bsg-tap-min));
+  min-height: max(60px, var(--bsg-tap-min));
   transition: all 0.2s ease;
 }
 

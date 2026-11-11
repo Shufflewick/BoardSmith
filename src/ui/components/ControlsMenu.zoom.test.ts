@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The zoom slider keeps its 0.5 minimum while the automatic fit may go lower (#1162).
+ * The zoom is a magnifier, 100% to 200%, with a button back to 100% (#1608).
  */
 import { describe, it, expect, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -12,19 +12,19 @@ vi.stubGlobal('matchMedia', vi.fn(() => ({
   removeEventListener: vi.fn(),
 })));
 
-describe('ControlsMenu zoom slider', () => {
-  it('keeps a 0.5 minimum and reports a fitted zoom below it without changing it', async () => {
+describe('ControlsMenu zoom magnifier', () => {
+  it('ranges from 100% to 200% and puts the board back to 100% on request', async () => {
     const wrapper = mount(ControlsMenu, {
-      props: { play: { autoEndTurn: false, zoom: 0.23, zoomSupported: true, canUndo: false } },
+      props: { play: { autoEndTurn: false, zoom: 1.5, canUndo: false } },
       attachTo: document.body,
     });
     await wrapper.find('button.menubtn').trigger('click');
     const slider = document.querySelector<HTMLInputElement>('input.zoom-range')!;
 
-    expect(slider.min).toBe('0.5');
-    expect(slider.max).toBe('2');
-    expect(slider.getAttribute('aria-valuetext')).toBe('23%');
-    expect(wrapper.emitted('update:zoom')).toBeUndefined();
+    expect([slider.min, slider.max]).toEqual(['1', '2']);
+    expect(slider.getAttribute('aria-valuetext')).toBe('150%');
+    document.querySelector<HTMLButtonElement>('button.zoom-reset')!.click();
+    expect(wrapper.emitted('reset-zoom')).toHaveLength(1);
     wrapper.unmount();
   });
 });

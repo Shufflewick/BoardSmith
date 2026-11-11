@@ -81,13 +81,14 @@ const chromeElements = computed(() =>
 <style scoped>
 .grid-board-template {
   display: grid;
+  /* Every row as wide as the template, so the hand wraps; a board wider than that overflows its row (issue 1608). */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
     "chrome"
     "board"
     "hand";
   height: 100%;
-  overflow: hidden;
 }
 
 /* Chrome slot: peripheral zones (decks, scores) — auto height, collapses when empty */
@@ -99,17 +100,17 @@ const chromeElements = computed(() =>
   padding: 8px;
 }
 
-/* Board slot: DOMINANT area — the focal grid/hex board.
-   The board renders at its natural size; this slot scrolls (overflow:auto) when the
-   board is larger than the available space rather than fitting it to the container.
-   min-height:0 lets the slot shrink within the grid track. */
+/* Board slot: DOMINANT area — the focal grid/hex board, its cells sized from the
+   region's width. A board that cannot fit at the tap floor overflows, and the board
+   region scrolls to it: `safe` keeps its left edge reachable (issue 1608). A second board wraps below. */
 .grid-board-template__board {
   grid-area: board;
   min-height: 0;
-  overflow: auto;
   display: flex;
-  align-items: stretch;
-  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: flex-start;
+  justify-content: safe center;
 }
 
 /* Hand strip: docked at bottom — fluid clamp replaces fixed 30vh viewport unit */

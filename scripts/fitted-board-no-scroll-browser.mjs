@@ -5,13 +5,13 @@
  * A game that starts the Action Panel put down and keeps it from opening for
  * actions (`action-bar-starts-collapsed`, `:action-bar-opens-for-actions="false"`)
  * has nothing floating over its board but the thin line, until the player's own
- * toggle refits it. The board region still ended in scroll room for a two-row
+ * toggle. The board region still ended in scroll room for a two-row
  * bar, so it scrolled, and the collapsed bar's 20px dots hung below its 14px
  * line, off the bottom of the screen, so the page scrolled too.
  *
  * Served from `boardsmith init`'s table sample with that App.vue and a board
- * taller than wide, so the fit fills the region's height, at 1440px and 390px,
- * in Chromium with classic (space-taking) scrollbars. Once the fit has run, neither the game's page nor its board region may scroll.
+ * that fits the region at 1440px and at 390px, in Chromium with classic
+ * (space-taking) scrollbars. Neither the game's page nor its board region may scroll.
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/fitted-board-no-scroll-browser.mjs`; a missing Chromium says to run
@@ -29,13 +29,13 @@ import uis from './uis.js';
 </template>
 `;
 
-// Taller than wide, so the startup fit is bound by the region's height at both widths.
+// Small enough to fit the region at both widths, as the board is never zoomed to fit (#1608).
 const TALL_BOARD = `<template>
   <div class="tall-board"></div>
 </template>
 
 <style>
-.tall-board { width: 300px; height: 900px; background: rebeccapurple; }
+.tall-board { width: 300px; height: 500px; background: rebeccapurple; }
 </style>
 `;
 
@@ -76,7 +76,7 @@ await runBrowserRegression(
         const at = `${viewport.width}px`;
         await page.setViewportSize(viewport);
         const seen = await waitUntil(() => overflow(frame), (now) => now.barDown && now.fits, 10_000);
-        await check(`${at}: the bar is down and the fitted board fits its region`, () => {
+        await check(`${at}: the bar is down and the board fits its region`, () => {
           assert(seen.barDown, 'the Action Panel is not down');
           assert(seen.fits, 'the board is larger than its region, so scrolling it is expected');
         });
@@ -92,6 +92,6 @@ await runBrowserRegression(
     } finally {
       await browser.close();
     }
-    return summarise('with a fitted board and the action bar kept down');
+    return summarise('with a board that fits and the action bar kept down');
   },
 );

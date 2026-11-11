@@ -18,7 +18,7 @@ describe('ControlsMenu outside tap', () => {
     const outside = document.createElement('div');
     document.body.appendChild(outside);
     const wrapper = mount(ControlsMenu, {
-      props: { play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false } },
+      props: { play: { autoEndTurn: false, zoom: 1, canUndo: false } },
       attachTo: document.body,
     });
     await wrapper.find('button.menubtn').trigger('click');

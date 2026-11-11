@@ -106,20 +106,19 @@ function declarationsIn(text: string): Decl[] {
     .map((m) => ({ prop: kebab(m[1]!), value: m[2]! }));
 }
 
-/** Local aliases in one file, e.g. `--cell: var(--bsg-cell-size)`. */
-function aliasesIn(decls: Decl[]): Map<string, string> {
-  const aliases = new Map<string, string>();
+/** Local aliases in one file, e.g. `--cell: var(--bsg-cell-size)`, or `--cell: clamp(var(--bsg-tap-min), …, var(--bsg-cell-size))`, which reads both. */
+function aliasesIn(decls: Decl[]): Map<string, string[]> {
+  const aliases = new Map<string, string[]>();
   for (const { prop, value } of decls) {
-    const m = /^var\((--bsg-[a-z0-9-]+)\)$/.exec(value.trim());
-    if (m && prop.startsWith('--') && !prop.startsWith('--bsg-')) aliases.set(prop, m[1]!);
+    if (prop.startsWith('--') && !prop.startsWith('--bsg-')) aliases.set(prop, tokensIn(value, aliases));
   }
   return aliases;
 }
 
 /** The --bsg-* tokens a fragment of a value reads, with aliases resolved. */
-function tokensIn(fragment: string, aliases: Map<string, string>): string[] {
+function tokensIn(fragment: string, aliases: Map<string, string[]>): string[] {
   return [...fragment.matchAll(VAR_REF)]
-    .map((v) => aliases.get(v[1]!) ?? v[1]!)
+    .flatMap((v) => aliases.get(v[1]!) ?? [v[1]!])
     .filter((t) => t.startsWith('--bsg-'));
 }
 

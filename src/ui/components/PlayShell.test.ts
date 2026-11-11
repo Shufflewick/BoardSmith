@@ -97,6 +97,21 @@ describe('the layout', () => {
     expect(zoom()).toBe('1.27');
   });
 
+  it('magnifies the board by a transform, in a frame the size of the magnified board, so the region scrolls to all of it (#1608)', async () => {
+    const wrapper = mountShell({ zoomLevel: 2 });
+    await nextTick();
+    const container = wrapper.get('.game-shell__zoom-container').element as HTMLElement;
+    const frame = wrapper.get('.game-shell__zoom-frame').element as HTMLElement;
+    expect(container.parentElement).toBe(frame);
+    const observer = PanelResizeObserver.instances.find((o) => o.observed === container)!;
+    Object.defineProperties(container, { scrollWidth: { value: 300 }, scrollHeight: { value: 200 } });
+    observer.callback();
+    await nextTick();
+    expect([frame.style.width, frame.style.height]).toEqual(['600px', '400px']);
+    await wrapper.setProps({ zoomLevel: 1 });
+    expect([frame.style.width, frame.style.height], 'at 100% the frame is the board\'s own size').toEqual(['', '']);
+  });
+
   it('keeps the modal host outside the board scroller and zoom container', () => {
     const wrapper = mountShell();
     const modal = wrapper.get('#bs-game-modal').element;

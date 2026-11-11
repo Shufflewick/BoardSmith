@@ -2,7 +2,7 @@
 /**
  * GameOverlay is the in-place modal backdrop custom UIs use for round summaries
  * and confirmations. It deliberately does NOT teleport: it relies on being
- * inside GameShell's `contain: layout` container so the header and Action Panel
+ * inside GameShell's zoom container, the containing block for its `position: fixed`, so the header and Action Panel
  * stay reachable behind it.
  */
 import { afterEach, describe, it, expect, vi } from 'vitest';
@@ -104,7 +104,7 @@ describe('GameOverlay', () => {
   it('stays in place rather than teleporting, so GameShell can contain it', () => {
     const wrapper = overlay({}, { default: '<div class="modal">Round over</div>' });
     // The overlay must be a descendant of the component's own root, not moved
-    // to document.body — teleporting would escape GameShell's contain: layout
+    // to document.body — teleporting would escape GameShell's zoom container
     // and cover the header and Action Panel.
     expect(wrapper.element.querySelector('.modal')).not.toBeNull();
   });

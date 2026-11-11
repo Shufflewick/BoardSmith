@@ -51,7 +51,7 @@ describe('ControlsMenu: Show action help', () => {
 
   it('shows in a table menu without a bot, whatever the teaching lockout', async () => {
     const wrapper = await openMenu({
-      play: { autoEndTurn: false, zoom: 1, zoomSupported: true, canUndo: false },
+      play: { autoEndTurn: false, zoom: 1, canUndo: false },
       teachingDisabled: true,
     });
     expect(findHelpToggle()).toBeDefined();

@@ -260,7 +260,8 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 <style scoped>
 /* Container baseline — natural card token (IA-05) */
 .hand-container {
-  --card-w: var(--bsg-card-w);
+  /* A fifth of the board region's width, between the tap floor and the natural width (issue 1608). */
+  --card-w: clamp(max(24px, var(--bsg-tap-min)), 20cqw, var(--bsg-card-w));
   --card-h: calc(var(--card-w) * 1.4);
   background: var(--bsg-surface);
   border-radius: var(--bsg-r-md);
@@ -416,10 +417,10 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 }
 
 /* Overlap layout — overlap grows with card count, but the negative margin is
-   capped so every card always exposes a >=44px tap strip (var(--card-w) - 44px). */
+   capped so every card always exposes a strip as wide as the tap floor. */
 .hand-cards-wrapper.has-overlap .hand-card {
   margin-right: calc(
-    -1 * min((var(--card-count, 1) - 1) * 4px, max(var(--card-w) - 44px, 0px))
+    -1 * min((var(--card-count, 1) - 1) * 4px, max(var(--card-w) - max(24px, var(--bsg-tap-min)), 0px))
   );
 }
 

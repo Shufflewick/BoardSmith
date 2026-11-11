@@ -207,7 +207,9 @@ useAutoRendererAnimations(animationEvents, { fly });
 .auto-renderer {
   position: relative;
   height: 100%;
-  overflow: hidden;
+  /* The board region's width, so rows wrap and cells size against it; a board that
+     cannot fit at the tap floor overflows it, and the region scrolls (issue 1608). */
+  max-width: 100cqw;
 }
 
 /* CF-3: null gameView loading state — skeleton + retry */
