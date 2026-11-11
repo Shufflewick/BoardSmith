@@ -1444,10 +1444,13 @@ Tap the piece, then the target. Never bind a drag-only handler of your own,
 never use native HTML5 drag (it never starts from a touch), and do not add your
 own click handler beside the props, or one tap chooses twice.
 
-`drag().props` sets `touch-action: none` on the draggable element only, so the
-page and the board region still scroll and pinch under a finger everywhere
-else. A custom gesture of your own (a dial, a swipe) sets `touch-action: none`
-on its element to keep its presses from panning the board. The details are in
+The shell pans and pinches the board region itself, and leaves a press alone
+when it lands on an element that sets anything but `touch-action: auto`: that press is
+the element's. `drag().props` sets `touch-action: none` on the draggable
+element, so a press there drags and a press anywhere else pans. A custom
+gesture of your own (a dial, a swipe) sets `touch-action: none` on its element
+for the same reason. Set `touch-action` on nothing else: on a large container
+it turns pan and pinch off over all of it. The details are in
 [`useDragDrop`](./ui-components.md#usedragdrop).
 
 Shown working by [the drag-drop unit tests](../src/ui/composables/useDragDrop.test.ts)
@@ -1468,7 +1471,7 @@ phone a hover style sticks. Put every hover style behind
 
 Never show information only on hover. A coordinate, a card's rules text or the
 reason a control is disabled must also show on tap or on keyboard focus, or be
-visible all the time on a touch screen. The native `title` attribute does
+visible all the time on a touch screen. A native `title="…"` tooltip does
 nothing on touch; for a disabled control use `vDisabledReason`, which explains
 on hover, focus and tap ([above](#understanding-getchoices-return-values)). The
 engine's own UI follows the same rule: the Action Panel previews a choice's
@@ -1509,7 +1512,7 @@ Every board gets two props from the shell: `formFactor` (`'compact'` below
 640px, `'medium'` below 1024px, `'wide'` from there, the tiers in
 `BREAKPOINTS`) and `orientation` (`'portrait'` or `'landscape'`). Both follow a
 resize or a rotation. Read them, through `TableBoardProps` or
-`WorldBoardProps`, rather than a `window.matchMedia` query of your own, so your board and the
+`WorldBoardProps`, rather than a media query of your own, so your board and the
 shell's chrome always agree on the size. The types are `FormFactor` and
 `Orientation`.
 
