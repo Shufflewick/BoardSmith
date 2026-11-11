@@ -289,8 +289,10 @@ onUnmounted(() => {
   z-index: 1;
 }
 
-.action-help-btn:hover {
-  color: var(--bsg-ink-2);
+@media (hover: hover) {
+  .action-help-btn:hover {
+    color: var(--bsg-ink-2);
+  }
 }
 
 .action-help-btn[aria-expanded="true"] {

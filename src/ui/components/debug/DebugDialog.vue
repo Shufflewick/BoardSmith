@@ -98,8 +98,10 @@ const emit = defineEmits<{ close: [] }>();
   justify-content: center;
 }
 
-.debug-dialog-header .close-btn:hover {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .debug-dialog-header .close-btn:hover {
+    color: var(--bsg-ink);
+  }
 }
 
 .debug-dialog-body {

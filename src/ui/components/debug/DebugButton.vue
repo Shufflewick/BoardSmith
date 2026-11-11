@@ -59,9 +59,11 @@ withDefaults(defineProps<{
   transition: all 0.2s;
 }
 
-.debug-btn:hover {
-  background: var(--bsg-surface-3);
-  border-color: var(--bsg-accent-2);
+@media (hover: hover) {
+  .debug-btn:hover {
+    background: var(--bsg-surface-3);
+    border-color: var(--bsg-accent-2);
+  }
 }
 
 .debug-btn.active {
@@ -80,8 +82,10 @@ withDefaults(defineProps<{
   color: var(--bsg-danger);
 }
 
-.debug-btn.danger:hover {
-  background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
+@media (hover: hover) {
+  .debug-btn.danger:hover {
+    background: color-mix(in srgb, var(--bsg-danger) 20%, transparent);
+  }
 }
 
 .debug-btn.primary {
@@ -90,8 +94,10 @@ withDefaults(defineProps<{
   color: var(--bsg-accent-2);
 }
 
-.debug-btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bsg-accent-2) 30%, transparent);
+@media (hover: hover) {
+  .debug-btn.primary:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bsg-accent-2) 30%, transparent);
+  }
 }
 
 .debug-btn.primary:disabled {

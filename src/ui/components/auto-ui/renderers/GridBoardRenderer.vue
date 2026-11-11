@@ -339,8 +339,10 @@ function cellAriaLabel(cell: GameElement): string {
   cursor: pointer;
 }
 
-.grid-cell.is-clickable:hover {
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .grid-cell.is-clickable:hover {
+    background: var(--bsg-selectable);
+  }
 }
 
 /* Cell states */
@@ -381,12 +383,22 @@ function cellAriaLabel(cell: GameElement): string {
   right: 2px;
   font-size: 10px;
   color: var(--bsg-ink-3);
-  opacity: 0;
   transition: opacity 0.15s ease;
   pointer-events: none;
 }
 
-.grid-cell:hover .cell-notation {
+/* Hidden until hovered only where a fine pointer hovers: some touch devices wrongly match (hover: hover) alone. */
+@media (hover: hover) and (pointer: fine) {
+  .cell-notation {
+    opacity: 0;
+  }
+
+  .grid-cell:hover .cell-notation {
+    opacity: 1;
+  }
+}
+
+.grid-cell:focus-visible .cell-notation {
   opacity: 1;
 }
 
@@ -397,8 +409,10 @@ function cellAriaLabel(cell: GameElement): string {
   cursor: not-allowed;
 }
 
-.grid-cell.is-disabled:hover {
-  background: var(--bsg-cell);
+@media (hover: hover) {
+  .grid-cell.is-disabled:hover {
+    background: var(--bsg-cell);
+  }
 }
 
 /* ── Error panel ── */

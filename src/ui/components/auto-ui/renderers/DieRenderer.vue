@@ -140,10 +140,12 @@ const ariaLabel = computed(() => {
   outline-offset: 2px;
 }
 
-.die-container.action-selectable:hover {
-  background: var(--bsg-selectable);
-  outline-style: solid;
-  transform: scale(1.05);
+@media (hover: hover) {
+  .die-container.action-selectable:hover {
+    background: var(--bsg-selectable);
+    outline-style: solid;
+    transform: scale(1.05);
+  }
 }
 
 /* Board interaction highlights — dashed = highlighted, solid = selected */
@@ -172,8 +174,10 @@ const ariaLabel = computed(() => {
   cursor: not-allowed;
 }
 
-.die-container.is-disabled:hover {
-  transform: none;
+@media (hover: hover) {
+  .die-container.is-disabled:hover {
+    transform: none;
+  }
 }
 
 .die-label {

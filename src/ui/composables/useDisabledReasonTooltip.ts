@@ -123,6 +123,11 @@ export function trackInputModality(doc: Document): void {
   doc.addEventListener('pointerdown', onModalityPointer, true);
 }
 
+/** Whether the player is driving with the keyboard right now; see `keyboardModality`. */
+export function isKeyboardModality(): boolean {
+  return keyboardModality;
+}
+
 /**
  * Show the tooltip for `element`, describing it with `reason`.
  *

@@ -1813,9 +1813,11 @@ defineExpose({
   font-size: 0.95rem;
   cursor: pointer;
 }
-.bsg-show-result:hover {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .bsg-show-result:hover {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 /* ── bot demo playback control bar ─────────────────────────────────────────── */
 .bsg-demo-controls {
@@ -1859,9 +1861,11 @@ defineExpose({
   cursor: pointer;
   transition: background 0.15s, border-color 0.15s;
 }
-.bsg-demo-btn:hover:not(:disabled) {
-  border-color: var(--bsg-accent);
-  background: var(--bsg-selectable);
+@media (hover: hover) {
+  .bsg-demo-btn:hover:not(:disabled) {
+    border-color: var(--bsg-accent);
+    background: var(--bsg-selectable);
+  }
 }
 .bsg-demo-btn--speed {
   font-size: 0.8rem;

@@ -280,11 +280,13 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   box-shadow: var(--bsg-ring);
 }
 
-.hand-container.action-selectable:hover {
-  outline-color: var(--bsg-accent-2);
-  background: color-mix(in srgb, var(--bsg-accent) 22%, transparent);
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .hand-container.action-selectable:hover {
+    outline-color: var(--bsg-accent-2);
+    background: color-mix(in srgb, var(--bsg-accent) 22%, transparent);
+    transform: translateY(-2px);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Board interaction highlights */
@@ -314,9 +316,11 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   cursor: not-allowed;
 }
 
-.hand-container.is-disabled:hover {
-  transform: none;
-  box-shadow: none;
+@media (hover: hover) {
+  .hand-container.is-disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 /* Header */
@@ -398,13 +402,17 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   transition: transform var(--bsg-dur-base) var(--bsg-ease), z-index 0s;
 }
 
-.hand-card:hover {
-  z-index: 100 !important;
+@media (hover: hover) {
+  .hand-card:hover {
+    z-index: 100 !important;
+  }
 }
 
 /* Non-fan cards lift on hover */
-.hand-cards-wrapper:not(.has-fan) .hand-card:hover {
-  transform: translateY(-8px);
+@media (hover: hover) {
+  .hand-cards-wrapper:not(.has-fan) .hand-card:hover {
+    transform: translateY(-8px);
+  }
 }
 
 /* Overlap layout — overlap grows with card count, but the negative margin is
@@ -430,8 +438,10 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 }
 
 /* Fan cards lift and un-rotate on hover */
-.hand-cards-wrapper.has-fan .hand-card:hover {
-  transform: rotate(0deg) translateY(-15px) scale(1.05);
-  z-index: 100 !important;
+@media (hover: hover) {
+  .hand-cards-wrapper.has-fan .hand-card:hover {
+    transform: rotate(0deg) translateY(-15px) scale(1.05);
+    z-index: 100 !important;
+  }
 }
 </style>

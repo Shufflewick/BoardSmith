@@ -356,8 +356,10 @@ const emit = defineEmits<{
   padding: 2px 6px !important;
   text-transform: none;
 }
-.trace-copy-btn:hover {
-  opacity: 1;
+@media (hover: hover) {
+  .trace-copy-btn:hover {
+    opacity: 1;
+  }
 }
 .trace-icon {
   font-size: 12px;

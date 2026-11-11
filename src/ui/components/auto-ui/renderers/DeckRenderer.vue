@@ -157,10 +157,12 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   background: var(--bsg-selectable);
 }
 
-.deck-container.action-selectable:hover {
-  outline-style: solid;
-  transform: translateY(-2px);
-  box-shadow: var(--bsg-shadow-sm);
+@media (hover: hover) {
+  .deck-container.action-selectable:hover {
+    outline-style: solid;
+    transform: translateY(-2px);
+    box-shadow: var(--bsg-shadow-sm);
+  }
 }
 
 /* Board interaction highlights */
@@ -189,9 +191,11 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
   cursor: not-allowed;
 }
 
-.deck-container.is-disabled:hover {
-  transform: none;
-  box-shadow: none;
+@media (hover: hover) {
+  .deck-container.is-disabled:hover {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 /* Header */

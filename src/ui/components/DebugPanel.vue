@@ -742,8 +742,10 @@ function handleRestartClick() {
   line-height: 1;
 }
 
-.close-btn:hover {
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .close-btn:hover {
+    color: var(--bsg-ink);
+  }
 }
 
 .debug-content {
@@ -773,9 +775,11 @@ function handleRestartClick() {
   transition: all 0.2s;
 }
 
-.debug-tabs button:hover {
-  background: var(--bsg-surface-3);
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .debug-tabs button:hover {
+    background: var(--bsg-surface-3);
+    color: var(--bsg-ink);
+  }
 }
 
 .debug-tabs button.active,
@@ -831,8 +835,10 @@ function handleRestartClick() {
   cursor: pointer;
 }
 
-.tree-row.expandable:hover {
-  background: var(--bsg-surface-2);
+@media (hover: hover) {
+  .tree-row.expandable:hover {
+    background: var(--bsg-surface-2);
+  }
 }
 
 .tree-row.hidden {
@@ -863,7 +869,6 @@ function handleRestartClick() {
 }
 
 .tree-copy-btn {
-  opacity: 0;
   margin-left: auto;
   padding: 2px 6px;
   font-size: 10px;
@@ -875,13 +880,26 @@ function handleRestartClick() {
   transition: opacity 0.15s, background 0.15s;
 }
 
-.tree-row:hover .tree-copy-btn {
+/* Hidden until hovered only where a fine pointer hovers: some touch devices wrongly match (hover: hover) alone. */
+@media (hover: hover) and (pointer: fine) {
+  .tree-copy-btn {
+    opacity: 0;
+  }
+
+  .tree-row:hover .tree-copy-btn {
+    opacity: 1;
+  }
+}
+
+.tree-copy-btn:focus-visible {
   opacity: 1;
 }
 
-.tree-copy-btn:hover {
-  background: var(--bsg-line-2);
-  color: var(--bsg-ink);
+@media (hover: hover) {
+  .tree-copy-btn:hover {
+    background: var(--bsg-line-2);
+    color: var(--bsg-ink);
+  }
 }
 
 .tree-json {
@@ -980,8 +998,10 @@ function handleRestartClick() {
   animation: restart-pulse 1s ease-in-out infinite alternate;
 }
 
-.debug-btn.restart-confirming:hover {
-  background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+@media (hover: hover) {
+  .debug-btn.restart-confirming:hover {
+    background: color-mix(in srgb, var(--bsg-danger) 10%, transparent);
+  }
 }
 
 @keyframes restart-pulse {

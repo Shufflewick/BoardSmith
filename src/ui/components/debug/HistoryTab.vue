@@ -220,8 +220,10 @@ const emit = defineEmits<{
   border-color: var(--bsg-warn) !important;
   color: var(--bsg-warn) !important;
 }
-.rewind-btn:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--bsg-warn) 40%, transparent) !important;
+@media (hover: hover) {
+  .rewind-btn:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bsg-warn) 40%, transparent) !important;
+  }
 }
 .rewind-btn:disabled {
   background: var(--bsg-disabled-surface) !important;

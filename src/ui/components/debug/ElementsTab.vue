@@ -289,8 +289,10 @@ async function copyElementToClipboard(element: GroupedElement) {
   cursor: pointer;
   transition: background 0.2s;
 }
-.element-group-header:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .element-group-header:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 .group-arrow {
   color: var(--bsg-ink-3);
@@ -319,8 +321,10 @@ async function copyElementToClipboard(element: GroupedElement) {
   cursor: pointer;
   transition: all 0.2s;
 }
-.element-item:hover {
-  background: var(--bsg-surface-3);
+@media (hover: hover) {
+  .element-item:hover {
+    background: var(--bsg-surface-3);
+  }
 }
 .element-item.selected {
   background: color-mix(in srgb, var(--bsg-accent-2) 20%, transparent);
@@ -366,8 +370,10 @@ async function copyElementToClipboard(element: GroupedElement) {
   font-size: 9px !important;
   padding: 2px 6px !important;
 }
-.custom-debug-copy:hover {
-  opacity: 1;
+@media (hover: hover) {
+  .custom-debug-copy:hover {
+    opacity: 1;
+  }
 }
 .custom-debug-value {
   margin: 0;

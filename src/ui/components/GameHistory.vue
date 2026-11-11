@@ -393,9 +393,11 @@ defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
   cursor: pointer;
 }
 
-.history-copy:hover:not(:disabled) {
-  color: var(--bsg-ink);
-  background: var(--bsg-field);
+@media (hover: hover) {
+  .history-copy:hover:not(:disabled) {
+    color: var(--bsg-ink);
+    background: var(--bsg-field);
+  }
 }
 
 .history-copy:disabled {

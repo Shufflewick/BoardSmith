@@ -216,8 +216,10 @@ watch(effectivePieceImage, () => {
 }
 
 /* Carry-forward #1: piece hover affordance for non-hex pieces */
-.piece:hover {
-  transform: scale(1.05);
+@media (hover: hover) {
+  .piece:hover {
+    transform: scale(1.05);
+  }
 }
 
 /* ── Board interaction states (CF-1: pieces get same six states as all other renderers) ── */
@@ -229,9 +231,11 @@ watch(effectivePieceImage, () => {
   background: var(--bsg-selectable);
 }
 
-.piece.action-selectable:hover {
-  outline-style: solid;
-  transform: scale(1.1);
+@media (hover: hover) {
+  .piece.action-selectable:hover {
+    outline-style: solid;
+    transform: scale(1.1);
+  }
 }
 
 /* is-board-highlighted: dashed accent + selectable fill */
@@ -257,8 +261,10 @@ watch(effectivePieceImage, () => {
   cursor: not-allowed;
 }
 
-.piece.is-disabled:hover {
-  transform: none;
+@media (hover: hover) {
+  .piece.is-disabled:hover {
+    transform: none;
+  }
 }
 
 .piece.is-draggable {
