@@ -1,5 +1,5 @@
 {
-  "revision": 353,
+  "revision": 354,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2767,6 +2767,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Boards get formFactor and orientation props, BREAKPOINTS is exported from boardsmith/ui, and defineGameUIs takes an optional phoneUI() board that the shell renders at the compact size."
+    },
+    {
+      "revision": 354,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Hosts post { type: 'safe_area', top, right, bottom, left } in CSS px on load and on change; the shell pads its chrome by --bsg-safe-* (0 until sent) instead of env(), and shell controls are at least 44px under pointer: coarse (#1611)"
     }
   ]
 }
