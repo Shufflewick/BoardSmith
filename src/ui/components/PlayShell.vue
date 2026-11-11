@@ -729,7 +729,7 @@ const mobileToggleLabel = computed(() => {
      one-row bar sits under the board and only rows beyond it cover it.
      The bar fills it (`min-height`), so a bar shorter than a row leaves no band. */
   --bsg-panel-reserved: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
-                             + env(safe-area-inset-bottom));
+                             + var(--bsg-safe-bottom));
 
   /* The panel's ceiling: TWO rows (issue 444). The panel lays itself out to fit
      them (ActionPanel compacts at phone width) and scrolls inside them only when
@@ -738,7 +738,7 @@ const mobileToggleLabel = computed(() => {
      routinely wraps once on a phone) and the context + prompt of a pick; more
      would cover more board. */
   --bsg-panel-max: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
-                             + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+                             + 2 * var(--bsg-panel-pad) + var(--bsg-safe-bottom));
 
   /* The exceptions to that cap: a typed editor (#229, #237) and a choice
      list (#1573, #1580, #1587). While one is open the bar may grow past the strip and
@@ -761,7 +761,7 @@ const mobileToggleLabel = computed(() => {
      box gives way to it (ActionPanel's textarea), so on a short screen the box
      shrinks rather than the submit button leaving the bar. */
   --bsg-editor-chrome: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap) + 1.5rem
-                            + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom));
+                            + 2 * var(--bsg-panel-pad) + var(--bsg-safe-bottom));
   --bsg-editor-text-rest: calc(6 * 1.4 * 0.9rem + 18px);
   --bsg-panel-editor-max: min(calc(var(--bsg-editor-chrome) + var(--bsg-editor-text-rest)), 60dvh);
 
@@ -769,9 +769,17 @@ const mobileToggleLabel = computed(() => {
      bare dots and the lower half of the 26px edge toggle. The dots' 24px
      WCAG 2.5.8 target reaches up over the board instead of widening the line. */
   --bsg-action-bar-line: 14px;
-  --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + env(safe-area-inset-bottom));
-  /* The edge toggle, centred on the bar's top edge, so half of it rises above the bar. */
+  --bsg-action-bar-collapsed: calc(var(--bsg-action-bar-line) + var(--bsg-safe-bottom));
+  /* The edge toggle on the bar's top edge, reaching 13px down into it, which the
+     line holds, and the rest rising above the bar. */
   --bsg-bar-edge: 26px;
+  --bsg-bar-edge-drop: 13px;
+}
+/* A finger's target (#1611): WCAG 2.5.5 and Apple's 44pt. */
+@media (pointer: coarse) {
+  .game-shell__game {
+    --bsg-bar-edge: 44px;
+  }
 }
 
 /* Put down by the player (#1518): the region reserves only the line, so the board
@@ -781,12 +789,14 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-reserved: var(--bsg-action-bar-collapsed);
 }
 
-/* Stage: sidebar + boardregion side by side; fills remaining height */
+/* Stage: sidebar + boardregion side by side; fills remaining height. It keeps
+   out of the host's safe areas (#1611); the bar under it keeps out of the bottom one. */
 .stage {
   flex: 1;
   min-height: 0;
   display: flex;
   position: relative;
+  padding: var(--bsg-safe-top) var(--bsg-safe-right) 0 var(--bsg-safe-left);
 }
 
 /* Sidebar: always-visible player status + history; collapses to rail (IA-06) */
@@ -835,6 +845,13 @@ const mobileToggleLabel = computed(() => {
   display: grid;
   place-items: center;
   cursor: pointer;
+}
+@media (pointer: coarse) {
+  .side-edge {
+    right: -22px;
+    width: 44px;
+    height: 44px;
+  }
 }
 .side-edge svg {
   width: 15px;
@@ -911,7 +928,7 @@ const mobileToggleLabel = computed(() => {
   position: relative;
   display: flex;
   /* Public (#1520): how far the bar and its edge toggle reach above the reserved row, for a game overlay that must stay clear of them. */
-  --bsg-panel-overlap: calc(max(0px, var(--bsg-bar-clearance) - var(--bsg-panel-reserved)) + var(--bsg-bar-edge) / 2);
+  --bsg-panel-overlap: calc(max(0px, var(--bsg-bar-clearance) - var(--bsg-panel-reserved)) + var(--bsg-bar-edge) - var(--bsg-bar-edge-drop));
 }
 
 .boardregion {
@@ -991,8 +1008,9 @@ const mobileToggleLabel = computed(() => {
   align-items: center;
   align-content: flex-start;
   gap: 8px;
-  padding: 9px var(--bsg-s4);
-  padding-bottom: calc(9px + env(safe-area-inset-bottom));
+  padding: 9px calc(var(--bsg-s4) + var(--bsg-safe-right)) 9px calc(var(--bsg-s4) + var(--bsg-safe-left));
+  /* The bottom safe area is a border, not padding: a scroller shows its content through its padding (#1611). */
+  border-bottom: var(--bsg-safe-bottom) solid var(--bsg-surface);
   /* Capped at two rows (issue 444): content that does not fit scrolls inside it. On the border box, or the
      padding would sit on top of the cap. The ⋯ menu popover teleports to <body>,
      so overflow is safe. */
@@ -1023,7 +1041,7 @@ const mobileToggleLabel = computed(() => {
   /* The full line even when the adapter fills no controls menu. */
   height: var(--bsg-action-bar-collapsed);
   padding-top: 0;
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: 0;
   /* Nothing to scroll on one row, and clipping would cut off the dots' hit area. */
   overflow: visible;
 }
@@ -1044,6 +1062,11 @@ const mobileToggleLabel = computed(() => {
   bottom: 0;
   height: 24px;
 }
+@media (pointer: coarse) {
+  .actionbar.collapsed :deep(.menubtn)::before {
+    height: 44px;
+  }
+}
 /* The shell's outer ring would hang below the line, off the bottom of the screen. */
 .actionbar.collapsed :deep(.menubtn):focus-visible {
   box-shadow: inset 0 0 0 2px var(--bsg-accent);
@@ -1063,8 +1086,8 @@ const mobileToggleLabel = computed(() => {
 .bar-edge {
   position: absolute;
   top: 0;
-  right: 12px;
-  transform: translateY(-50%);
+  right: calc(12px + var(--bsg-safe-right));
+  transform: translateY(calc(var(--bsg-bar-edge-drop) - 100%));
   /* Ties the game modal host and game-over scrim, and wins as the later element (#1346). */
   z-index: 32;
   width: var(--bsg-bar-edge);
@@ -1238,6 +1261,12 @@ const mobileToggleLabel = computed(() => {
     color: var(--bsg-ink-2);
     cursor: pointer;
   }
+  @media (pointer: coarse) {
+    .mobile-strip__toggle {
+      width: 44px;
+      height: 44px;
+    }
+  }
   .mobile-strip__toggle svg {
     width: 16px;
     height: 16px;
@@ -1302,13 +1331,13 @@ const mobileToggleLabel = computed(() => {
        reserve follows the bar's thinner padding, so no board is lost under it. */
     --bsg-panel-pad: 6px;
     --bsg-panel-max: calc(var(--bsg-panel-row) + var(--bsg-panel-pad)
-                          + max(var(--bsg-panel-pad), env(safe-area-inset-bottom)));
+                          + max(var(--bsg-panel-pad), var(--bsg-safe-bottom)));
     --bsg-panel-reserved: var(--bsg-panel-max);
   }
 
   .actionbar {
     padding-top: var(--bsg-panel-pad);
-    padding-bottom: max(var(--bsg-panel-pad), env(safe-area-inset-bottom));
+    padding-bottom: max(0px, var(--bsg-panel-pad) - var(--bsg-safe-bottom));
   }
 
   /* The wider tiers' region min-height is taller than this screen. Kept, it

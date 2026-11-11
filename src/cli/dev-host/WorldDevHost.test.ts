@@ -821,3 +821,25 @@ describe('#607: the world bar has tokens to be drawn in', () => {
     wrapper.unmount();
   });
 });
+
+describe('#1611: the world frame is sent its safe areas, as a production host sends them', () => {
+  it('posts them on every frame load, and again on a resize only when they changed', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    const safeAreas = () => posted.filter((message) => message.type === 'safe_area');
+    // jsdom lays nothing out, so the frame sits at 0,0 with no size: the page's top and left insets fall wholly over it.
+    const probe = document.querySelector<HTMLElement>('.bsg-safe-area-probe')!;
+    probe.style.padding = '47px 0px 34px 10px';
+
+    await wrapper.find('iframe').trigger('load');
+    expect(safeAreas()).toEqual([{ type: 'safe_area', top: 47, right: 0, bottom: 0, left: 10, source: WORLD_HOST_SOURCE }]);
+
+    window.dispatchEvent(new Event('resize'));
+    expect(safeAreas()).toHaveLength(1);
+    probe.style.padding = '0px 47px 21px 47px';
+    window.dispatchEvent(new Event('resize'));
+    expect(safeAreas().at(-1)).toEqual({ type: 'safe_area', top: 0, right: 0, bottom: 0, left: 47, source: WORLD_HOST_SOURCE });
+    wrapper.unmount();
+    expect(document.querySelector('.bsg-safe-area-probe')).toBeNull();
+  });
+});

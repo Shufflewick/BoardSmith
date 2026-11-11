@@ -70,16 +70,16 @@ type Env = { safeArea: number };
 
 /** Resolve a CSS length expression built from our tokens to a number of px. */
 function px(expr: string, tokens: Record<string, string>, env: Env): number {
+  const known: Record<string, string> = { ...tokens, '--bsg-safe-bottom': `${env.safeArea}px` };
   let out = expr;
   for (let i = 0; i < 10 && out.includes('var('); i++) {
     out = out.replace(/var\(\s*(--[\w-]+)\s*\)/g, (_, name: string) => {
-      const value = tokens[name];
+      const value = known[name];
       if (value === undefined) throw new Error(`unknown token ${name} in "${expr}"`);
       return `(${value})`;
     });
   }
   out = out
-    .replace(/env\(safe-area-inset-bottom\)/g, `${env.safeArea}px`)
     .replace(/calc\(/g, '(')
     .replace(/min\(/g, 'Math.min(')
     .replace(/max\(/g, 'Math.max(')
@@ -100,6 +100,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
     '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
     '--bsg-bar-edge': declaration('.game-shell__game', '--bsg-bar-edge'),
+    '--bsg-bar-edge-drop': declaration('.game-shell__game', '--bsg-bar-edge-drop'),
   };
   if (tier === 'base') return base;
   const overrides = Array.from(landscapeTokens().matchAll(/(--bsg-panel-[\w-]+)\s*:\s*([\s\S]*?);/g));
@@ -221,7 +222,9 @@ describe('the Action Panel\'s own height cap', () => {
     const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
     const bar = source.slice(at).match(/\.actionbar \{([^}]*)\}/)![1];
     expect(bar).toMatch(/padding-top:\s*var\(--bsg-panel-pad\);/);
-    expect(bar).toMatch(/padding-bottom:\s*max\(var\(--bsg-panel-pad\), env\(safe-area-inset-bottom\)\);/);
+    const padBottom = bar.match(/padding-bottom:\s*([^;]+);/)![1];
+    // The safe area is the bar's bottom border (#1611), so padding and border together are the larger of the two.
+    expect(px(padBottom, tokens, env) + env.safeArea).toBe(Math.max(pad, env.safeArea));
     expect(px('var(--bsg-panel-reserved)', tokens, env)).toBe(row + pad + Math.max(pad, env.safeArea));
     expect(px('var(--bsg-panel-max)', tokens, env)).toBe(px('var(--bsg-panel-reserved)', tokens, env));
   });
@@ -254,7 +257,7 @@ describe('#230, #1439: the bar put down is a thin line', () => {
     const tokens = tokensFor('base');
     const line = px('var(--bsg-action-bar-collapsed)', tokens, env) - env.safeArea;
     expect(line).toBeLessThan(28);
-    expect(line).toBeGreaterThanOrEqual(px(declaration('.bar-edge', 'height'), tokens, env) / 2);
+    expect(line).toBeGreaterThanOrEqual(px('var(--bsg-bar-edge-drop)', tokens, env));
   });
 
   it('draws the controls menu as bare dots along the line, with no outline or padding (#1439, #1444)', () => {

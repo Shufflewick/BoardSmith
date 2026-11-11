@@ -137,6 +137,13 @@ const STATIC_TOKENS = `
   --bsg-host-corner-width: 48px;
   --bsg-host-corner-height: 32px;
 
+  /* The frame's safe areas, which only the host page can measure (#1611): zero
+     until its safe_area message says otherwise (src/ui/safe-area.ts). */
+  --bsg-safe-top: 0px;
+  --bsg-safe-right: 0px;
+  --bsg-safe-bottom: 0px;
+  --bsg-safe-left: 0px;
+
   /* Fonts — family tokens only; @font-face loading is the host's responsibility */
   --bsg-font: 'Hanken Grotesk', system-ui, sans-serif;
   --bsg-display: 'Hanken Grotesk', system-ui, sans-serif;

@@ -373,6 +373,11 @@ names it says so and exits non-zero.
   zooms it (#1607). Chromium's touch drag is
   real touch, sent through the DevTools protocol; WebKit has no way to move a
   touch, so its drag is `PointerEvent`s dispatched in the page.
+- **`safe-area-browser.mjs`** gives the dev host's page an iPhone's insets at
+  390x844 and 844x390, by touch, in both browsers: the dev host sends the frame
+  the part of each that reaches over it, the shell takes them, no control can be
+  tapped inside one with the action bar up or put down, the controls menu open
+  or the phone strip expanded, and every shell control takes a 44px tap (#1611).
 - **`cpu-throttle-browser.mjs`** renders the table sample at 390x844 with the CPU
   slowed fourfold (`Emulation.setCPUThrottlingRate`, Chromium only), then plays
   a card, and holds the layouts, style recalculations and game-frame elements
@@ -389,7 +394,9 @@ What emulation cannot prove, so each stays a manual check on a real iPhone and
 a real Android phone:
 
 - **Safe areas.** No emulated viewport has a notch or a home indicator, so
-  `env(safe-area-inset-*)` is always 0.
+  `env(safe-area-inset-*)` is always 0. `safe-area-browser.mjs` pads the probe
+  the dev host reads them from instead, which proves what the shell does with
+  the insets it is sent, not that a real phone reports them.
 - **iOS long-press.** The callout, text selection and the magnifier are the
   real Safari's, not WebKit's.
 - **Real sticky hover.** Emulated touch shows when `:hover` sticks after a

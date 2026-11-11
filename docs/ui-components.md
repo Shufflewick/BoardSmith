@@ -1928,6 +1928,7 @@ Common tokens (the full set lives in `src/ui/theme.ts`, the single source of tru
 | `--bsg-font`, `--bsg-display`, `--bsg-mono` | Font stacks |
 | `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
 | `--bsg-host-corner-width`, `--bsg-host-corner-height` | The frame's top-right corner left to the host page (below) |
+| `--bsg-safe-top`, `--bsg-safe-right`, `--bsg-safe-bottom`, `--bsg-safe-left` | The frame's safe areas, as the host page sends them (below); 0px until it does |
 
 ### The host's corner
 
@@ -1941,6 +1942,36 @@ shell. `scripts/host-corner-browser.mjs` holds the shell to it at 1440, 640, 639
 and 390 px wide and on a landscape phone, with the connection dot, the unread
 badge and a narration showing, and over a board scrolled down. The game's board is not moved, so a framed game keeps its own
 board controls out of that corner.
+
+### The host's safe areas
+
+A notch, a rounded corner or a home indicator can cover the edges of the
+screen. Inside an iframe `env(safe-area-inset-*)` cannot be trusted (Chrome
+reads 0 and Safari reads the parent page's values), so the host page measures
+how far each inset reaches over its frame and posts it, in CSS pixels, when the
+frame loads and again whenever it changes (a rotation):
+
+```js
+frame.contentWindow.postMessage(
+  { source: 'shufflewick', type: 'safe_area', top: 0, right: 47, bottom: 21, left: 47 },
+  origin,
+);
+```
+
+A world frame takes the same message stamped `source: 'shufflewick-world'`.
+The shell writes the four values to `--bsg-safe-top`, `--bsg-safe-right`,
+`--bsg-safe-bottom` and `--bsg-safe-left` and keeps its chrome and the board
+region inside them. Until the message arrives they are 0px, never guessed; a
+message missing a side, or with a negative or non-numeric one, is refused whole
+with a console error and the insets stay as they were. A game that positions
+its own element against the frame's edge pads it by these tokens. `boardsmith
+dev` sends the dev page's own insets this way, and
+`scripts/safe-area-browser.mjs` holds the shell to them on a phone held both
+ways.
+
+On a touch screen (`pointer: coarse`) every shell control takes at least a
+44px tap: the phone strip's toggle, the sidebar and action bar edge toggles,
+the controls menu and its items, Cancel and the log's copy button.
 
 ## Animation Events
 

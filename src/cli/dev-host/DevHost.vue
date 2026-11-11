@@ -12,6 +12,7 @@
  * inherently multiplayer (open another browser / another computer to join).
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useFrameSafeArea } from './use-frame-safe-area.js';
 import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
@@ -386,7 +387,10 @@ function postToGame(message: Record<string, unknown>): void {
 // speck over the board. Interval (3s) stays well under the game's 10s stale timeout.
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+const sendSafeArea = useFrameSafeArea(iframeRef, postToGame);
+
 function onIframeLoad(): void {
+  sendSafeArea();
   postToGame({ type: 'heartbeat' });
   if (heartbeatTimer === null) {
     heartbeatTimer = setInterval(() => postToGame({ type: 'heartbeat' }), 3000);
