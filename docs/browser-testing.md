@@ -373,9 +373,10 @@ names it says so and exits non-zero.
   zooms it (#1607). Chromium's touch drag is
   real touch, sent through the DevTools protocol; WebKit has no way to move a
   touch, so its drag is `PointerEvent`s dispatched in the page.
-- **`safe-area-browser.mjs`** gives the dev host's page an iPhone's insets at
-  390x844 and 844x390, by touch, in both browsers: the dev host sends the frame
-  the part of each that reaches over it, the shell takes them, no control can be
+- **`safe-area-browser.mjs`** gives the dev host's page an iPhone's insets and
+  turns the phone to 390x844 and to 844x390, by touch, in both browsers: the dev
+  host sends the frame the part of each that reaches over it, the shell takes
+  them, the action bar's measured height includes the bottom one, no control can be
   tapped inside one with the action bar up or put down, the controls menu open
   or the phone strip expanded, and every shell control takes a 44px tap (#1611).
 - **`cpu-throttle-browser.mjs`** renders the table sample at 390x844 with the CPU

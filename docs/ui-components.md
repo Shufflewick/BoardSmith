@@ -1948,8 +1948,10 @@ board controls out of that corner.
 A notch, a rounded corner or a home indicator can cover the edges of the
 screen. Inside an iframe `env(safe-area-inset-*)` cannot be trusted (Chrome
 reads 0 and Safari reads the parent page's values), so the host page measures
-how far each inset reaches over its frame and posts it, in CSS pixels, when the
-frame loads and again whenever it changes (a rotation):
+how far each inset reaches over its frame and posts it, in CSS pixels, once the
+frame says it is listening (`game_ready`, or `world_ready` for a world) and
+again whenever it changes (a rotation, or the page moving the frame). A frame's
+`load` event is not that signal: the shell may mount after it.
 
 ```js
 frame.contentWindow.postMessage(

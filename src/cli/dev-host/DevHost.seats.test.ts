@@ -117,6 +117,8 @@ async function activateSeat(wrapper: VueWrapper, seat = 1): Promise<void> {
 beforeEach(() => {
   mockWsInstance = null;
   vi.stubGlobal('WebSocket', FakeWebSocket);
+  // jsdom has no layout observer; the dev host watches its frame's box (#1611).
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   // Prevent localStorage from leaking between tests
   localStorage.clear();
   // Silence the iframe-load side-effects (no real iframe in jsdom)

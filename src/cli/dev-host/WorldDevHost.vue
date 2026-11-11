@@ -284,7 +284,6 @@ function replayHeld(): void {
 const sendSafeArea = useFrameSafeArea(frameRef, postToWorld);
 
 function onFrameLoad(): void {
-  sendSafeArea();
   replayHeld();
 }
 
@@ -303,6 +302,7 @@ function onWindowMessage(event: MessageEvent): void {
   const data = fromWorldFrame(event);
   if (data === null) return;
   if (data.type === 'world_ready') {
+    sendSafeArea();
     replayHeld();
     return;
   }

@@ -1,4 +1,4 @@
-import { onUnmounted, type Ref } from 'vue';
+import { onUnmounted, watch, type Ref } from 'vue';
 
 /**
  * SEND THE GAME FRAME ITS SAFE AREAS, AS A PRODUCTION HOST DOES (#1611).
@@ -6,12 +6,13 @@ import { onUnmounted, type Ref } from 'vue';
  * A frame cannot read its own: inside an iframe `env(safe-area-inset-*)` is 0
  * in Chrome and the parent's values in Safari. This page reads its own from a
  * probe padded by them, takes how far each reaches over the frame, and posts
- * `safe_area` on every frame load and whenever they change, on a resize, which a
- * rotation is. The message is `src/ui/safe-area.ts`'s.
+ * `safe_area` when the frame says it is listening and again whenever the
+ * frame's box changes them: a rotation, or the page's chrome moving the frame.
+ * The message is `src/ui/safe-area.ts`'s.
  *
  * @param frame the game frame
  * @param post  sends a message to the frame, stamped by the caller's protocol
- * @returns the frame's `load` handler, which always resends
+ * @returns what to call when the frame says it is ready; it always sends
  */
 export function useFrameSafeArea(
   frame: Ref<HTMLIFrameElement | null>,
@@ -43,10 +44,13 @@ export function useFrameSafeArea(
     post({ type: 'safe_area', ...insets });
   }
 
-  const onResize = () => send(false);
-  window.addEventListener('resize', onResize);
+  const observer = new ResizeObserver(() => send(false));
+  watch(frame, (el, previous) => {
+    if (previous) observer.unobserve(previous);
+    if (el) observer.observe(el);
+  }, { immediate: true });
   onUnmounted(() => {
-    window.removeEventListener('resize', onResize);
+    observer.disconnect();
     probe.remove();
   });
   return () => send(true);

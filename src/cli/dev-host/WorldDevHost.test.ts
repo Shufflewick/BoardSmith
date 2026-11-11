@@ -154,10 +154,13 @@ beforeEach(() => {
   socket = null;
   originalWebSocket = globalThis.WebSocket;
   (globalThis as unknown as { WebSocket: unknown }).WebSocket = FakeWebSocket;
+  // jsdom has no layout observer; the dev host watches its frame's box (#1611).
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   localStorage.clear();
 });
 afterEach(() => {
   (globalThis as unknown as { WebSocket: unknown }).WebSocket = originalWebSocket;
+  vi.unstubAllGlobals();
 });
 
 describe('#167: the world chrome identifies itself and asks for state', () => {
@@ -824,7 +827,18 @@ describe('#607: the world bar has tokens to be drawn in', () => {
 });
 
 describe('#1611: the world frame is sent its safe areas, as a production host sends them', () => {
-  it('posts them on every frame load, and again on a resize only when they changed', async () => {
+  /** The frame's box changed: what a rotation, or the bar growing a notice, does. */
+  let resized: () => void = () => {};
+  beforeEach(() => {
+    vi.stubGlobal('ResizeObserver', class {
+      constructor(callback: () => void) { resized = callback; }
+      observe() {}
+      unobserve() {}
+      disconnect() {}
+    });
+  });
+
+  it('posts them once the frame is listening, and again whenever the frame moves them', async () => {
     const wrapper = await open();
     const posted = watchFrame(wrapper);
     const safeAreas = () => posted.filter((message) => message.type === 'safe_area');
@@ -832,13 +846,18 @@ describe('#1611: the world frame is sent its safe areas, as a production host se
     const probe = document.querySelector<HTMLElement>('.bsg-safe-area-probe')!;
     probe.style.padding = '47px 0px 34px 10px';
 
+    // A load is not a listener: the frame may mount its shell after it.
     await wrapper.find('iframe').trigger('load');
+    expect(safeAreas()).toEqual([]);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: wrapper.find('iframe').element.contentWindow, data: { source: WORLD_UI_SOURCE, type: 'world_ready' },
+    }));
     expect(safeAreas()).toEqual([{ type: 'safe_area', top: 47, right: 0, bottom: 0, left: 10, source: WORLD_HOST_SOURCE }]);
 
-    window.dispatchEvent(new Event('resize'));
-    expect(safeAreas()).toHaveLength(1);
+    resized();
+    expect(safeAreas(), 'the same insets again').toHaveLength(1);
     probe.style.padding = '0px 47px 21px 47px';
-    window.dispatchEvent(new Event('resize'));
+    resized();
     expect(safeAreas().at(-1)).toEqual({ type: 'safe_area', top: 0, right: 0, bottom: 0, left: 47, source: WORLD_HOST_SOURCE });
     wrapper.unmount();
     expect(document.querySelector('.bsg-safe-area-probe')).toBeNull();
