@@ -336,7 +336,8 @@ watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
   const measure = () => { barClearance.value = bar.getBoundingClientRect().height; };
   const observer = new ResizeObserver(measure);
-  observer.observe(bar);
+  // The border box: the bottom safe area is the bar's border, which the content box never sees change (#1611).
+  observer.observe(bar, { box: 'border-box' });
   measure();
   onCleanup(() => observer.disconnect());
 }, { flush: 'post' });

@@ -118,20 +118,29 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
     for (const { viewport, page: notch } of PHONES) {
       const size = `${viewport.width}x${viewport.height}`;
       // One seat throughout: a later page reclaims the first page's client id, as `onEachPhone` does.
-      const context = await browser.newContext({ viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player });
+      // Held the other way up first, so turning it is what brings the insets.
+      const turned = { width: viewport.height, height: viewport.width };
+      const context = await browser.newContext({ viewport: turned, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player });
       try {
         const page = await context.newPage();
         const frame = await openTableSample(page, hostUrl);
         player ??= await context.storageState();
 
-        // The page's own insets, where the dev host reads them, then the resize a rotation brings.
+        // The page's own insets, where the dev host reads them, then the phone turned to them.
         await page.addStyleTag({ content: `.bsg-safe-area-probe { padding: ${notch.top}px ${notch.right}px ${notch.bottom}px ${notch.left}px !important; }` });
-        await page.evaluate(() => window.dispatchEvent(new Event('resize')));
+        await page.setViewportSize(viewport);
         const insets = await overFrame(page, notch);
         await check(`the dev host sends the frame its safe areas, and the shell takes them, at ${size}: ${JSON.stringify(insets)}`, async () => {
           assert(SIDES.some((side) => insets[side] > 0), `the page's insets ${JSON.stringify(notch)} reach nowhere over the frame, so nothing is tested`);
           const read = await waitUntil(() => shellInsets(frame), (read) => SIDES.every((side) => read[side] === insets[side]));
           assert(SIDES.every((side) => read[side] === insets[side]), `the shell resolved ${JSON.stringify(read)}, not ${JSON.stringify(insets)}`);
+        });
+        await check(`what keeps clear of the action bar is told its height with the bottom inset at ${size}`, async () => {
+          const { bar, clearance } = await frame.locator('[data-testid="bs-actionbar"]').evaluate((el) => ({
+            bar: el.getBoundingClientRect().height,
+            clearance: parseFloat(el.ownerDocument.querySelector('.board-viewport').style.getPropertyValue('--bsg-bar-clearance')),
+          }));
+          assert(Math.abs(bar - clearance) < 0.5, `--bsg-bar-clearance is ${clearance}px, but the bar is ${bar}px tall`);
         });
 
         await check(`no control sits inside an inset with the action bar up at ${size}`, async () => {
