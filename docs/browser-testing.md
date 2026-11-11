@@ -770,8 +770,8 @@ the function is given as `seed` (null in a world):
 
 ```ts
 defineSmokeTest({
-  actions: ['selectSheriff', 'castroBonusHire', 'kimBonusGuards' /* ... */],
-  seed: ['Hale', 'Kim'],
+  actions: ['selectSheriff', 'haleBonusHire', 'ortizBonusGuards' /* ... */],
+  seed: ['Hale', 'Ortiz'],
   inputs: { selectSheriff: { sheriffChoice: ({ seed }) => seed ?? undefined } },
 });
 ```

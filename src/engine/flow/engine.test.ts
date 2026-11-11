@@ -839,7 +839,7 @@ describe('FlowEngine', () => {
     it('should throw an actionable error when switchOn has no matching case and no default', () => {
       const flow: FlowDefinition = {
         root: switchOn({
-          on: () => 'combatt',
+          on: () => 'duell',
           cases: {
             draw: setVar('result', 'case-draw'),
             play: setVar('result', 'case-play'),
@@ -851,7 +851,7 @@ describe('FlowEngine', () => {
       const engine = new FlowEngine(game, flow);
 
       expect(() => engine.start()).toThrow(/no matching case/);
-      expect(() => engine.start()).toThrow(/combatt/);
+      expect(() => engine.start()).toThrow(/duell/);
       expect(() => engine.start()).toThrow(/draw/);
       expect(() => engine.start()).toThrow(/play/);
       expect(() => engine.start()).toThrow(/duel/);
@@ -878,7 +878,7 @@ describe('FlowEngine', () => {
     it('should execute the default branch when switchOn has no matching case but has a default (control)', () => {
       const flow: FlowDefinition = {
         root: switchOn({
-          on: () => 'combatt',
+          on: () => 'duell',
           cases: {
             draw: setVar('result', 'case-draw'),
             play: setVar('result', 'case-play'),

@@ -62,7 +62,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
           success: true,
           followUp: {
             action: 'collect',
-            args: { duelistId: held.id, roomId: game.stash.id },
+            args: { holderId: held.id, roomId: game.stash.id },
           },
         };
       }),
@@ -73,7 +73,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
     // held space — the mutation under test for undo persistence.
     this.registerAction(
       Action.create('collect')
-        .followUpArgs<{ duelistId: number; roomId: number }>()
+        .followUpArgs<{ holderId: number; roomId: number }>()
         .condition({ 'has room arg': (ctx) => ctx.args.roomId != null })
         .chooseElement('item', {
           optional: true,
@@ -87,7 +87,7 @@ class CollectTurnsGame extends Game<CollectTurnsGame, Player> {
           }
           // Non-selection followUp args are plain numbers (ENG-05: resolveArgs no
           // longer coerces bare numbers), so resolve explicitly via getElementById.
-          const held = ctx.game.getElementById(ctx.args.duelistId) as Held;
+          const held = ctx.game.getElementById(ctx.args.holderId) as Held;
           item.putInto(held);
           return { success: true };
         }),

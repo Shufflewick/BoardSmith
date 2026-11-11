@@ -541,7 +541,7 @@ describe('GameRunner', () => {
       // Inject an extra action that would be INVALID to replay from the restored
       // position (player 1 is no longer awaiting). The old replay-based restore
       // re-ran the whole actionHistory and could mis-position or throw — the exact
-      // The "Player N is not awaiting action" crash class. The authoritative
+      // "Player N is not awaiting action" crash class. The authoritative
       // restore must IGNORE the history for positioning and land on player 2.
       snapshot.actionHistory.push({ ...snapshot.actionHistory[0] });
 

@@ -240,8 +240,8 @@ export function offerFollowUp(game: Game, flowState: FlowState | undefined, seat
  * rule -- never as "guess from history."
  *
  * This correctly handles games with phases where the same player can act at
- * the end of one phase and start of the next (e.g., where Outlaw Player
- * acts at end of Day 1 and start of Day 2): moveCount resets to 0 for the new
+ * the end of one phase and start of the next (e.g., an Outlaw player who
+ * acts at the end of Day 1 and the start of Day 2): moveCount resets to 0 for the new
  * action-step frame, so undo is (correctly) bounded to that frame and cannot
  * reach back across the phase boundary into the prior one.
  *

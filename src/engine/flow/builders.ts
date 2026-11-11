@@ -649,8 +649,8 @@ export function turnLoop<G extends Game = Game>(config: {
  * // is the shape the example above actually needs — a bare
  * // actionStep cannot both take the action and resolve what it produced.
  * stateAwareLoop({
- *   name: 'outlaw-phase',
- *   while: (ctx) => (ctx.game as HeroGame).rebelsHaveActions(),
+ *    (ctx.game as HeroGame).rebelsHaveActions(),=>name: 'hero-phase',
+ *   while: (ctx) => (ctx.game as HeroGame).heroesHaveActions(),=> (ctx.game as HeroGame).rebelsHaveActions(),
  *   pendingStates: (ctx) => [(ctx.game as HeroGame).pendingDuel],
  *   do: sequence(
  *     actionStep({ actions: ['move', 'attack'], player: (ctx) => ctx.game.getPlayer(1)! }),

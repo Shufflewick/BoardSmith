@@ -6,7 +6,7 @@
  *    (PickHandler.processSelectionStep -> executePendingAction), NOT performAction.
  *  - `collect.execute` MUTATES element placement (moves a Piece between Spaces via
  *    `putInto`) — the exact shape suspected not to survive the snapshot round-trip.
- *  - The followUp args carry PLAIN NUMERIC element ids (structured-cloneable),
+ *  - The followUp args carry PLAIN NUMERIC element ids, so they are structured-cloneable.
  */
 
 import {
@@ -27,7 +27,7 @@ class Equipment extends Piece<CollectGame> {}
 /** The stash space inside a room that holds uncollected equipment. */
 class Stash extends Space<CollectGame> {}
 
-/** A per-duelist "held" space that collected equipment moves into. */
+/** A per-holder "held" space that collected equipment moves into. */
 class Held extends Space<CollectGame> {}
 
 /** A room-like container that owns the stash. */
@@ -49,18 +49,18 @@ class CollectGame extends Game<CollectGame, Player> {
     this.room.stash.create(Equipment, 'Shield');
     this.room.stash.create(Equipment, 'Bow');
 
-    // Per-duelist held space.
+    // Per-holder held space.
     this.held = this.create(Held, 'held');
 
     // `explore`: a normal action (available at game start). Its execute returns a
     // followUp into `collect`, passing PLAIN NUMERIC element ids so the followUp
-    // args are structured-cloneable .
+    // args are structured-cloneable.
     this.registerAction(
       Action.create('explore').execute(() => ({
         success: true,
         followUp: {
           action: 'collect',
-          args: { duelistId: this.held.id, roomId: this.room.id },
+          args: { holderId: this.held.id, roomId: this.room.id },
         },
       })),
     );
@@ -72,7 +72,7 @@ class CollectGame extends Game<CollectGame, Player> {
     // ("done collecting") when the player skips (no item).
     this.registerAction(
       Action.create('collect')
-        .followUpArgs<{ duelistId: number; roomId: number }>()
+        .followUpArgs<{ holderId: number; roomId: number }>()
         .condition({ 'has room arg': (ctx) => ctx.args.roomId != null })
         .chooseElement('item', {
           optional: true,
@@ -92,7 +92,7 @@ class CollectGame extends Game<CollectGame, Player> {
           // piece — the mutation under test for snapshot persistence. Non-selection
           // followUp args are plain numbers (ENG-05: resolveArgs no longer coerces
           // bare numbers), so resolve explicitly via getElementById.
-          const held = ctx.game.getElementById(ctx.args.duelistId) as Held;
+          const held = ctx.game.getElementById(ctx.args.holderId) as Held;
           const room = ctx.game.getElementById(ctx.args.roomId) as Room;
           item.putInto(held);
 
@@ -102,7 +102,7 @@ class CollectGame extends Game<CollectGame, Player> {
               success: true,
               followUp: {
                 action: 'collect',
-                args: { duelistId: held.id, roomId: room.id },
+                args: { holderId: held.id, roomId: room.id },
               },
             };
           }

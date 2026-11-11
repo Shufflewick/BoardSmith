@@ -1104,7 +1104,7 @@ const isHiringHero = computed(() => boardInteraction.currentAction === 'hireFirs
 const drawnHeroes = computed(() => {
   if (!isHiringHero.value) return [];
 
-  const ids = props.gameView?.settings._drawnMercsForHiring as number[] | undefined;
+  const ids = props.gameView?.settings._drawnHeroesForHiring as number[] | undefined;
   if (!ids?.length) return [];
 
   // Find the elements by ID in the game view
