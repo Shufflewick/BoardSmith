@@ -1428,6 +1428,138 @@ than 1, divide by the `zoom` that `useBoardSize()` returns (see above), for
 example by setting it on your board as `--board-zoom` and writing
 `calc((var(--bsg-panel-overlap) + var(--bsg-s2)) / var(--board-zoom))`.
 
+## Playing on a Phone
+
+The shell is built for a phone first: its chrome, the Action Panel and the
+auto-UI already play by touch at 390px wide. A custom board has to hold up its
+own end, and these are the rules for it.
+
+### Touch input: tap first, pointer drag second
+
+Every move a board offers by drag must also work by tap. `useDragDrop()` gives
+you both from one binding: spread `drag(ref).props` on the piece and
+`drop(ref).props` on each target, and a press that moves drags (by mouse, pen
+or finger) while a press that does not move is a tap that chooses the element.
+Tap the piece, then the target. Never bind a drag-only handler of your own,
+never use native HTML5 drag (it never starts from a touch), and do not add your
+own click handler beside the props, or one tap chooses twice.
+
+`drag().props` sets `touch-action: none` on the draggable element only, so the
+page and the board region still scroll and pinch under a finger everywhere
+else. A custom gesture of your own (a dial, a swipe) sets `touch-action: none`
+on its element to keep its presses from panning the board. The details are in
+[`useDragDrop`](./ui-components.md#usedragdrop).
+
+Shown working by [the drag-drop unit tests](../src/ui/composables/useDragDrop.test.ts)
+and [the touch regression](../scripts/touch-phone-browser.mjs), which taps and
+drags a pawn by touch in Chromium and WebKit.
+
+### Hover is a bonus, never the only way
+
+A tapped element keeps `:hover` until the next tap somewhere else, so on a
+phone a hover style sticks. Put every hover style behind
+`@media (hover: hover)`:
+
+```css
+@media (hover: hover) {
+  .my-tile:hover { outline: 2px solid var(--bsg-accent); }
+}
+```
+
+Never show information only on hover. A coordinate, a card's rules text or the
+reason a control is disabled must also show on tap or on keyboard focus, or be
+visible all the time on a touch screen. The native `title` attribute does
+nothing on touch; for a disabled control use `vDisabledReason`, which explains
+on hover, focus and tap ([above](#understanding-getchoices-return-values)). The
+engine's own UI follows the same rule: the Action Panel previews a choice's
+pieces on focus, and on touch a first tap previews and a second commits.
+
+Shown working by [the hover gate](../src/ui/hover-gated.test.ts), which holds
+every `:hover` in the engine's UI inside `@media (hover: hover)`, and
+[the tap-preview tests](../src/ui/components/auto-ui/ActionPanel.tap-preview.test.ts).
+
+### Responsive boards and the tap floor
+
+The shell never shrinks a board to fit the screen ([Board Sizing](#board-sizing)).
+A board sizes itself from the board region: `.boardregion` is an inline-size
+container, so `100cqw` is its width and a container query in your board reads
+it. Size cells, pieces and cards between the tap floor and their natural size,
+the way the auto-UI does, and let the region scroll past that:
+
+```css
+.my-board {
+  --cell: clamp(max(24px, var(--bsg-tap-min)), 100cqw / 8, 64px);
+}
+@container (max-width: 480px) {
+  .my-board__legend { display: none; }
+}
+```
+
+`--bsg-tap-min` is 44px. A dense board may lower it, never below 24px, which
+the `max(24px, …)` holds. Anything a finger must hit gets at least that size,
+including the gaps you leave between targets. A content-driven board (a hand, a
+wrapping row) pins itself to the region with `useBoardSize()` instead.
+
+Shown working by [the phone tap-floor regression](../scripts/tap-floor-phone-browser.mjs)
+and [the fluid card test](../src/ui/components/auto-ui/renderers/CardRenderer.fluid.test.ts).
+
+### The layout size and a phone UI
+
+Every board gets two props from the shell: `formFactor` (`'compact'` below
+640px, `'medium'` below 1024px, `'wide'` from there, the tiers in
+`BREAKPOINTS`) and `orientation` (`'portrait'` or `'landscape'`). Both follow a
+resize or a rotation. Read them, through `TableBoardProps` or
+`WorldBoardProps`, rather than a `window.matchMedia` query of your own, so your board and the
+shell's chrome always agree on the size. The types are `FormFactor` and
+`Orientation`.
+
+The default is one responsive board at every size. A game that wants a
+different board on a phone opts in with at most one `phoneUI()` entry beside
+its `defaultUI()` in `defineGameUIs()`; the shell renders it below 640px and
+the default everywhere else, swapping as the viewport crosses the line. See
+[the UI registry](./ui-components.md#dev-time-ui-switcher) for the dev
+switcher's handling of it.
+
+Shown working by [the layout-size tests](../src/ui/composables/useLayoutSize.test.ts),
+[the phone UI shell tests](../src/ui/phone-ui.shells.test.ts) and
+[the phone UI regression](../scripts/phone-ui-browser.mjs).
+
+### Safe areas come from the host
+
+A notch, a rounded corner or a home indicator can cover the screen's edges.
+Inside the game's iframe `env(safe-area-inset-*)` cannot be trusted, so the
+host page measures the insets and sends them, and the shell writes them to
+`--bsg-safe-top`, `--bsg-safe-right`, `--bsg-safe-bottom` and
+`--bsg-safe-left` (0px until they arrive). The shell already keeps its chrome
+and the board region inside them, so a board inside the region needs nothing.
+An element of yours positioned against the frame's edge (a `position: fixed`
+tray, say) pads itself by these tokens, never by `env(safe-area-inset-*)`. The host's
+side is in [the host's safe areas](./ui-components.md#the-hosts-safe-areas).
+
+Shown working by [the safe-area shell tests](../src/ui/components/GameShell.safe-area.test.ts)
+and [the safe-area regression](../scripts/safe-area-browser.mjs), on a phone
+held both ways.
+
+### Check it on a real phone
+
+Emulation proves layout and the tap path, not the device. Before you ship a
+custom board, play a whole game on a real iPhone and a real Android phone,
+held both ways, and check what no emulator can show:
+
+- The notch and home indicator cover nothing you drew, and nothing you drew
+  sits under them.
+- A long press does what you expect: no iOS callout, text selection or
+  magnifier on your pieces.
+- No hover style sticks after a tap, and nothing you show on hover is missing.
+- Dragging by finger feels right, and a drag never pans or pinches the board.
+- Every target is easy to hit with a thumb, and the board stays smooth on a
+  mid-range phone.
+
+[Browser testing](./browser-testing.md#phones-webkit-touch-pointer-drag-and-a-slow-cpu-1604)
+lists what the emulated runs cover, shown in [the touch regression](../scripts/touch-phone-browser.mjs)
+and [the CPU-throttled regression](../scripts/cpu-throttle-browser.mjs), and why
+each item above stays a manual check.
+
 ## Debugging
 
 ### Why Isn't My Action Available?
