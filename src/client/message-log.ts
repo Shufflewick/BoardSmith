@@ -32,3 +32,14 @@ export function mergeMessageLog<S extends LogState>(held: LogState | undefined, 
   const messages = [...heldLines.slice(offset - heldOffset, from - heldOffset), ...(incoming.messages ?? [])];
   return { ...state, ...(messages.length > 0 && { messages }) } as S;
 }
+
+/** A `game_state` frame's `view` (`{ flowState, state }`) with its state's whole log, from the view the page holds. */
+export function mergeViewLog(held: unknown, view: unknown): unknown {
+  const state = stateOf(view);
+  return state ? { ...(view as object), state: mergeMessageLog(stateOf(held), state) } : view;
+}
+
+function stateOf(view: unknown): LogState | undefined {
+  const state = (view as { state?: unknown } | null | undefined)?.state;
+  return typeof state === 'object' && state !== null ? (state as LogState) : undefined;
+}
