@@ -1,5 +1,5 @@
 {
-  "revision": 347,
+  "revision": 348,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2719,6 +2719,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Docs and CLI help: the browser regressions run phone-size scripts in WebKit too, with touch, pointer-drag, stuck-hover and CPU-throttled checks."
+    },
+    {
+      "revision": 348,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "useDragDrop and the AutoUI drag by pointer events instead of native drag, so drag works by touch, and drag()/drop() props carry a click handler for the tap path; DragProps and DropProps changed shape (#1605)."
     }
   ]
 }
