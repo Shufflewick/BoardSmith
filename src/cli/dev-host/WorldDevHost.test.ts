@@ -637,7 +637,8 @@ describe('#245, #250: offers survive the handshake in either order, and retire w
     const before = posted.length;
     await trigger();
     await wrapper.vm.$nextTick();
-    return posted.slice(before).map((message) => message.type as string);
+    // Every load also carries the safe areas (#1611), which are not what this asks about.
+    return posted.slice(before).map((message) => message.type as string).filter((type) => type !== 'safe_area');
   }
 
   /**
