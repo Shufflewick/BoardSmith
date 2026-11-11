@@ -110,6 +110,15 @@ describe('useWorldHost', () => {
     host.stop();
   });
 
+  it("exposes the host's safe areas as the shell's CSS variables (#1611)", () => {
+    const host = make();
+    deliver(host, { source: WORLD_HOST_SOURCE, type: 'safe_area', top: 47, right: 0, bottom: 34, left: 0 });
+    const root = document.documentElement.style;
+    expect(['top', 'right', 'bottom', 'left'].map((side) => root.getPropertyValue(`--bsg-safe-${side}`)))
+      .toEqual(['47px', '0px', '34px', '0px']);
+    for (const side of ['top', 'right', 'bottom', 'left']) root.removeProperty(`--bsg-safe-${side}`);
+  });
+
   it('takes a state frame whole', () => {
     const host = make();
     deliver(host, stateFrame());

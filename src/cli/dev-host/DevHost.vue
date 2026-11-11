@@ -12,6 +12,7 @@
  * inherently multiplayer (open another browser / another computer to join).
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { useFrameSafeArea } from './use-frame-safe-area.js';
 import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
@@ -386,6 +387,8 @@ function postToGame(message: Record<string, unknown>): void {
 // speck over the board. Interval (3s) stays well under the game's 10s stale timeout.
 let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
 
+const sendSafeArea = useFrameSafeArea(iframeRef, postToGame);
+
 function onIframeLoad(): void {
   postToGame({ type: 'heartbeat' });
   if (heartbeatTimer === null) {
@@ -406,6 +409,11 @@ function onWindowMessage(event: MessageEvent): void {
   if (!frame || event.source !== frame) return;
   const data = event.data;
   if (!data || data.source !== 'shufflewick-game') return;
+  // The shell is listening now, which a load does not promise.
+  if (data.type === 'game_ready') {
+    sendSafeArea();
+    return;
+  }
   // D11 (ENDGAME-02): 'debug:restart' is a host-chrome op, not a game-server op
   // — bridge.ts's comment says it's "handled in DevHost, not here". Route it to
   // the SAME working restart the "New game" button uses, BEFORE the generic

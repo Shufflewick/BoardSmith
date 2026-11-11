@@ -73,6 +73,12 @@ const preferenceItems = computed(() => Object.entries(props.preferences.declarat
   text-align: left;
   cursor: pointer;
 }
+/* A finger's target (#1611). */
+@media (pointer: coarse) {
+  .pref-toggle {
+    min-height: 44px;
+  }
+}
 @media (hover: hover) {
   .pref-toggle:hover {
     background: var(--bsg-surface-2);

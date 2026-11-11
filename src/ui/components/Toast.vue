@@ -37,10 +37,11 @@ const { toasts, remove } = useToast();
   /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
   font-family: var(--bsg-font);
   position: fixed;
-  bottom: 20px;
+  /* Clear of the host's safe areas (#1611). */
+  bottom: calc(20px + var(--bsg-safe-bottom));
   /* Spans the viewport less a margin, so a long message wraps on a phone instead of running off it. */
-  left: 16px;
-  right: 16px;
+  left: calc(16px + var(--bsg-safe-left));
+  right: calc(16px + var(--bsg-safe-right));
   z-index: 9999;
   display: flex;
   flex-direction: column;

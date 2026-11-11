@@ -336,6 +336,16 @@ interface WorldQuoteResultMessage {
   readonly code?: string;
 }
 
+/** The frame's safe areas in CSS pixels, sent on load and on every change (#1611, `src/ui/safe-area.ts`). */
+interface WorldSafeAreaMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'safe_area';
+  readonly top: number;
+  readonly right: number;
+  readonly bottom: number;
+  readonly left: number;
+}
+
 /**
  * EVERYTHING THE HOST SENDS, and the only name the two halves share.
  *
@@ -351,7 +361,8 @@ export type WorldHostMessage =
   | WorldEventsMessage
   | WorldResponseMessage
   | WorldPickResultMessage
-  | WorldQuoteResultMessage;
+  | WorldQuoteResultMessage
+  | WorldSafeAreaMessage;
 
 /** What one command becomes on the wire. */
 interface WorldCommandMessage {

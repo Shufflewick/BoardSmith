@@ -122,6 +122,8 @@ function spyOnIframePostMessage(wrapper: VueWrapper): ReturnType<typeof vi.fn> {
 beforeEach(() => {
   mockWsInstance = null;
   vi.stubGlobal('WebSocket', FakeWebSocket);
+  // jsdom has no layout observer; the dev host watches its frame's box (#1611).
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('location', { protocol: 'http:', host: 'localhost', reload: vi.fn() });
   localStorage.clear();
 });
@@ -369,5 +371,23 @@ describe('DevHost — replay after a seat change with no state', () => {
       expect.objectContaining({ type: 'init', seat: 2 }),
       expect.objectContaining({ type: 'game_state', view: { seat: 2 } }),
     ]);
+  });
+});
+
+describe('DevHost — safe areas (#1611)', () => {
+  it('sends the frame its safe areas once the game says it is listening, not on load', async () => {
+    const wrapper = await mountAndActivate();
+    const postSpy = spyOnIframePostMessage(wrapper);
+    const safeAreas = () => postSpy.mock.calls.map((c) => c[0] as Record<string, unknown>).filter((m) => m.type === 'safe_area');
+    // This page's own probe: the file's other tests leave their pages mounted.
+    [...document.querySelectorAll<HTMLElement>('.bsg-safe-area-probe')].at(-1)!.style.padding = '47px 0px 34px 0px';
+
+    await wrapper.find('iframe').trigger('load');
+    expect(safeAreas()).toEqual([]);
+    window.dispatchEvent(new MessageEvent('message', {
+      source: wrapper.find('iframe').element.contentWindow, data: { source: 'shufflewick-game', type: 'game_ready' },
+    }));
+    expect(safeAreas()).toEqual([{ source: 'shufflewick', type: 'safe_area', top: 47, right: 0, bottom: 0, left: 0 }]);
+    wrapper.unmount();
   });
 });

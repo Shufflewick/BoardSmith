@@ -25,6 +25,7 @@
  *                   is an event nobody can debug.
  */
 import { ref, computed, onMounted, onUnmounted, shallowRef } from 'vue';
+import { useFrameSafeArea } from './use-frame-safe-area.js';
 import type { WorldDevConfig } from './world-config-types.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from '../../ui/world/worldProtocol.js';
 import { loadDevClientId, WORLD_CLIENT_KEY } from './dev-client-id.js';
@@ -280,6 +281,8 @@ function replayHeld(): void {
   if (lastOffers.value !== null) postToWorld(lastOffers.value.frame);
 }
 
+const sendSafeArea = useFrameSafeArea(frameRef, postToWorld);
+
 function onFrameLoad(): void {
   replayHeld();
 }
@@ -299,6 +302,7 @@ function onWindowMessage(event: MessageEvent): void {
   const data = fromWorldFrame(event);
   if (data === null) return;
   if (data.type === 'world_ready') {
+    sendSafeArea();
     replayHeld();
     return;
   }

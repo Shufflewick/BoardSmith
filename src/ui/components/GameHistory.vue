@@ -392,6 +392,13 @@ defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
   color: var(--bsg-ink-3);
   cursor: pointer;
 }
+/* A finger's target (#1611). */
+@media (pointer: coarse) {
+  .history-copy {
+    width: 44px;
+    height: 44px;
+  }
+}
 
 @media (hover: hover) {
   .history-copy:hover:not(:disabled) {

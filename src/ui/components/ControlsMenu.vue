@@ -411,6 +411,21 @@ function runCommand(command: MenuCommand) {
   font-family: inherit;
   cursor: pointer;
 }
+/* A finger's target (#1611). The rows' own padding already makes room around a 44px slider or button. */
+@media (pointer: coarse) {
+  .menubtn {
+    height: 44px;
+    width: 44px;
+  }
+  .menu :deep(.mi) {
+    min-height: 44px;
+  }
+  .menu :deep(input[type='range']),
+  .zoom-reset {
+    min-height: 44px;
+    margin-block: -10px;
+  }
+}
 @media (hover: hover) {
   .menubtn:hover {
     color: var(--bsg-ink);

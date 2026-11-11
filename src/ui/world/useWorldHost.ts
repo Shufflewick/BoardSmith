@@ -1,5 +1,6 @@
 import { ref, shallowRef, type Ref, type ShallowRef } from 'vue';
 import { isOriginAllowed } from '../components/GameShellInit.js';
+import { applySafeAreaInsets } from '../safe-area.js';
 import { seatView } from '../../engine/element/seat-placeholders.js';
 import { createOrderBook, type OrderBook, type PendingOrder } from './orderBook.js';
 import {
@@ -686,6 +687,10 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // about which KIND of frame arrived rather than about what each one carries.
     if (data.type === 'world_pick_result' || data.type === 'world_quote_result') {
       settleAnswer(data);
+      return;
+    }
+    if (data.type === 'safe_area') {
+      applySafeAreaInsets(data);
       return;
     }
     if (data.type === 'world_events') {

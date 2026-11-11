@@ -1405,9 +1405,10 @@ with `--bsg-panel-overlap` ([below](#keep-an-overlay-above-the-action-panel)).
 
 `--bsg-panel-overlap` is how far the Action Panel reaches above the row the
 board region reserves for it, in pixels, at the panel's current height,
-counting the half of its edge toggle that rises above its top. It is that half
-toggle (13px) while the panel fits its reserved row (a one-row panel, or the
-thin line while the player has it put down), and grows as the panel wraps to a
+counting the part of its edge toggle that rises above its top. It is that part
+of the toggle (13px, or 31px on a touch screen, where the toggle is 44px) while
+the panel fits its reserved row (a one-row panel, or the thin line while the
+player has it put down), and grows as the panel wraps to a
 second row, opens over a put-down preference, or an editor grows it. Every
 element inside the board region inherits it; one you teleport out of the board
 (to `body`, say) does not.

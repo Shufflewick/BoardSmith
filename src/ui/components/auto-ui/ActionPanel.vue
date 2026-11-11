@@ -2488,6 +2488,13 @@ button {
   min-height: 24px;
   min-width: 24px;
 }
+/* A finger's target (#1611). */
+@media (pointer: coarse) {
+  .cancel-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 
 @media (hover: hover) {
   .cancel-btn:hover {

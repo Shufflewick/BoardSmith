@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
 import { applyTheme } from '../theme.js';
+import { applySafeAreaInsets } from '../safe-area.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
@@ -1034,6 +1035,11 @@ if (inHost) {
       consumeInitMessage(data, { applyTheme });
     }
 
+    if (data.type === 'safe_area') {
+      applySafeAreaInsets(data);
+      return;
+    }
+
     if (data.type === 'server_response') {
       platformTransport.handleResponse(data);
       return;
@@ -1727,8 +1733,8 @@ defineExpose({
    101-RESEARCH.md A11Y-10:589-594. */
 .sr-skip {
   position: fixed;
-  top: 8px;
-  left: 8px;
+  top: calc(8px + var(--bsg-safe-top));
+  left: calc(8px + var(--bsg-safe-left));
   z-index: 200;
   background: var(--bsg-surface);
   color: var(--bsg-ink);
@@ -1736,7 +1742,8 @@ defineExpose({
   border-radius: var(--bsg-r-sm);
   padding: 10px 14px;
   font-weight: 700;
-  transform: translateY(-160%);
+  /* Wholly above the frame, wherever the top safe area puts it. */
+  transform: translateY(calc(-100% - 8px - var(--bsg-safe-top)));
   transition: transform .15s;
   text-decoration: none;
 }

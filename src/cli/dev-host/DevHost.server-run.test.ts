@@ -82,6 +82,8 @@ function reconnect(): ScriptedSocket {
 beforeEach(() => {
   opened = [];
   vi.stubGlobal('WebSocket', ScriptedSocket);
+  // jsdom has no layout observer; the dev host watches its frame's box (#1611).
+  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('location', { protocol: 'http:', host: 'localhost', reload: vi.fn() });
   localStorage.clear();
   sessionStorage.clear();
