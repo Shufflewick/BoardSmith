@@ -7,7 +7,8 @@
  * (which checks failed, or why it could not start) is the message.
  *
  * This is `boardsmith test --browser` (`vitest.browser.config.ts`), not part of the
- * default suite: it needs Chromium, installed by `boardsmith install-browser`.
+ * default suite: it needs Chromium, installed by `boardsmith install-browser`, and WebKit,
+ * installed by `npx playwright install webkit` in this checkout.
  */
 import { describe, it, expect, onTestFinished } from 'vitest';
 import { spawn } from 'node:child_process';
@@ -25,7 +26,7 @@ const HANG_GUARD_MS = 600_000;
 const STOP_GRACE_MS = 30_000;
 
 describe('the browser regressions', () => {
-  it.each(browserScripts())('%s passes in Chromium', async (name) => {
+  it.each(browserScripts())('%s passes in the browsers it names', async (name) => {
     const child = spawn(process.execPath, [join(SCRIPTS, name)], { cwd: join(SCRIPTS, '..') });
     // A script still running when the case ends hung past the guard. SIGTERM, by its own pid, lets
     // it stop what it started (a world host in-process, or a `boardsmith dev` child) and remove its

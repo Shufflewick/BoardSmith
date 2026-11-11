@@ -283,6 +283,7 @@ async function balance(page) {
 await runBrowserRegression(
   {
     script: 'draft-quote-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'draft-quote-realm',
       displayName: 'Draft Quote Realm',

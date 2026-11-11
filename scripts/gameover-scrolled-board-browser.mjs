@@ -22,7 +22,7 @@ import {
   assert, check, openTableSample, playTableSampleToTheEnd, runBrowserRegression, summarise,
 } from './browser-harness.mjs';
 
-await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'gameover-scrolled-board-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage({ viewport: { width: 390, height: 844 } });

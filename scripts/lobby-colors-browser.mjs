@@ -41,7 +41,7 @@ function lobbyGeometry(page) {
   });
 }
 
-await runBrowserRegression({ script: 'lobby-colors-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'lobby-colors-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     // The first browser is seated by the host, so it must be there before the second arrives.

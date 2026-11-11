@@ -102,7 +102,7 @@ function assertClear(read) {
   assert(read.found.length === 0, `these shell elements sit in the host's ${read.width}x${read.height}px corner: ${read.found.join('; ')}`);
 }
 
-await runBrowserRegression({ script: 'host-corner-browser.mjs', table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'host-corner-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage();

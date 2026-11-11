@@ -21,7 +21,7 @@
  * when this was written and the mistake had been copied into every one of them;
  * a fourth must not be able to reintroduce it.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { existsSync, readFileSync, statSync } from 'node:fs';
@@ -29,7 +29,7 @@ import { createRequire } from 'node:module';
 import { dirname, join, matchesGlob, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-import { browserScripts, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
+import { browserScripts, knownFailure, recordWorldFrames, runBrowserRegression } from './browser-harness.mjs';
 import { BROWSER_SUITE_CONFIG } from '../src/cli/commands/test.ts';
 // Imported so `vitest run --changed` runs this file, which lists the suite through it, when it changes (#1375).
 import browserConfig from '../vitest.browser.config.ts';
@@ -113,6 +113,18 @@ describe('every browser regression launches the one Chromium build the harness p
 
   it('launches the full Chromium build, headless', () => {
     expect(read('browser-harness.mjs')).toContain("chromium.launch({ channel: 'chromium',");
+  });
+});
+
+describe('#1604: a regression that lays a page out at phone size names its browsers', () => {
+  it.each(browserScripts())('%s names its engines when it uses a phone viewport or touch', (name) => {
+    const source = read(name);
+    if (!/width: (3\d\d|4[0-3]\d)\b|\b844\b|hasTouch/.test(source)) return;
+    expect(
+      source,
+      `${name} lays a page out at phone size, so its runBrowserRegression call must name the browsers it runs in: ` +
+        "`engines: ['chromium', 'webkit']`, since WebKit is where iOS differs, or `engines: ['chromium']` with a comment saying why WebKit cannot run it.",
+    ).toMatch(/engines: \[/);
   });
 });
 
@@ -346,5 +358,46 @@ describe('#1318: a table fixture is `true` or `{ files }`', () => {
     await expect(runBrowserRegression({ script: 'x-browser.mjs', table }, () => 0)).rejects.toThrow(
       'x-browser.mjs: `table` is `true` or `{ files: { <path in the project>: <text> } }`',
     );
+  });
+});
+
+describe('#1604: a script names the browsers it runs in', () => {
+  it.each([[[]], [['firefox']], [['chromium', 'safari']]])('refuses engines: %j before it serves anything', async (engines) => {
+    await expect(runBrowserRegression({ script: 'x-browser.mjs', engines, table: true }, () => 0)).rejects.toThrow(
+      "x-browser.mjs: `engines` lists 'chromium' and/or 'webkit'",
+    );
+  });
+});
+
+describe('#1604: a known failure passes only while it fails for its reason', () => {
+  /** What `knownFailure` printed for a body, read off the console. */
+  async function outcome(body) {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await knownFailure('a defect', { issue: '#1', because: 'the drag never started' }, body);
+      return log.mock.calls.map((call) => call.join(' ')).join('\n');
+    } finally {
+      log.mockRestore();
+    }
+  }
+
+  it('passes while the body fails with the reason', async () => {
+    const printed = await outcome(() => {
+      throw new Error('the drag never started: no drop target');
+    });
+    expect(printed).toContain('ok    a defect (fails until #1)');
+    expect(printed).toContain('as expected: the drag never started: no drop target');
+  });
+
+  it('fails once the body passes, saying to make it a plain check', async () => {
+    expect(await outcome(() => {})).toContain('it passes now, so #1 has fixed it: make it a plain check().');
+  });
+
+  it('fails when the body fails for another reason', async () => {
+    const printed = await outcome(() => {
+      throw new Error('locator.tap: Timeout');
+    });
+    expect(printed).toContain('FAIL  a defect (fails until #1)');
+    expect(printed).toContain('it failed, but not because the drag never started: locator.tap: Timeout');
   });
 });

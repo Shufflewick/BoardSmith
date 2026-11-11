@@ -47,7 +47,7 @@ interface TestOptions {
  * never sims (#1502). A change with no related unit test fails when it changed a file under src/
  * that is still there and is not a sim, and otherwise passes saying why each file needs none.
  *
- * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium
+ * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium, and WebKit for those that name it
  * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
  *
  * In the BoardSmith repository it type-checks first and runs no test if that

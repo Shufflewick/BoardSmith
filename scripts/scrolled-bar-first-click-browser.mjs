@@ -80,6 +80,7 @@ const barState = (surface) => surface.locator('[data-testid="bs-actionbar"]').ev
 await runBrowserRegression(
   {
     script: 'scrolled-bar-first-click-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'scrolled-bar-expanse',
       displayName: 'Scrolled Bar Expanse',

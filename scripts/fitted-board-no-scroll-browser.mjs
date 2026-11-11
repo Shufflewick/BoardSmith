@@ -62,8 +62,9 @@ function overflow(frame) {
   });
 }
 
+// Chromium only: classic scrollbars are what it measures, and WebKit cannot show them.
 await runBrowserRegression(
-  { script: 'fitted-board-no-scroll-browser.mjs', table: { files: { 'src/ui/App.vue': APP, 'src/ui/uis.ts': UIS, 'src/ui/components/Tall.vue': TALL_BOARD } } },
+  { script: 'fitted-board-no-scroll-browser.mjs', engines: ['chromium'], table: { files: { 'src/ui/App.vue': APP, 'src/ui/uis.ts': UIS, 'src/ui/components/Tall.vue': TALL_BOARD } } },
   async ({ launch, hostUrl }) => {
     const browser = await launch({ classicScrollbars: true });
     try {

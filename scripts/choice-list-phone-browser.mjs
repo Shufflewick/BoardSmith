@@ -122,6 +122,7 @@ export default defineComponent({
 await runBrowserRegression(
   {
     script: 'choice-list-phone-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'choice-list-phone',
       displayName: 'Multiselect Phone',

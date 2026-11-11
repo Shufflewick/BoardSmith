@@ -5,7 +5,8 @@
  * which `agent-policy verify` runs (#533) and the default `boardsmith test`
  * leaves out, so the ordinary suite needs no Chromium. What each of them has to
  * do first is identical and none of it is the behaviour under test: find
- * BoardSmith's own Chromium the way the smoke check does, serve a throwaway
+ * BoardSmith's own Chromium the way the smoke check does (and its WebKit, for a
+ * script that names it, #1604), serve a throwaway
  * world project through the CLI's own dev host (`withFixtureWorld`, in
  * `src/cli/commands/fixture-world.test-helper.ts`, where it is type-checked and
  * run by the ordinary suite, #357) or `boardsmith init`'s table sample through
@@ -23,7 +24,7 @@
  *
  * @module
  */
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,6 +50,24 @@ async function loadChromium() {
     process.exit(1);
   }
   return browser.chromium;
+}
+
+/**
+ * The WebKit this checkout's Playwright drives, or an exit that says how to
+ * install it. WebKit is where iOS Safari's behaviour shows (#1604); it is the
+ * browser regressions' alone, so `boardsmith install-browser`, which a game
+ * author runs for the smoke check, does not fetch it.
+ */
+async function loadWebkit(script) {
+  const { webkit } = await import('@playwright/test');
+  if (!existsSync(webkit.executablePath())) {
+    console.error(
+      `The WebKit ${script} also runs in is not installed: Playwright looks for it at ${webkit.executablePath()}, and nothing is there.\n` +
+        `  Run \`npx playwright install webkit\` in the BoardSmith checkout, then: node scripts/${script}`,
+    );
+    process.exit(1);
+  }
+  return webkit;
 }
 
 /** Every browser regression in `scripts/`, found by name rather than listed. */
@@ -227,6 +246,9 @@ const findAttr = (node: Node | undefined, key: string): unknown => {
 
 const results = [];
 
+/** The browser the checks being recorded run in, which the summary names. */
+let engineName = 'chromium';
+
 /** Run one named check, recording its outcome rather than throwing. */
 export async function check(name, body) {
   try {
@@ -238,6 +260,26 @@ export async function check(name, body) {
     results.push({ name, error });
     console.log(`  FAIL  ${name}\n        ${error.message}`);
   }
+}
+
+/**
+ * A check that fails today, for the reason `because` names, until `issue` fixes it (#1604).
+ *
+ * It passes while `body` throws with `because` in its message, and fails once
+ * `body` passes (the fix landed: make it a plain `check`) or throws for any
+ * other reason, so a broken fixture cannot pass for the known defect.
+ */
+export async function knownFailure(name, { issue, because }, body) {
+  await check(`${name} (fails until ${issue})`, async () => {
+    try {
+      await body();
+    } catch (thrown) {
+      const message = thrown instanceof Error ? thrown.message : String(thrown);
+      if (message.includes(because)) return console.log(`        as expected: ${message}`);
+      throw new Error(`it failed, but not because ${because}: ${message}`);
+    }
+    throw new Error(`it passes now, so ${issue} has fixed it: make it a plain check().`);
+  });
 }
 
 export function assert(condition, message) {
@@ -274,7 +316,7 @@ export async function waitUntil(read, accept, timeoutMs = 20_000) {
  */
 export function summarise(what) {
   const failed = results.filter((result) => result.error);
-  console.log(`\n${results.length - failed.length}/${results.length} checks passed ${what}`);
+  console.log(`\n${results.length - failed.length}/${results.length} checks passed in ${engineName} ${what}`);
   return failed.length === 0 ? 0 : 1;
 }
 
@@ -333,12 +375,15 @@ async function loadFixtures(script) {
  * It does not return: the code the body reports becomes the process's.
  *
  * @param run.script  the script's own filename, for the refusal's command line
+ * @param run.engines the browsers the whole run is made in, each with a fixture of its
+ *                    own: `['chromium']` when left out; a script with a phone viewport
+ *                    names them (`['chromium', 'webkit']`, #1604)
  * @param run.fixture the world project, as `withFixtureWorld` takes it
  * @param run.table   instead of `fixture`: `true` serves `boardsmith init`'s table
  *                    sample through `boardsmith dev` (`withFixtureTable`, #703), and
  *                    `{ files }` serves it with those files written over it (#1318)
- * @param body        called with `{ launch, hostUrl, fixture }`, `fixture` being the served
- *                    project's directory; returns `summarise`
+ * @param body        called with `{ launch, engine, hostUrl, fixture }`, `fixture` being the
+ *                    served project's directory and `engine` the browser's name; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
   const table = run.table === true ? {} : run.table?.files;
@@ -346,9 +391,32 @@ export async function runBrowserRegression(run, body) {
     throw new Error(`${run.script}: \`table\` is \`true\` or \`{ files: { <path in the project>: <text> } }\`, not ${JSON.stringify(run.table)}.`);
   }
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
-  const chromium = await loadChromium();
-  const drive = ({ hostUrl, fixture }) => body({ launch: (options) => launchChromium(chromium, options), hostUrl, fixture });
-  process.exit(await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
+  let code = 0;
+  for (const [engine, launch] of Object.entries(await launchersFor(run))) {
+    results.length = 0;
+    engineName = engine;
+    console.log(`\n${engine}:`);
+    const drive = ({ hostUrl, fixture }) => body({ launch, engine, hostUrl, fixture });
+    code = Math.max(code, await (table ? withFixtureTable(drive, table) : withFixtureWorld(run.fixture, drive)));
+  }
+  process.exit(code);
+}
+
+/** How each browser a script may name is found and launched. */
+const ENGINES = {
+  chromium: async () => launchChromium.bind(null, await loadChromium()),
+  webkit: async (script) => launchWebkit.bind(null, await loadWebkit(script)),
+};
+
+/** A launch for each browser `run.engines` names, in order (Chromium when it names none). */
+async function launchersFor(run) {
+  const engines = run.engines ?? ['chromium'];
+  if (engines.length === 0 || engines.some((engine) => !Object.hasOwn(ENGINES, engine))) {
+    throw new Error(`${run.script}: \`engines\` lists 'chromium' and/or 'webkit', not ${JSON.stringify(run.engines)}.`);
+  }
+  const launchers = {};
+  for (const engine of engines) launchers[engine] = await ENGINES[engine](run.script);
+  return launchers;
 }
 
 /**
@@ -368,4 +436,10 @@ export async function runBrowserRegression(run, body) {
 function launchChromium(chromium, { classicScrollbars = false } = {}) {
   // Headless hides scrollbars; `classicScrollbars` keeps the space-taking ones Windows and Linux show.
   return chromium.launch({ channel: 'chromium', ignoreDefaultArgs: classicScrollbars ? ['--hide-scrollbars'] : [] });
+}
+
+/** Launch WebKit, headless. It has no classic-scrollbar switch, so a script that needs one runs in Chromium only. */
+function launchWebkit(webkit, { classicScrollbars = false } = {}) {
+  if (classicScrollbars) throw new Error('WebKit cannot show classic scrollbars: run this script in Chromium only.');
+  return webkit.launch();
 }

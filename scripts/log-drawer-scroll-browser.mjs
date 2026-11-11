@@ -94,6 +94,7 @@ const SCENES = [
 await runBrowserRegression(
   {
     script: 'log-drawer-scroll-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'log-drawer-tavern',
       displayName: 'Log Drawer Tavern',

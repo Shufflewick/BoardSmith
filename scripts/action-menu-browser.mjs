@@ -325,9 +325,11 @@ async function until(read, want, what) {
  * is unreachable fails rather than hangs.
  */
 async function tabTo(page, target, limit = 25) {
+  // WebKit's Tab skips buttons, as Safari's does by default; Option-Tab is how a Safari player reaches them.
+  const tab = page.context().browser().browserType().name() === 'webkit' ? 'Alt+Tab' : 'Tab';
   for (let step = 0; step < limit; step += 1) {
     if ((await focused(page)) === target) return;
-    await page.keyboard.press('Tab');
+    await page.keyboard.press(tab);
   }
   assert(
     (await focused(page)) === target,
@@ -762,6 +764,7 @@ async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
 await runBrowserRegression(
   {
     script: 'action-menu-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'action-menu-realm',
       displayName: 'Action Menu Realm',

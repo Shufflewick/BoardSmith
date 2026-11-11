@@ -1,5 +1,5 @@
 {
-  "revision": 346,
+  "revision": 347,
   "surfaceHash": "9af900f6f4dfcaf8",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2711,6 +2711,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The packed docs, examples and comments no longer name a retired game, so a new build must ship them; its examples now use a neutral domain (#1603)."
+    },
+    {
+      "revision": 347,
+      "date": "2026-11-11",
+      "surfaceHash": "9af900f6f4dfcaf8",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Docs and CLI help: the browser regressions run phone-size scripts in WebKit too, with touch, pointer-drag, stuck-hover and CPU-throttled checks."
     }
   ]
 }

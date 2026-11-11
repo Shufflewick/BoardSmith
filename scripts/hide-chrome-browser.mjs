@@ -37,7 +37,7 @@ export default defineGameUIs({ Field: defaultUI(Field) });
 const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 
 await runBrowserRegression(
-  { script: 'hide-chrome-browser.mjs', table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Field.vue': FIELD_BOARD } } },
+  { script: 'hide-chrome-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Field.vue': FIELD_BOARD } } },
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {

@@ -171,6 +171,7 @@ const VIEWPORTS = [{ width: 1440, height: 900 }, { width: 390, height: 844 }];
 await runBrowserRegression(
   {
     script: 'annotation-bubble-browser.mjs',
+    engines: ['chromium', 'webkit'],
     table: { files: { 'src/rules/index.ts': RULES, 'src/ui/uis.ts': UIS, 'src/ui/components/Edges.vue': EDGES_BOARD } },
   },
   async ({ launch, hostUrl }) => {
