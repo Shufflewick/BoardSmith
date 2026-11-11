@@ -339,7 +339,7 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
       },
     });
     const metadata: Record<string, EnrichedActionMetadata> = {
-      move: { name: 'move', selections: [{ name: 'piece', type: 'element' }, { name: 'dest', type: 'choice' }] },
+      move: { name: 'move', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'dest', type: 'choice' }] },
       pass: { name: 'pass', selections: [] },
     };
     return wireAll(metadata, fetchPickChoices);
@@ -463,8 +463,8 @@ describe('drag-drop follows the board and the action panel (#724)', () => {
   });
 });
 
-// The server's metadata never lists an element pick's candidates, so with
-// several actions on offer and none open the board must ask for them (#1192).
+// With several actions on offer and none open, the board offers what each
+// action's opening pick, answered in the seat's metadata, can start with (#1192, #1615).
 describe('a turn that offers several actions and opens none, as Chess does (#1192)', () => {
   const pieces = [
     { id: 42, refs: [{ ref: { notation: 'd2' }, role: 'highlight' as const }] },
@@ -482,7 +482,7 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
       },
     });
     const metadata: Record<string, EnrichedActionMetadata> = {
-      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'destination', type: 'choice' }] },
       resign: { name: 'resign', selections: [] },
       offerDraw: { name: 'offerDraw', selections: [] },
     };
@@ -516,13 +516,12 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
   });
 
   it('offers an element by the action that can start with it, when an earlier action disables it', async () => {
-    const fetchPickChoices = answerPicks({
-      piece: { validElements: [{ id: 42, disabled: 'pinned', refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
-      subject: { validElements: [{ id: 42, refs: [{ ref: { id: 42 }, role: 'highlight' }] }] },
-    });
+    const pinned = [{ id: 42, disabled: 'pinned', refs: [{ ref: { id: 42 }, role: 'highlight' as const }] }];
+    const free = [{ id: 42, refs: [{ ref: { id: 42 }, role: 'highlight' as const }] }];
+    const fetchPickChoices = answerPicks({ piece: { validElements: pinned }, subject: { validElements: free } });
     const { controller, boardInteraction } = await wireAll({
-      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
-      inspect: { name: 'inspect', selections: [{ name: 'subject', type: 'element' }, { name: 'detail', type: 'choice' }] },
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element', validElements: pinned }, { name: 'destination', type: 'choice' }] },
+      inspect: { name: 'inspect', selections: [{ name: 'subject', type: 'element', validElements: free }, { name: 'detail', type: 'choice' }] },
     }, fetchPickChoices);
 
     boardInteraction.triggerElementSelect({ id: 42 });
@@ -531,20 +530,25 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
     expect(controller.currentArgs.value).toEqual({ subject: 42 });
   });
 
-  it('offers nothing from an earlier state while the new state\'s candidates are on their way', async () => {
+  it('offers what the new state carries, never what an earlier state did, and asks nothing for it (#1615)', async () => {
     const { boardInteraction, actionMetadata, fetchPickChoices } = await chess();
     expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(true);
-    fetchPickChoices.mockImplementation(() => new Promise(() => {}));
 
-    actionMetadata.value = { ...actionMetadata.value! };
+    const movePiece = actionMetadata.value!.movePiece!;
+    actionMetadata.value = {
+      ...actionMetadata.value!,
+      movePiece: { ...movePiece, selections: [{ ...movePiece.selections[0]!, validElements: [pieces[1]!] }, movePiece.selections[1]!] },
+    };
     await flushAll();
     expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
+    expect(boardInteraction.isSelectableElement({ id: 301, notation: 'e2' })).toBe(true);
+    expect(fetchPickChoices).not.toHaveBeenCalled();
   });
 
   it('offers nothing on the board on another seat\'s turn', async () => {
     const fetchPickChoices = answerPicks({ piece: { validElements: pieces } });
     const { boardInteraction } = await wireAll({
-      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element', validElements: pieces }, { name: 'destination', type: 'choice' }] },
       resign: { name: 'resign', selections: [] },
     }, fetchPickChoices, false);
     expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);

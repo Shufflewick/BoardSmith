@@ -1894,7 +1894,8 @@ function throughStorage(json: unknown): unknown {
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
   const { GameRunner } = await import('../runtime/index.js');
-  const { buildViews, buildSpectatorView } = await import('../session/utils.js');
+  const { buildSpectatorView } = await import('../session/utils.js');
+  const { buildViews } = await import('../session/stateless-ops.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,

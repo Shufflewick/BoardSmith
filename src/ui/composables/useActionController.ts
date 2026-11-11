@@ -1619,64 +1619,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   // === Start candidates (#1192) ===
-  // The server's action metadata never lists an element pick's candidates, so
-  // with several actions on offer and none open nothing on the board could start
-  // one. While no action is open, each available, enabled action that opens with
-  // an element pick has that pick's candidates fetched with the same request an
-  // open pick makes, keyed in availableActions order, so a board click and a
-  // drag find the same action.
-  const fetchedStartCandidates = ref<ReadonlyMap<string, StartCandidates>>(new Map());
-  let startCandidatesRequest = 0;
-
+  // With several actions on offer and none open, a board click or drag starts
+  // the first action, in availableActions order, whose opening element pick
+  // offers the element. Read off the metadata, which carries an opening pick's
+  // candidates when the seat sees them all; nothing is fetched for this (#1615).
   /** True while a board click or drag may start an action. */
   function mayStartFromBoard(): boolean {
     return !!isMyTurn.value && !currentAction.value && !isExecuting.value && !pendingFollowUp.value && !isViewingHistoryValue();
   }
 
-  /** Each available, enabled action that opens with an element pick, and that pick's name. */
-  function elementFirstPicks(): { action: string; pick: string }[] {
-    return (availableActions.value ?? []).flatMap((action) => {
+  const startCandidates = computed((): ReadonlyMap<string, StartCandidates> => {
+    if (!mayStartFromBoard()) return new Map();
+    return new Map((availableActions.value ?? []).flatMap((action) => {
       if (disabledActions?.value?.[action]) return [];
       const pick = getActionMetadata(action)?.selections[0];
-      return pick?.type === 'element' ? [{ action, pick: pick.name }] : [];
-    });
-  }
-
-  async function refreshStartCandidates(): Promise<void> {
-    const request = ++startCandidatesRequest;
-    // What an earlier state offered may name elements that are gone, so it is never shown past it.
-    if (fetchedStartCandidates.value.size > 0) fetchedStartCandidates.value = new Map();
-    const fetchFn = options.fetchPickChoices;
-    if (!fetchFn || !mayStartFromBoard()) return;
-    const firstPicks = elementFirstPicks();
-    const player = playerSeat?.value ?? 0;
-    const answers = await Promise.all(firstPicks.map(async ({ action, pick }) => {
-      try {
-        const result = await fetchFn(action, pick, player, {});
-        if (result.success) return [action, { pick, elements: result.validElements ?? [] }] as const;
-        console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, result.error);
-      } catch (err) {
-        console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, err);
-      }
-      return null;
+      if (pick?.type !== 'element' || !pick.validElements) return [];
+      return [[action, { pick: pick.name, elements: enrichElementsList(pick.validElements) }] as const];
     }));
-    if (request !== startCandidatesRequest) return;
-    fetchedStartCandidates.value = new Map(answers.filter((a) => a !== null));
-  }
-
-  watch(
-    [
-      () => isMyTurn.value, currentAction, isExecuting, pendingFollowUp, () => playerSeat?.value,
-      () => availableActions.value, () => actionMetadata.value, () => disabledActions?.value, () => gameView?.value,
-      isViewingHistoryValue,
-    ],
-    () => void refreshStartCandidates(),
-    { immediate: true },
-  );
-
-  const startCandidates = computed((): ReadonlyMap<string, StartCandidates> => new Map(
-    [...fetchedStartCandidates.value].map(([action, { pick, elements }]) => [action, { pick, elements: enrichElementsList(elements) }]),
-  ));
+  });
 
   // === Auto-fill Watch ===
   // When a pick changes, fetch choices if needed and auto-fill if only one choice

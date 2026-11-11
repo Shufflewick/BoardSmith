@@ -24,7 +24,9 @@ import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
  * Build action metadata for auto-UI generation.
  *
  * SIMPLIFIED VERSION: Only includes static metadata.
- * Choices and elements are fetched on-demand via /selection-choices endpoint.
+ * Choices and elements are not resolved here: a seat's published state adds an
+ * opening element pick's when the seat sees every candidate
+ * (`PickHandler.answerOpeningPicks`), and the rest are asked for with `resolveChoices`.
  */
 export function buildActionMetadata(
   game: Game,
@@ -113,8 +115,8 @@ function actionMetadataOf(
 /**
  * Build metadata for a single selection.
  *
- * Only includes static metadata - choices are always fetched on-demand
- * via /selection-choices endpoint.
+ * Only includes static metadata: choices are resolved elsewhere (see
+ * `buildActionMetadata`).
  *
  * This keeps:
  * - name, type, prompt, optional

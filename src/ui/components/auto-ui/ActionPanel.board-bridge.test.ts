@@ -67,11 +67,12 @@ const moveAction: EnrichedActionMetadata = {
   ],
 };
 
-// example-rts's `tend`: one element pick whose candidates arrive from the server.
+// example-rts's `tend`: one element pick whose candidates the seat's metadata
+// carries (#1615) and the open pick asks for again.
 const tendAction: EnrichedActionMetadata = {
   name: 'tend',
   prompt: 'Tend',
-  selections: [{ name: 'plot', type: 'element', prompt: 'Choose a plot' }],
+  selections: [{ name: 'plot', type: 'element', prompt: 'Choose a plot', validElements: [{ id: 11 }, { id: 12 }] }],
 };
 
 // Board-startable: clicking one of its plots on the board starts the action
@@ -81,7 +82,7 @@ const harvestAction: EnrichedActionMetadata = {
   name: 'harvest',
   prompt: 'Harvest',
   selections: [
-    { name: 'plot', type: 'element', prompt: 'Choose a plot' },
+    { name: 'plot', type: 'element', prompt: 'Choose a plot', validElements: [{ id: 21 }, { id: 22 }] },
     {
       name: 'direction',
       type: 'choice',

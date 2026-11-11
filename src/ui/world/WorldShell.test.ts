@@ -1389,7 +1389,7 @@ describe('WorldShell — the controls menu (#1443)', () => {
     await nextTick();
     expect(wrapper.find('.cancel-btn').exists()).toBe(false);
     expect(toasts.value.slice(before).map((t) => [t.type, t.message])).toEqual([['info', 'Moving waits until the replay ends.']]);
-    await nextTick();
+    await flushPromises();
     expect(wrapper.get('[data-bs-live-region="polite"]').text()).toBe('Moving waits until the replay ends.');
     wrapper.unmount();
   });

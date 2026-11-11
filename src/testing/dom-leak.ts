@@ -864,6 +864,8 @@ async function seatContextFor(
       seat,
       { includeActionMetadata: true },
     );
+    // As a session publishes it (buildViews): the opening picks the seat sees answered (#1615).
+    new PickHandler(table.runner).answerOpeningPicks(seat, seatState.actionMetadata);
     const gameView =
       options.gameViewOverride !== undefined ? options.gameViewOverride : seatState.view;
     return wireTableSeat(table, seat, seatState, gameView, boardInteraction);

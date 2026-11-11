@@ -19,6 +19,7 @@ import { gameCodeThrew } from '../engine/action/action.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
+  type ActionMetadata,
   type PickChoicesResponse,
   type WarningEntry,
 } from './types.js';
@@ -268,6 +269,30 @@ export class PickHandler<G extends Game = Game> {
     // A number or text pick has no choices.
     if (selection.type === 'number' || selection.type === 'text') return { success: true };
     return answerPick(executor, action, selection, player, ctx, warnings);
+  }
+
+  /**
+   * Put on each action's metadata its opening element pick's answer, as
+   * `getPickChoices` gives it with nothing picked, so the seat opens the action
+   * with no round trip (#1615). Only when the seat sees every candidate: an
+   * answer naming a card it cannot see is asked for when the action opens, so
+   * what every state push carries names only what the seat's board shows.
+   */
+  answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
+    const game = this.#runner.game;
+    const seen = (id: number) => game.getElementById(id)?.isVisibleTo(seat) === true;
+    for (const action of Object.values(metadata ?? {})) {
+      const first = action.selections[0];
+      if (first?.type !== 'element' && first?.type !== 'elements') continue;
+      let answer: PickChoicesResponse;
+      try {
+        answer = this.getPickChoices(action.name, first.name, seat);
+      } catch {
+        // Unanswered rather than a failed state push: resolveChoices reports the error when the seat opens the action.
+        continue;
+      }
+      if (answer.success && answer.validElements?.every((element) => seen(element.id))) first.validElements = answer.validElements;
+    }
   }
 
   /**

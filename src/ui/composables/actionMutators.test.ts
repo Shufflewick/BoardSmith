@@ -102,14 +102,14 @@ describe("the bridge's post-execute clear leaves a newer action alone (#445 on t
 
 type Surface = 'panel' | 'board';
 
-// `scout`'s first pick is an element pick, so clicking a unit on the board
-// starts the action through the bridge.
+// `scout`'s first pick is an element pick its metadata answers, as a seat's
+// state does (#1615), so clicking a unit on the board starts the action through the bridge.
 const DIRECTIONS = [{ value: 'n', display: 'North' }];
 const scoutAction: EnrichedActionMetadata = {
   name: 'scout',
   prompt: 'Scout',
   selections: [
-    { name: 'unit', type: 'element', prompt: 'Which unit?' },
+    { name: 'unit', type: 'element', prompt: 'Which unit?', validElements: [{ id: 5 }, { id: 6 }] },
     { name: 'dir', type: 'choice', prompt: 'Which way?', choices: DIRECTIONS },
   ],
 };
