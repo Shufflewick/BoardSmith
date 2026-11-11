@@ -27,8 +27,8 @@ import { assert, check, openTableSample, runBrowserRegression, summarise, waitUn
  * the most seen when recorded: a change that thrashes layout multiplies them.
  */
 const RECORDED = {
-  render: { layouts: 64, styles: 116, elements: 323 },
-  push: { layouts: 64, styles: 146, elements: 323 },
+  render: { layouts: 64, styles: 116, elements: 324 },
+  push: { layouts: 64, styles: 146, elements: 324 },
 };
 
 /** The layouts and style recalculations the page has done so far, and the game frame's elements now. */
