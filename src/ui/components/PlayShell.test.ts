@@ -30,10 +30,10 @@ import { ref, computed } from 'vue';
 
 class PanelResizeObserver {
   static instances: PanelResizeObserver[] = [];
-  callback: () => void;
+  callback: (entries: Array<Partial<ResizeObserverEntry>>) => void;
   observed?: Element;
   disconnect = vi.fn();
-  constructor(callback: () => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
+  constructor(callback: (entries: Array<Partial<ResizeObserverEntry>>) => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
   observe(el: Element) { this.observed = el; }
 }
 beforeEach(() => { PanelResizeObserver.instances = []; vi.stubGlobal('ResizeObserver', PanelResizeObserver); });
@@ -104,10 +104,10 @@ describe('the layout', () => {
     const frame = wrapper.get('.game-shell__zoom-frame').element as HTMLElement;
     expect(container.parentElement).toBe(frame);
     const observer = PanelResizeObserver.instances.find((o) => o.observed === container)!;
-    Object.defineProperties(container, { scrollWidth: { value: 300 }, scrollHeight: { value: 200 } });
-    observer.callback();
+    // The board's layout size, which the transform leaves as it was; a cqw-sized board is rarely a whole pixel.
+    observer.callback([{ contentRect: { width: 300.25, height: 200.5 } as DOMRectReadOnly }]);
     await nextTick();
-    expect([frame.style.width, frame.style.height]).toEqual(['600px', '400px']);
+    expect([frame.style.width, frame.style.height]).toEqual(['600.5px', '401px']);
     await wrapper.setProps({ zoomLevel: 1 });
     expect([frame.style.width, frame.style.height], 'at 100% the frame is the board\'s own size').toEqual(['', '']);
   });
@@ -127,13 +127,13 @@ describe('the layout', () => {
     const observer = PanelResizeObserver.instances.find(o => o.observed === bar);
     expect(observer).toBeDefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:260} as DOMRect);
-    observer!.callback(); await nextTick();
+    observer!.callback([]); await nextTick();
     // The clearance is set where both the modal host and the game-over scrim inherit it (#1346).
     const viewport = wrapper.get('.board-viewport');
     expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 260px');
     expect(wrapper.get('[data-testid="bs-board"]').attributes('style')).toBeUndefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:80} as DOMRect);
-    observer!.callback(); await nextTick();
+    observer!.callback([]); await nextTick();
     expect(viewport.attributes('style')).toContain('--bsg-bar-clearance: 80px');
     wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });

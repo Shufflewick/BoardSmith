@@ -349,12 +349,13 @@ watch(() => props.chromeHidden, async (hidden) => {
   boardRegionEl.value?.focus();
 });
 const zoomContainerEl = ref<HTMLElement | null>(null);
-/** The board's own layout size with what overflows it, which a transform leaves as it was, so the frame around the magnified board is sized from it. */
+/** The board's own layout size, unrounded, which a transform leaves as it was, so the frame around the magnified board is sized from it. */
 const boardSize = ref({ width: 0, height: 0 });
 watch(zoomContainerEl, (board, _previous, onCleanup) => {
   if (!board) return;
-  // WebKit scrolls only to the frame, not to a transformed board's overflow, so the frame takes the overflow in.
-  const observer = new ResizeObserver(() => { boardSize.value = { width: board.scrollWidth, height: board.scrollHeight }; });
+  const observer = new ResizeObserver(([entry]) => {
+    boardSize.value = { width: entry!.contentRect.width, height: entry!.contentRect.height };
+  });
   observer.observe(board);
   onCleanup(() => observer.disconnect());
 }, { flush: 'post' });

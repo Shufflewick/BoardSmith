@@ -81,8 +81,6 @@ const chromeElements = computed(() =>
 <style scoped>
 .grid-board-template {
   display: grid;
-  /* Every row as wide as the template, so the hand wraps; a board wider than that overflows its row (issue 1608). */
-  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr auto;
   grid-template-areas:
     "chrome"
@@ -98,14 +96,20 @@ const chromeElements = computed(() =>
   flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 
 /* Board slot: DOMINANT area — the focal grid/hex board, its cells sized from the
-   region's width. A board that cannot fit at the tap floor overflows, and the board
-   region scrolls to it: `safe` keeps its left edge reachable (issue 1608). A second board wraps below. */
+   region's width. A second board wraps below at the region's width; a board that
+   cannot fit at the tap floor widens the slot, and the board region scrolls to it.
+   `safe` keeps a board's left edge reachable (issue 1608). */
 .grid-board-template__board {
   grid-area: board;
   min-height: 0;
+  max-width: 100cqw;
+  min-width: min-content;
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -121,5 +125,8 @@ const chromeElements = computed(() =>
   display: flex;
   gap: 8px;
   padding: 8px;
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 </style>

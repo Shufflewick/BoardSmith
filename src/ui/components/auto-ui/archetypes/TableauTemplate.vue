@@ -34,11 +34,13 @@ defineProps<{
 .tableau-template {
   display: flex;
   flex-wrap: wrap;
-  /* Fixed spacing — no container-query context now that elements size naturally. */
   gap: var(--bsg-s4);
   height: 100%;
   overflow: auto;
   padding: var(--bsg-s4);
+  /* The board region's width, so the row wraps there (issue 1608). */
+  max-width: 100cqw;
+  box-sizing: border-box;
   align-content: flex-start;
 }
 </style>
