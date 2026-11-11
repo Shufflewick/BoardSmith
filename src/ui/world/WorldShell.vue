@@ -367,7 +367,9 @@ defineExpose({ host });
 .world-shell__waiting {
   max-width: 42rem;
   margin: 0 auto;
-  padding: 1rem;
+  /* Clear of the host's safe areas (#1611). */
+  padding: calc(1rem + var(--bsg-safe-top)) calc(1rem + var(--bsg-safe-right))
+           calc(1rem + var(--bsg-safe-bottom)) calc(1rem + var(--bsg-safe-left));
 }
 
 /* Both banners sit over the top of the board: LOST marks the last view as no
