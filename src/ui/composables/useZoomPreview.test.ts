@@ -432,6 +432,34 @@ describe('useZoomPreview', () => {
     });
   });
 
+  describe('touch on a phone (#1607)', () => {
+    it('registers no touch listener that can block scrolling', () => {
+      const addSpy = vi.spyOn(document.body, 'addEventListener');
+      const { wrapper } = withPreview();
+      const touch = addSpy.mock.calls.filter(([type]) => type === 'touchstart' || type === 'touchmove');
+      expect(touch.map(([type]) => type).sort()).toEqual(['touchmove', 'touchstart']);
+      for (const [, , options] of touch) expect(options).toMatchObject({ passive: true });
+      wrapper.unmount();
+    });
+
+    it('cancels the context menu on a zoomable card, and only there', () => {
+      const { wrapper } = withPreview();
+      const card = document.createElement('div');
+      card.classList.add('card');
+      const elsewhere = document.createElement('div');
+      document.body.append(card, elsewhere);
+      const contextMenu = (target: HTMLElement) => {
+        const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+        target.dispatchEvent(event);
+        return event.defaultPrevented;
+      };
+      expect(contextMenu(card)).toBe(true);
+      expect(contextMenu(elsewhere)).toBe(false);
+      wrapper.unmount();
+      expect(contextMenu(card)).toBe(false);
+    });
+  });
+
   describe('custom container', () => {
     it('listens on the container it was given', async () => {
       const container = document.createElement('div');

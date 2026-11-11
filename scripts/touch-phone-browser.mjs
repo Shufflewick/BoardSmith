@@ -18,6 +18,9 @@
  *      square under the finger, while it is dragged, and moves it there. Drag is
  *      pointer-event drag (#1605); native HTML5 drag never starts from touch.
  *   5. At 1440x900 the same drag by mouse still works.
+ *   6. No touch or wheel listener on the window, document or body can block
+ *      scrolling, a long press on a card zooms it, and a card cancels its
+ *      context menu and iOS callout while a square does not (#1607).
  *
  * Chromium's drag is real touch, sent through CDP. WebKit has no way to move a
  * touch, so its drag is `PointerEvent`s dispatched in the page, with no live
@@ -234,6 +237,34 @@ async function dragsAndDrops(frame, drag) {
 }
 
 
+/** Records, in every frame, each touch and wheel listener the page adds to the window, document or body, with its target and passive flag. */
+function recordPageListeners() {
+  const added = (window.__pageListeners = []);
+  const add = EventTarget.prototype.addEventListener;
+  EventTarget.prototype.addEventListener = function (type, listener, options) {
+    const target = this === window ? 'window' : this === document ? 'document' : this === document.body ? 'body' : null;
+    // Playwright's own InjectedScript adds a touchstart listener to the window; it is not the page's.
+    if (target && /^(touchstart|touchmove|wheel|mousewheel)$/.test(type) && !/InjectedScript/.test(new Error().stack)) {
+      added.push({ target, type, passive: typeof options === 'object' ? options.passive : undefined });
+    }
+    return add.call(this, type, listener, options);
+  };
+}
+
+/** Hold a finger on `locator` until `until` is true, then lift it. Chromium only: WebKit has no way to hold a touch. */
+async function longPress(page, locator, until) {
+  const box = await locator.boundingBox();
+  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [point] });
+  try {
+    return await waitUntil(until, (seen) => seen, 5_000);
+  } finally {
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await cdp.detach();
+  }
+}
+
 await runBrowserRegression(
   {
     script: 'touch-phone-browser.mjs',
@@ -326,6 +357,46 @@ await runBrowserRegression(
           });
         });
       }
+      await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
+        // The listeners are added as the game loads, so record them from a reload that keeps this seat.
+        await page.addInitScript(recordPageListeners);
+        await page.reload();
+        await myPawnReady(page);
+        const frame = gameFrame(page);
+
+        await check('390x844: no touch or wheel listener on the window, document or body can block scrolling', async () => {
+          const added = await frame.locator('body').evaluate((body) => body.ownerDocument.defaultView.__pageListeners);
+          assert(added.some((l) => l.target === 'body' && l.type === 'touchstart'), `the zoom's touchstart listener on the body was not recorded, so the check saw nothing: ${JSON.stringify(added)}`);
+          const blocking = added.filter((l) => l.passive === false);
+          assert(blocking.length === 0, `these page-level listeners make every touch wait for the main thread before scrolling: ${JSON.stringify(blocking)}`);
+        });
+
+        await check('390x844: a card cancels its context menu and the iOS callout, and a square does not', async () => {
+          const card = frame.locator(`${MY_HAND} .hand-card`).first();
+          const square = frame.locator('.grid-cell').first();
+          const look = (locator) => locator.evaluate((el) => {
+            const event = new MouseEvent('contextmenu', { bubbles: true, cancelable: true });
+            el.dispatchEvent(event);
+            const style = getComputedStyle(el);
+            return { cancelled: event.defaultPrevented, callout: CSS.supports('-webkit-touch-callout', 'none') ? style.getPropertyValue('-webkit-touch-callout') : 'unsupported', select: style.userSelect || style.webkitUserSelect };
+          });
+          const onCard = await look(card);
+          const onSquare = await look(square);
+          assert(onCard.cancelled, 'a long press on a card would open the context menu: its contextmenu event was not cancelled');
+          assert(onCard.select === 'none', `a long press on a card would select its text: user-select is ${onCard.select}`);
+          // Only iOS WebKit knows -webkit-touch-callout; desktop WebKit and Chromium drop it, so the real-phone check covers it.
+          assert(onCard.callout === 'none' || onCard.callout === 'unsupported', `a long press on a card would show the iOS callout: -webkit-touch-callout is ${onCard.callout}`);
+          assert(!onSquare.cancelled, 'a square cancelled its context menu; only zoomable cards should');
+        });
+
+        if (engine === 'chromium') {
+          await check('390x844: a long press on a card zooms it', async () => {
+            const card = frame.locator(`${MY_HAND} .hand-card`).first();
+            const zoomed = await longPress(page, card, () => frame.locator('.zoom-preview-overlay').isVisible());
+            assert(zoomed, 'holding a finger on a card did not show its zoom');
+          });
+        }
+      });
       await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce', storageState: player }, myPawnReady, async (page) => {
         const frame = gameFrame(page);
         await check('1440x900: dragging my pawn onto a square by mouse marks the drop targets and the square under the pointer, and moves it there', async () => {

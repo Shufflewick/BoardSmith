@@ -6,7 +6,7 @@
  *  1. Renders a .action-help-btn trigger with correct aria-label and aria-expanded="false" when closed.
  *  2. Clicking the trigger opens a Teleported tooltip with role="tooltip", id, and aria-describedby.
  *  3. Content rendering: helpText only, disabledReason only (no divider), both (with divider).
- *  4. Escape key closes the popover; outside mousedown closes it.
+ *  4. Escape key closes the popover; an outside pointerdown, touch or mouse, closes it.
  *  5. Text content reaches DOM via interpolation — never v-html.
  *  6. Reduced-motion: component renders without errors and does not depend on animation timing.
  *  7. Parity: identical tooltip content in custom-UI-like div host vs AutoUI-like td/grid cell host.
@@ -286,7 +286,7 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
-    it('mousedown outside the trigger closes the popover', async () => {
+    it('a touch-only tap outside the trigger closes the popover', async () => {
       const wrapper = mountPopover({
         actionName: 'flee',
         triggerLabel: 'Flee',
@@ -296,11 +296,10 @@ describe('ActionHelpPopover', () => {
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
 
-      // Mousedown on an unrelated element
+      // A touch sends no mousedown when a pointerdown handler cancels the compatibility mouse events, as drag does.
       const outsideEl = document.createElement('div');
       document.body.appendChild(outsideEl);
-      const mousedownEvent = new MouseEvent('mousedown', { bubbles: true });
-      outsideEl.dispatchEvent(mousedownEvent);
+      outsideEl.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'touch' }));
       await nextTick();
 
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(false);
@@ -342,7 +341,7 @@ describe('ActionHelpPopover', () => {
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
 
       // Dragging the popover's scrollbar presses the mouse inside it.
-      popover.element.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      popover.element.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerType: 'mouse' }));
       await nextTick();
       expect(wrapper.find('[role="tooltip"]').exists()).toBe(true);
 

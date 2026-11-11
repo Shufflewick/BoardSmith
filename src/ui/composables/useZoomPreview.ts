@@ -91,18 +91,24 @@ export interface ZoomPreviewReturn {
   updatePosition: (event: MouseEvent) => void;
 }
 
+/**
+ * What zooms: cards, then dice. `.die-3d-container` is left out on purpose: it
+ * carries no die data, so the search goes on up to its `.die-container`.
+ */
+const ZOOMABLE = '[data-card-preview], [data-card-id], .card, .card-back, .card-container, .deck-card, .hand-card, [data-die-preview], [data-die-id], .die-container';
+
 // Global alt key state (shared across all instances)
 const isAltPressed = ref(false);
 
-// WeakMap for storing the keyboard cleanup without polluting the window object
-const keyboardCleanupMap = new WeakMap<Window, () => void>();
+// WeakMap for storing the cleanup of the window listeners and touch style without polluting the window object
+const globalsCleanupMap = new WeakMap<Window, () => void>();
 
-// Track if global keyboard listeners are already attached
-let keyboardListenersAttached = false;
-let keyboardInstanceCount = 0;
+// Track if the window listeners and touch style are already attached
+let globalsAttached = false;
+let instanceCount = 0;
 
-function attachKeyboardListeners() {
-  if (keyboardListenersAttached) return;
+function attachGlobals() {
+  if (globalsAttached) return;
 
   const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Alt') {
@@ -125,22 +131,27 @@ function attachKeyboardListeners() {
   window.addEventListener('keyup', handleKeyUp);
   window.addEventListener('blur', handleBlur);
 
-  keyboardListenersAttached = true;
+  // A long press on a zoomable element must show the zoom, not the iOS callout or a text selection.
+  const touchStyle = document.head.appendChild(document.createElement('style'));
+  touchStyle.textContent = `:is(${ZOOMABLE}) { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }`;
+
+  globalsAttached = true;
 
   // Store cleanup function
-  keyboardCleanupMap.set(window, () => {
+  globalsCleanupMap.set(window, () => {
     window.removeEventListener('keydown', handleKeyDown);
     window.removeEventListener('keyup', handleKeyUp);
     window.removeEventListener('blur', handleBlur);
-    keyboardListenersAttached = false;
+    touchStyle.remove();
+    globalsAttached = false;
   });
 }
 
-function detachKeyboardListeners() {
-  const cleanup = keyboardCleanupMap.get(window);
+function detachGlobals() {
+  const cleanup = globalsCleanupMap.get(window);
   if (cleanup) {
     cleanup();
-    keyboardCleanupMap.delete(window);
+    globalsCleanupMap.delete(window);
   }
   // `isAltPressed` is module-global and outlives every instance. With the
   // listeners gone, nothing can ever observe the keyup — so leaving it true
@@ -416,62 +427,8 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     previewState.y = y;
   }
 
-  // Find zoomable element from event target
-  // Detects cards by: data-card-preview, data-card-id, or various card classes
-  // Detects dice by: data-die-preview, data-die-id, or dice classes
   function findCardElement(target: EventTarget | null): HTMLElement | null {
-    let element = target as HTMLElement | null;
-    while (element && element !== document.body) {
-      // === CARD DETECTION ===
-      // Check for explicit card preview data
-      if (element.hasAttribute('data-card-preview')) {
-        return element;
-      }
-      // Check for card ID (Auto-UI and custom UIs)
-      if (element.hasAttribute('data-card-id')) {
-        return element;
-      }
-      // Check for .card class (common convention)
-      if (element.classList.contains('card')) {
-        return element;
-      }
-      // Check for .card-back class (deck/crib backs in custom UIs)
-      if (element.classList.contains('card-back')) {
-        return element;
-      }
-      // Check for card-container (Auto-UI wrapper)
-      if (element.classList.contains('card-container')) {
-        return element;
-      }
-      // Check for deck-card (deck cards in Auto-UI)
-      if (element.classList.contains('deck-card')) {
-        return element;
-      }
-      // Check for hand-card (hand cards in Auto-UI)
-      if (element.classList.contains('hand-card')) {
-        return element;
-      }
-
-      // === DICE DETECTION ===
-      // Check for explicit die preview data (must check this first - it has the data we need)
-      if (element.hasAttribute('data-die-preview')) {
-        return element;
-      }
-      // Check for die ID (Auto-UI)
-      if (element.hasAttribute('data-die-id')) {
-        return element;
-      }
-      // Check for .die-container class (Auto-UI wrapper - has data-die-preview)
-      if (element.classList.contains('die-container')) {
-        return element;
-      }
-      // Note: We intentionally don't detect .die-3d-container here because
-      // it doesn't have the data-die-preview attribute. We need to keep
-      // walking up to find .die-container which has the die data.
-
-      element = element.parentElement;
-    }
-    return null;
+    return target instanceof Element ? target.closest<HTMLElement>(ZOOMABLE) : null;
   }
 
   // Event delegation handlers
@@ -559,9 +516,6 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
         isAltPressed.value = true;
         showPreviewFromElement(cardElement, syntheticEvent);
         isAltPressed.value = wasAltPressed;
-
-        // Prevent context menu on long press
-        event.preventDefault();
       }, LONG_PRESS_DURATION);
     }
   }
@@ -593,12 +547,17 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     hidePreview();
   }
 
+  // A long press opens the context menu on Android; on a zoomable element it shows the zoom instead.
+  function handleContextMenu(event: MouseEvent) {
+    if (findCardElement(event.target)) event.preventDefault();
+  }
+
   // Per instance: two instances on one container must not share one cleanup (#749).
   let removeContainerListeners: (() => void) | null = null;
 
   onMounted(() => {
-    keyboardInstanceCount++;
-    attachKeyboardListeners();
+    instanceCount++;
+    attachGlobals();
 
     // Get container (default to document.body)
     const container = options.containerRef?.value || document.body;
@@ -609,10 +568,11 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     container.addEventListener('mousemove', handleMouseMove);
 
     // Attach touch event listeners for mobile long press
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchstart', handleTouchStart, { passive: true });
     container.addEventListener('touchmove', handleTouchMove, { passive: true });
     container.addEventListener('touchend', handleTouchEnd);
     container.addEventListener('touchcancel', handleTouchEnd);
+    container.addEventListener('contextmenu', handleContextMenu);
 
     // Watch Alt key state to trigger preview when pressed while hovering
     const checkAlt = (e: KeyboardEvent) => {
@@ -639,6 +599,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
       container.removeEventListener('touchmove', handleTouchMove);
       container.removeEventListener('touchend', handleTouchEnd);
       container.removeEventListener('touchcancel', handleTouchEnd);
+      container.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', checkAlt);
       window.removeEventListener('keyup', checkAlt);
       cancelLongPress();
@@ -646,9 +607,9 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
   });
 
   onUnmounted(() => {
-    keyboardInstanceCount--;
-    if (keyboardInstanceCount === 0) {
-      detachKeyboardListeners();
+    instanceCount--;
+    if (instanceCount === 0) {
+      detachGlobals();
     }
 
     removeContainerListeners?.();

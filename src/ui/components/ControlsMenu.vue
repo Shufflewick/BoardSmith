@@ -195,7 +195,7 @@ function close() {
   isOpen.value = false;
 }
 
-function handleOutsideClick(event: MouseEvent) {
+function handleOutsideClick(event: PointerEvent) {
   const target = event.target as Node;
   const root = menuRoot.value;
   const menu = menuRef.value;
@@ -206,11 +206,11 @@ function handleOutsideClick(event: MouseEvent) {
 }
 
 onMounted(() => {
-  document.addEventListener('mousedown', handleOutsideClick);
+  document.addEventListener('pointerdown', handleOutsideClick);
 });
 
 onUnmounted(() => {
-  document.removeEventListener('mousedown', handleOutsideClick);
+  document.removeEventListener('pointerdown', handleOutsideClick);
 });
 
 function handleZoomInput(event: Event) {
