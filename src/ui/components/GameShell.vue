@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
+import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick, defineAsyncComponent } from 'vue';
 import { applyTheme } from '../theme.js';
 import { applySafeAreaInsets } from '../safe-area.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
@@ -18,7 +18,6 @@ import { audioService } from '../../client/audio.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
-import DebugPanel from './DebugPanel.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
 import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
@@ -184,6 +183,9 @@ const inHost = typeof window !== 'undefined' && window.parent !== window;
 // Dev build (Vite serves `boardsmith dev`); false in production embeds. Gates the
 // debug panel so it appears under `boardsmith dev` but never in a deployed game.
 const isDevBuild = import.meta.env.DEV;
+// `import.meta.env.DEV` stays inline so a production build folds it and drops the
+// panel's import, its tabs and its stylesheet from every player bundle (#1612).
+const DebugPanel = import.meta.env.DEV ? defineAsyncComponent(() => import('./DebugPanel.vue')) : null;
 
 // Dev-only UI switcher. `boardsmith dev` shows a dropdown of every UI the game's
 // registry declares and renders the selected one without a permanent split-screen.

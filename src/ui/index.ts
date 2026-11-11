@@ -2,7 +2,6 @@
 
 // Core components
 export { default as GameShell } from './components/GameShell.vue';
-export { default as DebugPanel } from './components/DebugPanel.vue';
 export { default as GameHistory } from './components/GameHistory.vue';
 export { default as PlayersPanel } from './components/PlayersPanel.vue';
 export { default as Toast } from './components/Toast.vue';

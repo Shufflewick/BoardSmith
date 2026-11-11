@@ -791,17 +791,10 @@ entry reach the bundle, JS or CSS (see SHIP-02 and `treeshake-bundle.test.ts`).
 
 ### DebugPanel
 
-Development tool for inspecting game state, history, and debugging.
-
-```vue
-<template>
-  <DebugPanel
-    :state="state"
-    :game-view="gameView"
-    :action-history="actionHistory"
-  />
-</template>
-```
+Development tool for inspecting game state, history, and debugging. `GameShell`
+mounts it itself under `boardsmith dev`, where the dev header's Debug button
+toggles it. It is not exported: it talks to the dev host through the shell, and a
+production build drops it, its tabs and its styles from the bundle.
 
 ## Game Setup
 

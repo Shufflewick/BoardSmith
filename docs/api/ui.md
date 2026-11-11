@@ -26,7 +26,6 @@ import {
 ### Core Components
 
 - `GameShell` - Main game container with panels and layout; runs inside a host's iframe
-- `DebugPanel` - Developer debug tools
 - `GameHistory` - Action history display
 - `PlayersPanel` - Player list and scores
 - `Toast` - Toast notification component

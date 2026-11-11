@@ -18,6 +18,7 @@
  * one this file wrote by hand.
  */
 import { describe, it, expect, afterEach } from 'vitest';
+import { flushPromises } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ControlsTab from './debug/ControlsTab.vue';
 import { Game, Player, Action, loop, eachPlayer, actionStep } from '../../engine/index.js';
@@ -77,8 +78,8 @@ async function openControlsWithFiveSeats() {
     view: fiveSeatView(),
     winners: [],
   });
-  await nextTick();
-  await nextTick();
+  // The shell loads the debug panel with a dynamic import, so wait for that to settle too.
+  await flushPromises();
 
   const controls = wrapper.findComponent(ControlsTab);
   expect(controls.exists()).toBe(true);
