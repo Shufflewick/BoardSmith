@@ -1,6 +1,6 @@
 {
-  "revision": 357,
-  "surfaceHash": "675cd495a6885e94",
+  "revision": 358,
+  "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2799,6 +2799,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A pushed seat view's log carries only the lines its seat was not sent: messages start at the new PlayerGameState.messagesFrom, and a page rebuilds the whole log with mergeMessageLog from boardsmith/client before handing it to GameShell. StatePushGate.shouldPush is now toPush, returning the frame to send, and its playerState option is gone (a frame's player state is its view.state). Views handed to record still carry the whole log (#1614)."
+    },
+    {
+      "revision": 358,
+      "date": "2026-11-11",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A seat's playerViews now carry each offered action's first element pick's validElements (exactly the resolveChoices answer with no args) when the seat can see every candidate, and the client stops sending one resolveChoices per element-first action on every state push; it reads board start candidates off that metadata and answers such an opening pick locally. Picks over cards the seat cannot see still go through resolveChoices when opened. PickHandler gains answerOpeningPicks(seat, actionMetadata), and buildViews moved from session utils to stateless-ops (#1615)."
     }
   ]
 }
