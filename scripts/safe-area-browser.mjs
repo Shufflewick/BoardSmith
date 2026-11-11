@@ -27,68 +27,77 @@ const SIDES = ['top', 'right', 'bottom', 'left'];
 
 const CONTROLS = 'button, a[href], input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"])';
 
-/**
- * Each control a tap inside an inset would reach, found by tapping every 4px
- * of the four insets: what a finger hits, so a control drawn under the bar or
- * scrolled out of its region does not count, and a hit area a pseudo-element
- * draws does.
- */
-function inInsets(frame, insets) {
-  return frame.locator('body').evaluate(async (body, { insets, controls }) => {
-    const doc = body.ownerDocument;
-    const easing = () => doc.getAnimations().filter((a) => a.transitionProperty);
-    while (easing().length > 0) await Promise.allSettled(easing().map((a) => a.finished));
-    const name = (el) => (el ? `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}` : 'nothing');
-    const width = doc.documentElement.clientWidth;
-    const height = doc.documentElement.clientHeight;
-    const found = new Map();
-    for (let y = 0.5; y < height; y += 4) {
-      for (let x = 0.5; x < width; x += 4) {
-        const inset = y < insets.top || y > height - insets.bottom || x < insets.left || x > width - insets.right;
-        const control = inset ? doc.elementFromPoint(x, y)?.closest(controls) : null;
-        if (control && !found.has(control)) found.set(control, `${name(control)} at ${Math.round(x)},${Math.round(y)}`);
-      }
-    }
-    return [...found.values()];
-  }, { insets, controls: CONTROLS });
+/** Wait until no transition is running in the frame, so what is measured is where things come to rest. */
+function settle(frame) {
+  return frame.locator('body').evaluate(async (body) => {
+    const running = () => body.ownerDocument.getAnimations().filter((a) => a.transitionProperty);
+    while (running().length > 0) await Promise.allSettled(running().map((a) => a.finished));
+  });
 }
 
 /**
- * Each shell control (not the board's own pieces) a tap can reach where a 44px
- * cross centred on it, moved inside the insets, is not its own at every end:
- * inside its box, or a tap there lands on it, so a hit area drawn by a
- * pseudo-element counts.
+ * What a finger finds, as lines naming each control.
+ *
+ * `inInsets`: each control a tap inside an inset would reach, found by tapping
+ * every 4px of the four insets, so a control drawn under the bar or scrolled out
+ * of its region does not count and a hit area a pseudo-element draws does.
+ *
+ * `small`: each shell control (not the board's own pieces) a tap can reach where
+ * a 44px cross centred on it, moved inside the insets, is not its own at every
+ * end: inside its box, or a tap there lands on it.
  */
-function smallTargets(frame, insets) {
-  return frame.locator('body').evaluate(async (body, { insets, controls }) => {
+function taps(frame, insets) {
+  return frame.locator('body').evaluate((body, { insets, controls }) => {
     const doc = body.ownerDocument;
-    const easing = () => doc.getAnimations().filter((a) => a.transitionProperty);
-    while (easing().length > 0) await Promise.allSettled(easing().map((a) => a.finished));
-    const name = (el) => (el ? `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}` : 'nothing');
-    const board = doc.querySelector('.game-shell__zoom-container');
     const width = doc.documentElement.clientWidth;
     const height = doc.documentElement.clientHeight;
+    const name = (el) => (el ? `${el.tagName.toLowerCase()}.${[...el.classList].join('.')}` : 'nothing');
     const half = 21.5;
     const within = (value, low, high) => Math.min(Math.max(value, low + half + 0.5), high - half - 0.5);
-    return [...doc.querySelectorAll(controls)]
+    const centre = (box) => [(box.left + box.right) / 2, (box.top + box.bottom) / 2];
+    const inInset = (x, y) => y < insets.top || y > height - insets.bottom || x < insets.left || x > width - insets.right;
+
+    const inInsets = new Map();
+    for (let y = 0.5; y < height; y += 4) {
+      for (let x = 0.5; x < width; x += 4) {
+        const control = inInset(x, y) ? doc.elementFromPoint(x, y)?.closest(controls) : null;
+        if (control && !inInsets.has(control)) inInsets.set(control, `${name(control)} at ${Math.round(x)},${Math.round(y)}`);
+      }
+    }
+
+    // A point inside its own box counts even under a neighbour: that is an overlap, not a size.
+    const missed = (el, box) => {
+      const [cx, cy] = centre(box);
+      const x = within(cx, insets.left, width - insets.right);
+      const y = within(cy, insets.top, height - insets.bottom);
+      return [[x, y], [x - half, y], [x + half, y], [x, y - half], [x, y + half]]
+        .filter(([px, py]) => px < box.left || px > box.right || py < box.top || py > box.bottom)
+        .map(([px, py]) => doc.elementFromPoint(px, py))
+        .filter((hit) => !el.contains(hit));
+    };
+    const board = doc.querySelector('.game-shell__zoom-container');
+    const small = [...doc.querySelectorAll(controls)]
       .filter((el) => el.checkVisibility() && !board.contains(el))
       .map((el) => ({ el, box: el.getBoundingClientRect() }))
       // Reachable: what a tap on its centre lands on, so one off screen or under the phone strip's scrim is left out.
-      .filter(({ el, box }) => el.contains(doc.elementFromPoint((box.left + box.right) / 2, (box.top + box.bottom) / 2)))
-      .map(({ el, box }) => {
-        const x = within((box.left + box.right) / 2, insets.left, width - insets.right);
-        const y = within((box.top + box.bottom) / 2, insets.top, height - insets.bottom);
-        // A point inside its own box counts even under a neighbour: that is an overlap, not a size.
-        const own = ([px, py]) => px >= box.left && px <= box.right && py >= box.top && py <= box.bottom;
-        const missed = [[x, y], [x - half, y], [x + half, y], [x, y - half], [x, y + half]]
-          .filter((point) => !own(point))
-          .map(([px, py]) => doc.elementFromPoint(px, py))
-          .filter((hit) => !el.contains(hit));
-        return { el, box, missed };
-      })
-      .filter(({ missed }) => missed.length > 0)
-      .map(({ el, box, missed }) => `${name(el)} (${Math.round(box.width)}x${Math.round(box.height)}, a tap beside it lands on ${missed.map(name).join(', ')})`);
+      .filter(({ el, box }) => el.contains(doc.elementFromPoint(...centre(box))))
+      .map(({ el, box }) => ({ el, box, misses: missed(el, box) }))
+      .filter(({ misses }) => misses.length > 0)
+      .map(({ el, box, misses }) => `${name(el)} (${Math.round(box.width)}x${Math.round(box.height)}, a tap beside it lands on ${misses.map(name).join(', ')})`);
+    return { inInsets: [...inInsets.values()], small };
   }, { insets, controls: CONTROLS });
+}
+
+/** The two checks every state of the shell is held to. */
+async function checkTaps(frame, insets, state, size) {
+  await settle(frame);
+  const found = await taps(frame, insets);
+  await check(`no control sits inside an inset with ${state} at ${size}`, () => {
+    assert(found.inInsets.length === 0, `inside ${JSON.stringify(insets)}: ${found.inInsets.join('; ')}`);
+  });
+  await check(`every shell control takes a 44px tap with ${state} at ${size}`, () => {
+    assert(found.small.length === 0, `smaller than 44px: ${found.small.join('; ')}`);
+  });
 }
 
 /** How far each of the page's insets reaches over the game frame: what the dev host must send. */
@@ -100,15 +109,19 @@ function overFrame(page, insets) {
   }, insets);
 }
 
-/** The four `--bsg-safe-*` the shell resolved, in px, once its easing has settled. */
+/** The four `--bsg-safe-*` the shell resolved, in px. */
 function shellInsets(frame) {
-  return frame.locator('body').evaluate(async (body, sides) => {
-    const doc = body.ownerDocument;
-    const easing = () => doc.getAnimations().filter((a) => a.transitionProperty);
-    while (easing().length > 0) await Promise.allSettled(easing().map((a) => a.finished));
-    const root = getComputedStyle(doc.documentElement);
+  return frame.locator('body').evaluate((body, sides) => {
+    const root = getComputedStyle(body.ownerDocument.documentElement);
     return Object.fromEntries(sides.map((side) => [side, parseFloat(root.getPropertyValue(`--bsg-safe-${side}`))]));
   }, SIDES);
+}
+
+/** Open a state with `open`, hold the shell to both checks in it, and leave it with `close`. */
+async function inState(frame, insets, size, state, { open, close }) {
+  await open();
+  await checkTaps(frame, insets, state, size);
+  await close();
 }
 
 await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
@@ -143,55 +156,40 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
           assert(Math.abs(bar - clearance) < 0.5, `--bsg-bar-clearance is ${clearance}px, but the bar is ${bar}px tall`);
         });
 
-        await check(`no control sits inside an inset with the action bar up at ${size}`, async () => {
-          const found = await inInsets(frame, insets);
-          assert(found.length === 0, `inside ${JSON.stringify(insets)}: ${found.join('; ')}`);
+        await checkTaps(frame, insets, 'the action bar up', size);
+        await inState(frame, insets, size, 'the controls menu open', {
+          open: async () => {
+            await frame.locator('[data-testid="bs-actionbar"] .menubtn').click();
+            await frame.locator('.menu').waitFor();
+          },
+          close: async () => {
+            await page.keyboard.press('Escape');
+            await frame.locator('.menu').waitFor({ state: 'detached' });
+          },
         });
-        await check(`every shell control takes a 44px tap with the action bar up at ${size}`, async () => {
-          const found = await smallTargets(frame, insets);
-          assert(found.length === 0, `smaller than 44px: ${found.join('; ')}`);
-        });
-
-        await frame.locator('[data-testid="bs-actionbar"] .menubtn').click();
-        await frame.locator('.menu').waitFor();
-        await check(`no control sits inside an inset with the controls menu open at ${size}`, async () => {
-          const found = await inInsets(frame, insets);
-          assert(found.length === 0, `inside ${JSON.stringify(insets)}: ${found.join('; ')}`);
-        });
-        await check(`every shell control takes a 44px tap with the controls menu open at ${size}`, async () => {
-          const found = await smallTargets(frame, insets);
-          assert(found.length === 0, `smaller than 44px: ${found.join('; ')}`);
-        });
-        await page.keyboard.press('Escape');
-        await frame.locator('.menu').waitFor({ state: 'detached' });
-
+        // The phone strip is the compact tier's alone.
         if (viewport.width < 640) {
-          await frame.locator('.mobile-strip__toggle').click();
-          await frame.locator('.sidebar.mobile-expanded .side-scroll').waitFor();
-          await check(`no control sits inside an inset with the phone strip expanded at ${size}`, async () => {
-            const found = await inInsets(frame, insets);
-            assert(found.length === 0, `inside ${JSON.stringify(insets)}: ${found.join('; ')}`);
+          await inState(frame, insets, size, 'the phone strip expanded', {
+            open: async () => {
+              await frame.locator('.mobile-strip__toggle').click();
+              await frame.locator('.sidebar.mobile-expanded .side-scroll').waitFor();
+            },
+            close: async () => {
+              await frame.locator('.mobile-strip__toggle').click();
+              await frame.locator('.sidebar.mobile-expanded').waitFor({ state: 'detached' });
+            },
           });
-          await check(`every shell control takes a 44px tap with the phone strip expanded at ${size}`, async () => {
-            const found = await smallTargets(frame, insets);
-            assert(found.length === 0, `smaller than 44px: ${found.join('; ')}`);
-          });
-          await frame.locator('.mobile-strip__toggle').click();
-          await frame.locator('.sidebar.mobile-expanded').waitFor({ state: 'detached' });
         }
-
-        await frame.locator('.bar-edge').click();
-        await frame.locator('.actionbar.collapsed').waitFor();
-        await check(`no control sits inside an inset with the action bar put down at ${size}`, async () => {
-          const found = await inInsets(frame, insets);
-          assert(found.length === 0, `inside ${JSON.stringify(insets)}: ${found.join('; ')}`);
+        await inState(frame, insets, size, 'the action bar put down', {
+          open: async () => {
+            await frame.locator('.bar-edge').click();
+            await frame.locator('.actionbar.collapsed').waitFor();
+          },
+          close: async () => {
+            await frame.locator('.bar-edge').click();
+            await frame.locator('.actionbar.collapsed').waitFor({ state: 'detached' });
+          },
         });
-        await check(`every shell control takes a 44px tap with the action bar put down at ${size}`, async () => {
-          const found = await smallTargets(frame, insets);
-          assert(found.length === 0, `smaller than 44px: ${found.join('; ')}`);
-        });
-        await frame.locator('.bar-edge').click();
-        await frame.locator('.actionbar.collapsed').waitFor({ state: 'detached' });
       } finally {
         await context.close();
       }
