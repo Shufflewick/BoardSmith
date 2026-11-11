@@ -346,6 +346,55 @@ non-zero, because a browser regression that silently passes when it did not run
 is the failure it exists to replace. Each starts and stops its own dev server,
 on its own port, inside the one process.
 
+### Phones: WebKit, touch, pointer drag and a slow CPU (#1604)
+
+A script runs in Chromium unless its `runBrowserRegression` call names its
+browsers: `engines: ['chromium', 'webkit']` runs the whole script once in each,
+each run with a fixture of its own, and the summary names the browser. WebKit
+is where iOS Safari's behaviour shows. Every script that lays a page out at a
+phone size (a width from 300 to 439, 844, or `hasTouch`) must name them, and
+`scripts/browser-harness.test.mjs` fails one that does not; a script that WebKit
+cannot run names `['chromium']` with a comment saying why (classic scrollbars,
+the DevTools protocol, or an open WebKit defect's issue). The body is handed
+`engine`, the browser's name. WebKit is installed with
+`npx playwright install webkit` in this checkout; with it missing a script that
+names it says so and exits non-zero.
+
+- **`touch-phone-browser.mjs`** plays the auto-UI by touch (`hasTouch`,
+  `isMobile`) at 390x844 and 844x390, in both browsers: the shell, action bar,
+  hand and square-grid board show without sideways scrolling, and a tap on a
+  pawn then a square moves it. It also holds two defects open as known
+  failures: a tapped card keeps its hover style (#1606), and a touch drag never
+  starts, because drag is native HTML5 drag, which touch cannot start (#1605).
+  Chromium's drag is real touch, sent through the DevTools protocol; WebKit has
+  no way to move a touch, so its drag is `PointerEvent`s dispatched in the page.
+- **`cpu-throttle-browser.mjs`** renders the table sample at 390x844 with the CPU
+  slowed fourfold (`Emulation.setCPUThrottlingRate`, Chromium only), then plays
+  a card, and holds the layouts, style recalculations and game-frame elements
+  each step does to the figures recorded in the script. It counts work and never
+  measures time, so a slow machine cannot fail it.
+
+`knownFailure(name, { issue, because }, body)`, from the harness, is a check that
+passes only while `body` fails with `because` in its message. It fails once the
+issue's fix makes `body` pass, saying to make it a plain `check`, and fails
+when `body` fails for any other reason, so a broken fixture cannot pass as the
+known defect.
+
+What emulation cannot prove, so each stays a manual check on a real iPhone and
+a real Android phone:
+
+- **Safe areas.** No emulated viewport has a notch or a home indicator, so
+  `env(safe-area-inset-*)` is always 0.
+- **iOS long-press.** The callout, text selection and the magnifier are the
+  real Safari's, not WebKit's.
+- **Real sticky hover.** Emulated touch shows when `:hover` sticks after a
+  tap, but how long it stays, and what clears it, is the device's own.
+- **Real touch drag in WebKit.** Its drag is dispatched events with no live
+  pointer behind them: `setPointerCapture` on one throws nothing and captures
+  nothing (`hasPointerCapture` stays false).
+- **Real phone speed.** A throttled desktop CPU is not a phone's CPU, GPU or
+  memory, which is why the CPU run counts work instead of timing it.
+
 ## The smoke test every game has: `tests/browser/smoke.spec.ts`
 
 `boardsmith init` writes it, `boardsmith verify` runs it as its `smoke` check,

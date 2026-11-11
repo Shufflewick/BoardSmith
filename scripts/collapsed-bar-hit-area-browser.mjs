@@ -75,6 +75,7 @@ async function clickAt(page, frame, offset, x, y) {
 await runBrowserRegression(
   {
     script: 'collapsed-bar-hit-area-browser.mjs',
+    engines: ['chromium', 'webkit'],
     table: true,
   },
   async ({ launch, hostUrl }) => {

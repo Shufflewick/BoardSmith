@@ -161,7 +161,7 @@ async function checkTallDisabledReason(page) {
 }
 
 await runBrowserRegression(
-  { script: 'action-help-browser.mjs', table: { files: { 'src/rules/actions.ts': ACTIONS, 'src/rules/flow.ts': FLOW } } },
+  { script: 'action-help-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/rules/actions.ts': ACTIONS, 'src/rules/flow.ts': FLOW } } },
   async ({ launch, hostUrl }) => {
     const browser = await launch();
     try {

@@ -2,7 +2,7 @@ import { defineConfig } from 'vitest/config';
 
 /**
  * `boardsmith test --browser`: every browser regression in `scripts/*-browser.mjs`, each run in
- * Chromium (#533). Kept apart from `vitest.config.ts` so the default suite needs no browser;
+ * Chromium (#533), and in WebKit too when it names it (#1604). Kept apart from `vitest.config.ts` so the default suite needs no browser;
  * of agent-policy's checks only `merge` runs it, when a change touches a path its `browser` step names.
  */
 export default defineConfig({

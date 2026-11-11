@@ -229,6 +229,7 @@ async function startAction(page, name, editor = '.text-input') {
 await runBrowserRegression(
   {
     script: 'multiline-text-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'multiline-colony',
       displayName: 'Multiline Colony',

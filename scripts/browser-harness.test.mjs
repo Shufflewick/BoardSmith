@@ -116,6 +116,18 @@ describe('every browser regression launches the one Chromium build the harness p
   });
 });
 
+describe('#1604: a regression that lays a page out at phone size names its browsers', () => {
+  it.each(browserScripts())('%s names its engines when it uses a phone viewport or touch', (name) => {
+    const source = read(name);
+    if (!/width: (3\d\d|4[0-3]\d|844)\b|hasTouch/.test(source)) return;
+    expect(
+      source,
+      `${name} lays a page out at phone size, so its runBrowserRegression call must name the browsers it runs in: ` +
+        "`engines: ['chromium', 'webkit']`, since WebKit is where iOS differs, or `engines: ['chromium']` with a comment saying why WebKit cannot run it.",
+    ).toMatch(/engines: \[/);
+  });
+});
+
 describe('#231: the fixture world stops the host before it removes the project', () => {
   // The lifetime lives in TypeScript so `boardsmith typecheck` compiles its
   // call to the world dev host (#357); the harness reaches it only through

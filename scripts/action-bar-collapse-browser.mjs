@@ -527,6 +527,7 @@ async function pickAfterAChoice(browser, hostUrl, viewport, colorScheme) {
 await runBrowserRegression(
   {
     script: 'action-bar-collapse-browser.mjs',
+    engines: ['chromium', 'webkit'],
     fixture: {
       slug: 'collapse-garden',
       displayName: 'Collapse Garden',
