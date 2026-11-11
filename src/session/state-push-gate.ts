@@ -6,13 +6,10 @@
  * state keeps one of these and asks it, per recipient, before each push:
  *
  * ```typescript
- * const gate = new StatePushGate<string, Frame>({
- *   playerState: (frame) => frame.view.state,
- *   perPushFields: ['serverNow'],
- * });
+ * const gate = new StatePushGate<string, Frame>({ perPushFields: ['serverNow'] });
  * for (const socket of sockets) {
- *   const frame = frameFor(socket);
- *   if (gate.shouldPush(socket.id, frame)) socket.send(frame);
+ *   const push = gate.toPush(socket.id, frameFor(socket));
+ *   if (push) socket.send(push);
  * }
  * ```
  *
@@ -30,19 +27,24 @@
  * else's action is not news to a client that has played those events, and only
  * an event with an id above the highest one the recipient was sent is.
  *
+ * The frame to send is the one `toPush` returns, not the one it was handed:
+ * its game log carries only the lines the recipient was not sent (#1614).
+ * `messages` then starts at line `messagesFrom`, the first line that differs
+ * from what the recipient holds, and the page keeps its lines before that one
+ * (`mergeMessageLog` in `boardsmith/client`). A frame's player state is its
+ * `view.state`.
+ *
  * Imports nothing, so it runs wherever `SnapshotSessionHost` does.
  */
-export interface StatePushGateOptions<F> {
-  /**
-   * The `PlayerGameState` inside a frame (`view.state` for a
-   * `SnapshotSessionHost` player view), or
-   * `undefined` when the frame carries none. Its `animationEvents` and
-   * `lastAnimationEventId`, and its game view's `animationEvents`, are compared
-   * by id as described above.
-   */
-  playerState: (frame: F) => unknown;
+export interface StatePushGateOptions {
   /** Top-level frame fields stamped fresh on every push, such as a send time. */
   perPushFields?: readonly string[];
+}
+
+/** The log a recipient was sent: the line number of its first line, and a hash of each line. */
+interface SentLog {
+  from: number;
+  lines: number[];
 }
 
 interface Sent {
@@ -54,6 +56,8 @@ interface Sent {
   body: string;
   /** The highest animation event id in the frame. */
   lastEventId: number;
+  /** The whole log the frame's player state carries, when it has one. */
+  log: SentLog | undefined;
 }
 
 type Holder = Record<string, unknown>;
@@ -73,14 +77,14 @@ function highestEventId(events: unknown): number {
 }
 
 /**
- * A 128-bit digest of `text` (cyrb128: four independently mixed 32-bit lanes).
+ * cyrb128's four independently mixed 32-bit lanes over `text`.
  * Not cryptographic, which it need not be: no one chooses the frames compared
  * here to collide, and with the text's length appended, two different frames
  * of one recipient sharing a digest by accident is vanishingly unlikely.
  * Synchronous and import-free, because the gate runs inside a Worker as well
  * as in Node.
  */
-function digest(text: string): string {
+function lanes(text: string): [number, number, number, number] {
   let h1 = 1779033703;
   let h2 = 3144134277;
   let h3 = 1013904242;
@@ -100,29 +104,39 @@ function digest(text: string): string {
   h2 ^= h1;
   h3 ^= h1;
   h4 ^= h1;
-  return [h1, h2, h3, h4].map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('') + `:${text.length}`;
+  return [h1, h2, h3, h4];
+}
+
+/** A 128-bit digest of `text`, its length appended. */
+function digest(text: string): string {
+  return lanes(text).map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('') + `:${text.length}`;
+}
+
+/** A 53-bit hash of one log line: a number, so a recipient's log costs 8 bytes a line to remember. */
+function lineHash(line: unknown): number {
+  const [h1, h2] = lanes(JSON.stringify(line));
+  return (h2 & 0x1fffff) * 0x100000000 + (h1 >>> 0);
 }
 
 export class StatePushGate<R, F extends object = object> {
-  readonly #playerState: (frame: F) => unknown;
   readonly #perPush: ReadonlySet<string>;
   readonly #sent = new Map<R, Sent>();
 
-  constructor(options: StatePushGateOptions<F>) {
-    this.#playerState = options.playerState;
+  constructor(options: StatePushGateOptions = {}) {
     this.#perPush = new Set(options.perPushFields ?? []);
   }
 
   /**
-   * Whether `frame` tells `recipient` anything it was not already sent. A
-   * `true` answer records `frame` as sent, so ask only when you will send it.
+   * The frame to send `recipient`, its log cut to the lines it was not sent,
+   * or `undefined` when `frame` tells it nothing it was not already sent. A
+   * frame returned is recorded as sent, so ask only when you will send it.
    */
-  shouldPush(recipient: R, frame: F): boolean {
+  toPush(recipient: R, frame: F): F | undefined {
     const next = this.#measure(frame);
     const last = this.#sent.get(recipient);
-    if (last !== undefined && last.body === next.body && next.lastEventId <= last.lastEventId) return false;
+    if (last !== undefined && last.body === next.body && next.lastEventId <= last.lastEventId) return undefined;
     this.#sent.set(recipient, next);
-    return true;
+    return last?.log && next.log ? withLogAfter(frame, last.log, next.log) : frame;
   }
 
   /** Record `frame` as sent to `recipient` without asking: a connect, a reconnect, an answer to a request. */
@@ -144,8 +158,7 @@ export class StatePushGate<R, F extends object = object> {
   }
 
   #measure(frame: F): Sent {
-    const state = this.#playerState(frame);
-    const playerState = isHolder(state) ? state : undefined;
+    const playerState = playerStateOf(frame);
     const gameView = playerState !== undefined && isHolder(playerState.view) ? playerState.view : undefined;
     const lastEventId = Math.max(
       highestEventId(playerState?.animationEvents),
@@ -158,6 +171,37 @@ export class StatePushGate<R, F extends object = object> {
       if (this === gameView && key === 'animationEvents') return undefined;
       return value;
     });
-    return { body: digest(text), lastEventId };
+    const messages = playerState?.messages;
+    const log = playerState === undefined
+      ? undefined
+      : { from: lineNumber(playerState.messageOffset), lines: Array.isArray(messages) ? messages.map(lineHash) : [] };
+    return { body: digest(text), lastEventId, log };
   }
+}
+
+function playerStateOf(frame: object): Holder | undefined {
+  const view = (frame as Holder).view;
+  return isHolder(view) && isHolder(view.state) ? view.state : undefined;
+}
+
+function lineNumber(value: unknown): number {
+  return typeof value === 'number' ? value : 0;
+}
+
+/** `frame` with its log cut to start at the first line `now` does not share with `held`. */
+function withLogAfter<F extends object>(frame: F, held: SentLog, now: SentLog): F {
+  let line = now.from;
+  // A log starting before the lines the recipient holds is sent whole.
+  if (now.from >= held.from) {
+    const end = Math.min(held.from + held.lines.length, now.from + now.lines.length);
+    while (line < end && held.lines[line - held.from] === now.lines[line - now.from]) line++;
+  }
+  if (line === now.from) return frame;
+  const view = (frame as Holder).view as Holder;
+  const { messages, ...state } = view.state as Holder;
+  const rest = (messages as unknown[] | undefined)?.slice(line - now.from) ?? [];
+  return {
+    ...frame,
+    view: { ...view, state: { ...state, ...(rest.length > 0 && { messages: rest }), messagesFrom: line } },
+  };
 }

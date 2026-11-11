@@ -268,6 +268,29 @@ describe('DevHost — game_state deadline relay (#302)', () => {
   });
 });
 
+// #1614: the host pushes only the log lines this page was not sent. The page
+// hands the game the whole log, on the push and on every replay of it.
+describe('DevHost — game_state log relay (#1614)', () => {
+  const lastLog = (spy: ReturnType<typeof vi.fn>) =>
+    (spy.mock.calls.map((c) => c[0] as { type?: string; view?: { state?: { messages?: unknown[]; messagesFrom?: number } } })
+      .filter((m) => m.type === 'game_state').at(-1)!.view!.state);
+  const frame = (state: Record<string, unknown>) => ({ type: 'game_state', view: { flowState: {}, state }, isComplete: false, winners: [] });
+
+  it('merges a pushed log into the one it holds, and replays the whole log', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    ws.simulateMessage(frame({ messages: [{ text: 'a' }, { text: 'b' }] }));
+    ws.simulateMessage(frame({ messages: [{ text: 'c' }], messagesFrom: 2 }));
+    await wrapper.vm.$nextTick();
+    expect(lastLog(postSpy)).toEqual({ messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] });
+
+    window.dispatchEvent(new MessageEvent('message', { source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow, data: { source: 'shufflewick-game', type: 'request-state' } }));
+    await wrapper.vm.$nextTick();
+    expect(lastLog(postSpy)).toEqual({ messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] });
+  });
+});
+
 // #481: the host says whether debugging is on (only one person holds the
 // seats, or `--debug`), and the page follows it live.
 describe('DevHost — debugging availability', () => {

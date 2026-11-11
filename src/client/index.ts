@@ -3,6 +3,8 @@
  *
  * - `createDevHostClient` drives a running `boardsmith dev` host from Node or a
  *   browser: take a seat, read state, perform actions (see docs/agent-control.md).
+ * - `mergeMessageLog` rebuilds a seat's whole log from a pushed state, which
+ *   carries only the lines the page was not sent.
  * - `audioService` plays the shell's sounds.
  * - `GameState`, `PlayerState` and `PublicFlowState` are the shape of the state
  *   a host sends one seat.
@@ -21,6 +23,9 @@ export type {
   DevHostStateReply,
   DevHostInboundMessage,
 } from './dev-host-client.js';
+
+// Merging a pushed seat state's log into the one a page holds (#1614).
+export { mergeMessageLog } from './message-log.js';
 
 // Audio service
 export { audioService, type AudioServiceOptions } from './audio.js';

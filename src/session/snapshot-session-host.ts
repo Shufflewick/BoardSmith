@@ -466,6 +466,12 @@ export interface SnapshotSessionAdapters {
    * is correct: in a simultaneous step with secret moves, a seat whose view
    * did not change is not in the list, and is not told that another seat
    * acted.
+   *
+   * A pushed view's log carries only the lines its seat was not pushed
+   * (#1614), so a page merges it into the view it holds (`mergeMessageLog` in
+   * `boardsmith/client`). That holds only for a page that got every push for
+   * its seat since it was served from `record`; serve any other page from
+   * `record` first.
    */
   push: (changed: ReadonlyArray<{ seat: number; view: unknown }>, meta: PublishMeta) => void;
   /**
@@ -664,9 +670,7 @@ export class SnapshotSessionHost {
    * to it is not pushed: in a simultaneous step with secret moves, that push
    * would tell the seat another seat acted.
    */
-  private readonly pushGate = new StatePushGate<number, { view: unknown }>({
-    playerState: (frame) => (frame.view as { state?: unknown } | null | undefined)?.state,
-  });
+  private readonly pushGate = new StatePushGate<number, { view: unknown }>();
   /** True while {@link publish} runs; a publish asked for meanwhile waits in {@link deferredPublish}. */
   private publishing = false;
   /** The cause of a publish asked for while another was running, to run once it ends. */
@@ -954,11 +958,11 @@ export class SnapshotSessionHost {
     this.adapters.record(views, meta);
     const changed: Array<{ seat: number; view: unknown }> = [];
     views.players.forEach((view, i) => {
-      if (this.pushGate.shouldPush(i + 1, { view })) changed.push({ seat: i + 1, view });
+      const push = this.pushGate.toPush(i + 1, { view });
+      if (push) changed.push({ seat: i + 1, view: push.view });
     });
-    if (views.spectator !== undefined && this.pushGate.shouldPush(0, { view: views.spectator })) {
-      changed.unshift({ seat: 0, view: views.spectator });
-    }
+    const spectator = views.spectator === undefined ? undefined : this.pushGate.toPush(0, { view: views.spectator });
+    if (spectator) changed.unshift({ seat: 0, view: spectator.view });
     if (changed.length > 0) this.adapters.push(changed, meta);
   }
 
