@@ -17,20 +17,25 @@ interface LogState {
  * without `messagesFrom` carries its whole log and is returned as it is.
  */
 export function mergeMessageLog<S extends LogState>(held: LogState | undefined, incoming: S): S {
-  const from = incoming.messagesFrom;
+  const { messagesFrom: from, ...state } = incoming;
   if (from === undefined) return incoming;
   const offset = incoming.messageOffset ?? 0;
+  const kept = heldLines(held, offset, from);
+  const messages = [...kept, ...(incoming.messages ?? [])];
+  return { ...state, ...(messages.length > 0 && { messages }) } as S;
+}
+
+/** The lines `held` has from line `offset` up to line `from`, which it must hold all of. */
+function heldLines(held: LogState | undefined, offset: number, from: number): unknown[] {
   const heldOffset = held?.messageOffset ?? 0;
-  const heldLines = held?.messages ?? [];
-  if (heldOffset > offset || heldOffset + heldLines.length < from) {
+  const lines = held?.messages ?? [];
+  if (heldOffset > offset || heldOffset + lines.length < from) {
     throw new Error(
-      `The host sent game log lines from line ${from}, but this page holds lines ${heldOffset} to ${heldOffset + heldLines.length}, ` +
+      `The host sent game log lines from line ${from}, but this page holds lines ${heldOffset} to ${heldOffset + lines.length}, ` +
         'so it cannot show the whole log. The host must send a page the whole state of record when it connects, reconnects or changes seat.',
     );
   }
-  const { messagesFrom: _, ...state } = incoming;
-  const messages = [...heldLines.slice(offset - heldOffset, from - heldOffset), ...(incoming.messages ?? [])];
-  return { ...state, ...(messages.length > 0 && { messages }) } as S;
+  return lines.slice(offset - heldOffset, from - heldOffset);
 }
 
 /** A `game_state` frame's `view` (`{ flowState, state }`) with its state's whole log, from the view the page holds. */
