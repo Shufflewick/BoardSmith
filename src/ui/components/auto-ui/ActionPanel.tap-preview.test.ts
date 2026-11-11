@@ -15,6 +15,9 @@ import type { EnrichedActionMetadata } from '../../composables/useActionControll
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { createBoardInteraction, provideBoardInteraction, type BoardInteraction } from '../../composables/useBoardInteraction.js';
+import { documentHasFocus } from './document-has-focus.test-helper.js';
+
+documentHasFocus();
 
 // Go Fish's ask: each rank highlights the cards it names, by id, so the panel is the surface.
 const ask: EnrichedActionMetadata = {
@@ -109,12 +112,12 @@ it('a keyboard player focusing a choice sees its pieces highlighted, and leaving
   const { wrapper, board, sendAction, button } = await mountPanel();
   document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
 
-  button('Sevens').focus();
+  button('Kings').focus();
   await flush();
-  expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 41 }]);
+  expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
   expect(sendAction).not.toHaveBeenCalled();
 
-  button('Sevens').blur();
+  button('Kings').blur();
   await flush();
   expect(board.hoveredChoice).toBeNull();
   wrapper.unmount();
@@ -127,5 +130,39 @@ it('focus the panel places after a pointer gesture highlights nothing', async ()
   button('Sevens').focus();
   await flush();
   expect(board.hoveredChoice).toBeNull();
+  wrapper.unmount();
+});
+
+it('a highlight a keyboard player focused clears when a pointer moves focus away', async () => {
+  const { wrapper, board, button } = await mountPanel();
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  button('Kings').focus();
+  await flush();
+  expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+
+  document.body.dispatchEvent(new MouseEvent('pointerdown', { bubbles: true }));
+  button('Kings').blur();
+  await flush();
+  expect(board.hoveredChoice).toBeNull();
+  wrapper.unmount();
+});
+
+it('focus the panel places on a choice by itself highlights nothing, even for a keyboard player', async () => {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  const { wrapper, board } = await mountPanel();
+  expect(document.activeElement?.classList.contains('choice-btn')).toBe(true);
+  expect(board.hoveredChoice).toBeNull();
+  wrapper.unmount();
+});
+
+it('a tap elsewhere ends a preview, so the next tap on the same choice previews it again', async () => {
+  const { wrapper, board, sendAction, button } = await mountPanel();
+  await tap(button('Kings'));
+  document.body.dispatchEvent(Object.assign(new MouseEvent('pointerdown', { bubbles: true }), { pointerType: 'touch' }));
+  board.setHoveredChoice(null);
+
+  await tap(button('Kings'));
+  expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+  expect(sendAction).not.toHaveBeenCalled();
   wrapper.unmount();
 });

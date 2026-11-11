@@ -412,7 +412,7 @@ async function focusIntoLevel(buttons = MENU_BUTTONS): Promise<void> {
   await nextTick();
   const root = panelRoot.value;
   if (!root?.isConnected) return;
-  firstOperableOf(root.querySelectorAll<HTMLElement>(buttons))?.focus();
+  placeFocus(firstOperableOf(root.querySelectorAll<HTMLElement>(buttons)));
 }
 
 async function restoreFocusToGroup(label: string, attribute = 'data-bs-action-group', buttons = MENU_BUTTONS): Promise<void> {
@@ -421,7 +421,7 @@ async function restoreFocusToGroup(label: string, attribute = 'data-bs-action-gr
   if (!root?.isConnected) return;
   const button = groupButton(root, label, attribute)
     ?? firstOperableOf(root.querySelectorAll<HTMLElement>(buttons));
-  button?.focus();
+  placeFocus(button);
 }
 
 /**
@@ -822,7 +822,7 @@ function repairStrandedFocus(): void {
   const target = focusTargetFor(root);
   // Focusing the container itself would be worse than the body — it is not
   // operable and announces nothing. Better to leave the player where they are.
-  target?.focus();
+  placeFocus(target);
 }
 
 function repairPutOffFocus(): void {
@@ -838,10 +838,12 @@ function dropPutOffRepair(): void {
 
 onMounted(() => {
   trackInputModality(document);
+  document.addEventListener('pointerdown', onDocumentPointerdown, true);
   window.addEventListener('focus', repairPutOffFocus);
   window.addEventListener('pointerdown', dropPutOffRepair, true);
 });
 onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocumentPointerdown, true);
   window.removeEventListener('focus', repairPutOffFocus);
   window.removeEventListener('pointerdown', dropPutOffRepair, true);
 });
@@ -1272,12 +1274,12 @@ function restoreFocusAfterRemoval(index: number): void {
   if (!focusIsStranded()) return;
   const removes = orderedEntriesList.value?.querySelectorAll<HTMLElement>('.ordered-list-remove');
   if (removes && removes.length > 0) {
-    removes[Math.min(index, removes.length - 1)]?.focus();
+    placeFocus(removes[Math.min(index, removes.length - 1)]);
     return;
   }
-  firstOperableOf(
+  placeFocus(firstOperableOf(
     orderedChoiceRow.value?.querySelectorAll<HTMLElement>('.ordered-list-add') ?? [],
-  )?.focus();
+  ));
 }
 
 /**
@@ -1448,26 +1450,42 @@ function handleChoiceHover(choice: ChoiceWithRefs): boolean {
 // so hover alone never shows a touch player what a choice points at before it
 // is taken. Keyboard focus previews; a first tap previews and a second commits.
 let lastPointerType = '';
-let previewedByTap: EventTarget | null = null;
+let previewedByTap: Node | null = null;
+let previewedByFocus = false;
+let placingFocus = false;
 
-function onPanelPointerdown(event: PointerEvent): void {
+// Document-wide, so a tap anywhere else ends a tap preview.
+function onDocumentPointerdown(event: PointerEvent): void {
   lastPointerType = event.pointerType;
+  if (!previewedByTap?.contains(event.target as Node)) previewedByTap = null;
+}
+
+/** Focus the panel moves itself, which is not the player reaching a choice. */
+function placeFocus(el: HTMLElement | null | undefined): void {
+  placingFocus = true;
+  try {
+    el?.focus();
+  } finally {
+    placingFocus = false;
+  }
 }
 
 /** True when this click is a first tap on a button with board pieces to show, which shows them instead of committing. */
 function previewsInsteadOfCommitting(event: MouseEvent, preview: () => boolean): boolean {
-  const firstTap = event.detail > 0 && lastPointerType === 'touch' && previewedByTap !== event.currentTarget;
-  previewedByTap = firstTap && preview() ? event.currentTarget : null;
+  const button = event.currentTarget as Node;
+  const firstTap = event.detail > 0 && lastPointerType === 'touch' && previewedByTap !== button;
+  previewedByTap = firstTap && preview() ? button : null;
   return previewedByTap !== null;
 }
 
-// Only focus the player moved: the panel puts focus back into itself after every redraw (#261).
-function previewOnFocus(preview: () => unknown): void {
-  if (isKeyboardModality()) preview();
+// Only focus the player moved by keyboard: the panel puts focus back into itself after every redraw (#261).
+function previewOnFocus(preview: () => boolean): void {
+  if (!placingFocus && isKeyboardModality()) previewedByFocus = preview();
 }
 
 function clearOnBlur(clear: () => void): void {
-  if (isKeyboardModality()) clear();
+  if (previewedByFocus) clear();
+  previewedByFocus = false;
 }
 
 function handleChoiceLeave() {
@@ -1572,7 +1590,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     data-bs-panel
     v-else-if="showActionPanel"
     @keydown="onPanelKeydown"
-    @pointerdown.capture="onPanelPointerdown"
   >
     <!-- What a screen reader is told when a menu level moved under the player
          (#228). OUTSIDE the keyed list below on purpose: that list re-mounts
