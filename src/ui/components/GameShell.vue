@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
-import { applyTheme, BREAKPOINTS } from '../theme.js';
+import { applyTheme } from '../theme.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
@@ -39,6 +39,7 @@ import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { exposeDevtoolsSnapshot } from './GameShell.devtools.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useBoardZoom } from '../composables/useBoardZoom';
+import { useLayoutSize } from '../composables/useLayoutSize.js';
 import { SETTLE_MS } from './board-settle';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
@@ -199,13 +200,16 @@ const isDevBuild = import.meta.env.DEV;
 // Elimination is a property of the WHOLE graph. Only the built artifact proves
 // it, which is what treeshake-bundle.test.ts asserts, for CSS as well as JS.
 const registry = computed(() => withDevAutoUI(props.uis));
+// The one reading of the viewport's tier: the chrome's compact layout, the
+// board's layout props and the phone UI all follow it.
+const layout = useLayoutSize();
 // Both shells resolve a registry the same way since #170, so the two lines that
 // do it live in `game-uis.ts` beside the registry itself.
 const uiNames = computed(() => devUiNames(registry.value));
 const selectedUiName = ref('');
 /** The board to render: the dev selection when there is one, else the default. */
 const selectedUiComponent = computed(() =>
-  resolveUiComponent(registry.value, selectedUiName.value, isDevBuild),
+  resolveUiComponent(registry.value, selectedUiName.value, isDevBuild, layout.formFactor.value),
 );
 // Tell the dev host which UIs are available so it can populate the dropdown.
 function postDevUiList(): void {
@@ -265,15 +269,11 @@ const mobileExpanded = ref<boolean>(false);
 // True on phones (≤639px). Mobile uses its own compact-strip + overlay layout and
 // must NOT inherit the desktop rail state — otherwise a rail collapsed on desktop
 // would make the mobile overlay show icons (and hide the log) instead of the full panel.
-const isCompact = ref<boolean>(false);
-let compactQuery: MediaQueryList | null = null;
-// Track the compact (phone) breakpoint so the mobile layout can ignore the desktop
-// rail state. Collapsing the mobile overlay when leaving compact avoids a stuck
-// overlay if the viewport widens while expanded.
-function updateCompact(mql: MediaQueryList | MediaQueryListEvent) {
-  isCompact.value = mql.matches;
-  if (!mql.matches) mobileExpanded.value = false;
-}
+const isCompact = computed(() => layout.formFactor.value === 'compact');
+// Leaving compact closes the mobile overlay, so it cannot stay stuck open on a wider screen.
+watch(isCompact, (compact) => {
+  if (!compact) mobileExpanded.value = false;
+});
 
 // The board is never zoomed to fit: it reflows to the region, and the zoom is
 // the player's magnifier (#1608).
@@ -777,7 +777,7 @@ async function handleUndo(): Promise<void> {
 // declares (#516), so this template cannot hand a board anything the type does
 // not name.
 const boardProps = computed(() =>
-  tableBoardProps(tableSeat, {
+  tableBoardProps(tableSeat, layout, {
     state: displayedState.value,
     players: displayedPlayers.value,
     myPlayer: displayedMyPlayer.value,
@@ -969,12 +969,6 @@ onMounted(async () => {
   // via the init postMessage and is applied by consumeInitMessage below.
   applyTheme();
 
-  // IA-06: Collapse sidebar to rail by default on compact phones (≤639px).
-  // This runs after paint so the initial state is correct before first render.
-  compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
-  updateCompact(compactQuery);
-  compactQuery.addEventListener('change', updateCompact);
-
   if (inHost) {
     // I AM MOUNTED (ShufflewickPub #486), and it is the table twin of
     // `world_ready`.
@@ -999,7 +993,6 @@ onMounted(async () => {
 
 // Cleanup on unmount
 onUnmounted(() => {
-  compactQuery?.removeEventListener('change', updateCompact);
   if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
   if (platformMessageHandler) {
     window.removeEventListener('message', platformMessageHandler);

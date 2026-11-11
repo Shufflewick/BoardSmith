@@ -52,8 +52,8 @@ export {
 export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
 
 // Game UI registry (src/ui/uis.ts) — single source of truth for a game's UIs.
-export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
-export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
+export { defineGameUIs, defaultUI, devUI, phoneUI } from './game-uis.js';
+export type { GameUIEntry, DefaultGameUIEntry, PhoneGameUIEntry, GameUIRegistry } from './game-uis.js';
 // A game's own player preferences, saved per game in this browser (#1440).
 export { definePlayerPreferences } from './player-preferences.js';
 export type { PlayerPreferences, PlayerPreferenceDeclaration, PlayerToggleDeclaration, PlayerChoiceDeclaration } from './player-preferences.js';
@@ -159,6 +159,7 @@ export {
 // (#516). A board declares `defineProps<TableBoardProps>()` (or the world's)
 // instead of restating the list; both shells bind exactly these.
 export type { BoardBaseProps, TableBoardProps, WorldBoardProps, DisplayedGameState } from './board-props.js';
+export type { FormFactor, Orientation } from './composables/useLayoutSize.js';
 // The shape of the context's `turnDeadline` (#301), for a board that types it.
 export type { TurnDeadline } from './composables/useTurnDeadline.js';
 
@@ -389,6 +390,7 @@ export {
   applyTheme,
   themeCSS,
   SEAT_PALETTE,
+  BREAKPOINTS,
 } from './theme.js';
 
 // Shared types

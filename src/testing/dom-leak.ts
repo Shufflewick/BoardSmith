@@ -35,6 +35,7 @@ import type { LiveRegion } from '../ui/composables/useAnnouncer.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
 import type { WorldSeatHost } from '../ui/world/useWorldHost.js';
 import type { WorldSeat } from '../ui/world/useWorldSeat.js';
+import type { LayoutSize } from '../ui/composables/useLayoutSize.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import { tableBoardProps, worldBoardProps, type TableBoardProps, type WorldBoardProps } from '../ui/board-props.js';
 import type { GameState } from '../client/types.js';
@@ -894,9 +895,10 @@ async function wireTableSeat(
   gameView: GameRootView | null,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
-  const [{ computed, effectScope, ref }, [{ useTableSeat }, { useTurnDeadline }]] = await Promise.all([
+  const [{ computed, effectScope, ref }, [{ useTableSeat }, { useTurnDeadline }], { useLayoutSize }] = await Promise.all([
     import('vue'),
     loadTableSeatModules(),
+    import('../ui/composables/useLayoutSize.js'),
   ]);
   const picks = new PickHandler(table.runner);
   // The frame a host hands GameShell: the session's seat state under the flow state.
@@ -911,7 +913,10 @@ async function wireTableSeat(
   let boardPrompt: string | null = null;
   const scope = effectScope(true);
   let tableSeat!: TableSeat;
+  let layout!: LayoutSize;
   scope.run(() => {
+    // The page's own size, read as GameShell reads it, so a test can render a board at a phone's.
+    layout = useLayoutSize();
     tableSeat = useTableSeat({
       state: ref(frame),
       gameView: computed(() => gameView),
@@ -950,7 +955,7 @@ async function wireTableSeat(
     gameView,
     // What GameShell binds, built by the same function (#516). A test mount has
     // no action bar, so the prompt the board sets is recorded instead of drawn.
-    contract: tableBoardProps(tableSeat, {
+    contract: tableBoardProps(tableSeat, layout, {
       state: frame,
       // A rendered seat shows no history, so the players on screen are the seat's.
       players: tableSeat.players.value,
@@ -994,9 +999,10 @@ async function wireWorldSeat(
   gameView: GameRootView | null,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
-  const [{ effectScope, ref, shallowRef }, { useWorldSeat }] = await Promise.all([
+  const [{ effectScope, ref, shallowRef }, { useWorldSeat }, { useLayoutSize }] = await Promise.all([
     import('vue'),
     loadWorldSeatModule(),
+    import('../ui/composables/useLayoutSize.js'),
   ]);
   const host: WorldSeatHost = {
     phase: ref('watching'),
@@ -1036,13 +1042,15 @@ async function wireWorldSeat(
   };
   const scope = effectScope(true);
   let worldSeat!: WorldSeat;
+  let layout!: LayoutSize;
   scope.run(() => {
+    layout = useLayoutSize();
     worldSeat = useWorldSeat({ host, boardInteraction });
   });
   return {
     gameView,
     // What WorldShell binds, built by the same function (#516).
-    contract: worldBoardProps(worldSeat, host),
+    contract: worldBoardProps(worldSeat, layout, host),
     controller: worldSeat.controller,
     provide: Object.fromEntries(worldSeat.provisions),
     openAction: (request) =>

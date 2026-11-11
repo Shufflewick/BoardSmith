@@ -14,6 +14,10 @@
  * });
  * ```
  *
+ * A game that wants a different board on a phone adds ONE `phoneUI(Board)`
+ * entry (#1610). It ships beside the default and renders at the compact size
+ * only; without one, the default is the single responsive board everywhere.
+ *
  * Two guarantees follow from this shape, and both are the reason it looks the
  * way it does:
  *
@@ -42,12 +46,15 @@
  * UI should be the thing you have to spell out.
  */
 import { defineAsyncComponent, type Component } from 'vue';
+import type { FormFactor } from './composables/useLayoutSize.js';
 
 /**
  * Brand carried only by `defaultUI()` results. Type-only — it never exists at
  * runtime, so it cannot be forged by hand-writing an object literal.
  */
 declare const DEFAULT_UI_BRAND: unique symbol;
+/** Brand carried only by `phoneUI()` results, for the same reason. */
+declare const PHONE_UI_BRAND: unique symbol;
 
 /** A UI a game can render. `component` is null when the UI was eliminated from this build. */
 export interface GameUIEntry {
@@ -62,6 +69,13 @@ export interface DefaultGameUIEntry extends GameUIEntry {
   readonly [DEFAULT_UI_BRAND]: true;
 }
 
+/** The UI a production build renders at the compact size instead of the default. */
+export interface PhoneGameUIEntry extends GameUIEntry {
+  readonly devOnly: false;
+  readonly phone: true;
+  readonly [PHONE_UI_BRAND]: true;
+}
+
 type GameUILoader = () => Promise<{ default: Component }>;
 
 /**
@@ -69,11 +83,14 @@ type GameUILoader = () => Promise<{ default: Component }>;
  * functional component), so only this check stops `defaultUI(() => import(...))`.
  */
 type NotAFunction<C> = C extends (...args: never[]) => unknown
-  ? 'ERROR: defaultUI() takes the board component itself; import it statically'
+  ? 'ERROR: defaultUI() and phoneUI() take the board component itself; import it statically'
   : C;
 
 /** Keys of `T` whose entry is the default. A union — 0, 1, or many members. */
 type DefaultKeys<T> = { [K in keyof T]: T[K] extends DefaultGameUIEntry ? K : never }[keyof T];
+
+/** Keys of `T` whose entry is the phone UI. */
+type PhoneKeys<T> = { [K in keyof T]: T[K] extends PhoneGameUIEntry ? K : never }[keyof T];
 
 /** True when `T` is a union of two or more members. */
 type IsUnion<T, U = T> = T extends unknown ? ([U] extends [T] ? false : true) : never;
@@ -90,11 +107,21 @@ type ExactlyOneDefault<T> =
       ? 'ERROR: only one UI may be defaultUI() — mark the others devUI()'
       : T;
 
+/** Resolves to `T` when at most one entry is a `phoneUI()`, and to an error string otherwise. */
+type AtMostOnePhone<T> =
+  [PhoneKeys<T>] extends [never]
+    ? T
+    : IsUnion<PhoneKeys<T>> extends true
+      ? 'ERROR: only one UI may be phoneUI() — mark the others devUI()'
+      : T;
+
 /** A resolved registry: every declared UI, plus which one is the default. */
 export interface GameUIRegistry {
   /** Declared order is preserved — it drives the dev UI-switcher's ordering. */
   readonly names: readonly string[];
   readonly defaultName: string;
+  /** The UI shipped for the compact size, or null when the default renders at every size. */
+  readonly phoneName: string | null;
   readonly entries: Readonly<Record<string, GameUIEntry>>;
 }
 
@@ -132,14 +159,28 @@ export interface GameUIRegistry {
  * in `defineComponent`.
  */
 export function defaultUI<C extends Component>(component: C & NotAFunction<C>): DefaultGameUIEntry {
-  if (typeof component === 'function') {
-    throw new Error(
-      'defaultUI() takes the board component itself, not a function. '
-      + 'Import the board statically (`import Board from \'./Board.vue\'`) and pass `defaultUI(Board)`; '
-      + 'a lazy default board can fail to load and leave players with no game.',
-    );
-  }
+  refuseLoader('defaultUI', component);
   return { component, devOnly: false } as DefaultGameUIEntry;
+}
+
+/**
+ * The UI a production build renders at the compact (phone) size, in place of
+ * the default. Optional: without one, the default renders at every size, so it
+ * should be responsive. At most one entry may use this. It ships, so it takes
+ * the component itself for the same reason `defaultUI()` does.
+ */
+export function phoneUI<C extends Component>(component: C & NotAFunction<C>): PhoneGameUIEntry {
+  refuseLoader('phoneUI', component);
+  return { component, devOnly: false, phone: true } as PhoneGameUIEntry;
+}
+
+function refuseLoader(marker: 'defaultUI' | 'phoneUI', component: Component): void {
+  if (typeof component !== 'function') return;
+  throw new Error(
+    `${marker}() takes the board component itself, not a function. `
+    + `Import the board statically (\`import Board from './Board.vue'\`) and pass \`${marker}(Board)\`; `
+    + 'a lazy shipped board can fail to load and leave players with no game.',
+  );
 }
 
 /**
@@ -161,15 +202,16 @@ export function devUI(loader: GameUILoader): GameUIEntry {
  * Build a game's UI registry. Pass an object whose keys are the display names
  * shown in the `boardsmith dev` UI switcher.
  *
- * The `& ExactlyOneDefault<T>` on the parameter is what enforces the
- * one-default rule at compile time.
+ * The `& ExactlyOneDefault<T> & AtMostOnePhone<T>` on the parameter is what
+ * enforces the one-default and one-phone rules at compile time.
  */
 export function defineGameUIs<T extends Record<string, GameUIEntry>>(
-  uis: T & ExactlyOneDefault<T>,
+  uis: T & ExactlyOneDefault<T> & AtMostOnePhone<T>,
 ): GameUIRegistry {
   const entries = uis as unknown as Record<string, GameUIEntry>;
   const names = Object.keys(entries);
-  const defaultNames = names.filter((name) => !entries[name].devOnly);
+  const phoneNames = names.filter((name) => isPhone(entries[name]));
+  const defaultNames = names.filter((name) => !entries[name].devOnly && !isPhone(entries[name]));
 
   // The compiler already rejects zero-or-many defaults, but a game can reach
   // here from untyped JS or a stale build. Fail loudly in dev, where the author
@@ -183,14 +225,25 @@ export function defineGameUIs<T extends Record<string, GameUIEntry>>(
       + `Wrap the board you want production to render in defaultUI(), and every other one in devUI().`,
     );
   }
+  if (import.meta.env.DEV && phoneNames.length > 1) {
+    throw new Error(
+      `src/ui/uis.ts may mark at most one UI with phoneUI() — found ${phoneNames.join(', ')}. `
+      + 'Keep phoneUI() on the board phones should render, and mark every other one devUI().',
+    );
+  }
 
   return {
     names,
     // In the degraded non-dev case above, fall back to the first declared UI so
     // a player still sees a board rather than an empty stage.
     defaultName: defaultNames[0] ?? names[0] ?? '',
+    phoneName: phoneNames[0] ?? null,
     entries,
   };
+}
+
+function isPhone(entry: GameUIEntry): boolean {
+  return (entry as Partial<PhoneGameUIEntry>).phone === true;
 }
 
 /** The name of the auto-UI entry the table shell adds under `boardsmith dev`. */
@@ -233,8 +286,10 @@ export function devUiNames(registry: GameUIRegistry): string[] {
 }
 
 /**
- * The board to render: the dev switcher's selection when there is one, else the
- * registry's default.
+ * The board to render: the dev switcher's selection when there is one, else
+ * what ships, which is the phone UI at the compact size when the game has one
+ * and the default otherwise. The dev host always selects a name, so choosing
+ * the default means what ships; a phone UI previews at every size by name.
  *
  * `null` only when the default entry resolved to no component — a broken
  * `uis.ts`. The table shell names that fix rather than rendering blank.
@@ -243,7 +298,9 @@ export function resolveUiComponent(
   registry: GameUIRegistry,
   selectedName: string,
   isDevBuild: boolean,
+  formFactor: FormFactor,
 ): Component | null {
-  const name = selectedName && isDevBuild ? selectedName : registry.defaultName;
+  const shipped = (formFactor === 'compact' && registry.phoneName) || registry.defaultName;
+  const name = selectedName && isDevBuild && selectedName !== registry.defaultName ? selectedName : shipped;
   return (registry.entries[name] ?? registry.entries[registry.defaultName])?.component ?? null;
 }

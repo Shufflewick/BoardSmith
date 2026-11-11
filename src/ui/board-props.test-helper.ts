@@ -7,10 +7,10 @@ import type { TableBoardProps, WorldBoardProps } from './board-props.js';
  */
 export const TABLE_BOARD_PROP_NAMES = [
   'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'availableActions', 'actionController',
-  'disabledActions', 'state', 'isViewingHistory', 'canUndo', 'undo', 'setBoardPrompt',
+  'disabledActions', 'formFactor', 'orientation', 'state', 'isViewingHistory', 'canUndo', 'undo', 'setBoardPrompt',
 ] as const satisfies readonly (keyof TableBoardProps)[];
 
 export const WORLD_BOARD_PROP_NAMES = [
   'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'availableActions', 'actionController',
-  'disabledActions', 'presence', 'events', 'worldName', 'phase',
+  'disabledActions', 'formFactor', 'orientation', 'presence', 'events', 'worldName', 'phase',
 ] as const satisfies readonly (keyof WorldBoardProps)[];

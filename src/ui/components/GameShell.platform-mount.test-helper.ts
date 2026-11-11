@@ -2,7 +2,7 @@ import { mount } from '@vue/test-utils';
 import { defineComponent, h, nextTick, type Component, type FunctionalComponent } from 'vue';
 import GameShell from './GameShell.vue';
 import DebugPanel from './DebugPanel.vue';
-import { defineGameUIs, defaultUI } from '../game-uis.js';
+import { defineGameUIs, defaultUI, type GameUIRegistry } from '../game-uis.js';
 import type { PlayerPreferences } from '../player-preferences.js';
 
 /**
@@ -72,6 +72,8 @@ interface PlatformShellOptions {
    * draws nothing worth asserting on.
    */
   board?: BoardComponent;
+  /** The whole registry instead of `board`, for a test about which of a game's UIs renders. */
+  uis?: GameUIRegistry;
   /**
    * Further GameShell props, for a test about what a prop changes, in either
    * form a template writes them (#433).
@@ -94,7 +96,7 @@ interface PlatformShellOptions {
 export function mountPlatformShell(options: PlatformShellOptions = {}) {
   return mount(GameShell, {
     props: {
-      uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
+      uis: options.uis ?? defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
       ...options.props,
     },
     slots: options.slots,

@@ -210,6 +210,7 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 - `applyTheme(overrides?, options?)` - Inject the Slate token stylesheet and write `--bsg-*` overrides. Keys that are not `--bsg-*` custom properties are rejected.
 - `themeCSS` - The Slate token stylesheet as a string constant (not a function)
 - `SEAT_PALETTE` - Seat color values backing `--bsg-seat-1` … `--bsg-seat-6`
+- `BREAKPOINTS` - The layout tiers in px: `compact` (640, below it is a phone), `medium` (1024, at and above it is wide), `wide` (1440, the board gains a centered cap). A board reads its tier from the `formFactor` prop rather than its own `matchMedia`
 
 ### Types
 
@@ -217,6 +218,8 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 - `WorldBoardProps` - What `WorldShell` gives a world's board
 - `BoardBaseProps` - What both shells give, for a board that renders in either
 - `DisplayedGameState` - A table board's `state` prop: the seat's frame for the position shown
+- `FormFactor` - A board's `formFactor` prop: `'compact' | 'medium' | 'wide'`
+- `Orientation` - A board's `orientation` prop: `'portrait' | 'landscape'`
 - `BoardInteraction` - Board interaction interface
 - `BoardInteractionState` - Interaction state
 - `BoardInteractionActions` - Interaction actions
@@ -238,7 +241,8 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 ### Basic Game Shell
 
 ```ts
-// src/ui/uis.ts: every board the game has; exactly one is defaultUI().
+// src/ui/uis.ts: every board the game has; exactly one is defaultUI(), and at
+// most one is phoneUI(), rendered instead of the default on phones.
 // defineGameUIs and defaultUI come from 'boardsmith/ui', MyBoard from './components/MyBoard.vue'
 
 export default defineGameUIs({ MyBoard: defaultUI(MyBoard) });

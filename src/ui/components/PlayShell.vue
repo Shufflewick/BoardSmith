@@ -1140,7 +1140,7 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* ─── Responsive Tiers (IA-06) ──────────────────────────────────────────────
-   Shared breakpoint scale: 640 / 768 / 1024 / 1440.
+   Shared breakpoint scale: 640 / 1024 / 1440, `BREAKPOINTS` in theme.ts.
    @media queries drive shell chrome; @container for renderer reflow (plan 100-02).
    one-line player-icon strip across the top; tapping its chevron opens the full
    players + log as an overlay over the board (never the action bar), with a scrim. */
@@ -1273,7 +1273,7 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
-   compact ceiling (639px) so 640–767px is a real tier, not an untiered gap. */
+   compact ceiling (639px), so no width falls between tiers. */
 @media (min-width: 640px) and (max-width: 1023px) {
   .boardregion {
     min-height: 380px;

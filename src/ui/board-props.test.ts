@@ -16,6 +16,7 @@ describe('the board prop contract (#516)', () => {
   it('names the fields both shells give in one base type', () => {
     expectTypeOf<keyof BoardBaseProps>().toEqualTypeOf<
       'gameView' | 'players' | 'myPlayer' | 'playerSeat' | 'isMyTurn' | 'availableActions' | 'actionController' | 'disabledActions'
+      | 'formFactor' | 'orientation'
     >();
     expectTypeOf<TableBoardProps>().toMatchTypeOf<BoardBaseProps>();
     expectTypeOf<WorldBoardProps>().toMatchTypeOf<BoardBaseProps>();

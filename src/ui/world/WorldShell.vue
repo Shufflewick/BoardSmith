@@ -125,12 +125,13 @@ import LiveRegions from '../components/LiveRegions.vue';
 import ControlsMenu from '../components/ControlsMenu.vue';
 import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
-import type { GameUIRegistry } from '../game-uis.js';
+import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
+import { useLayoutSize } from '../composables/useLayoutSize.js';
 import type { PlayerPreferences } from '../player-preferences.js';
 import { worldBoardProps } from '../board-props.js';
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
-import { applyTheme, BREAKPOINTS } from '../theme.js';
+import { applyTheme } from '../theme.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 
@@ -208,14 +209,19 @@ const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
 provideWorldSeat(seat);
 const { play, controller: actionController, disabledActions, menuCommands, hideChrome, announcer, liveRegion } = seat;
 
+// The one reading of the viewport's tier: the chrome's compact layout, the
+// board's layout props and the phone UI all follow it.
+const layout = useLayoutSize();
+
 /** The board's props, as the `WorldBoardProps` a world board declares (#516). */
-const boardProps = computed(() => worldBoardProps(seat, host));
+const boardProps = computed(() => worldBoardProps(seat, layout, host));
 
 /** The world's own name once the host has said it, and the game's until then --
  *  two worlds of the same game have different names and only one is this one. */
 const worldTitle = computed(() => host.worldName.value ?? props.displayName);
 
-const boardComponent = computed(() => props.uis.entries[props.uis.defaultName]?.component ?? null);
+// A world has no dev switcher (#896), so it renders what ships.
+const boardComponent = computed(() => resolveUiComponent(props.uis, '', false, layout.formFactor.value));
 
 /**
  * THE OTHER HALF OF #169: A REFUSAL THE PANEL EARNED.
@@ -289,12 +295,10 @@ const sidebarRail = ref(props.sidebarStartsCollapsed);
 // rail's is, and not persisted for the same reason.
 const actionBarMinimized = ref(props.actionBarStartsCollapsed);
 const mobileExpanded = ref(false);
-const isCompact = ref(false);
-let compactQuery: MediaQueryList | null = null;
-function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
-  isCompact.value = event.matches;
-  if (!event.matches) mobileExpanded.value = false;
-}
+const isCompact = computed(() => layout.formFactor.value === 'compact');
+watch(isCompact, (compact) => {
+  if (!compact) mobileExpanded.value = false;
+});
 
 /**
  * WHETHER THE MODAL HOST A BOARD TELEPORTS INTO IS IN THE DOCUMENT YET (#204).
@@ -341,15 +345,9 @@ onMounted(() => {
   // a table does.
   applyTheme();
   host.start();
-  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
-    compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
-    trackCompact(compactQuery);
-    compactQuery.addEventListener('change', trackCompact);
-  }
 });
 onUnmounted(() => {
   host.stop();
-  compactQuery?.removeEventListener('change', trackCompact);
 });
 
 defineExpose({ host });
