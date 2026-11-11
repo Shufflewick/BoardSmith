@@ -520,8 +520,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   seconds (#464). A script the walk runs in the page, a count of elements or a
   move of the mouse takes no time limit in Playwright, so the walk gives each the
   same 5 seconds of the page's time (#618). A step that cannot go on is reported with its number and its deal, and ends that
-  deal's walk. The whole run is bounded at 600 seconds of the wall clock, which
-  ends a walk that a machine stretches past it.
+  deal's walk. The whole walk is bounded on the wall clock by a limit that grows
+  with what the spec asks for (#1601): 600 seconds, plus, for each deal and each
+  world seat, 90 seconds and 10 more for each of its `steps`. That ends a walk a
+  machine stretches past it.
 - Every wait in the walk (the 5 seconds a press gets, the 30 a deal or a turn
   gets, the 90 the game gets to load) counts only time in which the page and
   `boardsmith dev` were answering (#609). Every tenth of a second the walk asks

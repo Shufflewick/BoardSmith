@@ -190,7 +190,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as string[]));
     const seats = smokeWorldSeats(options.seats);
     const walk = newWalk(options);
-    test.setTimeout(smokeWalkLimit(seeds.length, walk.steps));
+    test.setTimeout(smokeWalkLimit(seeds.length, walk.steps, seats?.length ?? 1));
     const memories: WalkMemory[] = [];
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);

@@ -122,14 +122,24 @@ describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
 });
 
 describe('smokeWalkLimit: the hang guard on a whole walk (#1601)', () => {
-  it('grows with every deal and every step, so a spec that asks for more walking gets the time for it', () => {
-    const one = smokeWalkLimit(1, 60);
-    expect(smokeWalkLimit(11, 60) - one).toBe(10 * (smokeWalkLimit(2, 60) - one));
-    expect(smokeWalkLimit(1, 120) - one).toBe(smokeWalkLimit(2, 60) - one);
+  it('never gives a walk less than the 600 s every walk had before it grew with the walk', () => {
+    expect(smokeWalkLimit(1, 1, 1)).toBeGreaterThanOrEqual(600_000);
+  });
+
+  it('grows with every deal, every step and every world seat, so a spec that asks for more walking gets the time for it', () => {
+    const one = smokeWalkLimit(1, 60, 1);
+    expect(smokeWalkLimit(11, 60, 1) - one).toBe(10 * (smokeWalkLimit(2, 60, 1) - one));
+    expect(smokeWalkLimit(1, 120, 1)).toBeGreaterThan(one);
+    expect(smokeWalkLimit(1, 60, 2)).toBeGreaterThan(one);
+    expect(smokeWalkLimit(1, 60, 4) - one).toBe(3 * (smokeWalkLimit(1, 60, 2) - one));
   });
 
   it("gives MERC's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
-    expect(smokeWalkLimit(11, 300)).toBeGreaterThan(2 * 2_200_000);
+    expect(smokeWalkLimit(11, 300, 1)).toBeGreaterThan(2 * 2_200_000);
+  });
+
+  it('stops at the longest delay a timer can wait, past which Node fires it at once', () => {
+    expect(smokeWalkLimit(22, 10_000, 4)).toBe(2_147_483_647);
   });
 });
 

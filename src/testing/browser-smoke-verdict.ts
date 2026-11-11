@@ -95,18 +95,25 @@ export function smokeWorldSeats(seats: number | readonly number[] | undefined): 
   return [...seats];
 }
 
-/** What a walk gets to open the page, start `boardsmith dev`'s first build and take a seat, before its first step. */
-const WALK_SETUP_MS = 180_000;
+/** What every walk gets, whatever its size: the 600 s the whole run had before it grew with the walk. */
+const WALK_BASE_MS = 600_000;
 
-/** What a walk gets for each step it may take: some 15 times what a step of MERC, a heavy game, takes. */
+/** What each seat gets on each deal besides its steps: to load and seat it, deal, and settle at the end. */
+const WALK_DEAL_MS = 90_000;
+
+/** What each seat gets for each step it may take: some 15 times what a step of MERC, a heavy game, takes. */
 const WALK_STEP_MS = 10_000;
 
+/** The longest delay a timer can wait: Node fires a longer one at once. */
+const LONGEST_TIMER_MS = 2_147_483_647;
+
 /**
- * The longest a walk of `deals` deals of at most `steps` steps each may run before Playwright ends it
- * (#1601). A hang guard sized to the walk the spec asks for; the walk's own checks catch a stuck game sooner.
+ * The longest a walk of `deals` deals of at most `steps` steps each, played by `seats` seats, may run
+ * before Playwright ends it (#1601). A hang guard sized to the walk the spec asks for; the walk's own
+ * checks catch a stuck game sooner.
  */
-export function smokeWalkLimit(deals: number, steps: number): number {
-  return WALK_SETUP_MS + deals * steps * WALK_STEP_MS;
+export function smokeWalkLimit(deals: number, steps: number, seats: number): number {
+  return Math.min(LONGEST_TIMER_MS, WALK_BASE_MS + deals * seats * (WALK_DEAL_MS + steps * WALK_STEP_MS));
 }
 
 /** The spec's `steps`, once it is a positive whole number: with none, the walk takes no step and passes any game that loads (#924). */
