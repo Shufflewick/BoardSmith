@@ -42,6 +42,10 @@
       "types": "./src/session/index.ts",
       "import": "./src/session/index.ts"
     },
+    "./view-patch": {
+      "types": "./src/session/view-patch.ts",
+      "import": "./src/session/view-patch.ts"
+    },
     "./persistence": {
       "types": "./src/persistence/index.ts",
       "import": "./src/persistence/index.ts"

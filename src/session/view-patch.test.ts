@@ -1,6 +1,26 @@
 import { describe, it, expect } from 'vitest';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import ts from 'typescript';
 import { applyViewPatch, diffView, patchView, stampRev } from './view-patch.js';
 import * as session from './index.js';
+import pkg from '../../package.json';
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const entry = (pkg.exports as Record<string, { types?: string }>)['./view-patch']?.types;
+// Built once, at the top of the file, where no test timeout applies: the flags of Nuxt's default tsconfig (#1624).
+const consumer = entry === undefined ? undefined : ts.createProgram([path.join(ROOT, entry)], {
+  target: ts.ScriptTarget.ES2022,
+  lib: ['lib.es2022.d.ts'],
+  module: ts.ModuleKind.ESNext,
+  moduleResolution: ts.ModuleResolutionKind.Bundler,
+  strict: true,
+  noUncheckedIndexedAccess: true,
+  noImplicitOverride: true,
+  verbatimModuleSyntax: true,
+  types: [],
+  noEmit: true,
+});
 
 // #1616: a push carries what changed in a seat's view, not the whole view.
 
@@ -92,5 +112,18 @@ describe('stampRev', () => {
 describe('boardsmith/session', () => {
   it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', () => {
     expect(session.applyViewPatch).toBe(applyViewPatch);
+  });
+});
+
+describe('boardsmith/view-patch', () => {
+  it('reaches only view-patch.ts, so a consumer compiles nothing else of the engine (#1624)', () => {
+    expect(entry).toBe('./src/session/view-patch.ts');
+    const files = consumer!.getSourceFiles().filter((f) => !consumer!.isSourceFileDefaultLibrary(f));
+    expect(files.map((f) => path.relative(ROOT, f.fileName))).toEqual(['src/session/view-patch.ts']);
+  });
+
+  it('typechecks under a consumer\'s strict and noUncheckedIndexedAccess (#1624)', () => {
+    const errors = ts.getPreEmitDiagnostics(consumer!).map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n'));
+    expect(errors).toEqual([]);
   });
 });
