@@ -48,8 +48,9 @@ async function jsProblem(file: string, code: string): Promise<string | undefined
 
 /** Why `css` (a built stylesheet) holds CSS the floor cannot parse, or undefined when it does not. */
 function cssProblem(file: string, css: string): string | undefined {
-  const code = css.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\*[\s\S]*?\*\/|url\([^)]*\)/g, '""');
-  const found = [...code.matchAll(/(?<!\\)@([\w-]+)/g)].find(([, name]) => !FLOOR_AT_RULES.has(name.toLowerCase()))?.[0] ?? code.match(ABOVE_FLOOR_CSS)?.[0];
+  // An escape (Tailwind's `\@` or `\"` in a class name) is one character, never a string or an at-rule.
+  const code = css.replace(/\\[\s\S]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\*[\s\S]*?\*\/|url\([^)]*\)/g, (token) => (token[0] === '\\' ? '_' : '""'));
+  const found = [...code.matchAll(/@([\w-]+)/g)].find(([, name]) => !FLOOR_AT_RULES.has(name.toLowerCase()))?.[0] ?? code.match(ABOVE_FLOOR_CSS)?.[0];
   return found && `${file} holds CSS that ${BROWSER_FLOOR_NAMES} cannot parse: ${found}\n${fix}`;
 }
 

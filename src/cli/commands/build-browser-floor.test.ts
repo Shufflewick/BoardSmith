@@ -84,6 +84,16 @@ const floorCss = project("import './style.css';\n", {
 });
 const floorCssError = await build(floorCss);
 
+// Tailwind v4's `before:content-['']` escapes quotes in its class name; an above-floor rule after it must still fail (#1634).
+const escapedQuote = project("import './style.css';\n", {
+  'src/style.css': String.raw`.before\:content-\[\\\"\\\"\]:before{--tw-content:\"\";content:var(--tw-content)}
+.panel{opacity:1}
+@starting-style{.panel{opacity:0}}
+.c{content:"a"}
+`,
+});
+const escapedQuoteError = await build(escapedQuote);
+
 const staticBlock = project("class Ready { static { console.log('ready'); } }\nconsole.log(Ready);\n");
 const staticBlockError = await build(staticBlock);
 
@@ -105,6 +115,10 @@ describe('boardsmith build holds the bundle to the browser floor (#1633)', () =>
 
   it('checks a stylesheet Vite emits for the whole bundle', () => {
     expect(String(oneStylesheetError)).toMatch(/assets\/[\w-]+\.css[\s\S]*Safari 16\.4[\s\S]*@starting-style/);
+  });
+
+  it('fails on CSS newer than the floor after an escaped quote in a class name', () => {
+    expect(String(escapedQuoteError)).toMatch(/assets\/index-[\w-]+\.css[\s\S]*Safari 16\.4[\s\S]*@starting-style/);
   });
 
   it('passes CSS the floor parses: escaped @ in a class name, and @font-feature-values blocks', () => {
