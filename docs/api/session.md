@@ -40,7 +40,7 @@ import {
 - `StatePushGate` - Decides per connection whether a frame is news, and turns it into a patch against the last one sent, for a host that pushes outside `SnapshotSessionHost`
 - `SeatPush` - One seat's push: `{ seat, view }` the first time, then `{ seat, patch }`
 - `ViewPatch`, `ViewPatchOp`, `ViewPath` - What changed in a seat's view: the `rev` it was made against (`base`) and the ops that turn it into the next view. A page applies one with `applyViewPatch`
-- `applyViewPatch(held, patch)` - The seat view a pushed `patch` turns `held` into, or `undefined` when `held` is not the view the patch was made against. Also exported from `boardsmith/client`; this one pulls in no DOM code, so a host on Workers can apply in its tests the patches it pushes (#1623)
+- `applyViewPatch(held, patch)` - The seat view a pushed `patch` turns `held` into, or `undefined` when `held` is not the view the patch was made against. Also exported from `boardsmith/client`; the same function, here because `boardsmith/client` also carries DOM code (`audioService`), so a host on Workers can apply in its tests the patches it pushes (#1623)
 
 ### Headless Session
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyViewPatch, diffView, patchView, stampRev } from './view-patch.js';
+import * as session from './index.js';
 
 // #1616: a push carries what changed in a seat's view, not the whole view.
 
@@ -89,9 +90,7 @@ describe('stampRev', () => {
 });
 
 describe('boardsmith/session', () => {
-  it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', async () => {
-    // Dynamic import: the entry under test, loaded whole to read its exports.
-    const session: Record<string, unknown> = await import('./index.js');
+  it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', () => {
     expect(session.applyViewPatch).toBe(applyViewPatch);
   });
 });
