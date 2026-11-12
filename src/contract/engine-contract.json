@@ -2806,7 +2806,7 @@
       "surfaceHash": "2f62346bc29aac59",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A seat's playerViews now carry each offered action's first element pick's validElements (exactly the resolveChoices answer with no args) when the seat can see every candidate, and the client stops sending one resolveChoices per element-first action on every state push; it reads board start candidates off that metadata and answers such an opening pick locally. Picks over cards the seat cannot see still go through resolveChoices when opened. PickHandler gains answerOpeningPicks(seat, actionMetadata), and buildViews moved from session utils to stateless-ops (#1615)."
+      "summary": "A seat's playerViews now carry each offered action's first element pick's validElements (exactly the resolveChoices answer with no args) when the seat can see every candidate, and the client no longer sends a resolveChoices for those on every state push; it reads board start candidates off that metadata and answers such an opening pick locally. A first pick over a card the seat cannot see still goes through resolveChoices, once per state for board starts and when opened. PickHandler gains answerOpeningPicks(seat, actionMetadata), and buildViews moved from session utils to stateless-ops (#1615)."
     }
   ]
 }
