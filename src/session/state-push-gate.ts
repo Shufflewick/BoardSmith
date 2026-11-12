@@ -125,17 +125,23 @@ export class StatePushGate<R, F extends { view: unknown } = { view: unknown }> {
       highestEventId(playerState?.animationEvents),
       highestEventId(gameView?.animationEvents),
     );
-    const perPush = this.#perPush;
+    // The keys left out of the comparison, by the object that holds them.
+    const skipped = new Map<unknown, ReadonlySet<string>>([
+      [gameView, GAME_VIEW_SKIPPED],
+      [playerState, PLAYER_STATE_SKIPPED],
+      [frame.view, VIEW_SKIPPED],
+      [frame, this.#perPush],
+    ]);
     const text = JSON.stringify(frame, function (this: unknown, key: string, value: unknown) {
-      if (this === frame && perPush.has(key)) return undefined;
-      if (this === frame.view && key === 'rev') return undefined;
-      if (this === playerState && (key === 'animationEvents' || key === 'lastAnimationEventId')) return undefined;
-      if (this === gameView && key === 'animationEvents') return undefined;
-      return value;
+      return skipped.get(this)?.has(key) ? undefined : value;
     });
     return { body: digest(text), lastEventId, view: frame.view };
   }
 }
+
+const VIEW_SKIPPED: ReadonlySet<string> = new Set(['rev']);
+const PLAYER_STATE_SKIPPED: ReadonlySet<string> = new Set(['animationEvents', 'lastAnimationEventId']);
+const GAME_VIEW_SKIPPED: ReadonlySet<string> = new Set(['animationEvents']);
 
 function playerStateOf(frame: { view: unknown }): Holder | undefined {
   const view = frame.view;

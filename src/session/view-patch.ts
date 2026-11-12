@@ -115,10 +115,11 @@ function diffInto(ops: ViewPatchOp[], path: Array<string | number>, from: unknow
     if (!same(from, to)) ops.push(['set', [...path], to]);
     return;
   }
-  if (Array.isArray(from)) {
-    diffArray(ops, path, from, to as unknown as unknown[]);
-    return;
-  }
+  if (Array.isArray(from)) diffArray(ops, path, from, to as unknown as unknown[]);
+  else diffObject(ops, path, from, to);
+}
+
+function diffObject(ops: ViewPatchOp[], path: Array<string | number>, from: Holder, to: Holder): void {
   for (const key of keysOf(from)) {
     if (to[key] === undefined) ops.push(['del', [...path, key]]);
   }
@@ -138,10 +139,7 @@ function diffArray(ops: ViewPatchOp[], path: Array<string | number>, from: unkno
   const dropped = frontDropped(from, to);
   if (dropped > 0) ops.push(['splice', [...path], 0, dropped, []]);
   const held = from.length - dropped;
-  let head = 0;
-  while (head < held && head < to.length && same(from[dropped + head], to[head])) head++;
-  let tail = 0;
-  while (tail < held - head && tail < to.length - head && same(from[from.length - 1 - tail], to[to.length - 1 - tail])) tail++;
+  const [head, tail] = sharedEnds(from.slice(dropped), to);
   const removed = held - head - tail;
   const added = to.length - head - tail;
   if (removed === added) {
@@ -149,6 +147,15 @@ function diffArray(ops: ViewPatchOp[], path: Array<string | number>, from: unkno
   } else {
     ops.push(['splice', [...path], head, removed, to.slice(head, head + added)]);
   }
+}
+
+/** How many items `a` and `b` share at their start, and then at their end. */
+function sharedEnds(a: unknown[], b: unknown[]): [number, number] {
+  let head = 0;
+  while (head < a.length && head < b.length && same(a[head], b[head])) head++;
+  let tail = 0;
+  while (tail < a.length - head && tail < b.length - head && same(a[a.length - 1 - tail], b[b.length - 1 - tail])) tail++;
+  return [head, tail];
 }
 
 /** How many items were dropped from the front of `from` to start `to`: `to` begins with all the rest. 0 when none were. */
