@@ -87,3 +87,11 @@ describe('stampRev', () => {
     expect(stampRev({ state: { board: 'b' } }).rev).not.toBe(stampRev(view).rev);
   });
 });
+
+describe('boardsmith/session', () => {
+  it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', async () => {
+    // Dynamic import: the entry under test, loaded whole to read its exports.
+    const session: Record<string, unknown> = await import('./index.js');
+    expect(session.applyViewPatch).toBe(applyViewPatch);
+  });
+});
