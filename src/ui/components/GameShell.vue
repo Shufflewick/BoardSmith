@@ -253,6 +253,15 @@ function patchedView(patch: ViewPatch): typeof heldView {
   }
 }
 
+/** The view a `game_state` frame carries, whole or as a patch to the held one; a patch the shell cannot apply asks the host for the whole view. */
+function viewOfFrame(data: Record<string, unknown>): typeof heldView {
+  if (data.patch === undefined) return data.view as typeof heldView;
+  const view = patchedView(data.patch as ViewPatch);
+  // The shell does not hold the view the patch was made against (it missed a post, or just loaded).
+  if (view === undefined) requestHostState();
+  return view;
+}
+
 /** Freezes `value` and all it holds that is not frozen yet, so the view a patch applies to cannot drift from the `rev` it carries. */
 function freezeView(value: unknown): void {
   if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
@@ -1084,13 +1093,7 @@ if (inHost) {
     if (isDevBuild && devDebugGate.handleMessage(data)) return;
 
     if (data.type === 'game_state') {
-      const patch = data.patch as ViewPatch | undefined;
-      const view = patch === undefined ? (data.view as typeof heldView) : patchedView(patch);
-      if (patch !== undefined && view === undefined) {
-        // The shell does not hold the view the patch was made against (it missed a post, or just loaded): ask for the whole one.
-        requestHostState();
-        return;
-      }
+      const view = viewOfFrame(data);
       if (!view?.state) return;
 
       // The host sends { flowState, state }, where `state` is the full
@@ -1106,7 +1109,7 @@ if (inHost) {
       const incoming = { flowState: view.flowState, state: view.state };
       const held = state.value ? { flowState: state.value.flowState, state: state.value.state } : undefined;
       // A patch already kept every part it did not change.
-      const shared = held && patch === undefined ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming;
+      const shared = held && data.patch === undefined ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming;
       freezeView(shared);
       heldView = { ...view, ...shared };
       state.value = {
