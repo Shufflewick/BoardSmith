@@ -35,7 +35,7 @@ function frame(scores: [number, number]): Record<string, unknown> {
 }
 
 const renders = new Map<number, number>();
-const views: Array<{ children: Array<{ id: number }> }> = [];
+const views: Array<{ children: Array<{ id: number; attributes?: { score: number } }> }> = [];
 
 const Mat = defineComponent({
   props: { mat: { type: Object, required: true } },
@@ -153,10 +153,10 @@ describe('GameShell applies a posted view patch', () => {
     fromHost({ type: 'init', seat: 1 });
     fromHost({ type: 'game_state', view: v1, winners: [] });
     await flushPromises();
-    expect(() => ((views.at(-1)!.children[1] as { attributes: { score: number } }).attributes.score = 99)).toThrow(TypeError);
+    expect(() => (views.at(-1)!.children[1].attributes!.score = 99)).toThrow(TypeError);
     fromHost(patchFrame(v1, v2));
     await flushPromises();
-    expect(() => ((views.at(-1)!.children[1] as { attributes: { score: number } }).attributes.score = 99)).toThrow(TypeError);
+    expect(() => (views.at(-1)!.children[1].attributes!.score = 99)).toThrow(TypeError);
     expect(() => views.at(-1)!.children.push({ id: 3 })).toThrow(TypeError);
     wrapper.unmount();
   });
