@@ -3,8 +3,6 @@
  *
  * - `createDevHostClient` drives a running `boardsmith dev` host from Node or a
  *   browser: take a seat, read state, perform actions (see docs/agent-control.md).
- * - `applyViewPatch` turns the seat view a page holds into the next one, from
- *   a pushed patch.
  * - `audioService` plays the shell's sounds.
  * - `GameState`, `PlayerState` and `PublicFlowState` are the shape of the state
  *   a host sends one seat.
@@ -23,9 +21,6 @@ export type {
   DevHostStateReply,
   DevHostInboundMessage,
 } from './dev-host-client.js';
-
-// Applying a pushed patch to the seat view a page holds (#1616).
-export { applyViewPatch } from '../session/view-patch.js';
 
 // Audio service
 export { audioService, type AudioServiceOptions } from './audio.js';

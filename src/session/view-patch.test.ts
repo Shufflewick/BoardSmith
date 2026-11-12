@@ -3,7 +3,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
 import { applyViewPatch, diffView, patchView, stampRev } from './view-patch.js';
-import * as session from './index.js';
 import pkg from '../../package.json';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -109,15 +108,9 @@ describe('stampRev', () => {
   });
 });
 
-describe('boardsmith/session', () => {
-  it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', () => {
-    expect(session.applyViewPatch).toBe(applyViewPatch);
-  });
-});
-
 describe('boardsmith/view-patch', () => {
   it('reaches only view-patch.ts, so a consumer compiles nothing else of the engine (#1624)', () => {
-    expect(entry).toBe('./src/session/view-patch.ts');
+    expect(pkg.exports['./view-patch']).toEqual({ types: './src/session/view-patch.ts', import: './src/session/view-patch.ts' });
     const files = consumer!.getSourceFiles().filter((f) => !consumer!.isSourceFileDefaultLibrary(f));
     expect(files.map((f) => path.relative(ROOT, f.fileName))).toEqual(['src/session/view-patch.ts']);
   });

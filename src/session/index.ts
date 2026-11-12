@@ -114,8 +114,6 @@ export { parseExecutorOp, type ParsedExecutorOp } from './parse-executor-op.js';
 // ordering, and drives the bot pump. Accepts an injected executeOp adapter so the same
 // host class works in-process (dev) and via remote RPC (production executor worker).
 export * from './snapshot-session-host.js';
-// Applying a pushed patch to the view a seat holds, for a host with no DOM lib (#1623).
-export { applyViewPatch } from './view-patch.js';
 // How a host holds the work a session starts itself while its rules are replaced (#388).
 export type { HostWorkGate } from './host-work-gate.js';
 

@@ -27,7 +27,6 @@ import { pendingActionForSeat } from './utils.js';
 export type { Op, OpResult } from './stateless-ops.js';
 // The adapter's half of #487: every host that pushes these views keeps one.
 export { StatePushGate, type StatePushGateOptions, type PatchedFrame } from './state-push-gate.js';
-export type { ViewPatch, ViewPatchOp, ViewPath } from './view-patch.js';
 
 /**
  * One seat's push (#1616): its whole `view` the first time the host pushes
