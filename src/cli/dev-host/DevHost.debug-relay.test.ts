@@ -270,25 +270,27 @@ describe('DevHost — game_state deadline relay (#302)', () => {
 });
 
 // #1616: after the first game_state the host pushes a patch against the view
-// this page holds. The page hands the game the whole view, on the push and on
-// every replay of it, and asks for the whole view when it missed a push.
+// this page holds. The page relays the patch to the game (#1629), replays the
+// whole view, and asks for the whole view when it missed a push.
 describe('DevHost — game_state patch relay (#1616)', () => {
-  const lastView = (spy: ReturnType<typeof vi.fn>) =>
-    spy.mock.calls.map((c) => c[0] as { type?: string; view?: unknown }).filter((m) => m.type === 'game_state').at(-1)!.view;
+  const lastFrame = (spy: ReturnType<typeof vi.fn>) =>
+    spy.mock.calls.map((c) => c[0] as { type?: string; view?: unknown; patch?: unknown }).filter((m) => m.type === 'game_state').at(-1)!;
+  const lastView = (spy: ReturnType<typeof vi.fn>) => lastFrame(spy).view;
   const v1 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }] } });
   const v2 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }, { text: 'b' }] } });
   const v3 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] } });
   const full = (view: unknown) => ({ type: 'game_state', view, isComplete: false, winners: [] });
   const patch = (from: { rev: string }, to: unknown) => ({ type: 'game_state', patch: { base: from.rev, ops: diffView(from, to) }, isComplete: false, winners: [] });
 
-  it('applies a patch to the view it holds, and replays the whole view', async () => {
+  it('relays a patch to the game, and replays the whole view it applied it to', async () => {
     const wrapper = await mountAndActivate();
     const ws = mockWsInstance!;
     const postSpy = spyOnIframePostMessage(wrapper);
     ws.simulateMessage(full(v1));
     ws.simulateMessage(patch(v1, v2));
     await wrapper.vm.$nextTick();
-    expect(lastView(postSpy)).toEqual(v2);
+    expect(lastFrame(postSpy)).toMatchObject({ patch: patch(v1, v2).patch, isComplete: false, winners: [] });
+    expect(lastView(postSpy)).toBeUndefined();
 
     window.dispatchEvent(new MessageEvent('message', { source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow, data: { source: 'shufflewick-game', type: 'request-state' } }));
     await wrapper.vm.$nextTick();

@@ -15,7 +15,7 @@ import {
 import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { audioService } from '../../client/audio.js';
-import { diffView, patchView } from '../../session/view-patch.js';
+import { applyViewPatch, diffView, patchView, type ViewPatch } from '../../session/view-patch.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
@@ -239,6 +239,9 @@ const isMyTurn = computed(() => state.value?.state.isMyTurn ?? false);
 // reads private data that is not there (#1135).
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 let seatFromHost = -1;
+/** The view the host last posted, with its `rev`, sharing the parts `state` holds: what a posted patch applies to (#1629). */
+let heldView: { flowState?: unknown; state?: Record<string, unknown> } | undefined;
+const requestHostState = () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
@@ -533,7 +536,7 @@ const tableSeat = useTableSeat({
   timeTravelDiff,
   platformRequest,
   // Covers the iframe mounting before the host sent its first game_state.
-  requestHostState: () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*'),
+  requestHostState,
   presentation: toRef(props, 'presentation'),
   debugHighlight: debugHighlightedElementId,
   turnDeadline,
@@ -1064,7 +1067,13 @@ if (inHost) {
     if (isDevBuild && devDebugGate.handleMessage(data)) return;
 
     if (data.type === 'game_state') {
-      const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
+      const patch = data.patch as ViewPatch | undefined;
+      const view = (patch === undefined ? data.view : applyViewPatch(heldView, patch)) as typeof heldView;
+      if (patch !== undefined && view === undefined) {
+        // The shell does not hold the view the patch was made against (it missed a post, or just loaded): ask for the whole one.
+        requestHostState();
+        return;
+      }
       if (!view?.state) return;
 
       // The host sends { flowState, state }, where `state` is the full
@@ -1079,8 +1088,11 @@ if (inHost) {
       // Each part that did not change stays the object the shell holds (#1616), so what reads only it does not re-run.
       const incoming = { flowState: view.flowState, state: view.state };
       const held = state.value ? { flowState: state.value.flowState, state: state.value.state } : undefined;
+      // A patch already kept every part it did not change.
+      const shared = held && patch === undefined ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming;
+      heldView = { ...view, ...shared };
       state.value = {
-        ...(held ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming),
+        ...shared,
         playerSeat: seatFromHost,
         isSpectator: false,
       } as any;
