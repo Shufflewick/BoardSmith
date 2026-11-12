@@ -1,6 +1,6 @@
 {
-  "revision": 360,
-  "surfaceHash": "419e363c7e56a971",
+  "revision": 361,
+  "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2823,6 +2823,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "applyViewPatch is now exported from boardsmith/session as well as boardsmith/client, so a Worker host with no DOM lib can apply the patches it pushes in its own tests; nothing else changed and no game needs rebuilding (#1623)."
+    },
+    {
+      "revision": 361,
+      "date": "2026-11-12",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "applyViewPatch, ViewPatch, ViewPatchOp and ViewPath now come from boardsmith/view-patch only, an entry that imports nothing and typechecks under a consumer's strict and noUncheckedIndexedAccess; boardsmith/session and boardsmith/client no longer export them, so a host or page importing them from either must import them from boardsmith/view-patch. No game needs rebuilding (#1624)."
     }
   ]
 }

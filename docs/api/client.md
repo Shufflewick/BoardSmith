@@ -20,7 +20,7 @@ Import from `boardsmith/client` when you want to:
 ### Functions
 
 - `createDevHostClient(url, options?)` - A WebSocket client for the `boardsmith dev` host. See [Agent control](../agent-control.md#createdevhostclient--drive-the-dev-host-from-node).
-- `applyViewPatch(held, patch)` - The seat view a pushed `patch` turns the view a page holds into, unchanged parts shared with `held` (#1616). A page relaying pushed state to `GameShell` keeps the whole view, replaces it with what this returns on every `game_state` carrying a `patch`, and relays the whole view. It returns `undefined` when the page does not hold the view the patch was made against (it missed a push): ask the host for the whole view. See [Session](./session.md).
+- `applyViewPatch(held, patch)`, from `boardsmith/view-patch` (#1624), which imports nothing, so a page compiles none of the engine - The seat view a pushed `patch` turns the view a page holds into, unchanged parts shared with `held` (#1616). A page relaying pushed state to `GameShell` keeps the whole view, replaces it with what this returns on every `game_state` carrying a `patch`, and relays the whole view. It returns `undefined` when the page does not hold the view the patch was made against (it missed a push): ask the host for the whole view. See [Session](./session.md).
 
 ### Audio
 

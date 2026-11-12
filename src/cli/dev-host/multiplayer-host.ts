@@ -29,8 +29,8 @@ import {
   type RulesReload,
   type TurnBoundary,
   type SeatPush,
-  type ViewPatch,
 } from '../../session/index.js';
+import type { ViewPatch } from '../../session/view-patch.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
 import { isReadOnlyOp } from '../../session/stateless-ops.js';

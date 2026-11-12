@@ -219,8 +219,8 @@ export function patchView(held: unknown, ops: readonly ViewPatchOp[]): unknown {
   for (const op of ops) {
     const [kind, path] = op;
     const steps: Array<string | number> = ['value', ...path];
-    const parent = steps.slice(0, -1).reduce<Holder>((container, key) => writable(container, key, fresh), root);
-    const key = steps[steps.length - 1];
+    const key = steps.pop()!; // Never undefined: steps starts with 'value'.
+    const parent = steps.reduce<Holder>((container, step) => writable(container, step, fresh), root);
     // Defined, not assigned: JSON.parse makes `__proto__` an own key, and assigning one would set the prototype.
     if (kind === 'set') Object.defineProperty(parent, key, { value: op[2], writable: true, enumerable: true, configurable: true });
     else if (kind === 'del') delete parent[key];
