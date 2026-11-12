@@ -23,7 +23,7 @@ const ART = {
 };
 
 function project(art: Record<string, unknown>): string {
-  const dir = join(tempTree('boardsmith-build-cover-art-'), 'game');
+  const dir = tempTree('boardsmith-build-cover-art-');
   mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
   writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', displayName: 'Fixture', backend: 'table', ...art }));
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'fixture', version: '1.0.0' }));
