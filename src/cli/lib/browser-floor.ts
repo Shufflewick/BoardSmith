@@ -33,7 +33,7 @@ const FLOOR_AT_RULES = new Set([
 ]);
 
 // shortcut: a hand list of the newer CSS functions and selectors most likely to be reached for; check MDN's compat data instead when the floor moves or one slips past.
-const ABOVE_FLOOR_CSS = /light-dark\(|:user-(?:valid|invalid)\b|:popover-open\b|:state\(|::details-content\b/;
+const ABOVE_FLOOR_CSS = /light-dark\(|:user-(?:valid|invalid)\b|:popover-open\b|:state\(|::details-content\b/i;
 
 const fix = 'Rewrite it with what those browsers have; docs/custom-ui-guide.md, "Check it on a real phone", states the floor.';
 
@@ -48,8 +48,8 @@ async function jsProblem(file: string, code: string): Promise<string | undefined
 
 /** Why `css` (a built stylesheet) holds CSS the floor cannot parse, or undefined when it does not. */
 function cssProblem(file: string, css: string): string | undefined {
-  // An escape (Tailwind's `\@` or `\"` in a class name) is one character, never a string or an at-rule.
-  const code = css.replace(/\\[\s\S]|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\*[\s\S]*?\*\/|url\([^)]*\)/g, (token) => (token[0] === '\\' ? '_' : '""'));
+  // As a browser reads it: an escape (Tailwind's `\@`, `\"`) is one character, a string stops at a raw newline, a quoted url() is a string.
+  const code = css.replace(/\\[\s\S]|"(?:\\[\s\S]|[^"\\\n])*"|'(?:\\[\s\S]|[^'\\\n])*'|\/\*[\s\S]*?\*\/|url\((?!\s*["'])(?:\\[\s\S]|[^)\\])*\)/g, (token) => (token[0] === '\\' ? '_' : '""'));
   const found = [...code.matchAll(/@([\w-]+)/g)].find(([, name]) => !FLOOR_AT_RULES.has(name.toLowerCase()))?.[0] ?? code.match(ABOVE_FLOOR_CSS)?.[0];
   return found && `${file} holds CSS that ${BROWSER_FLOOR_NAMES} cannot parse: ${found}\n${fix}`;
 }
