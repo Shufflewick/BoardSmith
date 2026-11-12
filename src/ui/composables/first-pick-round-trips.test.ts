@@ -5,9 +5,10 @@
  * On a phone each `resolveChoices` is iframe to page to socket to the table to
  * the executor and back, and the executor rebuilds the game for it. A seat's
  * state carries each action's opening element pick answered when every
- * candidate is a card its board already shows, so a state push asks nothing and
- * opening such an action asks nothing. A pick that names a card the seat cannot
- * see is still answered by the server, when the seat opens it.
+ * candidate is a card its board already shows, so a state push asks nothing for
+ * it and opening it asks nothing. A pick that names a card the seat cannot see
+ * is still answered by the server: once per state for what the board can start
+ * with, and when the seat opens it.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ref, type Ref } from 'vue';
@@ -60,13 +61,14 @@ async function mountTable() {
 }
 
 describe('round trips per pick (#1615)', () => {
-  it('asks nothing when a state lands, though every action opens with an element pick', async () => {
+  it('asks, when a state lands, only for the opening pick the state could not carry', async () => {
     const { session, seatState, asked } = await mountTable();
+    expect(asked()).toEqual(['draw']);
     const rooms = session.readGame().all(Room);
     await session.send(1, { type: 'action', actionName: 'rest', player: 1, args: { room: rooms[1]!.id } });
     seatState.value = session.playerState(1);
     await settle();
-    expect(asked()).toEqual([]);
+    expect(asked()).toEqual(['draw', 'draw']);
   });
 
   it('carries an opening pick over cards the seat sees, and leaves one over hidden cards to the server', async () => {
@@ -79,22 +81,26 @@ describe('round trips per pick (#1615)', () => {
 
   it('opens an action whose opening pick the state carries with no request', async () => {
     const { wiring, asked } = await mountTable();
+    const before = asked().length;
     await wiring.controller.start('move');
     await settle();
     expect(wiring.controller.validElements.value.map((e) => e.display)).toEqual(['engine', 'hold']);
-    expect(asked()).toEqual([]);
+    expect(asked().slice(before)).toEqual([]);
   });
 
-  it('asks the server for an opening pick over hidden cards, once, when the action opens', async () => {
+  it('asks the server for an opening pick over hidden cards when the action opens', async () => {
     const { wiring, asked } = await mountTable();
+    const before = asked().length;
     await wiring.controller.start('draw');
     await settle();
     expect(wiring.controller.validElements.value).toHaveLength(2);
-    expect(asked()).toEqual(['draw']);
+    expect(asked().slice(before)).toEqual(['draw']);
   });
 
-  it('lets the board start an action from the candidates the state carries', async () => {
+  it('lets the board start every action, from the state where it carries the candidates and from the server where not', async () => {
     const { wiring } = await mountTable();
-    expect([...wiring.controller.startCandidates.value.keys()]).toEqual(['move', 'rest']);
+    const started = wiring.controller.startCandidates.value;
+    expect([...started.keys()]).toEqual(['move', 'rest', 'draw']);
+    expect(started.get('draw')!.elements).toHaveLength(2);
   });
 });

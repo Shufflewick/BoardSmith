@@ -545,6 +545,21 @@ describe('a turn that offers several actions and opens none, as Chess does (#119
     expect(fetchPickChoices).not.toHaveBeenCalled();
   });
 
+  it('offers nothing from an earlier state while the new state\'s asked-for candidates are on their way', async () => {
+    // No validElements on the pick: the state could not carry them, so they are asked for.
+    const fetchPickChoices = answerPicks({ piece: { validElements: pieces } });
+    const { boardInteraction, actionMetadata } = await wireAll({
+      movePiece: { name: 'movePiece', selections: [{ name: 'piece', type: 'element' }, { name: 'destination', type: 'choice' }] },
+      resign: { name: 'resign', selections: [] },
+    }, fetchPickChoices);
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(true);
+    fetchPickChoices.mockImplementation(() => new Promise(() => {}));
+
+    actionMetadata.value = { ...actionMetadata.value! };
+    await flushAll();
+    expect(boardInteraction.isSelectableElement({ id: 300, notation: 'd2' })).toBe(false);
+  });
+
   it('offers nothing on the board on another seat\'s turn', async () => {
     const fetchPickChoices = answerPicks({ piece: { validElements: pieces } });
     const { boardInteraction } = await wireAll({

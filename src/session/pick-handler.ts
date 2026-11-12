@@ -275,8 +275,8 @@ export class PickHandler<G extends Game = Game> {
    * Put on each action's metadata its opening element pick's answer, as
    * `getPickChoices` gives it with nothing picked, so the seat opens the action
    * with no round trip (#1615). Only when the seat sees every candidate: an
-   * answer naming a card it cannot see is asked for when the action opens, so
-   * what every state push carries names only what the seat's board shows.
+   * answer naming a card it cannot see stays with resolveChoices, so what every
+   * state push carries names only what the seat's board shows.
    */
   answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
     const game = this.#runner.game;
