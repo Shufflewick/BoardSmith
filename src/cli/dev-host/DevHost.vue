@@ -321,7 +321,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
       postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });
       break;
     case 'game_state': {
-      // After the first frame the host pushes a patch against the view this page holds (#1616); the game is handed the whole view.
+      // After the first frame the host pushes a patch against the view this page holds (#1616); the game is handed the patch too (#1629), and every replay the whole view.
       const view = msg.patch === undefined ? msg.view : applyViewPatch(lastGameState?.view, msg.patch as ViewPatch);
       if (view === undefined && msg.patch !== undefined) {
         // This page does not hold the view the patch was made against: ask for the whole one.
@@ -348,7 +348,8 @@ function onHostMessage(msg: Record<string, unknown>): void {
       };
       stepDeadlineOpen.value = msg.deadlineAt !== null && msg.deadlineAt !== undefined;
       reofferAt.value = (msg.reofferAt as number | null | undefined) ?? null;
-      postToGame(lastGameState);
+      const { view: _whole, ...fields } = lastGameState;
+      postToGame(msg.patch === undefined ? lastGameState : { ...fields, patch: msg.patch });
       // Shown only once the frame carrying it is on its way to the game, so a
       // page that reads the seed reads the game dealt from it.
       dealtFrom.value = (msg.seed as string | null | undefined) ?? null;

@@ -15,7 +15,7 @@ import {
 import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { audioService } from '../../client/audio.js';
-import { diffView, patchView } from '../../session/view-patch.js';
+import { applyViewPatch, diffView, patchView, type ViewPatch } from '../../session/view-patch.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
@@ -239,6 +239,35 @@ const isMyTurn = computed(() => state.value?.state.isMyTurn ?? false);
 // reads private data that is not there (#1135).
 const playerSeat = ref<number>(-1); // -1 means no seat assigned yet (spectator)
 let seatFromHost = -1;
+/** The view the host last posted, with its `rev`, sharing the parts `state` holds: what a posted patch applies to (#1629). */
+let heldView: { flowState?: unknown; state?: Record<string, unknown> } | undefined;
+const requestHostState = () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
+
+/** The view `patch` turns the held one into, or `undefined` when the shell cannot apply it and must ask for the whole view. */
+function patchedView(patch: ViewPatch): typeof heldView {
+  try {
+    return applyViewPatch(heldView, patch) as typeof heldView;
+  } catch (error) {
+    console.error(error);
+    return undefined;
+  }
+}
+
+/** The view a `game_state` frame carries, whole or as a patch to the held one; a patch the shell cannot apply asks the host for the whole view. */
+function viewOfFrame(data: Record<string, unknown>): typeof heldView {
+  if (data.patch === undefined) return data.view as typeof heldView;
+  const view = patchedView(data.patch as ViewPatch);
+  // The shell does not hold the view the patch was made against (it missed a post, or just loaded).
+  if (view === undefined) requestHostState();
+  return view;
+}
+
+/** Freezes `value` and all it holds that is not frozen yet, so the view a patch applies to cannot drift from the `rev` it carries. */
+function freezeView(value: unknown): void {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeView(child);
+}
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
@@ -533,7 +562,7 @@ const tableSeat = useTableSeat({
   timeTravelDiff,
   platformRequest,
   // Covers the iframe mounting before the host sent its first game_state.
-  requestHostState: () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*'),
+  requestHostState,
   presentation: toRef(props, 'presentation'),
   debugHighlight: debugHighlightedElementId,
   turnDeadline,
@@ -1064,7 +1093,7 @@ if (inHost) {
     if (isDevBuild && devDebugGate.handleMessage(data)) return;
 
     if (data.type === 'game_state') {
-      const view = data.view as { flowState?: unknown; state?: Record<string, unknown> } | undefined;
+      const view = viewOfFrame(data);
       if (!view?.state) return;
 
       // The host sends { flowState, state }, where `state` is the full
@@ -1079,8 +1108,12 @@ if (inHost) {
       // Each part that did not change stays the object the shell holds (#1616), so what reads only it does not re-run.
       const incoming = { flowState: view.flowState, state: view.state };
       const held = state.value ? { flowState: state.value.flowState, state: state.value.state } : undefined;
+      // A patch already kept every part it did not change.
+      const shared = held && data.patch === undefined ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming;
+      freezeView(shared);
+      heldView = { ...view, ...shared };
       state.value = {
-        ...(held ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming),
+        ...shared,
         playerSeat: seatFromHost,
         isSpectator: false,
       } as any;

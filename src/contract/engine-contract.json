@@ -1,5 +1,5 @@
 {
-  "revision": 363,
+  "revision": 364,
   "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2847,6 +2847,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith build now targets Safari/iOS 16.4 (with Chrome/Edge 111 and Firefox 128) for a game's UI bundle and fails a bundle holding JavaScript or CSS those browsers cannot parse (#1633)."
+    },
+    {
+      "revision": 364,
+      "date": "2026-11-12",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "GameShell's game_state postMessage may carry patch (a ViewPatch) in place of view: GameShell applies it to the view it last held and, when it does not hold the patch's base, posts request-state for the whole view. A host page can relay the socket's patch frames to the iframe instead of the whole view it rebuilt, but only to a game UI built at this revision or later: an older GameShell ignores a frame with no view. Whole views keep working everywhere. GameShell now freezes the state it holds, so a custom UI that changes it in place throws instead of silently drifting from the view the next patch is made against (#1629)."
     }
   ]
 }
