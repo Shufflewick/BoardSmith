@@ -590,8 +590,8 @@ makes every smaller size itself, so supply one file per field, at full size:
 
 `boardsmith validate` reads each file's format and size from its header, not
 its extension, and fails on art outside this table or on a declared file that
-does not exist. A path under `ui/` or `rules/`, or outside the project, is
-refused, because the bundle would not carry it at that path. A game with no
+does not exist. A path under `ui/`, `rules/` or `dist/`, or outside the
+project, is refused, because the build would replace or move it. A game with no
 art still builds and publishes, and the platform shows a placeholder.
 ShufflewickPub's `docs/GAME-ART.md` says what makes good art for each field.
 

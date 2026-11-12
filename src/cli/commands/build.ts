@@ -580,8 +580,8 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
     );
 
     for (const [key, path] of Object.entries(coverArtPaths(config))) {
-      if (!existsSync(join(cwd, path))) {
-        throw new Error(`boardsmith.json "${key}" names ${path}, which does not exist. Add the file at ${join(cwd, path)}, or remove the "${key}" key.`);
+      if (!existsSync(join(cwd, path)) || !statSync(join(cwd, path)).isFile()) {
+        throw new Error(`boardsmith.json "${key}" names ${path}, which is not a file. Add the file at ${join(cwd, path)}, or remove the "${key}" key.`);
       }
       cpSync(join(cwd, path), join(outDir, path));
     }

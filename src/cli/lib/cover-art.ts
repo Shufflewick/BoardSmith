@@ -6,7 +6,7 @@
  * below mirrors ShufflewickPub's game art spec (GAME-ART.md there), which it checks again on upload.
  * The platform makes every smaller size itself, so nothing here resizes.
  */
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { isAbsolute, posix, resolve } from 'node:path';
 
 export type ImageFormat = 'png' | 'jpeg' | 'webp';
@@ -95,21 +95,33 @@ export function readImageHeader(bytes: Uint8Array): ImageHeader | undefined {
   return readPng(bytes, view) ?? readJpeg(bytes, view) ?? readWebp(bytes, view);
 }
 
+/** The packer moves ui/ to the bundle root and rules/ beside rules.js, and build empties dist/ first. */
+const REPLACED_FOLDERS = new Set(['ui', 'rules', 'dist']);
+
+/** Why the bundle could not carry `declared` at its own path, or undefined when it can. */
+function bundlePathRefusal(declared: unknown): string | undefined {
+  if (typeof declared !== 'string' || declared === '') return 'is not a path';
+  if (declared.includes('\\')) return 'has a backslash; separate folders with "/"';
+  if (isAbsolute(declared)) return 'is an absolute path';
+  const path = posix.normalize(declared);
+  if (path === '.' || path === '..' || path.startsWith('../')) return 'is not inside the project';
+  // Lower-cased because a case-insensitive disk opens UI/ as ui/.
+  const top = path.split('/')[0].toLowerCase();
+  return REPLACED_FOLDERS.has(top) ? `is under ${top}/, which the build replaces` : undefined;
+}
+
 /**
  * Where the bundle carries a declared art file: its path relative to the project, normalised.
  * Throws for a path the bundle could not carry at that same place.
  */
 export function coverArtBundlePath(key: string, declared: unknown): string {
-  const refuse = (why: string) =>
-    new Error(`boardsmith.json "${key}": ${JSON.stringify(declared)} ${why}. Name a file inside the project, such as "art/${key}.png".`);
-  if (typeof declared !== 'string' || declared === '') throw refuse('is not a path');
-  if (isAbsolute(declared)) throw refuse('is an absolute path');
-  const path = posix.normalize(declared.replaceAll('\\', '/'));
-  if (path === '.' || path === '..' || path.startsWith('../')) throw refuse('is not inside the project');
-  // The packer moves ui/ to the bundle root and rules/ beside rules.js, so a file there would not stay at its path.
-  const top = path.split('/')[0];
-  if (top === 'ui' || top === 'rules') throw refuse(`is under ${top}/, which the bundle moves`);
-  return path;
+  const refusal = bundlePathRefusal(declared);
+  if (refusal !== undefined) {
+    throw new Error(
+      `boardsmith.json "${key}": ${JSON.stringify(declared)} ${refusal}. Name a file inside the project, such as "art/${key}.png".`,
+    );
+  }
+  return posix.normalize(declared as string);
 }
 
 /** The bundle path of each cover-art field `config` declares. */
@@ -170,6 +182,10 @@ export function coverArtProblems(cwd: string, config: Record<string, unknown>): 
     }
     const file = resolve(cwd, path);
     if (!existsSync(file)) continue;
+    if (!statSync(file).isFile()) {
+      problems.push(`boardsmith.json "${key}": ${path} is a folder, not a file. Name the image file itself.`);
+      continue;
+    }
     problems.push(...artFileProblems(key, spec, path, readFileSync(file)));
   }
   return problems;

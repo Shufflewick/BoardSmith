@@ -40,7 +40,11 @@ describe('coverArtBundlePath', () => {
   });
 
   it('refuses a path the bundle could not carry at the same place, saying what to do', () => {
-    for (const declared of ['/abs/logo.png', '../logo.png', 'art/../../logo.png', 'ui/logo.png', 'rules/logo.png', '', '.', 7]) {
+    for (const declared of [
+      '/abs/logo.png', '../logo.png', 'art/../../logo.png', 'ui/logo.png', 'rules/logo.png', '', '.', 7,
+      // Review F3, F4, F5, F7 (#1630): a backslash, a case-folded ui/ or rules/, and the build output folder.
+      '\\art\\logo.png', 'art\\logo.png', 'UI/logo.png', 'Rules/logo.png', 'dist/logo.png',
+    ]) {
       expect(() => coverArtBundlePath('logo', declared)).toThrow(/boardsmith\.json "logo"/);
     }
   });
@@ -119,6 +123,12 @@ describe('coverArtProblems', () => {
     const [problem] = coverArtProblems(project({ 'b.webp': big }), { backdrop: 'b.webp' });
     expect(problem).toContain('at most 400 KB (409,600 bytes)');
     expect(coverArtProblems(project({ 'b.webp': webpBytes(1500, 500, 'VP8X', 400 * 1024) }), { backdrop: 'b.webp' })).toEqual([]);
+  });
+
+  it('refuses a declared path that is a folder, rather than crashing on it (review F1)', () => {
+    const dir = project({ 'art/logo.png': pngBytes(1500, 1500, 'rgba') });
+    const [problem] = coverArtProblems(dir, { logo: 'art' });
+    expect(problem).toContain('is a folder');
   });
 
   it('refuses a path the bundle cannot carry', () => {
