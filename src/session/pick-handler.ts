@@ -279,20 +279,26 @@ export class PickHandler<G extends Game = Game> {
    * state push carries names only what the seat's board shows.
    */
   answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
-    const game = this.#runner.game;
-    const seen = (id: number) => game.getElementById(id)?.isVisibleTo(seat) === true;
     for (const action of Object.values(metadata ?? {})) {
       const first = action.selections[0];
       if (first?.type !== 'element' && first?.type !== 'elements') continue;
-      let answer: PickChoicesResponse;
-      try {
-        answer = this.getPickChoices(action.name, first.name, seat);
-      } catch {
-        // Unanswered rather than a failed state push: resolveChoices reports the error when the seat opens the action.
-        continue;
-      }
-      if (answer.success && answer.validElements?.every((element) => seen(element.id))) first.validElements = answer.validElements;
+      const elements = this.#openingAnswer(action.name, first.name, seat);
+      if (elements) first.validElements = elements;
     }
+  }
+
+  /** An opening pick's candidates when the seat sees every one, else `undefined`. */
+  #openingAnswer(actionName: string, pickName: string, seat: number): ValidElement[] | undefined {
+    let answer: PickChoicesResponse;
+    try {
+      answer = this.getPickChoices(actionName, pickName, seat);
+    } catch {
+      // Unanswered rather than a failed state push: resolveChoices reports the error when the seat opens the action.
+      return undefined;
+    }
+    const game = this.#runner.game;
+    const seen = (id: number) => game.getElementById(id)?.isVisibleTo(seat) === true;
+    return answer.success && answer.validElements?.every((element) => seen(element.id)) ? answer.validElements : undefined;
   }
 
   /**
