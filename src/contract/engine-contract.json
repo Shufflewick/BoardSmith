@@ -2814,7 +2814,7 @@
       "surfaceHash": "2f62346bc29aac59",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A seat is pushed its whole view once, then a patch against the view it was last pushed: SnapshotSessionAdapters.push hands each seat { seat, view } or { seat, patch } (SeatPush), every view handed to record and push carries rev, a digest of its content, and a ViewPatch names the rev it was made against as its base. A page applies it with applyViewPatch from boardsmith/client, which answers undefined when the page does not hold that view, and then serves the page its view of record. StatePushGate.toPush returns a PatchedFrame after a recipient's first frame. GameShell keeps each unchanged part of a new state as the object it holds. PlayerGameState.messagesFrom and mergeMessageLog are gone: the patch carries only new log lines (#1616)."
+      "summary": "A seat is pushed its whole view once, then a patch against the view it was last pushed: SnapshotSessionAdapters.push hands each seat { seat, view } or { seat, patch } (SeatPush), every view handed to record and push carries rev, a digest of its content but its animation events (which every patch states whole), and a ViewPatch names the rev it was made against as its base. A page applies it with applyViewPatch from boardsmith/client, which answers undefined when the page does not hold that view, and then serves the page its view of record. StatePushGate.toPush returns a PatchedFrame after a recipient's first frame. GameShell keeps each unchanged part of a new state as the object it holds. PlayerGameState.messagesFrom and mergeMessageLog are gone: the patch carries only new log lines (#1616)."
     }
   ]
 }
