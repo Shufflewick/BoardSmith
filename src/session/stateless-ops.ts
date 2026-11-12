@@ -12,7 +12,7 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
-import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError, toPublicFlowState } from '../engine/index.js';
 import { withDevDetail } from '../engine/action/rules-error.js';
 import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../engine/index.js';
@@ -43,7 +43,6 @@ import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
   offerFollowUp,
   buildPlayerState,
-  buildViews,
   buildSpectatorView,
   buildActionTraces,
   computeElementDiff,
@@ -663,6 +662,21 @@ type BotFlowState = {
     availableActions: string[];
   }>;
 };
+
+/**
+ * Each seat's published view, indexed by seat - 1: its cut of the flow state and
+ * its state, with each action's opening element pick answered where the seat
+ * sees every candidate, so opening it costs no round trip (#1615).
+ */
+export function buildViews(runner: GameRunner, playerCount: number): unknown[] {
+  const flowState = runner.getFlowState();
+  const picks = new PickHandler(runner);
+  return Array.from({ length: playerCount }, (_, i) => {
+    const state = buildPlayerState(runner, [], i + 1, { includeActionMetadata: true });
+    picks.answerOpeningPicks(i + 1, state.actionMetadata);
+    return { flowState: toPublicFlowState(flowState, i + 1), state };
+  });
+}
 
 function stateEnvelope(runner: GameRunner, playerCount: number): StateEnvelope {
   // getSnapshot() records the op's checkpoint, so it runs before any view is

@@ -112,8 +112,28 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     return { gameInstanceId: published.gameInstanceId, restoreEpoch: published.restoreEpoch };
   });
 
+  // An opening pick the seat's state answers costs no round trip (#1615), as a world's offer's does,
+  // unless the seat has moved the game since that state: its next one has not landed yet.
+  let sentFrom: TableSeatState | null | undefined;
+  const moving = <A extends unknown[], R>(send: (...args: A) => Promise<R>) => (...args: A) => {
+    sentFrom = seatState.value;
+    return send(...args);
+  };
+  const { fetchPickChoices: ask, sendAction, pickStep, cancelPendingAction } = transport;
+  const fetchPickChoices: UseActionControllerOptions['fetchPickChoices'] = ask && (async (actionName, selectionName, player, currentArgs) => {
+    const first = actionMetadata.value[actionName]?.selections[0];
+    if (first?.name !== selectionName || !first.validElements || Object.keys(currentArgs).length > 0 || seatState.value === sentFrom) {
+      return ask(actionName, selectionName, player, currentArgs);
+    }
+    return { success: true, validElements: first.validElements, multiSelect: first.multiSelect };
+  });
+
   const controller = useActionController({
     ...transport,
+    fetchPickChoices,
+    sendAction: moving(sendAction),
+    pickStep: pickStep && moving(pickStep),
+    cancelPendingAction: cancelPendingAction && moving(cancelPendingAction),
     actionMetadata,
     heldFollowUp,
     disabledActions,

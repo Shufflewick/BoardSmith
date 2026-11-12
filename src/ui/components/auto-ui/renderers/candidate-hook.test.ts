@@ -58,12 +58,16 @@ const GAME_VIEW = {
   ],
 };
 
-// `tend` chooses a NEIGHBOURING holding by element (#169), and its candidates
-// arrive from the server, not from the action metadata.
+// `tend` chooses a NEIGHBOURING holding by element (#169). Its candidates ride
+// on the seat's metadata (#1615), and the open pick asks for them again.
+const HOLDINGS = [
+  { id: 11, display: 'Holding 1' },
+  { id: 12, display: 'Holding 2' },
+];
 const tendAction: EnrichedActionMetadata = {
   name: 'tend',
   prompt: 'Tend',
-  selections: [{ name: 'neighbour', type: 'element', prompt: 'Choose a holding' }],
+  selections: [{ name: 'neighbour', type: 'element', prompt: 'Choose a holding', validElements: HOLDINGS }],
 };
 
 // A no-selection action keeps auto-start out of the way.
@@ -82,15 +86,7 @@ interface Harness {
 /** Mount the real panel and the real AutoUI board over one bridge, as a shell does. */
 function mountHarness(): Harness {
   const sendAction = vi.fn().mockResolvedValue({ success: true });
-  const fetchPickChoices = vi.fn(() =>
-    Promise.resolve({
-      success: true,
-      validElements: [
-        { id: 11, display: 'Holding 1' },
-        { id: 12, display: 'Holding 2' },
-      ],
-    }),
-  );
+  const fetchPickChoices = vi.fn(() => Promise.resolve({ success: true, validElements: HOLDINGS }));
 
   let board!: BoardInteraction;
   const isMyTurn = ref(true);

@@ -1029,15 +1029,6 @@ export function debuggingOffMessage(requestName: string): string {
     'Debug tools run only in a session whose host turns debugging on, such as `boardsmith dev`.';
 }
 
-/** Each seat's published view, indexed by seat - 1: its cut of the flow state and its state. */
-export function buildViews(runner: GameRunner, playerCount: number): unknown[] {
-  const flowState = runner.getFlowState();
-  return Array.from({ length: playerCount }, (_, i) => ({
-    flowState: toPublicFlowState(flowState, i + 1),
-    state: buildPlayerState(runner, [], i + 1, { includeActionMetadata: true }),
-  }));
-}
-
 // Public observer view. Position 0 is the spectator sentinel: no player has
 // seat 0, so only mode:'all' elements are visible — mode:'owner'/'hidden'
 // element contents are omitted. includeActionMetadata:false ensures

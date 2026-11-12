@@ -1619,13 +1619,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   // === Start candidates (#1192) ===
-  // The server's action metadata never lists an element pick's candidates, so
-  // with several actions on offer and none open nothing on the board could start
-  // one. While no action is open, each available, enabled action that opens with
-  // an element pick has that pick's candidates fetched with the same request an
-  // open pick makes, keyed in availableActions order, so a board click and a
-  // drag find the same action.
-  const fetchedStartCandidates = ref<ReadonlyMap<string, StartCandidates>>(new Map());
+  // With several actions on offer and none open, a board click or drag starts
+  // the first action, in availableActions order, whose opening element pick
+  // offers the element. Read off the metadata, which carries an opening pick's
+  // candidates when the seat sees them all (#1615); only a pick it leaves out,
+  // one naming a card the seat cannot see, is asked for, once per state.
+  const fetchedStartCandidates = ref<ReadonlyMap<string, EnrichedValidElement[]>>(new Map());
   let startCandidatesRequest = 0;
 
   /** True while a board click or drag may start an action. */
@@ -1633,12 +1632,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return !!isMyTurn.value && !currentAction.value && !isExecuting.value && !pendingFollowUp.value && !isViewingHistoryValue();
   }
 
-  /** Each available, enabled action that opens with an element pick, and that pick's name. */
-  function elementFirstPicks(): { action: string; pick: string }[] {
+  /** Each available, enabled action that opens with an element pick, and that pick. */
+  function elementFirstPicks(): { action: string; pick: EnrichedPickMetadata }[] {
     return (availableActions.value ?? []).flatMap((action) => {
       if (disabledActions?.value?.[action]) return [];
       const pick = getActionMetadata(action)?.selections[0];
-      return pick?.type === 'element' ? [{ action, pick: pick.name }] : [];
+      return pick?.type === 'element' ? [{ action, pick }] : [];
     });
   }
 
@@ -1648,12 +1647,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (fetchedStartCandidates.value.size > 0) fetchedStartCandidates.value = new Map();
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn || !mayStartFromBoard()) return;
-    const firstPicks = elementFirstPicks();
+    const unanswered = elementFirstPicks().filter(({ pick }) => !pick.validElements);
     const player = playerSeat?.value ?? 0;
-    const answers = await Promise.all(firstPicks.map(async ({ action, pick }) => {
+    const answers = await Promise.all(unanswered.map(async ({ action, pick }) => {
       try {
-        const result = await fetchFn(action, pick, player, {});
-        if (result.success) return [action, { pick, elements: result.validElements ?? [] }] as const;
+        const result = await fetchFn(action, pick.name, player, {});
+        if (result.success) return [action, result.validElements ?? []] as const;
         console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, result.error);
       } catch (err) {
         console.error(`[BoardSmith] Could not fetch what '${action}' can start with:`, err);
@@ -1674,9 +1673,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     { immediate: true },
   );
 
-  const startCandidates = computed((): ReadonlyMap<string, StartCandidates> => new Map(
-    [...fetchedStartCandidates.value].map(([action, { pick, elements }]) => [action, { pick, elements: enrichElementsList(elements) }]),
-  ));
+  const startCandidates = computed((): ReadonlyMap<string, StartCandidates> => {
+    if (!mayStartFromBoard()) return new Map();
+    return new Map(elementFirstPicks().flatMap(({ action, pick }) => {
+      const elements = pick.validElements ?? fetchedStartCandidates.value.get(action);
+      return elements ? [[action, { pick: pick.name, elements: enrichElementsList(elements) }] as const] : [];
+    }));
+  });
 
   // === Auto-fill Watch ===
   // When a pick changes, fetch choices if needed and auto-fill if only one choice

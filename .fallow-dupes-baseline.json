@@ -5,7 +5,7 @@
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:99-113|src/ui/composables/useHexGrid.ts:300-315",
     "src/ui/components/auto-ui/renderers/HandRenderer.vue:432-438|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:255-261",
     "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:215-233",
-    "src/session/stateless-ops.ts:1117-1133|src/session/stateless-ops.ts:1206-1220",
+    "src/session/stateless-ops.ts:1131-1147|src/session/stateless-ops.ts:1220-1234",
     "src/ui/composables/useFLIP.ts:273-284|src/ui/composables/useFLIP.ts:320-334",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
