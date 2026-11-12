@@ -14,6 +14,7 @@ import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolve
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { listFiles } from '../lib/source-files.js';
 import { coverArtPaths } from '../lib/cover-art.js';
+import { browserFloorCheck, floorBuildOptions, floorEsbuildOptions } from '../lib/browser-floor.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { mergePlayerOptions } from '../lib/player-options.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
@@ -543,11 +544,14 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
       root: cwd,
       base: './',
       build: {
+        ...floorBuildOptions,
         outDir: join(outDir, 'ui'),
         copyPublicDir: false,
         emptyOutDir: true,
         ...(ui.input === undefined ? {} : { rollupOptions: { input: ui.input } }),
       },
+      esbuild: floorEsbuildOptions,
+      plugins: [browserFloorCheck()],
       logLevel: 'warn',
     });
     spinner.succeed(`UI built${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}`);
