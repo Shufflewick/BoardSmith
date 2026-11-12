@@ -20,7 +20,7 @@ import { applyTheme } from '../../ui/theme.js';
 import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 import { DEV_HOST_WS_PATH } from './socket-path.js';
-import { mergeViewLog } from '../../client/message-log.js';
+import { applyViewPatch, type ViewPatch } from '../../session/view-patch.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
 import { handleEscape } from '../../ui/utils/escape.js';
 import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
@@ -320,11 +320,17 @@ function onHostMessage(msg: Record<string, unknown>): void {
       mySeat.value = msg.seat as number;
       postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });
       break;
-    case 'game_state':
+    case 'game_state': {
+      // After the first frame the host pushes a patch against the view this page holds (#1616); the game is handed the whole view.
+      const view = msg.patch === undefined ? msg.view : applyViewPatch(lastGameState?.view, msg.patch as ViewPatch);
+      if (view === undefined && msg.patch !== undefined) {
+        // This page does not hold the view the patch was made against: ask for the whole one.
+        wsSend({ type: 'getState' });
+        break;
+      }
       lastGameState = {
         type: 'game_state',
-        // The host pushes only the log lines this page was not sent (#1614); the game is handed the whole log.
-        view: mergeViewLog(lastGameState?.view, msg.view),
+        view,
         isComplete: msg.isComplete,
         winners: msg.winners,
         // isDraw is the D10 draw-vs-unknown signal — it MUST be relayed to the
@@ -351,6 +357,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
         toast.info('Game restarted');
       }
       break;
+    }
     case 'server_response':
       postToGame({ type: 'server_response', requestId: msg.requestId, result: msg.result });
       break;

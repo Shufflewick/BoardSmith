@@ -21,6 +21,7 @@ import { secretDeploymentDefinition } from '../../session/testing/fixtures/secre
 import { animationTimeline, createAnimationEvents } from '../../ui/composables/useAnimationEvents.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { applyViewPatch } from '../../session/view-patch.js';
 
 const clients = createDevHostClientMemory();
 let scope: EffectScope;
@@ -47,7 +48,9 @@ describe('a page that changes seat plays the new seat its animations (#489)', ()
         clients.remember(clientId, msg);
         if (clientId !== 'A') return;
         if (msg.type === 'init') seat = msg.seat;
-        if (msg.type === 'game_state') shown.value = msg.view as { state: PlayerGameState };
+        if (msg.type === 'game_state') {
+          shown.value = ('patch' in msg ? applyViewPatch(shown.value, msg.patch) : msg.view) as { state: PlayerGameState };
+        }
       },
     });
     const queue = scope.run(() =>

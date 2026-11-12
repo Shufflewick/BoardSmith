@@ -379,12 +379,6 @@ export interface PlayerGameState {
    */
   messageOffset?: number;
   /**
-   * Present only in a pushed state (#1614): `messages` then holds the lines
-   * from this line number on, and the page keeps the lines it holds before it.
-   * `mergeMessageLog` (`boardsmith/client`) rebuilds the whole log.
-   */
-  messagesFrom?: number;
-  /**
    * How many checkpoint RESTORES (undo / rewind / host-driven restore) this
    * game's timeline has undergone (`runner.restoreEpoch`).
    *

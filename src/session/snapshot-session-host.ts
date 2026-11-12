@@ -20,12 +20,20 @@ import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import { StatePushGate } from './state-push-gate.js';
+import { stampRev, type ViewPatch } from './view-patch.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { pendingActionForSeat } from './utils.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
 // The adapter's half of #487: every host that pushes these views keeps one.
-export { StatePushGate, type StatePushGateOptions } from './state-push-gate.js';
+export { StatePushGate, type StatePushGateOptions, type PatchedFrame } from './state-push-gate.js';
+export type { ViewPatch, ViewPatchOp, ViewPath } from './view-patch.js';
+
+/**
+ * One seat's push (#1616): its whole `view` the first time the host pushes
+ * that seat, and after that a `patch` against the view it last pushed it.
+ */
+export type SeatPush = { seat: number; view: unknown } | { seat: number; patch: ViewPatch };
 
 /** Bot moves a run makes before it yields to the event loop, so a long all-bot game never starves the host's I/O and timers (#815). */
 const BOT_MOVES_PER_STRETCH = 500;
@@ -467,13 +475,14 @@ export interface SnapshotSessionAdapters {
    * did not change is not in the list, and is not told that another seat
    * acted.
    *
-   * A pushed view's log carries only the lines its seat was not pushed
-   * (#1614), so a page merges it into the view it holds (`mergeMessageLog` in
-   * `boardsmith/client`). That holds only for a page that got every push for
-   * its seat since it was served from `record`; serve any other page from
-   * `record` first.
+   * After a seat's first push, it is pushed a `patch` against the view it
+   * was last pushed rather than its whole view (#1616). Every view the host
+   * hands out, here and to `record`, carries `rev`, and a patch names the `rev`
+   * it was made against, so a page applies it with `applyViewPatch`
+   * (`boardsmith/client`), which answers `undefined` when the page does not
+   * hold that view: serve that page the seat's view of record from `record`.
    */
-  push: (changed: ReadonlyArray<{ seat: number; view: unknown }>, meta: PublishMeta) => void;
+  push: (changed: ReadonlyArray<SeatPush>, meta: PublishMeta) => void;
   /**
    * When true, demoStart is rejected fail-loud and state.teachingDisabled is broadcast
    * as true to every seat. Set once at session creation; never toggled mid-session.
@@ -668,7 +677,8 @@ export class SnapshotSessionHost {
   /**
    * What each seat (0 = spectators) was last pushed (#487). A view identical
    * to it is not pushed: in a simultaneous step with secret moves, that push
-   * would tell the seat another seat acted.
+   * would tell the seat another seat acted. A view that differs is pushed as a
+   * patch against it (#1616).
    */
   private readonly pushGate = new StatePushGate<number, { view: unknown }>();
   /** True while {@link publish} runs; a publish asked for meanwhile waits in {@link deferredPublish}. */
@@ -956,21 +966,21 @@ export class SnapshotSessionHost {
     };
     const views = this.mergedViews();
     this.adapters.record(views, meta);
-    const changed: Array<{ seat: number; view: unknown }> = [];
+    const changed: SeatPush[] = [];
     views.players.forEach((view, i) => {
       const push = this.pushGate.toPush(i + 1, { view });
-      if (push) changed.push({ seat: i + 1, view: push.view });
+      if (push) changed.push({ seat: i + 1, ...push });
     });
     const spectator = views.spectator === undefined ? undefined : this.pushGate.toPush(0, { view: views.spectator });
-    if (spectator) changed.unshift({ seat: 0, view: spectator.view });
+    if (spectator) changed.unshift({ seat: 0, ...spectator });
     if (changed.length > 0) this.adapters.push(changed, meta);
   }
 
-  /** Every view of record with the host's transient state merged in. */
+  /** Every view of record with the host's transient state merged in, each with its `rev` (#1616). */
   private mergedViews(): PublishedViews {
     return {
-      players: this.mergeTransientState(this.lastPlayerViews),
-      spectator: this.lastSpectatorView === undefined ? undefined : this.mergeView(this.lastSpectatorView, 0),
+      players: this.mergeTransientState(this.lastPlayerViews).map(stampRev),
+      spectator: this.lastSpectatorView === undefined ? undefined : stampRev(this.mergeView(this.lastSpectatorView, 0)),
     };
   }
 

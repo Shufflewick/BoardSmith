@@ -10,7 +10,7 @@ import {
 import { runnerFromSnapshot } from '../session/runner-from-snapshot.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import type { Game, GameClass } from '../engine/index.js';
-import type { BotSeat, SeatOpType, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
+import type { BotSeat, SeatOpType, SeatPush, SnapshotSessionAdapters } from '../session/snapshot-session-host.js';
 import { fillGameOptionDefaults, type GameOptionSelection } from '../session/game-option-selection.js';
 import { projectColorOptions, projectGameOptions } from '#testing/project-game-options';
 import type { PlayerGameState } from '../session/types.js';
@@ -128,7 +128,7 @@ export function createHeadlessSession<G extends Game = Game>(
   };
   const broadcasts: unknown[] = [];
   const metas: BroadcastMeta[] = [];
-  const pushes: Array<ReadonlyArray<{ seat: number; view: unknown }>> = [];
+  const pushes: Array<ReadonlyArray<SeatPush>> = [];
   const spectatorViews: unknown[] = [];
   // The roster this harness owns. The positional `botSeats` argument seeds it,
   // and `makeSeatBot` below changes it mid-game, telling the host each time
@@ -176,7 +176,8 @@ export function createHeadlessSession<G extends Game = Game>(
     metas,
     /**
      * What the host pushed, one entry per push: only the seats (0 = the
-     * spectators) whose view changed (#487). {@link broadcasts} is the state
+     * spectators) whose view changed (#487), each its whole view or a patch
+     * against the one it was last pushed (#1616). {@link broadcasts} is the state
      * of record after every change, pushed or not.
      */
     pushes,

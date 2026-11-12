@@ -1,3 +1,5 @@
+import { diffView, digest, revOf, type ViewPatch } from './view-patch.js';
+
 /**
  * Never push a recipient a state identical to the last one it was sent (#487).
  *
@@ -27,38 +29,35 @@
  * else's action is not news to a client that has played those events, and only
  * an event with an id above the highest one the recipient was sent is.
  *
- * The frame to send is the one `toPush` returns, not the one it was handed:
- * its game log carries only the lines the recipient was not sent (#1614).
- * `messages` then starts at line `messagesFrom`, the first line that differs
- * from what the recipient holds, and the page keeps its lines before that one
- * (`mergeMessageLog` in `boardsmith/client`). A frame's player state is its
- * `view.state`.
+ * The frame to send is the one `toPush` returns, not the one it was handed
+ * (#1616). The first frame a recipient is pushed carries its whole `view`;
+ * every later one carries a `patch` instead (`ViewPatch` in `view-patch.ts`),
+ * made against the view it was last sent, whose `rev` the patch names as its
+ * `base`. A view without a `rev` is always sent whole. A frame's player state is
+ * its `view.state`.
  *
- * Imports nothing, so it runs wherever `SnapshotSessionHost` does.
+ * Imports only `view-patch.ts`, which imports nothing, so it runs wherever
+ * `SnapshotSessionHost` does.
  */
 export interface StatePushGateOptions {
   /** Top-level frame fields stamped fresh on every push, such as a send time. */
   perPushFields?: readonly string[];
 }
 
-/** The log a recipient was sent: the line number of its first line, and a hash of each line. */
-interface SentLog {
-  from: number;
-  lines: number[];
-}
-
 interface Sent {
   /**
-   * A 128-bit digest of the frame as compared (everything but per-push fields
-   * and animation events). A digest rather than the text, so a gate holds a few
-   * bytes per recipient rather than a copy of every frame it sent.
+   * A 128-bit digest of the frame as compared (everything but per-push fields,
+   * animation events and the view's `rev`, which names the events too).
    */
   body: string;
   /** The highest animation event id in the frame. */
   lastEventId: number;
-  /** The whole log the frame's player state carries, when it has one. */
-  log: SentLog | undefined;
+  /** The view the frame carried, which the next push is a patch against. */
+  view: unknown;
 }
+
+/** A frame whose `view` was replaced by the patch that turns the recipient's last view into it. */
+export type PatchedFrame<F> = Omit<F, 'view'> & { patch: ViewPatch };
 
 type Holder = Record<string, unknown>;
 
@@ -76,49 +75,7 @@ function highestEventId(events: unknown): number {
   return highest;
 }
 
-/**
- * cyrb128's four independently mixed 32-bit lanes over `text`.
- * Not cryptographic, which it need not be: no one chooses the frames compared
- * here to collide, and with the text's length appended, two different frames
- * of one recipient sharing a digest by accident is vanishingly unlikely.
- * Synchronous and import-free, because the gate runs inside a Worker as well
- * as in Node.
- */
-function lanes(text: string): [number, number, number, number] {
-  let h1 = 1779033703;
-  let h2 = 3144134277;
-  let h3 = 1013904242;
-  let h4 = 2773480762;
-  for (let i = 0; i < text.length; i++) {
-    const k = text.charCodeAt(i);
-    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
-    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
-    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
-    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
-  }
-  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
-  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
-  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
-  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
-  h1 ^= h2 ^ h3 ^ h4;
-  h2 ^= h1;
-  h3 ^= h1;
-  h4 ^= h1;
-  return [h1, h2, h3, h4];
-}
-
-/** A 128-bit digest of `text`, its length appended. */
-function digest(text: string): string {
-  return lanes(text).map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('') + `:${text.length}`;
-}
-
-/** A 53-bit hash of one log line: a number, so a recipient's log costs 8 bytes a line to remember. */
-function lineHash(line: unknown): number {
-  const [h1, h2] = lanes(JSON.stringify(line));
-  return (h2 & 0x1fffff) * 0x100000000 + (h1 >>> 0);
-}
-
-export class StatePushGate<R, F extends object = object> {
+export class StatePushGate<R, F extends { view: unknown } = { view: unknown }> {
   readonly #perPush: ReadonlySet<string>;
   readonly #sent = new Map<R, Sent>();
 
@@ -127,16 +84,20 @@ export class StatePushGate<R, F extends object = object> {
   }
 
   /**
-   * The frame to send `recipient`, its log cut to the lines it was not sent,
-   * or `undefined` when `frame` tells it nothing it was not already sent. A
-   * frame returned is recorded as sent, so ask only when you will send it.
+   * The frame to send `recipient`, as a patch against the view it was last
+   * sent when it was sent one with a `rev`, or `undefined` when `frame` tells
+   * it nothing it was not already sent. A frame returned is recorded as sent,
+   * so ask only when you will send it.
    */
-  toPush(recipient: R, frame: F): F | undefined {
+  toPush(recipient: R, frame: F): F | PatchedFrame<F> | undefined {
     const next = this.#measure(frame);
     const last = this.#sent.get(recipient);
     if (last !== undefined && last.body === next.body && next.lastEventId <= last.lastEventId) return undefined;
     this.#sent.set(recipient, next);
-    return last?.log && next.log ? withLogAfter(frame, last.log, next.log) : frame;
+    const base = revOf(last?.view);
+    if (base === undefined || revOf(frame.view) === undefined) return frame;
+    const { view, ...rest } = frame;
+    return { ...rest, patch: { base, ops: diffView(last!.view, view) } };
   }
 
   /** Record `frame` as sent to `recipient` without asking: a connect, a reconnect, an answer to a request. */
@@ -167,41 +128,16 @@ export class StatePushGate<R, F extends object = object> {
     const perPush = this.#perPush;
     const text = JSON.stringify(frame, function (this: unknown, key: string, value: unknown) {
       if (this === frame && perPush.has(key)) return undefined;
+      if (this === frame.view && key === 'rev') return undefined;
       if (this === playerState && (key === 'animationEvents' || key === 'lastAnimationEventId')) return undefined;
       if (this === gameView && key === 'animationEvents') return undefined;
       return value;
     });
-    const messages = playerState?.messages;
-    const log = playerState === undefined
-      ? undefined
-      : { from: lineNumber(playerState.messageOffset), lines: Array.isArray(messages) ? messages.map(lineHash) : [] };
-    return { body: digest(text), lastEventId, log };
+    return { body: digest(text), lastEventId, view: frame.view };
   }
 }
 
-function playerStateOf(frame: object): Holder | undefined {
-  const view = (frame as Holder).view;
+function playerStateOf(frame: { view: unknown }): Holder | undefined {
+  const view = frame.view;
   return isHolder(view) && isHolder(view.state) ? view.state : undefined;
-}
-
-function lineNumber(value: unknown): number {
-  return typeof value === 'number' ? value : 0;
-}
-
-/** `frame` with its log cut to start at the first line `now` does not share with `held`. */
-function withLogAfter<F extends object>(frame: F, held: SentLog, now: SentLog): F {
-  let line = now.from;
-  // A log starting before the lines the recipient holds is sent whole.
-  if (now.from >= held.from) {
-    const end = Math.min(held.from + held.lines.length, now.from + now.lines.length);
-    while (line < end && held.lines[line - held.from] === now.lines[line - now.from]) line++;
-  }
-  if (line === now.from) return frame;
-  const view = (frame as Holder).view as Holder;
-  const { messages, ...state } = view.state as Holder;
-  const rest = (messages as unknown[] | undefined)?.slice(line - now.from) ?? [];
-  return {
-    ...frame,
-    view: { ...view, state: { ...state, ...(rest.length > 0 && { messages: rest }), messagesFrom: line } },
-  };
 }

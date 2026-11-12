@@ -19,12 +19,15 @@
  */
 
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
+import { applyViewPatch, type ViewPatch } from '../../session/view-patch.js';
 
 interface DevHostClientMemory {
   /** Feed every outbound host message through this; only `game_state` is kept. */
-  remember(clientId: string, msg: { type: string; view?: unknown }): void;
+  remember(clientId: string, msg: { type: string; view?: unknown; patch?: ViewPatch }): void;
   /** The boundary key `clientId` would echo on its next submission. */
   key(clientId: string): string;
+  /** The whole view `clientId`'s page shows. */
+  view(clientId: string): unknown;
   /** Forget every client's rendered state (call from `beforeEach`). */
   reset(): void;
 }
@@ -33,10 +36,15 @@ export function createDevHostClientMemory(): DevHostClientMemory {
   const lastRendered = new Map<string, unknown>();
   return {
     remember(clientId, msg) {
-      if (msg.type === 'game_state') lastRendered.set(clientId, msg.view);
+      if (msg.type !== 'game_state') return;
+      // After the first frame the host sends a patch against the view the page holds (#1616).
+      lastRendered.set(clientId, msg.patch === undefined ? msg.view : applyViewPatch(lastRendered.get(clientId), msg.patch));
     },
     key(clientId) {
       return boundaryKeyOf(lastRendered.get(clientId));
+    },
+    view(clientId) {
+      return lastRendered.get(clientId);
     },
     reset() {
       lastRendered.clear();

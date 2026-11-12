@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike, type GamePreset } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { pageFrames } from './page-frames.test-helper.js';
 
 /**
  * D16/DEVHOST-04: a game's declared color palette must reach each seat's
@@ -107,9 +108,7 @@ describe('MultiplayerHost — declared color palette reaches per-seat color (D16
     // broadcast whose view carries the actual per-seat player.color — this is
     // exactly what GameShell renders. Pre-fix the engine ignored the palette
     // (constructor reads only options.colors) and assigned its red/blue default.
-    const gameStates = sent
-      .map((s) => s.msg)
-      .filter((m): m is Extract<HostOutbound, { type: 'game_state' }> => m.type === 'game_state');
+    const gameStates = pageFrames(sent, sent.find((s) => s.msg.type === 'game_state')!.clientId);
     expect(gameStates.length).toBeGreaterThan(0);
 
     const view = gameStates[gameStates.length - 1].view as {

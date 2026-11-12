@@ -11,7 +11,7 @@
  */
 
 import { resolveWsCtor } from './ws-ctor.js';
-import { mergeViewLog } from './message-log.js';
+import { applyViewPatch, type ViewPatch } from '../session/view-patch.js';
 
 /** Default timeout for requestId-correlated requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -42,7 +42,7 @@ export interface DevHostLobbyReply {
   gameOptions: Record<string, unknown>;
 }
 
-/** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast with its whole log. */
+/** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast, whole. */
 export interface DevHostStateReply {
   view: unknown;
   isComplete: boolean;
@@ -167,7 +167,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     { once: true },
   );
 
-  /** The view of the last `game_state` this connection got, whole log and all. */
+  /** The whole view of the last `game_state` this connection got. */
   let lastView: unknown;
 
   socket.addEventListener('message', (event: MessageEvent) => {
@@ -188,7 +188,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       );
       return;
     }
-    if (msg.type === 'game_state' && !mergeLog(msg)) return;
+    if (msg.type === 'game_state' && !wholeView(msg)) return;
     settlePending(msg);
     // #741: a throwing listener must not stop the other listeners or escape into the socket's event loop.
     for (const listener of listeners) {
@@ -203,13 +203,20 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     }
   });
 
-  /** Give a `game_state` its whole log, as the host pushes only the lines this connection was not sent (#1614); false drops it. */
-  function mergeLog(msg: DevHostInboundMessage): boolean {
-    try {
-      msg.view = mergeViewLog(lastView, msg.view);
-    } catch (error) {
-      console.error(`createDevHostClient: dropping a game_state frame: ${error instanceof Error ? error.message : String(error)}`);
-      return false;
+  /**
+   * Give a `game_state` its whole view, as the host pushes a patch against the
+   * one this connection holds (#1616). False drops it: the connection does not
+   * hold the patch's base, so it asks the host for the whole view instead.
+   */
+  function wholeView(msg: DevHostInboundMessage): boolean {
+    if (msg.patch !== undefined) {
+      const view = applyViewPatch(lastView, msg.patch as ViewPatch);
+      if (view === undefined) {
+        send({ type: 'getState' });
+        return false;
+      }
+      delete msg.patch;
+      msg.view = view;
     }
     lastView = msg.view;
     return true;

@@ -119,7 +119,7 @@ function makeAltHost(
 /** The follower `A` is acting as seat 2, which is due, and sees that seat's own view. */
 function expectFollowingSeatTwo(lastOfType: ReturnType<typeof makeAltHost>['lastOfType']): void {
   expect(lastOfType('A', 'init').seat).toBe(2);
-  expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+  expect((clients.view('A') as any).state.isMyTurn).toBe(true);
 }
 
 function makeHost(opts: { designatedBotSeats?: number[]; debug?: boolean; reconnectTimer?: ReconnectTimer } = {}) {
@@ -213,7 +213,7 @@ describe('MultiplayerHost (always-live)', () => {
     await host.settled();
     expect(lastOfType('A', 'lobby').seats.map((s: any) => s.bot)).toEqual([true, false]);
     // Seat 1's bot passed, so seat 2 (A) is due now.
-    expect(lastOfType('A', 'game_state').view.state.isMyTurn).toBe(true);
+    expect((clients.view('A') as any).state.isMyTurn).toBe(true);
   });
 
   it('#1304: every lobby a seat-moving join sends already shows the seat left as played by the bot, and none repeats', async () => {
@@ -246,7 +246,7 @@ describe('MultiplayerHost (always-live)', () => {
     await host.handleMessage('A', { type: 'join', seat: 1 });
     await host.settled();
     expect(lastOfType('A', 'lobby').seats.map((s: any) => s.bot)).toEqual([false, true]);
-    expect(lastOfType('A', 'game_state').view.state.isMyTurn).toBe(true);
+    expect((clients.view('A') as any).state.isMyTurn).toBe(true);
   });
 
   it("#887: the lobby is sent again when an away seat's grace runs out and a bot covers it", async () => {

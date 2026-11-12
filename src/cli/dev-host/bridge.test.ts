@@ -64,7 +64,7 @@ function makeSession() {
     playerCount: 2,
     executeOp: (snap, pend, op) =>
       executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
-    postGameState: (seat) => posted.push({ kind: 'game_state', seat }),
+    postGameState: ({ seat }) => posted.push({ kind: 'game_state', seat }),
     postServerResponse: (seat) => posted.push({ kind: 'server_response', seat }),
   });
   return { session, posted };
@@ -324,13 +324,15 @@ describe('dev host bridge', () => {
         teachingDisabled: true,
         executeOp: (snap, pend, op) =>
           executeOp(simpleGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op),
-        postGameState: (_seat, view) => {
-          // Collect first postGameState call per broadcast cycle (both seats fire)
+        postGameState: (push) => {
+          // A seat's first push is its whole view (#1616); collect those, both seats' in one cycle.
+          if (!('view' in push)) return;
+          const view = push.view as { state: Record<string, unknown> };
           const last = stateViews[stateViews.length - 1];
           if (!last) {
-            stateViews.push([view as { state: Record<string, unknown> }]);
+            stateViews.push([view]);
           } else {
-            last.push(view as { state: Record<string, unknown> });
+            last.push(view);
           }
         },
         postServerResponse: (_seat, _reqId, result) => responses.push(result),
@@ -413,7 +415,7 @@ describe('dev host bridge', () => {
         playerCount: 2,
         executeOp: (snap, pend, op) =>
           executeOp(debugDataGameDef, op.type === 'start' ? gameOptions : { playerCount: 2 }, snap, pend, op, { debug: true, fullHistory: true }),
-        postGameState: (_seat, state) => pushed.push(state),
+        postGameState: (push) => pushed.push(push),
         postServerResponse: (seat, _requestId, result) => responses.push({ seat, result }),
       });
       await session.start();

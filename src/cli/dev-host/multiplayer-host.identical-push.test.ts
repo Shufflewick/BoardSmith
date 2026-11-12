@@ -15,6 +15,7 @@ import { secretDeploymentDefinition } from '../../session/testing/fixtures/secre
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { pageFrames } from './page-frames.test-helper.js';
 
 const clients = createDevHostClientMemory();
 beforeEach(() => clients.reset());
@@ -105,9 +106,7 @@ describe('boardsmith dev pushes no game_state identical to the last one a page w
     const { sent } = await secretTable();
     // B took seat 2 from the bot, so no seat is a bot's any more.
     const lastTo = (clientId: string) =>
-      sent.filter((e) => e.clientId === clientId && e.msg.type === 'game_state').at(-1)?.msg as
-        | { view: { state: { hasBotPlayers?: boolean } } }
-        | undefined;
+      pageFrames(sent, clientId).at(-1) as { view: { state: { hasBotPlayers?: boolean } } } | undefined;
     expect(lastTo('A')?.view.state.hasBotPlayers).toBeUndefined();
     expect(lastTo('B')?.view.state.hasBotPlayers).toBeUndefined();
   });

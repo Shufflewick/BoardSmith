@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { StatePushGate } from './state-push-gate.js';
+import { applyViewPatch, stampRev, type ViewPatch } from './view-patch.js';
 
 // #487: a recipient is never pushed a frame identical to the last one it was
 // sent. "Identical" is the frame as that recipient would receive it, except
@@ -7,7 +8,7 @@ import { StatePushGate } from './state-push-gate.js';
 // events it has already been sent.
 
 interface Frame {
-  view: { state: { board: string; messages?: Array<{ text: string }>; messageOffset?: number; messagesFrom?: number; animationEvents?: Array<{ id: number; type: string }>; lastAnimationEventId?: number; view?: { animationEvents?: Array<{ id: number }> } } };
+  view: { rev?: string; state: { board: string; animationEvents?: Array<{ id: number; type: string }>; lastAnimationEventId?: number; view?: { animationEvents?: Array<{ id: number }> } } };
   serverNow: number;
 }
 
@@ -96,70 +97,42 @@ describe('StatePushGate', () => {
   });
 });
 
-// #1614: a pushed frame carries only the log lines its recipient was not sent,
-// from `messagesFrom`; a frame sent in full outside the push path counts too.
-describe('StatePushGate cuts the log to what the recipient was not sent', () => {
-  const said = (board: string, texts: string[], messageOffset?: number): Frame => ({
-    view: { state: { board, messages: texts.map((text) => ({ text })), ...(messageOffset !== undefined && { messageOffset }) } },
-    serverNow: 1,
-  });
-  const logOf = (f: Frame | undefined) => {
-    const { messages, messageOffset, messagesFrom } = f!.view.state;
-    return { messages: messages?.map((m) => m.text), messageOffset, messagesFrom };
-  };
+// #1616: after the first frame, a recipient is pushed a patch against the
+// view it was last sent, never the whole view again.
+describe('StatePushGate pushes what changed', () => {
+  const stamped = (board: string, serverNow = 1): Frame => ({ view: stampRev({ state: { board } }), serverNow });
 
   it('pushes the first frame whole', () => {
-    expect(logOf(gate().toPush('a', said('x', ['a', 'b'])))).toEqual({ messages: ['a', 'b'] });
+    const first = stamped('x');
+    expect(gate().toPush('a', first)).toEqual(first);
   });
 
-  it('pushes only the new lines, from the line after those it was sent', () => {
+  it('pushes a patch against the view it last sent, which rebuilds the new view', () => {
     const g = gate();
-    g.toPush('a', said('x', ['a', 'b']));
-    expect(logOf(g.toPush('a', said('y', ['a', 'b', 'c'])))).toEqual({ messages: ['c'], messagesFrom: 2 });
-    expect(logOf(g.toPush('a', said('z', ['a', 'b', 'c'])))).toEqual({ messagesFrom: 3 });
-  });
-
-  it('still compares the whole log, so a frame with no new line and nothing else new is held back', () => {
-    const g = gate();
-    g.toPush('a', said('x', ['a']));
-    expect(g.toPush('a', said('x', ['a']))).toBeUndefined();
+    const first = stamped('x');
+    g.toPush('a', first);
+    const next = stamped('y', 2);
+    const push = g.toPush('a', next);
+    expect(push).toEqual({ serverNow: 2, patch: { base: first.view.rev, ops: expect.any(Array) } });
+    expect(applyViewPatch(first.view, (push as { patch: ViewPatch }).patch)).toEqual(next.view);
   });
 
   it('counts from a frame sent outside the push path', () => {
     const g = gate();
-    g.recordSent('a', said('x', ['a', 'b']));
-    expect(logOf(g.toPush('a', said('y', ['a', 'b', 'c'])))).toEqual({ messages: ['c'], messagesFrom: 2 });
+    const first = stamped('x');
+    g.recordSent('a', first);
+    expect(g.toPush('a', stamped('y'))).toMatchObject({ patch: { base: first.view.rev } });
   });
 
-  it('sends again from the first line an undo changed', () => {
+  it('pushes a view without a rev whole, since a page could not tell what a patch of it was made against', () => {
     const g = gate();
-    g.toPush('a', said('x', ['a', 'b', 'c']));
-    expect(logOf(g.toPush('a', said('y', ['a', 'd'])))).toEqual({ messages: ['d'], messagesFrom: 1 });
+    g.toPush('a', frame('x', 1));
+    expect(g.toPush('a', frame('y', 2))).toEqual(frame('y', 2));
   });
 
-  it('sends the whole log when its first line changed, as in a new game', () => {
+  it('holds back a view whose only change is its rev', () => {
     const g = gate();
-    g.toPush('a', said('x', ['a', 'b']));
-    expect(logOf(g.toPush('a', said('y', ['n'])))).toEqual({ messages: ['n'] });
-  });
-
-  it('counts by line number once the game prunes the log', () => {
-    const g = gate();
-    g.toPush('a', said('x', ['a', 'b', 'c']));
-    expect(logOf(g.toPush('a', said('y', ['c', 'd'], 2)))).toEqual({ messages: ['d'], messageOffset: 2, messagesFrom: 3 });
-  });
-
-  it('sends the whole log when it starts before the lines the recipient was sent', () => {
-    const g = gate();
-    g.toPush('a', said('x', ['b', 'c'], 1));
-    expect(logOf(g.toPush('a', said('y', ['a', 'b', 'c', 'd'])))).toEqual({ messages: ['a', 'b', 'c', 'd'] });
-  });
-
-  it('leaves the frame it was handed as it was', () => {
-    const g = gate();
-    g.toPush('a', said('x', ['a']));
-    const next = said('y', ['a', 'b']);
-    g.toPush('a', next);
-    expect(logOf(next)).toEqual({ messages: ['a', 'b'] });
+    g.toPush('a', stamped('x'));
+    expect(g.toPush('a', { ...stamped('x'), view: { ...stamped('x').view, rev: 'other' } })).toBeUndefined();
   });
 });

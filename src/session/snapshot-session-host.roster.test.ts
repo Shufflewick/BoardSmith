@@ -11,6 +11,7 @@
 import { describe, it, expect, expectTypeOf } from 'vitest';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
+import { applyViewPatch } from './view-patch.js';
 import {
   SnapshotSessionHost,
   type BotSeat,
@@ -27,7 +28,8 @@ const options = { playerCount: 2, seed: 'bs537' };
 type Published = { cause: PublishCause; views: unknown[]; spectator: unknown };
 
 /** Adapters that record every publish and push, with a bot that never moves. */
-function adapters(onRecord?: (meta: PublishMeta) => void) {
+/** What each seat's page shows once it has applied every push (#1616), starting from `shown`. */
+function adapters(onRecord?: (meta: PublishMeta) => void, shown = new Map<number, unknown>()) {
   const records: Published[] = [];
   const pushes: Array<{ cause: PublishCause; seats: number[]; views: unknown[] }> = [];
   const value: SnapshotSessionAdapters = {
@@ -38,10 +40,17 @@ function adapters(onRecord?: (meta: PublishMeta) => void) {
       records.push({ cause: meta.cause, views: views.players, spectator: views.spectator });
       onRecord?.(meta);
     },
-    push: (changed, meta) =>
-      pushes.push({ cause: meta.cause, seats: changed.map((c) => c.seat), views: changed.map((c) => c.view) }),
+    push: (changed, meta) => {
+      for (const c of changed) shown.set(c.seat, 'view' in c ? c.view : applyViewPatch(shown.get(c.seat), c.patch));
+      pushes.push({ cause: meta.cause, seats: changed.map((c) => c.seat), views: changed.map((c) => shown.get(c.seat)) });
+    },
   };
   return { value, records, pushes };
+}
+
+/** The pages of a host that published `views`: each shows its seat's view. */
+function shownFrom(views: Published): Map<number, unknown> {
+  return new Map<number, unknown>([[0, views.spectator], ...views.views.map((view, i): [number, unknown] => [i + 1, view])]);
 }
 
 async function startedTable(onRecord?: (meta: PublishMeta) => void) {
@@ -90,7 +99,7 @@ describe('the call order is not the platform\'s to remember (#537)', () => {
   it('a host restored after a seat passed to the bot while it slept pushes every page the change, with cause restore', async () => {
     const first = await startedTable();
     const last = first.records.at(-1)!;
-    const second = adapters();
+    const second = adapters(undefined, shownFrom(last));
     SnapshotSessionHost.restore(second.value, {
       ...first.host.durableState(),
       playerViews: last.views,
@@ -105,7 +114,7 @@ describe('the call order is not the platform\'s to remember (#537)', () => {
   it('a host restored with nothing changed pushes nothing', async () => {
     const first = await startedTable();
     const last = first.records.at(-1)!;
-    const second = adapters();
+    const second = adapters(undefined, shownFrom(last));
     const host = SnapshotSessionHost.restore(second.value, {
       ...first.host.durableState(),
       playerViews: last.views,

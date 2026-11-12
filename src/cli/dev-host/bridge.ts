@@ -25,6 +25,7 @@ import {
   type OpResultFor,
   type SnapshotSessionAdapters,
   type PublishMeta,
+  type SeatPush,
   type BotSeat,
   type SeatOp,
 } from '../../session/index.js';
@@ -119,14 +120,11 @@ export interface DevSessionOptions {
   observeChange?: (meta: PublishMeta) => void;
   /**
    * Post a `game_state` frame for one seat's iframe. Called only for a seat
-   * whose view changed since it was last posted (#487); the caller decides
+   * whose view changed since it was last posted (#487), with its whole view or
+   * a patch against the one it was last posted (#1616); the caller decides
    * which seat's iframe actually exists.
    */
-  postGameState: (
-    seat: number,
-    view: unknown,
-    meta: PublishMeta,
-  ) => void;
+  postGameState: (push: SeatPush, meta: PublishMeta) => void;
   /** Post a `server_response` frame to the requesting seat's iframe. */
   postServerResponse: (
     seat: number,
@@ -435,7 +433,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     },
     push: (changed, meta) => {
       // The dev host has no spectators: seat 0 has no iframe to post to.
-      for (const { seat, view } of changed) if (seat > 0) opts.postGameState(seat, view, meta);
+      for (const push of changed) if (push.seat > 0) opts.postGameState(push, meta);
     },
   });
 
