@@ -71,6 +71,19 @@ const regexSetsError = await build(regexSets);
 const startingStyle = project("import './style.css';\n", { 'src/style.css': '.panel { opacity: 1; }\n@starting-style { .panel { opacity: 0; } }\n' });
 const startingStyleError = await build(startingStyle);
 
+// One stylesheet for the whole bundle, which Vite emits after the per-chunk ones (#1633 review F2).
+const oneStylesheet = project("import './style.css';\n", {
+  'src/style.css': '@starting-style { .panel { opacity: 0; } }\n',
+  'vite.config.mjs': 'export default { build: { cssCodeSplit: false } };\n',
+});
+const oneStylesheetError = await build(oneStylesheet);
+
+// Tailwind v4's container utilities escape `@` in class names, and `@font-feature-values` holds at-rules of its own (#1633 review F1, F4).
+const floorCss = project("import './style.css';\n", {
+  'src/style.css': '.\\@container { container-type: inline-size; }\n@container (min-width: 28rem) { .\\@md\\:flex { display: flex; } }\n@font-feature-values Fancy { @styleset { nice: 12; } @swash { flowing: 1; } }\n',
+});
+const floorCssError = await build(floorCss);
+
 const staticBlock = project("class Ready { static { console.log('ready'); } }\nconsole.log(Ready);\n");
 const staticBlockError = await build(staticBlock);
 
@@ -88,6 +101,15 @@ describe('boardsmith build holds the bundle to the browser floor (#1633)', () =>
 
   it('fails on CSS newer than the floor, naming the file and the rule', () => {
     expect(String(startingStyleError)).toMatch(/assets\/index-[\w-]+\.css[\s\S]*Safari 16\.4[\s\S]*@starting-style/);
+  });
+
+  it('checks a stylesheet Vite emits for the whole bundle', () => {
+    expect(String(oneStylesheetError)).toMatch(/assets\/[\w-]+\.css[\s\S]*Safari 16\.4[\s\S]*@starting-style/);
+  });
+
+  it('passes CSS the floor parses: escaped @ in a class name, and @font-feature-values blocks', () => {
+    expect(floorCssError).toBeUndefined();
+    expect(built(floorCss, '.css')).toContain('@styleset');
   });
 
   it('leaves syntax the floor has as written, such as a class static block', () => {

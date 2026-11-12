@@ -26,8 +26,11 @@ const REGEXP_FEATURES = ['dot-all-flag', 'lookbehind-assertions', 'match-indices
  */
 export const floorEsbuildOptions = { supported: Object.fromEntries(REGEXP_FEATURES.map((feature) => [`regexp-${feature}`, true])) };
 
-/** The at-rules every floor browser parses (Safari 16.4 has no `@counter-style`). */
-const FLOOR_AT_RULES = new Set(['charset', 'import', 'namespace', 'media', 'supports', 'font-face', 'keyframes', '-webkit-keyframes', 'page', 'layer', 'container', 'property', 'font-feature-values', 'font-palette-values']);
+/** The at-rules every floor browser parses, with those `@font-feature-values` holds (Safari 16.4 has no `@counter-style`). */
+const FLOOR_AT_RULES = new Set([
+  'charset', 'import', 'namespace', 'media', 'supports', 'font-face', 'keyframes', '-webkit-keyframes', 'page', 'layer', 'container', 'property', 'font-palette-values',
+  'font-feature-values', 'stylistic', 'historical-forms', 'styleset', 'character-variant', 'swash', 'ornaments', 'annotation',
+]);
 
 // shortcut: a hand list of the newer CSS functions and selectors most likely to be reached for; check MDN's compat data instead when the floor moves or one slips past.
 const ABOVE_FLOOR_CSS = /light-dark\(|:user-(?:valid|invalid)\b|:popover-open\b|:state\(|::details-content\b/;
@@ -46,7 +49,7 @@ async function jsProblem(file: string, code: string): Promise<string | undefined
 /** Why `css` (a built stylesheet) holds CSS the floor cannot parse, or undefined when it does not. */
 function cssProblem(file: string, css: string): string | undefined {
   const code = css.replace(/"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\/\*[\s\S]*?\*\/|url\([^)]*\)/g, '""');
-  const found = [...code.matchAll(/@([\w-]+)/g)].find(([, name]) => !FLOOR_AT_RULES.has(name.toLowerCase()))?.[0] ?? code.match(ABOVE_FLOOR_CSS)?.[0];
+  const found = [...code.matchAll(/(?<!\\)@([\w-]+)/g)].find(([, name]) => !FLOOR_AT_RULES.has(name.toLowerCase()))?.[0] ?? code.match(ABOVE_FLOOR_CSS)?.[0];
   return found && `${file} holds CSS that ${BROWSER_FLOOR_NAMES} cannot parse: ${found}\n${fix}`;
 }
 
@@ -54,6 +57,8 @@ function cssProblem(file: string, css: string): string | undefined {
 export function browserFloorCheck(): Plugin {
   return {
     name: 'boardsmith:browser-floor',
+    // After Vite's own generateBundle hooks, which emit the one stylesheet of `cssCodeSplit: false`.
+    enforce: 'post',
     async generateBundle(_options, bundle) {
       const problems = await Promise.all(Object.values(bundle).map((file) => {
         if (file.type === 'chunk') return jsProblem(file.fileName, file.code);
