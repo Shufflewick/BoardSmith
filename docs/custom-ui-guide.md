@@ -1545,6 +1545,12 @@ held both ways.
 
 ### Check it on a real phone
 
+The oldest browsers a game supports are Safari 16.4, iOS 16.4, Chrome 111, Edge 111 and Firefox 128.
+`boardsmith build` targets them, and fails, naming the file and the code, when
+your bundle holds JavaScript or CSS they cannot parse, shown in
+[the floor test](https://github.com/Shufflewick/BoardSmith/blob/main/src/cli/commands/build-browser-floor.test.ts).
+Test on the oldest phone you can find, not only on a new one.
+
 Emulation proves layout and the tap path, not the device. Before you ship a
 custom board, play a whole game on a real iPhone and a real Android phone,
 held both ways, and check what no emulator can show:
