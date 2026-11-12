@@ -2854,7 +2854,7 @@
       "surfaceHash": "2f62346bc29aac59",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "GameShell's game_state postMessage may carry patch (a ViewPatch) in place of view: GameShell applies it to the view it last held and, when it does not hold the patch's base, posts request-state for the whole view. A host page can now relay the socket's patch frames to the iframe instead of the whole view it rebuilt; whole views keep working. No game needs rebuilding (#1629)."
+      "summary": "GameShell's game_state postMessage may carry patch (a ViewPatch) in place of view: GameShell applies it to the view it last held and, when it does not hold the patch's base, posts request-state for the whole view. A host page can relay the socket's patch frames to the iframe instead of the whole view it rebuilt, but only to a game UI built at this revision or later: an older GameShell ignores a frame with no view. Whole views keep working everywhere. GameShell now freezes the state it holds, so a custom UI that changes it in place throws instead of silently drifting from the view the next patch is made against (#1629)."
     }
   ]
 }
