@@ -28,6 +28,8 @@ import {
   type GamePreset,
   type RulesReload,
   type TurnBoundary,
+  type SeatPush,
+  type ViewPatch,
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
@@ -101,6 +103,40 @@ const nodeReconnectTimer: ReconnectTimer = (delayMs, fire) => {
   return () => clearTimeout(timer);
 };
 
+/** Every `game_state` frame's fields but its view. */
+type GameStateFields = {
+  type: 'game_state';
+  isComplete: boolean;
+  winners: number[];
+  /**
+   * Explicit draw signal (D10/ENDGAME-01): isComplete && winners.length === 0.
+   * Absent/false does NOT mean "not a draw" — it means the field carries no
+   * claim either way; the client must not fabricate "Draw" from a bare [].
+   */
+  isDraw: boolean;
+  /**
+   * Host clock, epoch ms, when the open step closes, or null when it
+   * declared no time window (#301's platform contract, enforced here by
+   * #302). The page counts down with `serverNow` and its own `receivedAt`.
+   */
+  deadlineAt: number | null;
+  /**
+   * Host clock, epoch ms, when an offer the step clock greyed goes out of
+   * date before the step closes (#1536), or null when none does. The dev
+   * bar shows "Skip wait" while it is set (#1547).
+   */
+  reofferAt: number | null;
+  /** Host clock, epoch ms, when this frame was sent. */
+  serverNow: number;
+  /**
+   * The seed this game was dealt from (#460), which a `restart` naming it
+   * deals again. Null for a game restored from a recorded state that names
+   * none (`boardsmith dev --seed <file>`).
+   */
+  seed: string | null;
+  requestId?: string | null;
+};
+
 /** Messages the host sends to a client. */
 export type HostOutbound =
   | {
@@ -122,39 +158,9 @@ export type HostOutbound =
   | { type: 'joined'; seat: number }
   | { type: 'error'; message: string; requestId?: string | null }
   | { type: 'init'; seat: number }
-  | {
-      type: 'game_state';
-      view: unknown;
-      isComplete: boolean;
-      winners: number[];
-      /**
-       * Explicit draw signal (D10/ENDGAME-01): isComplete && winners.length === 0.
-       * Absent/false does NOT mean "not a draw" — it means the field carries no
-       * claim either way; the client must not fabricate "Draw" from a bare [].
-       */
-      isDraw: boolean;
-      /**
-       * Host clock, epoch ms, when the open step closes, or null when it
-       * declared no time window (#301's platform contract, enforced here by
-       * #302). The page counts down with `serverNow` and its own `receivedAt`.
-       */
-      deadlineAt: number | null;
-      /**
-       * Host clock, epoch ms, when an offer the step clock greyed goes out of
-       * date before the step closes (#1536), or null when none does. The dev
-       * bar shows "Skip wait" while it is set (#1547).
-       */
-      reofferAt: number | null;
-      /** Host clock, epoch ms, when this frame was sent. */
-      serverNow: number;
-      /**
-       * The seed this game was dealt from (#460), which a `restart` naming it
-       * deals again. Null for a game restored from a recorded state that names
-       * none (`boardsmith dev --seed <file>`).
-       */
-      seed: string | null;
-      requestId?: string | null;
-    }
+  /** A seat's whole view, or after its first push a patch against the view its page holds (#1616). */
+  | (GameStateFields & { view: unknown })
+  | (GameStateFields & { patch: ViewPatch })
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
   | { type: 'follow'; enabled: boolean; seat: number }
   | { type: 'debugToggle' }
@@ -174,7 +180,7 @@ export type HostOutbound =
   | { type: 'stale_run' };
 
 /** The `game_state` frame, the one message `pushGate` decides on. */
-type GameStateFrame = Extract<HostOutbound, { type: 'game_state' }>;
+export type GameStateFrame = GameStateFields & { view: unknown };
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -1573,7 +1579,7 @@ export class MultiplayerHost {
         // Before `start` commits the session, the post-start re-init shows the follower its seat.
         if (this.session === session) this.followActiveSeat(meta);
       },
-      postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
+      postGameState: (push, meta) => this.deliverGameState(push, meta),
       postServerResponse: (_seat, hostRequestId, result) => this.deliverServerResponse(hostRequestId, result),
     });
 
@@ -1774,17 +1780,18 @@ export class MultiplayerHost {
 
   /**
    * Send a `game_state` frame to the seat's client, which the game's host
-   * calls only when that seat's view changed (#487). The follower is not sent
+   * calls only when that seat's view changed (#487), with its whole view or a
+   * patch against the one it last pushed (#1616). The follower is not sent
    * its own seat's view here: it shows the active seat, in `followActiveSeat`.
    */
   private deliverGameState(
-    seat: number,
-    view: unknown,
+    push: SeatPush,
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
   ): void {
-    const info = this.seats.get(seat);
+    const info = this.seats.get(push.seat);
     if (!info?.clientId || !info.connected || info.clientId === this.followerClientId) return;
-    this.send(info.clientId, this.gameStateFrame(view, meta));
+    const { seat: _seat, ...content } = push;
+    this.send(info.clientId, { ...this.gameStateFields(meta), ...content });
   }
 
   /**
@@ -1808,17 +1815,21 @@ export class MultiplayerHost {
     if (push) this.send(clientId, push);
   }
 
-  /**
-   * Every `game_state` frame, in one shape: the view and terminal state, plus
-   * the open step's deadline and this host's clock at send time (#302).
-   */
+  /** A `game_state` frame carrying `view` whole. */
   private gameStateFrame(
     view: unknown,
     meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
   ): GameStateFrame {
+    return { ...this.gameStateFields(meta), view };
+  }
+
+  /**
+   * Every `game_state` frame's fields but its view, in one shape: the terminal
+   * state, plus the open step's deadline and this host's clock at send time (#302).
+   */
+  private gameStateFields(meta: { isComplete: boolean; winners: number[]; isDraw: boolean }): GameStateFields {
     return {
       type: 'game_state',
-      view,
       isComplete: meta.isComplete,
       winners: meta.winners,
       isDraw: meta.isDraw,

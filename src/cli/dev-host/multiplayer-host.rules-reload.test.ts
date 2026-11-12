@@ -25,6 +25,7 @@ import { bundledTable, openTable, tableProject } from './table-host.test-helper.
 import { buildFailure } from './rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { pageViews } from './page-frames.test-helper.js';
 
 const clients = createDevHostClientMemory();
 beforeEach(() => clients.reset());
@@ -151,13 +152,13 @@ async function openCounterTable(runtime: TableRuntime, clock = fakeClock()) {
 
 /** The counter as the last frame the seat was sent shows it. */
 function shownCount(frames: ReadonlyArray<Record<string, unknown>>): number {
-  const view = frames.at(-1)?.view as { state: { view: { attributes: { count: number } } } };
+  const view = pageViews(frames).at(-1) as { state: { view: { attributes: { count: number } } } };
   return view.state.view.attributes.count;
 }
 
 /** The actions the last frame the seat was sent greys, with why. */
 function shownDisabled(frames: ReadonlyArray<Record<string, unknown>>): Record<string, string> | undefined {
-  return (frames.at(-1)?.view as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
+  return (pageViews(frames).at(-1) as { state: { disabledActions?: Record<string, string> } }).state.disabledActions;
 }
 
 describe('#343: a table dev host reloads its rules on the server', () => {
@@ -410,13 +411,13 @@ async function serveTable(edit: Rules | Error, before: Rules = beforeEdit, seats
   /** Bump as the page, from the board it last drew; resolves with the host's answer. */
   const bump = () => {
     const requestId = `bump-${++request}`;
-    const drawn = page.frames.filter((f) => f.type === 'game_state').at(-1)!;
+    const drawn = pageViews(page.frames.filter((f) => f.type === 'game_state')).at(-1);
     const answer = page.next((f) => (f.type === 'server_response' || f.type === 'error') && f.requestId === requestId);
     page.send({
       type: 'server_request',
       requestId,
       op: 'action',
-      payload: { actionName: 'bump', args: {}, boundaryKey: boundaryKeyOf(drawn.view) },
+      payload: { actionName: 'bump', args: {}, boundaryKey: boundaryKeyOf(drawn) },
     });
     return answer;
   };

@@ -37,7 +37,9 @@ import {
 - `BotSeat` - A seat a bot plays, and how strongly: `{ seat, level? }`
 - `PublishMeta` - Handed beside every record and push: `cause`, `isComplete`, `winners`, `isDraw`, `turnBoundary`
 - `flowStateOf()`, `isCompleteOf()`, `winnersOf()` - Read the flow state, the game's end and its winners out of a snapshot
-- `StatePushGate` - Decides per connection whether a frame is news, for a host that pushes outside `SnapshotSessionHost`
+- `StatePushGate` - Decides per connection whether a frame is news, and turns it into a patch against the last one sent, for a host that pushes outside `SnapshotSessionHost`
+- `SeatPush` - One seat's push: `{ seat, view }` the first time, then `{ seat, patch }`
+- `ViewPatch`, `ViewPatchOp`, `ViewPath` - What changed in a seat's view: the `rev` it was made against (`base`) and the ops that turn it into the next view. A page applies one with `applyViewPatch` from `boardsmith/client`
 
 ### Headless Session
 
@@ -295,24 +297,27 @@ const host = new SnapshotSessionHost({
     lastViews = { players, spectator };
   },
   // Only the seats whose view changed (seat 0 is the spectators). A plain loop
-  // is correct: a seat that saw nothing new is not in the list.
+  // is correct: a seat that saw nothing new is not in the list. Each is
+  // `{ seat, view }` or `{ seat, patch }`.
   push: (changed, meta) => {
-    for (const { seat, view } of changed) {
-      for (const socket of socketsOf(seat)) socket.send(JSON.stringify({ view, serverNow: Date.now() }));
+    for (const { seat, ...content } of changed) {
+      for (const socket of socketsOf(seat)) socket.send(JSON.stringify({ ...content, serverNow: Date.now() }));
     }
   },
 });
 ```
 
-A pushed view's log carries only the lines its seat was not already pushed
-(#1614): `state.messages` then starts at line `state.messagesFrom`, the first
-line that differs from what the seat was sent (an undo takes lines back), and
-the page keeps the lines it holds before it. The page rebuilds the whole log
-with `mergeMessageLog` from `boardsmith/client` and hands `GameShell` the
-merged state, never the pushed one. That needs every page of a seat to get
-every push for it, after it was served the view of record from `record`: a page
-that connects, reconnects or changes seat is served from `record` first, and
-the views `record` is handed always carry the whole log.
+A seat's first push is its whole `view`; every later one is a `patch` against
+the view it was last pushed (#1616), which carries only what changed: a log
+line, a card moved, a score. Every view the host hands out, to `record` and
+`push`, carries `rev`, a digest of its content but its animation events (which
+every patch states whole), and a patch names the `rev` it was made against as
+its `base`. A page keeps the whole view and replaces it
+with `applyViewPatch(held, patch)` (from `boardsmith/client`) on every push. It
+answers `undefined` when the page does not hold that view, because it missed a
+push or was served a newer view of record: serve that page its seat's view of
+record from `record` (a resync), and hand `GameShell` whole views only. A page
+that connects, reconnects or changes seat is served from `record` first.
 
 Stamp per-push fields such as a send time in `push`, after the host has
 compared. `meta.cause` says why the host published: `change` when the game
@@ -364,7 +369,8 @@ const gate = new StatePushGate<string, Frame>({
 });
 
 // The push path, per socket. Send the frame the gate returns, not your own:
-// its log carries only the lines the socket was not sent.
+// after the first, it carries a `patch` against the view the socket was last
+// sent instead of the whole `view`.
 export function push(socketId: string, socket: WebSocket, frame: Frame): void {
   const sent = gate.toPush(socketId, frame);
   if (sent) socket.send(JSON.stringify(sent));
@@ -383,7 +389,8 @@ export function closed(socketId: string): void {
 }
 ```
 
-The log is cut the same way `SnapshotSessionHost`'s `push` cuts it (below).
+A view without a `rev` is always sent whole, since a page could not tell what a
+patch of it was made against; the views `SnapshotSessionHost` hands out carry one.
 
 Animation events are compared by id, not by content: the engine empties its
 buffer at the start of every action, so a buffer emptied by another seat's

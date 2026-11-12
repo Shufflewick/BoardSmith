@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import DevHost from './DevHost.vue';
 import type { DevHostConfig } from './config-types.js';
+import { diffView, stampRev } from '../../session/view-patch.js';
 
 // ── Mock WebSocket (verbatim from DevHost.restart.test.ts) ───────────────────
 
@@ -268,26 +269,42 @@ describe('DevHost — game_state deadline relay (#302)', () => {
   });
 });
 
-// #1614: the host pushes only the log lines this page was not sent. The page
-// hands the game the whole log, on the push and on every replay of it.
-describe('DevHost — game_state log relay (#1614)', () => {
-  const lastLog = (spy: ReturnType<typeof vi.fn>) =>
-    (spy.mock.calls.map((c) => c[0] as { type?: string; view?: { state?: { messages?: unknown[]; messagesFrom?: number } } })
-      .filter((m) => m.type === 'game_state').at(-1)!.view!.state);
-  const frame = (state: Record<string, unknown>) => ({ type: 'game_state', view: { flowState: {}, state }, isComplete: false, winners: [] });
+// #1616: after the first game_state the host pushes a patch against the view
+// this page holds. The page hands the game the whole view, on the push and on
+// every replay of it, and asks for the whole view when it missed a push.
+describe('DevHost — game_state patch relay (#1616)', () => {
+  const lastView = (spy: ReturnType<typeof vi.fn>) =>
+    spy.mock.calls.map((c) => c[0] as { type?: string; view?: unknown }).filter((m) => m.type === 'game_state').at(-1)!.view;
+  const v1 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }] } });
+  const v2 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }, { text: 'b' }] } });
+  const v3 = stampRev({ flowState: {}, state: { messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] } });
+  const full = (view: unknown) => ({ type: 'game_state', view, isComplete: false, winners: [] });
+  const patch = (from: { rev: string }, to: unknown) => ({ type: 'game_state', patch: { base: from.rev, ops: diffView(from, to) }, isComplete: false, winners: [] });
 
-  it('merges a pushed log into the one it holds, and replays the whole log', async () => {
+  it('applies a patch to the view it holds, and replays the whole view', async () => {
     const wrapper = await mountAndActivate();
     const ws = mockWsInstance!;
     const postSpy = spyOnIframePostMessage(wrapper);
-    ws.simulateMessage(frame({ messages: [{ text: 'a' }, { text: 'b' }] }));
-    ws.simulateMessage(frame({ messages: [{ text: 'c' }], messagesFrom: 2 }));
+    ws.simulateMessage(full(v1));
+    ws.simulateMessage(patch(v1, v2));
     await wrapper.vm.$nextTick();
-    expect(lastLog(postSpy)).toEqual({ messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] });
+    expect(lastView(postSpy)).toEqual(v2);
 
     window.dispatchEvent(new MessageEvent('message', { source: (wrapper.find('iframe').element as HTMLIFrameElement).contentWindow, data: { source: 'shufflewick-game', type: 'request-state' } }));
     await wrapper.vm.$nextTick();
-    expect(lastLog(postSpy)).toEqual({ messages: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] });
+    expect(lastView(postSpy)).toEqual(v2);
+  });
+
+  it('asks the host for the whole view when a patch is against a view it does not hold', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    ws.simulateMessage(full(v1));
+    ws.send.mockClear();
+    ws.simulateMessage(patch(v2, v3));
+    await wrapper.vm.$nextTick();
+    expect(ws.send.mock.calls.map((c) => JSON.parse(c[0] as string))).toEqual([{ type: 'getState' }]);
+    expect(lastView(postSpy)).toEqual(v1);
   });
 });
 

@@ -39,6 +39,7 @@ import {
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
+import { pageFrames } from './page-frames.test-helper.js';
 import { succeeded } from '../../session/op-result.test-helper.js';
 
 const clients = createDevHostClientMemory();
@@ -168,10 +169,7 @@ function makeHost(
     },
     ...options,
   });
-  const frames = (clientId: string) =>
-    sent
-      .filter((e) => e.clientId === clientId && e.msg.type === 'game_state')
-      .map((e) => e.msg as Extract<HostOutbound, { type: 'game_state' }>);
+  const frames = (clientId: string) => pageFrames(sent, clientId);
   const lastFrame = (clientId: string) => frames(clientId).at(-1)!;
   const errors = (clientId: string) =>
     sent.filter((e) => e.clientId === clientId && e.msg.type === 'error').map((e) => (e.msg as { message: string }).message);

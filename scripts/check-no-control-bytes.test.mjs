@@ -56,6 +56,7 @@ const BINARY_EXTENSIONS = new Set([
   '.otf',
   '.zip',
   '.gz',
+  '.br',
 ]);
 
 /** Every file git tracks that is meant to be read as text. */

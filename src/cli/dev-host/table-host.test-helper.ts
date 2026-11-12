@@ -7,7 +7,8 @@
  * client, `dev`. Nothing here is a hand-built runtime.
  */
 import { bundleTableRules, loadTableRuntime, startTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
-import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
+import { MultiplayerHost, type GameStateFrame, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
+import { pageFrames } from './page-frames.test-helper.js';
 import { rulesProject } from './rules-project.test-helper.js';
 import type { createDevHostClientMemory } from './test-client-memory.js';
 
@@ -32,7 +33,6 @@ export async function bundledTable(prefix: string, source: string): Promise<() =
   return () => startTableRuntime(bundlePath, undefined);
 }
 
-type GameStateFrame = Extract<HostOutbound, { type: 'game_state' }>;
 type OpResponse = { success: boolean; error?: string };
 
 /**
@@ -57,8 +57,7 @@ export async function openTable(
     },
   });
   await host.handleMessage('dev', { type: 'hello' });
-  const frames = (): GameStateFrame[] =>
-    sent.filter((e) => e.clientId === 'dev' && e.msg.type === 'game_state').map((e) => e.msg as GameStateFrame);
+  const frames = (): GameStateFrame[] => pageFrames(sent, 'dev');
   const errors = () =>
     sent.filter((e) => e.msg.type === 'error').map((e) => ({ to: e.clientId, message: (e.msg as { message: string }).message }));
   let request = 0;

@@ -15,6 +15,7 @@ import {
 import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import type { BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { audioService } from '../../client/audio.js';
+import { diffView, patchView } from '../../session/view-patch.js';
 import ActionPanel from './auto-ui/ActionPanel.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
@@ -1075,9 +1076,11 @@ if (inHost) {
       // "works in dev, broken in the iframe" bugs, so there is deliberately no
       // per-field reconstruction.
       playerSeat.value = seatFromHost;
+      // Each part that did not change stays the object the shell holds (#1616), so what reads only it does not re-run.
+      const incoming = { flowState: view.flowState, state: view.state };
+      const held = state.value ? { flowState: state.value.flowState, state: state.value.state } : undefined;
       state.value = {
-        flowState: view.flowState,
-        state: view.state,
+        ...(held ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming),
         playerSeat: seatFromHost,
         isSpectator: false,
       } as any;
