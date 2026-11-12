@@ -13,6 +13,7 @@ import { isSameOrInside } from '../lib/path-inside.js';
 import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolveRulesDir, tableUiState } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { listFiles } from '../lib/source-files.js';
+import { coverArtPaths } from '../lib/cover-art.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { mergePlayerOptions } from '../lib/player-options.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
@@ -249,6 +250,8 @@ export function deriveManifest(
 
   return {
     ...rest,
+    // Where the bundle carries each cover-art file, which `buildProjectIn` copies there (#1630).
+    ...coverArtPaths(config),
     // The platform's lobby lists these, so a designer-only option, which no
     // player may see or set, is left out (#701). The bundle still carries it
     // (`rulesEntrySource`), so a published game starts at its default.
@@ -575,6 +578,13 @@ async function buildProjectIn(projectDir: string, options: BuildOptions): Promis
       ENGINE_REVISION,
       { tableUi, worldUi: hasWorldUi },
     );
+
+    for (const [key, path] of Object.entries(coverArtPaths(config))) {
+      if (!existsSync(join(cwd, path))) {
+        throw new Error(`boardsmith.json "${key}" names ${path}, which does not exist. Add the file at ${join(cwd, path)}, or remove the "${key}" key.`);
+      }
+      cpSync(join(cwd, path), join(outDir, path));
+    }
 
     mkdirSync(outDir, { recursive: true });
     writeFileSync(

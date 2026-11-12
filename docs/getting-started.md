@@ -569,6 +569,32 @@ file the bundle does not carry:
   "thumbnail": "./public/thumbnail.png"
 ```
 
+#### Cover art
+
+Three optional fields give the publishing platform a game's cover art. Each
+is a path relative to the project root; `boardsmith build` copies the file
+into the bundle at that same path, and the platform stores it at publish and
+makes every smaller size itself, so supply one file per field, at full size:
+
+```json
+  "backdrop": "art/backdrop.jpg",
+  "logo": "art/logo.png",
+  "box": "art/box.png"
+```
+
+| Field | Size | Format | Max bytes |
+|---|---|---|---|
+| `backdrop` | exactly 1500 x 500 | JPEG or WebP | 400 KB (409,600 bytes) |
+| `logo` | exactly 1500 x 1500 | PNG with transparency | 1 MB (1,048,576 bytes) |
+| `box` | exactly 280 x 280 | PNG with transparency | 1 MB (1,048,576 bytes) |
+
+`boardsmith validate` reads each file's format and size from its header, not
+its extension, and fails on art outside this table or on a declared file that
+does not exist. A path under `ui/` or `rules/`, or outside the project, is
+refused, because the bundle would not carry it at that path. A game with no
+art still builds and publishes, and the platform shows a placeholder.
+ShufflewickPub's `docs/GAME-ART.md` says what makes good art for each field.
+
 #### Game options
 
 A game's options live here too, and only here: a `gameOptions` list, each entry

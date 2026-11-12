@@ -15,6 +15,7 @@ import {
   checkTaxonomyShape,
   validateBundleSize,
   validateAssetPaths,
+  validateCoverArt,
   parseProgramFiles,
   findUntypedTestFiles,
   hasBlockingFailure,
@@ -39,6 +40,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { pngBytes } from '../lib/cover-art.test-helper.js';
 import { linkGameModules } from '../../testing/installed-modules.test-helper.js';
 import { GAME_VITE_CONFIG } from '../lib/test-run-scope.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
@@ -746,6 +748,41 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     const details = (result.details ?? []).join('\n');
     expect(details).toContain('"/art (v2)/..."');
     expect(details).not.toContain('a.b');
+  });
+});
+
+/** Cover art (#1630): `src/cli/lib/cover-art.test.ts` holds each rule; this is the check validate runs. */
+describe('validate.ts validateCoverArt', () => {
+  function projectWithLogo(bytes?: Uint8Array): string {
+    const dir = tempTree('boardsmith-cover-art-check-');
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'x', logo: 'art/logo.png' }));
+    if (bytes) {
+      mkdirSync(join(dir, 'art'));
+      writeFileSync(join(dir, 'art', 'logo.png'), bytes);
+    }
+    return dir;
+  }
+
+  it('passes a logo within the spec, and a game that declares no art', async () => {
+    expect((await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgba')))).passed).toBe(true);
+    const none = tempTree('boardsmith-cover-art-check-');
+    writeFileSync(join(none, 'boardsmith.json'), JSON.stringify({ name: 'x' }));
+    expect((await validateCoverArt(none)).passed).toBe(true);
+  });
+
+  it('fails a logo outside the spec, naming what to fix', async () => {
+    const result = await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgb')));
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBeUndefined();
+    expect((result.details ?? []).join('\n')).toContain('transparent background');
+  });
+
+  it('leaves a missing logo to Asset Paths, which fails naming the file to add', async () => {
+    const dir = projectWithLogo();
+    expect((await validateCoverArt(dir)).passed).toBe(true);
+    const assets = await validateAssetPaths(dir);
+    expect(assets.passed).toBe(false);
+    expect((assets.details ?? []).join('\n')).toContain(`Add the file at ${join(dir, 'art', 'logo.png')}`);
   });
 });
 

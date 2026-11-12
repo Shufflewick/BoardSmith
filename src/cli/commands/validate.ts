@@ -15,6 +15,7 @@ import {
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
 import { agentsBlockProblems } from '../lib/agent-roles.js';
+import { coverArtProblems } from '../lib/cover-art.js';
 import { mutationBlockProblems } from '../lib/mutation-budget.js';
 import {
   MAX_TABLE_RULES_ENCODED_BYTES,
@@ -117,6 +118,9 @@ async function runValidation(
 
   // 4. Asset path check (absolute paths break on platform)
   results.push(await validateAssetPaths(cwd));
+
+  // 4b. Cover art inside the spec the platform checks again on upload.
+  results.push(await validateCoverArt(cwd));
 
   // 5. Bundle size check
   results.push(await validateBundleSize(cwd, worldMode));
@@ -1142,6 +1146,20 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
     message: assetPathMessage(danglingIssues, absoluteIssues, remoteIssues),
     details,
   };
+}
+
+/** The cover art `boardsmith.json` declares is inside the spec the platform checks again on upload (#1630). */
+export async function validateCoverArt(cwd: string): Promise<ValidationResult> {
+  let config: Record<string, unknown>;
+  try {
+    config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
+  } catch {
+    // A boardsmith.json it cannot read or parse is the Metadata check's report, not this one's.
+    return { name: 'Cover Art', passed: true, message: '' };
+  }
+  const problems = coverArtProblems(cwd, config);
+  if (problems.length === 0) return { name: 'Cover Art', passed: true, message: '' };
+  return { name: 'Cover Art', passed: false, message: 'Cover art is outside the platform\'s spec', details: problems };
 }
 
 /**

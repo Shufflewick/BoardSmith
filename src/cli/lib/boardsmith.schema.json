@@ -95,6 +95,24 @@
       "type": "string",
       "description": "Relative path to the game's thumbnail image, resolved from the project root. NOT scaffold-emitted: `boardsmith new` creates no thumbnail image, so declaring the key by default meant every new game named a file its bundle did not carry. `boardsmith validate` fails when a declared asset path resolves to nothing (`x-asset-path` marks which keys it checks)."
     },
+    "backdrop": {
+      "x-convex-sink": false,
+      "x-asset-path": true,
+      "type": "string",
+      "description": "The game's cover backdrop: atmospheric art with no text, exactly 1500 x 500, a JPEG or WebP of at most 400 KB (409,600 bytes). A path relative to the project root. `boardsmith build` copies the file into the bundle at that same path and writes the path, normalised, into the manifest, where the publishing platform reads it from the R2 sink and makes every smaller size itself. `boardsmith validate` checks the format, size and transparency from the file's header, against `src/cli/lib/cover-art.ts`, which mirrors ShufflewickPub's game art spec. Optional: a game with none shows the platform's placeholder (#1630)."
+    },
+    "logo": {
+      "x-convex-sink": false,
+      "x-asset-path": true,
+      "type": "string",
+      "description": "The game's logo: its wordmark centred on a transparent square, exactly 1500 x 1500, a PNG with an alpha channel of at most 1 MB (1,048,576 bytes). A path relative to the project root. `boardsmith build` copies the file into the bundle at that same path and writes the path, normalised, into the manifest, where the publishing platform reads it from the R2 sink and makes every smaller size itself. `boardsmith validate` checks the format, size and transparency from the file's header, against `src/cli/lib/cover-art.ts`, which mirrors ShufflewickPub's game art spec. Optional: a game with none shows the platform's placeholder (#1630)."
+    },
+    "box": {
+      "x-convex-sink": false,
+      "x-asset-path": true,
+      "type": "string",
+      "description": "A render of the game's box: exactly 280 x 280, a PNG with an alpha channel of at most 1 MB (1,048,576 bytes). A path relative to the project root. `boardsmith build` copies the file into the bundle at that same path and writes the path, normalised, into the manifest, where the publishing platform reads it from the R2 sink and makes every smaller size itself. `boardsmith validate` checks the format, size and transparency from the file's header, against `src/cli/lib/cover-art.ts`, which mirrors ShufflewickPub's game art spec. Optional: a game with none shows the platform's placeholder (#1630)."
+    },
     "gameOptions": {
       "x-convex-sink": true,
       "type": "array",
