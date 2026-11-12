@@ -242,6 +242,23 @@ let seatFromHost = -1;
 /** The view the host last posted, with its `rev`, sharing the parts `state` holds: what a posted patch applies to (#1629). */
 let heldView: { flowState?: unknown; state?: Record<string, unknown> } | undefined;
 const requestHostState = () => window.parent.postMessage({ source: 'shufflewick-game', type: 'request-state' }, '*');
+
+/** The view `patch` turns the held one into, or `undefined` when the shell cannot apply it and must ask for the whole view. */
+function patchedView(patch: ViewPatch): typeof heldView {
+  try {
+    return applyViewPatch(heldView, patch) as typeof heldView;
+  } catch (error) {
+    console.error(error);
+    return undefined;
+  }
+}
+
+/** Freezes `value` and all it holds that is not frozen yet, so the view a patch applies to cannot drift from the `rev` it carries. */
+function freezeView(value: unknown): void {
+  if (typeof value !== 'object' || value === null || Object.isFrozen(value)) return;
+  Object.freeze(value);
+  for (const child of Object.values(value)) freezeView(child);
+}
 // Host anti-cheat: teaching features disabled for this session.
 // Set from the platform init postMessage (data.teachingDisabled) for first-render
 // before any broadcast. The broadcast-preferred computed below (teachingDisabledProp)
@@ -1068,7 +1085,7 @@ if (inHost) {
 
     if (data.type === 'game_state') {
       const patch = data.patch as ViewPatch | undefined;
-      const view = (patch === undefined ? data.view : applyViewPatch(heldView, patch)) as typeof heldView;
+      const view = patch === undefined ? (data.view as typeof heldView) : patchedView(patch);
       if (patch !== undefined && view === undefined) {
         // The shell does not hold the view the patch was made against (it missed a post, or just loaded): ask for the whole one.
         requestHostState();
@@ -1090,6 +1107,7 @@ if (inHost) {
       const held = state.value ? { flowState: state.value.flowState, state: state.value.state } : undefined;
       // A patch already kept every part it did not change.
       const shared = held && patch === undefined ? (patchView(held, diffView(held, incoming)) as typeof incoming) : incoming;
+      freezeView(shared);
       heldView = { ...view, ...shared };
       state.value = {
         ...shared,

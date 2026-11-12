@@ -129,4 +129,35 @@ describe('GameShell applies a posted view patch', () => {
     expect(wrapper.text()).toContain('9');
     wrapper.unmount();
   });
+
+  it('asks the host for the whole view when a patch on the right base cannot be applied', async () => {
+    const posted = enterIframe();
+    const wrapper = mountPlatformShell({ board: Board });
+    await nextTick();
+    const v1 = view([3, 5]);
+    fromHost({ type: 'init', seat: 1 });
+    fromHost({ type: 'game_state', view: v1, winners: [] });
+    await flushPromises();
+    posted.length = 0;
+    fromHost({ type: 'game_state', patch: { base: v1.rev, ops: [['set', ['state', 'view', 'children', 0, 'attributes', 'score', 'x'], 1]] }, winners: [] });
+    await flushPromises();
+    expect(posted).toEqual([{ source: 'shufflewick-game', type: 'request-state' }]);
+    wrapper.unmount();
+  });
+
+  it('refuses a change in place to the view it holds, so the base a patch applies to is the view its rev names', async () => {
+    enterIframe();
+    const wrapper = mountPlatformShell({ board: Board });
+    await nextTick();
+    const [v1, v2] = [view([3, 5]), view([3, 6])];
+    fromHost({ type: 'init', seat: 1 });
+    fromHost({ type: 'game_state', view: v1, winners: [] });
+    await flushPromises();
+    expect(() => ((views.at(-1)!.children[1] as { attributes: { score: number } }).attributes.score = 99)).toThrow(TypeError);
+    fromHost(patchFrame(v1, v2));
+    await flushPromises();
+    expect(() => ((views.at(-1)!.children[1] as { attributes: { score: number } }).attributes.score = 99)).toThrow(TypeError);
+    expect(() => views.at(-1)!.children.push({ id: 3 })).toThrow(TypeError);
+    wrapper.unmount();
+  });
 });
