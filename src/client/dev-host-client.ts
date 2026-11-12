@@ -167,7 +167,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     { once: true },
   );
 
-  /** The whole view of the last `game_state` this connection got. */
+  /** The whole view of the last `game_state` this connection got: its own copy, so a listener that edits `msg.view` cannot move the next patch's base. */
   let lastView: unknown;
 
   socket.addEventListener('message', (event: MessageEvent) => {
@@ -209,16 +209,23 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
    * hold the patch's base, so it asks the host for the whole view instead.
    */
   function wholeView(msg: DevHostInboundMessage): boolean {
-    if (msg.patch !== undefined) {
-      const view = applyViewPatch(lastView, msg.patch as ViewPatch);
-      if (view === undefined) {
-        send({ type: 'getState' });
-        return false;
-      }
-      delete msg.patch;
-      msg.view = view;
+    if (msg.patch === undefined) {
+      lastView = structuredClone(msg.view);
+      return true;
     }
-    lastView = msg.view;
+    let view: unknown;
+    try {
+      view = applyViewPatch(lastView, msg.patch as ViewPatch);
+    } catch (error) {
+      console.error(`createDevHostClient: a game_state patch does not fit the view this connection holds, so it asks for the whole view: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    if (view === undefined) {
+      send({ type: 'getState' });
+      return false;
+    }
+    lastView = view;
+    delete msg.patch;
+    msg.view = structuredClone(view);
     return true;
   }
 

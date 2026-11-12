@@ -72,6 +72,25 @@ describe('createDevHostClient game_state patches', () => {
     expect(views).toEqual([v1, v2]);
   });
 
+  it('applies the next patch to the view it was sent, whatever a subscriber did to its copy (#1616 review F1)', async () => {
+    const views = await connected();
+    FakeSocket.last.receive({ type: 'game_state', view: v1 });
+    (views[0] as { state: Record<string, unknown> }).state.scribbled = true;
+    FakeSocket.last.receive({ type: 'game_state', patch: { base: v1.rev, ops: diffView(v1, v2) } });
+    expect(views[1]).toEqual(v2);
+  });
+
+  it('asks for the whole view when a patch cannot be applied to the view it holds, rather than throw', async () => {
+    const views = await connected();
+    FakeSocket.last.receive({ type: 'game_state', view: v1 });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    FakeSocket.last.receive({ type: 'game_state', patch: { base: v1.rev, ops: [['set', ['state', 'missing', 'deep'], 1]] } });
+    expect(views).toEqual([v1]);
+    expect(FakeSocket.last.sent.at(-1)).toEqual({ type: 'getState' });
+    expect(consoleError).toHaveBeenCalled();
+    consoleError.mockRestore();
+  });
+
   it('asks for the whole view when it missed a push, and hands subscribers that', async () => {
     const views = await connected();
     FakeSocket.last.receive({ type: 'game_state', view: v1 });
