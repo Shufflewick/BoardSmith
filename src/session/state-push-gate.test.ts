@@ -130,6 +130,20 @@ describe('StatePushGate pushes what changed', () => {
     expect(g.toPush('a', frame('y', 2))).toEqual(frame('y', 2));
   });
 
+  it('a patch applies to the view the gate held back as well as to the one it last sent (#1616 review F2)', () => {
+    const g = gate();
+    const withEvents = (board: string, events: number[]): Frame => ({ view: stampRev(frame(board, 1, events).view), serverNow: 1 });
+    const v1 = withEvents('x', [4]);
+    g.toPush('a', v1);
+    // Another seat's action emptied the buffer: nothing new, so held back, but record serves this view.
+    const v2 = withEvents('x', []);
+    expect(g.toPush('a', v2)).toBeUndefined();
+    const v3 = withEvents('y', [6]);
+    const { patch } = g.toPush('a', v3) as { patch: ViewPatch };
+    expect(applyViewPatch(v1.view, patch)).toStrictEqual(v3.view);
+    expect(applyViewPatch(v2.view, patch)).toStrictEqual(v3.view);
+  });
+
   it('holds back a view whose only change is its rev', () => {
     const g = gate();
     g.toPush('a', stamped('x'));

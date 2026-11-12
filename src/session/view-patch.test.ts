@@ -28,6 +28,14 @@ describe('diffView and patchView', () => {
     expect(roundTrip(from, to)).toEqual(to);
   });
 
+  it('sets a key named __proto__ as a key, as JSON.parse reads one (#1616 review F8)', () => {
+    const from = JSON.parse('{"names":{"a":1}}');
+    const to = JSON.parse('{"names":{"a":1,"__proto__":2}}');
+    const next = roundTrip(from, to) as { names: Record<string, number> };
+    expect(Object.keys(next.names)).toEqual(['a', '__proto__']);
+    expect(Object.getPrototypeOf(next.names)).toBe(Object.prototype);
+  });
+
   it('says nothing about a view that did not change', () => {
     expect(diffView({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] })).toEqual([]);
   });

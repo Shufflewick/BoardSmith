@@ -310,8 +310,9 @@ const host = new SnapshotSessionHost({
 A seat's first push is its whole `view`; every later one is a `patch` against
 the view it was last pushed (#1616), which carries only what changed: a log
 line, a card moved, a score. Every view the host hands out, to `record` and
-`push`, carries `rev`, a digest of its content, and a patch names the `rev` it
-was made against as its `base`. A page keeps the whole view and replaces it
+`push`, carries `rev`, a digest of its content but its animation events (which
+every patch states whole), and a patch names the `rev` it was made against as
+its `base`. A page keeps the whole view and replaces it
 with `applyViewPatch(held, patch)` (from `boardsmith/client`) on every push. It
 answers `undefined` when the page does not hold that view, because it missed a
 push or was served a newer view of record: serve that page its seat's view of

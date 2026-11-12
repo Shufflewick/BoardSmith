@@ -72,11 +72,33 @@ export function digest(text: string): string {
   return lanes(text).map((h) => (h >>> 0).toString(16).padStart(8, '0')).join('') + `:${text.length}`;
 }
 
-/** `view` with `rev`, the digest of everything else in it. A view that is not an object is returned as it is. */
+/**
+ * Where a seat view carries its animation events. A host holds back a view
+ * whose only change is a buffer another seat's action emptied (#487), so a
+ * page may hold that view or the one before it: `rev` leaves the events out,
+ * and every patch states them whole ({@link diffPushedView}).
+ */
+const EVENT_PATHS: readonly ViewPath[] = [
+  ['state', 'animationEvents'],
+  ['state', 'lastAnimationEventId'],
+  ['state', 'view', 'animationEvents'],
+];
+
+/** The value at `path` in `view`, or `undefined`. */
+function at(view: unknown, path: ViewPath): unknown {
+  return path.reduce<unknown>((value, key) => (isHolder(value) ? value[key] : undefined), view);
+}
+
+/** `view` without its animation events, sharing everything else with it. */
+function withoutEvents(view: unknown): unknown {
+  return EVENT_PATHS.reduce((stripped, path) => (at(stripped, path) === undefined ? stripped : patchView(stripped, [['del', path]])), view);
+}
+
+/** `view` with `rev`, the digest of everything else in it but its animation events. A view that is not an object is returned as it is. */
 export function stampRev<V>(view: V): V & { rev: string } {
   if (!isHolder(view) || Array.isArray(view)) return view as V & { rev: string };
   const { rev: _stale, ...content } = view as Holder;
-  return { ...content, rev: digest(JSON.stringify(content)) } as V & { rev: string };
+  return { ...content, rev: digest(JSON.stringify(withoutEvents(content))) } as V & { rev: string };
 }
 
 /** The `rev` a view carries, if any. */
@@ -172,6 +194,21 @@ function frontDropped(from: unknown[], to: unknown[]): number {
 }
 
 /**
+ * The ops that turn a seat view pushed `from` into `to`, which also turn any
+ * view with `from`'s `rev` into `to`: its animation events are set whole,
+ * since they are the part `rev` leaves out.
+ */
+export function diffPushedView(from: unknown, to: unknown): ViewPatchOp[] {
+  const ops = diffView(withoutEvents(from), withoutEvents(to));
+  for (const path of EVENT_PATHS) {
+    const value = at(to, path);
+    if (value !== undefined) ops.push(['set', path, value]);
+    else if (isHolder(at(to, path.slice(0, -1)))) ops.push(['del', path]);
+  }
+  return ops;
+}
+
+/**
  * `held` with `ops` applied. Unchanged subtrees are the same objects as in
  * `held`, so a computed or a component that reads only them does not re-run;
  * `held` itself is never changed.
@@ -184,7 +221,8 @@ export function patchView(held: unknown, ops: readonly ViewPatchOp[]): unknown {
     const steps: Array<string | number> = ['value', ...path];
     const parent = steps.slice(0, -1).reduce<Holder>((container, key) => writable(container, key, fresh), root);
     const key = steps[steps.length - 1];
-    if (kind === 'set') parent[key] = op[2];
+    // Defined, not assigned: JSON.parse makes `__proto__` an own key, and assigning one would set the prototype.
+    if (kind === 'set') Object.defineProperty(parent, key, { value: op[2], writable: true, enumerable: true, configurable: true });
     else if (kind === 'del') delete parent[key];
     else (writable(parent, key, fresh) as unknown as unknown[]).splice(op[2], op[3], ...op[4]);
   }

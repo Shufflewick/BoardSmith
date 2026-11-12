@@ -1,4 +1,4 @@
-import { diffView, digest, revOf, type ViewPatch } from './view-patch.js';
+import { diffPushedView, digest, revOf, type ViewPatch } from './view-patch.js';
 
 /**
  * Never push a recipient a state identical to the last one it was sent (#487).
@@ -97,7 +97,7 @@ export class StatePushGate<R, F extends { view: unknown } = { view: unknown }> {
     const base = revOf(last?.view);
     if (base === undefined || revOf(frame.view) === undefined) return frame;
     const { view, ...rest } = frame;
-    return { ...rest, patch: { base, ops: diffView(last!.view, view) } };
+    return { ...rest, patch: { base, ops: diffPushedView(last!.view, view) } };
   }
 
   /** Record `frame` as sent to `recipient` without asking: a connect, a reconnect, an answer to a request. */
