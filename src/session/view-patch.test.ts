@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { applyViewPatch, diffView, patchView, stampRev } from './view-patch.js';
+import * as session from './index.js';
 
 // #1616: a push carries what changed in a seat's view, not the whole view.
 
@@ -85,5 +86,11 @@ describe('stampRev', () => {
     const view = { state: { board: 'a' } };
     expect(stampRev({ ...view, rev: 'stale' }).rev).toBe(stampRev(view).rev);
     expect(stampRev({ state: { board: 'b' } }).rev).not.toBe(stampRev(view).rev);
+  });
+});
+
+describe('boardsmith/session', () => {
+  it('exports applyViewPatch, so a Worker host with no DOM lib can apply the patches it pushes (#1623)', () => {
+    expect(session.applyViewPatch).toBe(applyViewPatch);
   });
 });

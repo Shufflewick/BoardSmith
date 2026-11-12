@@ -39,7 +39,8 @@ import {
 - `flowStateOf()`, `isCompleteOf()`, `winnersOf()` - Read the flow state, the game's end and its winners out of a snapshot
 - `StatePushGate` - Decides per connection whether a frame is news, and turns it into a patch against the last one sent, for a host that pushes outside `SnapshotSessionHost`
 - `SeatPush` - One seat's push: `{ seat, view }` the first time, then `{ seat, patch }`
-- `ViewPatch`, `ViewPatchOp`, `ViewPath` - What changed in a seat's view: the `rev` it was made against (`base`) and the ops that turn it into the next view. A page applies one with `applyViewPatch` from `boardsmith/client`
+- `ViewPatch`, `ViewPatchOp`, `ViewPath` - What changed in a seat's view: the `rev` it was made against (`base`) and the ops that turn it into the next view. A page applies one with `applyViewPatch`
+- `applyViewPatch(held, patch)` - The seat view a pushed `patch` turns `held` into, or `undefined` when `held` is not the view the patch was made against. Also exported from `boardsmith/client`; the same function, here because `boardsmith/client` also carries DOM code (`audioService`), so a host on Workers can apply in its tests the patches it pushes (#1623)
 
 ### Headless Session
 
@@ -313,7 +314,7 @@ line, a card moved, a score. Every view the host hands out, to `record` and
 `push`, carries `rev`, a digest of its content but its animation events (which
 every patch states whole), and a patch names the `rev` it was made against as
 its `base`. A page keeps the whole view and replaces it
-with `applyViewPatch(held, patch)` (from `boardsmith/client`) on every push. It
+with `applyViewPatch(held, patch)` (from `boardsmith/client` or `boardsmith/session`) on every push. It
 answers `undefined` when the page does not hold that view, because it missed a
 push or was served a newer view of record: serve that page its seat's view of
 record from `record` (a resync), and hand `GameShell` whole views only. A page
