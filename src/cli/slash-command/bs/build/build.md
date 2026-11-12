@@ -221,10 +221,13 @@ by convention every chunk's author has to remember. A bare asset `<img>` is not 
 discouraged — it is a `test`-step failure (see `build/test.md`'s asset-reachability gate), so the
 prohibition is enforced, not just advised.
 
-### The Action Panel is always on, and it always agrees with the board
+### The Action Panel is complete, and the board never disagrees with it
 
-The Action Panel is on at all times, and it offers exactly what the board offers. A custom board
-control is IN ADDITION to the panel, never instead of it. The panel is the keyboard and
+The Action Panel is on at all times, and every action a player can take is in the Action Panel. A
+custom board control is IN ADDITION to the panel, never instead of it. The rule runs one way: the
+board may show only state, or offer some of those actions, because a game starts on the automatic
+UI and gains its own board in stages. Whatever the board offers must also be in the panel, and the
+board and the panel never show different states. The panel is the keyboard and
 screen-reader path and the path that still works when a board control is off-screen, mid-animation,
 or not built yet — which, in a chunked build, is most controls most of the time.
 

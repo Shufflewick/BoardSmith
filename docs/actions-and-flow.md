@@ -1297,21 +1297,22 @@ actionStep({
 })
 ```
 
-#### The Action Panel is always on, and it always agrees with the board
+#### The Action Panel is complete, and the board never disagrees with it
 
 This is the rule that governs everything below it, and it is the one designers
 most often try to break:
 
-> **The Action Panel is on at all times, and it offers exactly what the board
-> offers. A custom board control is *in addition to* the panel, never instead
-> of it.**
+> **The Action Panel is on at all times, and every action a player can take is
+> in the Action Panel. A custom board control is *in addition to* the panel,
+> never instead of it.**
 
-Both halves matter, in both directions. Every action a player can take right
-now must be reachable from the panel, and every control the board draws must
-correspond to something the panel is also offering. If your board grows a
-compass, a card fan, or a drag-drop affordance, the panel keeps listing the same
-choices underneath it — that is correct and intended, not a duplicate to be
-removed.
+The rule runs one way. The board may show only state, or offer some of those
+actions, because a game starts on the automatic UI and gains its own board in
+stages. Whatever the board offers must also be in the panel, and the board and
+the panel never show different states. If your board grows a compass, a card
+fan, or a drag-drop affordance, the panel keeps listing the same choices
+underneath it: that is correct and intended, not a duplicate to be removed. A
+board that offers none of the actions yet is not a fault.
 
 **Why:** the panel is the accessibility surface. It is the keyboard path, the
 screen-reader path, and the path that still works when a board control is
@@ -1429,7 +1430,7 @@ candidate cap), the check says it could not run and why.
 The one thing you may remove is a **redundant start button**, below. Note what
 that is not: it hides one button while the panel keeps rendering everything
 else, including every choice of the action once it is under way. The panel never
-goes away, and it never offers less than the board.
+goes away, and it never leaves out an action the player can take.
 
 `platformActionPanelEscapeHatch` is not an exception a game may reach for — it
 is reserved for the host platform, which substitutes its own equivalent surface.

@@ -14,7 +14,8 @@ Have a subagent read the relevant docs in the docs folder to get started.
 **UI Design**
 - The action panel is a simple, accessible, text-based representation of available player actions. 
 - The custom UI is a visual representation of available player actions. 
-- The action panel and the custom UI must remain in sync at all times. They are two different representations of the same state in the game.
+- Every action a player can take is in the Action Panel. The custom UI may show only state, or offer some of those actions, because a game starts on the automatic UI and gains its own board in stages.
+- Whatever the custom UI offers must also be in the Action Panel, and the two never show different states. They are two different representations of the same state in the game.
 
 **Architecture**
 - Single source of truth for each piece of data
@@ -65,7 +66,7 @@ The rules every Shufflewick repo shares, and which model and reasoning level eac
 # Hard Rules
 - **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.
 - **Prove Before Fix**: When fixing a bug, never guess at the cause. Always prove the root cause through investigation before attempting a fix.
-- All UI interactions must work in a Custom UI and Action Panel in parity with shared state through useBoardInteraction
+- Every UI interaction must work in the Action Panel. One the Custom UI also offers must share its state with the panel through useBoardInteraction, so the two never show different states
 - **Stop only the processes you started, by their pid. Never by name** (`pkill -f vitest`, `killall node`): every agent on this machine runs vitest, and a kill by name ends all of their runs and any merge in progress. That is what cut `boardsmith test` short in #429.
 
 # Testing
