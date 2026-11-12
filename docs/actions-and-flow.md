@@ -1330,8 +1330,9 @@ So the following are all the *same* mistake, and none of them is supported:
   tree — strictly worse than showing it, since the control is still operable but
   now invisible.
 
-If a board control and the panel are showing *different* things, that is a bug
-in the game's wiring, not a reason to suppress one of them. Drive both from the
+If a board control and the panel are showing *different states* (a choice
+enabled on one and not the other, a different selection), that is a bug in the
+game's wiring, not a reason to suppress one of them. Drive both from the
 same `useBoardInteraction` / action-controller state and they cannot drift —
 see [Custom UI Guide](./custom-ui-guide.md).
 
@@ -1430,7 +1431,7 @@ candidate cap), the check says it could not run and why.
 The one thing you may remove is a **redundant start button**, below. Note what
 that is not: it hides one button while the panel keeps rendering everything
 else, including every choice of the action once it is under way. The panel never
-goes away, and it never leaves out an action the player can take.
+goes away.
 
 `platformActionPanelEscapeHatch` is not an exception a game may reach for — it
 is reserved for the host platform, which substitutes its own equivalent surface.

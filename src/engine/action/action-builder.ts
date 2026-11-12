@@ -572,9 +572,10 @@ export class Action<
    * in the Action Panel. The board may show only state, or offer some of those
    * actions; whatever the board offers must also be in the panel, and the board
    * and the panel never show different states. A custom board control is *in
-   * addition to* the panel, never instead of it: the panel is the keyboard path, the screen-reader path, and the path
-   * that still works when a board control is off-screen, mid-animation, or not
-   * built yet. Two surfaces showing different things means the panel's user is
+   * addition to* the panel, never instead of it: the panel is the keyboard path,
+   * the screen-reader path, and the path that still works when a board control
+   * is off-screen, mid-animation, or not built yet. Two surfaces showing
+   * different states means the panel's user is
    * playing a different game — see docs/actions-and-flow.md.
    *
    * Two consequences, both deliberate:

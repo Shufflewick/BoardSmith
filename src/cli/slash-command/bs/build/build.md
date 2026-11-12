@@ -227,9 +227,8 @@ The Action Panel is on at all times, and every action a player can take is in th
 custom board control is IN ADDITION to the panel, never instead of it. The rule runs one way: the
 board may show only state, or offer some of those actions, because a game starts on the automatic
 UI and gains its own board in stages. Whatever the board offers must also be in the panel, and the
-board and the panel never show different states. The panel is the keyboard and
-screen-reader path and the path that still works when a board control is off-screen, mid-animation,
-or not built yet — which, in a chunked build, is most controls most of the time.
+board and the panel never show different states. The panel is the keyboard and screen-reader path
+and the path that still works when a board control is off-screen, mid-animation, or not built yet — which, in a chunked build, is most controls most of the time.
 
 Expect the arrangement this produces: the custom board control AND the panel offering the same
 choices beneath it. That is the floor, not a duplicate to clean up. A chunk that reports the panel's

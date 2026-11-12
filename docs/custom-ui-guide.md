@@ -40,9 +40,10 @@ The parity runs one way. Every action a player can take is in the Action Panel.
 The board may show only state, or offer some of those actions, because a game
 starts on the automatic UI and gains its own board in stages. Whatever the board
 offers must also be in the panel, and the board and the panel never show
-different states. If the two ever show different things, that is a wiring bug in your UI, not an argument for hiding one of them.
-Drive both from the same state — the `actionController` and `boardInteraction`
-described in this guide — and they cannot drift. If you find yourself keeping a
+different states. If the two ever show different states, that is a wiring bug
+in your UI, not an argument for hiding one of them. Drive both from the same
+state — the `actionController` and `boardInteraction` described in this guide —
+and they cannot drift. If you find yourself keeping a
 second, board-local copy of "what is selectable right now", that copy is the
 bug.
 
