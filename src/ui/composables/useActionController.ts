@@ -90,8 +90,8 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { devWarn, isDevMode } from '../../utils/dev.js';
-import { sameThing, useSharedSelection, type ThingStart } from './sharedSelection.js';
+import { devWarn } from '../../utils/dev.js';
+import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
 import { copyOfChoice, formatActionName, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
@@ -498,7 +498,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     disabledActions,
   });
   /** The thing the open action was started on, for the pick it narrows or is carried to. */
-  const thingRun = ref<{ tick: number; start: Extract<ThingStart, { kind: 'within' | 'carry' }>; thing: SubjectRef } | null>(null);
+  const thingRun = ref<(ThingRun & { tick: number }) | null>(null);
   const thingRunFor = (pick: string, kind: 'within' | 'carry') => {
     const run = thingRun.value;
     return run && run.tick === actionStartTick.value && run.start.kind === kind && run.start.pick === pick ? run : null;
@@ -2257,7 +2257,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * `lastError` or the `beforeAutoExecuteHooks` mechanism, not via this return value.
    */
   async function start(actionName: string, startOptions?: StartOptions): Promise<ControllerActionResult> {
-    let initialArgs = startOptions?.args ?? {};
+    const givenArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
     // What the board could start this action with, read before opening it clears them (#1313).
     const opening = startCandidates.value.get(actionName);
@@ -2307,7 +2307,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Only picks reach the server (buildServerArgs, #662): say so rather than
     // drop an arg the caller meant to send.
     const picks = meta.selections.map((s) => s.name);
-    const undeclared = Object.keys(initialArgs).filter((key) => !picks.includes(key));
+    const undeclared = Object.keys(givenArgs).filter((key) => !picks.includes(key));
     if (undeclared.length > 0) {
       const sent = undeclared.map((key) => `'${key}'`).join(', ');
       devWarn(
@@ -2318,27 +2318,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    const subject = startOptions?.subject;
-    const reached = subject && sharedSelection.thingStart(meta, subject);
-    if (subject && !reached) {
-      const thing = sharedSelection.namedThing(meta, {}, subject)!;
-      const error = `${meta.prompt || formatActionName(actionName)} does not take ${thing.type} "${thing.label}".`;
-      setError(error);
-      return { success: false, error };
+    const onThing = sharedSelection.argsOn(meta, givenArgs, startOptions?.subject);
+    if (onThing.error !== undefined) {
+      setError(onThing.error);
+      return { success: false, error: onThing.error };
     }
-    if (reached?.kind === 'fill' && initialArgs[reached.pick] === undefined) initialArgs = { ...initialArgs, [reached.pick]: reached.value };
-
+    const initialArgs = onThing.args;
     const refusal = startArgsRefusal(meta, initialArgs);
     if (refusal) {
       setError(refusal);
       return { success: false, error: refusal };
     }
-
-    const named = sharedSelection.namedThing(meta, { ...prefillArgs, ...initialArgs }, subject);
-    const disagreement = sharedSelection.mismatch(meta, named);
-    // A development check: a board and a panel that disagree about the thing are a bug in the board.
-    if (disagreement && isDevMode()) throw new Error(disagreement);
-    sharedSelection.follow(named);
+    sharedSelection.admit(meta, { ...prefillArgs, ...initialArgs }, startOptions?.subject);
 
     currentAction.value = actionName;
     actionStartTick.value++;
@@ -2361,7 +2352,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const [name, value] of Object.entries(initialArgs)) {
       actionSnapshot.value.collectedPicks.set(name, { value, display: startArgLabel(meta, initialArgs, opening, name, value), skipped: false });
     }
-    thingRun.value = subject && (reached?.kind === 'within' || reached?.kind === 'carry') ? { tick: actionStartTick.value, start: reached, thing: subject } : null;
+    thingRun.value = onThing.run ? { tick: actionStartTick.value, ...onThing.run } : null;
 
     // Fetch choices for the first selection that needs input
     // This handles both normal start (first selection) and followUp with pre-filled args

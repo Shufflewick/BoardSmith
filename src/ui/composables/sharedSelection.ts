@@ -10,6 +10,7 @@ import { computed, shallowRef, watch, type ComputedRef, type Ref } from 'vue';
 import { subjectIndex, type SubjectEntry, type SubjectIndex } from '../../engine/action/subject-index.js';
 import { valuesEqual } from '../../engine/action/choice-matching.js';
 import { formatActionName } from './actionControllerHelpers.js';
+import { isDevMode } from '../../utils/dev.js';
 import type { ActionMetadata, SubjectRef } from '../../types/protocol.js';
 import type { SubjectChoice, SubjectSelectionBinding } from './useActionControllerTypes.js';
 
@@ -17,11 +18,19 @@ export const sameThing = (a: SubjectRef | null | undefined, b: SubjectRef | null
   !!a && !!b && a.type === b.type && a.key === b.key;
 
 /** How a verb reaches a thing: the first-pick row that is it, the rows that belong to it, a later pick that takes one of its type, or `.about()`. */
-export type ThingStart =
+type ThingStart =
   | { kind: 'fill'; pick: string; value: unknown }
   | { kind: 'within'; pick: string }
   | { kind: 'carry'; pick: string }
   | { kind: 'about' };
+
+/** The thing a started action narrows a pick to, or carries to a later pick. */
+export interface ThingRun {
+  start: Extract<ThingStart, { kind: 'within' | 'carry' }>;
+  thing: SubjectRef;
+}
+
+type SubjectArgs = { args: Record<string, unknown>; run?: ThingRun; error?: undefined } | { error: string };
 
 interface SharedSelectionOptions {
   offered: ComputedRef<readonly ActionMetadata[]>;
@@ -108,7 +117,28 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
     if (named?.onBoard && !binding.value && !own.value) own.value = named;
   }
 
-  return { subjects, selection, select, bindSubjectSelection, thingStart, namedThing, mismatch, follow };
+  /** The args a start on `subject` opens with and the pick it narrows or is carried to, or why the action does not take it. */
+  function argsOn(meta: ActionMetadata, args: Record<string, unknown>, subject: SubjectRef | undefined): SubjectArgs {
+    if (!subject) return { args };
+    const reached = thingStart(meta, subject);
+    if (!reached) {
+      const thing = entryOf(subject);
+      return { error: `${meta.prompt || formatActionName(meta.name)} does not take ${thing.type} "${thing.label}".` };
+    }
+    if (reached.kind === 'fill') return { args: args[reached.pick] === undefined ? { ...args, [reached.pick]: reached.value } : args };
+    return { args, ...(reached.kind === 'about' ? {} : { run: { start: reached, thing: subject } }) };
+  }
+
+  /** Judge a start against the shared selection, then select the board thing it names when nothing is selected. */
+  function admit(meta: ActionMetadata, args: Record<string, unknown>, subject: SubjectRef | undefined): void {
+    const named = namedThing(meta, args, subject);
+    const disagreement = mismatch(meta, named);
+    // A development check: a board and a panel that disagree about the thing are a bug in the board.
+    if (disagreement && isDevMode()) throw new Error(disagreement);
+    follow(named);
+  }
+
+  return { subjects, selection, select, bindSubjectSelection, argsOn, admit };
 }
 
 /** The actions that can act on a thing now, each once. */

@@ -504,18 +504,25 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         if (!held || (held.element.disabled && !element.disabled)) offered.set(element.id, { action, pick, element });
       }
     }
-    // An element that is a declared thing is clickable for all its verbs, not only an element-first one (#1641).
     const targets = new Map([...offered.values()].map(({ element }) => [element.id, boardTarget(element)] as const));
-    for (const entry of controller.subjects.value.things) {
-      const held = entry.element === undefined ? undefined : targets.get(entry.element);
-      if (entry.element === undefined || (held && !held.disabled) || usableVerbs(entry).length === 0) continue;
-      targets.set(entry.element, { id: entry.element, ref: held?.ref ?? { id: entry.element }, display: held?.display ?? entry.label });
-    }
+    enableThings(targets);
     board.setValidElements([...targets.values()], (elementId: number) => {
       if (pressThing(elementId)) return;
       const start = offered.get(elementId);
       if (start) void startAction(start.action, { args: { [start.pick]: elementId } });
     });
+  }
+
+  /**
+   * A declared thing a verb can act on now is an enabled board target for all its verbs, not only an
+   * element-first one, keeping the anchor an element pick gave it (#1641).
+   */
+  function enableThings(targets: Map<number, ReturnType<typeof boardTarget>>): void {
+    for (const entry of controller.subjects.value.things) {
+      if (entry.element === undefined || usableVerbs(entry).length === 0) continue;
+      const held = targets.get(entry.element);
+      targets.set(entry.element, { id: entry.element, ref: held?.ref ?? { id: entry.element }, display: held?.display ?? entry.label });
+    }
   }
 
   /**

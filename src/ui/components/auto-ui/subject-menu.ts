@@ -52,6 +52,30 @@ interface SelectionMenu {
   folded: FoldedVerb[];
 }
 
+/** A selection menu being built: each action is offered once, under the first thing that takes it. */
+interface Building extends SelectionMenu {
+  seen: Set<string>;
+  metadataOf: (action: string) => EnrichedActionMetadata | undefined;
+}
+
+function offer(menu: Building, action: string, of: SubjectRef, reason: string | undefined, label?: string): void {
+  const meta = menu.metadataOf(action);
+  if (!meta || menu.seen.has(action)) return;
+  menu.seen.add(action);
+  const item = { ...meta, ...(label ? { prompt: label } : {}), verbOf: of };
+  if (reason) menu.folded.push({ ...item, reason });
+  else menu.items.push(item);
+}
+
+/** Every verb of `entry`, a disabled one with its reason. */
+function offerVerbsOf(menu: Building, entry: SubjectEntry, label?: (prompt: string) => string): void {
+  const usable = usableVerbs(entry);
+  for (const action of new Set(entry.verbs.map((verb) => verb.action))) {
+    const reason = usable.includes(action) ? undefined : entry.verbs.find((verb) => verb.action === action)!.disabled;
+    offer(menu, action, entry, reason, label?.(menu.metadataOf(action)?.prompt ?? action));
+  }
+}
+
 /** A selected thing's own menu, and the verbs of it that cannot be used now. */
 export function selectionMenuItems(
   selection: SubjectEntry,
@@ -59,34 +83,14 @@ export function selectionMenuItems(
   metadataOf: (action: string) => EnrichedActionMetadata | undefined,
   disabledReason: (action: string) => string | undefined,
 ): SelectionMenu {
-  const items: PanelMenuItem[] = [];
-  const folded: FoldedVerb[] = [];
-  const seen = new Set<string>();
-  const offer = (action: string, of: SubjectRef, reason: string | undefined, label?: string) => {
-    const meta = metadataOf(action);
-    if (!meta || seen.has(action)) return;
-    seen.add(action);
-    const item = { ...meta, ...(label ? { prompt: label } : {}), verbOf: of };
-    if (reason) folded.push({ ...item, reason });
-    else items.push(item);
-  };
-  const verbsOf = (entry: SubjectEntry, label?: (prompt: string) => string) => {
-    for (const action of new Set(entry.verbs.map((verb) => verb.action))) {
-      const usable = usableVerbs(entry).includes(action);
-      const prompt = metadataOf(action)?.prompt ?? action;
-      offer(action, entry, usable ? undefined : entry.verbs.find((verb) => verb.action === action)!.disabled, label?.(prompt));
-    }
-  };
-  verbsOf(selection);
-  for (const later of subjects.laterVerbs) if (later.type === selection.type) offer(later.action, selection, disabledReason(later.action));
+  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf };
+  offerVerbsOf(menu, selection);
+  for (const later of subjects.laterVerbs.filter((verb) => verb.type === selection.type)) offer(menu, later.action, selection, disabledReason(later.action));
   const parts = subjects.things.filter((thing) => sameThing(thing.within, selection));
-  for (const part of parts) {
-    for (const action of usableVerbs(part)) if (!subjects.listedUnderThings.has(action)) offer(action, selection, undefined);
-  }
-  for (const ref of selection.related ?? []) {
-    const related = subjects.things.find((thing) => sameThing(thing, ref));
-    if (related) verbsOf(related, (prompt) => `${prompt}: ${related.label}`);
-  }
-  for (const part of parts) if (part.onBoard && usableVerbs(part).length > 0) items.push(thingItem(part, Infinity));
-  return { items, folded };
+  // A verb whose rows belong to the thing opens narrowed to them; one listed under its things is reached through them.
+  for (const action of parts.flatMap(usableVerbs).filter((name) => !subjects.listedUnderThings.has(name))) offer(menu, action, selection, undefined);
+  const related = (selection.related ?? []).flatMap((ref) => subjects.things.filter((thing) => sameThing(thing, ref)));
+  for (const thing of related) offerVerbsOf(menu, thing, (prompt) => `${prompt}: ${thing.label}`);
+  menu.items.push(...parts.filter((part) => part.onBoard && usableVerbs(part).length > 0).map((part) => thingItem(part, Infinity)));
+  return { items: menu.items, folded: menu.folded };
 }
