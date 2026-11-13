@@ -99,6 +99,8 @@ describe('the disabled-reason bubble after a verb is taken (#261)', () => {
   it('is gone once the pointer has left and another verb has been taken', async () => {
     const { wrapper, controller } = mountShell();
     await nextTick();
+    // The disabled verb sits in the "not available yet" fold (#1638).
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
 
     const disabledVerb = wrapper.find('[data-bs-action="rest"]').element as HTMLElement;
     disabledVerb.dispatchEvent(new Event('mouseenter'));

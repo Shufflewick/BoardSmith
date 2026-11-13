@@ -47,6 +47,10 @@ const seatState = {
   },
 };
 
+/** A disabled action sits in the panel's "not available yet" fold (#1638); open it. */
+const openFold = (wrapper: { get(selector: string): { trigger(event: string): Promise<void> } }) =>
+  wrapper.get('[data-bs-unavailable-toggle]').trigger('click');
+
 describe('GameShell action holds (#1450)', () => {
   it('greys the held action out in the panel with its reason, and restores it when the hold lifts', async () => {
     const { wrapper } = await mountTableWithDebugPanel(ReplayBoard, seatState);
@@ -54,6 +58,7 @@ describe('GameShell action holds (#1450)', () => {
     expect(move().attributes('aria-disabled')).toBeUndefined();
 
     await wrapper.get('[data-testid="replay"]').trigger('click');
+    await openFold(wrapper);
     expect(move().attributes('aria-disabled')).toBe('true');
     expect(move().attributes('data-bs-disabled-reason')).toBe(WAIT);
     expect(boardSees).toEqual({ move: WAIT });
@@ -79,6 +84,7 @@ describe('GameShell action holds (#1450)', () => {
     await wrapper.get('[data-testid="replay"]').trigger('click');
     await nextTick();
     expect(wrapper.find('.cancel-btn').exists()).toBe(false);
+    await openFold(wrapper);
     expect(wrapper.get('[data-bs-action="move"]').attributes('data-bs-disabled-reason')).toBe(WAIT);
     // The hold is this screen's own state, not a failed action, so it is told as a notice (#1461).
     expect(document.querySelector('.toast.info')?.textContent).toContain(WAIT);
@@ -96,6 +102,7 @@ describe('GameShell action holds (#1450)', () => {
     });
     await wrapper.get('[data-testid="replay"]').trigger('click');
     await nextTick();
+    await openFold(wrapper);
     expect(wrapper.get('[data-bs-action="move"]').attributes('data-bs-disabled-reason')).toBe('Not yet');
     wrapper.unmount();
   });

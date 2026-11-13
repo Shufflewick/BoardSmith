@@ -704,6 +704,32 @@ describe('useBoardActionBridge — disabled actions', () => {
     expect(start).toHaveBeenCalledWith('placeStone', undefined);
   });
 
+  // The panel folds a disabled action away (#1638); auto-start still counts the engine's full list.
+  it('does NOT auto-execute the one usable action while another is disabled', async () => {
+    const board = createBoardInteraction();
+    const { controller, execute, start } = makeController({ pick: null, action: null });
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(true),
+      actionMetadata: ref({
+        pass: { name: 'pass', selections: [] },
+        placeStone: { name: 'placeStone', selections: [cellPick] },
+      }),
+      availableActions: ref(['pass', 'placeStone']),
+      disabledActions: ref({ placeStone: 'The board is full.' }),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+
+    await nextTick();
+    await nextTick();
+
+    expect(execute).not.toHaveBeenCalled();
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('does NOT dispatch a disabled action from a board element click', async () => {
     const board = createBoardInteraction();
     const validElements: EnrichedValidElement[] = [

@@ -94,6 +94,8 @@ describe('a harness wired with useTableActionWiring (#1462)', () => {
     await settle();
     expect(wiring().controller.currentAction.value).toBeNull();
     expect(wiring().controller.holdNotice.value?.reason).toBe(WAIT);
+    // The held action sits in the panel's "not available yet" fold (#1638).
+    await wrapper.get('[data-bs-unavailable-toggle]').trigger('click');
     expect(move().attributes('aria-disabled')).toBe('true');
     expect(move().attributes('data-bs-disabled-reason')).toBe(WAIT);
   });
@@ -111,6 +113,7 @@ describe('a harness wired with useTableActionWiring (#1462)', () => {
     await settle();
     await wrapper.get('[data-testid="replay"]').trigger('click');
     await settle();
+    await wrapper.get('[data-testid="harness"] [data-bs-unavailable-toggle]').trigger('click');
 
     const harnessMove = wrapper.get('[data-testid="harness"] [data-bs-action="move"]');
     expect(harnessMove.attributes('data-bs-disabled-reason')).toBe(WAIT);

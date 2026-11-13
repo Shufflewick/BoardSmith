@@ -48,3 +48,12 @@ export function buildSelector(target: AnnotationTarget): string {
       return '[data-bs-panel]';
   }
 }
+
+/** The element an overlay anchors `target` to, or `null` when the page has none. */
+export function findAnchor(target: AnnotationTarget): Element | null {
+  const selector = buildSelector(target);
+  const found = selector ? document.querySelector(selector) : null;
+  // A folded action is hidden while its fold is shut (#1638), so its row is what the player can see.
+  const toggle = found?.closest('[data-bs-unavailable-list]')?.parentElement?.querySelector('[data-bs-unavailable-toggle]');
+  return toggle?.getAttribute('aria-expanded') === 'false' ? toggle : found;
+}

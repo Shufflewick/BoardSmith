@@ -5,7 +5,7 @@
  * Contract:
  *  1. Renders a .action-help-btn trigger with correct aria-label and aria-expanded="false" when closed.
  *  2. Clicking the trigger opens a Teleported tooltip with role="tooltip", id, and aria-describedby.
- *  3. Content rendering: helpText only, disabledReason only (no divider), both (with divider).
+ *  3. Content rendering: helpText.
  *  4. Escape key closes the popover; an outside pointerdown, touch or mouse, closes it.
  *  5. Text content reaches DOM via interpolation — never v-html.
  *  6. Reduced-motion: component renders without errors and does not depend on animation timing.
@@ -39,7 +39,6 @@ function mountPopover(props: {
   actionName: string;
   triggerLabel: string;
   helpText?: string;
-  disabledReason?: string;
 }) {
   return mount(ActionHelpPopover, {
     props,
@@ -196,7 +195,7 @@ describe('ActionHelpPopover', () => {
   // ── Case 3: content rendering ─────────────────────────────────────────────
 
   describe('content rendering', () => {
-    it('with helpText only: shows help text, no divider, no disabled section', async () => {
+    it('shows the help text', async () => {
       const wrapper = mountPopover({
         actionName: 'build',
         triggerLabel: 'Build',
@@ -207,44 +206,9 @@ describe('ActionHelpPopover', () => {
 
       const tooltip = wrapper.find('[role="tooltip"]');
       expect(tooltip.text()).toContain('Place a structure on an empty tile.');
-      expect(wrapper.find('.help-divider').exists()).toBe(false);
-      expect(tooltip.text()).not.toContain("Why it's disabled:");
       wrapper.unmount();
     });
 
-    it('with disabledReason only: shows "Why it\'s disabled:" + reason, no divider', async () => {
-      const wrapper = mountPopover({
-        actionName: 'build',
-        triggerLabel: 'Build',
-        disabledReason: 'You need at least 3 wood.',
-      });
-      await wrapper.find('.action-help-btn').trigger('click');
-      await nextTick();
-
-      const tooltip = wrapper.find('[role="tooltip"]');
-      expect(tooltip.text()).toContain("Why it's disabled:");
-      expect(tooltip.text()).toContain('You need at least 3 wood.');
-      expect(wrapper.find('.help-divider').exists()).toBe(false);
-      wrapper.unmount();
-    });
-
-    it('with both helpText and disabledReason: shows help text + divider + disabled section', async () => {
-      const wrapper = mountPopover({
-        actionName: 'cast',
-        triggerLabel: 'Cast Spell',
-        helpText: 'Cast a powerful arcane bolt.',
-        disabledReason: 'Not enough mana.',
-      });
-      await wrapper.find('.action-help-btn').trigger('click');
-      await nextTick();
-
-      const tooltip = wrapper.find('[role="tooltip"]');
-      expect(tooltip.text()).toContain('Cast a powerful arcane bolt.');
-      expect(tooltip.text()).toContain("Why it's disabled:");
-      expect(tooltip.text()).toContain('Not enough mana.');
-      expect(wrapper.find('.help-divider').exists()).toBe(true);
-      wrapper.unmount();
-    });
   });
 
   // ── Case 4: dismiss behavior ──────────────────────────────────────────────
@@ -429,21 +393,6 @@ describe('ActionHelpPopover', () => {
       wrapper.unmount();
     });
 
-    it('disabledReason reaches DOM as text content, not parsed HTML', async () => {
-      const xssAttempt = '<img src=x onerror="alert(1)">';
-      const wrapper = mountPopover({
-        actionName: 'attack',
-        triggerLabel: 'Attack',
-        disabledReason: xssAttempt,
-      });
-      await wrapper.find('.action-help-btn').trigger('click');
-      await nextTick();
-
-      const tooltip = wrapper.find('[role="tooltip"]');
-      expect(tooltip.text()).toContain('<img');
-      expect(tooltip.find('img').exists()).toBe(false);
-      wrapper.unmount();
-    });
   });
 
   // ── Case 6: reduced-motion ────────────────────────────────────────────────
@@ -499,7 +448,6 @@ describe('ActionHelpPopover', () => {
           actionName: 'move',
           triggerLabel: 'Move Piece',
           helpText: 'Click a square to move.',
-          disabledReason: 'No valid moves.',
         },
         global: { stubs: { Teleport: true } },
         attachTo: (() => {
@@ -523,7 +471,6 @@ describe('ActionHelpPopover', () => {
           actionName: 'move',
           triggerLabel: 'Move Piece',
           helpText: 'Click a square to move.',
-          disabledReason: 'No valid moves.',
         },
         global: { stubs: { Teleport: true } },
         attachTo: (() => {
@@ -548,14 +495,8 @@ describe('ActionHelpPopover', () => {
 
       wrapper2.unmount();
 
-      // Both must contain identical help text and disabled reason
       expect(textA).toContain('Click a square to move.');
-      expect(textA).toContain("Why it's disabled:");
-      expect(textA).toContain('No valid moves.');
-
       expect(textB).toContain('Click a square to move.');
-      expect(textB).toContain("Why it's disabled:");
-      expect(textB).toContain('No valid moves.');
 
       // And they must be equal
       expect(textA).toBe(textB);
@@ -563,41 +504,6 @@ describe('ActionHelpPopover', () => {
       // Clean up fixture elements
       document.querySelectorAll('.custom-ui-panel').forEach(el => el.remove());
       document.querySelectorAll('table').forEach(el => el.remove());
-    });
-
-    it('divider is present in both hosts when both helpText and disabledReason exist', async () => {
-      async function mountAndCheck(hostEl: HTMLElement) {
-        const wrapper = mount(ActionHelpPopover, {
-          props: {
-            actionName: 'cast',
-            triggerLabel: 'Cast',
-            helpText: 'Launch a fireball.',
-            disabledReason: 'No mana.',
-          },
-          global: { stubs: { Teleport: true } },
-          attachTo: hostEl,
-        });
-        await wrapper.find('.action-help-btn').trigger('click');
-        await nextTick();
-        const hasDivider = wrapper.find('.help-divider').exists();
-        wrapper.unmount();
-        return hasDivider;
-      }
-
-      const divHost = document.createElement('div');
-      document.body.appendChild(divHost);
-      const hasDividerA = await mountAndCheck(divHost);
-
-      const tdHost = document.createElement('td');
-      const table = document.createElement('table');
-      document.body.appendChild(table);
-      const hasDividerB = await mountAndCheck(tdHost);
-
-      expect(hasDividerA).toBe(true);
-      expect(hasDividerB).toBe(true);
-
-      divHost.remove();
-      table.remove();
     });
   });
 
@@ -641,7 +547,6 @@ describe('ActionHelpPopover', () => {
         actionName: 'cast',
         triggerLabel: 'Cast',
         helpText: 'Cast a powerful spell.',
-        disabledReason: 'No mana remaining.',
       });
 
       const triggerEl = wrapper.find('.action-help-btn').element as HTMLButtonElement;

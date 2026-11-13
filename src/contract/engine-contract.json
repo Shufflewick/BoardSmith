@@ -1,5 +1,5 @@
 {
-  "revision": 366,
+  "revision": 367,
   "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2871,6 +2871,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Docs only: the parity rule now reads one way, the Action Panel holds every action and the board may offer some or none (#1637)"
+    },
+    {
+      "revision": 367,
+      "date": "2026-11-13",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel folds disabled actions into one \"N not available yet\" row at each menu level, with their reasons; the action help \"?\" no longer carries disabled reasons (#1638)."
     }
   ]
 }

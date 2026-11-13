@@ -427,7 +427,7 @@ const isSimultaneous = computed(() => {
 });
 
 // The panel draws no open action while history is shown.
-const hasHelpToShow = computed(() => hasActionHelp(availableActions.value, actionMetadata.value, disabledActions.value, isViewingHistory.value ? undefined : actionController.currentActionMeta.value?.help));
+const hasHelpToShow = computed(() => hasActionHelp(availableActions.value, actionMetadata.value, isViewingHistory.value ? undefined : actionController.currentActionMeta.value?.help));
 
 // Game view - computed here so actionController can use it for element enrichment
 // When viewing historical state (time travel), use that instead of live state.
