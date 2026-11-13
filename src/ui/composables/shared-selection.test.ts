@@ -178,3 +178,14 @@ describe('a selection the game keeps in its own state (#1641)', () => {
     expect(game().log).toEqual(['draft green']);
   });
 });
+
+describe('a start with every pick given (#1641)', () => {
+  it('runs the action and resolves to the server\'s answer, as execute did, so a board needs no execute', async () => {
+    const { controller, game, die } = await workshop();
+    const result = await controller.start('reroll', { args: { die: die('red').id } });
+    expect(result.success).toBe(true);
+    expect(game().log).toEqual(['reroll red']);
+    expect(await controller.start('pass')).toMatchObject({ success: true });
+    expect(game().log).toEqual(['reroll red', 'pass']);
+  });
+});

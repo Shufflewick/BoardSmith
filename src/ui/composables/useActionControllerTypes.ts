@@ -554,10 +554,11 @@ export interface UseActionControllerReturn {
    * ```
    */
   /**
-   * Begin wizard mode for an action. The resolved ControllerActionResult reflects ONLY
-   * start()'s synchronous pre-checks (action availability, metadata presence) —
-   * `{ success: true }` means wizard mode began, NOT that the action has been
-   * executed. The eventual server outcome arrives later via the auto-execute
+   * Begin wizard mode for an action. With every pick in `args` the action runs at once and
+   * this resolves to the server's answer, as `execute` does. Otherwise the resolved
+   * ControllerActionResult reflects ONLY start()'s synchronous pre-checks (action
+   * availability, metadata presence) — `{ success: true }` means wizard mode began, NOT
+   * that the action has been executed. The eventual server outcome arrives later via the auto-execute
    * watcher, observable through `lastError`, not through this return value.
    */
   start: (actionName: string, options?: StartOptions) => Promise<ControllerActionResult>;
