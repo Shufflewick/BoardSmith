@@ -1,6 +1,7 @@
 import type { GameElement } from '../element/game-element.js';
 import type { Game } from '../element/game.js';
 import type { ElementRef } from '../../types/protocol.js';
+import type { SubjectBinding, SubjectType } from './subject-type.js';
 import type {
   ActionDefinition,
   ActionContext,
@@ -182,6 +183,21 @@ function assertFiltersByOneValue(action: string, name: string, declared: readonl
   );
 }
 
+/** A subject names one thing, and the panel lists one thing at a time, so a pick that takes several values binds none (#1640). */
+function assertBindsOneValue(
+  method: string,
+  name: string,
+  options: { subject?: SubjectBinding<never, never>; multiSelect?: unknown; orderedList?: unknown; repeat?: unknown; repeatUntil?: unknown },
+): void {
+  if (options.subject === undefined) return;
+  const many = (['multiSelect', 'orderedList', 'repeat', 'repeatUntil'] as const).find((option) => options[option] !== undefined);
+  if (many === undefined) return;
+  throw new Error(
+    `${method}('${name}') binds subject ${options.subject.types.map((type) => type.options.name).join(' or ')} and takes several values with ${many}. `
+    + `A subject names one thing, so remove subject, or ${many}.`
+  );
+}
+
 /**
  * Every `chooseFrom` option except the repeat options ({@link RepeatingOptions})
  * and the disabled rule ({@link DisabledOptions}).
@@ -211,6 +227,8 @@ type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, 
    * `multiSelect` or `orderedList` pick (#1439).
    */
   group?: (choice: ChoiceValue<T>) => readonly string[];
+  /** The subject type a choice is a thing of: `PACKS`, or `PACKS.of((value, ctx) => thing)` (#1640). Not on a pick that takes several values. */
+  subject?: SubjectBinding<ChoiceValue<T>, ActionContext<G>>;
   optional?: O;
   /** `args` holds the picks declared before this one (on a repeating pick, also this pick's earlier values). */
   validate?: (value: V, args: A, context: ActionContext<G, A>) => boolean | string;
@@ -249,8 +267,8 @@ type CountOption<G extends Game, A extends Record<string, unknown>, C> = number 
 
 /** A `chooseFrom` that asks for an array: a set (`multiSelect`) or a sequence (`orderedList`). */
 type ManyOptions<G extends Game, A extends Record<string, unknown>> =
-  | { multiSelect: CountOption<G, A, MultiSelectConfig>; orderedList?: undefined; group?: undefined }
-  | { orderedList: CountOption<G, A, OrderedListConfig>; multiSelect?: undefined; group?: undefined };
+  | { multiSelect: CountOption<G, A, MultiSelectConfig>; orderedList?: undefined; group?: undefined; subject?: undefined }
+  | { orderedList: CountOption<G, A, OrderedListConfig>; multiSelect?: undefined; group?: undefined; subject?: undefined };
 
 /** A `chooseFrom` that asks for one value. */
 type OneOptions = { multiSelect?: undefined; orderedList?: undefined };
@@ -285,6 +303,8 @@ type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T e
   display?: (element: T, context: PickContext<G, C>, allElements: T[]) => string;
   /** The Action Panel category an element sits under, as `group` on `chooseFrom` (#1439). */
   group?: (element: T, context: PickContext<G, C>) => readonly string[];
+  /** The subject type an element is a thing of, as `subject` on `chooseFrom` (#1640). */
+  subject?: SubjectBinding<T, ActionContext<G>>;
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: PickContext<G, C>) => ElementRef;
   /**
@@ -603,6 +623,17 @@ export class Action<
   }
 
   /**
+   * Say this action is about things it never picks, or picks only later or as
+   * typed text, so the Action Panel offers it under them (#1640):
+   * `.about(TOWERS, (ctx) => [ctx.game.warCollege])`. Return `[]` when it is
+   * about nothing now. A thing the seat cannot see is left out.
+   */
+  about<T, C extends ActionContext>(type: SubjectType<T, C>, things: (context: ActionContext<G>) => readonly NoInfer<T>[]): this {
+    (this.definition.about ??= []).push((context) => things(context as ActionContext<G>).flatMap((thing) => type.describe(thing, context as C) ?? []));
+    return this;
+  }
+
+  /**
    * Mark this verb as one that permanently ends something, so the Action Panel
    * draws it apart from every other button in the bar.
    *
@@ -828,6 +859,7 @@ export class Action<
         + `at a time, so it can only group a pick that takes one choice. Remove group, or ${many}.`
       );
     }
+    assertBindsOneValue('chooseFrom', name, options);
     const selection = {
       type: 'choice',
       name,
@@ -835,6 +867,7 @@ export class Action<
       choices: options.choices,
       display: options.display,
       group: options.group,
+      subject: options.subject,
       optional: options.optional,
       validate: options.validate,
       boardRefs: options.boardRefs,
@@ -929,6 +962,7 @@ export class Action<
   ): Action<G, AddArg<A, K, T, O>> | Action<G, AddArg<A, K, T[], O>> {
     assertPrepareHasDisabled('chooseElement', name, options);
     assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
+    assertBindsOneValue('chooseElement', name, options);
     const selection = {
       type: 'element',
       name,
@@ -941,6 +975,7 @@ export class Action<
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
       group: options.group as ElementSelection<T>['group'],
+      subject: options.subject as ElementSelection<T>['subject'],
       boardRef: options.boardRef as ElementSelection<T>['boardRef'],
       dependsOn: options.dependsOn,
       repeat: options.repeat,
@@ -1134,7 +1169,7 @@ export class Action<
    *   });
    * ```
    */
-  enterText<K extends string, O extends boolean | string = false>(
+  enterText<K extends string, O extends boolean | string = false, C extends ActionContext = ActionContext<G>>(
     name: K,
     options: {
       prompt?: string | ((context: PickContext<G, A>) => string);
@@ -1143,6 +1178,8 @@ export class Action<
       maxLength?: number;
       maxBytes?: number;
       multiline?: boolean;
+      /** The text names a thing of this type that no list may show, such as a hidden survivor (#1640). */
+      subject?: SubjectType<string, C>;
       optional?: O;
       validate?: (value: string, args: A, context: ActionContext<G, A>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -1172,6 +1209,7 @@ export class Action<
       maxLength: options.maxLength ?? DEFAULT_TEXT_MAX_LENGTH,
       maxBytes: options.maxBytes,
       multiline: options.multiline,
+      subject: options.subject,
       optional: options.optional,
       validate: options.validate,
       onSelect: options.onSelect,

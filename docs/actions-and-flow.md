@@ -1667,6 +1667,92 @@ the player cannot see stays at the top level, since its category could name the
 card, and so does every element of a `chooseElement` whose earlier picks hold
 one.
 
+#### Subject types: the things a game's verbs are about
+
+In a big game most verbs are about a thing: a pack, a building, a ship. A
+subject type names that kind of thing once per game, and a pick says only which
+thing its value is. Each candidate row then carries the thing it is, keyed and
+labelled the same way in every action, so the engine can report which verbs take
+which thing.
+
+`subjectType` and `eitherSubject` come from `boardsmith`.
+
+```typescript
+const UNIT_TYPES = subjectType<string>({
+  name: 'Unit types', onBoard: false, key: (unit) => unit, label: (unit) => unit,
+});
+const PACKS = subjectType<Pack>({
+  name: 'Packs',
+  onBoard: true,
+  label: (pack) => `${pack.unitType} at ${pack.square}`,
+  related: (pack) => [UNIT_TYPES.ref(pack.unitType)],
+});
+
+Action.create('movePack').chooseElement('pack', { elementClass: Pack, subject: PACKS })
+// The action spells the pack its own way, so it maps the value to the pack.
+Action.create('sellPack').chooseFrom('pack', {
+  choices: (ctx) => fieldedTokens(ctx),
+  subject: PACKS.of((token, ctx) => packOf(ctx, token)),
+})
+Action.create('buyPack').chooseFrom('unit', { choices: UNIT_LIST, subject: UNIT_TYPES })
+// A building's own offer never picks the building.
+Action.create('analyticalTraining').about(BUILDINGS, (ctx) => [ctx.game.warCollege])
+```
+
+What a type declares:
+
+- `name`: what the panel calls the type.
+- `key`: identifies a thing. A thing that is a game element takes no key: its
+  key is its id. Any other thing must have one. Both are type errors otherwise.
+- `label`: the thing's own name, never a verb's wording for it. It gets the
+  pick's context, since a name can depend on game state.
+- `onBoard`: true only when every thing of the type is a piece the player
+  already has on the board. Packs and buildings are; unit types to buy are not.
+- `category`: an optional path for a long list, at most two levels.
+- `related`: other things to offer with this one, as `TYPE.ref(thing)`.
+- `within`: the thing this one belongs to, such as a blueprint's tower.
+- `things`: optional, every thing of the type. When given, a pick that names any
+  other thing is refused when its choices are listed.
+
+How a pick binds:
+
+- `subject: PACKS` when the value is the thing, on `chooseFrom`, `chooseElement`
+  and `enterText` (a typed thing, which has no list).
+- `subject: PACKS.of((value, ctx) => thing)` when the action spells the thing its
+  own way. A mapping that returns another kind of thing does not compile.
+- `subject: eitherSubject(PACKS.of(...), BUILDINGS)` for a pick that lists two
+  kinds of thing. Each binding but the last must be an `.of()` that returns
+  `undefined` for a value it does not name, or it is refused when declared.
+- `.about(TYPE, (ctx) => [thing])` on an action about things it never picks.
+  It always returns a list, `[]` when the action is about nothing now.
+
+A thing that is a board element the seat cannot see is given no subject, in a
+row or in `.about()`, whatever the pick's value is: its key, label and id would
+name it.
+
+A pick that takes several values (`chooseElements`, `multiSelect`,
+`orderedList`, `repeat`) binds no subject: it is a type error or refused when
+declared, since a subject names one thing.
+
+**Which verbs take which thing.** `subjectIndex(actions)` inverts the offered
+actions' first-pick lists: there is no separate rule of which verb accepts
+what, so the list that validates a pick is the only source. It lists each thing
+once with every verb whose first pick lists it, the verbs of `.about()`, and the
+verbs that take a thing of a type in a later pick or as typed text. An action is
+listed under its things, instead of in the action list, only when all three
+hold: its first pick's types are all `onBoard`, every row of that pick is a
+thing, and no two rows are the same thing. Otherwise it stays where `.group()`
+puts it, so buying and unlocking stay verb first.
+
+**What travels.** At a table each state push carries a subject choice pick's
+list, when every row is a thing (a row the seat cannot see is given none), as it
+already carries opening element lists. A subject first pick that lists more than
+`MAX_SUBJECT_ROWS` (200, the number a world allows a selection) is refused when
+the seat opens it, saying so: its list would ride in every push. A world's
+offer already carries its lists, so only each row's thing is added.
+
+A game that binds no subject sends nothing new.
+
 ---
 
 ## Action Chaining with `followUp`

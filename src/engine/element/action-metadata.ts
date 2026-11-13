@@ -18,7 +18,7 @@ import { hidesFrom, seatText } from '../action/seat-text.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionContext, ActionDefinition, TextSelection, NumberSelection } from '../action/types.js';
-import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
+import type { ActionMetadata, PickMetadata, PickSubject } from '../../types/protocol.js';
 
 /**
  * Build action metadata for auto-UI generation.
@@ -108,8 +108,15 @@ function actionMetadataOf(
     // flat list it has always been.
     ...(actionDef.group === undefined ? {} : { group: actionDef.group }),
     ...(actionDef.order === undefined ? {} : { order: actionDef.order }),
+    ...aboutOf(actionDef, ctx),
     selections,
   };
+}
+
+/** The things an action is about without picking them (#1640). */
+function aboutOf(actionDef: ActionDefinition, ctx: ActionContext): { about?: PickSubject[] } {
+  const about = (actionDef.about ?? []).flatMap((things) => things(ctx));
+  return about.length > 0 ? { about } : {};
 }
 
 /**
@@ -214,6 +221,9 @@ export function buildPickMetadata(
   // onSelect callback flag - client needs this to route through server per-step
   if (selection.onSelect) {
     base.hasOnSelect = true;
+  }
+  if ((selection.type === 'choice' || selection.type === 'element' || selection.type === 'text') && selection.subject) {
+    base.subjectTypes = selection.subject.types.map((type) => type.info);
   }
 
   // Type-specific properties (static metadata only)

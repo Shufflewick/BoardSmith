@@ -1,6 +1,6 @@
 {
-  "revision": 368,
-  "surfaceHash": "2f62346bc29aac59",
+  "revision": 369,
+  "surfaceHash": "f105072b5ce712c4",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2887,6 +2887,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel draws a group holding one thing as that thing (never a lone destructive action, never moving a player standing in it), counts a group's actions, and boardsmith validate refuses more than nine ungrouped start buttons at one level (#1639)."
+    },
+    {
+      "revision": 369,
+      "date": "2026-11-13",
+      "surfaceHash": "f105072b5ce712c4",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Games declare subject types (subjectType, TYPE.of, eitherSubject, .about) and bind picks to them; each candidate row carries the thing it is, a table's state push carries subject choice lists (a subject first pick over 200 rows is refused), and subjectIndex reports which verbs take which thing (#1640)."
     }
   ]
 }

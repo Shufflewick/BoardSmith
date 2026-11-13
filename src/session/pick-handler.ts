@@ -23,7 +23,8 @@ import {
   type PickChoicesResponse,
   type WarningEntry,
 } from './types.js';
-import type { ValidElement } from '../types/protocol.js';
+import type { PickMetadata, ValidElement } from '../types/protocol.js';
+import { MAX_SUBJECT_ROWS } from '../engine/action/subject-type.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { actionForSeat, deserializePendingState, serializePendingActionState } from './utils.js';
@@ -51,14 +52,17 @@ function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: s
  */
 function evaluateCandidates(
   executor: ReturnType<Game['getActionExecutor']>,
-  actionName: string,
+  action: ActionDefinition,
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   player: Player,
   args: Record<string, unknown>,
 ): { candidates: AnnotatedCandidate[] } | { refusal: PickChoicesResponse } {
+  const actionName = action.name;
   try {
     // The action's name, so a running tutorial's per-pick gate greys what it does not allow (#1248).
-    return { candidates: executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[] };
+    const candidates = executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[];
+    const refusal = subjectListRefusal(action, selection, candidates.length);
+    return refusal ? { refusal } : { candidates };
   } catch (error) {
     // The engine's own crash handling (#1045, #1248): a refusal travels, anything else is logged and replaced.
     const thrown = gameCodeThrew(actionName, `Evaluating '${selection.name}' of action '${actionName}'`, error);
@@ -88,13 +92,14 @@ function answerPick(
   ctx: { game: Game; player: Player; args: Record<string, unknown> },
   warnings: WarningEntry[],
 ): PickChoicesResponse {
-  const evaluated = evaluateCandidates(executor, action.name, selection, player, ctx.args);
+  const evaluated = evaluateCandidates(executor, action, selection, player, ctx.args);
   if ('refusal' in evaluated) return evaluated.refusal;
 
   // AFTER THE FORMATTERS RUN, NEVER BEFORE: a soft-failing `display()` or
   // `boardRefs()` is what puts anything in here, so reading the array early
   // would ship an answer that drops the very warnings it is meant to carry.
   const said = () => (warnings.length > 0 ? warnings : undefined);
+
 
   if (selection.type === 'choice') {
     const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
@@ -112,6 +117,18 @@ function answerPick(
   const multiSelect = selection.type === 'elements' ? resolveMultiSelect(selection, ctx) : undefined;
   if (validElements.length === 0 && !answersEmpty(selection, multiSelect)) return deadEnd(action, selection, ctx);
   return { success: true, validElements, multiSelect, warnings: said() };
+}
+
+/** A subject first pick's list rides in every state push, so one over the cap is refused (#1640). */
+function subjectListRefusal(action: ActionDefinition, selection: ChoiceSelection | ElementSelection | ElementsSelection, rows: number): PickChoicesResponse | undefined {
+  if (selection !== action.selections[0] || selection.type === 'elements' || !selection.subject || rows <= MAX_SUBJECT_ROWS) return undefined;
+  const types = selection.subject.types.map((type) => type.options.name).join(' or ');
+  return {
+    success: false,
+    error: `"${action.name}" pick "${selection.name}" lists ${rows} ${types}, and a subject pick lists at most ${MAX_SUBJECT_ROWS}, `
+      + 'because its list travels with every state push. Narrow the pick with an earlier one, or remove its subject.',
+    errorCode: ErrorCode.INVALID_PICK,
+  };
 }
 
 /** Whether a pick with nothing to pick still has an answer: skipping an optional one, or [] for a min-0 list (#1558). */
@@ -276,15 +293,38 @@ export class PickHandler<G extends Game = Game> {
    * `getPickChoices` gives it with nothing picked, so the seat opens the action
    * with no round trip (#1615). Only when the seat sees every candidate: an
    * answer naming a card it cannot see stays with resolveChoices, so what every
-   * state push carries names only what the seat's board shows.
+   * state push carries names only what the seat's board shows. A choice pick
+   * travels too when it binds a subject (#1640), for the panel to invert.
    */
   answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
     for (const action of Object.values(metadata ?? {})) {
       const first = action.selections[0];
-      if (first?.type !== 'element' && first?.type !== 'elements') continue;
-      const elements = this.#openingAnswer(action.name, first.name, seat);
-      if (elements) first.validElements = elements;
+      if (first) this.#carryOpeningList(action.name, first, seat);
     }
+  }
+
+  /**
+   * A subject choice pick's rows when every one is a thing (#1640), else `undefined`. A row the seat
+   * cannot see is given no thing, so a list naming one stays with resolveChoices, as an element list does.
+   */
+  #carrySubjectList(actionName: string, pick: PickMetadata, seat: number): void {
+    let answer: PickChoicesResponse;
+    try {
+      answer = this.getPickChoices(actionName, pick.name, seat);
+    } catch {
+      return;
+    }
+    if (answer.success && answer.choices?.every((row) => row.subject)) pick.choices = answer.choices;
+  }
+
+  #carryOpeningList(actionName: string, pick: PickMetadata, seat: number): void {
+    if (pick.type === 'choice') {
+      if (pick.subjectTypes) this.#carrySubjectList(actionName, pick, seat);
+      return;
+    }
+    if (pick.type !== 'element' && pick.type !== 'elements') return;
+    const elements = this.#openingAnswer(actionName, pick.name, seat);
+    if (elements) pick.validElements = elements;
   }
 
   /** An opening pick's candidates when the seat sees every one, else `undefined`. */
