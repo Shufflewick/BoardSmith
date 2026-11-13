@@ -210,8 +210,9 @@ defineSlots<{
    * down: content here sits beside the name row instead of stacking under it.
    */
   'player-token-extra'(props: { player: Player }): any;
-  /** Custom content under each seat's token in seat-strip mode (the collapsed
-   *  rail and the phone strip), for the one number a player needs at a glance. */
+  /** Custom content with each seat's token in seat-strip mode (under it in the
+   *  collapsed rail, beside it in the phone strip), for the one number a player
+   *  needs at a glance. */
   'player-strip-extra'(props: { player: Player }): any;
 }>();
 </script>
@@ -219,7 +220,7 @@ defineSlots<{
 <template>
   <!-- ── Seat Strip: compact one-line for phone compact tier (IA-06) ───────── -->
   <div v-if="seatStrip" class="players-panel seat-strip" role="group" aria-label="Players">
-    <!-- All player tokens inline, each over the game's #player-strip-extra content -->
+    <!-- All player tokens inline, each with the game's #player-strip-extra content -->
     <div class="strip-tokens" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
       <!-- Content under a token sits at one height whether its seat acts or not (#431). -->
       <span
@@ -239,10 +240,11 @@ defineSlots<{
         <slot name="player-strip-extra" :player="player"></slot>
       </span>
     </div>
-    <!-- Turn-status sentence naming every acting seat; the only live region, so
+    <!-- Turn-status sentence naming every acting seat, for screen readers only: the
+         outline on the acting token is the visible cue. The only live region, so
          changing slot content beside it does not re-read the sentence. Always
          mounted, even empty, because a live region inserted with its text is not read. -->
-    <span class="strip-status" role="status">{{ stripStatus }}</span>
+    <span class="strip-status sr-only" role="status">{{ stripStatus }}</span>
     <span v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</span>
   </div>
 
@@ -475,7 +477,7 @@ defineSlots<{
 /* ── Seat strip: the compact icon-only representation (IA-06). Used in two places:
    the desktop rail (a ~64px column → row+wrap collapses to a vertical stack) and the
    mobile top strip (a wide bar → stays a horizontal row). The turn-status sentence is
-   hidden — the active token is emphasized instead. */
+   for screen readers only — the active token is emphasized and outlined instead. */
 .seat-strip {
   flex-direction: row;
   flex-wrap: wrap;
@@ -495,7 +497,8 @@ defineSlots<{
 .strip-tokens .pt {
   display: grid;
   place-items: center;
-  gap: 2px;
+  /* Clears the acting token's 3px outline. */
+  gap: 4px;
 }
 
 /* Only the token dims: a game's #player-strip-extra content stays legible. */
@@ -508,8 +511,27 @@ defineSlots<{
   opacity: 1;
 }
 
-.strip-status {
-  display: none;
+/* The acting token's outline, throbbing so a glance finds whose turn it is.
+   Same PERF constraint as .turn-indicator-dot: transform + opacity ONLY. */
+.strip-tokens .pt.strip-active > .tok::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2px solid var(--bsg-accent);
+  pointer-events: none;
+  animation: strip-throb 1.6s ease-in-out infinite;
+}
+
+/* Throbs inward, so the outline never reaches past its resting 3px onto a seat's extra. */
+@keyframes strip-throb {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(0.92); opacity: 0.35; }
+}
+
+/* Reduced motion keeps the outline, still at its resting full-size, opaque state. */
+.bs-reduce-motion .strip-tokens .pt.strip-active > .tok::after {
+  animation: none;
 }
 
 /* The capped-list footer. Deliberately not a card: it is not a seat, and drawing
@@ -522,3 +544,5 @@ defineSlots<{
   color: var(--bsg-ink-3);
 }
 </style>
+
+<style scoped src="./sr-only.css"></style>
