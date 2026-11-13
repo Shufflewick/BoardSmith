@@ -6,7 +6,7 @@
  * that opens to the disabled ones with their reasons. A disabled action sits in
  * exactly one fold: the deepest level of the usable menu its group reaches.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ActionPanel from './ActionPanel.vue';
@@ -14,10 +14,16 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController, type ActionPanelProps } from './action-panel-controller.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 import { documentHasFocus } from './document-has-focus.test-helper.js';
+import { findAnchor } from '../helpers/overlay-utils.js';
 
 documentHasFocus();
 
 type Meta = Partial<EnrichedActionMetadata> & { name: string };
+
+const mounted: { unmount(): void }[] = [];
+afterEach(() => {
+  for (const wrapper of mounted.splice(0)) wrapper.unmount();
+});
 
 function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
   const controller = stubActionController();
@@ -33,6 +39,7 @@ function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
       ...extra,
     },
   });
+  mounted.push(wrapper);
   return { wrapper, controller };
 }
 
@@ -149,7 +156,6 @@ describe('the fold row is reachable by keyboard and screen reader', () => {
     await nextTick();
     await nextTick();
     expect(document.activeElement?.hasAttribute('data-bs-unavailable-toggle')).toBe(true);
-    wrapper.unmount();
   });
 
   it('keeps folded entries in the tab order, so their reasons can be reached', async () => {
@@ -171,29 +177,68 @@ describe('the fold row is reachable by keyboard and screen reader', () => {
 });
 
 describe('a player is never left standing in a dead level', () => {
-  it('moves them to the parent, and says so, when the last usable action of their group is disabled', async () => {
+  const NO_GEARS = { ...ROUND_ONE, unlockUnit: 'You have no gears left.' };
+
+  it('shows them the parent, and says why, when the last usable action of their level is disabled', async () => {
     const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
     await wrapper.find('[data-bs-action-group="Buy and unlock"]').trigger('click');
 
-    await wrapper.setProps({ disabledActions: { ...ROUND_ONE, unlockUnit: 'You have no gears left.' } });
+    await wrapper.setProps({ disabledActions: NO_GEARS });
     await nextTick();
     expect(wrapper.find('.action-menu-header').exists()).toBe(false);
     expect(usable(wrapper)).toEqual(['checkIn', 'buyPack']);
     expect(wrapper.find('[data-bs-menu-announcement]').text())
-      .toBe('Buy and unlock is no longer available. Showing all actions.');
+      .toBe('Buy and unlock has nothing available yet. Showing all actions.');
     expect(await folded(wrapper)).toContain('unlockUnit');
   });
 
-  it('moves them out even when no action at all is usable any more', async () => {
+  it('brings them back to their level when a hold on its only usable action lifts', async () => {
+    const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
+    await wrapper.find('[data-bs-action-group="Buy and unlock"]').trigger('click');
+
+    await wrapper.setProps({ disabledActions: NO_GEARS });
+    await nextTick();
+    await wrapper.setProps({ disabledActions: ROUND_ONE });
+    await nextTick();
+    expect(wrapper.find('.action-menu-label').text()).toBe('Buy and unlock');
+    expect(usable(wrapper)).toEqual(['unlockUnit']);
+  });
+
+  it('shows the top level while nothing at all is usable, and brings them back after', async () => {
     const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
     await wrapper.find('[data-bs-action-group="Buy and unlock"]').trigger('click');
 
     const everything = Object.fromEntries(WINDUP.map((a) => [a.name, 'The battle is playing.']));
     await wrapper.setProps({ disabledActions: everything });
     await nextTick();
-    // The level is gone for good: re-enabling every action must not drop them back into it.
+    expect(wrapper.find('.action-menu-header').exists()).toBe(false);
+    expect(usable(wrapper)).toEqual([]);
+
     await wrapper.setProps({ disabledActions: undefined });
     await nextTick();
+    expect(wrapper.find('.action-menu-label').text()).toBe('Buy and unlock');
+  });
+
+  it('still drops a level for good when its actions are no longer offered at all', async () => {
+    const { wrapper } = mountPanel(WINDUP);
+    await wrapper.find('[data-bs-action-group="Buy and unlock"]').trigger('click');
+
+    await wrapper.setProps({ availableActions: ['checkIn', 'buyPack'] });
+    await nextTick();
+    expect(wrapper.find('[data-bs-menu-announcement]').text())
+      .toBe('Buy and unlock is no longer available. Showing all actions.');
+    await wrapper.setProps({ availableActions: WINDUP.map((a) => a.name) });
+    await nextTick();
     expect(wrapper.find('.action-menu-header').exists()).toBe(false);
+  });
+});
+
+describe('an overlay pointing at a folded action', () => {
+  it('points at the fold row while it is shut, and at the action once it is open', async () => {
+    const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
+    const target = { kind: 'action', actionName: 'rocket' } as const;
+    expect(findAnchor(target)).toBe(toggle(wrapper).element);
+    await toggle(wrapper).trigger('click');
+    expect(findAnchor(target)).toBe(wrapper.find('[data-bs-action="rocket"]').element);
   });
 });

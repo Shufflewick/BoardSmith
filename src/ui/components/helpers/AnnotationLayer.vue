@@ -31,7 +31,7 @@
 import { computed, ref, toRef, type ComponentPublicInstance } from 'vue';
 import BoardMessage from './BoardMessage.vue';
 import type { Annotation } from '../../../engine/tutorial/types.js';
-import { buildSelector } from './overlay-utils.js';
+import { findAnchor } from './overlay-utils.js';
 import { useOverlayTracking } from '../../composables/useOverlayTracking.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
 
@@ -95,8 +95,7 @@ function boardTop(placement: Annotation['placement'], top: number, bottom: numbe
 interface LayerSize { width: number; height: number }
 
 function resolve(ann: Annotation, boardRect: DOMRect | null, layer: LayerSize): ResolvedAnnotation {
-  const selector = ann.target ? buildSelector(ann.target) : '';
-  const targetEl = selector ? document.querySelector(selector) : null;
+  const targetEl = ann.target ? findAnchor(ann.target) : null;
   if (!targetEl) {
     return { text: ann.text, ring: null, inModal: false, anchorStyle: boardStyle(ann.placement, boardRect, layer) };
   }

@@ -9,7 +9,7 @@
 
 import { onMounted, onUnmounted, watch, nextTick, type Ref } from 'vue';
 import type { AnnotationTarget } from '../../engine/tutorial/types.js';
-import { buildSelector } from '../components/helpers/overlay-utils.js';
+import { findAnchor } from '../components/helpers/overlay-utils.js';
 
 export function useOverlayTracking<T>(options: {
   /** The overlay's root element (null while nothing is shown). */
@@ -54,8 +54,7 @@ export function useOverlayTracking<T>(options: {
     const observed = new Set<Element>([root.value]);
     for (const item of content.value) {
       const target = targetOf(item);
-      const selector = target ? buildSelector(target) : '';
-      const el = selector ? document.querySelector(selector) : null;
+      const el = target ? findAnchor(target) : null;
       if (el) observed.add(el);
     }
     const region = boardRegion();

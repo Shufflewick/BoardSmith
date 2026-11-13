@@ -338,6 +338,8 @@ const visibleActions = computed(() => {
 // in it goes too, and a group's count is what can be pressed.
 const disabledReasonOf = (name: string) => props.disabledActions?.[name];
 const actionMenu = computed(() => buildActionMenu(visibleActions.value.filter((a) => !disabledReasonOf(a.name))));
+/** Every offered action, disabled ones included: a level whose actions are only held is kept to come back to. */
+const offeredMenu = computed(() => buildActionMenu(visibleActions.value));
 
 /**
  * The level the player has navigated to -- REQUESTED, never trusted.
@@ -471,16 +473,22 @@ function onPanelKeydown(event: KeyboardEvent): void {
  * path is REQUESTED, never trusted, so with nothing to resolve against it
  * simply waits: the next set with anything in it is what answers the question,
  * however long it takes to arrive.
+ *
+ * A level whose actions are only disabled, by a rule or a board's hold, is kept
+ * rather than truncated: the parent is shown, and the player is back in it when
+ * an action there is usable again (#1638).
  */
 watch(actionMenu, () => {
   if (visibleActions.value.length === 0) return;
-  const resolved = resolveMenuPath(actionMenu.value, openPath.value);
-  if (resolved.length === openPath.value.length) return;
-  const lost = openPath.value[resolved.length];
-  openPath.value = resolved;
-  menuAnnouncement.value = resolved.length === 0
-    ? `${lost} is no longer available. Showing all actions.`
-    : `${lost} is no longer available. Showing ${resolved[resolved.length - 1]}.`;
+  const kept = resolveMenuPath(offeredMenu.value, openPath.value);
+  const shown = resolveMenuPath(actionMenu.value, kept);
+  if (shown.length === openPath.value.length) return;
+  const lost = openPath.value[shown.length];
+  openPath.value = kept;
+  const showing = shown.length === 0 ? 'all actions' : shown[shown.length - 1];
+  menuAnnouncement.value = kept.length > shown.length
+    ? `${lost} has nothing available yet. Showing ${showing}.`
+    : `${lost} is no longer available. Showing ${showing}.`;
 });
 
 // Current action metadata
@@ -1724,7 +1732,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </div>
         <!-- Drawn while closed too, so a reader of the page (the smoke walk, #472) finds each reason.
              Each entry is a focusable aria-disabled button, so v-disabled-reason gives a reader its reason. -->
-        <div v-show="foldOpen" :id="foldListId" class="action-fold-list" role="group" aria-label="Not available yet">
+        <div v-show="foldOpen" :id="foldListId" class="action-fold-list" data-bs-unavailable-list role="group" aria-label="Not available yet">
           <div v-for="action in foldedActions" :key="action.name" class="action-btn-group">
             <button
               class="action-btn"
