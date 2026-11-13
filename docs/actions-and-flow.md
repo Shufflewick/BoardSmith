@@ -1675,9 +1675,9 @@ thing its value is. Each candidate row then carries the thing it is, keyed and
 labelled the same way in every action, so the engine can report which verbs take
 which thing.
 
-```typescript
-import { subjectType, eitherSubject } from 'boardsmith';
+`subjectType` and `eitherSubject` come from `boardsmith`.
 
+```typescript
 const UNIT_TYPES = subjectType<string>({
   name: 'Unit types', onBoard: false, key: (unit) => unit, label: (unit) => unit,
 });
