@@ -119,6 +119,16 @@ describe('the panel on a selected thing (#1641)', () => {
     expect(game().log).toEqual(['paint blue']);
   });
 
+  it('treats a verb its thing answered completely as done, never as waiting on the board (#1641 review F4)', async () => {
+    const { wrapper, controller, game, die } = await panel(WorkshopGame);
+    controller.select(die('red'));
+    await settle();
+    await press(wrapper, 'Reroll');
+    expect(game().log).toEqual(['reroll red']);
+    expect(wrapper.emitted('selectingElement')).toBeUndefined();
+    expect(wrapper.emitted('cancelSelection')).toHaveLength(1);
+  });
+
   it('folds a verb the thing cannot take now, with its reason', async () => {
     const { wrapper, controller, die } = await panel(WorkshopGame);
     controller.select(die('green'));

@@ -112,11 +112,6 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
       + 'Select the thing first with actionController.select(), or start the verb with { subject } set to the selection.';
   }
 
-  /** A start on a board thing while nothing is selected selects it, so the panel stands on it and cancel lands there. */
-  function follow(named: SubjectEntry | undefined): void {
-    if (named?.onBoard && !binding.value && !own.value) own.value = named;
-  }
-
   /** The args a start on `subject` opens with and the pick it narrows or is carried to, or why the action does not take it. */
   function argsOn(meta: ActionMetadata, args: Record<string, unknown>, subject: SubjectRef | undefined): SubjectArgs {
     if (!subject) return { args };
@@ -129,13 +124,11 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
     return { args, ...(reached.kind === 'about' ? {} : { run: { start: reached, thing: subject } }) };
   }
 
-  /** Judge a start against the shared selection, then select the board thing it names when nothing is selected. */
+  /** Judge a start against the shared selection. */
   function admit(meta: ActionMetadata, args: Record<string, unknown>, subject: SubjectRef | undefined): void {
-    const named = namedThing(meta, args, subject);
-    const disagreement = mismatch(meta, named);
+    const disagreement = mismatch(meta, namedThing(meta, args, subject));
     // A development check: a board and a panel that disagree about the thing are a bug in the board.
     if (disagreement && isDevMode()) throw new Error(disagreement);
-    follow(named);
   }
 
   return { subjects, selection, select, bindSubjectSelection, argsOn, admit };

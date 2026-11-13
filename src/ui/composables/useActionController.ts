@@ -248,6 +248,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const getAutoFill = (): boolean => {
     return typeof autoFillOption === 'boolean' ? autoFillOption : autoFillOption.value;
   };
+  /** Whether an action auto-executes once nothing is left to ask: never one that quotes (#248). */
+  const autoExecutesFor = (meta: { quote?: boolean } | null | undefined): boolean =>
+    meta?.quote !== true && (typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value);
   const getAutoExecute = (): boolean => {
     // AN ACTION THAT QUOTES IS CONFIRMED, NEVER AUTO-COMMITTED (#248). Filling
     // the last selection used to BE the purchase, which left no moment for a
@@ -256,8 +259,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // player reaches it having seen what it costs. Here rather than at the watch
     // because this is the question "may anything auto-execute right now", and
     // every caller of it is asking that.
-    if (quotesItsDraft.value) return false;
-    return typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value;
+    return autoExecutesFor(currentActionMeta.value);
   };
 
   // D27 commit-leak gate (T-160-27 / BLOCKER-160): the acting seat's own
@@ -1769,11 +1771,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
     const seq = actionStartTick.value;
     const run = ++autoExecuteRuns;
-    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
+    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, () => actionMovedOn(seq));
     const result: ControllerActionResult = actionMovedOn(seq)
       ? { success: false, error: 'Action was cancelled' }
       : await executeCurrentAction();
     notifyAfterAutoExecute(result, run);
+  }
+
+  /** Send an action whose picks are all given, between the auto-execute hooks and listeners an action filled in the panel runs. */
+  async function sendAtOnce(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
+    const seq = actionStartTick.value;
+    const run = ++autoExecuteRuns;
+    // Nothing is open for it, so only another action starting means the player moved on.
+    await runBeforeAutoExecuteHooks(actionName, args, run, () => actionStartTick.value !== seq);
+    const result = await execute(actionName, args);
+    notifyAfterAutoExecute(result, run);
+    return result;
   }
 
   /**
@@ -1788,11 +1801,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * skip the hook registered after it.
    */
   async function runBeforeAutoExecuteHooks(
-    actionName: string, args: Record<string, unknown>, run: number, seq: number,
+    actionName: string, args: Record<string, unknown>, run: number, movedOn: () => boolean,
   ): Promise<void> {
     for (const hook of [...beforeAutoExecuteHooks.value]) {
       // A run the player has left must not reach a hook that would overwrite the next run's capture (#1026).
-      if (actionMovedOn(seq)) return;
+      if (movedOn()) return;
       try {
         // A copy each, so one hook changing its args cannot change what the next hook sees.
         await hook(actionName, { ...args }, run);
@@ -2330,8 +2343,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: refusal };
     }
     sharedSelection.admit(meta, { ...prefillArgs, ...initialArgs }, startOptions?.subject);
-    // Nothing left to ask: it is sent at once, as execute sends it, and the answer is the server's. Without auto-execute it waits for confirm.
-    if (getAutoExecute() && meta.selections.every((sel) => initialArgs[sel.name] !== undefined)) return execute(actionName, initialArgs);
+    // Nothing left to ask: it is sent at once and the answer is the server's. A quoted action, or one without auto-execute, waits for confirm.
+    if (autoExecutesFor(meta) && meta.selections.every((sel) => initialArgs[sel.name] !== undefined)) return sendAtOnce(actionName, initialArgs);
 
     currentAction.value = actionName;
     actionStartTick.value++;

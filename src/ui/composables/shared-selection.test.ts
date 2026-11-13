@@ -12,6 +12,7 @@
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { ref } from 'vue';
+import { useActionController } from './useActionController.js';
 import type { VueWrapper } from '@vue/test-utils';
 import type { SubjectRef } from '../../types/protocol.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
@@ -133,10 +134,12 @@ describe('starting a verb of a thing (#1641)', () => {
     expect(controller.currentAction.value).toBeNull();
   });
 
-  it('selects the thing a board starts a verb on while nothing is selected, so cancel lands on it', async () => {
-    const { controller, die } = await workshop();
-    await controller.start('placeDie', { args: { slot: 'top' }, subject: DICE.ref(die('green')) });
-    expect(controller.selection.value).toMatchObject({ type: 'Dice', label: 'green showing 1' });
+  it('leaves the selection alone when a board starts a verb on a thing, so it never goes stale (#1641 review F3)', async () => {
+    const { controller, game, die } = await workshop();
+    await controller.start('reroll', { args: { die: die('red').id } });
+    await controller.start('reroll', { args: { die: die('blue').id } });
+    expect(controller.selection.value).toBeNull();
+    expect(game().log).toEqual(['reroll red', 'reroll blue']);
   });
 });
 
@@ -187,5 +190,38 @@ describe('a start with every pick given (#1641)', () => {
     expect(game().log).toEqual(['reroll red']);
     expect(await controller.start('pass')).toMatchObject({ success: true });
     expect(game().log).toEqual(['reroll red', 'pass']);
+  });
+});
+
+describe('a start with every pick given, around the send (#1641 review F1, F2)', () => {
+  const metadata = {
+    buy: { name: 'buy', quote: true, selections: [{ name: 'item', type: 'choice' as const, choices: [{ value: 7, display: 'Lamp' }] }] },
+    move: { name: 'move', selections: [{ name: 'to', type: 'choice' as const, choices: [{ value: 'a', display: 'A' }] }] },
+  };
+  const controllerFor = (sent: string[]) => useActionController({
+    sendAction: async (name) => { sent.push(name); return { success: true }; },
+    availableActions: ref(['buy', 'move']),
+    actionMetadata: ref(metadata),
+    isMyTurn: ref(true),
+  });
+
+  it('opens a quoted action for confirm instead of sending it, whatever was open before', async () => {
+    const sent: string[] = [];
+    const controller = controllerFor(sent);
+    await controller.start('buy', { args: { item: 7 } });
+    expect(sent).toEqual([]);
+    expect(controller.currentAction.value).toBe('buy');
+  });
+
+  it('runs the auto-execute hooks and tells the listeners, as an action filled in the panel does', async () => {
+    const sent: string[] = [];
+    const controller = controllerFor(sent);
+    const heard: string[] = [];
+    controller.onBeforeAutoExecute(async (name) => { heard.push(`before ${name}`); });
+    controller.onAfterAutoExecute((result) => { heard.push(`after ${result.success}`); });
+    await controller.start('move', { args: { to: 'a' } });
+    await Promise.resolve();
+    expect(sent).toEqual(['move']);
+    expect(heard).toEqual(['before move', 'after true']);
   });
 });

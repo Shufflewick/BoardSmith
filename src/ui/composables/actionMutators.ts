@@ -62,6 +62,7 @@ type MutatorController = Pick<
   UseActionControllerReturn,
   | 'start'
   | 'execute'
+  | 'currentAction'
   | 'fill'
   | 'toggleMultiSelect'
   | 'appendListEntry'
@@ -102,8 +103,12 @@ export function createActionMutators(
     // after the await wipes all of that and no watcher re-runs, so the board goes
     // dead for the whole action while `currentAction` still names it.
     board?.clear();
-    await controller.start(actionName, options);
-    return 'started';
+    const startTick = controller.actionStartTick.value;
+    const result = await controller.start(actionName, options);
+    if (controller.currentAction.value === actionName) return 'started';
+    // A start with nothing left to ask was sent at once (#1641), so the board belongs to it no longer.
+    if (controller.actionStartTick.value === startTick) board?.clear();
+    return result.success ? 'executed' : 'refused';
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean> {
