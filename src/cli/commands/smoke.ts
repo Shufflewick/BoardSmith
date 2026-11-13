@@ -311,7 +311,8 @@ async function runWalk(
   // The walk reads its seeds from this variable alone, so a run with none to hand it must not let it
   // inherit another run's: a check run inside a `boardsmith smoke --seed` deals from the spec's seeds.
   const env = { [SMOKE_SEEDS_ENV]: seeds === undefined ? undefined : JSON.stringify(seeds) };
-  const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env);
+  // Its own group: Playwright's runner dies at once on SIGTERM while its workers ignore it and go on writing into the copy (#1648).
+  const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env, { ownGroup: true });
   walk.child.stdout?.on('data', (chunk: Buffer) => chunk.toString().split('\n').filter(Boolean).forEach(log));
   const [code] = (await once(walk.child, 'exit')) as [number | null];
   return verdict(await readPlaywrightReport(join(work, 'report.json')), code, walk.output());
