@@ -46,7 +46,14 @@ function readStrip(frame, strip) {
     const acting = root.querySelector('.pt.strip-active > .tok');
     const ring = acting && root.ownerDocument.getAnimations().find((a) => a.effect.target === acting && a.effect.pseudoElement === '::after');
     const after = acting && getComputedStyle(acting, '::after');
+    const tokens = root.querySelector('.strip-tokens');
+    // How far the outline reaches past the token at its largest scale.
+    const scales = ring ? ring.effect.getKeyframes().map((k) => (k.transform && k.transform !== 'none' ? new DOMMatrix(k.transform).a : 1)) : [1];
+    const side = acting && acting.getBoundingClientRect().width - 2 * parseFloat(after.left);
     return {
+      reach: acting && (side * Math.max(...scales) - acting.getBoundingClientRect().width) / 2,
+      actingSeat: acting && [...root.querySelectorAll('.strip-tokens .pt')].indexOf(acting.parentElement),
+      tokens: { right: tokens.getBoundingClientRect().right, scrolls: tokens.scrollWidth > tokens.clientWidth },
       root: box(root),
       seats: [...root.querySelectorAll('.strip-tokens .pt')].map((pt) => ({ tok: box(pt.querySelector('.tok')), extra: box(pt.querySelector('.extra')) })),
       status: { text: status.textContent, shown: status.getBoundingClientRect().width > 1, inTree: getComputedStyle(status).display !== 'none' },
@@ -87,7 +94,26 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files:
         assert(read.ring && read.ring.iterations === Infinity, `the outline does not loop: ${JSON.stringify(read.ring)}`);
         assert(read.ring.properties.every((p) => p === 'transform' || p === 'opacity'), `the outline animates ${read.ring.properties.join(', ')}`);
       });
+      await check(`at ${width}px the outline stays clear of the acting seat's extra`, async () => {
+        const { tok, extra } = read.seats[read.actingSeat];
+        assert(read.reach <= extra.left - tok.right, `the outline reaches ${read.reach}px past the badge, the extra is ${extra.left - tok.right}px away`);
+      });
     }
+
+    await check('with more seats than fit at 320px the strip stays one row and scrolls, clear of the toggle', async () => {
+      await page.setViewportSize({ width: 320, height: 800 });
+      // The table sample seats two; copies of a seat stand in for a bigger table.
+      await frame.locator('.mobile-strip .strip-tokens').evaluate((row) => {
+        for (let i = 0; i < 4; i++) row.append(row.lastElementChild.cloneNode(true));
+      });
+      const read = await readStrip(frame, '.mobile-strip .seat-strip');
+      const toggle = await frame.locator('.mobile-strip__toggle').evaluate((el) => el.getBoundingClientRect().left);
+      assert(read.seats.length === 6 && read.root.bottom - read.root.top <= 34 + 1, `six seats make the strip ${read.root.bottom - read.root.top}px tall`);
+      assert(read.tokens.right <= toggle && read.tokens.scrolls, `the seats run to ${read.tokens.right} (toggle at ${toggle}), scrolling: ${read.tokens.scrolls}`);
+      await frame.locator('.mobile-strip .strip-tokens').evaluate((row) => {
+        for (let i = 0; i < 4; i++) row.lastElementChild.remove();
+      });
+    });
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await frame.getByRole('button', { name: 'Collapse panel' }).click();
@@ -97,6 +123,8 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files:
       for (const { tok, extra } of read.seats) {
         assert(extra.top >= tok.bottom, `an extra is not under its badge: ${JSON.stringify({ tok, extra })}`);
       }
+      const { tok, extra } = read.seats[read.actingSeat];
+      assert(read.reach <= extra.top - tok.bottom, `the outline reaches ${read.reach}px past the badge, the extra is ${extra.top - tok.bottom}px below`);
     });
 
     await page.setViewportSize({ width: 375, height: 800 });

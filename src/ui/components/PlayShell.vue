@@ -188,7 +188,7 @@ defineSlots<{
   'player-stats'(props: { player: Player }): unknown;
   /** The game's per-seat content, under the identity token. */
   'player-token-extra'(props: { player: Player }): unknown;
-  /** The game's per-seat content, under each token in the rail and the phone strip. */
+  /** The game's per-seat content, under each token in the rail and beside it in the phone strip. */
   'player-strip-extra'(props: { player: Player }): unknown;
   /** The controls menu, at the far left of the action bar. Its contents are the
    *  adapter's: a table's carries undo, hints and the tutorial. */
@@ -1168,6 +1168,12 @@ const mobileToggleLabel = computed(() => {
   .mobile-strip :deep(.strip-tokens) {
     flex-wrap: nowrap;
     justify-content: flex-start;
+    /* A table too wide for the phone scrolls sideways rather than running under the toggle. */
+    overflow-x: auto;
+    scrollbar-width: none;
+    /* Room for the acting token's outline, which the scroll box would clip, at no extra height. */
+    padding: 3px;
+    margin: -3px;
   }
   /* A seat's #player-strip-extra sits beside its token, keeping the strip one row. */
   .mobile-strip :deep(.strip-tokens .pt) {

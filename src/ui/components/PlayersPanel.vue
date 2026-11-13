@@ -210,8 +210,9 @@ defineSlots<{
    * down: content here sits beside the name row instead of stacking under it.
    */
   'player-token-extra'(props: { player: Player }): any;
-  /** Custom content under each seat's token in seat-strip mode (the collapsed
-   *  rail and the phone strip), for the one number a player needs at a glance. */
+  /** Custom content with each seat's token in seat-strip mode (under it in the
+   *  collapsed rail, beside it in the phone strip), for the one number a player
+   *  needs at a glance. */
   'player-strip-extra'(props: { player: Player }): any;
 }>();
 </script>
@@ -219,7 +220,7 @@ defineSlots<{
 <template>
   <!-- ── Seat Strip: compact one-line for phone compact tier (IA-06) ───────── -->
   <div v-if="seatStrip" class="players-panel seat-strip" role="group" aria-label="Players">
-    <!-- All player tokens inline, each over the game's #player-strip-extra content -->
+    <!-- All player tokens inline, each with the game's #player-strip-extra content -->
     <div class="strip-tokens" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
       <!-- Content under a token sits at one height whether its seat acts or not (#431). -->
       <span
@@ -496,7 +497,8 @@ defineSlots<{
 .strip-tokens .pt {
   display: grid;
   place-items: center;
-  gap: 2px;
+  /* Clears the acting token's 3px outline. */
+  gap: 4px;
 }
 
 /* Only the token dims: a game's #player-strip-extra content stays legible. */
@@ -514,16 +516,17 @@ defineSlots<{
 .strip-tokens .pt.strip-active > .tok::after {
   content: '';
   position: absolute;
-  inset: -4px;
+  inset: -3px;
   border-radius: 50%;
   border: 2px solid var(--bsg-accent);
   pointer-events: none;
   animation: strip-throb 1.6s ease-in-out infinite;
 }
 
+/* Throbs inward, so the outline never reaches past its resting 3px onto a seat's extra. */
 @keyframes strip-throb {
   0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(1.12); opacity: 0.35; }
+  50% { transform: scale(0.92); opacity: 0.35; }
 }
 
 /* Reduced motion keeps the outline, still at its resting full-size, opaque state. */
