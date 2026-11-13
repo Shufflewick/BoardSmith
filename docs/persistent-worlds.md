@@ -896,6 +896,23 @@ under an Action Panel category, as on a table; see
 world context, `ctx.world` included. It is not taken with `multiSelect` or
 `orderedList`, or on `chooseElements`.
 
+`chooseFrom`, `chooseElement` and `enterText` also take `subject:`, as on a
+table; see
+[Subject types](./actions-and-flow.md#subject-types-the-things-a-games-verbs-are-about).
+Declare the type with the world context, `subjectType<Colony, WorldActionContext>(...)`,
+and its callbacks get `ctx.world`. Two things differ in a world:
+
+- **A label may be `undefined`.** An offer hydrates only what its action needs,
+  so a thing's name may not be resident there. Return `undefined` rather than a
+  stand-in such as the id; `subjectIndex` names the thing from another offer's
+  row that has its name, and by its key only when no row does. At a table an
+  `undefined` label is refused, since everything is resident.
+- **Binding a pick to the wrong subject type is not detected.** When two types'
+  keys look alike (a shop item and a pack item are both a catalogue number), a
+  pick bound to the wrong one shows as a doubled thing or a stray verb in the
+  panel, and nothing reports it. A world cannot list `things` in every offer, so
+  check the panel on first look.
+
 ### `ctx.world`: what a world gives an action that a table cannot
 
 `ActionContext` is `{ game, player, args }` and stays that: the table backend has

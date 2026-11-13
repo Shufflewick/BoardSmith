@@ -508,6 +508,33 @@ export interface RefWithRole {
   role: 'source' | 'target' | 'highlight';
 }
 
+/** Which thing of a declared subject type (#1640): the type's name and the key its one key function gave. */
+export interface SubjectRef {
+  type: string;
+  key: string;
+}
+
+/** The thing a candidate row is, as its subject type describes it (#1640). */
+export interface PickSubject extends SubjectRef {
+  /** The thing's own name, not a verb's wording for it. Absent only in a world offer that did not hydrate what names it. */
+  label?: string;
+  /** The board element the thing is, when it is one. */
+  element?: number;
+  /** Category path for a long list, outermost first; at most two levels. */
+  category?: readonly string[];
+  /** Other things whose verbs belong with this one: a pack's unit type. */
+  related?: readonly SubjectRef[];
+  /** The thing this one belongs to: a blueprint's tower. */
+  within?: SubjectRef;
+}
+
+/** A subject type a pick binds (#1640). */
+export interface PickSubjectType {
+  name: string;
+  /** Every thing of the type is a piece the player already has on the board. */
+  onBoard: boolean;
+}
+
 /**
  * Choice with optional board references for highlighting.
  */
@@ -520,6 +547,8 @@ export interface ChoiceWithRefs {
   disabled?: string;
   /** The Action Panel category path, outermost first; absent at the top level (#1439). */
   group?: readonly string[];
+  /** The thing this candidate is, when the pick binds a subject type (#1640). */
+  subject?: PickSubject;
 }
 
 /**
@@ -535,6 +564,8 @@ export interface ValidElement {
   disabled?: string;
   /** The Action Panel category path, outermost first; absent at the top level (#1439). */
   group?: readonly string[];
+  /** The thing this candidate is, when the pick binds a subject type (#1640). */
+  subject?: PickSubject;
 }
 
 /**
@@ -585,6 +616,8 @@ export interface PickMetadata<TElement extends ValidElement = ValidElement> {
   prompt?: string;
   /** If true, shows "Skip" button. If a string, shows that text instead. */
   optional?: boolean | string;
+  /** The subject types this pick's values are things of (#1640). */
+  subjectTypes?: readonly PickSubjectType[];
   // Choice-specific properties
   /** For choice picks: available choices */
   choices?: ChoiceWithRefs[];
@@ -748,6 +781,8 @@ export interface ActionMetadata<TElement extends ValidElement = ValidElement> {
    * a game that declares nothing keeps the flat panel.
    */
   group?: readonly string[];
+  /** Things the action is about without picking them, declared with `.about()` (#1640). */
+  about?: readonly PickSubject[];
   /** Sort key within the action's menu level (#228); absent sorts as `0`. */
   order?: number;
   /**

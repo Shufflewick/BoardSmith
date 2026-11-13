@@ -23,7 +23,8 @@ import {
   type PickChoicesResponse,
   type WarningEntry,
 } from './types.js';
-import type { ValidElement } from '../types/protocol.js';
+import type { ChoiceWithRefs, ValidElement } from '../types/protocol.js';
+import { MAX_SUBJECT_ROWS } from '../engine/action/subject-type.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { actionForSeat, deserializePendingState, serializePendingActionState } from './utils.js';
@@ -96,6 +97,9 @@ function answerPick(
   // would ship an answer that drops the very warnings it is meant to carry.
   const said = () => (warnings.length > 0 ? warnings : undefined);
 
+  const tooMany = subjectListRefusal(action, selection, evaluated.candidates.length);
+  if (tooMany) return tooMany;
+
   if (selection.type === 'choice') {
     const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
     const multiSelect = resolveMultiSelect(selection, ctx);
@@ -112,6 +116,18 @@ function answerPick(
   const multiSelect = selection.type === 'elements' ? resolveMultiSelect(selection, ctx) : undefined;
   if (validElements.length === 0 && !answersEmpty(selection, multiSelect)) return deadEnd(action, selection, ctx);
   return { success: true, validElements, multiSelect, warnings: said() };
+}
+
+/** A subject first pick's list rides in every state push, so one over the cap is refused (#1640). */
+function subjectListRefusal(action: ActionDefinition, selection: ChoiceSelection | ElementSelection | ElementsSelection, rows: number): PickChoicesResponse | undefined {
+  if (selection !== action.selections[0] || selection.type === 'elements' || !selection.subject || rows <= MAX_SUBJECT_ROWS) return undefined;
+  const types = selection.subject.types.map((type) => type.options.name).join(' or ');
+  return {
+    success: false,
+    error: `"${action.name}" pick "${selection.name}" lists ${rows} ${types}, and a subject pick lists at most ${MAX_SUBJECT_ROWS}, `
+      + 'because its list travels with every state push. Narrow the pick with an earlier one, or remove its subject.',
+    errorCode: ErrorCode.INVALID_PICK,
+  };
 }
 
 /** Whether a pick with nothing to pick still has an answer: skipping an optional one, or [] for a min-0 list (#1558). */
@@ -281,10 +297,29 @@ export class PickHandler<G extends Game = Game> {
   answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
     for (const action of Object.values(metadata ?? {})) {
       const first = action.selections[0];
+      if (first?.type === 'choice' && first.subjectTypes) {
+        const choices = this.#subjectAnswer(action.name, first.name, seat);
+        if (choices) first.choices = choices;
+        continue;
+      }
       if (first?.type !== 'element' && first?.type !== 'elements') continue;
       const elements = this.#openingAnswer(action.name, first.name, seat);
       if (elements) first.validElements = elements;
     }
+  }
+
+  /**
+   * A subject choice pick's rows when every one is a thing (#1640), else `undefined`. A row the seat
+   * cannot see is given no thing, so a list naming one stays with resolveChoices, as an element list does.
+   */
+  #subjectAnswer(actionName: string, pickName: string, seat: number): ChoiceWithRefs[] | undefined {
+    let answer: PickChoicesResponse;
+    try {
+      answer = this.getPickChoices(actionName, pickName, seat);
+    } catch {
+      return undefined;
+    }
+    return answer.success && answer.choices?.every((row) => row.subject) ? answer.choices : undefined;
   }
 
   /** An opening pick's candidates when the seat sees every one, else `undefined`. */

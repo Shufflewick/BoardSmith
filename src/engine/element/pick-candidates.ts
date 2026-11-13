@@ -33,7 +33,8 @@ import type {
 } from '../action/types.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { ChoiceWithRefs, ValidElement, WarningEntry } from '../../types/protocol.js';
+import type { ChoiceWithRefs, PickSubject, ValidElement, WarningEntry } from '../../types/protocol.js';
+import type { SubjectBinding } from '../action/subject-type.js';
 
 /** One candidate as the executor answers it: the value, and why it cannot be
  *  taken if it cannot. */
@@ -117,6 +118,7 @@ export function formatChoiceCandidates(
 
     if (disabled !== false) choice.disabled = disabled;
     setGroup(choice, selection.group, value, hidesFrom(ctx.player.seat, value), selection.name);
+    setSubject(choice, selection.subject, value, ctx);
     return choice;
   });
 }
@@ -150,6 +152,7 @@ export function formatElementCandidates(
     if (disabled !== false) validElem.disabled = disabled;
     // `group` is handed the earlier picks too, as `display` is, so a hidden card there hides every category.
     setGroup(validElem, groupOfElement, element, hidesFrom(ctx.player.seat, [ctx.args, element]), selection.name);
+    if (selection.type === 'element') setSubject(validElem, selection.subject, element, ctx);
     return validElem;
   });
 }
@@ -205,6 +208,18 @@ function setGroup<V>(
     return;
   }
   devWarn(`group-hidden:${selectionName}`, `group for selection '${selectionName}' was handed a card the player cannot see, so that choice is shown at the top level (#1293).`);
+}
+
+/** Give a candidate the thing it is (#1640), except one the seat cannot see, whose key and label could name it. */
+function setSubject(
+  candidate: { subject?: PickSubject },
+  subject: SubjectBinding<never, never> | undefined,
+  value: unknown,
+  ctx: CandidateContext,
+): void {
+  if (subject === undefined || hidesFrom(ctx.player.seat, value)) return;
+  const described = subject.describe(value as never, ctx as never);
+  if (described) candidate.subject = described;
 }
 
 /** The little of an element these formatters read. */

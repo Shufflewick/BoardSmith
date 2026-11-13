@@ -6,8 +6,9 @@ import type { Game, PlayerOf } from '../element/game.js';
 // `ActionDefinition.world`.
 import type { WorldActionBlock } from '../../world/action.js';
 import type { ElementClass } from '../element/types.js';
-import type { ActionMetadata, ElementRef, RefWithRole, ValidElement } from '../../types/protocol.js';
+import type { ActionMetadata, ElementRef, PickSubject, RefWithRole, ValidElement } from '../../types/protocol.js';
 import type { TextPattern } from './text-rules.js';
+import type { SubjectBinding, SubjectType } from './subject-type.js';
 // The protocol owns the element reference shapes; the engine's action API hands them out as they are.
 export type { RefWithRole };
 
@@ -302,6 +303,8 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
   display?: (choice: T) => string;
   /** The Action Panel category path for a choice, outermost first, as `.group()` places an action; `[]` for the top level (#1439). */
   group?: (choice: T) => readonly string[];
+  /** The subject type a value is a thing of (#1640). */
+  subject?: SubjectBinding<T, ActionContext>;
   /** Get board element references for highlighting (source/target) */
   boardRefs?: (choice: T, context: ActionContext) => ChoiceBoardRefs;
   /** Keep the choices whose `key` equals an earlier pick's value; that pick must answer with one value, not a list. */
@@ -400,6 +403,8 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** The Action Panel category path for an element, outermost first, as `.group()` places an action; `[]` for the top level (#1439). */
   group?: (element: T, context: ActionContext) => readonly string[];
+  /** The subject type a value is a thing of (#1640). */
+  subject?: SubjectBinding<T, ActionContext>;
   /** Get board element reference for highlighting */
   boardRef?: (element: T, context: ActionContext) => ElementRef;
   /**
@@ -501,6 +506,8 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
 export const DEFAULT_TEXT_MAX_LENGTH = 256;
 
 export interface TextSelection extends BaseSelection<string> {
+  /** The text names a thing of this type that no list may show (#1640). A typed pick has no list to describe, so its context is never read. */
+  subject?: SubjectType<string, never>;
   type: 'text';
   /** Pattern the text must match, and the sentence a player is shown when it does not (#394). */
   pattern?: TextPattern;
@@ -758,6 +765,8 @@ export interface ActionDefinition {
    * Action Panel button is hidden. Not a security control. Set via `.suppressFromActionPanel()`.
    */
   suppressFromActionPanel?: boolean;
+  /** Things the action is about without picking them, for one seat now; set via `.about()` (#1640). */
+  about?: ((context: ActionContext) => PickSubject[])[];
   /**
    * This verb permanently ends something, so the Action Panel draws it apart
    * from the rest (#268). Set via `.destructive()`.

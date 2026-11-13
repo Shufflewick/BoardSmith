@@ -83,6 +83,7 @@ import type {
 } from "../engine/index.js";
 import type { ChoiceValue, ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
 import type { TextPattern } from "../engine/action/text-rules.js";
+import type { SubjectBinding, SubjectType } from "../engine/action/subject-type.js";
 import type { AddArg } from "../engine/action/action-builder.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
@@ -451,6 +452,8 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined, O = boolea
   display?: (choice: ChoiceValue<T>) => string;
   /** The Action Panel category a choice sits under; see the engine's `chooseFrom` (#1439). Not on a `multiSelect` or `orderedList`. */
   group?: (choice: ChoiceValue<T>) => readonly string[];
+  /** The subject type a choice is a thing of; see the engine's `chooseFrom` (#1640). Not on a `multiSelect` or `orderedList`. */
+  subject?: SubjectBinding<ChoiceValue<T>, WorldActionContext<G>>;
   optional?: O;
   validate?: (
     value: V,
@@ -851,6 +854,18 @@ function forwardElementOptions<G extends Game, T extends GameElement, P, O>(
   };
 }
 
+/**
+ * A world's subject binding, handed the WORLD context like every other callback
+ * here, and allowed a thing it cannot name: an offer hydrates only what its
+ * action needs, so a thing's name may not be resident (#1640).
+ */
+function forwardSubject<G extends Game, V>(
+  subject: SubjectBinding<V, WorldActionContext<G>> | undefined,
+): SubjectBinding<V, AnyContext> | undefined {
+  if (subject === undefined) return undefined;
+  return { types: subject.types, describe: (value, context) => subject.describe(value, withWorld<G>(context), true) };
+}
+
 /** A world's `unavailable` sentence, handed the WORLD context like every other callback here (#393). */
 function forwardUnavailable<G extends Game>(
   unavailable: ((value: unknown, context: WorldActionContext<G>) => string) | undefined,
@@ -1216,6 +1231,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
           : options.choices,
       display: options.display,
       group: options.group,
+      subject: forwardSubject<G, ChoiceValue<T>>(options.subject),
       optional: options.optional,
       validate: forwardValidate(options.validate),
       boardRefs: options.boardRefs
@@ -1251,6 +1267,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       ) => boolean | string;
       /** The Action Panel category an element sits under; see the engine's `chooseElement` (#1439). */
       group?: (element: T, context: WorldActionContext<G>) => readonly string[];
+      /** The subject type an element is a thing of; see the engine's `chooseElement` (#1640). */
+      subject?: SubjectBinding<T, WorldActionContext<G>>;
     },
   ): WorldAction<G, AddArg<A, K, T, O>> {
     this.declareSelection(options.needs);
@@ -1258,6 +1276,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     this.inner.chooseElement<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
       group: group ? (element, context) => group(element, withWorld<G>(context)) : undefined,
+      subject: forwardSubject<G, T>(options.subject),
       validate: forwardValidate(options.validate),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T, O>>;
@@ -1319,6 +1338,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       maxBytes?: number;
       multiline?: boolean;
       pattern?: TextPattern;
+      /** The text names a thing of this type that no list may show; see the engine's `enterText` (#1640). */
+      subject?: SubjectType<string, WorldActionContext<G>>;
       optional?: O;
       validate?: (
         value: string,
@@ -1328,13 +1349,14 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     } = {},
   ): WorldAction<G, AddArg<A, K, string, O>> {
     this.declareSelection(options.needs);
-    this.inner.enterText<K, O>(name, {
+    this.inner.enterText<K, O, WorldActionContext<G>>(name, {
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
       maxLength: options.maxLength,
       maxBytes: options.maxBytes,
       multiline: options.multiline,
       pattern: options.pattern,
+      subject: options.subject,
       optional: options.optional,
       validate: forwardValidate(options.validate),
     });

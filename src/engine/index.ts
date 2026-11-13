@@ -142,6 +142,8 @@ export type { VisibilityMode, VisibilityState } from './element/visibility.js';
 
 // Action system
 export { Action, evaluateCondition } from './action/index.js';
+export { subjectType, eitherSubject, MAX_SUBJECT_ROWS, type SubjectType, type SubjectTypeOptions, type SubjectBinding } from './action/subject-type.js';
+export { subjectIndex, type SubjectIndex, type SubjectEntry, type SubjectVerb } from './action/subject-index.js';
 
 // Filter helpers for multi-step selections
 export {
