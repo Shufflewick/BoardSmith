@@ -1764,20 +1764,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (ready && !pendingOnServer.value) await autoExecuteCurrentAction();
   });
 
-  /** The auto-execute under way: the watcher and a start that filled every pick share it, so the action is sent once. */
-  let autoExecuting: { tick: number; run: Promise<ControllerActionResult | undefined> } | null = null;
-  function autoExecuteCurrentAction(): Promise<ControllerActionResult | undefined> {
-    if (autoExecuting?.tick === actionStartTick.value) return autoExecuting.run;
-    const run = runAutoExecute();
-    const held = { tick: actionStartTick.value, run };
-    autoExecuting = held;
-    void run.finally(() => { if (autoExecuting === held) autoExecuting = null; });
-    return run;
-  }
-
-  /** Send the open action as auto-execute does, between its hooks, when auto-execute may run now; its result, or undefined when it did not run. */
-  async function runAutoExecute(): Promise<ControllerActionResult | undefined> {
-    if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return undefined;
+  /** Send the open action as auto-execute does, between its hooks, when auto-execute may run now. */
+  async function autoExecuteCurrentAction(): Promise<void> {
+    if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
     const seq = actionStartTick.value;
     const run = ++autoExecuteRuns;
     await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
@@ -1785,7 +1774,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       ? { success: false, error: 'Action was cancelled' }
       : await executeCurrentAction();
     notifyAfterAutoExecute(result, run);
-    return result;
   }
 
   /**
@@ -2342,6 +2330,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: refusal };
     }
     sharedSelection.admit(meta, { ...prefillArgs, ...initialArgs }, startOptions?.subject);
+    // Nothing left to ask: it is sent at once, as execute sends it, and the answer is the server's. Without auto-execute it waits for confirm.
+    if (getAutoExecute() && meta.selections.every((sel) => initialArgs[sel.name] !== undefined)) return execute(actionName, initialArgs);
 
     currentAction.value = actionName;
     actionStartTick.value++;
@@ -2369,11 +2359,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Fetch choices for the first selection that needs input
     // This handles both normal start (first selection) and followUp with pre-filled args
     // (where we need to fetch choices for the next unfilled selection)
-    const asked = meta.selections.find((sel) => initialArgs[sel.name] === undefined);
-    if (asked) await fetchAndAutoFill(asked);
+    if (meta.selections.length > 0) {
+      // Find first selection that needs input (wasn't pre-filled)
+      let selectionToFetch: EnrichedPickMetadata | undefined;
+      for (const sel of meta.selections) {
+        if (initialArgs[sel.name] === undefined) {
+          selectionToFetch = sel;
+          break;
+        }
+      }
 
-    // The caller gave every pick, so it runs now and the caller gets the server's answer, as execute gave it.
-    if (!asked && isReady.value && !pendingOnServer.value) return (await autoExecuteCurrentAction()) ?? { success: true };
+      if (selectionToFetch) {
+        await fetchAndAutoFill(selectionToFetch);
+      }
+    }
+
     return { success: true };
   }
 
