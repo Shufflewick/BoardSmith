@@ -1080,7 +1080,8 @@ async function openSeatAction(
 ): Promise<void> {
   const started = await controller.start(name, args ? { args } : undefined);
   const mayTake = seatActions.length > 0 ? seatActions.map((action) => `"${action}"`).join(', ') : 'nothing';
-  if (!started.success) {
+  // An action the seat may take that has nothing to choose is sent at once (#1641), which the check below reports.
+  if (!started.success && !seatActions.includes(name)) {
     throw new Error(
       `renderAsSeat could not open "${name}" for seat ${seat}: ${started.error ?? 'the controller refused it'}. ` +
         `startAction opens an action the seat may take now, and seat ${seat} may take ${mayTake}.`,

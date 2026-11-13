@@ -81,7 +81,7 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     canClear: vi.fn(() => true),
 
     // Reached from event handlers only.
-    start: vi.fn(async () => {}),
+    start: vi.fn(async () => ({ success: true })),
     fill: vi.fn(async () => ({ valid: true })),
     skip: vi.fn(),
     cancel: vi.fn(),
