@@ -43,7 +43,7 @@ import PlayerToken from './PlayerToken.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { tryUseBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useDrawnBoardElements } from '../composables/useDrawnBoardElements.js';
-import type { EnrichedActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../composables/useActionControllerTypes.js';
 
 /** What the adapter has to say about its own connection, on whichever axis it
  *  has. A table's is socket health; a world's is an attachment lifecycle. The
@@ -244,8 +244,7 @@ watch(() => props.isCompact, (compact) => {
  * `currentAction` the panel itself renders from -- so the bar's chrome and the
  * panel's contents cannot disagree about whether anything is being asked.
  */
-const actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined) as
-  UseActionControllerReturn | undefined;
+const actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined);
 if (!actionController) {
   throw new Error(
     'PlayShell requires the action controller to be provided. ' +

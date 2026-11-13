@@ -10,6 +10,8 @@ import type { GameViewElement } from '../types.js';
 import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 import type { FollowUpOffer } from '../../engine/action/types.js';
+import type { SubjectEntry, SubjectIndex } from '../../engine/action/subject-index.js';
+import type { SubjectRef } from '../../types/protocol.js';
 
 
 // THE PICK SHAPE IS OWNED BY ../../types/protocol.js (#251).
@@ -391,6 +393,30 @@ export interface StartCandidates {
   elements: EnrichedValidElement[];
 }
 
+/** A thing to select (#1641), with the label and related things a board knows when no offered pick lists it. */
+export interface SubjectChoice extends SubjectRef {
+  label?: string;
+  related?: readonly SubjectRef[];
+}
+
+/** A selection a game keeps in its own state (#1641): read from its view, written through its own actions. */
+export interface SubjectSelectionBinding {
+  read: () => SubjectChoice | null;
+  write: (thing: SubjectChoice | null) => void;
+  /** The game's actions that change the selection, so starting one is never judged a mismatch. */
+  selects: readonly string[];
+}
+
+/** How `start` opens an action. */
+export interface StartOptions {
+  /** Picks to fill at once. */
+  args?: Record<string, unknown>;
+  /** Picks to fill when each becomes the open one. */
+  prefill?: Record<string, unknown>;
+  /** The thing the verb acts on (#1641): it fills the pick that lists it, narrows a pick to the rows that belong to it, or is carried to the later pick that takes it. */
+  subject?: SubjectRef;
+}
+
 export interface UseActionControllerReturn {
   // === State ===
   /** Currently active action name */
@@ -534,10 +560,7 @@ export interface UseActionControllerReturn {
    * executed. The eventual server outcome arrives later via the auto-execute
    * watcher, observable through `lastError`, not through this return value.
    */
-  start: (actionName: string, options?: {
-    args?: Record<string, unknown>;
-    prefill?: Record<string, unknown>;
-  }) => Promise<ControllerActionResult>;
+  start: (actionName: string, options?: StartOptions) => Promise<ControllerActionResult>;
   /** Fill a selection with a value (async for repeating selections) */
   fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
@@ -638,6 +661,16 @@ export interface UseActionControllerReturn {
    * still there.
    */
   actionMenuPath: Ref<readonly string[]>;
+  /** True while the panel shows its ordinary menu though a thing is selected: a world's selection is never empty, so Back only looks away from it (#1641). */
+  actionMenuAway: Ref<boolean>;
+  /** The things the offered verbs take, inverted from their first-pick lists, each verb with its action's disabled reason (#1641). */
+  subjects: ComputedRef<SubjectIndex>;
+  /** The one thing the board and the panel have selected, with its verbs, or null (#1641). */
+  selection: ComputedRef<SubjectEntry | null>;
+  /** Select a thing, or nothing, for the board and the panel alike (#1641). */
+  select: (thing: SubjectChoice | null) => void;
+  /** Keep the shared selection in the game's own state instead of the controller's; null unbinds (#1641). */
+  bindSubjectSelection: (binding: SubjectSelectionBinding | null) => void;
   /**
    * Toggle a value in the in-progress multiSelect draft for a selection.
    * Respects the selection's max; auto-confirms when min === max and the exact count
@@ -759,3 +792,10 @@ export interface UseActionControllerReturn {
    */
   showActionPanel: ComputedRef<boolean>;
 }
+
+/**
+ * The controller as a board is handed it (#1641): every member but `execute`,
+ * which would take an action the panel never showed. A board starts a verb with
+ * `start`, so the panel follows it and the shared selection is judged.
+ */
+export type BoardActionController = Omit<UseActionControllerReturn, 'execute'>;

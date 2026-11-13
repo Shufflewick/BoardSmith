@@ -104,7 +104,7 @@ GameRunner.start()
 UI Click / Bot Decision
     │
     ▼
-actionController.execute(name, args)
+actionController.start(name, { args })
     │
     ▼
 GameShell ──► postMessage ───────────────► Host (deployment platform)

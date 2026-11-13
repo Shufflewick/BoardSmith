@@ -290,3 +290,19 @@ export function levelButtons<A extends MenuItem>(
     ...drawn.flatMap((node) => (node.kind === 'group' ? levelButtons(node.children, canPromote, node.path) : [])),
   ];
 }
+
+/** The path of the level holding the first item `match` accepts, or undefined when no level holds one. */
+export function levelHolding<A extends MenuItem>(
+  nodes: readonly ActionMenuNode<A>[],
+  match: (item: A) => boolean,
+  path: readonly string[] = [],
+): readonly string[] | undefined {
+  for (const node of nodes) {
+    if (node.kind === 'item' && match(node.item)) return path;
+  }
+  for (const node of nodes) {
+    const found = node.kind === 'group' ? levelHolding(node.children, match, node.path) : undefined;
+    if (found) return found;
+  }
+  return undefined;
+}

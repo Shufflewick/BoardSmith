@@ -22,7 +22,7 @@
 import type { GameState, PublicFlowState } from '../client/types.js';
 import type { GameRootView } from './types.js';
 import type { GameContextPlayer } from './composables/useGameContext.js';
-import type { UseActionControllerReturn } from './composables/useActionControllerTypes.js';
+import type { BoardActionController } from './composables/useActionControllerTypes.js';
 import type { TableSeat } from './composables/useTableSeat.js';
 import type { WorldSeat } from './world/useWorldSeat.js';
 import type { WorldSeatHost } from './world/useWorldHost.js';
@@ -43,8 +43,8 @@ export interface BoardBaseProps {
   isMyTurn: boolean;
   /** The action names the viewer may take now. Empty while a table shows history. */
   availableActions: string[];
-  /** The one write path for taking an action: start, fill, execute, cancel. */
-  actionController: UseActionControllerReturn;
+  /** The one write path for taking an action: select, start, fill, cancel. No execute: a board starts a verb, so the panel shows it (#1641). */
+  actionController: BoardActionController;
   /** Action name to the reason it is disabled. None while a table shows history. */
   disabledActions?: Record<string, string>;
   /** The viewport's size tier: compact below 640px, medium below 1024px, wide from there (`BREAKPOINTS`). */

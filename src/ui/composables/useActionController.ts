@@ -90,8 +90,9 @@
  */
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { devWarn } from '../../utils/dev.js';
-import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { devWarn, isDevMode } from '../../utils/dev.js';
+import { sameThing, useSharedSelection, type ThingStart } from './sharedSelection.js';
+import { copyOfChoice, formatActionName, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -113,7 +114,11 @@ export type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  BoardActionController,
   StartCandidates,
+  StartOptions,
+  SubjectChoice,
+  SubjectSelectionBinding,
 } from './useActionControllerTypes.js';
 
 import type {
@@ -134,9 +139,11 @@ import type {
   RepeatingState,
   UseActionControllerReturn,
   StartCandidates,
+  StartOptions,
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
+import type { PickSubject, SubjectRef } from '../../types/protocol.js';
 
 /**
  * Create an action controller for handling game actions.
@@ -483,6 +490,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // the menu on every read, so a path whose group has gone away lands on the
   // deepest level that survived.
   const actionMenuPath = ref<readonly string[]>([]);
+  const actionMenuAway = ref(false);
+
+  // === The one shared selection (#1641) ===
+  const sharedSelection = useSharedSelection({
+    offered: computed(() => (availableActions.value ?? []).flatMap((name) => actionMetadata.value?.[name] ?? [])),
+    disabledActions,
+  });
+  /** The thing the open action was started on, for the pick it narrows or is carried to. */
+  const thingRun = ref<{ tick: number; start: Extract<ThingStart, { kind: 'within' | 'carry' }>; thing: SubjectRef } | null>(null);
+  const thingRunFor = (pick: string, kind: 'within' | 'carry') => {
+    const run = thingRun.value;
+    return run && run.tick === actionStartTick.value && run.start.kind === kind && run.start.pick === pick ? run : null;
+  };
+  /** A pick opened on a thing that holds some of its rows lists only those, on the board and in the panel alike. */
+  function narrowed<T extends { subject?: PickSubject }>(pick: string, rows: T[]): T[] {
+    const run = thingRunFor(pick, 'within');
+    return run ? rows.filter((row) => sameThing(row.subject?.within, run.thing)) : rows;
+  }
 
   // === Element Enrichment ===
   // Creates functions to enrich validElements with full element data from gameView
@@ -1031,6 +1056,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return true;
   }
 
+  /** Answer a later pick with the thing its action was started on, when the pick lists it; otherwise the pick stays open. */
+  function consumeCarriedThing(selection: EnrichedPickMetadata): boolean {
+    const run = thingRunFor(selection.name, 'carry');
+    if (!run) return false;
+    thingRun.value = null;
+    // A typed thing is its own text: the server judges it, and no list of candidates reaches the page.
+    if (selection.type === 'text') {
+      void fill(selection.name, run.thing.key);
+      return true;
+    }
+    const rows: { value: unknown; subject?: PickSubject; disabled?: string }[] = selection.type === 'element'
+      ? (actionSnapshot.value?.pickSnapshots.get(selection.name)?.validElements ?? []).map((element) => ({ ...element, value: element.id }))
+      : getChoices(selection) as ChoiceWithRefs[];
+    const row = rows.find((candidate) => sameThing(candidate.subject, run.thing) && !candidate.disabled);
+    if (!row) return false;
+    void fill(selection.name, row.value);
+    return true;
+  }
+
   /**
    * Attempt to auto-fill a non-optional selection that has exactly one answer.
    * Updates both currentArgs and collectedPicks in actionSnapshot.
@@ -1552,7 +1596,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const _version = snapshotVersion.value; // reactive dependency (Maps aren't reactive)
     const pick = currentPick.value;
     if (!pick) return [];
-    return getChoices(pick) as ChoiceWithRefs[];
+    return narrowed(pick.name, getChoices(pick) as ChoiceWithRefs[]);
   });
 
   // A held entry the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575, #1576).
@@ -1615,7 +1659,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const elements = snapshot?.validElements || [];
 
     // Enrich with full element data from gameView
-    return enrichElementsList(elements);
+    return narrowed(sel.name, enrichElementsList(elements));
   });
 
   // === Start candidates (#1192) ===
@@ -1706,7 +1750,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
-    if (consumePrefill(sel)) return;
+    if (consumePrefill(sel) || consumeCarriedThing(sel)) return;
 
     // Now attempt auto-fill if enabled
     // Don't auto-fill optional selections - user must consciously choose or skip
@@ -2212,11 +2256,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * auto-execute watcher / executeCurrentAction(), which callers can observe via
    * `lastError` or the `beforeAutoExecuteHooks` mechanism, not via this return value.
    */
-  async function start(
-    actionName: string,
-    startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
-  ): Promise<ControllerActionResult> {
-    const initialArgs = startOptions?.args ?? {};
+  async function start(actionName: string, startOptions?: StartOptions): Promise<ControllerActionResult> {
+    let initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
     // What the board could start this action with, read before opening it clears them (#1313).
     const opening = startCandidates.value.get(actionName);
@@ -2277,11 +2318,27 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
+    const subject = startOptions?.subject;
+    const reached = subject && sharedSelection.thingStart(meta, subject);
+    if (subject && !reached) {
+      const thing = sharedSelection.namedThing(meta, {}, subject)!;
+      const error = `${meta.prompt || formatActionName(actionName)} does not take ${thing.type} "${thing.label}".`;
+      setError(error);
+      return { success: false, error };
+    }
+    if (reached?.kind === 'fill' && initialArgs[reached.pick] === undefined) initialArgs = { ...initialArgs, [reached.pick]: reached.value };
+
     const refusal = startArgsRefusal(meta, initialArgs);
     if (refusal) {
       setError(refusal);
       return { success: false, error: refusal };
     }
+
+    const named = sharedSelection.namedThing(meta, { ...prefillArgs, ...initialArgs }, subject);
+    const disagreement = sharedSelection.mismatch(meta, named);
+    // A development check: a board and a panel that disagree about the thing are a bug in the board.
+    if (disagreement && isDevMode()) throw new Error(disagreement);
+    sharedSelection.follow(named);
 
     currentAction.value = actionName;
     actionStartTick.value++;
@@ -2304,6 +2361,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const [name, value] of Object.entries(initialArgs)) {
       actionSnapshot.value.collectedPicks.set(name, { value, display: startArgLabel(meta, initialArgs, opening, name, value), skipped: false });
     }
+    thingRun.value = subject && (reached?.kind === 'within' || reached?.kind === 'carry') ? { tick: actionStartTick.value, start: reached, thing: subject } : null;
 
     // Fetch choices for the first selection that needs input
     // This handles both normal start (first selection) and followUp with pre-filled args
@@ -3171,6 +3229,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Where the player is standing in the action list's hierarchy, for the same
     // reason. Opaque to the controller: only the panel knows what a label means.
     actionMenuPath,
+    actionMenuAway,
+    subjects: sharedSelection.subjects,
+    selection: sharedSelection.selection,
+    select: sharedSelection.select,
+    bindSubjectSelection: sharedSelection.bindSubjectSelection,
 
     // Multi-select draft (shared source of truth for in-progress multiSelect)
     multiSelectDraft,

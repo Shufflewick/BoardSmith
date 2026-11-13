@@ -155,62 +155,45 @@ const boardPieces = computed(() => {
 
 ## Step 3: Executing Actions
 
-The `actionController` provides two patterns for executing actions:
-
-### Pattern A: Direct Execution
-
-Use when you have all required values:
+A board takes every action with `actionController.start()`, so the Action Panel shows what the board started and follows it. A board's controller has no `execute()`: an action that ran without passing through the panel would leave the panel and the board telling different stories.
 
 ```typescript
-// No selections needed
-await actionController.execute('endTurn');
+// No selections needed: it runs as soon as it opens
+await actionController.start('endTurn');
 
-// All selections provided
-await actionController.execute('move', {
-  piece: clickedPiece.id,      // Use numeric IDs
-  destination: clickedCell.id,
-});
-
-// The result tells you if it succeeded
-const result = await actionController.execute('play', { card: cardId });
-if (!result.success) {
-  console.error(result.error);
-}
-```
-
-### Pattern B: Wizard Mode
-
-Use when the user needs to make selections through the ActionPanel:
-
-```typescript
-// Start wizard mode - ActionPanel shows selection UI, and check the result
-const result = await actionController.start('attack');
-if (!result.success) {
-  console.error(result.error);
-}
-
-// Pre-fill the first selection
+// All selections known from the board: it runs as soon as it opens
 await actionController.start('move', {
-  args: { piece: pieceId }
+  args: { piece: clickedPiece.id, destination: clickedCell.id },  // Use numeric IDs
 });
 
-// Pre-fill a later selection (auto-applied when that step activates)
+// The first selection known, the player answers the rest in the panel or on the board
+await actionController.start('move', { args: { piece: pieceId } });
+
+// A later selection known (auto-applied when that step activates)
 await actionController.start('dropEquipment', {
   args: { hero: heroId },
   prefill: { equipment: equipmentId },
 });
+
+// Nothing known: the panel and the board ask for every selection
+const result = await actionController.start('attack');
+if (!result.success) {
+  console.error(result.error);
+}
 ```
 
-**Important: `start()`'s result only covers its synchronous pre-checks.** `start()` returns a `Promise<ControllerActionResult>` (the same shape `execute()` returns), but `{ success: true }` only means "the seat is not viewing past game state, the action is not disabled, it is in `availableActions`, its metadata resolved, and no arg is a list for a pick that takes one element: wizard mode has begun." It is **not** the eventual server outcome of the action the user goes on to complete. If you ignore the return value entirely, you still get feedback: GameShell centrally watches for failures and surfaces a toast (see below), so callers that fire-and-forget `start()` are not silently swallowing pre-check failures. But `{ success: true }` from `start()` never tells you the wizard-mode action ultimately succeeded — only `execute()`'s (or the wizard's terminal `fill()`/auto-execute) result reflects that. If you need to react to the final server-confirmed outcome, use `execute()` directly instead of `start()`.
+A game that declares subject types also passes the thing a verb acts on with `subject`, and selects things with `actionController.select()`; see [The shared selection](./ui-components.md#the-shared-selection).
 
-**Every action failure surfaces automatically — you don't have to wire your own toast.** GameShell watches `actionController.errorTick` centrally (a monotonic counter bumped on every failure — so even retrying the exact same failed selection re-toasts) and shows a `--bsg-danger` toast with the `lastError` message (plus an assertive live-region announcement) for any failed action, whether it was initiated from the shipped ActionPanel or from a custom UI through `useBoardInteraction` — both paths share the same `useActionController` instance, so this is automatic parity, not something you opt into. Do not add a second toast call in your custom UI for the same failure; it would duplicate the one GameShell already shows. WorldShell does the same for a world: a refused order, from the panel or `useWorld().act()`, is a toast plus an assertive live-region announcement. One refusal is not a failure: a second `execute()` while the first is still being sent (a double-click) returns `{ success: false, error: 'Action already executing' }` without a toast and leaves `lastError` alone, since the player did nothing wrong.
+**Important: `start()`'s result only covers its synchronous pre-checks.** `{ success: true }` only means "the seat is not viewing past game state, the action is not disabled, it is in `availableActions`, its metadata resolved, and no arg is a list for a pick that takes one element: the action has opened." It is **not** the server's answer. If you ignore the return value entirely, you still get feedback: GameShell centrally watches for failures and surfaces a toast (see below), so callers that fire-and-forget `start()` are not silently swallowing pre-check failures. To react to the server's answer, watch `actionController.lastActionResult` ([Reading an action's return value](./ui-components.md#reading-an-actions-return-value-lastactionresult)).
+
+**Every action failure surfaces automatically — you don't have to wire your own toast.** GameShell watches `actionController.errorTick` centrally (a monotonic counter bumped on every failure — so even retrying the exact same failed selection re-toasts) and shows a `--bsg-danger` toast with the `lastError` message (plus an assertive live-region announcement) for any failed action, whether it was initiated from the shipped ActionPanel or from a custom UI through `useBoardInteraction` — both paths share the same `useActionController` instance, so this is automatic parity, not something you opt into. Do not add a second toast call in your custom UI for the same failure; it would duplicate the one GameShell already shows. WorldShell does the same for a world: a refused order, from the panel or `useWorld().act()`, is a toast plus an assertive live-region announcement. One refusal is not a failure: a second send while the first is still out (a double-click) is refused with `'Action already executing'` without a toast and leaves `lastError` alone, since the player did nothing wrong.
 
 **When to use which:**
 
 | Scenario | Use |
 |----------|-----|
-| No selections (endTurn, pass) | `execute()` |
-| All values known from board click | `execute()` |
+| No selections (endTurn, pass) | `start()` |
+| All values known from board click | `start()` with every pick in `args` |
 | User picks from ActionPanel | `start()` |
 | Pre-fill first selection, user picks rest | `start()` with `args` |
 | Dependent selection needs prefill | `start()` with `prefill` |
@@ -226,22 +209,11 @@ Use `prefill` for dependent selections where the choice isn't available until a 
 
 A common pattern in custom UIs is a button that triggers an action requiring the user to select an element on the game board. For example, a "Retreat" button that requires selecting a destination room.
 
-**The Wrong Way (easy mistake):**
 ```typescript
 // DuelPanel.vue
 function handleRetreat() {
-  // WRONG: execute() without the required 'retreatRoom' parameter
-  // The action needs wizard mode to let the user select a room!
-  await actionController.execute('retreat', {});  // ❌ Fails silently
-}
-```
-
-**The Right Way:**
-```typescript
-// DuelPanel.vue
-function handleRetreat() {
-  // Start wizard mode - BoardSmith will enable room selection
-  actionController.start('retreat');  // ✓
+  // The panel and the board ask for the room
+  actionController.start('retreat');
 }
 ```
 
@@ -283,30 +255,6 @@ function onRoomClick(room: GameViewElement) {
 }
 </script>
 ```
-
-### Detecting When to Use Wizard Mode
-
-Use the `actionNeedsWizardMode()` helper to check programmatically:
-
-<!-- typecheck: game src/ui/retreat.ts -->
-```typescript
-import { actionNeedsWizardMode, type UseActionControllerReturn } from 'boardsmith/ui';
-
-export function retreat(actionController: UseActionControllerReturn): void {
-  const meta = actionController.getActionMetadata('retreat');
-  const check = actionNeedsWizardMode(meta, {});
-
-  if (check.needed) {
-    console.log(check.reason);
-    // "Selection 'retreatRoom' requires element selection from the game board"
-    actionController.start('retreat');
-  } else {
-    actionController.execute('retreat', {});
-  }
-}
-```
-
-> **Dev Mode Warning**: In development mode, BoardSmith automatically warns when you call `execute()` on an action that likely needs wizard mode. Check your browser console for helpful messages.
 
 ## Step 4: Handling Element Selections
 
@@ -491,7 +439,7 @@ one thing to avoid.
 
 **Note:** `fill()` takes `choice.value`, never the `{ value, display }` choice object. A choice object is refused like any other value that is not on offer.
 
-Every controller call that takes a pick value (`fill()`, `execute()`, `start()`'s `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('crew', 'Agent Vex')` followed by `isMultiSelectSelected('crew', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
+Every controller call that takes a pick value (`fill()`, `start()`'s `args` and `prefill`, `toggleMultiSelect()`, `isMultiSelectSelected()`, `appendListEntry()`) names a choice by the same rule as the server: the offered value, a copy of it, or a shorthand (its `id`, its display text, or an object with only its identifying fields). The controller then holds the offered value, so `toggleMultiSelect('crew', 'Agent Vex')` followed by `isMultiSelectSelected('crew', vex.id)` is `true`, and toggling it again by either name removes it. Adding a disabled choice is refused with its reason; removing a draft entry never is.
 
 `start()`'s `args` are the exception: the controller has not fetched that pick's choices yet, so they are sent as given and judged by the server, and the breadcrumb shows the value itself. The controller refuses only a list for a pick that takes one element. Pass the value under `prefill` instead when the breadcrumb should read as the choice's label.
 
@@ -1603,7 +1551,7 @@ for (const sel of debug.details.selections) {
    ```typescript
    async function executeAction(name: string, args: Record<string, unknown>) {
      console.log('[Action]', name, JSON.stringify(args, null, 2));
-     await actionController.execute(name, args);
+     await actionController.start(name, { args });
    }
    ```
 
@@ -1634,10 +1582,10 @@ console.log(card);           // { id: 42, className: 'Card', attributes: {...} }
 console.log(card.id);        // 42
 
 // Correct - pass the ID
-await actionController.execute('play', { card: card.id });
+await actionController.start('play', { args: { card: card.id } });
 
 // Wrong - don't pass the object
-await actionController.execute('play', { card: card });
+await actionController.start('play', { args: { card: card } });
 ```
 
 ## Complete Example: Card Game Board
@@ -1694,13 +1642,13 @@ async function onCardClick(card: GameViewElement) {
     return;
   }
 
-  // Otherwise execute directly
-  await props.actionController.execute('play', { card: card.id });
+  // Otherwise play it: every pick is known, so it runs as soon as it opens
+  await props.actionController.start('play', { args: { card: card.id } });
 }
 
 async function drawCard() {
   if (!props.availableActions.includes('draw')) return;
-  await props.actionController.execute('draw');
+  await props.actionController.start('draw');
 }
 </script>
 

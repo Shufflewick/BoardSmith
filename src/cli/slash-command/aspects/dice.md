@@ -117,7 +117,7 @@ const canRoll = computed(() => props.availableActions.includes('roll'));
 
 // Handle roll - use execute() since roll takes no input
 function handleRoll() {
-  props.actionController.execute('roll', {});
+  props.actionController.start('roll');
 }
 </script>
 

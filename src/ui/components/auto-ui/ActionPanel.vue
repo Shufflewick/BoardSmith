@@ -27,6 +27,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
   ElementRef,
+  StartOptions,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
 import {
@@ -40,11 +41,17 @@ import {
   actionCount,
   buildActionMenu,
   drawnAs,
+  levelHolding,
   levelShowing,
   menuLevelAt,
   resolveMenuPath,
   type ActionMenuGroup,
+  type ActionMenuNode,
 } from './action-menu.js';
+import { ordinaryMenuItems, selectionMenuItems, type FoldedVerb, type PanelMenuItem } from './subject-menu.js';
+import { sameThing } from '../../composables/sharedSelection.js';
+import type { SubjectEntry } from '../../../engine/action/subject-index.js';
+import type { SubjectRef } from '../../../types/protocol.js';
 // The engine's own validators, reached the way `action-panel-helpers.ts`
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
 // rules the server applies, and a second copy of them is a second rule set
@@ -61,6 +68,7 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // Inject the action controller from GameShell (REQUIRED)
 // ActionPanel is now a thin UI layer over the controller
+// Both shells publish the whole controller; the key's type is the board's, which lacks the execute a no-pick action needs here.
 const _actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined) as UseActionControllerReturn | undefined;
 if (!_actionController) {
   throw new Error('ActionPanel requires actionController to be provided via inject. Use inside GameShell.');
@@ -340,9 +348,35 @@ const visibleActions = computed(() => {
 // yet" row of the deepest level its group still reaches, so a group with nothing usable
 // in it goes too, and a group's count is what can be pressed.
 const disabledReasonOf = (name: string) => props.disabledActions?.[name];
-const actionMenu = computed(() => buildActionMenu(visibleActions.value.filter((a) => !disabledReasonOf(a.name))));
+
+// ── The one shared selection (#1641) ───────────────────────────────────────
+//
+// The selection is the controller's, so the board and the panel show the same
+// thing; this only draws it. `actionMenuAway` is the panel looking elsewhere in
+// the menu while a thing stays selected, since a world's selection is never empty.
+const subjects = computed(() => actionController.subjects.value);
+const menuAway = actionController.actionMenuAway;
+/** The thing whose own menu the panel draws, or null for the ordinary menu. */
+const shownThing = computed(() => (menuAway.value ? null : actionController.selection.value));
+const metadataOf = (name: string) => actionsWithMetadata.value.find((a) => a.name === name);
+const thingMenu = computed(() => shownThing.value
+  ? selectionMenuItems(shownThing.value, subjects.value, metadataOf, disabledReasonOf)
+  : { items: [], folded: [] });
+
+/** A top level that is one subject type and nothing else is drawn as that type's things: no press to open it. */
+function thingsAtTop(menu: readonly ActionMenuNode<PanelMenuItem>[]): readonly ActionMenuNode<PanelMenuItem>[] {
+  const only = menu.length === 1 ? menu[0]! : undefined;
+  return only?.kind === 'group' && only.children.every((child) => child.kind === 'item' && child.item.thing) ? only.children : menu;
+}
+const ordinaryMenu = computed(() => thingsAtTop(buildActionMenu(ordinaryMenuItems(visibleActions.value.filter((a) => !disabledReasonOf(a.name)), subjects.value, true))));
+const selectionMenu = computed(() => buildActionMenu(thingMenu.value.items));
+const actionMenu = computed(() => (shownThing.value ? selectionMenu.value : ordinaryMenu.value));
 /** Every offered action, disabled ones included: a level whose actions are only held is kept to come back to. */
-const offeredMenu = computed(() => buildActionMenu(visibleActions.value));
+const offeredMenu = computed(() => (shownThing.value
+  ? selectionMenu.value
+  : thingsAtTop(buildActionMenu(ordinaryMenuItems(visibleActions.value, subjects.value, false)))));
+/** Which menu is drawn: a move between two is the player's own, never a level going away. */
+const shownMenuKey = computed(() => (shownThing.value ? `thing\u0000${shownThing.value.type}\u0000${shownThing.value.key}` : 'menu'));
 
 /**
  * The level the player has navigated to -- REQUESTED, never trusted.
@@ -365,7 +399,7 @@ const openPath = actionController.actionMenuPath;
 const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 
 /** A lone destructive action keeps its group, so it is never one press from a level it was not in (#1639). */
-const promotable = (action: EnrichedActionMetadata) => !action.destructive;
+const promotable = (action: PanelMenuItem) => !action.destructive;
 /** The buttons of the level now drawn, a group holding one thing drawn as that thing (#1639). */
 const menuNodes = computed(() => menuLevel.value.nodes.map((node) => drawnAs(node, promotable)));
 /** Where Back goes: the nearest level up that is drawn, past a lone group drawn as its child. */
@@ -374,21 +408,34 @@ const backPath = computed(() => {
   return path.length === 0 ? path : levelShowing(actionMenu.value, path.slice(0, -1), [], promotable);
 });
 
-/** The full path, for the current-level label. */
-const menuBreadcrumb = computed(() => menuLevel.value.group?.path.join(' / ') ?? '');
+/** The full path, for the current-level label, under the selected thing's type and name. */
+const menuBreadcrumb = computed(() => [
+  ...(shownThing.value ? [shownThing.value.type, shownThing.value.label] : []),
+  ...(menuLevel.value.group?.path ?? []),
+].join(' / '));
 
 /** Where Back goes from `path`, said out loud for a screen reader; `top` names the top level. */
 function backLabelFor(path: readonly string[], top: string): string {
   return path.length > 1 ? `Back to ${path[path.length - 2]}` : `Back to ${top}`;
 }
 
-const backLabel = computed(() => `Back to ${backPath.value.at(-1) ?? 'all actions'}`);
+const backLabel = computed(() => {
+  const thing = shownThing.value;
+  if (thing && !menuLevel.value.group) return `Back to ${thing.within ? thingLabel(thing.within) : thing.type}`;
+  return `Back to ${backPath.value.at(-1) ?? (thing?.label ?? 'all actions')}`;
+});
 
-/** The disabled actions folded at the level now drawn, each folded at one level only. */
-const foldedActions = computed(() => {
+const thingLabel = (ref: SubjectRef) => subjects.value.things.find((thing) => sameThing(thing, ref))?.label ?? ref.key;
+
+/** The disabled actions folded at the level now drawn, each folded at one level only, with why. */
+const foldedActions = computed<FoldedVerb[]>(() => {
   const here = menuLevel.value.group?.path ?? [];
-  return visibleActions.value.filter((a) => disabledReasonOf(a.name)
-    && levelShowing(actionMenu.value, a.group ?? [], here, promotable).join('\u0000') === here.join('\u0000'));
+  const atHere = (group: readonly string[] | undefined) => levelShowing(actionMenu.value, group ?? [], here, promotable).join('\u0000') === here.join('\u0000');
+  if (shownThing.value) return thingMenu.value.folded.filter((verb) => atHere(verb.group));
+  return visibleActions.value.flatMap((a) => {
+    const reason = disabledReasonOf(a.name);
+    return reason && atHere(a.group) ? [{ ...a, reason }] : [];
+  });
 });
 const foldOpen = ref(false);
 const foldListId = `bs-unavailable-${useId()}`;
@@ -398,12 +445,12 @@ watch(menuBreadcrumb, () => { foldOpen.value = false; });
 const menuAnnouncement = ref('');
 
 /** How many things are behind a group's button, for its accessible name. */
-function groupContents(group: ActionMenuGroup<EnrichedActionMetadata>): string {
+function groupContents(group: ActionMenuGroup<PanelMenuItem>): string {
   const count = actionCount(group);
   return `submenu, ${count} ${count === 1 ? 'action' : 'actions'}`;
 }
 
-const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group], [data-bs-unavailable-toggle]';
+const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group], [data-bs-thing], [data-bs-unavailable-toggle]';
 
 /** The group button carrying `label` in `attribute`, in the level now rendered. */
 function groupButton(root: HTMLElement, label: string, attribute: string): HTMLElement | null {
@@ -421,16 +468,19 @@ function groupButton(root: HTMLElement, label: string, attribute: string): HTMLE
  * player was going, and Back is one keystroke from undoing the navigation they
  * just performed.
  */
-function enterGroup(group: ActionMenuGroup<EnrichedActionMetadata>): void {
+function enterGroup(group: ActionMenuGroup<PanelMenuItem>): void {
   menuAnnouncement.value = '';
   openPath.value = group.path;
   void focusIntoLevel();
 }
 
-/** Leave the current group, and put the keyboard back on the button that opened it. */
+/** Leave the current group, and put the keyboard back on the button that opened it; at a thing's own level, leave the thing. */
 function leaveGroup(): void {
   const path = menuLevel.value.group?.path;
-  if (!path || path.length === 0) return;
+  if (!path || path.length === 0) {
+    leaveThing();
+    return;
+  }
   const target = backPath.value;
   const way = menuLevelAt(actionMenu.value, target).nodes.find((node) => node.kind === 'group' && node.label === path[target.length])!;
   const drawn = drawnAs(way, promotable);
@@ -465,9 +515,64 @@ async function restoreFocusToGroup(label: string, attribute = 'data-bs-action-gr
  */
 function onPanelKeydown(event: KeyboardEvent): void {
   if (currentAction.value) return;
-  if (!menuLevel.value.group) return;
+  if (!menuLevel.value.group && !shownThing.value) return;
   handleEscape(event, leaveGroup);
 }
+
+/** The level a thing sits at in the ordinary menu: its type, then its categories. */
+const levelOf = (thing: SubjectEntry) => [thing.type, ...(thing.category ?? [])];
+
+/** Pressing a thing selects it, for the board as well. */
+function pressThing(thing: SubjectEntry): void {
+  menuAnnouncement.value = '';
+  actionController.select(thing);
+  menuAway.value = false;
+  void focusIntoLevel();
+}
+
+/**
+ * Back from a thing: to the thing it belongs to, else to no selection. A selection the game keeps
+ * may refuse to empty (a world's open colony), so then the panel only looks away to the thing's list.
+ */
+function leaveThing(): void {
+  const leaving = shownThing.value;
+  if (!leaving) return;
+  menuAnnouncement.value = '';
+  actionController.select(leaving.within ?? null);
+  if (sameThing(actionController.selection.value, leaving)) {
+    menuAway.value = true;
+    openPath.value = levelOf(leaving);
+  }
+  void focusIntoLevel();
+}
+
+// A new selection, from the board or the panel, brings the panel to the thing; none puts it in the list the thing left.
+watch(() => actionController.selection.value, (now, was) => {
+  if (sameThing(now, was)) return;
+  menuAway.value = false;
+  openPath.value = now || !was ? [] : levelOf(was);
+});
+
+/**
+ * THE PANEL FOLLOWS A START IT DID NOT MAKE (#1641). An action opened from the board, or by an
+ * auto-start, that the level now drawn does not hold moves the panel to the level that does, so
+ * cancel lands there. One the panel started is drawn where it stands, so nothing moves.
+ */
+watch(() => actionController.actionStartTick.value, () => {
+  const name = currentAction.value;
+  if (!name || menuNodes.value.some((node) => node.kind === 'item' && node.item.name === name)) return;
+  const isIt = (item: PanelMenuItem) => item.name === name;
+  const onThing = actionController.selection.value ? levelHolding(selectionMenu.value, isIt) : undefined;
+  if (onThing) {
+    menuAway.value = false;
+    openPath.value = levelShowing(selectionMenu.value, onThing, [], promotable);
+    return;
+  }
+  const elsewhere = levelHolding(ordinaryMenu.value, isIt);
+  if (!elsewhere) return;
+  menuAway.value = actionController.selection.value !== null;
+  openPath.value = levelShowing(ordinaryMenu.value, elsewhere, [], promotable);
+});
 
 /**
  * KEEP `openPath` HONEST, AND SAY SO WHEN IT MOVES.
@@ -494,8 +599,8 @@ function onPanelKeydown(event: KeyboardEvent): void {
  * rather than truncated: the parent is shown, and the player is back in it when
  * an action there is usable again (#1638).
  */
-watch(actionMenu, () => {
-  if (visibleActions.value.length === 0) return;
+watch([actionMenu, shownMenuKey], (_, [, wasKey]) => {
+  if (visibleActions.value.length === 0 || shownMenuKey.value !== wasKey) return;
   const kept = resolveMenuPath(offeredMenu.value, openPath.value);
   const shown = resolveMenuPath(actionMenu.value, kept);
   if (shown.length === openPath.value.length) return;
@@ -1430,10 +1535,7 @@ const mutators = createActionMutators(actionController, boardInteraction, {
   actionMetadata: (name) => actionsWithMetadata.value.find(a => a.name === name),
 });
 
-async function startAction(
-  actionName: string,
-  options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
-) {
+async function startAction(actionName: string, options?: StartOptions) {
   const outcome = await mutators.startAction(actionName, options);
   if (outcome === 'executed') {
     emit('cancelSelection');
@@ -1666,7 +1768,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           {{ heldFollowUpButton.prompt }}
         </button>
       </div>
-      <div v-if="menuLevel.group" class="action-menu-header">
+      <div v-if="menuLevel.group || shownThing" class="action-menu-header" :data-bs-thing-level="shownThing ? `${shownThing.type} / ${shownThing.key}` : undefined">
         <button
           class="action-btn menu-back-btn"
           data-bs-menu-back
@@ -1676,6 +1778,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span aria-hidden="true">&lsaquo;</span> Back
         </button>
         <span class="action-menu-label">{{ menuBreadcrumb }}</span>
+      </div>
+      <div v-if="shownThing && menuNodes.length === 0" class="action-menu-label" role="status" data-bs-thing-empty>
+        Nothing can be done with {{ shownThing.label }} right now.
       </div>
       <!-- Each action wrapped in .action-btn-group: positioning context for "?" affordance.
            .action-buttons { display: contents } propagates the parent flex context so
@@ -1697,6 +1802,15 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           :contents="groupContents(node)"
           @click="enterGroup(node)"
         />
+        <!-- A THING BUTTON SELECTS, AND NOTHING ELSE: the board shows the same thing, and its verbs follow. -->
+        <button
+          v-else-if="node.item.thing"
+          class="action-btn action-group-btn"
+          :data-bs-thing="`${node.item.thing.type} / ${node.item.thing.key}`"
+          @click="pressThing(node.item.thing)"
+        >
+          {{ node.item.thing.label }} <span aria-hidden="true">&rsaquo;</span>
+        </button>
         <template v-else>
           <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
                and swallows the activation. It uses aria-disabled rather than the
@@ -1707,7 +1821,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             :class="{ destructive: node.item.destructive }"
             :data-bs-action="node.item.name"
             v-disabled-reason="submissionInFlightReason"
-            @click="startAction(node.item.name)"
+            @click="startAction(node.item.name, node.item.verbOf && { subject: node.item.verbOf })"
           >
             <!-- #268: the emphasis on a destructive verb is carried FOUR ways,
                  only one of which is colour -- the plate, an inset ring (CSS),
@@ -1755,10 +1869,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="action-btn"
               :data-bs-action="action.name"
               data-bs-unavailable
-              v-disabled-reason="disabledReasonOf(action.name)"
+              v-disabled-reason="action.reason"
             >
               {{ action.prompt || formatActionName(action.name) }}
-              <span class="action-fold-reason" aria-hidden="true">{{ disabledReasonOf(action.name) }}</span>
+              <span class="action-fold-reason" aria-hidden="true">{{ action.reason }}</span>
             </button>
             <ActionHelpPopover
               v-if="isActionHelpVisible && action.help"

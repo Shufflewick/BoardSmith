@@ -9,6 +9,8 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { UseActionControllerReturn } from './useActionControllerTypes.js';
+import type { BoardBaseProps } from '../board-props.js';
+import type { PlayContext } from './useGameContext.js';
 // Type imports are erased; this links the test to the file for verify's related-tests check.
 import './useActionControllerTypes.js';
 import docs from '../../../docs/ui-components.md';
@@ -61,6 +63,11 @@ const MEMBERS: {
   confirmDisabledReason: 'Controller State',
   confirm: 'Controller Methods',
   actionMenuPath: 'Controller State',
+  actionMenuAway: 'Controller State',
+  subjects: 'Controller State',
+  selection: 'Controller State',
+  select: 'Controller Methods',
+  bindSubjectSelection: 'Controller Methods',
   toggleMultiSelect: 'Controller Methods',
   confirmMultiSelect: 'Controller Methods',
   isMultiSelectSelected: 'Controller Methods',
@@ -99,4 +106,15 @@ describe('UseActionControllerReturn', () => {
       }, `${table} table`).toEqual({ missing: [], stale: [], duplicated: [] });
     });
   }
+});
+
+describe('the controller a board is handed (#1641)', () => {
+  it('has no execute, so a board starts a verb with start and the panel shows it', () => {
+    const fromProps = {} as BoardBaseProps['actionController'];
+    const fromContext = {} as PlayContext['actionController'];
+    // @ts-expect-error A board takes an action only through start, which the panel follows.
+    expect(fromProps.execute).toBeUndefined();
+    // @ts-expect-error The same controller, injected by a component under the board.
+    expect(fromContext.execute).toBeUndefined();
+  });
 });
