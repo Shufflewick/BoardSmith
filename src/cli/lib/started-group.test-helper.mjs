@@ -8,13 +8,15 @@
  *   still alive, which is when `runSmoke` removes the copy the worker writes into.
  * - `runner` forks a `worker`, as Playwright's runner does. It dies at once on SIGTERM (it has no
  *   handler), and on SIGINT stops its worker and waits for it to exit before it exits itself.
+ * - `crashing-runner` forks a `worker` and exits at once without stopping it, as a runner that
+ *   crashes does.
  * - `worker` ignores SIGINT and SIGTERM and outlives its runner, as Playwright's workers do; only a
  *   `stop` message from the runner, or SIGKILL, ends it.
  *
  * Every line goes out with `writeSync`, so a line written just before a signal ends the process is
  * not lost in a pipe's buffer.
  *
- * Usage: `node started-group.test-helper.mjs driver`
+ * Usage: `node started-group.test-helper.mjs driver <runner|crashing-runner>`
  */
 import { fork } from 'node:child_process';
 import { once } from 'node:events';
@@ -32,24 +34,27 @@ if (mode === 'worker') {
   // Keeps the worker alive once its runner is gone, as a Playwright worker's teardown does.
   setInterval(() => {}, 1 << 30);
   process.send('ready');
-} else if (mode === 'runner') {
-  const worker = fork(self, ['worker']);
+} else if (mode === 'runner' || mode === 'crashing-runner') {
+  // Off the runner's pipes, so the driver's pipes close when the runner goes.
+  const worker = fork(self, ['worker'], { stdio: ['ignore', 'ignore', 'ignore', 'ipc'] });
   await once(worker, 'message');
+  say(`worker ${worker.pid}`);
+  if (mode === 'crashing-runner') process.exit(1);
   process.on('SIGINT', async () => {
     worker.send('stop');
     await once(worker, 'exit');
     process.exit(130);
   });
-  say(`worker ${worker.pid}`);
 } else if (mode === 'driver') {
   await import('tsx');
   const { Started } = await import('./started-processes.ts');
   const started = new Started();
-  const runner = started.spawn([self, 'runner'], process.cwd(), {}, { ownGroup: true });
+  const runner = started.spawn([self, process.argv[3]], process.cwd(), {}, { ownGroup: true });
+  const exited = once(runner.child, 'exit');
   const [line] = await once(runner.child.stdout, 'data');
   const workerPid = Number(/worker (\d+)/.exec(String(line))[1]);
   say(`worker ${workerPid}`);
-  await once(runner.child, 'exit');
+  await exited;
   await started.finish(async () => {
     const alive = (() => {
       try {
