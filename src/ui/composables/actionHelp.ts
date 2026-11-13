@@ -20,15 +20,13 @@ export function actionHelpPreference() {
 
 /**
  * Whether the toggle has anything to reveal: the same conditions ActionPanel
- * uses to draw a "?" (an action's help text or disabled reason, or the help
- * of the action in progress).
+ * uses to draw a "?" (an action's help text, or the help of the action in
+ * progress). A disabled reason is shown as text in the panel's fold (#1638).
  */
 export function hasActionHelp(
   availableActions: readonly string[],
   actionMetadata: Record<string, { help?: string }> | undefined,
-  disabledActions: Record<string, string> | undefined,
   inProgressHelp: string | undefined,
 ): boolean {
-  return !!inProgressHelp
-    || availableActions.some((name) => !!actionMetadata?.[name]?.help || !!disabledActions?.[name]);
+  return !!inProgressHelp || availableActions.some((name) => !!actionMetadata?.[name]?.help);
 }

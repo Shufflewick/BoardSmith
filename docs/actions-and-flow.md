@@ -1226,7 +1226,7 @@ checks in), set `checkpoints: { actionHistory: 'undo' }` on the game definition
 to keep only the history undo reads, so the saved game stays a fixed size. See
 [Bounding the action history](./state-size.md#bounding-the-action-history).
 
-#### `.disabled()` — offer the action, greyed out, and say why
+#### `.disabled()` — offer the action as not available yet, and say why
 
 ```typescript
 Action.create<Settlement>('build')
@@ -1240,8 +1240,11 @@ Action.create<Settlement>('build')
 Return a **reason string** to disable the button, or `false` to leave it
 enabled. The reason is not optional, and there is no boolean form: a greyed-out
 button that will not say why is the single most reliable way to make a player
-think the game is broken. The reason is shown on hover and on focus, and read by
-screen readers. The server refuses a disabled action, and `enumerateLegalMoves`,
+think the game is broken. The Action Panel folds disabled actions into one "N
+not available yet" row at the end of each menu level, which opens to each of
+them with its reason; a group with nothing usable in it folds into that row
+too, and no row is drawn when nothing is disabled (#1638). The reason is also
+shown on hover and on focus, and read by screen readers. The server refuses a disabled action, and `enumerateLegalMoves`,
 bots and the simulator never offer it; a tutorial step's gate works the same way.
 
 Choose between this and `.condition()` by asking whether the player should be
@@ -1250,7 +1253,7 @@ thinking about the action at all:
 | | The player sees | Use when |
 |---|---|---|
 | `.condition()` | Nothing — the action is gone | The action is **irrelevant** here (playing a card during someone else's turn) |
-| `.disabled()` | A greyed button that explains itself | The action is **relevant but blocked**, and its absence would be confusing (Build, while two wood short) |
+| `.disabled()` | The action in the panel's "not available yet" row, with its reason | The action is **relevant but blocked**, and its absence would be confusing (Build, while two wood short) |
 
 Four things worth knowing:
 
@@ -1558,9 +1561,9 @@ rules to be told.
   they are put on the deepest level that survived, and a screen reader is told
   why.
 - **Executability.** `.condition()`, `.disabled()` and `.validate()` are
-  untouched. A grouped action's disabled reason and its help popover render
-  inside a group exactly as at the top level, and the server validates it
-  identically.
+  untouched. A grouped action's help popover renders inside a group exactly as
+  at the top level, a disabled one folds into its group's "not available yet"
+  row, and the server validates it identically.
 - **The board.** Grouping arranges the panel's buttons; it does not change what
   the game offers, so a custom board UI is unaffected and the two surfaces still
   show the same state.

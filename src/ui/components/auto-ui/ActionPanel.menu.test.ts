@@ -248,6 +248,8 @@ describe('grouping changes nothing about a leaf', () => {
       disabledActions: { dumpOre: 'You have no ore to dump.' },
     });
     await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
+    // Folded inside its group, which still holds Dump water (#1638).
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
     const button = wrapper.find('[data-bs-action="dumpOre"]');
     expect(button.attributes('aria-disabled')).toBe('true');
     expect(button.attributes('data-bs-disabled-reason')).toBe('You have no ore to dump.');

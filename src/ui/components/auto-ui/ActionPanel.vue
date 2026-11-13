@@ -333,7 +333,11 @@ const visibleActions = computed(() => {
 // never reads, and cannot interpret, because it does not import the menu model
 // at all: no controller verb, no transport, no engine. And a group node carries
 // no action name, so `enterGroup` has nothing it could submit even by mistake.
-const actionMenu = computed(() => buildActionMenu(visibleActions.value));
+// A DISABLED ACTION IS NOT A BUTTON OF THE MENU (#1638): it folds into the "not available
+// yet" row of the deepest level its group still reaches, so a group with nothing usable
+// in it goes too, and a group's count is what can be pressed.
+const disabledReasonOf = (name: string) => props.disabledActions?.[name];
+const actionMenu = computed(() => buildActionMenu(visibleActions.value.filter((a) => !disabledReasonOf(a.name))));
 
 /**
  * The level the player has navigated to -- REQUESTED, never trusted.
@@ -365,6 +369,16 @@ function backLabelFor(path: readonly string[], top: string): string {
 
 const backLabel = computed(() => backLabelFor(menuLevel.value.group?.path ?? [], 'all actions'));
 
+/** The disabled actions folded at the level now drawn, each folded at one level only. */
+const foldedActions = computed(() => {
+  const here = (menuLevel.value.group?.path ?? []).join('\u0000');
+  return visibleActions.value.filter((a) => disabledReasonOf(a.name)
+    && resolveMenuPath(actionMenu.value, a.group ?? []).join('\u0000') === here);
+});
+const foldOpen = ref(false);
+const foldListId = `bs-unavailable-${useId()}`;
+watch(menuBreadcrumb, () => { foldOpen.value = false; });
+
 /** What a screen reader is told when a level moved under the player. */
 const menuAnnouncement = ref('');
 
@@ -374,7 +388,7 @@ function groupContents(group: ActionMenuGroup<EnrichedActionMetadata>): string {
   return `submenu, ${count} ${count === 1 ? 'action' : 'actions'}`;
 }
 
-const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group]';
+const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group], [data-bs-unavailable-toggle]';
 
 /** The group button carrying `label` in `attribute`, in the level now rendered. */
 function groupButton(root: HTMLElement, label: string, attribute: string): HTMLElement | null {
@@ -446,7 +460,7 @@ function onPanelKeydown(event: KeyboardEvent): void {
  * screen-reader user that the level they were standing in went away. Without
  * the announcement the only signal is a silent change of button list.
  *
- * A MENU WITH NOTHING IN IT IS NOT EVIDENCE THAT A GROUP WENT AWAY (#253). A
+ * AN OFFER WITH NOTHING IN IT IS NOT EVIDENCE THAT A GROUP WENT AWAY (#253). A
  * push is two frames: the state arrives, the offers follow, and between them
  * the panel holds NO actions at all -- "not yet", which the world host keeps
  * deliberately distinct from "nothing" (#244), and which a table produces too
@@ -459,7 +473,7 @@ function onPanelKeydown(event: KeyboardEvent): void {
  * however long it takes to arrive.
  */
 watch(actionMenu, () => {
-  if (actionMenu.value.length === 0) return;
+  if (visibleActions.value.length === 0) return;
   const resolved = resolveMenuPath(actionMenu.value, openPath.value);
   if (resolved.length === openPath.value.length) return;
   const lost = openPath.value[resolved.length];
@@ -791,13 +805,14 @@ function focusTargetFor(root: HTMLElement): HTMLElement | null {
 // keyed on `availableActions`, so a change re-mounts every button in it and
 // takes the focused one with it -- which is precisely the moment a player
 // standing in a group is most likely to be moved. `stepIdentity` cannot see it:
-// idle to idle is the same step.
+// idle to idle is the same step. The menu is watched too: a disabled reason alone
+// moves a button into the fold (#1638).
 //
 // A STEP WHOSE CHOICES ARE STILL LOADING HAS NOTHING TO LAND ON YET (#653). Its
 // selection is drawn before the server's answer, so the only control in the
 // panel is cancel -- and focus parked there is no longer stranded, so it would
 // stay there once the choices arrived. The repair waits for them instead.
-watch([stepIdentity, () => props.availableActions.join(','), isLoadingChoices], async () => {
+watch([stepIdentity, () => props.availableActions.join(','), actionMenu, isLoadingChoices], async () => {
   // Wait for the swap to actually land in the DOM before looking for a target.
   await nextTick();
   repairStrandedFocus();
@@ -1518,16 +1533,6 @@ const submissionInFlightReason = computed<DisabledReason>(() =>
 );
 
 /**
- * Why an action's button is disabled: the server-supplied reason for this
- * action (its `.disabled()` rule or the tutorial gate) if any, otherwise the
- * in-flight submission. The server reason wins — it is the specific one, and
- * it stays true after the in-flight moment passes.
- */
-function actionDisabledReason(actionName: string): DisabledReason {
-  return props.disabledActions?.[actionName] || submissionInFlightReason.value;
-}
-
-/**
  * Why a multi-select option cannot be toggled: its own disabled reason if it
  * has one, otherwise the max-selections cap (which blocks only options that
  * are not already selected — deselecting is always allowed).
@@ -1676,7 +1681,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             class="action-btn"
             :class="{ destructive: node.item.destructive }"
             :data-bs-action="node.item.name"
-            v-disabled-reason="actionDisabledReason(node.item.name)"
+            v-disabled-reason="submissionInFlightReason"
             @click="startAction(node.item.name)"
           >
             <!-- #268: the emphasis on a destructive verb is carried FOUR ways,
@@ -1687,13 +1692,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span v-if="node.item.destructive" aria-hidden="true" class="action-destructive-mark">&#9888;</span>
             {{ node.item.prompt || formatActionName(node.item.name) }}
           </button>
-          <!-- "?" affordance: shown when global toggle is ON and content exists.
-               Disabled-reason-only case also shows the affordance (UI-SPEC Interaction States). -->
+          <!-- "?" affordance: shown when the global toggle is ON and the action has help. -->
           <ActionHelpPopover
-            v-if="isActionHelpVisible && (node.item.help || disabledActions?.[node.item.name])"
+            v-if="isActionHelpVisible && node.item.help"
             :action-name="node.item.name"
             :help-text="node.item.help"
-            :disabled-reason="disabledActions?.[node.item.name]"
             :trigger-label="node.item.prompt || formatActionName(node.item.name)"
           />
         </template>
@@ -1707,6 +1710,40 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       >
         Undo
       </button>
+      <template v-if="foldedActions.length > 0">
+        <div class="action-btn-group">
+          <button
+            class="action-btn action-fold-btn"
+            data-bs-unavailable-toggle
+            :aria-expanded="foldOpen"
+            :aria-controls="foldListId"
+            @click="foldOpen = !foldOpen"
+          >
+            {{ foldedActions.length }} not available yet <span aria-hidden="true">{{ foldOpen ? '&#9652;' : '&#9662;' }}</span>
+          </button>
+        </div>
+        <!-- Drawn while closed too, so a reader of the page (the smoke walk, #472) finds each reason.
+             Each entry is a focusable aria-disabled button, so v-disabled-reason gives a reader its reason. -->
+        <div v-show="foldOpen" :id="foldListId" class="action-fold-list" role="group" aria-label="Not available yet">
+          <div v-for="action in foldedActions" :key="action.name" class="action-btn-group">
+            <button
+              class="action-btn"
+              :data-bs-action="action.name"
+              data-bs-unavailable
+              v-disabled-reason="disabledReasonOf(action.name)"
+            >
+              {{ action.prompt || formatActionName(action.name) }}
+              <span class="action-fold-reason" aria-hidden="true">{{ disabledReasonOf(action.name) }}</span>
+            </button>
+            <ActionHelpPopover
+              v-if="isActionHelpVisible && action.help"
+              :action-name="action.name"
+              :help-text="action.help"
+              :trigger-label="action.prompt || formatActionName(action.name)"
+            />
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- Configuring an action -->
@@ -2437,7 +2474,8 @@ button {
 
 /* Back reads as a way out, not as a move: the neutral plate the Undo button
    uses, so a group's own actions keep the accent to themselves. */
-.menu-back-btn {
+.menu-back-btn,
+.action-fold-btn {
   background: var(--bsg-surface-2);
   border: 1px solid var(--bsg-line-2);
   color: var(--bsg-ink);
@@ -2445,10 +2483,22 @@ button {
 }
 
 @media (hover: hover) {
-  .menu-back-btn:hover:not([aria-disabled='true']) {
+  .menu-back-btn:hover:not([aria-disabled='true']),
+  .action-fold-btn:hover {
     background: var(--bsg-surface-3);
     box-shadow: var(--bsg-shadow-sm);
   }
+}
+
+/* The opened fold's entries flow in the action bar like any other button. */
+.action-fold-list {
+  display: contents;
+}
+
+.action-fold-reason {
+  display: block;
+  font-size: 0.8em;
+  font-weight: normal;
 }
 
 /* Action configuration - horizontal flow layout */

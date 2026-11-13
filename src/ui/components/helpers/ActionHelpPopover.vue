@@ -1,17 +1,17 @@
 <script setup lang="ts">
 /**
- * ActionHelpPopover — shared reveal surface for action help text and disabled reasons.
+ * ActionHelpPopover — shared reveal surface for action help text.
  *
  * Renders a circled "?" trigger button that opens a Teleport-to-body fixed-positioned
  * popover on mouse hover, or on click, tap or Enter. A click on help a hover opened keeps
- * it open, and the next click closes it (#1451). The same popover also surfaces the
- * previously-dead `disabledActions` reason, closing the v2.8 "why disabled" friction loop.
+ * it open, and the next click closes it (#1451). A disabled action's reason is not shown
+ * here: the Action Panel's fold shows it as text (#1638).
  *
  * Parity: this single shared component is used by both ActionPanel (AutoUI) and custom
  * UI slots — identical rendering from the same props (project hard-rule: no per-UI branching).
  *
  * Security:
- *  - T-108-03: helpText and disabledReason rendered via Vue text interpolation only.
+ *  - T-108-03: helpText rendered via Vue text interpolation only.
  *    Only text interpolation, never raw HTML binding. Mirrors TutorialOverlay T-105-05 rule.
  *
  * Accessibility:
@@ -38,8 +38,6 @@ const props = defineProps<{
   actionName: string;
   /** From ActionMetadata.help (Plan 01). Display-only; never a predicate. */
   helpText?: string;
-  /** From disabledActions[name]. Rendered under the "Why it's disabled:" label. */
-  disabledReason?: string;
   /** The action prompt/display name — aria-label "Help for {triggerLabel}". */
   triggerLabel: string;
 }>();
@@ -61,7 +59,7 @@ const scrollRef = ref<HTMLDivElement | null>(null);
 
 /**
  * Conservative fallback height used when offsetHeight is unavailable (e.g. jsdom).
- * 220 px covers a dual-section popover (help text + divider + disabled reason).
+ * 220 px covers a long help text.
  */
 const POPOVER_FALLBACK_HEIGHT = 220;
 const POPOVER_MAX_WIDTH = 240;
@@ -247,20 +245,6 @@ onUnmounted(() => {
         <div ref="scrollRef" class="ahp-scroll">
         <!-- Help text section — text interpolation only (T-108-03, no raw HTML binding) -->
         <p v-if="helpText" class="ahp-help-body">{{ helpText }}</p>
-
-        <!-- Divider — only when BOTH sections exist (UI-SPEC "Content layout") -->
-        <hr v-if="helpText && disabledReason" class="help-divider" aria-hidden="true" />
-
-        <!-- Disabled-reason section — text interpolation only (T-108-03).
-             The label may assert non-functionality: a `disabledActions` entry now
-             genuinely disables the button (ActionPanel binds the same reason to
-             aria-disabled and blocks the click), so the popover and the UI state
-             agree. This supersedes WR-03, which chose the vaguer "Note:" back when
-             a gated action's button stayed clickable. -->
-        <template v-if="disabledReason">
-          <span class="ahp-disabled-label">Why it's disabled:</span>
-          <p class="ahp-disabled-body">{{ disabledReason }}</p>
-        </template>
         </div>
       </div>
     </Transition>
@@ -397,29 +381,6 @@ onUnmounted(() => {
   font-size: var(--bsg-text-sm); /* 14px */
   color: var(--bsg-ink-2);
   line-height: var(--bsg-line-normal); /* 1.5 */
-  margin: 0;
-}
-
-/* ── Divider (both sections) ──────────────────────────────────────────────── */
-.help-divider {
-  border: none;
-  border-top: 1px solid var(--bsg-line-2);
-  margin: var(--bsg-s2) calc(-1 * var(--bsg-s3)); /* 8px -12px, full-bleed */
-}
-
-/* ── Disabled-reason section ──────────────────────────────────────────────── */
-.ahp-disabled-label {
-  display: block;
-  font-size: var(--bsg-text-xs); /* 12px */
-  color: var(--bsg-ink-3);
-  line-height: var(--bsg-line-normal);
-  margin-bottom: 2px;
-}
-
-.ahp-disabled-body {
-  font-size: var(--bsg-text-sm); /* 14px */
-  color: var(--bsg-ink-2);
-  line-height: var(--bsg-line-normal);
   margin: 0;
 }
 

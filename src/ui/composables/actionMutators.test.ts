@@ -272,7 +272,12 @@ describe.each<Surface>(['panel', 'board'])('the same gesture through the %s', (s
   ] as const)('sends nothing and changes nothing when %s', async (_why, guard) => {
     const t = mountTable({ availableActions: ['wait'], autoEndTurn: surface === 'board', ...guard });
     await flush();
-    if (surface === 'panel') await t.wrapper.find('[data-bs-action="wait"]').trigger('click');
+    if (surface === 'panel') {
+      // A disabled action sits in the "not available yet" fold (#1638).
+      const fold = t.wrapper.find('[data-bs-unavailable-toggle]');
+      if (fold.exists()) await fold.trigger('click');
+      await t.wrapper.find('[data-bs-action="wait"]').trigger('click');
+    }
     await flush();
 
     expect(stateOf(t)).toEqual({

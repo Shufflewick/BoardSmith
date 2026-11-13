@@ -554,12 +554,13 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 
-  it('greys an offered-but-refused action with its reason rather than hiding it', async () => {
+  it('folds an offered-but-refused action, with its reason, into "not available yet" rather than hiding it (#1638)', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame({
       actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [], disabled: 'the door is barred' }],
     }));
     await nextTick();
+    await wrapper.get('[data-bs-unavailable-toggle]').trigger('click');
     expect(wrapper.find('[data-testid="bs-action-panel"]').html()).toContain('the door is barred');
     wrapper.unmount();
   });
@@ -1358,6 +1359,8 @@ describe('WorldShell — the controls menu (#1443)', () => {
 
     replaying.value = true;
     await nextTick();
+    // The held action sits in the panel's "not available yet" fold (#1638).
+    await wrapper.get('[data-bs-unavailable-toggle]').trigger('click');
     expect(move().attributes('aria-disabled')).toBe('true');
     expect(move().attributes('data-bs-disabled-reason')).toBe('Moving waits until the replay ends.');
     expect(boardSees).toEqual({ move: 'Moving waits until the replay ends.' });

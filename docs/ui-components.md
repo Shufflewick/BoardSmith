@@ -441,13 +441,14 @@ component or stylesheet that skips it.
 
 Every game also gets a built-in "Show action help" item in "Preferences", just
 after Reduce motion, in both GameShell and WorldShell. While it is on, the
-action panel puts a "?" beside each action that has `.help(text)` or a disabled
-reason, and the "?" shows that text. While an action is open, including one the
+action panel puts a "?" beside each action that has `.help(text)`, and the "?"
+shows that text. A disabled action's reason is shown as text in the panel's
+"not available yet" row instead. While an action is open, including one the
 panel started because it was the step's only action, its "?" sits beside its
 prompt. It is on by default and saved once for all
 BoardSmith games in this browser (`boardsmith-preference:boardsmith:actionHelp`).
 The item is hidden while neither the open action nor any available action has
-help text or a disabled reason, so it never shows a switch that does nothing. Host teaching lockout
+help text, so it never shows a switch that does nothing. Host teaching lockout
 (`teachingDisabled`) does not hide it: help explains the rules, not a good move.
 
 #### Sound
@@ -525,8 +526,9 @@ useActionHolds(() => (replaying.value
 
 The function is read reactively and returns `null` when nothing is held. The shell adds the holds to the
 `disabledActions` the Action Panel, the board's `disabledActions` prop and the
-action controller already read, so a held action is greyed out with its reason
-exactly like a rule's own `.disabled()` reason, and neither the panel nor the
+action controller already read, so a held action is shown with its reason
+exactly like a rule's own `.disabled()` reason (in the panel's "not available
+yet" row), and neither the panel nor the
 board can start it. When the hold lifts, the action is back at once.
 
 - **It is this screen only.** Nothing is sent to the server and other seats
@@ -1202,7 +1204,7 @@ export function wireSeat(
 things a board injects from the wiring: the board interaction and the register
 `useActionHolds` adds to. Call it in the `setup` of the component that renders
 your board, and feed the Action Panel `wiring.disabledActions`, which already
-carries the board's holds. So a board's holds grey out the harness's panel, and
+carries the board's holds. So a board's holds reach the harness's panel, and
 its controller cancels a held draft. The controller is not among them: it is
 part of the game context (`GAME_CONTEXT_KEYS.actionController`, which the
 Action Panel reads), and a shell provides that context whole.

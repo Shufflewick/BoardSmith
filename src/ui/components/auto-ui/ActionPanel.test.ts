@@ -382,7 +382,8 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
     wrapper.unmount();
   });
 
-  it('renders .action-help-btn when toggle is ON and action has a disabledActions reason (no help)', () => {
+  // #1638: a disabled action folds away, and the fold shows its reason as text.
+  it('shows a disabled reason as text in the fold, not behind a "?", when the action has no help', async () => {
     const wrapper = mountWithHelp({
       actions: ['build'],
       actionMetadata: {
@@ -391,7 +392,9 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
       isActionHelpVisible: true,
       disabledActions: { build: 'You need more resources.' },
     });
-    expect(wrapper.find('.action-help-btn').exists()).toBe(true);
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
+    expect(wrapper.find('[data-bs-action="build"]').text()).toContain('You need more resources.');
+    expect(wrapper.find('.action-help-btn').exists()).toBe(false);
     wrapper.unmount();
   });
 
@@ -452,12 +455,14 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
  * unreachable exactly when the player needs it.
  */
 describe('ActionPanel — disabled action buttons carry their reason', () => {
-  it('marks an action disabled with the server-supplied reason, on hover and for SR', () => {
+  // #1638: a disabled action sits in the "not available yet" fold, so each of these opens it first.
+  it('marks an action disabled with the server-supplied reason, on hover and for SR', async () => {
     const wrapper = mountWithHelp({
       actions: ['build'],
       actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } },
       disabledActions: { build: 'You need 3 wood; you have 1.' },
     });
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
 
     const btn = wrapper.find('[data-bs-action="build"]');
     expect(btn.attributes('aria-disabled')).toBe('true');
@@ -490,6 +495,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       },
     });
 
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
     await wrapper.find('[data-bs-action="build"]').trigger('click');
     await Promise.resolve();
 
@@ -544,7 +550,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     wrapper.unmount();
   });
 
-  it('prefers the action-specific reason over the generic in-flight one', () => {
+  it('prefers the action-specific reason over the generic in-flight one', async () => {
     const controller = stubActionController({ isExecuting: ref(true) });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
@@ -556,6 +562,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
       },
     });
 
+    await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
     expect(wrapper.find('[data-bs-action="build"]').attributes('data-bs-disabled-reason'))
       .toBe('You need 3 wood; you have 1.');
     wrapper.unmount();
