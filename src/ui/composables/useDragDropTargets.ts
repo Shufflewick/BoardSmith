@@ -165,6 +165,9 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
         return;
       }
 
+      // The dragged thing is what the player is acting on, so it becomes the shared selection (#1641).
+      const thing = actionController.subjects.value.things.find((entry) => entry.element === match.element.id);
+      if (thing) actionController.select(thing);
       try {
         await actionController.start(match.action, { args: { [match.pick]: match.element.id } });
       } catch {

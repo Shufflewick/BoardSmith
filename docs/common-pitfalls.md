@@ -2138,7 +2138,6 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | **followUp args in filter** | Bare numeric id in followUp args stays a number | Pass `{ id, className }` (auto-resolved) or call `getElementById()` yourself |
 | **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
 | **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
-| **execute() vs start()** | `execute('retreat', {})` without params | `start('retreat')` for wizard mode |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 | **Drag-drop not working** | No drop targets when dragging | Start the action with a `chooseElement`; give `chooseFrom` choices `boardRefs` |
 | **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |

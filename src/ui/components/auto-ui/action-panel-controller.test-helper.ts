@@ -59,6 +59,11 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     currentPickDraft: ref(null),
     setPickDraft: vi.fn(),
     actionMenuPath: ref<readonly string[]>([]),
+    // A game that declares no subject type has no things and no selection (#1641).
+    actionMenuAway: ref(false),
+    subjects: ref({ things: [], listedUnderThings: new Set<string>(), laterVerbs: [] }),
+    selection: ref(null),
+    select: vi.fn(),
     // The draft's price and the confirmation it is read before (#248), shared for
     // the same reason: the panel renders what the controller holds, and a custom
     // UI reads the same refs rather than a second copy.
@@ -76,7 +81,7 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     canClear: vi.fn(() => true),
 
     // Reached from event handlers only.
-    start: vi.fn(async () => {}),
+    start: vi.fn(async () => ({ success: true })),
     fill: vi.fn(async () => ({ valid: true })),
     skip: vi.fn(),
     cancel: vi.fn(),

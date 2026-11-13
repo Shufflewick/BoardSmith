@@ -1078,14 +1078,15 @@ async function openSeatAction(
   seat: number,
   seatActions: readonly string[],
 ): Promise<void> {
-  const started = await controller.start(name, args ? { args } : undefined);
   const mayTake = seatActions.length > 0 ? seatActions.map((action) => `"${action}"`).join(', ') : 'nothing';
-  if (!started.success) {
+  if (!seatActions.includes(name)) {
     throw new Error(
-      `renderAsSeat could not open "${name}" for seat ${seat}: ${started.error ?? 'the controller refused it'}. ` +
+      `renderAsSeat could not open "${name}" for seat ${seat}: it is not offered to that seat now. ` +
         `startAction opens an action the seat may take now, and seat ${seat} may take ${mayTake}.`,
     );
   }
+  // One the seat may take but that is refused, or has nothing to choose and is sent at once (#1641), does not stay open, said below.
+  await controller.start(name, args ? { args } : undefined);
   // The first pick's choices are fetched and handed to the board by watchers;
   // a macrotask is after every one of them has run.
   await new Promise((resolve) => setTimeout(resolve, 0));

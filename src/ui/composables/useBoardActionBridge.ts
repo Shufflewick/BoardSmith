@@ -39,6 +39,7 @@ import type {
 import { answerMark, choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
+import { usableVerbs } from './sharedSelection.js';
 
 interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
@@ -503,15 +504,43 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         if (!held || (held.element.disabled && !element.disabled)) offered.set(element.id, { action, pick, element });
       }
     }
-    board.setValidElements([...offered.values()].map(({ element }) => boardTarget(element)), (elementId: number) => {
+    const targets = new Map([...offered.values()].map(({ element }) => [element.id, boardTarget(element)] as const));
+    enableThings(targets);
+    board.setValidElements([...targets.values()], (elementId: number) => {
+      if (pressThing(elementId)) return;
       const start = offered.get(elementId);
       if (start) void startAction(start.action, { args: { [start.pick]: elementId } });
     });
   }
 
+  /**
+   * A declared thing a verb can act on now is an enabled board target for all its verbs, not only an
+   * element-first one, keeping the anchor an element pick gave it (#1641).
+   */
+  function enableThings(targets: Map<number, ReturnType<typeof boardTarget>>): void {
+    for (const entry of controller.subjects.value.things) {
+      if (entry.element === undefined || usableVerbs(entry).length === 0) continue;
+      const held = targets.get(entry.element);
+      targets.set(entry.element, { id: entry.element, ref: held?.ref ?? { id: entry.element }, display: held?.display ?? entry.label });
+    }
+  }
+
+  /**
+   * A click on a declared thing selects it, and starts its verb only when one verb takes it: several
+   * verbs are offered by the panel, never the first match (#1641). False when the element is no such thing.
+   */
+  function pressThing(elementId: number): boolean {
+    const entry = controller.subjects.value.things.find((thing) => thing.element === elementId);
+    const verbs = entry ? usableVerbs(entry) : [];
+    if (!entry || verbs.length === 0) return false;
+    controller.select(entry);
+    if (verbs.length === 1) void startAction(verbs[0]!, { subject: entry });
+    return true;
+  }
+
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates, controller.subjects], ([selection]) => {
     if (!selection) {
       feedStartCandidates();
       return;
@@ -687,6 +716,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
     if (!isMyTurn.value || isExecuting.value) return;
 
+    if (selected.id !== undefined && pressThing(selected.id)) return;
     const start = findStartCandidate(controller, selected);
     if (start) void startAction(start.action, { args: { [start.pick]: start.element.id } });
   });

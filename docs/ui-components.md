@@ -2242,14 +2242,16 @@ See [Nomenclature](./nomenclature.md) for animation event terminology definition
 
 ## Action Controller API
 
-The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It is passed to the board component as a prop and handles all action execution, wizard mode navigation, and auto-fill logic.
+The `actionController` (type: `UseActionControllerReturn`) is the unified interface for executing and managing game actions. It handles all action execution, wizard mode navigation, and auto-fill logic. A board is handed it as a prop, and a component under the board injects it with `usePlayContext()`, both as `BoardActionController`: every member but `execute`. A board takes an action with `start`, so the Action Panel shows what the board started and follows it.
 
 ### Controller Methods
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ControllerActionResult>` | Execute an action immediately with provided args; resolves to the server's answer as a `ControllerActionResult` (`.success`/`.error`) |
-| `start` | `(name: string, options?: StartOptions) => Promise<ControllerActionResult>` | Start wizard mode for a multi-selection action (await before driving further selections). `success: true` means wizard mode began, not that the action ran |
+| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ControllerActionResult>` | Execute an action immediately with provided args; resolves to the server's answer as a `ControllerActionResult` (`.success`/`.error`). Not on a board's `BoardActionController`: a board uses `start` with `args`, which the Action Panel follows |
+| `start` | `(name: string, options?: StartOptions) => Promise<ControllerActionResult>` | Start wizard mode for a multi-selection action (await before driving further selections). `success: true` means wizard mode began, not that the action ran. With every pick in `args` the action runs at once and the result is the server's answer, as `execute` gives it |
+| `select` | `(thing: SubjectChoice \| null) => void` | Select a thing, or nothing, for the board and the Action Panel alike. `SubjectChoice` is `{ type, key, label?, related? }`; pass `label` and `related` for a thing no offered pick lists. A bound selection is written through the game instead |
+| `bindSubjectSelection` | `(binding: SubjectSelectionBinding \| null) => void` | Keep the shared selection in the game's own state: `{ read, write, selects }`. `read` returns the selected thing from the game's view, `write` changes it through the game's own actions, and `selects` names those actions. `null` unbinds |
 | `fill` | `(name: string, value: unknown) => Promise<PickValidationResult>` | Fill a specific selection in wizard mode (async) |
 | `skip` | `(selectionName: string) => void` | Skip an optional selection (requires the selection name) |
 | `clear` | `(selectionName: string) => boolean` | Take back a pick and every pick after it, keeping the action open so the cleared pick is asked again. Returns `false` and sets `lastError` when refused: a pick step still waiting on the server, a name that is not one of the action's picks, or a pick at or before an answer the server already holds. The Action Panel's clear button calls it |
@@ -2276,8 +2278,22 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 |--------|------|-------------|
 | `args` | `Record<string, unknown>` | Values applied immediately to matching selections |
 | `prefill` | `Record<string, unknown>` | Values auto-filled when their selection becomes active. A pick that takes a list (chooseElements, multiSelect, ordered list) takes an array, each entry matched against the choices; a lone value for one is refused |
+| `subject` | `SubjectRef` | The thing the verb acts on: it fills the first pick's row that is the thing, opens a first pick whose rows belong to the thing narrowed to those rows, or answers the later pick that takes a thing of its type when that pick lists it. A verb that takes none of these is refused, naming both |
 
 Use `args` for selections that are already available. Use `prefill` for deferred auto-fill of future selections (e.g., when the first selection determines which options appear in the second).
+
+### The shared selection
+
+A game that declares subject types ([Subject types](./actions-and-flow.md#subject-types-the-things-a-games-verbs-are-about)) has one selected thing, held by the controller, which the board and the Action Panel both read (`selection`) and both change (`select`). They cannot drift apart.
+
+- **A board click** on an element that is a declared thing selects it when several verbs can act on it now, and the panel offers them. It never starts the first match. A thing one verb can act on still starts that verb in one click. A drag selects the dragged thing and starts what it starts. A board can still start a specific verb itself with `start(name, { args })` or `start(name, { subject })`.
+- **The panel with nothing selected** is the ordinary grouped menu. An action listed under its things is reached through them: the things of an `onBoard` type sit under the type, then their categories. A top level that is one subject type and nothing else is drawn as that type's things.
+- **The panel on a selected thing** shows a heading naming it (`Dice / d4 showing 2`), then its verbs in their actions' groups, the verbs that take a thing of its type in a later pick, the verbs about the things that belong to it (opened narrowed to them), its related things' verbs (`Paint: red`), and the things that belong to it. A verb it cannot take now is folded with its reason. With none, it says `Nothing can be done with X right now.` Back goes to the thing it belongs to, else clears the selection and stands in the list the thing sat in.
+- **The panel follows the board.** A verb started from the board at a level the panel is not showing moves the panel to that level, so cancel lands there. An open action, auto-started or a follow-up, always shows in place of the menu.
+- **A selection the game keeps** in its own state (a world's open colony) is bound with `bindSubjectSelection`. If the game will not empty it, Back only makes the panel look away to the thing's list (`actionMenuAway`) while the board keeps its thing.
+- **In development**, a `start` that acts on a different thing than the shared selection throws, naming the action and both things. A thing that belongs to the selection, one of its related things, and the game's own selecting actions (`selects`) are not a mismatch.
+
+A game that declares no subject type has no things and no selection, and its board and panel behave as before.
 
 ### Controller State
 
@@ -2312,7 +2328,10 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | `quoteError` | `ComputedRef<string \| null>` | Why the current draft could not be priced, or `null` |
 | `awaitingConfirmation` | `ComputedRef<boolean>` | True when a quoted action's draft is complete and waiting for `confirm()` |
 | `confirmDisabledReason` | `ComputedRef<string \| null>` | For an open quoted action, why `confirm()` is refused right now, or `null` when it is allowed. Also `null` when no quoted action is open. Bind it to the confirm control |
-| `actionMenuPath` | `Ref<readonly string[]>` | The action-group path the player has opened in the Action Panel; empty at the top level |
+| `actionMenuPath` | `Ref<readonly string[]>` | The action-group path the player has opened in the Action Panel; empty at the top level. With a thing selected, the path within that thing's own menu |
+| `actionMenuAway` | `Ref<boolean>` | True while the Action Panel shows its ordinary menu though a thing is selected, because the game would not empty its selection |
+| `subjects` | `ComputedRef<SubjectIndex>` | The things the offered actions take, from their first-pick lists: `{ things, listedUnderThings, laterVerbs }` (see `subjectIndex`). Each verb carries its action's disabled reason when the action has one |
+| `selection` | `ComputedRef<SubjectEntry \| null>` | The one thing the board and the Action Panel have selected, with its label and verbs, or `null`. A thing no offered pick lists has no verbs |
 | `actionSnapshot` | `Ref<ActionStateSnapshot \| null>` | The current action's state: its metadata, frozen at start (so a follow-up not in `availableActions` has it), and the picks collected so far. Read it; don't write it |
 | `animationsPending` | `ComputedRef<boolean>` | Whether animations are playing. Always `false` without `animationEvents` |
 | `showActionPanel` | `ComputedRef<boolean>` | Whether to show action UI: `isMyTurn && !animationsPending && !pendingFollowUp` |
@@ -2321,8 +2340,8 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 
 An action's `execute()` can return a computed value to the seat that took it via
 `ActionResult.data` (a map recall, a scout report, a peek at the top of a deck).
-`execute()` hands that back to its own caller — but an action driven by picks
-(a selection with `onSelect`, or a repeating one) *completes inside `fill()`*,
+A board's `start()` resolves when the action opens, not when the server answers,
+and an action driven by picks *completes inside `fill()`* or an auto-execute,
 usually from an ActionPanel click no board code called at all. There is no caller
 to return to, so the controller publishes every resolution here instead:
 
@@ -2385,13 +2404,13 @@ See [Element Enrichment](./element-enrichment.md) for full documentation.
 
 ### Usage Patterns
 
-**Direct execution (single-step actions):**
+**Every pick known (runs as soon as it opens):**
 ```typescript
-// Execute an action with all args provided
-await actionController.execute('draw', { count: 3 });
+// An action with all args provided
+await actionController.start('draw', { args: { count: 3 } });
 
-// Execute an action that requires no selections
-await actionController.execute('endTurn');
+// An action that requires no selections
+await actionController.start('endTurn');
 ```
 
 **Wizard mode (multi-step actions):**
@@ -2545,7 +2564,7 @@ Common error messages and how to handle them:
 ```typescript
 async function handleAction(name: string, args: Record<string, unknown>) {
   try {
-    await actionController.execute(name, args);
+    await actionController.start(name, { args });
   } catch (e) {
     // actionController.lastError is already set, but you may want custom handling
   }
@@ -2650,7 +2669,7 @@ async function executeWithRetry(
   maxRetries = 2
 ) {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    await actionController.execute(name, args);
+    await actionController.start(name, { args });
 
     if (!actionController.lastError.value) return; // Success
 
@@ -2732,9 +2751,8 @@ export async function dropEquipment(
   const equipmentId = getElementId(equipment);
 
   if (equipmentId) {
-    await actionController.execute('dropEquipment', {
-      actingHero: hero.id,
-      equipment: equipmentId,
+    await actionController.start('dropEquipment', {
+      args: { actingHero: hero.id, equipment: equipmentId },
     });
   }
 }
@@ -2768,9 +2786,8 @@ const equipment = findElement(hero, { name: selectedEquipmentName });
 
 if (equipment) {
   console.log('Found equipment ID:', equipment.id);  // e.g., 42
-  await actionController.execute('dropEquipment', {
-    actingHero: hero.id,
-    equipment: equipment.id  // Use the numeric ID
+  await actionController.start('dropEquipment', {
+    args: { actingHero: hero.id, equipment: equipment.id },  // Use the numeric ID
   });
 }
 ```
@@ -2782,7 +2799,7 @@ if (equipment) {
 // The game must have created the room with the name 'alpha-3'.
 const room = findElement(gameView, { name: 'alpha-3' });
 if (room) {
-  await actionController.execute('moveTo', { destination: room.id });
+  await actionController.start('moveTo', { args: { destination: room.id } });
 }
 ```
 
@@ -2795,29 +2812,23 @@ When the value you have is stored in an attribute rather than in the element's `
 const room = findElements(gameView, { className: 'Room' })
   .find(el => el.attributes?.roomId === 'alpha-3');
 if (room) {
-  await actionController.execute('moveTo', { destination: room.id });
+  await actionController.start('moveTo', { args: { destination: room.id } });
 }
 ```
 
 ## Calling Actions from Custom UIs
 
-### When to Use `execute()` vs `start()`
+### Taking an action with `start()`
 
-The `actionController` has two main ways to trigger actions. Choosing the right one depends on whether you have all the information needed upfront.
-
-| Method | Use When | What Happens |
-|--------|----------|--------------|
-| `execute(name, args)` | You have all selection values ready | Action executes immediately |
-| `start(name, options?)` | User needs to make selections via ActionPanel | Enters wizard mode, ActionPanel shows selection UI |
+A board takes every action with `start()`, and a board's controller has no `execute()`: the Action Panel shows what the board started and follows it, so the two never tell different stories. With every pick given, the action runs as soon as it opens.
 
 **Decision Guide:**
 
 ```
 Do you have ALL required selection values?
-├── YES → Use execute()
-│   Example: await execute('draw', { count: 3 })
+├── YES → start('action', { args: { every: value } })   runs at once
 │
-└── NO → Use start()
+└── NO → start('action')                                 the panel and the board ask
     │
     ├── Do you have SOME values to pre-fill?
     │   └── YES → start('action', { args: { known: value } })
@@ -2830,15 +2841,14 @@ Do you have ALL required selection values?
 
 ```typescript
 // Pattern 1: No selections required (e.g., endTurn, pass)
-await actionController.execute('endTurn');
+await actionController.start('endTurn');
 
 // Pattern 2: All selections known (direct board click)
-await actionController.execute('move', {
-  piece: clickedPiece.id,
-  destination: clickedCell.id
+await actionController.start('move', {
+  args: { piece: clickedPiece.id, destination: clickedCell.id },
 });
 
-// Pattern 3: Start wizard mode (let ActionPanel handle selections)
+// Pattern 3: Let the panel and the board ask for every selection
 actionController.start('play');
 
 // Pattern 4: Pre-fill first selection, let user choose rest
@@ -2856,22 +2866,21 @@ actionController.start('dropEquipment', {
 - `args`: Applied immediately when `start()` is called. Use for selections that are available now.
 - `prefill`: Applied later when that selection step becomes active. Use for dependent selections where the choice isn't visible until a prior selection is made.
 
-When calling `actionController.execute()` or `actionController.fill()`, pass **numeric element IDs**:
+When calling `actionController.start()` or `actionController.fill()`, pass **numeric element IDs**:
 
 ```typescript
 // For chooseElement / chooseElements selections, pass the element ID
-await actionController.execute('dropEquipment', {
-  actingHero: hero.id,       // number (e.g., 42)
-  equipment: equipment.id,   // number (e.g., 17)
+await actionController.start('dropEquipment', {
+  args: { actingHero: hero.id, equipment: equipment.id },  // numbers (e.g., 42, 17)
 });
 
 // For chooseFrom selections, pass the choice value
-await actionController.execute('selectColor', {
-  color: 'red',  // The actual choice value
+await actionController.start('selectColor', {
+  args: { color: 'red' },  // The actual choice value
 });
 ```
 
-The framework automatically converts element IDs to actual element objects before passing to the `execute()` handler.
+The framework automatically converts element IDs to actual element objects before passing to the action's `execute()` handler.
 
 ### Complete Custom UI Flow Example
 
@@ -2912,7 +2921,7 @@ To debug what's being sent to the server, add logging:
 ```typescript
 async function executeAction(name: string, args: Record<string, unknown>) {
   console.log('[Action]', name, 'args:', JSON.stringify(args, null, 2));
-  await props.actionController.execute(name, args);
+  await props.actionController.start(name, { args });
 }
 ```
 
@@ -2964,7 +2973,7 @@ async function onCardClick(card: any) {
     boardInteraction.triggerElementSelect(card);
   } else {
     // Direct action execution
-    await props.actionController.execute('play', { card: card.id });
+    await props.actionController.start('play', { args: { card: card.id } });
   }
 }
 

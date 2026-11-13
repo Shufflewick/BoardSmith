@@ -349,6 +349,11 @@ export {
   type ActionStateSnapshot,
   type UseActionControllerOptions,
   type UseActionControllerReturn,
+  type BoardActionController,
+  type StartOptions,
+  // The one shared selection (#1641)
+  type SubjectChoice,
+  type SubjectSelectionBinding,
   // Pick-related types
   type ChoiceWithRefs,
   type EnrichedValidElement,

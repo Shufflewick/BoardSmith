@@ -42,6 +42,9 @@ export function makeController(opts: {
   const currentChoices = computed(() => opts.pick?.choices ?? []);
   const validElements = computed(() => opts.validElements ?? []);
   const startCandidates = ref(new Map(Object.entries(opts.startCandidates ?? {})));
+  // A game that declares no subject type: no things, so a click starts what it always did (#1641).
+  const subjects = computed(() => ({ things: [], listedUnderThings: new Set<string>(), laterVerbs: [] }));
+  const select = vi.fn();
 
   const controller = {
     currentAction,
@@ -60,6 +63,8 @@ export function makeController(opts: {
     currentChoices,
     validElements,
     startCandidates,
+    subjects,
+    select,
     getValidElements: () => opts.validElements ?? [],
     fill,
     start,

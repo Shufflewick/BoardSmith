@@ -157,7 +157,7 @@ const canDraw = computed(() => props.availableActions.includes('draw'));
 const canPlay = computed(() => props.availableActions.includes('play'));
 
 function handleDraw() {
-  props.actionController.execute('draw', {});
+  props.actionController.start('draw');
 }
 
 function handlePlayCard(cardId: number) {

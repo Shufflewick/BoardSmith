@@ -15,7 +15,7 @@
  * surface's view of the guards.
  */
 import type { BoardInteraction } from './useBoardInteraction.js';
-import type { EnrichedActionMetadata, UseActionControllerReturn } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, StartOptions, UseActionControllerReturn } from './useActionControllerTypes.js';
 import { copyOfChoice } from './actionControllerHelpers.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
@@ -46,7 +46,7 @@ export type StartOutcome =
 export interface ActionMutators {
   startAction(
     actionName: string,
-    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> },
+    options?: StartOptions,
   ): Promise<StartOutcome>;
   /** Execute an action outright. Resolves `false` when a seat guard refused it; execute() refuses the rest itself. */
   executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean>;
@@ -62,6 +62,7 @@ type MutatorController = Pick<
   UseActionControllerReturn,
   | 'start'
   | 'execute'
+  | 'currentAction'
   | 'fill'
   | 'toggleMultiSelect'
   | 'appendListEntry'
@@ -80,7 +81,7 @@ export function createActionMutators(
 ): ActionMutators {
   async function startAction(
     actionName: string,
-    options?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> },
+    options?: StartOptions,
   ): Promise<StartOutcome> {
     if (guards.isViewingHistory()) return 'refused';
     // A disabled action is offered so the panel can explain it, and is never started.
@@ -102,8 +103,15 @@ export function createActionMutators(
     // after the await wipes all of that and no watcher re-runs, so the board goes
     // dead for the whole action while `currentAction` still names it.
     board?.clear();
-    await controller.start(actionName, options);
-    return 'started';
+    const startTick = controller.actionStartTick.value;
+    return startOutcome(actionName, await controller.start(actionName, options), startTick);
+  }
+
+  /** Opened, or sent at once because nothing was left to ask (#1641), after which the board belongs to it no longer. */
+  function startOutcome(actionName: string, result: { success: boolean }, startTick: number): StartOutcome {
+    if (controller.currentAction.value === actionName) return 'started';
+    if (controller.actionStartTick.value === startTick) board?.clear();
+    return result.success ? 'executed' : 'refused';
   }
 
   async function executeAction(actionName: string, args: Record<string, unknown>): Promise<boolean> {

@@ -22,7 +22,7 @@
  */
 import { inject, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
-import type { UseActionControllerReturn } from './useActionController.js';
+import type { BoardActionController } from './useActionController.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 
 /** One player as the shell knows them. */
@@ -82,8 +82,8 @@ export interface PlayContext {
   isViewingHistory: Ref<boolean> | ComputedRef<boolean>;
   /** Action names available to the viewer this step. Empty while {@link isViewingHistory} is true. */
   availableActions: ComputedRef<string[]>;
-  /** The action controller — the one write path for taking an action. */
-  actionController: UseActionControllerReturn;
+  /** The action controller, the one write path for taking an action. No execute: a board starts a verb, so the panel shows it (#1641). */
+  actionController: BoardActionController;
   /** The presentation overlay, if the host supplied one. */
   presentation: Ref<unknown>;
   /** Element id the debug panel is highlighting, or null. */

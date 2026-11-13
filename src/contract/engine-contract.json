@@ -1,5 +1,5 @@
 {
-  "revision": 369,
+  "revision": 370,
   "surfaceHash": "f105072b5ce712c4",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2895,6 +2895,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Games declare subject types (subjectType, TYPE.of, eitherSubject, .about) and bind picks to them; each candidate row carries the thing it is, a table's state push carries subject choice lists (a subject first pick over 200 rows is refused), and subjectIndex reports which verbs take which thing (#1640)."
+    },
+    {
+      "revision": 370,
+      "date": "2026-11-13",
+      "surfaceHash": "f105072b5ce712c4",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "One shared selection: the board and the Action Panel select the same thing, a click on a thing several verbs take selects it, and boards start actions with start (no execute) (#1641)"
     }
   ]
 }

@@ -578,7 +578,7 @@ Action.create('attack')
 // In your custom Vue component:
 function attackTarget(targetId: number) {
   // Just send the element ID - it works!
-  props.actionController.execute('attack', { target: targetId });
+  props.actionController.start('attack', { args: { target: targetId } });
 }
 ```
 
@@ -3044,7 +3044,7 @@ import type { TableBoardProps } from 'boardsmith/ui';
 const props = defineProps<TableBoardProps>();
 
 function attackTarget(targetId: number) {
-  props.actionController.execute('attack', { target: targetId });
+  props.actionController.start('attack', { args: { target: targetId } });
 }
 </script>
 ```
@@ -3067,7 +3067,7 @@ This means custom UIs can send element IDs even for `chooseFrom` selections:
 })
 
 // Custom UI can send the element ID directly
-props.actionController.execute('attack', { target: target.id });  // Works!
+props.actionController.start('attack', { args: { target: target.id } });  // Works!
 ```
 
 ### Detailed Validation Errors

@@ -91,6 +91,7 @@
 
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
+import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
 import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
@@ -113,7 +114,11 @@ export type {
   UseActionControllerOptions,
   RepeatingState,
   UseActionControllerReturn,
+  BoardActionController,
   StartCandidates,
+  StartOptions,
+  SubjectChoice,
+  SubjectSelectionBinding,
 } from './useActionControllerTypes.js';
 
 import type {
@@ -134,9 +139,11 @@ import type {
   RepeatingState,
   UseActionControllerReturn,
   StartCandidates,
+  StartOptions,
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
+import type { PickSubject, SubjectRef } from '../../types/protocol.js';
 
 /**
  * Create an action controller for handling game actions.
@@ -241,6 +248,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const getAutoFill = (): boolean => {
     return typeof autoFillOption === 'boolean' ? autoFillOption : autoFillOption.value;
   };
+  /** Whether an action auto-executes once nothing is left to ask: never one that quotes (#248). */
+  const autoExecutesFor = (meta: { quote?: boolean } | null | undefined): boolean =>
+    meta?.quote !== true && (typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value);
   const getAutoExecute = (): boolean => {
     // AN ACTION THAT QUOTES IS CONFIRMED, NEVER AUTO-COMMITTED (#248). Filling
     // the last selection used to BE the purchase, which left no moment for a
@@ -249,8 +259,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // player reaches it having seen what it costs. Here rather than at the watch
     // because this is the question "may anything auto-execute right now", and
     // every caller of it is asking that.
-    if (quotesItsDraft.value) return false;
-    return typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value;
+    return autoExecutesFor(currentActionMeta.value);
   };
 
   // D27 commit-leak gate (T-160-27 / BLOCKER-160): the acting seat's own
@@ -483,6 +492,24 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // the menu on every read, so a path whose group has gone away lands on the
   // deepest level that survived.
   const actionMenuPath = ref<readonly string[]>([]);
+  const actionMenuAway = ref(false);
+
+  // === The one shared selection (#1641) ===
+  const sharedSelection = useSharedSelection({
+    offered: computed(() => (availableActions.value ?? []).flatMap((name) => actionMetadata.value?.[name] ?? [])),
+    disabledActions,
+  });
+  /** The thing the open action was started on, for the pick it narrows or is carried to. */
+  const thingRun = ref<(ThingRun & { tick: number }) | null>(null);
+  const thingRunFor = (pick: string, kind: 'within' | 'carry') => {
+    const run = thingRun.value;
+    return run && run.tick === actionStartTick.value && run.start.kind === kind && run.start.pick === pick ? run : null;
+  };
+  /** A pick opened on a thing that holds some of its rows lists only those, on the board and in the panel alike. */
+  function narrowed<T extends { subject?: PickSubject }>(pick: string, rows: T[]): T[] {
+    const run = thingRunFor(pick, 'within');
+    return run ? rows.filter((row) => sameThing(row.subject?.within, run.thing)) : rows;
+  }
 
   // === Element Enrichment ===
   // Creates functions to enrich validElements with full element data from gameView
@@ -1031,6 +1058,25 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return true;
   }
 
+  /** Answer a later pick with the thing its action was started on, when the pick lists it; otherwise the pick stays open. */
+  function consumeCarriedThing(selection: EnrichedPickMetadata): boolean {
+    const run = thingRunFor(selection.name, 'carry');
+    if (!run) return false;
+    thingRun.value = null;
+    // A typed thing is its own text: the server judges it, and no list of candidates reaches the page.
+    if (selection.type === 'text') {
+      void fill(selection.name, run.thing.key);
+      return true;
+    }
+    const rows: { value: unknown; subject?: PickSubject; disabled?: string }[] = selection.type === 'element'
+      ? (actionSnapshot.value?.pickSnapshots.get(selection.name)?.validElements ?? []).map((element) => ({ ...element, value: element.id }))
+      : getChoices(selection) as ChoiceWithRefs[];
+    const row = rows.find((candidate) => sameThing(candidate.subject, run.thing) && !candidate.disabled);
+    if (!row) return false;
+    void fill(selection.name, row.value);
+    return true;
+  }
+
   /**
    * Attempt to auto-fill a non-optional selection that has exactly one answer.
    * Updates both currentArgs and collectedPicks in actionSnapshot.
@@ -1552,7 +1598,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const _version = snapshotVersion.value; // reactive dependency (Maps aren't reactive)
     const pick = currentPick.value;
     if (!pick) return [];
-    return getChoices(pick) as ChoiceWithRefs[];
+    return narrowed(pick.name, getChoices(pick) as ChoiceWithRefs[]);
   });
 
   // A held entry the open list no longer offers enabled would be counted and submitted but drawn nowhere (#1575, #1576).
@@ -1615,7 +1661,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const elements = snapshot?.validElements || [];
 
     // Enrich with full element data from gameView
-    return enrichElementsList(elements);
+    return narrowed(sel.name, enrichElementsList(elements));
   });
 
   // === Start candidates (#1192) ===
@@ -1706,7 +1752,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (isViewingHistoryValue()) return;
 
     // A prefill takes priority over auto-fill, and settles the pick either way.
-    if (consumePrefill(sel)) return;
+    if (consumePrefill(sel) || consumeCarriedThing(sel)) return;
 
     // Now attempt auto-fill if enabled
     // Don't auto-fill optional selections - user must consciously choose or skip
@@ -1725,11 +1771,41 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!getAutoExecute() || !currentAction.value || isExecuting.value || isViewingHistoryValue()) return;
     const seq = actionStartTick.value;
     const run = ++autoExecuteRuns;
-    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, seq);
+    await runBeforeAutoExecuteHooks(currentAction.value, buildServerArgs(), run, () => actionMovedOn(seq));
     const result: ControllerActionResult = actionMovedOn(seq)
       ? { success: false, error: 'Action was cancelled' }
       : await executeCurrentAction();
     notifyAfterAutoExecute(result, run);
+  }
+
+  /** The args a start opens with, the thing it carries or narrows to, or why it is refused; judged against the shared selection. */
+  function startArgs(meta: EnrichedActionMetadata, given: Record<string, unknown>, prefill: Record<string, unknown>, subject: SubjectRef | undefined) {
+    const onThing = sharedSelection.argsOn(meta, given, subject);
+    if (onThing.error !== undefined) return onThing;
+    const refusal = startArgsRefusal(meta, onThing.args);
+    if (refusal) return { error: refusal };
+    sharedSelection.admit(meta, { ...prefill, ...onThing.args }, subject);
+    return onThing;
+  }
+
+  /** Nothing left to ask, so it is sent at once and the answer is the server's. A quoted action, or one without auto-execute, waits for confirm. */
+  function sendsAtOnce(meta: EnrichedActionMetadata, args: Record<string, unknown>): boolean {
+    return autoExecutesFor(meta) && meta.selections.every((sel) => args[sel.name] !== undefined);
+  }
+
+  /** Send an action whose picks are all given, between the auto-execute hooks and listeners an action filled in the panel runs. */
+  function sendAtOnce(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
+    const seq = actionStartTick.value;
+    const run = ++autoExecuteRuns;
+    const send = () => {
+      const sending = execute(actionName, args);
+      void sending.then((result) => notifyAfterAutoExecute(result, run));
+      return sending;
+    };
+    // With no hook the send starts in the tick the board asked, as execute had it. Nothing is open for it,
+    // so only another action starting means the player moved on.
+    if (beforeAutoExecuteHooks.value.length === 0) return send();
+    return runBeforeAutoExecuteHooks(actionName, args, run, () => actionStartTick.value !== seq).then(send);
   }
 
   /**
@@ -1744,11 +1820,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * skip the hook registered after it.
    */
   async function runBeforeAutoExecuteHooks(
-    actionName: string, args: Record<string, unknown>, run: number, seq: number,
+    actionName: string, args: Record<string, unknown>, run: number, movedOn: () => boolean,
   ): Promise<void> {
     for (const hook of [...beforeAutoExecuteHooks.value]) {
       // A run the player has left must not reach a hook that would overwrite the next run's capture (#1026).
-      if (actionMovedOn(seq)) return;
+      if (movedOn()) return;
       try {
         // A copy each, so one hook changing its args cannot change what the next hook sees.
         await hook(actionName, { ...args }, run);
@@ -2212,11 +2288,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * auto-execute watcher / executeCurrentAction(), which callers can observe via
    * `lastError` or the `beforeAutoExecuteHooks` mechanism, not via this return value.
    */
-  async function start(
-    actionName: string,
-    startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
-  ): Promise<ControllerActionResult> {
-    const initialArgs = startOptions?.args ?? {};
+  async function start(actionName: string, startOptions?: StartOptions): Promise<ControllerActionResult> {
+    const givenArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
     // What the board could start this action with, read before opening it clears them (#1313).
     const opening = startCandidates.value.get(actionName);
@@ -2266,7 +2339,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Only picks reach the server (buildServerArgs, #662): say so rather than
     // drop an arg the caller meant to send.
     const picks = meta.selections.map((s) => s.name);
-    const undeclared = Object.keys(initialArgs).filter((key) => !picks.includes(key));
+    const undeclared = Object.keys(givenArgs).filter((key) => !picks.includes(key));
     if (undeclared.length > 0) {
       const sent = undeclared.map((key) => `'${key}'`).join(', ');
       devWarn(
@@ -2277,11 +2350,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    const refusal = startArgsRefusal(meta, initialArgs);
-    if (refusal) {
-      setError(refusal);
-      return { success: false, error: refusal };
+    const onThing = startArgs(meta, givenArgs, prefillArgs, startOptions?.subject);
+    if (onThing.error !== undefined) {
+      setError(onThing.error);
+      return { success: false, error: onThing.error };
     }
+    const initialArgs = onThing.args;
+    if (sendsAtOnce(meta, initialArgs)) return sendAtOnce(actionName, initialArgs);
 
     currentAction.value = actionName;
     actionStartTick.value++;
@@ -2304,6 +2379,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     for (const [name, value] of Object.entries(initialArgs)) {
       actionSnapshot.value.collectedPicks.set(name, { value, display: startArgLabel(meta, initialArgs, opening, name, value), skipped: false });
     }
+    thingRun.value = onThing.run ? { tick: actionStartTick.value, ...onThing.run } : null;
 
     // Fetch choices for the first selection that needs input
     // This handles both normal start (first selection) and followUp with pre-filled args
@@ -3171,6 +3247,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // Where the player is standing in the action list's hierarchy, for the same
     // reason. Opaque to the controller: only the panel knows what a label means.
     actionMenuPath,
+    actionMenuAway,
+    subjects: sharedSelection.subjects,
+    selection: sharedSelection.selection,
+    select: sharedSelection.select,
+    bindSubjectSelection: sharedSelection.bindSubjectSelection,
 
     // Multi-select draft (shared source of truth for in-progress multiSelect)
     multiSelectDraft,
