@@ -23,7 +23,7 @@
 import { availableActionsForSeat, type ActionDefinition, type Game, type GameOptions } from '../../engine/index.js';
 import { buildActionMetadata } from '../../engine/element/action-metadata.js';
 import type { ActionMetadata } from '../../types/protocol.js';
-import { buildActionMenu, busiestLevel } from '../../ui/components/auto-ui/action-menu.js';
+import { buildActionMenu, levelButtons } from '../../ui/components/auto-ui/action-menu.js';
 import { simulateRandomGames } from '../../testing/random-simulation.js';
 import { noSeatHasEnabledAction } from '../../sim/play-game.js';
 import { createTestWorld, type TestWorld, type TestWorldOptions } from '../../testing/test-world.js';
@@ -154,18 +154,18 @@ export interface ChoiceAudit {
 }
 
 /**
- * The busiest level of the Action Panel a seat offered `actions` sees, read the way the panel draws
+ * Every level of the Action Panel a seat offered `actions` can reach, read the way the panel draws
  * it (`ActionPanel.vue`): suppressed actions only when nothing else is offered, disabled ones folded
  * into one row, and a group holding one thing drawn as that thing.
  */
-export function startButtonLevel(
+export function startButtonLevels(
   actions: readonly ActionMetadata[],
   isDisabled: (name: string) => boolean,
-): CrowdedLevel {
+): CrowdedLevel[] {
   const unsuppressed = actions.filter((action) => !action.suppressFromActionPanel);
   const visible = unsuppressed.length > 0 ? unsuppressed : actions;
-  const level = busiestLevel(buildActionMenu(visible.filter((action) => !isDisabled(action.name))), (action) => !action.destructive);
-  return { path: level.path, actions: level.buttons.map((action) => action.name) };
+  return levelButtons(buildActionMenu(visible.filter((action) => !isDisabled(action.name))), (action) => !action.destructive)
+    .map((level) => ({ path: level.path, actions: level.buttons.map((action) => action.name) }));
 }
 
 /** The levels seen with more than `max` buttons, each once with the most it had, the fullest first. */
@@ -189,14 +189,24 @@ export function describeCrowdedLevel(level: CrowdedLevel): string {
   );
 }
 
-/** The busiest level of every seat's Action Panel in a table game as it stands. */
+/**
+ * Every level of every seat's Action Panel in a table game as it stands. The panel's own metadata
+ * runs the game's prompts, which the random policy never reads, so a throw is named as the panel's.
+ */
 function tableLevels(game: Game): CrowdedLevel[] {
   const flowState = game.getFlowState();
   return game.players.flatMap((player) => {
     const names = availableActionsForSeat(flowState, player.seat);
     if (names.length === 0) return [];
-    const refused = game.getDisabledActions(player.seat);
-    return [startButtonLevel(Object.values(buildActionMetadata(game, player, names)), (name) => name in refused)];
+    try {
+      const refused = game.getDisabledActions(player.seat);
+      return startButtonLevels(Object.values(buildActionMetadata(game, player, names)), (name) => name in refused);
+    } catch (error) {
+      throw new Error(
+        `seat ${player.seat}'s Action Panel could not be built, so a player in that seat would see none: ` +
+          `${(error as Error).message.replace(/\.$/, '')}`,
+      );
+    }
   });
 }
 
@@ -256,6 +266,7 @@ export async function auditChoiceCardinality<G extends Game>(
 ): Promise<ChoiceAudit> {
   const observations: ChoiceStepObservation[] = [];
   const levels: CrowdedLevel[] = [];
+  let panelFault: Error | undefined;
 
   const results = await simulateRandomGames(gameClass, {
     count: options.games ?? 3,
@@ -276,7 +287,12 @@ export async function auditChoiceCardinality<G extends Game>(
       observations.push(observeChoiceStep(action, selection as ObservableSelection, candidateCount));
     },
     onTurn: (game) => {
-      levels.push(...tableLevels(game));
+      if (panelFault !== undefined) return;
+      try {
+        levels.push(...tableLevels(game));
+      } catch (error) {
+        panelFault = error as Error;
+      }
     },
   });
 
@@ -292,6 +308,7 @@ export async function auditChoiceCardinality<G extends Game>(
     );
   }
 
+  if (panelFault !== undefined) throw panelFault;
   return { unbounded: findUnboundedChoiceSteps(observations, options.threshold), crowded: findCrowdedLevels(levels) };
 }
 
@@ -406,7 +423,7 @@ async function driveSeat(drive: WorldDrive, seat: number): Promise<void> {
   const moves: DraftedMove[] = [];
   const offers = await offersOf(drive.world, seat);
   const held = new Set(offers.filter((offer) => offer.disabled !== undefined).map((offer) => offer.name));
-  if (offers.length > 0) drive.levels.push(startButtonLevel(offers, (name) => held.has(name)));
+  drive.levels.push(...startButtonLevels(offers, (name) => held.has(name)));
   for (const offer of offers) {
     if (offer.disabled !== undefined) continue;
     const move = await draftMove(drive, seat, offer);

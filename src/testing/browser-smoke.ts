@@ -503,7 +503,7 @@ interface SeatPlay {
   took: { readonly name: string; readonly step: number } | undefined;
   /** The step of the first seat's action this one last followed (`companionStep`). */
   followed: number;
-  /** The panel's action groups the walk has opened in this browser, by label. */
+  /** The panel's action groups the walk has opened in this browser, by path. */
   readonly opened: Set<string>;
   /** Whether the last step here found a modal dialog open (#461). */
   inDialog: boolean;
@@ -621,7 +621,7 @@ interface Offers {
   readonly enabled: string[];
   /** The actions the panel shows greyed out, for a reason of their own: none while an action in flight greys them all. */
   readonly greyed: string[];
-  /** The groups the panel shows, each a menu of more actions. */
+  /** The groups the panel shows, each a menu of more actions, by path: two may share a label (#1639). */
   readonly groups: string[];
   /** Whether the panel is showing a group's menu, which has a way back. */
   readonly inGroup: boolean;
@@ -645,7 +645,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
       greyed: greyed.map((b) => [b.dataset.bsAction ?? '', b.dataset.bsDisabledReason] as const),
       submitting: document.querySelector('[data-bs-submitting]') !== null,
       pending: document.querySelector('[data-testid="bs-actions-pending"]') !== null,
-      groups: [...document.querySelectorAll<HTMLElement>('[data-bs-action-group]')].map((g) => g.dataset.bsActionGroup ?? ''),
+      groups: [...document.querySelectorAll<HTMLElement>('[data-bs-group-path]')].map((g) => g.dataset.bsGroupPath ?? ''),
       inGroup: document.querySelector('[data-bs-menu-back]') !== null,
       open: document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction ?? null,
     };
@@ -1793,10 +1793,10 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: R
   if (now !== undefined) return { take: now };
   const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   if (untaken !== undefined) return { take: untaken };
-  const group = offers.groups.find((label) => !opened.has(label));
+  const group = offers.groups.find((path) => !opened.has(path));
   if (group !== undefined) {
     opened.add(group);
-    return { press: `[data-bs-action-group=${JSON.stringify(group)}]`, what: `group "${group}"` };
+    return { press: `[data-bs-group-path=${JSON.stringify(group)}]`, what: `group "${group}"` };
   }
   if (offers.inGroup) return { press: '[data-bs-menu-back]', what: 'way back' };
   const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
@@ -1952,7 +1952,7 @@ async function companionStep(
   const mine = offers.enabled.filter((name) => !lead.offered.includes(name));
   const untaken = mine.some((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   // A group this browser has not opened may hold what only it is offered, and one open is left first.
-  const ownBusiness = untaken || offers.inGroup || offers.groups.some((label) => !play.opened.has(label));
+  const ownBusiness = untaken || offers.inGroup || offers.groups.some((path) => !play.opened.has(path));
   const { took } = lead;
   if (!ownBusiness && took !== undefined && took.step !== play.followed && offers.enabled.includes(took.name)) {
     play.followed = took.step;

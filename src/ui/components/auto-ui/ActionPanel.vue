@@ -436,7 +436,8 @@ function leaveGroup(): void {
   const drawn = drawnAs(way, promotable);
   menuAnnouncement.value = '';
   openPath.value = target;
-  void (drawn.kind === 'group' ? restoreFocusToGroup(drawn.label) : restoreFocusToGroup(drawn.item.name, 'data-bs-action'));
+  // A collapsed group is drawn under its inner group's label, so a label alone may name two buttons.
+  void (drawn.kind === 'group' ? restoreFocusToGroup(drawn.path.join(' / '), 'data-bs-group-path') : restoreFocusToGroup(drawn.item.name, 'data-bs-action'));
 }
 
 async function focusIntoLevel(buttons = MENU_BUTTONS): Promise<void> {
@@ -1681,7 +1682,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
            .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
       <div
         v-for="node in menuNodes"
-        :key="node.kind === 'group' ? `group:${node.label}` : node.item.name"
+        :key="node.kind === 'group' ? `group:${node.path.join(' / ')}` : node.item.name"
         class="action-btn-group"
       >
         <!-- A GROUP BUTTON IS NAVIGATION AND NOTHING ELSE. `enterGroup` assigns
@@ -1691,6 +1692,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           v-if="node.kind === 'group'"
           class="action-btn action-group-btn"
           :data-bs-action-group="node.label"
+          :data-bs-group-path="node.path.join(' / ')"
           :label="node.label"
           :contents="groupContents(node)"
           @click="enterGroup(node)"

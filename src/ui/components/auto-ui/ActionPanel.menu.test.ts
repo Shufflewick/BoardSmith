@@ -564,3 +564,21 @@ describe('a group that holds one thing is drawn as that thing (#1639)', () => {
     expect(wrapper.find('[data-bs-unavailable][data-bs-action="dumpWater"]').exists()).toBe(true);
   });
 });
+
+describe('two groups drawn under one label stay two groups (#1639 review F1)', () => {
+  it('puts focus back on the group the player came out of, not the first with its label', async () => {
+    const { wrapper } = mountPanel([
+      { name: 'sound', group: ['Settings'] },
+      { name: 'music', group: ['Settings'] },
+      { name: 'rename', group: ['More', 'Settings'] },
+      { name: 'describe', group: ['More', 'Settings'] },
+    ]);
+    const paths = wrapper.findAll('[data-bs-action-group="Settings"]').map((b) => b.attributes('data-bs-group-path'));
+    expect(paths).toEqual(['Settings', 'More / Settings']);
+
+    await wrapper.find('[data-bs-group-path="More / Settings"]').trigger('click');
+    await wrapper.find('[data-bs-menu-back]').trigger('click');
+    await nextTick();
+    expect(document.activeElement?.getAttribute('data-bs-group-path')).toBe('More / Settings');
+  });
+});

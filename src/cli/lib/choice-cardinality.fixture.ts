@@ -126,6 +126,24 @@ export class GroupedChoresGame extends Game<GroupedChoresGame, Player> {
   }
 }
 
+/** Its one verb's prompt throws: the panel cannot be drawn, though the random policy never reads a prompt. */
+export class PromptCrashGame extends Game<PromptCrashGame, Player> {
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<PromptCrashGame>('wave')
+        .prompt(() => {
+          throw new TypeError('the banner is undefined');
+        })
+        .execute(burnTurn),
+    );
+    this.setFlow(shortFlow(['wave']));
+  }
+}
+
 /**
  * WideGame for three or more seats: it refuses to be built for fewer, as a
  * real game dealing a three-hand layout would. The audit must play it at a seat

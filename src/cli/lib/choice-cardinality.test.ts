@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { ActionMetadata } from '../../types/protocol.js';
+import type { CrowdedLevel } from './choice-cardinality.js';
 import {
   MAX_FLAT_CHOICE_CANDIDATES,
   auditChoiceCardinality,
@@ -8,7 +9,7 @@ import {
   findUnboundedChoiceSteps,
   describeUnboundedChoiceStep,
   MAX_LEVEL_BUTTONS,
-  startButtonLevel,
+  startButtonLevels,
   findCrowdedLevels,
   describeCrowdedLevel,
   type ChoiceStepObservation,
@@ -16,6 +17,7 @@ import {
 import {
   CrowdedGame,
   GroupedChoresGame,
+  PromptCrashGame,
   LateWideGame,
   NarrowGame,
   ThreeSeatWideGame,
@@ -324,22 +326,29 @@ describe('MAX_LEVEL_BUTTONS', () => {
   });
 });
 
-describe('startButtonLevel', () => {
-  it('reads the busiest level as the panel draws it, a lone group drawn as its button', () => {
-    const level = startButtonLevel([verb('a'), verb('b', { group: ['Lone'] }), verb('c', { group: ['G'] }), verb('d', { group: ['G'] })], never);
-    expect(level).toEqual({ path: [], actions: ['a', 'b'] });
+describe('startButtonLevels', () => {
+  const top = (levels: CrowdedLevel[]) => levels.find((level) => level.path.length === 0)!;
+
+  it('reads every level as the panel draws it, a lone group drawn as its button', () => {
+    const levels = startButtonLevels([verb('a'), verb('b', { group: ['Lone'] }), verb('c', { group: ['G'] }), verb('d', { group: ['G'] })], never);
+    expect(levels).toEqual([{ path: [], actions: ['a', 'b'] }, { path: ['G'], actions: ['c', 'd'] }]);
   });
 
   it('leaves out disabled actions, which fold into one row', () => {
-    expect(startButtonLevel(tenVerbs, (name) => name === 'chore0').actions).toHaveLength(9);
+    expect(top(startButtonLevels(tenVerbs, (name) => name === 'chore0')).actions).toHaveLength(9);
   });
 
   it('leaves out suppressed actions while anything else is offered', () => {
-    expect(startButtonLevel([...tenVerbs.slice(0, 9), verb('chore9', { suppressFromActionPanel: true })], never).actions).toHaveLength(9);
+    expect(top(startButtonLevels([...tenVerbs.slice(0, 9), verb('chore9', { suppressFromActionPanel: true })], never)).actions).toHaveLength(9);
   });
 
   it('keeps a lone destructive action in its group', () => {
-    expect(startButtonLevel([verb('a'), verb('scuttle', { group: ['Fleet'], destructive: true })], never).actions).toEqual(['a']);
+    expect(top(startButtonLevels([verb('a'), verb('scuttle', { group: ['Fleet'], destructive: true })], never)).actions).toEqual(['a']);
+  });
+
+  it('reports a second crowded level beside a busier one (#1639 review F2)', () => {
+    const levels = startButtonLevels([...tenVerbs, verb('x'), verb('y'), ...tenVerbs.map((a) => verb(`build-${a.name}`, { group: ['Build'] }))], never);
+    expect(findCrowdedLevels(levels).map((level) => [level.path, level.actions.length])).toEqual([[[], 12], [['Build'], 10]]);
   });
 });
 
@@ -378,6 +387,12 @@ describe('the audits count start buttons per level', () => {
   it('finds a world level of ten ungrouped buttons', async () => {
     expect((await auditWorldChoiceCardinality(cardinalityWorld(['chores']), { seed: 'audit' })).crowded)
       .toEqual([{ path: [], actions: CHORE_NAMES }]);
+  });
+
+  it('says a seat\'s panel could not be built, not that the simulator crashed (#1639 review F4)', async () => {
+    const audit = auditChoiceCardinality(PromptCrashGame, { seed: 'audit', games: 1 });
+    await expect(audit).rejects.toThrow(/seat 1's Action Panel could not be built.*the banner is undefined/s);
+    await expect(audit).rejects.not.toThrow(/shows the same failure/);
   });
 
   it('finds nothing in a world with a few buttons', async () => {

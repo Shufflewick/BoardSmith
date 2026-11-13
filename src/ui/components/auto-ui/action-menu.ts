@@ -278,21 +278,15 @@ export function levelShowing<A extends MenuItem>(
   return [];
 }
 
-/** The level that draws the most buttons that are not groups, and those buttons' items. */
-export function busiestLevel<A extends MenuItem>(
+/** Every level a player can reach, with the items it draws as buttons that are not groups. */
+export function levelButtons<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],
   canPromote: (item: A) => boolean,
   path: readonly string[] = [],
-): { readonly path: readonly string[]; readonly buttons: readonly A[] } {
+): { readonly path: readonly string[]; readonly buttons: readonly A[] }[] {
   const drawn = nodes.map((node) => drawnAs(node, canPromote));
-  let busiest: { readonly path: readonly string[]; readonly buttons: readonly A[] } = {
-    path,
-    buttons: drawn.flatMap((node) => (node.kind === 'item' ? [node.item] : [])),
-  };
-  for (const node of drawn) {
-    if (node.kind !== 'group') continue;
-    const inner = busiestLevel(node.children, canPromote, node.path);
-    if (inner.buttons.length > busiest.buttons.length) busiest = inner;
-  }
-  return busiest;
+  return [
+    { path, buttons: drawn.flatMap((node) => (node.kind === 'item' ? [node.item] : [])) },
+    ...drawn.flatMap((node) => (node.kind === 'group' ? levelButtons(node.children, canPromote, node.path) : [])),
+  ];
 }

@@ -121,7 +121,7 @@ export interface SelectionChoicesObservation {
 export function random(
   options: {
     onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
-    /** Called with the game each time the policy is asked for a move, before it builds one. */
+    /** Called with the game each time the policy is asked for a move, before it builds one. It must not throw: a throw fails the game. */
     onTurn?: (game: Game) => void;
   } = {},
 ): Policy {

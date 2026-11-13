@@ -1875,7 +1875,8 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  * before it greets anyone it did not see at first.
  *
  * With `stumbles`, seat 4's arrival fails in its rules, so only seat 4's browser sees a failure.
- * With `manners`, seat 4 alone may also `bow`, an action the panel offers inside its "Manners" group.
+ * With `manners`, seat 4 alone may also `bow` and `nod`, the two actions of the panel's "Manners" group (a
+ * group of one is drawn as its action, #1639).
  * With `busy`, the page is kept busy for 1.5s by every click it takes, longer than the walk gives one
  * look at a panel button, as a loaded machine keeps it (#562).
  */
@@ -1888,6 +1889,13 @@ const bow = worldAction<DevGameGame>('bow')
   .group('Manners')
   .needs(({ player }) => [wandererPartition(player.seat)])
   .condition({ 'only seat 4 bows': ({ player }) => player.seat === 4 })
+  .execute(() => {});
+
+const nod = worldAction<DevGameGame>('nod')
+  .prompt('Nod to the glade')
+  .group('Manners')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .condition({ 'only seat 4 nods': ({ player }) => player.seat === 4 })
   .execute(() => {});
 `
     : '';
@@ -2030,7 +2038,7 @@ const stroll = worldAction<DevGameGame>('stroll')
   });
 
 ${bow}
-export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll${options.manners ? ', bow' : ''}];
+export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll${options.manners ? ', bow, nod' : ''}];
 `,
     'src/ui/components/WorldBoard.vue': `<script setup lang="ts">
 import { computed } from 'vue';
@@ -2080,7 +2088,7 @@ export function gladeSpec(more: { seats?: string; steps: number; manners?: boole
   return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
 
 defineSmokeTest({
-  actions: ['arrive', 'greet', 'look', 'rest', 'stroll'${more.manners ? ", 'bow'" : ''}],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
+  actions: ['arrive', 'greet', 'look', 'rest', 'stroll'${more.manners ? ", 'bow', 'nod'" : ''}],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
   inputs: {
     greet: {
       whom: async ({ texts, otherSeats }: SmokeInputView) =>

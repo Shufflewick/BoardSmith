@@ -26,7 +26,7 @@ import {
   drawnAs,
   actionCount,
   levelShowing,
-  busiestLevel,
+  levelButtons,
   type ActionMenuGroup,
   type ActionMenuNode,
   type MenuItem,
@@ -247,18 +247,15 @@ describe('levelShowing', () => {
   });
 });
 
-describe('busiestLevel', () => {
-  it('names the level drawing the most buttons that are not groups, collapsed ones included', () => {
+describe('levelButtons', () => {
+  it('lists every reachable level with its buttons that are not groups, collapsed ones included', () => {
     const menu = buildActionMenu([
       action('a'),
       action('b', { group: ['G'] }),
       action('c', { group: ['G'] }),
-      action('d', { group: ['G'] }),
       action('e', { group: ['Lone'] }),
     ]);
-    const busiest = busiestLevel(menu, () => true);
-    expect(busiest.path).toEqual(['G']);
-    expect(busiest.buttons.map((item) => item.name)).toEqual(['b', 'c', 'd']);
-    expect(busiestLevel(menu.slice(0, 1).concat(menu.slice(2)), () => true).buttons.map((item) => item.name)).toEqual(['a', 'e']);
+    expect(levelButtons(menu, () => true).map((level) => [level.path, level.buttons.map((item) => item.name)]))
+      .toEqual([[[], ['a', 'e']], [['G'], ['b', 'c']]]);
   });
 });
