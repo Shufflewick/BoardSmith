@@ -104,9 +104,12 @@ export function createActionMutators(
     // dead for the whole action while `currentAction` still names it.
     board?.clear();
     const startTick = controller.actionStartTick.value;
-    const result = await controller.start(actionName, options);
+    return startOutcome(actionName, await controller.start(actionName, options), startTick);
+  }
+
+  /** Opened, or sent at once because nothing was left to ask (#1641), after which the board belongs to it no longer. */
+  function startOutcome(actionName: string, result: { success: boolean }, startTick: number): StartOutcome {
     if (controller.currentAction.value === actionName) return 'started';
-    // A start with nothing left to ask was sent at once (#1641), so the board belongs to it no longer.
     if (controller.actionStartTick.value === startTick) board?.clear();
     return result.success ? 'executed' : 'refused';
   }

@@ -143,7 +143,7 @@ import type {
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
-import type { PickSubject } from '../../types/protocol.js';
+import type { PickSubject, SubjectRef } from '../../types/protocol.js';
 
 /**
  * Create an action controller for handling game actions.
@@ -1778,6 +1778,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     notifyAfterAutoExecute(result, run);
   }
 
+  /** The args a start opens with, the thing it carries or narrows to, or why it is refused; judged against the shared selection. */
+  function startArgs(meta: EnrichedActionMetadata, given: Record<string, unknown>, prefill: Record<string, unknown>, subject: SubjectRef | undefined) {
+    const onThing = sharedSelection.argsOn(meta, given, subject);
+    if (onThing.error !== undefined) return onThing;
+    const refusal = startArgsRefusal(meta, onThing.args);
+    if (refusal) return { error: refusal };
+    sharedSelection.admit(meta, { ...prefill, ...onThing.args }, subject);
+    return onThing;
+  }
+
+  /** Nothing left to ask, so it is sent at once and the answer is the server's. A quoted action, or one without auto-execute, waits for confirm. */
+  function sendsAtOnce(meta: EnrichedActionMetadata, args: Record<string, unknown>): boolean {
+    return autoExecutesFor(meta) && meta.selections.every((sel) => args[sel.name] !== undefined);
+  }
+
   /** Send an action whose picks are all given, between the auto-execute hooks and listeners an action filled in the panel runs. */
   function sendAtOnce(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
     const seq = actionStartTick.value;
@@ -2335,20 +2350,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
     }
 
-    const onThing = sharedSelection.argsOn(meta, givenArgs, startOptions?.subject);
+    const onThing = startArgs(meta, givenArgs, prefillArgs, startOptions?.subject);
     if (onThing.error !== undefined) {
       setError(onThing.error);
       return { success: false, error: onThing.error };
     }
     const initialArgs = onThing.args;
-    const refusal = startArgsRefusal(meta, initialArgs);
-    if (refusal) {
-      setError(refusal);
-      return { success: false, error: refusal };
-    }
-    sharedSelection.admit(meta, { ...prefillArgs, ...initialArgs }, startOptions?.subject);
-    // Nothing left to ask: it is sent at once and the answer is the server's. A quoted action, or one without auto-execute, waits for confirm.
-    if (autoExecutesFor(meta) && meta.selections.every((sel) => initialArgs[sel.name] !== undefined)) return sendAtOnce(actionName, initialArgs);
+    if (sendsAtOnce(meta, initialArgs)) return sendAtOnce(actionName, initialArgs);
 
     currentAction.value = actionName;
     actionStartTick.value++;
