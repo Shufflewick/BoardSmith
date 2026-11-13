@@ -234,3 +234,59 @@ export function menuLevelAt<A extends MenuItem>(
   const group = groupAt(nodes, resolveMenuPath(nodes, path));
   return { group, nodes: group ? group.children : nodes };
 }
+
+/**
+ * What a node is drawn as at its parent's level (#1639).
+ *
+ * A group that holds one thing is drawn as that thing, a lone group as that group (its path goes
+ * all the way in), so `Buildings > Inspect > Open repairs` is one button. `canPromote` keeps a group
+ * around a lone action that may not be one press away, such as a destructive one. This changes how a
+ * parent draws a node and never which levels exist, so nobody standing in a group is moved by it.
+ */
+export function drawnAs<A extends MenuItem>(
+  node: ActionMenuNode<A>,
+  canPromote: (item: A) => boolean,
+): ActionMenuNode<A> {
+  if (node.kind !== 'group' || node.children.length !== 1) return node;
+  const [only] = node.children;
+  if (only.kind === 'group') return drawnAs(only, canPromote);
+  return canPromote(only.item) ? only : node;
+}
+
+/** How many actions are behind a group, at any depth. */
+export function actionCount<A extends MenuItem>(group: ActionMenuGroup<A>): number {
+  return group.children.reduce((sum, child) => sum + (child.kind === 'group' ? actionCount(child) : 1), 0);
+}
+
+/**
+ * The level a path's buttons are seen at: the deepest prefix of it, resolved, that is drawn as a
+ * level of its own (`drawnAs`) or is the level the player is `standing` in.
+ */
+export function levelShowing<A extends MenuItem>(
+  nodes: readonly ActionMenuNode<A>[],
+  path: readonly string[],
+  standing: readonly string[],
+  canPromote: (item: A) => boolean,
+): readonly string[] {
+  const resolved = resolveMenuPath(nodes, path);
+  for (let depth = resolved.length; depth > 0; depth -= 1) {
+    const prefix = resolved.slice(0, depth);
+    if (prefix.join('\u0000') === standing.join('\u0000')) return prefix;
+    const group = groupAt(nodes, prefix)!;
+    if (drawnAs(group, canPromote) === group) return prefix;
+  }
+  return [];
+}
+
+/** Every level a player can reach, with the items it draws as buttons that are not groups. */
+export function levelButtons<A extends MenuItem>(
+  nodes: readonly ActionMenuNode<A>[],
+  canPromote: (item: A) => boolean,
+  path: readonly string[] = [],
+): { readonly path: readonly string[]; readonly buttons: readonly A[] }[] {
+  const drawn = nodes.map((node) => drawnAs(node, canPromote));
+  return [
+    { path, buttons: drawn.flatMap((node) => (node.kind === 'item' ? [node.item] : [])) },
+    ...drawn.flatMap((node) => (node.kind === 'group' ? levelButtons(node.children, canPromote, node.path) : [])),
+  ];
+}

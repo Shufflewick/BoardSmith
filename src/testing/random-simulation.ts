@@ -54,6 +54,11 @@ export interface SimulateRandomGamesOptions<G extends Game = Game> {
    */
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
   /**
+   * Called with the game each time a seat is asked for a move, before the move is built, so every
+   * state a seat moves from is seen once at least. Purely observational, like `onSelectionChoices`.
+   */
+  onTurn?: (game: Game) => void;
+  /**
    * Declares where the game is meant to rest. It is asked after every move the
    * simulator applies, and the first time it returns a reason the game stops
    * as `resting`. A game that never reaches its rest ends as it would without
@@ -122,9 +127,9 @@ const realSetImmediate = setImmediate;
 /** The random policy at every seat. */
 function randomSeats(
   playerCount: number,
-  onSelectionChoices?: (observation: SelectionChoicesObservation) => void,
+  observers: Parameters<typeof random>[0] = {},
 ): Policy[] {
-  return Array.from({ length: playerCount }, () => random({ onSelectionChoices }));
+  return Array.from({ length: playerCount }, () => random(observers));
 }
 
 /**
@@ -237,7 +242,10 @@ export async function simulateRandomGames<G extends Game>(
       const result = await playGame({ gameClass: GameClass }, {
         playerCount,
         seed,
-        policies: randomSeats(playerCount, options.onSelectionChoices),
+        policies: randomSeats(playerCount, {
+          onSelectionChoices: options.onSelectionChoices,
+          onTurn: options.onTurn,
+        }),
         timeout,
         maxActions,
         gameOptions,

@@ -116,8 +116,8 @@ describe('a group occupies one button, and its children appear only after openin
     expect(dump.text()).toContain('Dump');
     expect(dump.text()).toContain('2 actions');
     const more = wrapper.find('[data-bs-action-group="More"]');
-    // One action and one nested group: both are things behind the button.
-    expect(more.text()).toContain('2 actions');
+    // One action of its own and two in the nested group: the count is actions, not buttons (#1639).
+    expect(more.text()).toContain('3 actions');
   });
 });
 
@@ -190,7 +190,7 @@ describe('only available actions contribute to the hierarchy', () => {
     const { wrapper } = mountPanel(LACUNA);
     await wrapper.find('[data-bs-action-group="More"]').trigger('click');
 
-    await wrapper.setProps({ availableActions: ['construct', 'dumpOre'] });
+    await wrapper.setProps({ availableActions: ['construct', 'dumpOre', 'dumpWater'] });
     await nextTick();
     expect(wrapper.find('.action-menu-header').exists()).toBe(false);
     expect(leafNames(wrapper)).toEqual(['construct']);
@@ -233,7 +233,9 @@ describe('display order', () => {
       { name: 'rename', prompt: 'Rename', group: ['More'], order: 90 },
       { name: 'construct', prompt: 'Construct', order: 10 },
       { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], order: 30 },
+      { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'], order: 31 },
       { name: 'upgrade', prompt: 'Upgrade', order: 20 },
+      { name: 'skipMission', prompt: 'Skip mission', group: ['More'], order: 91 },
     ]);
     const rendered = wrapper
       .findAll('[data-bs-action], [data-bs-action-group]')
@@ -244,11 +246,11 @@ describe('display order', () => {
 
 describe('grouping changes nothing about a leaf', () => {
   it("keeps a grouped action's disabled reason on its button", async () => {
-    const { wrapper } = mountPanel(LACUNA, {
+    const { wrapper } = mountPanel([...LACUNA, { name: 'dumpFood', prompt: 'Dump food', group: ['Dump'], order: 32 }], {
       disabledActions: { dumpOre: 'You have no ore to dump.' },
     });
     await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
-    // Folded inside its group, which still holds Dump water (#1638).
+    // Folded inside its group, which still holds Dump water and Dump food (#1638).
     await wrapper.find('[data-bs-unavailable-toggle]').trigger('click');
     const button = wrapper.find('[data-bs-action="dumpOre"]');
     expect(button.attributes('aria-disabled')).toBe('true');
@@ -257,7 +259,10 @@ describe('grouping changes nothing about a leaf', () => {
 
   it('keeps the help affordance on a grouped action', async () => {
     const { wrapper } = mountPanel(
-      [{ name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], help: 'Throws ore away.' }],
+      [
+        { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], help: 'Throws ore away.' },
+        { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'] },
+      ],
       { isActionHelpVisible: true },
     );
     await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
@@ -269,6 +274,7 @@ describe('grouping changes nothing about a leaf', () => {
       { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], selections: [
         { name: 'amount', type: 'number', prompt: 'How much?' },
       ] },
+      { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'] },
       { name: 'construct', prompt: 'Construct' },
     ]);
     await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
@@ -280,6 +286,7 @@ describe('grouping changes nothing about a leaf', () => {
   it('executes a no-selection grouped leaf exactly as a flat one', async () => {
     const { wrapper, controller } = mountPanel([
       { name: 'skipMission', prompt: 'Skip mission', group: ['More'] },
+      { name: 'renamePlanet', prompt: 'Rename planet', group: ['More'] },
       { name: 'construct', prompt: 'Construct' },
     ]);
     await wrapper.find('[data-bs-action-group="More"]').trigger('click');
@@ -478,7 +485,9 @@ describe('grouping survives having no ungrouped action at all', () => {
   it('does not collapse into a flat list when every available action is grouped', () => {
     const { wrapper } = mountPanel([
       { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'] },
+      { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'] },
       { name: 'renamePlanet', prompt: 'Rename planet', group: ['More'] },
+      { name: 'skipMission', prompt: 'Skip mission', group: ['More'] },
     ]);
     expect(leafNames(wrapper)).toEqual([]);
     expect(groupLabels(wrapper)).toEqual(['Dump', 'More']);
@@ -490,5 +499,86 @@ describe('grouping survives having no ungrouped action at all', () => {
       { canUndo: true },
     );
     expect(wrapper.find('.undo-btn').exists()).toBe(true);
+  });
+});
+
+describe('a group that holds one thing is drawn as that thing (#1639)', () => {
+  const REPAIRS: Meta[] = [
+    { name: 'construct', prompt: 'Construct building' },
+    { name: 'openRepairs', prompt: 'Open repair results page', group: ['Buildings', 'Inspect and maintain'] },
+  ];
+
+  it('draws a chain of groups around one action as that action', () => {
+    const { wrapper } = mountPanel(REPAIRS);
+    expect(leafNames(wrapper)).toEqual(['construct', 'openRepairs']);
+    expect(groupLabels(wrapper)).toEqual([]);
+  });
+
+  it('draws a group whose only child is a group as that group, and Back skips the level it hid', async () => {
+    const { wrapper } = mountPanel([
+      { name: 'construct' },
+      { name: 'inspect', group: ['Buildings', 'Inspect and maintain'] },
+      { name: 'repair', group: ['Buildings', 'Inspect and maintain'] },
+    ]);
+    expect(groupLabels(wrapper)).toEqual(['Inspect and maintain']);
+    expect(wrapper.find('[data-bs-action-group="Inspect and maintain"]').text()).toContain('2 actions');
+
+    await wrapper.find('[data-bs-action-group="Inspect and maintain"]').trigger('click');
+    expect(wrapper.find('.action-menu-label').text()).toBe('Buildings / Inspect and maintain');
+    expect(leafNames(wrapper)).toEqual(['inspect', 'repair']);
+    expect(wrapper.find('[data-bs-menu-back]').attributes('aria-label')).toBe('Back to all actions');
+
+    await wrapper.find('[data-bs-menu-back]').trigger('click');
+    expect(wrapper.find('.action-menu-header').exists()).toBe(false);
+    expect(groupLabels(wrapper)).toEqual(['Inspect and maintain']);
+  });
+
+  it('keeps the group around a lone destructive action', () => {
+    const { wrapper } = mountPanel([
+      { name: 'construct' },
+      { name: 'scuttle', prompt: 'Scuttle fleet', group: ['Fleet'], destructive: true },
+    ]);
+    expect(leafNames(wrapper)).toEqual(['construct']);
+    expect(groupLabels(wrapper)).toEqual(['Fleet']);
+  });
+
+  it('does not move a player standing in a group that drops to one button', async () => {
+    const { wrapper } = mountPanel(LACUNA);
+    await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
+
+    await wrapper.setProps({ availableActions: ['construct', 'dumpOre'] });
+    await nextTick();
+    expect(wrapper.find('.action-menu-label').text()).toBe('Dump');
+    expect(leafNames(wrapper)).toEqual(['dumpOre']);
+    expect(wrapper.find('[data-bs-menu-announcement]').text()).toBe('');
+
+    await wrapper.find('[data-bs-menu-back]').trigger('click');
+    expect(leafNames(wrapper)).toEqual(['construct', 'dumpOre']);
+    expect(groupLabels(wrapper)).toEqual([]);
+  });
+
+  it('folds a held action of a group drawn as its lone button at the level that button is on', () => {
+    const { wrapper } = mountPanel(LACUNA, { disabledActions: { dumpWater: 'The silo is empty.' } });
+    expect(leafNames(wrapper).filter((name) => !wrapper.find(`[data-bs-unavailable][data-bs-action="${name}"]`).exists()))
+      .toEqual(['construct', 'upgrade', 'dumpOre']);
+    expect(wrapper.find('[data-bs-unavailable][data-bs-action="dumpWater"]').exists()).toBe(true);
+  });
+});
+
+describe('two groups drawn under one label stay two groups (#1639 review F1)', () => {
+  it('puts focus back on the group the player came out of, not the first with its label', async () => {
+    const { wrapper } = mountPanel([
+      { name: 'sound', group: ['Settings'] },
+      { name: 'music', group: ['Settings'] },
+      { name: 'rename', group: ['More', 'Settings'] },
+      { name: 'describe', group: ['More', 'Settings'] },
+    ]);
+    const paths = wrapper.findAll('[data-bs-action-group="Settings"]').map((b) => b.attributes('data-bs-group-path'));
+    expect(paths).toEqual(['Settings', 'More / Settings']);
+
+    await wrapper.find('[data-bs-group-path="More / Settings"]').trigger('click');
+    await wrapper.find('[data-bs-menu-back]').trigger('click');
+    await nextTick();
+    expect(document.activeElement?.getAttribute('data-bs-group-path')).toBe('More / Settings');
   });
 });

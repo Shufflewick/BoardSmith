@@ -23,6 +23,10 @@ import {
   buildActionMenu,
   resolveMenuPath,
   menuLevelAt,
+  drawnAs,
+  actionCount,
+  levelShowing,
+  levelButtons,
   type ActionMenuGroup,
   type ActionMenuNode,
   type MenuItem,
@@ -183,5 +187,75 @@ describe('menuLevelAt', () => {
     const level = menuLevelAt(menu, ['Nowhere']);
     expect(level.group).toBeNull();
     expect(labels(level.nodes)).toEqual(['build', '[Dump]', '[More]']);
+  });
+});
+
+describe('a group that holds one thing is drawn as that thing (#1639)', () => {
+  type Item = Named & { destructive?: boolean };
+  const promotable = (item: Item) => !item.destructive;
+  const top = (items: Item[]) => buildActionMenu(items).map((node) => drawnAs(node, promotable));
+
+  it('draws a group holding one button as that button', () => {
+    expect(labels(top([action('build'), action('repairs', { group: ['Buildings', 'Inspect'] })]))).toEqual(['build', 'repairs']);
+  });
+
+  it('draws a group whose only child is a group as that group, with the inner path', () => {
+    const [drawn] = top([action('a', { group: ['Outer', 'Inner'] }), action('b', { group: ['Outer', 'Inner'] })]);
+    expect(drawn).toMatchObject({ kind: 'group', label: 'Inner', path: ['Outer', 'Inner'] });
+  });
+
+  it('keeps a group around a lone destructive action', () => {
+    expect(labels(top([{ ...action('scuttle', { group: ['Fleet'] }), destructive: true }]))).toEqual(['[Fleet]']);
+  });
+
+  it('keeps a group that holds two things', () => {
+    expect(labels(top([action('a', { group: ['G'] }), action('b', { group: ['G'] })]))).toEqual(['[G]']);
+  });
+});
+
+describe('actionCount', () => {
+  it('counts the actions behind a group, not its child buttons', () => {
+    const [more] = buildActionMenu([
+      action('skip', { group: ['More'] }),
+      action('rename', { group: ['More', 'Settings'] }),
+      action('describe', { group: ['More', 'Settings'] }),
+    ]);
+    expect(actionCount(more as ActionMenuGroup<Named>)).toBe(3);
+  });
+});
+
+describe('levelShowing', () => {
+  const promotable = () => true;
+  const menu = buildActionMenu([
+    action('build'),
+    action('dumpOre', { group: ['Dump'] }),
+    action('skip', { group: ['More'] }),
+    action('rename', { group: ['More', 'Settings'] }),
+  ]);
+
+  it('answers the group itself when it is drawn as a level', () => {
+    expect(levelShowing(menu, ['More'], [], promotable)).toEqual(['More']);
+  });
+
+  it('answers the parent of a group drawn as its lone button', () => {
+    expect(levelShowing(menu, ['Dump'], [], promotable)).toEqual([]);
+    expect(levelShowing(menu, ['More', 'Settings'], [], promotable)).toEqual(['More']);
+  });
+
+  it('answers a collapsed group when the player is standing in it', () => {
+    expect(levelShowing(menu, ['Dump'], ['Dump'], promotable)).toEqual(['Dump']);
+  });
+});
+
+describe('levelButtons', () => {
+  it('lists every reachable level with its buttons that are not groups, collapsed ones included', () => {
+    const menu = buildActionMenu([
+      action('a'),
+      action('b', { group: ['G'] }),
+      action('c', { group: ['G'] }),
+      action('e', { group: ['Lone'] }),
+    ]);
+    expect(levelButtons(menu, () => true).map((level) => [level.path, level.buttons.map((item) => item.name)]))
+      .toEqual([[[], ['a', 'e']], [['G'], ['b', 'c']]]);
   });
 });

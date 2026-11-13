@@ -186,7 +186,7 @@ describe('a printed replay command plays the game that failed (#322)', () => {
   it('boardsmith validate: the choice cardinality check names a command that replays its failure', async () => {
     const cwd = deadEndProject();
 
-    const result = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
     const failure = /seed (\S+): (.+?)\. "(boardsmith [^"]+)" shows the same failure/s.exec(result.message);
     expect(failure, result.message).not.toBeNull();
     const [, seed, reason, command] = failure!;

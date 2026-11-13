@@ -20,6 +20,7 @@ import {
   findUntypedTestFiles,
   hasBlockingFailure,
   buildChoiceCardinalityResult,
+  buildLevelButtonsResult,
   validateChoiceCardinality,
   checkRulesAgreement,
   checkSpriteImages,
@@ -878,6 +879,20 @@ describe('validate.ts choice cardinality (#172)', () => {
     expect(result.details ?? []).toEqual([]);
   });
 
+  it('passes a game whose Action Panel levels are short (#1639)', () => {
+    expect(buildLevelButtonsResult([])).toMatchObject({ name: 'Start buttons per level', passed: true });
+  });
+
+  it('refuses a level with too many start buttons, naming the actions and the count (#1639)', () => {
+    const actions = Array.from({ length: 10 }, (_, i) => `chore${i}`);
+    const result = buildLevelButtonsResult([{ path: [], actions }]);
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBeUndefined();
+    expect(hasBlockingFailure([result])).toBe(true);
+    expect(result.details).toEqual([expect.stringContaining('10 start buttons')]);
+    expect(result.details![0]).toContain('chore9');
+  });
+
   it('reports each unbounded table step as a warning with the count and both fixes', () => {
     const result = buildChoiceCardinalityResult(
       [{ action: 'shout', selection: 'verb', maxCandidates: 40 }],
@@ -920,7 +935,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   }
 
   /** The check did not produce a verdict: never a pass, always a warning saying why. */
-  function expectNotRun(result: Awaited<ReturnType<typeof validateChoiceCardinality>>, why: RegExp): void {
+  function expectNotRun(result: Awaited<ReturnType<typeof validateChoiceCardinality>>[number], why: RegExp): void {
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
     expect(result.message).toMatch(why);
@@ -932,7 +947,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const cwd = freshProject(wideRules);
     expect(existsSync(join(cwd, '.boardsmith'))).toBe(false);
 
-    const result = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
@@ -952,7 +967,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
     const results = await Promise.all([validateChoiceCardinality(projectRules(cwd), false), validateChoiceCardinality(projectRules(cwd), false)]);
 
-    for (const result of results) expect(result.details!.join('\n')).toContain('shout');
+    for (const [result] of results) expect(result.details!.join('\n')).toContain('shout');
     expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
   }, 60_000);
 
@@ -963,7 +978,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const other = makeCommandBuildDir(cwd, 'validate');
     writeFileSync(join(other, 'simulate-bundle.mjs'), 'export {};');
 
-    const result = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
     expect(existsSync(join(other, 'simulate-bundle.mjs')), 'validate removed another run’s bundle').toBe(true);
@@ -973,13 +988,13 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('plays the game at the seat count its definition starts from', async () => {
     const cwd = freshProject(rulesFor('ThreeSeatWideGame', ', minPlayers: 3, maxPlayers: 4'));
 
-    const result = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
   }, 30_000);
 
   it('says it could not run when a table game declares no minPlayers to play it at', async () => {
-    const result = await validateChoiceCardinality(projectRules(freshProject(rulesFor('WideGame', ''))), false);
+    const [result] = await validateChoiceCardinality(projectRules(freshProject(rulesFor('WideGame', ''))), false);
 
     expectNotRun(result, /could not run.*minPlayers/is);
   }, 30_000);
@@ -994,27 +1009,41 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   // #323: a world gets a real verdict, driven the way a host drives it.
   it('drives a world and reports the flat list it offers, with a world’s way out', async () => {
-    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['shout', 'mark']), 'world')), true);
+    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['shout', 'mark']), 'world')), true);
 
     expect(result).toMatchObject({ passed: false, severity: 'warning' });
     expect(result.details).toEqual([expect.stringContaining("'shout' step 'verb' offered 40")]);
     expect(result.details![0]).not.toContain('dependsOn');
   }, 30_000);
 
+  it('refuses a world whose top level shows ten ungrouped start buttons (#1639)', async () => {
+    const [, levels] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['chores']), 'world')), true);
+
+    expect(levels).toMatchObject({ name: 'Start buttons per level', passed: false });
+    expect(levels.severity).toBeUndefined();
+    expect(levels.details).toEqual([expect.stringContaining('The top level of the Action Panel showed 10')]);
+  }, 30_000);
+
+  it('says the level count could not run either when the walk could not run', async () => {
+    const [, levels] = await validateChoiceCardinality(projectRules(freshProject(null)), false);
+
+    expectNotRun(levels, /could not run/i);
+  }, 30_000);
+
   it('passes a world whose every list is short', async () => {
-    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['nod']), 'world')), true);
+    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['nod']), 'world')), true);
 
     expect(result.passed).toBe(true);
   }, 30_000);
 
   it('says it could not run when a world offers nothing it could drive', async () => {
-    const result = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['say']), 'world')), true);
+    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['say']), 'world')), true);
 
     expectNotRun(result, /could not run.*no seat was offered/is);
   }, 30_000);
 
   it('does not report a pass when the check could not run, and says why', async () => {
-    const result = await validateChoiceCardinality(projectRules(freshProject(null)), false);
+    const [result] = await validateChoiceCardinality(projectRules(freshProject(null)), false);
 
     expectNotRun(result, /could not run/i);
   }, 30_000);

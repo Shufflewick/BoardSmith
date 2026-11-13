@@ -64,6 +64,7 @@ const WINDUP: Meta[] = [
   { name: 'movePack', prompt: 'Move a pack', group: ['Packs'] },
   { name: 'levelUp', prompt: 'Level up a pack', group: ['Packs'] },
   { name: 'unlockUnit', prompt: 'Unlock a unit type', group: ['Buy and unlock'] },
+  { name: 'unlockSkin', prompt: 'Unlock a skin', group: ['Buy and unlock'] },
   { name: 'buyTech', prompt: 'Buy a technology', group: ['Buy and unlock'] },
   { name: 'rocket', prompt: 'Rocket Strike', group: ['Strikes', 'Damage'] },
   { name: 'cancelStrike', prompt: 'Cancel a strike', group: ['Strikes'] },
@@ -106,9 +107,9 @@ describe('the fold row', () => {
   it('folds the disabled members of a usable group inside that group', async () => {
     const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
     const group = wrapper.find('[data-bs-action-group="Buy and unlock"]');
-    expect(group.text()).toContain('1 action');
+    expect(group.text()).toContain('2 actions');
     await group.trigger('click');
-    expect(usable(wrapper)).toEqual(['unlockUnit']);
+    expect(usable(wrapper)).toEqual(['unlockUnit', 'unlockSkin']);
     expect(toggle(wrapper).text()).toContain('1 not available yet');
     expect(await folded(wrapper)).toEqual(['buyTech']);
   });
@@ -147,12 +148,12 @@ describe('the fold row is reachable by keyboard and screen reader', () => {
 
   it('puts the keyboard on the row when a level holds nothing usable', async () => {
     const { wrapper } = mountPanel(
-      [{ name: 'pass', prompt: 'Pass', group: ['Turn'] }, { name: 'look', prompt: 'Look' }],
+      [{ name: 'pass', prompt: 'Pass', group: ['Turn'] }, { name: 'endTurn', prompt: 'End turn', group: ['Turn'] }, { name: 'look', prompt: 'Look' }],
       { disabledActions: { look: 'It is too dark.' } },
     );
     await wrapper.find('[data-bs-action-group="Turn"]').trigger('click');
     await nextTick();
-    await wrapper.setProps({ disabledActions: { look: 'It is too dark.', pass: 'Wait for the battle.' } });
+    await wrapper.setProps({ disabledActions: { look: 'It is too dark.', pass: 'Wait for the battle.', endTurn: 'Wait for the battle.' } });
     await nextTick();
     await nextTick();
     expect(document.activeElement?.hasAttribute('data-bs-unavailable-toggle')).toBe(true);
@@ -177,7 +178,7 @@ describe('the fold row is reachable by keyboard and screen reader', () => {
 });
 
 describe('a player is never left standing in a dead level', () => {
-  const NO_GEARS = { ...ROUND_ONE, unlockUnit: 'You have no gears left.' };
+  const NO_GEARS = { ...ROUND_ONE, unlockUnit: 'You have no gears left.', unlockSkin: 'You have no gears left.' };
 
   it('shows them the parent, and says why, when the last usable action of their level is disabled', async () => {
     const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
@@ -192,7 +193,7 @@ describe('a player is never left standing in a dead level', () => {
     expect(await folded(wrapper)).toContain('unlockUnit');
   });
 
-  it('brings them back to their level when a hold on its only usable action lifts', async () => {
+  it('brings them back to their level when a hold on its usable actions lifts', async () => {
     const { wrapper } = mountPanel(WINDUP, { disabledActions: ROUND_ONE });
     await wrapper.find('[data-bs-action-group="Buy and unlock"]').trigger('click');
 
@@ -201,7 +202,7 @@ describe('a player is never left standing in a dead level', () => {
     await wrapper.setProps({ disabledActions: ROUND_ONE });
     await nextTick();
     expect(wrapper.find('.action-menu-label').text()).toBe('Buy and unlock');
-    expect(usable(wrapper)).toEqual(['unlockUnit']);
+    expect(usable(wrapper)).toEqual(['unlockUnit', 'unlockSkin']);
   });
 
   it('shows the top level while nothing at all is usable, and brings them back after', async () => {

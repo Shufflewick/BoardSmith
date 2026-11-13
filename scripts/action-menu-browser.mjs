@@ -60,7 +60,8 @@ import {
  * AN EMPIRE WITH TOO MANY VERBS, which is the report.
  *
  * Two ungrouped primaries, a `Dump` group of two, and a `More` group holding
- * one action and a nested `Empire settings` group of two. That is the exact
+ * two actions and a nested `Empire settings` group of two (a group holding one
+ * thing is drawn as that thing, #1639). That is the exact
  * arrangement the issue sketches for Lacuna, at the smallest size that still
  * has every shape in it: a group, a nested group, a group beside ungrouped
  * actions, a leaf with a selection and a leaf without.
@@ -154,6 +155,15 @@ const skipMission = worldAction<Realm>('skipMission')
     ctx.world.emit(EMPIRE, { skipped: true }, 'The mission was skipped.');
   });
 
+const readLog = worldAction<Realm>('readLog')
+  .prompt('Read the log')
+  .group('More')
+  .order(81)
+  .needs(() => [EMPIRE])
+  .execute((_args, ctx) => {
+    ctx.world.emit(EMPIRE, { read: true }, 'The log was read.');
+  });
+
 const renamePlanet = worldAction<Realm>('renamePlanet')
   .prompt((ctx) => 'Rename planet for seat ' + ctx.player.seat)
   .group('More', 'Empire settings')
@@ -194,6 +204,7 @@ export const gameDefinition: GameDefinition = {
       dumpOre,
       dumpWater,
       skipMission,
+      readLog,
       renamePlanet,
       describeEmpire,
     ],
@@ -398,7 +409,7 @@ async function oneSeatWalksTheMenu({ browser, hostUrl }) {
   await check('a nested group opens to its own level, and the label says where', async () => {
     await surfaceOf(page).locator('[data-bs-menu-back]').click();
     await surfaceOf(page).locator('[data-bs-action-group="More"]').click();
-    await until(() => shownActions(page), ['skipMission'], 'the More level');
+    await until(() => shownActions(page), ['skipMission', 'readLog'], 'the More level');
     await until(() => shownGroups(page), ['Empire settings'], 'the More level');
     await surfaceOf(page).locator('[data-bs-action-group="Empire settings"]').click();
     await until(() => shownActions(page), ['renamePlanet', 'describeEmpire'], 'the settings level');
@@ -534,7 +545,7 @@ async function anotherSeatMovesTheLevel({ browser, hostUrl }) {
     // conditional on. Seat one is standing INSIDE that level and did
     // nothing at all.
     await surfaceOf(second).locator('[data-bs-action="closeRegistry"]').click();
-    await until(() => shownActions(page), ['skipMission'], 'the level seat one was moved to');
+    await until(() => shownActions(page), ['skipMission', 'readLog'], 'the level seat one was moved to');
     assert((await levelLabel(page)) === 'More', `the level said "${await levelLabel(page)}"`);
     const said = await announcement(page);
     assert(
@@ -564,7 +575,7 @@ async function theMenuOnANarrowScreen({ browser, hostUrl }) {
     assert(box !== null, 'the group button has no box at all on a narrow screen');
     assert(box.width >= 44 && box.height >= 44, `the group button is ${box.width}x${box.height}`);
     await group.click();
-    await until(() => shownActions(page), ['skipMission'], 'the More level on a narrow screen');
+    await until(() => shownActions(page), ['skipMission', 'readLog'], 'the More level on a narrow screen');
   });
 
   await check('nothing in the open level is off-screen or scrolls the page sideways', async () => {

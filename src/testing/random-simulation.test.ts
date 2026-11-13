@@ -515,3 +515,22 @@ describe('onSelectionChoices observer', () => {
     expect(withObserver.completed).toBe(without.completed);
   });
 });
+
+/** #1639: `boardsmith validate` counts each seat's Action Panel buttons in every state a seat moves from. */
+describe('onTurn observer', () => {
+  it('is handed the game once before each move, from the opening state on', async () => {
+    const totals: number[] = [];
+
+    const results = await simulateRandomGames(PickGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'observer-seed',
+      onTurn: (game) => {
+        totals.push((game as PickGame).total);
+      },
+    });
+
+    expect(totals[0]).toBe(0);
+    expect(totals).toHaveLength(results.games[0].actionCount);
+  });
+});

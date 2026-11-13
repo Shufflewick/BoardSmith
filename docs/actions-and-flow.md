@@ -1544,6 +1544,31 @@ and **a group sits where its lowest-ordered member sits** -- so there is no
 separate order to declare for a group, and no way for two of its members to
 disagree about where it goes.
 
+##### A group that holds one thing is drawn as that thing
+
+A group whose only usable member is one action is drawn as that action's
+button, and a group whose only member is another group is drawn as that inner
+group, so `Buildings > Inspect and maintain > Open repairs` is one button at the
+top level. Two exceptions keep it honest:
+
+- **A lone destructive action keeps its group**, so a verb a player cannot take
+  back is never one press from a level it was not declared at.
+- **A player standing in a group is never moved by it.** If the level they are in
+  drops to one button they stay there, and the group is drawn as its button only
+  once they have left it.
+
+A group's button counts the actions behind it at every depth, not its child
+buttons.
+
+##### At most nine start buttons per level
+
+`boardsmith validate` plays the game (a table's seeded random games, a world's
+driven seats) and refuses it when any seat's panel shows more than nine start
+buttons that are not groups at one level, counted as the panel draws them:
+disabled actions fold into one row and do not count, and a group drawn as its
+lone action does. The message names the level, the count and the actions; the
+fix is to put some of them in a `.group()`.
+
 ##### A group is navigation, not a game command
 
 **Opening or closing a group submits no order, consumes no turn, and moves no
@@ -1584,7 +1609,8 @@ arrangement the game declared.
 A group's button is an ordinary button in the tab order; its accessible name
 says it opens a submenu and how many actions are behind it. `Enter` opens a
 level and moves focus to its first action. `Escape` and `Back` each go up
-exactly one level and put focus back on the button that opened it. The current
+one level, past a level drawn as its lone group, and put focus back on the
+button that opened it. The current
 level's name is on screen, and a live region says so when a level moves for a
 reason that is not the player's.
 

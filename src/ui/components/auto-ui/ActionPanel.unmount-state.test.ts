@@ -51,6 +51,7 @@ const LACUNA: EnrichedActionMetadata[] = [
   { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], order: 30, selections: [] },
   { name: 'dumpFood', prompt: 'Dump food', group: ['Dump'], order: 31, selections: [] },
   { name: 'renamePlanet', prompt: 'Rename planet', group: ['More', 'Empire settings'], order: 90, selections: [] },
+  { name: 'describeEmpire', prompt: 'Describe empire', group: ['More', 'Empire settings'], order: 91, selections: [] },
   { name: 'skipMission', prompt: 'Skip mission', group: ['More'], order: 95, selections: [] },
 ];
 
@@ -174,7 +175,7 @@ async function walkedTwoLevelsInThenGone(
   const wrapper = await mountPanel();
   await wrapper.find('[data-bs-action-group="More"]').trigger('click');
   await wrapper.find('[data-bs-action-group="Empire settings"]').trigger('click');
-  expect(leafNames(wrapper)).toEqual(['renamePlanet']);
+  expect(leafNames(wrapper)).toEqual(['renamePlanet', 'describeEmpire']);
   wrapper.unmount();
 }
 
@@ -184,7 +185,7 @@ describe('the open menu level survives the panel being unmounted (#228, #235)', 
     await walkedTwoLevelsInThenGone(mountPanel);
 
     const second = await mountPanel();
-    expect(leafNames(second)).toEqual(['renamePlanet']);
+    expect(leafNames(second)).toEqual(['renamePlanet', 'describeEmpire']);
     expect(second.find('.action-menu-label').text()).toBe('More / Empire settings');
     second.unmount();
   });
@@ -212,7 +213,7 @@ describe('the open menu level survives the panel being unmounted (#228, #235)', 
     const { availableActions, mountPanel } = panelsOver(LACUNA);
     await walkedTwoLevelsInThenGone(mountPanel);
 
-    // The only action inside 'Empire settings' goes away while the bar is down.
+    // Both actions inside 'Empire settings' go away while the bar is down.
     availableActions.value = ['construct', 'dumpOre', 'dumpFood', 'skipMission'];
     const second = await mountPanel();
     expect(second.find('.action-menu-label').text()).toBe('More');
