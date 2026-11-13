@@ -18,7 +18,7 @@ export const MAX_SUBJECT_ROWS = 200;
 /** A game element is keyed by its id, so its type takes no key; any other thing needs one. */
 type KeyOption<T> = [T] extends [GameElement] ? { key?: never } : { key: (thing: T) => string };
 
-export type SubjectTypeOptions<T, C = ActionContext> = KeyOption<T> & {
+export type SubjectTypeOptions<T, C extends ActionContext = ActionContext> = KeyOption<T> & {
   /** What the panel calls the type: "Packs". */
   name: string;
   /** True only when every thing of the type is a piece the player already has on the board. */
@@ -45,7 +45,7 @@ export interface SubjectBinding<V, C = ActionContext> {
   readonly describe: (value: V, context: C, world?: boolean) => PickSubject | undefined;
 }
 
-export class SubjectType<T, C = ActionContext> implements SubjectBinding<T, C> {
+export class SubjectType<T, C extends ActionContext = ActionContext> implements SubjectBinding<T, C> {
   readonly types: readonly SubjectType<never, never>[] = [this as unknown as SubjectType<never, never>];
 
   constructor(readonly options: SubjectTypeOptions<T, C>) {
@@ -78,31 +78,48 @@ export class SubjectType<T, C = ActionContext> implements SubjectBinding<T, C> {
     return { type: this.options.name, key: String(thing.id) };
   }
 
-  readonly describe = (thing: T, context: C, world = false): PickSubject => {
-    const subject: PickSubject = this.ref(thing);
-    const named = `${this.options.name} "${subject.key}"`;
-    if (isElement(thing)) subject.element = thing.id;
+  /** The thing as a row carries it, or `undefined` for an element the seat cannot see, whose key, label and id would name it. */
+  readonly describe = (thing: T, context: C, world = false): PickSubject | undefined => {
+    if (isElement(thing) && !thing.isVisibleTo(context.player.seat)) return undefined;
+    const subject: PickSubject = { ...this.ref(thing), ...(isElement(thing) ? { element: thing.id } : {}) };
     const label = this.options.label(thing, context);
     if (label !== undefined) subject.label = label;
-    else if (!world) throw new Error(`${named} has no label. Return the thing's name from the type's label; only a world offer may leave a thing it did not hydrate unnamed.`);
-    const category = this.options.category?.(thing, context);
-    if (category?.some((level) => level.trim() === '')) throw new Error(`${named} was given a blank category label. Name every category, or return [].`);
-    if (category && category.length > 2) throw new Error(`${named} was given ${category.length} category levels, and a subject list takes at most two.`);
-    if (category?.length) subject.category = category;
-    const related = this.options.related?.(thing, context);
-    if (related?.length) subject.related = related;
-    const within = this.options.within?.(thing, context);
-    if (within) subject.within = within;
-    const listed = this.options.things?.(context);
-    if (listed && !listed.some((each) => this.ref(each).key === subject.key)) {
-      throw new Error(`${named} is not one of the ${listed.length} ${this.options.name} the type lists. Check the pick's subject mapping.`);
-    }
+    else if (!world) throw new Error(`${this.#named(subject)} has no label. Return the thing's name from the type's label; only a world offer may leave a thing it did not hydrate unnamed.`);
+    this.#place(subject, thing, context);
+    this.#assertListed(subject, context);
     return subject;
   };
+
+  #named(subject: SubjectRef): string {
+    return `${this.options.name} "${subject.key}"`;
+  }
+
+  /** Where the thing sits: its category, related things and container. */
+  #place(subject: PickSubject, thing: T, context: C): void {
+    const category = this.#category(subject, thing, context);
+    if (category.length > 0) subject.category = category;
+    const related = this.options.related?.(thing, context) ?? [];
+    if (related.length > 0) subject.related = related;
+    const within = this.options.within?.(thing, context);
+    if (within) subject.within = within;
+  }
+
+  #category(subject: SubjectRef, thing: T, context: C): readonly string[] {
+    const category = this.options.category?.(thing, context) ?? [];
+    if (category.some((level) => level.trim() === '')) throw new Error(`${this.#named(subject)} was given a blank category label. Name every category, or return [].`);
+    if (category.length > 2) throw new Error(`${this.#named(subject)} was given ${category.length} category levels, and a subject list takes at most two.`);
+    return category;
+  }
+
+  #assertListed(subject: SubjectRef, context: C): void {
+    const listed = this.options.things?.(context);
+    if (!listed || listed.some((each) => this.ref(each).key === subject.key)) return;
+    throw new Error(`${this.#named(subject)} is not one of the ${listed.length} ${this.options.name} the type lists. Check the pick's subject mapping.`);
+  }
 }
 
 /** Declare a subject type once per game; picks bind to it with `subject:`. */
-export function subjectType<T, C = ActionContext>(options: SubjectTypeOptions<T, C>): SubjectType<T, C> {
+export function subjectType<T, C extends ActionContext = ActionContext>(options: SubjectTypeOptions<T, C>): SubjectType<T, C> {
   return new SubjectType(options);
 }
 
@@ -110,7 +127,7 @@ export function subjectType<T, C = ActionContext>(options: SubjectTypeOptions<T,
 export function eitherSubject<V, C = ActionContext>(...bindings: SubjectBinding<V, C>[]): SubjectBinding<V, C> {
   const bare = bindings.slice(0, -1).find((binding) => binding instanceof SubjectType);
   if (bindings.length < 2 || bare) {
-    const which = bare ? `${(bare as SubjectType<V, C>).options.name} is a bare type before the last, so it would claim every value` : 'it needs at least two bindings';
+    const which = bare ? `${(bare as SubjectType<unknown>).options.name} is a bare type before the last, so it would claim every value` : 'it needs at least two bindings';
     throw new Error(`eitherSubject(): ${which}. Give each but the last as TYPE.of() returning undefined for a value it does not name.`);
   }
   return {

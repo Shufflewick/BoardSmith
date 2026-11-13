@@ -27,6 +27,7 @@ const PACKS = subjectType<Pack>({
   label: (pack) => `${pack.unitType} pack`,
   related: (pack) => [UNIT_TYPES.ref(pack.unitType)],
 });
+const SQUARES = subjectType<[number, number]>({ name: 'Squares', onBoard: true, key: ([x, y]) => `${x},${y}`, label: ([x, y]) => `${x}, ${y}` });
 const BUILDINGS = subjectType<Building>({ name: 'Buildings', onBoard: true, label: (building) => building.name! });
 
 /** One pack is `pack.id` in one action and `fielded:<id>` in another; the type keys both the same. */
@@ -54,9 +55,11 @@ function makeGame() {
       .chooseElement('pack', { elementClass: Pack, subject: PACKS })
       .execute(() => {}),
     Action.create<PackGame>('rename').enterText('name', { subject: UNIT_TYPES }).execute(() => {}),
-    Action.create<PackGame>('inspect').about(PACKS, (ctx) => ctx.game.first(Pack, 'lancers')).execute(() => {}),
+    Action.create<PackGame>('inspect').about(PACKS, (ctx) => [ctx.game.first(Pack, 'lancers')!]).execute(() => {}),
+    // A thing that is itself a list is one thing (#1640 review F9).
+    Action.create<PackGame>('survey').about(SQUARES, (): [number, number][] => [[3, 4]]).execute(() => {}),
   );
-  game.setFlow({ root: actionStep({ actions: ['movePack', 'sellPack', 'buyPack', 'rally', 'deploy', 'rename', 'inspect'] }) });
+  game.setFlow({ root: actionStep({ actions: ['movePack', 'sellPack', 'buyPack', 'rally', 'deploy', 'rename', 'inspect', 'survey'] }) });
   game.startFlow();
   return { game, fusiliers, lancers, hq };
 }
@@ -105,6 +108,12 @@ describe('a candidate row carries the thing it is', () => {
     expect(rows(game, 'movePack').map((row) => row.subject?.label)).toEqual([undefined, 'Lancers pack']);
   });
 
+  it('gives no subject to a visible value whose mapped thing the seat cannot see (#1640 review F1)', () => {
+    const { game, fusiliers } = makeGame();
+    fusiliers.hideFromAll();
+    expect(rows(game, 'sellPack').map((row) => row.subject?.label)).toEqual([undefined, 'Lancers pack']);
+  });
+
   it('sends nothing for a pick that binds no subject', () => {
     const { game } = makeGame();
     const side = game.getAction('deploy')!.selections[0] as ChoiceSelection;
@@ -134,6 +143,14 @@ describe('the action metadata says which picks are about which types', () => {
     const lancers = game.first(Pack, 'lancers')!;
     expect(meta.inspect!.about).toEqual([expect.objectContaining({ type: 'Packs', key: String(lancers.id), label: 'Lancers pack' })]);
     expect(meta.movePack!.about).toBeUndefined();
+  });
+
+  it('leaves out an about thing the seat cannot see, and keeps a thing that is a list whole', () => {
+    const { game } = makeGame();
+    game.first(Pack, 'lancers')!.hideFromAll();
+    const meta = buildActionMetadata(game, game.getPlayer(1)!, ['inspect', 'survey']);
+    expect(meta.inspect!.about).toBeUndefined();
+    expect(meta.survey!.about).toEqual([{ type: 'Squares', key: '3,4', label: '3, 4' }]);
   });
 });
 
@@ -178,6 +195,8 @@ describe('what a subject declaration refuses', () => {
     subjectType<Pack>({ name: 'P', onBoard: true, key: (pack) => pack.name!, label: () => '' });
     // @ts-expect-error a thing that is not a game element needs a key
     subjectType<string>({ name: 'S', onBoard: false, label: () => '' });
+    // @ts-expect-error .about() takes a list of things, so a thing that is itself a list is never split (#1640 review F9)
+    Action.create<PackGame>('x').about(SQUARES, () => [3, 4]);
     // @ts-expect-error a mapping must return the type's own kind of thing
     PACKS.of((token: string, ctx) => ctx.game.first(Building));
     Action.create<PackGame>('x').chooseElements('packs', {

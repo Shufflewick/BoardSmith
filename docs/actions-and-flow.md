@@ -1696,7 +1696,7 @@ Action.create('sellPack').chooseFrom('pack', {
 })
 Action.create('buyPack').chooseFrom('unit', { choices: UNIT_LIST, subject: UNIT_TYPES })
 // A building's own offer never picks the building.
-Action.create('analyticalTraining').about(BUILDINGS, (ctx) => ctx.game.warCollege)
+Action.create('analyticalTraining').about(BUILDINGS, (ctx) => [ctx.game.warCollege])
 ```
 
 What a type declares:
@@ -1723,8 +1723,12 @@ How a pick binds:
 - `subject: eitherSubject(PACKS.of(...), BUILDINGS)` for a pick that lists two
   kinds of thing. Each binding but the last must be an `.of()` that returns
   `undefined` for a value it does not name, or it is refused when declared.
-- `.about(TYPE, (ctx) => thing)` on an action about a thing it never picks.
-  Return `undefined` or `[]` when it is about nothing now.
+- `.about(TYPE, (ctx) => [thing])` on an action about things it never picks.
+  It always returns a list, `[]` when the action is about nothing now.
+
+A thing that is a board element the seat cannot see is given no subject, in a
+row or in `.about()`, whatever the pick's value is: its key, label and id would
+name it.
 
 A pick that takes several values (`chooseElements`, `multiSelect`,
 `orderedList`, `repeat`) binds no subject: it is a type error or refused when

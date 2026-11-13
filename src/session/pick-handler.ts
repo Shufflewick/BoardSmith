@@ -23,7 +23,7 @@ import {
   type PickChoicesResponse,
   type WarningEntry,
 } from './types.js';
-import type { ChoiceWithRefs, ValidElement } from '../types/protocol.js';
+import type { PickMetadata, ValidElement } from '../types/protocol.js';
 import { MAX_SUBJECT_ROWS } from '../engine/action/subject-type.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
@@ -52,14 +52,17 @@ function picksHeldBy(pendingState: Record<string, unknown> | null, actionName: s
  */
 function evaluateCandidates(
   executor: ReturnType<Game['getActionExecutor']>,
-  actionName: string,
+  action: ActionDefinition,
   selection: ChoiceSelection | ElementSelection | ElementsSelection,
   player: Player,
   args: Record<string, unknown>,
 ): { candidates: AnnotatedCandidate[] } | { refusal: PickChoicesResponse } {
+  const actionName = action.name;
   try {
     // The action's name, so a running tutorial's per-pick gate greys what it does not allow (#1248).
-    return { candidates: executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[] };
+    const candidates = executor.getChoices(selection, player, args, actionName) as AnnotatedCandidate[];
+    const refusal = subjectListRefusal(action, selection, candidates.length);
+    return refusal ? { refusal } : { candidates };
   } catch (error) {
     // The engine's own crash handling (#1045, #1248): a refusal travels, anything else is logged and replaced.
     const thrown = gameCodeThrew(actionName, `Evaluating '${selection.name}' of action '${actionName}'`, error);
@@ -89,7 +92,7 @@ function answerPick(
   ctx: { game: Game; player: Player; args: Record<string, unknown> },
   warnings: WarningEntry[],
 ): PickChoicesResponse {
-  const evaluated = evaluateCandidates(executor, action.name, selection, player, ctx.args);
+  const evaluated = evaluateCandidates(executor, action, selection, player, ctx.args);
   if ('refusal' in evaluated) return evaluated.refusal;
 
   // AFTER THE FORMATTERS RUN, NEVER BEFORE: a soft-failing `display()` or
@@ -97,8 +100,6 @@ function answerPick(
   // would ship an answer that drops the very warnings it is meant to carry.
   const said = () => (warnings.length > 0 ? warnings : undefined);
 
-  const tooMany = subjectListRefusal(action, selection, evaluated.candidates.length);
-  if (tooMany) return tooMany;
 
   if (selection.type === 'choice') {
     const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
@@ -292,19 +293,13 @@ export class PickHandler<G extends Game = Game> {
    * `getPickChoices` gives it with nothing picked, so the seat opens the action
    * with no round trip (#1615). Only when the seat sees every candidate: an
    * answer naming a card it cannot see stays with resolveChoices, so what every
-   * state push carries names only what the seat's board shows.
+   * state push carries names only what the seat's board shows. A choice pick
+   * travels too when it binds a subject (#1640), for the panel to invert.
    */
   answerOpeningPicks(seat: number, metadata: Record<string, ActionMetadata> | undefined): void {
     for (const action of Object.values(metadata ?? {})) {
       const first = action.selections[0];
-      if (first?.type === 'choice' && first.subjectTypes) {
-        const choices = this.#subjectAnswer(action.name, first.name, seat);
-        if (choices) first.choices = choices;
-        continue;
-      }
-      if (first?.type !== 'element' && first?.type !== 'elements') continue;
-      const elements = this.#openingAnswer(action.name, first.name, seat);
-      if (elements) first.validElements = elements;
+      if (first) this.#carryOpeningList(action.name, first, seat);
     }
   }
 
@@ -312,14 +307,24 @@ export class PickHandler<G extends Game = Game> {
    * A subject choice pick's rows when every one is a thing (#1640), else `undefined`. A row the seat
    * cannot see is given no thing, so a list naming one stays with resolveChoices, as an element list does.
    */
-  #subjectAnswer(actionName: string, pickName: string, seat: number): ChoiceWithRefs[] | undefined {
+  #carrySubjectList(actionName: string, pick: PickMetadata, seat: number): void {
     let answer: PickChoicesResponse;
     try {
-      answer = this.getPickChoices(actionName, pickName, seat);
+      answer = this.getPickChoices(actionName, pick.name, seat);
     } catch {
-      return undefined;
+      return;
     }
-    return answer.success && answer.choices?.every((row) => row.subject) ? answer.choices : undefined;
+    if (answer.success && answer.choices?.every((row) => row.subject)) pick.choices = answer.choices;
+  }
+
+  #carryOpeningList(actionName: string, pick: PickMetadata, seat: number): void {
+    if (pick.type === 'choice') {
+      if (pick.subjectTypes) this.#carrySubjectList(actionName, pick, seat);
+      return;
+    }
+    if (pick.type !== 'element' && pick.type !== 'elements') return;
+    const elements = this.#openingAnswer(actionName, pick.name, seat);
+    if (elements) pick.validElements = elements;
   }
 
   /** An opening pick's candidates when the seat sees every one, else `undefined`. */

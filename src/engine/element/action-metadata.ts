@@ -113,10 +113,9 @@ function actionMetadataOf(
   };
 }
 
-/** The things an action is about without picking them, leaving out one the seat cannot see (#1640). */
+/** The things an action is about without picking them (#1640). */
 function aboutOf(actionDef: ActionDefinition, ctx: ActionContext): { about?: PickSubject[] } {
-  const about = (actionDef.about ?? []).flatMap((things) => things(ctx))
-    .filter((subject) => subject.element === undefined || ctx.game.getElementById(subject.element)?.isVisibleTo(ctx.player.seat) !== false);
+  const about = (actionDef.about ?? []).flatMap((things) => things(ctx));
   return about.length > 0 ? { about } : {};
 }
 

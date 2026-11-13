@@ -184,10 +184,16 @@ function assertFiltersByOneValue(action: string, name: string, declared: readonl
 }
 
 /** A subject names one thing, and the panel lists one thing at a time, so a pick that takes several values binds none (#1640). */
-function assertBindsOneValue(method: string, name: string, subject: SubjectBinding<never, never> | undefined, many: string | null): void {
-  if (subject === undefined || many === null) return;
+function assertBindsOneValue(
+  method: string,
+  name: string,
+  options: { subject?: SubjectBinding<never, never>; multiSelect?: unknown; orderedList?: unknown; repeat?: unknown; repeatUntil?: unknown },
+): void {
+  if (options.subject === undefined) return;
+  const many = (['multiSelect', 'orderedList', 'repeat', 'repeatUntil'] as const).find((option) => options[option] !== undefined);
+  if (many === undefined) return;
   throw new Error(
-    `${method}('${name}') binds subject ${subject.types.map((type) => type.options.name).join(' or ')} and takes several values with ${many}. `
+    `${method}('${name}') binds subject ${options.subject.types.map((type) => type.options.name).join(' or ')} and takes several values with ${many}. `
     + `A subject names one thing, so remove subject, or ${many}.`
   );
 }
@@ -611,23 +617,19 @@ export class Action<
    * `platformActionPanelEscapeHatch` is not the game-side version of this: it
    * belongs to the host platform, which substitutes its own equivalent surface.
    */
-  /**
-   * Say this action is about a thing it never picks, or picks only later or as
-   * typed text, so the Action Panel offers it under that thing (#1640):
-   * `.about(TOWERS, (ctx) => ctx.game.warCollege)`. Return `undefined` or `[]`
-   * when it is about nothing now.
-   */
-  about<T, C>(type: SubjectType<T, C>, things: (context: ActionContext<G>) => T | readonly T[] | undefined): this {
-    (this.definition.about ??= []).push((context) => {
-      const found = things(context as ActionContext<G>);
-      const list = found === undefined ? [] : Array.isArray(found) ? found as readonly T[] : [found as T];
-      return list.map((thing) => type.describe(thing, context as C));
-    });
+  suppressFromActionPanel(): this {
+    this.definition.suppressFromActionPanel = true;
     return this;
   }
 
-  suppressFromActionPanel(): this {
-    this.definition.suppressFromActionPanel = true;
+  /**
+   * Say this action is about things it never picks, or picks only later or as
+   * typed text, so the Action Panel offers it under them (#1640):
+   * `.about(TOWERS, (ctx) => [ctx.game.warCollege])`. Return `[]` when it is
+   * about nothing now. A thing the seat cannot see is left out.
+   */
+  about<T, C extends ActionContext>(type: SubjectType<T, C>, things: (context: ActionContext<G>) => readonly NoInfer<T>[]): this {
+    (this.definition.about ??= []).push((context) => things(context as ActionContext<G>).flatMap((thing) => type.describe(thing, context as C) ?? []));
     return this;
   }
 
@@ -857,7 +859,7 @@ export class Action<
         + `at a time, so it can only group a pick that takes one choice. Remove group, or ${many}.`
       );
     }
-    assertBindsOneValue('chooseFrom', name, options.subject, many ?? (options.repeat || options.repeatUntil !== undefined ? 'repeat' : null));
+    assertBindsOneValue('chooseFrom', name, options);
     const selection = {
       type: 'choice',
       name,
@@ -960,7 +962,7 @@ export class Action<
   ): Action<G, AddArg<A, K, T, O>> | Action<G, AddArg<A, K, T[], O>> {
     assertPrepareHasDisabled('chooseElement', name, options);
     assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
-    assertBindsOneValue('chooseElement', name, options.subject, options.repeat || options.repeatUntil !== undefined ? 'repeat' : null);
+    assertBindsOneValue('chooseElement', name, options);
     const selection = {
       type: 'element',
       name,
@@ -1167,7 +1169,7 @@ export class Action<
    *   });
    * ```
    */
-  enterText<K extends string, O extends boolean | string = false, C = ActionContext<G>>(
+  enterText<K extends string, O extends boolean | string = false, C extends ActionContext = ActionContext<G>>(
     name: K,
     options: {
       prompt?: string | ((context: PickContext<G, A>) => string);
