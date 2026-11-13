@@ -37,7 +37,10 @@ import {
   numberRangeHint,
 } from './action-panel-helpers.js';
 import {
+  actionCount,
   buildActionMenu,
+  drawnAs,
+  levelShowing,
   menuLevelAt,
   resolveMenuPath,
   type ActionMenuGroup,
@@ -361,6 +364,16 @@ const openPath = actionController.actionMenuPath;
 
 const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 
+/** A lone destructive action keeps its group, so it is never one press from a level it was not in (#1639). */
+const promotable = (action: EnrichedActionMetadata) => !action.destructive;
+/** The buttons of the level now drawn, a group holding one thing drawn as that thing (#1639). */
+const menuNodes = computed(() => menuLevel.value.nodes.map((node) => drawnAs(node, promotable)));
+/** Where Back goes: the nearest level up that is drawn, past a lone group drawn as its child. */
+const backPath = computed(() => {
+  const path = menuLevel.value.group?.path ?? [];
+  return path.length === 0 ? path : levelShowing(actionMenu.value, path.slice(0, -1), [], promotable);
+});
+
 /** The full path, for the current-level label. */
 const menuBreadcrumb = computed(() => menuLevel.value.group?.path.join(' / ') ?? '');
 
@@ -369,13 +382,13 @@ function backLabelFor(path: readonly string[], top: string): string {
   return path.length > 1 ? `Back to ${path[path.length - 2]}` : `Back to ${top}`;
 }
 
-const backLabel = computed(() => backLabelFor(menuLevel.value.group?.path ?? [], 'all actions'));
+const backLabel = computed(() => `Back to ${backPath.value.at(-1) ?? 'all actions'}`);
 
 /** The disabled actions folded at the level now drawn, each folded at one level only. */
 const foldedActions = computed(() => {
-  const here = (menuLevel.value.group?.path ?? []).join('\u0000');
+  const here = menuLevel.value.group?.path ?? [];
   return visibleActions.value.filter((a) => disabledReasonOf(a.name)
-    && resolveMenuPath(actionMenu.value, a.group ?? []).join('\u0000') === here);
+    && levelShowing(actionMenu.value, a.group ?? [], here, promotable).join('\u0000') === here.join('\u0000'));
 });
 const foldOpen = ref(false);
 const foldListId = `bs-unavailable-${useId()}`;
@@ -386,7 +399,7 @@ const menuAnnouncement = ref('');
 
 /** How many things are behind a group's button, for its accessible name. */
 function groupContents(group: ActionMenuGroup<EnrichedActionMetadata>): string {
-  const count = group.children.length;
+  const count = actionCount(group);
   return `submenu, ${count} ${count === 1 ? 'action' : 'actions'}`;
 }
 
@@ -418,10 +431,12 @@ function enterGroup(group: ActionMenuGroup<EnrichedActionMetadata>): void {
 function leaveGroup(): void {
   const path = menuLevel.value.group?.path;
   if (!path || path.length === 0) return;
-  const leaving = path[path.length - 1];
+  const target = backPath.value;
+  const way = menuLevelAt(actionMenu.value, target).nodes.find((node) => node.kind === 'group' && node.label === path[target.length])!;
+  const drawn = drawnAs(way, promotable);
   menuAnnouncement.value = '';
-  openPath.value = path.slice(0, -1);
-  void restoreFocusToGroup(leaving);
+  openPath.value = target;
+  void (drawn.kind === 'group' ? restoreFocusToGroup(drawn.label) : restoreFocusToGroup(drawn.item.name, 'data-bs-action'));
 }
 
 async function focusIntoLevel(buttons = MENU_BUTTONS): Promise<void> {
@@ -1665,7 +1680,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
            .action-buttons { display: contents } propagates the parent flex context so
            .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
       <div
-        v-for="node in menuLevel.nodes"
+        v-for="node in menuNodes"
         :key="node.kind === 'group' ? `group:${node.label}` : node.item.name"
         class="action-btn-group"
       >

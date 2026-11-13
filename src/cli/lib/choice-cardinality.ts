@@ -20,7 +20,10 @@
  * Note what is deliberately NOT flagged: a large BOARD-ANCHORED step. That is
  * the correct shape, not the bug.
  */
-import type { ActionDefinition, Game, GameOptions } from '../../engine/index.js';
+import { availableActionsForSeat, type ActionDefinition, type Game, type GameOptions } from '../../engine/index.js';
+import { buildActionMetadata } from '../../engine/element/action-metadata.js';
+import type { ActionMetadata } from '../../types/protocol.js';
+import { buildActionMenu, busiestLevel } from '../../ui/components/auto-ui/action-menu.js';
 import { simulateRandomGames } from '../../testing/random-simulation.js';
 import { noSeatHasEnabledAction } from '../../sim/play-game.js';
 import { createTestWorld, type TestWorld, type TestWorldOptions } from '../../testing/test-world.js';
@@ -131,6 +134,72 @@ export function findUnboundedChoiceSteps(
     );
 }
 
+/**
+ * The most start buttons that are not groups one Action Panel level may show (#1639). Lacuna
+ * Expanse, Survival of the Fittest and Windup Warfare all held to nine once grouped (#1622).
+ */
+export const MAX_LEVEL_BUTTONS = 9;
+
+/** One Action Panel level, and the actions drawn on it as buttons of their own. */
+export interface CrowdedLevel {
+  /** The level's group path; empty for the top level. */
+  readonly path: readonly string[];
+  readonly actions: readonly string[];
+}
+
+/** What one walk of a game found: choice steps with nothing shaping them, and levels with too many buttons. */
+export interface ChoiceAudit {
+  readonly unbounded: UnboundedChoiceStep[];
+  readonly crowded: CrowdedLevel[];
+}
+
+/**
+ * The busiest level of the Action Panel a seat offered `actions` sees, read the way the panel draws
+ * it (`ActionPanel.vue`): suppressed actions only when nothing else is offered, disabled ones folded
+ * into one row, and a group holding one thing drawn as that thing.
+ */
+export function startButtonLevel(
+  actions: readonly ActionMetadata[],
+  isDisabled: (name: string) => boolean,
+): CrowdedLevel {
+  const unsuppressed = actions.filter((action) => !action.suppressFromActionPanel);
+  const visible = unsuppressed.length > 0 ? unsuppressed : actions;
+  const level = busiestLevel(buildActionMenu(visible.filter((action) => !isDisabled(action.name))), (action) => !action.destructive);
+  return { path: level.path, actions: level.buttons.map((action) => action.name) };
+}
+
+/** The levels seen with more than `max` buttons, each once with the most it had, the fullest first. */
+export function findCrowdedLevels(levels: Iterable<CrowdedLevel>, max: number = MAX_LEVEL_BUTTONS): CrowdedLevel[] {
+  const worst = new Map<string, CrowdedLevel>();
+  for (const level of levels) {
+    if (level.actions.length <= max) continue;
+    const key = level.path.join('\u0000');
+    if ((worst.get(key)?.actions.length ?? 0) < level.actions.length) worst.set(key, level);
+  }
+  return [...worst.values()].sort((a, b) => b.actions.length - a.actions.length);
+}
+
+/** The author-facing sentence for one crowded level: where, how many, which, and the way out. */
+export function describeCrowdedLevel(level: CrowdedLevel): string {
+  const where = level.path.length === 0 ? 'The top level' : `The level '${level.path.join(' / ')}'`;
+  return (
+    `${where} of the Action Panel showed ${level.actions.length} start buttons that are not in a group: ` +
+    `${level.actions.join(', ')}. Put some of these actions in a group with .group('<name>') so the level ` +
+    `shows ${MAX_LEVEL_BUTTONS} or fewer.`
+  );
+}
+
+/** The busiest level of every seat's Action Panel in a table game as it stands. */
+function tableLevels(game: Game): CrowdedLevel[] {
+  const flowState = game.getFlowState();
+  return game.players.flatMap((player) => {
+    const names = availableActionsForSeat(flowState, player.seat);
+    if (names.length === 0) return [];
+    const refused = game.getDisabledActions(player.seat);
+    return [startButtonLevel(Object.values(buildActionMetadata(game, player, names)), (name) => name in refused)];
+  });
+}
+
 /** Which backend a finding came from, which decides the way out the author is told. */
 export type ChoiceCardinalityBackend = 'table' | 'world';
 
@@ -184,8 +253,9 @@ interface ChoiceCardinalityAuditOptions {
 export async function auditChoiceCardinality<G extends Game>(
   gameClass: new (options: GameOptions) => G,
   options: ChoiceCardinalityAuditOptions = {},
-): Promise<UnboundedChoiceStep[]> {
+): Promise<ChoiceAudit> {
   const observations: ChoiceStepObservation[] = [];
+  const levels: CrowdedLevel[] = [];
 
   const results = await simulateRandomGames(gameClass, {
     count: options.games ?? 3,
@@ -205,6 +275,9 @@ export async function auditChoiceCardinality<G extends Game>(
     onSelectionChoices: ({ action, selection, candidateCount }) => {
       observations.push(observeChoiceStep(action, selection as ObservableSelection, candidateCount));
     },
+    onTurn: (game) => {
+      levels.push(...tableLevels(game));
+    },
   });
 
   // A game the simulator could not play offered no choice steps to count, so
@@ -219,7 +292,7 @@ export async function auditChoiceCardinality<G extends Game>(
     );
   }
 
-  return findUnboundedChoiceSteps(observations, options.threshold);
+  return { unbounded: findUnboundedChoiceSteps(observations, options.threshold), crowded: findCrowdedLevels(levels) };
 }
 
 /** How the world audit drives the world to collect real candidate counts. */
@@ -249,6 +322,8 @@ interface WorldDrive {
   readonly actions: readonly ActionDefinition[];
   readonly rng: SeededRandom;
   readonly observations: ChoiceStepObservation[];
+  /** The busiest Action Panel level of every seat's offers, each round. */
+  readonly levels: CrowdedLevel[];
   /** Why an enabled offer could not be answered, once per distinct reason. */
   readonly undraftable: Set<string>;
   /** How many enabled offers were answered, which is how much was checked. */
@@ -279,7 +354,7 @@ interface WorldDrive {
 export async function auditWorldChoiceCardinality(
   definition: TestWorldOptions['definition'],
   options: WorldChoiceCardinalityAuditOptions = {},
-): Promise<UnboundedChoiceStep[]> {
+): Promise<ChoiceAudit> {
   const block = definition.world;
   if (block === undefined) {
     throw new Error('your gameDefinition declares no world block, so there is no world to drive');
@@ -294,6 +369,7 @@ export async function auditWorldChoiceCardinality(
     actions: block.actions,
     rng: new SeededRandom(seed),
     observations: [],
+    levels: [],
     undraftable: new Set(),
     drafted: 0,
   };
@@ -308,7 +384,7 @@ export async function auditWorldChoiceCardinality(
   }
 
   if (drive.drafted === 0) throw nothingDrafted(drive, rounds, seats);
-  return findUnboundedChoiceSteps(drive.observations, options.threshold);
+  return { unbounded: findUnboundedChoiceSteps(drive.observations, options.threshold), crowded: findCrowdedLevels(drive.levels) };
 }
 
 /** Seats 1 to `wanted`, or every seat of a world with fewer. */
@@ -328,7 +404,10 @@ function nothingDrafted(drive: WorldDrive, rounds: number, seats: readonly numbe
 /** Draft every enabled offer this seat holds, then take one of them. */
 async function driveSeat(drive: WorldDrive, seat: number): Promise<void> {
   const moves: DraftedMove[] = [];
-  for (const offer of await offersOf(drive.world, seat)) {
+  const offers = await offersOf(drive.world, seat);
+  const held = new Set(offers.filter((offer) => offer.disabled !== undefined).map((offer) => offer.name));
+  if (offers.length > 0) drive.levels.push(startButtonLevel(offers, (name) => held.has(name)));
+  for (const offer of offers) {
     if (offer.disabled !== undefined) continue;
     const move = await draftMove(drive, seat, offer);
     if (typeof move === 'string') drive.undraftable.add(move);

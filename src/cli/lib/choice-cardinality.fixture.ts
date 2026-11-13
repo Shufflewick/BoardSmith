@@ -96,6 +96,36 @@ export class NarrowGame extends Game<NarrowGame, Player> {
   }
 }
 
+/** Ten verbs, as many start buttons as one Action Panel level may not show (#1639). */
+const CHORES = Array.from({ length: 10 }, (_, i) => `chore${i}`);
+
+/** Offers every chore at once, none in a group: one level of ten buttons. */
+export class CrowdedGame extends Game<CrowdedGame, Player> {
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of CHORES) this.registerAction(Action.create<CrowdedGame>(name).execute(burnTurn));
+    this.setFlow(shortFlow(CHORES));
+  }
+}
+
+/** The same ten chores, half of them in a group: no level shows more than five. */
+export class GroupedChoresGame extends Game<GroupedChoresGame, Player> {
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    CHORES.forEach((name, i) => {
+      const action = Action.create<GroupedChoresGame>(name);
+      this.registerAction((i < 5 ? action.group('Chores') : action).execute(burnTurn));
+    });
+    this.setFlow(shortFlow(CHORES));
+  }
+}
+
 /**
  * WideGame for three or more seats: it refuses to be built for fewer, as a
  * real game dealing a three-hand layout would. The audit must play it at a seat
@@ -338,8 +368,11 @@ const sift = worldAction<CardinalityWorld>('sift')
   })
   .execute(() => {});
 
+/** Ten verbs offered at once, none in a group: one level of ten buttons (#1639). */
+const chores = CHORES.map((name) => worldAction<CardinalityWorld>(name).needs(inCommons).execute(() => {}));
+
 const WORLD_ACTIONS = {
-  shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood, grow, balk, sift,
+  shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood, grow, balk, sift, chores,
 };
 
 /**
@@ -352,7 +385,7 @@ export function cardinalityWorld(
 ) {
   const world: WorldDefinition = {
     maxPlayers: 3,
-    actions: actions.map((name) => WORLD_ACTIONS[name]),
+    actions: actions.flatMap((name) => WORLD_ACTIONS[name]),
     view: () => [COMMONS],
     genesis: (game: Game) => ({ [COMMONS]: game.create(Commons, COMMONS) }),
     ...(onArrive === undefined ? {} : { presence: { onArrive } }),

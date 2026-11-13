@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import type { ActionMetadata } from '../../types/protocol.js';
 import {
   MAX_FLAT_CHOICE_CANDIDATES,
   auditChoiceCardinality,
@@ -6,9 +7,15 @@ import {
   observeChoiceStep,
   findUnboundedChoiceSteps,
   describeUnboundedChoiceStep,
+  MAX_LEVEL_BUTTONS,
+  startButtonLevel,
+  findCrowdedLevels,
+  describeCrowdedLevel,
   type ChoiceStepObservation,
 } from './choice-cardinality.js';
 import {
+  CrowdedGame,
+  GroupedChoresGame,
   LateWideGame,
   NarrowGame,
   ThreeSeatWideGame,
@@ -160,7 +167,7 @@ describe('describeUnboundedChoiceStep', () => {
 
 describe('auditChoiceCardinality', () => {
   it('flags a flat unanchored step and leaves a board-anchored one alone', async () => {
-    const findings = await auditChoiceCardinality(WideGame, { seed: 'audit', games: 1 });
+    const findings = (await auditChoiceCardinality(WideGame, { seed: 'audit', games: 1 })).unbounded;
 
     expect(findings).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
@@ -168,7 +175,7 @@ describe('auditChoiceCardinality', () => {
   });
 
   it('finds nothing in a game whose steps are all small', async () => {
-    expect(await auditChoiceCardinality(NarrowGame, { seed: 'audit', games: 1 })).toEqual([]);
+    expect((await auditChoiceCardinality(NarrowGame, { seed: 'audit', games: 1 })).unbounded).toEqual([]);
   });
 
   // #306: a game the simulator could not play offers no choice steps to count,
@@ -189,7 +196,7 @@ describe('auditChoiceCardinality', () => {
   // that ends it exists. Every choice it offered was counted, so that stop is
   // a finished walk, not a game the simulator could not play.
   it('counts a game whose ending is not built yet, which stops with no move left', async () => {
-    expect(await auditChoiceCardinality(UnfinishedWideGame, { seed: 'audit', games: 2 })).toEqual([
+    expect((await auditChoiceCardinality(UnfinishedWideGame, { seed: 'audit', games: 2 })).unbounded).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
@@ -197,13 +204,13 @@ describe('auditChoiceCardinality', () => {
   // #383: the simulator asks isResting after every move, so the audit's rest
   // must name only the no-move stop, or the walk would end after one move.
   it('keeps walking past the first move to a step that opens later', async () => {
-    expect(await auditChoiceCardinality(LateWideGame, { seed: 'audit', games: 2 })).toEqual([
+    expect((await auditChoiceCardinality(LateWideGame, { seed: 'audit', games: 2 })).unbounded).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
 
   it('plays at the seat count it is given', async () => {
-    expect(await auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 3 })).toEqual([
+    expect((await auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 3 })).unbounded).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
@@ -217,17 +224,17 @@ describe('auditChoiceCardinality', () => {
 
 describe('auditWorldChoiceCardinality', () => {
   it('flags a flat unanchored step and leaves a board-anchored one alone', async () => {
-    expect(await auditWorldChoiceCardinality(cardinalityWorld(['shout', 'mark']), { seed: 'audit' })).toEqual([
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['shout', 'mark']), { seed: 'audit' })).unbounded).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
 
   it('finds nothing in a world whose steps are all small', async () => {
-    expect(await auditWorldChoiceCardinality(cardinalityWorld(['nod']), { seed: 'audit' })).toEqual([]);
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['nod']), { seed: 'audit' })).unbounded).toEqual([]);
   });
 
   it('counts a later question with the earlier answers bound, as the panel re-asks it', async () => {
-    expect(await auditWorldChoiceCardinality(cardinalityWorld(['pair']), { seed: 'audit' })).toEqual([
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['pair']), { seed: 'audit' })).unbounded).toEqual([
       { action: 'pair', selection: 'second', maxCandidates: 40 },
     ]);
   });
@@ -235,14 +242,14 @@ describe('auditWorldChoiceCardinality', () => {
   it('announces each driven seat’s arrival, so what arrivals build is counted', async () => {
     // Ten lanterns per arrival: thirty once all three seats are here.
     expect(
-      await auditWorldChoiceCardinality(cardinalityWorld(['light', 'hang', 'nod'], 'hang'), { seed: 'audit' }),
+      (await auditWorldChoiceCardinality(cardinalityWorld(['light', 'hang', 'nod'], 'hang'), { seed: 'audit' })).unbounded,
     ).toEqual([{ action: 'light', selection: 'lantern', maxCandidates: 30 }]);
   });
 
   it('takes offers and fires what falls due, so a list that only grows in play is counted', async () => {
-    const findings = await auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), {
+    const findings = (await auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), {
       seed: 'audit',
-    });
+    })).unbounded;
 
     expect(findings.map(({ action, selection }) => ({ action, selection }))).toEqual([
       { action: 'harvest', selection: 'shoot' },
@@ -288,7 +295,7 @@ describe('auditWorldChoiceCardinality', () => {
 
   it('counts the rules refusing a move as part of driving the world (#847)', async () => {
     balked.times = 0;
-    expect(await auditWorldChoiceCardinality(cardinalityWorld(['balk', 'shout']), { seed: 'audit' })).toEqual([
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['balk', 'shout']), { seed: 'audit' })).unbounded).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
     expect(balked.times).toBeGreaterThan(0);
@@ -298,5 +305,82 @@ describe('auditWorldChoiceCardinality', () => {
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['trespass']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's 'trespass'.*"how":"quietly".*elsewhere/s,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Start buttons per level (#1639): one Action Panel level shows at most nine
+// buttons that are not groups, counted the way the panel draws the level.
+// ---------------------------------------------------------------------------
+
+const verb = (name: string, over: Partial<ActionMetadata> = {}): ActionMetadata => ({ name, prompt: name, selections: [], ...over });
+const tenVerbs = Array.from({ length: 10 }, (_, i) => verb(`chore${i}`));
+const CHORE_NAMES = tenVerbs.map((a) => a.name);
+const never = () => false;
+
+describe('MAX_LEVEL_BUTTONS', () => {
+  it('is nine, the most any trial game needed at one level', () => {
+    expect(MAX_LEVEL_BUTTONS).toBe(9);
+  });
+});
+
+describe('startButtonLevel', () => {
+  it('reads the busiest level as the panel draws it, a lone group drawn as its button', () => {
+    const level = startButtonLevel([verb('a'), verb('b', { group: ['Lone'] }), verb('c', { group: ['G'] }), verb('d', { group: ['G'] })], never);
+    expect(level).toEqual({ path: [], actions: ['a', 'b'] });
+  });
+
+  it('leaves out disabled actions, which fold into one row', () => {
+    expect(startButtonLevel(tenVerbs, (name) => name === 'chore0').actions).toHaveLength(9);
+  });
+
+  it('leaves out suppressed actions while anything else is offered', () => {
+    expect(startButtonLevel([...tenVerbs.slice(0, 9), verb('chore9', { suppressFromActionPanel: true })], never).actions).toHaveLength(9);
+  });
+
+  it('keeps a lone destructive action in its group', () => {
+    expect(startButtonLevel([verb('a'), verb('scuttle', { group: ['Fleet'], destructive: true })], never).actions).toEqual(['a']);
+  });
+});
+
+describe('findCrowdedLevels', () => {
+  it('reports a level over the limit once, with the most buttons it was seen with', () => {
+    const levels = [
+      { path: [], actions: CHORE_NAMES.slice(0, 9) },
+      { path: [], actions: CHORE_NAMES },
+      { path: ['G'], actions: CHORE_NAMES.slice(0, 9) },
+    ];
+    expect(findCrowdedLevels(levels)).toEqual([{ path: [], actions: CHORE_NAMES }]);
+  });
+});
+
+describe('describeCrowdedLevel', () => {
+  it('names the level, the count, the actions and the way out', () => {
+    const text = describeCrowdedLevel({ path: ['Buildings'], actions: CHORE_NAMES });
+    expect(text).toContain('Buildings');
+    expect(text).toContain('10');
+    expect(text).toContain('chore0');
+    expect(text).toContain('.group(');
+    expect(describeCrowdedLevel({ path: [], actions: CHORE_NAMES })).toContain('top level');
+  });
+});
+
+describe('the audits count start buttons per level', () => {
+  it('finds a table level of ten ungrouped buttons', async () => {
+    expect((await auditChoiceCardinality(CrowdedGame, { seed: 'audit', games: 1 })).crowded)
+      .toEqual([{ path: [], actions: CHORE_NAMES }]);
+  });
+
+  it('finds nothing in a table game whose levels are grouped', async () => {
+    expect((await auditChoiceCardinality(GroupedChoresGame, { seed: 'audit', games: 1 })).crowded).toEqual([]);
+  });
+
+  it('finds a world level of ten ungrouped buttons', async () => {
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['chores']), { seed: 'audit' })).crowded)
+      .toEqual([{ path: [], actions: CHORE_NAMES }]);
+  });
+
+  it('finds nothing in a world with a few buttons', async () => {
+    expect((await auditWorldChoiceCardinality(cardinalityWorld(['shout', 'mark']), { seed: 'audit' })).crowded).toEqual([]);
   });
 });

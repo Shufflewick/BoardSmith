@@ -119,11 +119,16 @@ export interface SelectionChoicesObservation {
  * choice-cardinality audit skips an action reached only as a follow-up.
  */
 export function random(
-  options: { onSelectionChoices?: (observation: SelectionChoicesObservation) => void } = {},
+  options: {
+    onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
+    /** Called with the game each time the policy is asked for a move, before it builds one. */
+    onTurn?: (game: Game) => void;
+  } = {},
 ): Policy {
   return {
     name: 'random',
     choose({ game, seat, actions, followUp: held, random: rng }) {
+      options.onTurn?.(game);
       const player = game.getPlayer(seat);
       if (!player) return { noMove: `No playable move for player ${seat}: there is no such player.` };
       const moves: PolicyMove[] = [];

@@ -38,9 +38,13 @@ import { parseImageInfo } from '../../ui/utils/image.js';
 import {
   auditChoiceCardinality,
   auditWorldChoiceCardinality,
+  describeCrowdedLevel,
   describeUnboundedChoiceStep,
   MAX_FLAT_CHOICE_CANDIDATES,
+  MAX_LEVEL_BUTTONS,
+  type ChoiceAudit,
   type ChoiceCardinalityBackend,
+  type CrowdedLevel,
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
 import type { Game, GameElement, GameOptions } from '../../engine/index.js';
@@ -131,7 +135,8 @@ async function runValidation(
   const rules = projectRules(cwd);
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
-  results.push(await validateChoiceCardinality(rules, worldMode));
+  // 7b. And no Action Panel level shows more than nine ungrouped start buttons, from the same walk (#1639).
+  results.push(...await validateChoiceCardinality(rules, worldMode));
 
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
   results.push(await validateRulesAgreement(rules));
@@ -1264,9 +1269,30 @@ export function buildChoiceCardinalityResult(
   };
 }
 
+/** Turn the crowded levels into a validation result: any one refuses the game (#1639). */
+export function buildLevelButtonsResult(crowded: CrowdedLevel[]): ValidationResult {
+  if (crowded.length === 0) {
+    return {
+      name: 'Start buttons per level',
+      passed: true,
+      message: `No Action Panel level shows more than ${MAX_LEVEL_BUTTONS} start buttons.`,
+    };
+  }
+  return {
+    name: 'Start buttons per level',
+    passed: false,
+    message:
+      `${crowded.length} Action Panel level(s) show more than ${MAX_LEVEL_BUTTONS} start buttons that are not ` +
+      `in a group. A player reads every button of a level to find the one they want, so a level holds ` +
+      `${MAX_LEVEL_BUTTONS} at most.`,
+    details: crowded.map(describeCrowdedLevel),
+  };
+}
+
 /**
  * Run the game and report any choice step that presents a large flat list with
- * no board anchor and no dependent narrowing.
+ * no board anchor and no dependent narrowing, and any Action Panel level with
+ * more start buttons than {@link MAX_LEVEL_BUTTONS} (#1639). One walk answers both.
  *
  * This check runs the game because a candidate count does not exist until a
  * game is running: the source text of `chooseElement('cell', { elementClass:
@@ -1283,26 +1309,23 @@ export function buildChoiceCardinalityResult(
  * warning that the check could not run, never as a pass: a check that did not
  * run has not found the game clean (#306).
  */
-export async function validateChoiceCardinality(rules: ProjectRules, isWorld: boolean): Promise<ValidationResult> {
-  const spinner = ora('Checking choice cardinality...').start();
+export async function validateChoiceCardinality(rules: ProjectRules, isWorld: boolean): Promise<ValidationResult[]> {
+  const spinner = ora('Checking choice cardinality and start buttons per level...').start();
 
   try {
-    const findings = isWorld ? await auditWorld(rules.cwd) : await auditTable(await rules.load());
+    const audit = isWorld ? await auditWorld(rules.cwd) : await auditTable(await rules.load());
 
-    const result = buildChoiceCardinalityResult(findings, isWorld ? 'world' : 'table');
-    if (result.passed) spinner.succeed('Choice cardinality OK');
-    else spinner.warn('Choice cardinality: large flat choice lists found');
-    return result;
+    const results = [buildChoiceCardinalityResult(audit.unbounded, isWorld ? 'world' : 'table'), buildLevelButtonsResult(audit.crowded)];
+    if (results.every((result) => result.passed)) spinner.succeed('Choice cardinality and start buttons per level OK');
+    else spinner.warn(`Found: ${results.filter((result) => !result.passed).map((result) => result.name).join(', ')}`);
+    return results;
   } catch (error) {
-    spinner.warn('Choice cardinality: could not run');
-    return {
-      name: 'Choice cardinality',
-      passed: false,
-      severity: 'warning',
-      message:
-        `This check could not run, so your choice lists were not checked. Reason: ` +
-        `${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
-    };
+    spinner.warn('Choice cardinality and start buttons per level: could not run');
+    const reason = `${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`;
+    return [
+      { name: 'Choice cardinality', passed: false, severity: 'warning', message: `This check could not run, so your choice lists were not checked. Reason: ${reason}` },
+      { name: 'Start buttons per level', passed: false, severity: 'warning', message: `This check could not run, so your Action Panel levels were not counted. Reason: ${reason}` },
+    ];
   }
 }
 
@@ -1314,7 +1337,7 @@ export async function validateChoiceCardinality(rules: ProjectRules, isWorld: bo
  * world host inside it, come out of the rules' own bundle, exactly as
  * `boardsmith dev` takes its world host from there.
  */
-function auditWorld(cwd: string): Promise<UnboundedChoiceStep[]> {
+function auditWorld(cwd: string): Promise<ChoiceAudit> {
   return withProjectBundle(
     cwd,
     'world-cardinality',
@@ -1329,7 +1352,7 @@ function auditWorld(cwd: string): Promise<UnboundedChoiceStep[]> {
 }
 
 /** Play a table game's seeded random games at its `minPlayers`. */
-function auditTable(gameDefinition: GameDefinition): Promise<UnboundedChoiceStep[]> {
+function auditTable(gameDefinition: GameDefinition): Promise<ChoiceAudit> {
   if (gameDefinition.minPlayers === undefined) {
     throw new Error('your gameDefinition declares no minPlayers, so there is no seat count to play it at');
   }
