@@ -70,7 +70,7 @@ function readStrip(frame, strip) {
 await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files: { 'src/ui/App.vue': APP } } }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
-    const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
+    const page = await browser.newPage({ viewport: { width: PHONES[0], height: 800 } });
     const frame = await openTableSample(page, hostUrl);
 
     for (const width of PHONES) {
