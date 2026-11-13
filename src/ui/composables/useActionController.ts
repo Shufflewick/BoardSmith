@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
-import { copyOfChoice, formatActionName, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -143,7 +143,7 @@ import type {
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
-import type { PickSubject, SubjectRef } from '../../types/protocol.js';
+import type { PickSubject } from '../../types/protocol.js';
 
 /**
  * Create an action controller for handling game actions.
