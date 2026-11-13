@@ -239,10 +239,11 @@ defineSlots<{
         <slot name="player-strip-extra" :player="player"></slot>
       </span>
     </div>
-    <!-- Turn-status sentence naming every acting seat; the only live region, so
+    <!-- Turn-status sentence naming every acting seat, for screen readers only: the
+         outline on the acting token is the visible cue. The only live region, so
          changing slot content beside it does not re-read the sentence. Always
          mounted, even empty, because a live region inserted with its text is not read. -->
-    <span class="strip-status" role="status">{{ stripStatus }}</span>
+    <span class="strip-status sr-only" role="status">{{ stripStatus }}</span>
     <span v-if="hiddenCount > 0" class="players-overflow">{{ overflowText }}</span>
   </div>
 
@@ -475,7 +476,7 @@ defineSlots<{
 /* ── Seat strip: the compact icon-only representation (IA-06). Used in two places:
    the desktop rail (a ~64px column → row+wrap collapses to a vertical stack) and the
    mobile top strip (a wide bar → stays a horizontal row). The turn-status sentence is
-   hidden — the active token is emphasized instead. */
+   for screen readers only — the active token is emphasized and outlined instead. */
 .seat-strip {
   flex-direction: row;
   flex-wrap: wrap;
@@ -508,8 +509,26 @@ defineSlots<{
   opacity: 1;
 }
 
-.strip-status {
-  display: none;
+/* The acting token's outline, throbbing so a glance finds whose turn it is.
+   Same PERF constraint as .turn-indicator-dot: transform + opacity ONLY. */
+.strip-tokens .pt.strip-active > .tok::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid var(--bsg-accent);
+  pointer-events: none;
+  animation: strip-throb 1.6s ease-in-out infinite;
+}
+
+@keyframes strip-throb {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.12); opacity: 0.35; }
+}
+
+/* Reduced motion keeps the outline, still at its resting full-size, opaque state. */
+.bs-reduce-motion .strip-tokens .pt.strip-active > .tok::after {
+  animation: none;
 }
 
 /* The capped-list footer. Deliberately not a card: it is not a seat, and drawing
@@ -522,3 +541,5 @@ defineSlots<{
   color: var(--bsg-ink-3);
 }
 </style>
+
+<style scoped src="./sr-only.css"></style>

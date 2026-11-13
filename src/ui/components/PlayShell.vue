@@ -1169,19 +1169,9 @@ const mobileToggleLabel = computed(() => {
     flex-wrap: nowrap;
     justify-content: flex-start;
   }
-  /* Un-hide the turn-status sentence in the phone strip so off-turn players can
-     READ whose turn it is (the desktop rail keeps it icon-only — see PlayersPanel).
-     Scoped to .mobile-strip so only the wide phone bar gets the text. */
-  .mobile-strip :deep(.strip-status) {
-    display: inline-block;
-    margin-left: var(--bsg-s2);
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--bsg-accent);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    min-width: 0;
+  /* A seat's #player-strip-extra sits beside its token, keeping the strip one row. */
+  .mobile-strip :deep(.strip-tokens .pt) {
+    grid-auto-flow: column;
   }
   .mobile-strip__unread {
     position: absolute;
