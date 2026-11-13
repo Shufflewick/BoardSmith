@@ -1779,14 +1779,18 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Send an action whose picks are all given, between the auto-execute hooks and listeners an action filled in the panel runs. */
-  async function sendAtOnce(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
+  function sendAtOnce(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
     const seq = actionStartTick.value;
     const run = ++autoExecuteRuns;
-    // Nothing is open for it, so only another action starting means the player moved on.
-    await runBeforeAutoExecuteHooks(actionName, args, run, () => actionStartTick.value !== seq);
-    const result = await execute(actionName, args);
-    notifyAfterAutoExecute(result, run);
-    return result;
+    const send = () => {
+      const sending = execute(actionName, args);
+      void sending.then((result) => notifyAfterAutoExecute(result, run));
+      return sending;
+    };
+    // With no hook the send starts in the tick the board asked, as execute had it. Nothing is open for it,
+    // so only another action starting means the player moved on.
+    if (beforeAutoExecuteHooks.value.length === 0) return send();
+    return runBeforeAutoExecuteHooks(actionName, args, run, () => actionStartTick.value !== seq).then(send);
   }
 
   /**
