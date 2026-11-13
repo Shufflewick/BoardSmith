@@ -1,5 +1,5 @@
 {
-  "revision": 367,
+  "revision": 368,
   "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2879,6 +2879,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel folds disabled actions into one \"N not available yet\" row at each menu level, with their reasons; the action help \"?\" no longer carries disabled reasons (#1638)."
+    },
+    {
+      "revision": 368,
+      "date": "2026-11-13",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel draws a group holding one thing as that thing (never a lone destructive action, never moving a player standing in it), counts a group's actions, and boardsmith validate refuses more than nine ungrouped start buttons at one level (#1639)."
     }
   ]
 }
