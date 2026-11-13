@@ -77,6 +77,32 @@ describe('Action Panel parity doctrine', () => {
     ).toMatch(/in addition to the panel, never instead of it/i);
   });
 
+  it.each(PARITY_SURFACES)('%s states the one-way rule: the panel is complete, the board offers some of it or none', (path) => {
+    const text = flowed(path);
+    for (const sentence of [
+      /every action a player can take is in the Action Panel/i,
+      /the board may show only state, or offer some of those actions/i,
+      /whatever the board offers must also be in the panel/i,
+      /the board and the panel never show different states/i,
+    ]) {
+      expect(
+        text,
+        `${path} must state the parity rule one way: the panel holds every action, and the ` +
+          `board may hold some or none, since a game gains its own board in stages.`,
+      ).toMatch(sentence);
+    }
+  });
+
+  it.each(PARITY_SURFACES)('%s no longer says the board must offer everything the panel offers', (path) => {
+    expect(
+      flowed(path),
+      `${path} still states the retired two-way rule. The board may offer only some actions; ` +
+        `only "whatever the board offers is in the panel" holds.`,
+    ).not.toMatch(
+      /offers exactly what the board offers|the board must offer|runs both ways|never offers less than the board|always agrees with the board/i,
+    );
+  });
+
   it.each(PARITY_SURFACES)('%s scopes suppression to the START BUTTON only', (path) => {
     const text = flowed(path);
     expect(

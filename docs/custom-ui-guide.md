@@ -36,11 +36,14 @@ So expect — and keep — this arrangement: your compass, card fan, or drag-dro
 grid on the board, **and** the panel listing those same choices beneath it. It
 is not clutter, it is the floor.
 
-The parity runs both ways: whatever the panel offers, the board must offer, and
-whatever the board offers, the panel must offer. If the two ever show different
-things, that is a wiring bug in your UI, not an argument for hiding one of them.
-Drive both from the same state — the `actionController` and `boardInteraction`
-described in this guide — and they cannot drift. If you find yourself keeping a
+The parity runs one way. Every action a player can take is in the Action Panel.
+The board may show only state, or offer some of those actions, because a game
+starts on the automatic UI and gains its own board in stages. Whatever the board
+offers must also be in the panel, and the board and the panel never show
+different states. If the two ever show different states, that is a wiring bug
+in your UI, not an argument for hiding one of them. Drive both from the same
+state — the `actionController` and `boardInteraction` described in this guide —
+and they cannot drift. If you find yourself keeping a
 second, board-local copy of "what is selectable right now", that copy is the
 bug.
 
@@ -49,7 +52,7 @@ action drops its redundant **start button** while the panel keeps rendering
 everything else, including that action's full choice list once it is under way.
 Nothing suppresses a live choice list, and `platformActionPanelEscapeHatch`
 belongs to the host platform, not to a game. See
-[Actions & Flow](./actions-and-flow.md#the-action-panel-is-always-on-and-it-always-agrees-with-the-board).
+[Actions & Flow](./actions-and-flow.md#the-action-panel-is-complete-and-the-board-never-disagrees-with-it).
 
 Hiding the panel in CSS is worse than either option: the controls stay operable
 and in the tab order, but nobody can see them.

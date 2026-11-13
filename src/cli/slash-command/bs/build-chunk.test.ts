@@ -1768,7 +1768,7 @@ describe('PROC-02 — Part D survives the autonomy rewrite', () => {
     // The parity doctrine the section now leads with: a custom board control is
     // IN ADDITION to the Action Panel, never instead of it. Without this, an
     // agent reads the panel's copy of a board control as clutter to remove.
-    expect(build).toMatch(/The Action Panel is always on, and it always agrees with the board/);
+    expect(build).toMatch(/The Action Panel is complete, and the board never disagrees with it/);
     expect(build).toMatch(/IN ADDITION to the panel, never instead of it/);
     expect(build).toMatch(/Never CSS-hide the panel/);
   });

@@ -1,5 +1,5 @@
 {
-  "revision": 365,
+  "revision": 366,
   "surfaceHash": "2f62346bc29aac59",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2863,6 +2863,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The browser floor check reads CSS escapes, strings, url() and function-name case the way a browser does, so an escaped quote in a class name no longer hides later above-floor CSS (#1634)."
+    },
+    {
+      "revision": 366,
+      "date": "2026-11-12",
+      "surfaceHash": "2f62346bc29aac59",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Docs only: the parity rule now reads one way, the Action Panel holds every action and the board may offer some or none (#1637)"
     }
   ]
 }
