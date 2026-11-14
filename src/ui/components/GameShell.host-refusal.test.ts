@@ -11,7 +11,7 @@
  * `server_request`, the host answers it, and the toast is read off the one
  * global toast list.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { useToast } from '../composables/useToast.js';
@@ -125,6 +125,27 @@ describe('GameShell shows a host refusal of undo and the debug ops (#859)', () =
     answerer(posted)('undo', { success: false, error: 'Nothing to undo.' });
     await flushPromises();
     expect(shownToasts()).toEqual([['error', 'Nothing to undo.']]);
+  });
+
+  it('toasts no undo refusal while the connection already shows as stale (#1649)', async () => {
+    // Only the timers the heartbeat uses, so flushPromises keeps its real setImmediate.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted } = await mountTableWithDebugPanel(Board);
+      mounted.push(wrapper);
+      fromHost({ type: 'heartbeat' });
+      vi.advanceTimersByTime(10_001);
+      await nextTick();
+      expect(wrapper.find('[data-testid="bs-connection"]').classes()).toContain('stale');
+
+      wrapper.findComponent(PlayShell).vm.$emit('undo');
+      await flushPromises();
+      answerer(posted)('undo', { success: false, error: 'You are not connected to the table right now, so this was not sent.' });
+      await flushPromises();
+      expect(shownToasts()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([

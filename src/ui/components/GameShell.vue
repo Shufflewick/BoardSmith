@@ -499,10 +499,15 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
   return platformTransport.request(op, payload);
 }
 
+/** Toast a failed request, unless the stale connection dot already says why it failed (#1649). */
+function toastRequestError(text: string): void {
+  if (connectionHealth.value !== 'stale') toast.error(text);
+}
+
 /** Show the player a host refusal; the transport resolves one rather than rejecting. */
 function toastRefusal(result: Record<string, unknown>, failed: string, unsupported?: string): void {
   const refusal = hostRefusal(result, failed, unsupported);
-  if (refusal) toast.error(refusal);
+  if (refusal) toastRequestError(refusal);
 }
 
 // Board interaction state (shared between ActionPanel and game board)
@@ -1279,7 +1284,7 @@ watch(actionController.errorTick, () => {
   const text = typeof err === 'string' && err.length > 0
     ? err
     : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
-  toast.error(text);
+  toastRequestError(text);
   announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
