@@ -16,7 +16,7 @@ import { useActionController } from './useActionController.js';
 import type { VueWrapper } from '@vue/test-utils';
 import type { SubjectRef } from '../../types/protocol.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
-import { DICE, Die, TOWERS, Tower, WorkshopGame } from './shared-selection.test-helper.js';
+import { DICE, Die, HiddenVerbsGame, TOWERS, Tower, WorkshopGame } from './shared-selection.test-helper.js';
 import type { SubjectChoice } from './useActionControllerTypes.js';
 import { setupDragDropOrchestration } from './useDragDropTargets.js';
 import { selectedAttrs } from './sharedSelection.js';
@@ -231,5 +231,41 @@ describe('a board marking its selected thing (#1642)', () => {
   it('marks a thing with its type and key, and nothing at all for no thing', () => {
     expect(selectedAttrs({ type: 'Dice', key: '7' })).toEqual({ 'data-bs-selected': 'Dice / 7' });
     expect(selectedAttrs(null)).toEqual({});
+  });
+});
+
+describe('what the Action Panel offers as an action starts (#1642 review F1, F2)', () => {
+  async function offeredAsStarted(run: (seat: Awaited<ReturnType<typeof mountLiveSeat>>) => Promise<unknown>): Promise<Array<{ action: string; offered: string[] }>> {
+    const seat = await mountLiveSeat(HiddenVerbsGame, 'panel-reach', mounted);
+    await settle();
+    const events: Array<{ action: string; offered: string[] }> = [];
+    const keep = (event: Event) => events.push((event as CustomEvent<{ action: string; offered: string[] }>).detail);
+    window.addEventListener('boardsmith:action-started', keep);
+    try {
+      await run(seat);
+      await settle();
+    } finally {
+      window.removeEventListener('boardsmith:action-started', keep);
+    }
+    return events;
+  }
+
+  it('counts a suppressed verb of a thing the panel lists, which it reaches through the thing', async () => {
+    const events = await offeredAsStarted((seat) => seat.wiring.controller.start('reroll', { args: { die: seat.session.readGame().first(Die, 'red')!.id } }));
+    expect(events).toEqual([{ action: 'reroll', offered: expect.arrayContaining(['draft', 'pass', 'reroll']) }]);
+  });
+
+  it('counts the suppressed only verb of a thing the board selects, which the panel then shows', async () => {
+    const events = await offeredAsStarted((seat) => {
+      seat.board.triggerElementSelect({ id: seat.session.readGame().first(Tower, 'Bank')!.id });
+      return Promise.resolve();
+    });
+    expect(events).toEqual([{ action: 'upgrade', offered: expect.arrayContaining(['upgrade']) }]);
+  });
+
+  it('leaves out a suppressed action no level of the panel shows', async () => {
+    const events = await offeredAsStarted((seat) => seat.wiring.controller.start('vote'));
+    expect(events).toHaveLength(1);
+    expect(events[0]!.offered).not.toContain('vote');
   });
 });

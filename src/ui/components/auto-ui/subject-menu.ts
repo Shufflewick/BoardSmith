@@ -94,3 +94,31 @@ export function selectionMenuItems(
   menu.items.push(...parts.filter((part) => part.onBoard && usableVerbs(part).length > 0).map((part) => thingItem(part, Infinity)));
   return { items: menu.items, folded: menu.folded };
 }
+
+/**
+ * Every action the panel can start at some level now (#1642): its start buttons (`visible`), and the
+ * verbs on the menu of each thing it lists or has selected, and of the things those menus list.
+ */
+export function panelReach(
+  visible: readonly EnrichedActionMetadata[],
+  subjects: SubjectIndex,
+  metadataOf: (action: string) => EnrichedActionMetadata | undefined,
+  disabledReason: (action: string) => string | undefined,
+  selection: SubjectEntry | null,
+): string[] {
+  const reach = new Set(visible.map((action) => action.name));
+  const listed = ordinaryMenuItems(visible, subjects, true).flatMap((item) => (item.thing ? [item.thing] : []));
+  const things = [...(selection ? [selection] : []), ...listed];
+  const seen = new Set<string>();
+  // The list grows as menus name things of their own; each thing is opened once.
+  for (const thing of things) {
+    const key = `${thing.type}\u0000${thing.key}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    for (const item of selectionMenuItems(thing, subjects, metadataOf, disabledReason).items) {
+      if (item.thing) things.push(item.thing);
+      else reach.add(item.name);
+    }
+  }
+  return [...reach];
+}

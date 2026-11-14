@@ -837,4 +837,8 @@ describe('selectionsDiffer: a board whose marked selection is not the panel\'s (
     expect(selectionsDiffer(['Cards / 7'], 'Cards / 7', after)).toBeUndefined();
     expect(selectionsDiffer([], 'Cards / 7', after)).toBeUndefined();
   });
+
+  it('passes a board that draws the panel\'s selection twice, as a hand and a preview do (#1642 review F3)', () => {
+    expect(selectionsDiffer(['Cards / 7', 'Cards / 7'], 'Cards / 7', after)).toBeUndefined();
+  });
 });

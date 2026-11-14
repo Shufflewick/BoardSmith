@@ -372,9 +372,11 @@ export function startsOffThePanel(started: readonly StartedAction[], after: stri
  * they agree, or the board marks nothing, as a board drawing no selection does (#1642).
  */
 export function selectionsDiffer(board: readonly string[], panel: string | null, after: string): string | undefined {
-  if (board.length === 0 || (board.length === 1 && board[0] === panel)) return undefined;
+  // A board may draw its one selected thing in several places.
+  const marked = [...new Set(board)];
+  if (marked.length === 0 || (marked.length === 1 && marked[0] === panel)) return undefined;
   return (
-    `The board showed ${quoted(board)} selected while the Action Panel had ${panel === null ? 'nothing' : `"${panel}"`} selected, ${after}. ` +
+    `The board showed ${quoted(marked)} selected while the Action Panel had ${panel === null ? 'nothing' : `"${panel}"`} selected, ${after}. ` +
     'The board and the panel show one shared selection: select a thing with actionController.select(), and mark the thing ' +
     'actionController.selection names with selectedAttrs().'
   );
