@@ -174,10 +174,10 @@ async function onScreen(browser, hostUrl, viewport) {
       ]);
     });
 
-    await check(`${size}: closing the pick puts the bar back inside the strip`, async () => {
+    await check(`${size}: closing the pick puts the bar back inside a menu level's cap`, async () => {
       await close();
       const bar = await barGeometry(surface);
-      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(bar.top >= bar.menuStrip - 1, `the bar's top is at ${bar.top}, above a menu level's cap at ${bar.menuStrip}`);
     });
 
     // #1574: a value offered more than once ticks the copy clicked, and only the selected copies show ticked.

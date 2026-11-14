@@ -1754,7 +1754,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       role="status"
     >{{ ACTIONS_PENDING_TEXT }}</div>
 
-    <div v-else-if="!shownAction" class="action-buttons">
+    <div v-else-if="!shownAction" class="action-buttons" data-bs-menu-level>
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
@@ -1779,6 +1779,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         </button>
         <span class="action-menu-label">{{ menuBreadcrumb }}</span>
       </div>
+      <!-- At phone width the chrome (menu, seat, Back, where you are) ends its row here and the level is a grid under it (#1627). -->
+      <span class="menu-level-break" aria-hidden="true"></span>
       <div v-if="shownThing && menuNodes.length === 0" class="action-menu-label" role="status" data-bs-thing-empty>
         Nothing can be done with {{ shownThing.label }} right now.
       </div>
@@ -3383,10 +3385,59 @@ button {
   }
 }
 
+/* A menu level on a phone (#1627): the level's buttons are a grid of three
+   columns under the chrome row, so nine buttons are three rows, and a label
+   wraps whole, three lines to one 44px row, rather than being cut. PlayShell
+   lets a menu level take four rows here. On a short landscape screen a label
+   wraps to two lines instead of widening its button onto a second row, and
+   PlayShell lets the level take two. The fold's opened entries are not
+   direct children, so they keep their own width for their reasons. */
+.menu-level-break {
+  display: none;
+}
+
+@media (max-width: 639px) {
+  .menu-level-break {
+    display: block;
+    flex-basis: 100%;
+    height: 0;
+  }
+
+  [data-bs-menu-level] > .action-btn-group {
+    flex: 0 0 calc((100% - 16px) / 3);
+    min-width: 0;
+  }
+
+  [data-bs-menu-level] > .action-btn-group > .action-btn {
+    width: 100%;
+    min-width: 0;
+    padding: 1px 6px;
+    font-size: 0.75rem;
+    line-height: 14px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  [data-bs-menu-level] .action-menu-label {
+    flex: 1 1 2rem;
+    min-width: 0;
+    font-size: 0.8rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+}
+
 /* Short landscape screens reserve ONE row (PlayShell). A one-line field or a
    number field puts its label beside the field there instead of above it, so
    the field and its Done stay in that row rather than scrolling below it. */
 @media (orientation: landscape) and (max-height: 600px) {
+  [data-bs-menu-level] > .action-btn-group > .action-btn {
+    max-width: 15rem;
+    padding: 4px 12px;
+    line-height: 16px;
+    white-space: normal;
+  }
+
   .number-input,
   .text-input:not(.text-input-multiline) {
     flex-direction: row;

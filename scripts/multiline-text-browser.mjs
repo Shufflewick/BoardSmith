@@ -593,10 +593,10 @@ async function withEditorOpen(page, action, editor, body) {
 async function onASmallerScreen(browser, hostUrl, viewport) {
   const size = `${viewport.width}x${viewport.height}`;
   await onFreshPage(browser, hostUrl, { viewport }, (page) => waitForAction(page, 'setDescription'), async (page, surface) => {
-    await check(`${size}: at rest the bar sits inside its strip, without scrolling`, async () => {
+    await check(`${size}: at rest the bar sits inside a menu level's cap, without scrolling`, async () => {
       const bar = await barGeometry(surface);
-      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
-      assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit the strip`);
+      assert(bar.top >= bar.menuStrip - 1, `the bar's top is at ${bar.top}, above a menu level's cap at ${bar.menuStrip}`);
+      assert(!bar.scrolls, `the bar scrolls at rest (${bar.height}px tall): its actions do not fit a menu level's cap`);
     });
 
     // A one-line or number editor stacks label, hint and field + Done: three
@@ -680,11 +680,11 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
       assert(area !== null && area.height >= 40, `the box is ${Math.round(area?.height ?? 0)}px tall: not two lines`);
     });
 
-    await check(`${size}: closing the box puts the bar back inside the strip`, async () => {
+    await check(`${size}: closing the box puts the bar back inside a menu level's cap`, async () => {
       await surface.locator('.cancel-btn').click();
       await surface.locator('.text-input').waitFor({ state: 'detached', timeout: 10_000 });
       const bar = await barGeometry(surface);
-      assert(bar.top >= bar.strip - 1, `the bar's top is at ${bar.top}, above the strip at ${bar.strip}`);
+      assert(bar.top >= bar.menuStrip - 1, `the bar's top is at ${bar.top}, above a menu level's cap at ${bar.menuStrip}`);
     });
 
     // A refusal the player cannot see is the silent Done of #229 again: the
@@ -703,6 +703,8 @@ async function onASmallerScreen(browser, hostUrl, viewport) {
         ];
         const { bar, before, after } = await withEditorOpen(page, action, editor, async () => {
           await surface.locator(`${editor} textarea, ${editor} input`).first().fill(value);
+          // The press that opened the editor can leave the pointer where Done lands; its hover lift makes Playwright scroll to click it.
+          await page.mouse.move(0, 0);
           const before = await scrolled();
           await surface.locator(`${editor} .done-button`).click();
           await surface.locator(`${editor} .selection-error`).waitFor({ timeout: 10_000 });

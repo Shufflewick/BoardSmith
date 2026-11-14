@@ -209,7 +209,9 @@ export async function onEachPhone(browser, hostUrl, ready, body) {
  *
  * The bar floats over the board and is capped at `--bsg-panel-max` (two rows),
  * so `strip` is the line that cap puts its top at: "the bar fits its cap" is
- * `top >= strip` and "everything fits" is `!scrolls`. `regionHeight` is the
+ * `top >= strip` and "everything fits" is `!scrolls`. `menuStrip` is the same
+ * line for a menu level's own cap, `--bsg-panel-menu-max`, which is higher on a
+ * phone, so a bar at rest fits when `top >= menuStrip` (#1627). `regionHeight` is the
  * height of the board region's content box, what the board is fitted to, which no state of the bar may change.
  * `outside` names each of `selectors` (looked up inside the
  * bar) that is missing or not wholly in view inside the bar and the viewport;
@@ -225,11 +227,14 @@ export function barGeometry(surface, selectors = []) {
     const region = document.querySelector('.boardregion');
     const regionStyle = getComputedStyle(region);
     const frame = bar.parentElement;
-    // The cap resolved to px; the bar's own max-height grows while an editor is open.
-    const probe = frame.appendChild(document.createElement('div'));
-    probe.style.height = 'var(--bsg-panel-max)';
-    const strip = frame.getBoundingClientRect().bottom - probe.getBoundingClientRect().height;
-    probe.remove();
+    // A cap resolved to px; the bar's own max-height grows while an editor is open.
+    const lineOf = (cap) => {
+      const probe = frame.appendChild(document.createElement('div'));
+      probe.style.height = `var(${cap})`;
+      const line = frame.getBoundingClientRect().bottom - probe.getBoundingClientRect().height;
+      probe.remove();
+      return Math.round(line);
+    };
     const box = bar.getBoundingClientRect();
     const outside = selectors.filter((selector) => {
       const el = bar.querySelector(selector);
@@ -242,7 +247,8 @@ export function barGeometry(surface, selectors = []) {
       return el !== null && el.scrollWidth > el.clientWidth + 1;
     });
     return {
-      strip: Math.round(strip),
+      strip: lineOf('--bsg-panel-max'),
+      menuStrip: lineOf('--bsg-panel-menu-max'),
       regionHeight: region.clientHeight - parseFloat(regionStyle.paddingTop) - parseFloat(regionStyle.paddingBottom),
       top: Math.round(box.top),
       height: Math.round(box.height),
