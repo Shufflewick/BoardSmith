@@ -1511,6 +1511,11 @@ routinely mistaken for a way to turn the panel off:
 
 Design the board affordance as the primary path, not the only one.
 
+`boardsmith smoke` fails a board that starts a suppressed action while the panel
+offers others (#1642): the panel then has no start button for it, so a player
+using the panel alone cannot take it, which breaks the one-way parity rule. The
+method goes in #1643; until then, keep it off any action a board control starts.
+
 #### `.group()` and `.order()` arrange the start buttons
 
 A game with many simultaneously available verbs gives a rare administrative one

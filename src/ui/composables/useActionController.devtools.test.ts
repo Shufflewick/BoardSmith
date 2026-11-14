@@ -266,3 +266,54 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
     expect(events[0].detail.action).toBe('endTurn');
   });
 });
+
+describe('useActionController devtools CustomEvent (boardsmith:action-started)', () => {
+  /** The `boardsmith:action-started` events `run` fires. */
+  async function startedDuring(run: () => Promise<unknown>): Promise<Array<{ action: string; offered: string[] }>> {
+    const events: Array<{ action: string; offered: string[] }> = [];
+    const handler = (e: Event) => events.push((e as CustomEvent<{ action: string; offered: string[] }>).detail);
+    window.addEventListener('boardsmith:action-started', handler);
+    try {
+      await run();
+    } finally {
+      window.removeEventListener('boardsmith:action-started', handler);
+    }
+    return events;
+  }
+
+  function controllerOffering(actions: string[], suppressed: string[]) {
+    const metadata = createTestMetadata();
+    for (const name of suppressed) metadata[name] = { ...metadata[name], suppressFromActionPanel: true };
+    return useActionController({
+      sendAction: createMockSendAction(),
+      availableActions: ref(actions),
+      actionMetadata: ref(metadata),
+      isMyTurn: ref(true),
+      playerSeat: ref(0),
+    });
+  }
+
+  it('#1642: says what the Action Panel offers when an action starts, leaving out one suppressed from it', async () => {
+    const controller = controllerOffering(['playCard', 'attack'], ['attack']);
+
+    const events = await startedDuring(() => controller.start('attack'));
+
+    expect(events).toEqual([{ action: 'attack', offered: ['playCard'] }]);
+  });
+
+  it('#1642: counts every action as offered when all are suppressed, as the panel then shows them all', async () => {
+    const controller = controllerOffering(['playCard', 'attack'], ['playCard', 'attack']);
+
+    const events = await startedDuring(() => controller.start('playCard'));
+
+    expect(events).toEqual([{ action: 'playCard', offered: ['playCard', 'attack'] }]);
+  });
+
+  it('#1642: fires nothing for a start the controller refuses', async () => {
+    const controller = controllerOffering(['playCard'], []);
+
+    const events = await startedDuring(() => controller.start('attack'));
+
+    expect(events).toEqual([]);
+  });
+});

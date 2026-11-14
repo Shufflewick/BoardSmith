@@ -194,7 +194,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
-import.meta.glob(['./GameShell.vue', './PlayShell.vue', './auto-ui/ActionPanel.vue']);
+import.meta.glob(['./GameShell.vue', './PlayShell.vue', './auto-ui/ActionPanel.vue', '../composables/actionControllerHelpers.ts']);
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -206,9 +206,10 @@ describe('source: the guarantee lives in the filter, not in a shell guard', () =
   );
 
   it('ActionPanel falls back to the full list rather than rendering an empty Action Panel', () => {
-    expect(actionPanelSource).toMatch(
-      /unsuppressed\.length > 0 \? unsuppressed : actionsWithMetadata\.value/
-    );
+    // The panel's rule lives in panelOffer, which the controller's start record shares (#1642).
+    const helpersSource = fs.readFileSync(path.join(here, '..', 'composables', 'actionControllerHelpers.ts'), 'utf-8');
+    expect(actionPanelSource).toMatch(/visibleActions = computed\(\(\) => panelOffer\(actionsWithMetadata\.value\)\)/);
+    expect(helpersSource).toMatch(/unsuppressed\.length > 0 \? unsuppressed : actions/);
   });
 
   it('GameShell no longer gates the panel on suppression at all', () => {

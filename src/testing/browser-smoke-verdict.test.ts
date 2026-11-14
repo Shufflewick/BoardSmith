@@ -14,6 +14,8 @@ import {
   readyToTake,
   recordGreyed,
   recordResolved,
+  selectionsDiffer,
+  startsOffThePanel,
   SMOKE_SPEC_PATH,
   startAnswering,
   walkStopped,
@@ -796,5 +798,47 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect(w.errors).toHaveLength(1);
     expect(w.errors[0]).toContain('taking it failed: The "kindle" action could not be completed');
     expect(m.refused.get('kindle')).toBeUndefined();
+  });
+});
+
+describe('startsOffThePanel: an action started that the Action Panel did not offer (#1642)', () => {
+  const after = 'after the walk pressed the board\'s "Fast" at step 3 of the game dealt from seed "smoke"';
+
+  it('fails a start of an action the panel did not offer, naming it, the press and what the panel offered', () => {
+    expect(startsOffThePanel([{ action: 'vote', offered: ['draw', 'play'] }], after)).toEqual([
+      '"vote" started after the walk pressed the board\'s "Fast" at step 3 of the game dealt from seed "smoke", but the Action Panel ' +
+        'did not offer it then: it offered "draw", "play". Every action the board starts must be in the panel, so a player can take it ' +
+        'from the panel alone. Give it a place there: an action declared with .suppressFromActionPanel() has none.',
+    ]);
+  });
+
+  it('passes a start of an action the panel offered', () => {
+    expect(startsOffThePanel([{ action: 'draw', offered: ['draw', 'play'] }], after)).toEqual([]);
+  });
+});
+
+describe('selectionsDiffer: a board whose marked selection is not the panel\'s (#1642)', () => {
+  const after = 'after the walk pressed the board\'s "Card 7" at step 2';
+
+  it('fails a board that marks a thing while the panel has nothing selected', () => {
+    expect(selectionsDiffer(['Cards / 7'], null, after)).toBe(
+      'The board showed "Cards / 7" selected while the Action Panel had nothing selected, after the walk pressed the board\'s "Card 7" ' +
+        'at step 2. The board and the panel show one shared selection: select a thing with actionController.select(), and mark the ' +
+        'thing actionController.selection names with selectedAttrs().',
+    );
+  });
+
+  it('fails a board that marks another thing than the panel\'s, or more than the one', () => {
+    expect(selectionsDiffer(['Cards / 7'], 'Cards / 8', after)).toContain('while the Action Panel had "Cards / 8" selected,');
+    expect(selectionsDiffer(['Cards / 7', 'Cards / 8'], 'Cards / 8', after)).toContain('The board showed "Cards / 7", "Cards / 8" selected');
+  });
+
+  it('passes a board that marks the panel\'s selection, or marks nothing', () => {
+    expect(selectionsDiffer(['Cards / 7'], 'Cards / 7', after)).toBeUndefined();
+    expect(selectionsDiffer([], 'Cards / 7', after)).toBeUndefined();
+  });
+
+  it('passes a board that draws the panel\'s selection twice, as a hand and a preview do (#1642 review F3)', () => {
+    expect(selectionsDiffer(['Cards / 7', 'Cards / 7'], 'Cards / 7', after)).toBeUndefined();
   });
 });

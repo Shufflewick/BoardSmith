@@ -17,6 +17,17 @@ import type { SubjectChoice, SubjectSelectionBinding } from './useActionControll
 export const sameThing = (a: SubjectRef | null | undefined, b: SubjectRef | null | undefined): boolean =>
   !!a && !!b && a.type === b.type && a.key === b.key;
 
+/** How a selected thing is written on the page: its type and key, as the panel's thing buttons are. */
+export const thingMark = (thing: SubjectRef): string => `${thing.type} / ${thing.key}`;
+
+/**
+ * The attribute a board puts on the thing it shows selected, or none for no thing, so the smoke walk
+ * can fail a board whose selection is not the panel's (#1642). The single source of `data-bs-selected`.
+ */
+export function selectedAttrs(thing: SubjectRef | null | undefined): Record<string, string> {
+  return thing ? { 'data-bs-selected': thingMark(thing) } : {};
+}
+
 /** How a verb reaches a thing: the first-pick row that is it, the rows that belong to it, a later pick that takes one of its type, or `.about()`. */
 type ThingStart =
   | { kind: 'fill'; pick: string; value: unknown }
