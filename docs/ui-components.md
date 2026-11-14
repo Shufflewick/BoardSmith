@@ -2292,6 +2292,7 @@ A game that declares subject types ([Subject types](./actions-and-flow.md#subjec
 - **The panel follows the board.** A verb started from the board at a level the panel is not showing moves the panel to that level, so cancel lands there. An open action, auto-started or a follow-up, always shows in place of the menu.
 - **A selection the game keeps** in its own state (a world's open colony) is bound with `bindSubjectSelection`. If the game will not empty it, Back only makes the panel look away to the thing's list (`actionMenuAway`) while the board keeps its thing.
 - **In development**, a `start` that acts on a different thing than the shared selection throws, naming the action and both things. A thing that belongs to the selection, one of its related things, and the game's own selecting actions (`selects`) are not a mismatch.
+- **The board marks the thing it shows selected** with `selectedAttrs(thing)`, which puts `data-bs-selected="<type> / <key>"` on it, and the panel's root carries the shared selection the same way as `data-bs-selection`. After each press, `boardsmith smoke` fails a board whose marks are not the panel's selection (#1642). Mark what `actionController.selection` names, and the two agree. A board that marks nothing is not checked.
 
 A game that declares no subject type has no things and no selection, and its board and panel behave as before.
 

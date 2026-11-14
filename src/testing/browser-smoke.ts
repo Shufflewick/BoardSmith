@@ -76,6 +76,7 @@ import {
   readyToTake,
   recordGreyed,
   recordResolved,
+  selectionsDiffer,
   SMOKE_ANNOTATION,
   SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
@@ -88,12 +89,14 @@ import {
   smokeWalkLimit,
   smokeWorldSeats,
   startAnswering,
+  startsOffThePanel,
   walkStopped,
   type ResolvedAction,
   type ResolvedMemory,
   type SmokeInputs,
   type SmokeInputView,
   type SmokeWalk,
+  type StartedAction,
   type TypedValue,
 } from './browser-smoke-verdict.js';
 
@@ -194,7 +197,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const memories: WalkMemory[] = [];
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
-    await recordResolvedActions(page);
+    await recordActionEvents(page);
     await page.addInitScript(tracePointerWork);
     startClock(page);
     try {
@@ -315,25 +318,69 @@ function watchForErrors(page: Page, walk: SmokeWalk): void {
   });
 }
 
-/** Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainResolved}. */
-async function recordResolvedActions(page: Page): Promise<void> {
+/** Keeps every `boardsmith:action-resolved` and `boardsmith:action-started` (#1642) event a frame fires, for {@link drainThePage}. */
+async function recordActionEvents(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    const resolved: unknown[] = [];
-    Object.defineProperty(window, '__boardsmithSmokeResolved', { value: resolved });
-    window.addEventListener('boardsmith:action-resolved', (event) => resolved.push((event as CustomEvent).detail));
+    for (const [event, log] of [['boardsmith:action-resolved', '__boardsmithSmokeResolved'], ['boardsmith:action-started', '__boardsmithSmokeStarted']] as const) {
+      const kept: unknown[] = [];
+      Object.defineProperty(window, log, { value: kept });
+      window.addEventListener(event, (fired) => kept.push((fired as CustomEvent).detail));
+    }
   });
 }
 
-/** The actions resolved in `frame` since the last call, recorded (`recordResolved`): taken ones taken, failed ones reported. */
-async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
-  const resolved = await inPageTime(frame.page(), 'reading the actions resolved', () =>
-    frame.evaluate(() => {
-      const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
-      return log.splice(0, log.length) as ResolvedAction[];
+/** What `frame` did since the last look: the actions it started and resolved, and the selection its board and panel show. */
+interface PageDid {
+  readonly resolved: ResolvedAction[];
+  readonly started: StartedAction[];
+  /** What the board marks selected (`selectedAttrs`). */
+  readonly marked: string[];
+  /** The panel's shared selection, null for none; undefined when no panel is on the page. */
+  readonly selection: string | null | undefined;
+}
+
+/**
+ * What `frame` did since the last call, recorded: each action it started that the Action Panel did not
+ * offer, and a board selection that is not the panel's (#1642), are reported after the press that
+ * led there (`WalkMemory.lastPress`); the actions resolved are recorded (`recordResolved`). Returns
+ * how many resolved.
+ */
+async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
+  const page = frame.page();
+  const did = await inPageTime(page, 'reading what the page did', () =>
+    frame.evaluate((): PageDid => {
+      const take = (log: string) => {
+        const kept = (window as unknown as Record<string, unknown[] | undefined>)[log] ?? [];
+        return kept.splice(0, kept.length);
+      };
+      const panel = document.querySelector('.action-panel-root');
+      return {
+        resolved: take('__boardsmithSmokeResolved') as ResolvedAction[],
+        started: take('__boardsmithSmokeStarted') as StartedAction[],
+        marked: [...document.querySelectorAll('[data-testid="bs-board"] [data-bs-selected]')].map((thing) => thing.getAttribute('data-bs-selected') ?? ''),
+        selection: panel === null ? undefined : panel.getAttribute('data-bs-selection'),
+      };
     }),
   );
-  recordResolved(resolved, walk, memory, browserNames.get(frame.page()));
-  return resolved.length;
+  const after = memory.lastPress.get(page) ?? `before the walk pressed anything, ${stepWhere(memory)}`;
+  for (const problem of startsOffThePanel(did.started, after)) noteIn(page, walk, problem);
+  if (did.selection !== undefined) noteASelectionApart(page, walk, memory, did.marked, did.selection, after);
+  recordResolved(did.resolved, walk, memory, browserNames.get(page));
+  return did.resolved.length;
+}
+
+/** Reports the board's marked selection when it is not the panel's (`selectionsDiffer`), once for each time the two change. */
+function noteASelectionApart(page: Page, walk: SmokeWalk, memory: WalkMemory, marked: readonly string[], selection: string | null, after: string): void {
+  const seen = JSON.stringify([marked, selection]);
+  if (memory.selections.get(page) === seen) return;
+  memory.selections.set(page, seen);
+  const problem = selectionsDiffer(marked, selection, after);
+  if (problem !== undefined) noteIn(page, walk, problem);
+}
+
+/** "at step 3 of the game dealt from seed "smoke"", or "at step 3" in a world: where the walk is now. */
+function stepWhere(memory: WalkMemory): string {
+  return `at step ${memory.step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
 }
 
 /** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
@@ -551,7 +598,7 @@ async function seatTheWorld(
       seated = await opened.newPage();
       browserNames.set(seated, `In seat ${seat}'s browser: `);
       watchForErrors(seated, walk);
-      await recordResolvedActions(seated);
+      await recordActionEvents(seated);
       await seated.addInitScript(tracePointerWork);
       startClock(seated);
       await seated.goto('/', { waitUntil: 'commit' });
@@ -799,6 +846,7 @@ function toastOnTop(error: unknown): unknown {
  * reported. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<boolean> {
+  memory.lastPress.set(control.frame.page(), `after the walk pressed ${what} ${stepWhere(memory)}`);
   const replaced = `Pressing ${what} replaced the game's page, so the walk could not see what the press did.`;
   // A page that redraws the control as a new element mid-press takes away the element marked for
   // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
@@ -1510,7 +1558,7 @@ async function finishOpenAction(
 ): Promise<void> {
   const reopened = play.resolvedOpen === name;
   const answering: Answering = { frame, walk, memory, name, step, otherSeats, picked: new Set(), refused: new Set(), reopened };
-  const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
+  const where = stepWhere(memory);
   const trail = startAnswering(name, where, await openActionState(frame));
   memory.typed.delete(name);
   if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
@@ -1523,7 +1571,7 @@ async function finishOpenAction(
     }
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
-    if ((await drainResolved(frame, walk, memory)) > 0) {
+    if ((await drainThePage(frame, walk, memory)) > 0) {
       play.resolvedOpen = name;
       return;
     }
@@ -1850,6 +1898,12 @@ interface WalkMemory extends ResolvedMemory {
   readonly wentAway: Map<string, number>;
   /** The actions put off for want of an input (#470), with how many actions had been taken then. */
   readonly putOff: Map<string, number>;
+  /** The step the walk is taking. */
+  step: number;
+  /** The last press in each browser and where, said of what the page does next (#1642). */
+  readonly lastPress: Map<Page, string>;
+  /** The board's marked selection and the panel's as each browser last showed them, so a disagreement is reported once (#1642). */
+  readonly selections: Map<Page, string>;
 }
 
 function newMemory(seed: string | null): WalkMemory {
@@ -1874,6 +1928,9 @@ function newMemory(seed: string | null): WalkMemory {
     typed: new Map(),
     moves: 0,
     putOff: new Map(),
+    step: 0,
+    lastPress: new Map(),
+    selections: new Map(),
   };
 }
 
@@ -2036,7 +2093,7 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
   const frame = await gameFrame(play.page);
   await settle(frame);
   acting.now = play.seat;
-  await drainResolved(frame, walk, memory);
+  await drainThePage(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
   if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator(GAME_OVER).isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
@@ -2143,6 +2200,7 @@ async function walkOneStep(plays: readonly SeatPlay[], walk: SmokeWalk, memory: 
 async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   let idle = 0;
   for (let step = 1; step <= walk.steps && idle < IDLE_STEPS; step++) {
+    memory.step = step;
     try {
       const seenBefore = walk.offered.size + memory.pressed.size;
       if (!(await walkOneStep(plays, walk, memory, step))) break;
@@ -2158,7 +2216,7 @@ async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: 
   for (const play of plays) {
     const frame = await gameFrame(play.page);
     await settle(frame);
-    await drainResolved(frame, walk, memory);
+    await drainThePage(frame, walk, memory);
     await noteErrorToasts(frame, walk, memory);
   }
   // Errors the last press raised reach the page's listeners a moment after it; let them land.

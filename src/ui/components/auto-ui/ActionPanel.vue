@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, panelOffer, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -49,7 +49,7 @@ import {
   type ActionMenuNode,
 } from './action-menu.js';
 import { ordinaryMenuItems, selectionMenuItems, type FoldedVerb, type PanelMenuItem } from './subject-menu.js';
-import { sameThing } from '../../composables/sharedSelection.js';
+import { sameThing, thingMark } from '../../composables/sharedSelection.js';
 import type { SubjectEntry } from '../../../engine/action/subject-index.js';
 import type { SubjectRef } from '../../../types/protocol.js';
 // The engine's own validators, reached the way `action-panel-helpers.ts`
@@ -328,10 +328,7 @@ const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
 // that disagreed about arrangement would have made "grouping remains effective
 // when no ungrouped action is available" false in exactly the case the fallback
 // fires.
-const visibleActions = computed(() => {
-  const unsuppressed = actionsWithMetadata.value.filter(a => !a.suppressFromActionPanel);
-  return unsuppressed.length > 0 ? unsuppressed : actionsWithMetadata.value;
-});
+const visibleActions = computed(() => panelOffer(actionsWithMetadata.value));
 
 // ── The start-button hierarchy (#228) ──────────────────────────────────────
 //
@@ -358,6 +355,7 @@ const subjects = computed(() => actionController.subjects.value);
 const menuAway = actionController.actionMenuAway;
 /** The thing whose own menu the panel draws, or null for the ordinary menu. */
 const shownThing = computed(() => (menuAway.value ? null : actionController.selection.value));
+const selectionMark = computed(() => (actionController.selection.value ? thingMark(actionController.selection.value) : undefined));
 const metadataOf = (name: string) => actionsWithMetadata.value.find((a) => a.name === name);
 const thingMenu = computed(() => shownThing.value
   ? selectionMenuItems(shownThing.value, subjects.value, metadataOf, disabledReasonOf)
@@ -1696,8 +1694,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
        land on it. `display: contents` keeps it out of the action bar's flow.
        `data-bs-submitting` marks an action or a pick step in flight (#1595), so a
        reader can wait it out rather than read a panel that offers nothing or
-       press a choice already sent (the smoke walk, #474). -->
-  <div class="action-panel-root" :data-bs-submitting="isSubmitting || undefined">
+       press a choice already sent (the smoke walk, #474). `data-bs-selection`
+       is the shared selection, which the walk holds a board's mark to (#1642). -->
+  <div class="action-panel-root" :data-bs-submitting="isSubmitting || undefined" :data-bs-selection="selectionMark">
   <!-- The host's deadline (#301), whatever else the panel is showing. A
        `timer` is not a live region, so the per-second change is never
        announced; a reader finds it by moving to it. -->
@@ -1768,7 +1767,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           {{ heldFollowUpButton.prompt }}
         </button>
       </div>
-      <div v-if="menuLevel.group || shownThing" class="action-menu-header" :data-bs-thing-level="shownThing ? `${shownThing.type} / ${shownThing.key}` : undefined">
+      <div v-if="menuLevel.group || shownThing" class="action-menu-header" :data-bs-thing-level="shownThing ? thingMark(shownThing) : undefined">
         <button
           class="action-btn menu-back-btn"
           data-bs-menu-back
@@ -1808,7 +1807,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <button
           v-else-if="node.item.thing"
           class="action-btn action-group-btn"
-          :data-bs-thing="`${node.item.thing.type} / ${node.item.thing.key}`"
+          :data-bs-thing="thingMark(node.item.thing)"
           @click="pressThing(node.item.thing)"
         >
           {{ node.item.thing.label }} <span aria-hidden="true">&rsaquo;</span>

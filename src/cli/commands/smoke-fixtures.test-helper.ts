@@ -2415,3 +2415,105 @@ defineSmokeTest({
 });
 `;
 }
+
+/**
+ * A BOARD THAT STARTS AN ACTION THE PANEL DOES NOT OFFER (#1642): each turn offers `draw` and `vote`,
+ * `vote` declared with `.suppressFromActionPanel()`, and the board's "Vote" button starts it, so a
+ * player using the panel alone can never vote.
+ */
+export function boardThatStartsAHiddenAction(): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('vote')
+      .prompt('Vote to speed up')
+      .suppressFromActionPanel()
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'vote'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" :disabled="!props.availableActions.includes('vote')" @click="props.actionController.start('vote')">Vote</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'vote'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
+  };
+}
+
+/**
+ * A BOARD THAT SHOWS A CARD SELECTED (#1642), for the ace game: pressing "Card 7" selects the seven
+ * and the board marks it with `selectedAttrs`. With `shared` the board selects it through the shared
+ * selection and marks what that names, as a board should; without, it keeps the card in a ref of its
+ * own, so the board shows the seven selected while the panel has nothing selected.
+ */
+export function boardThatSelectsACard({ shared }: { shared: boolean }): Record<string, string> {
+  const choose = shared ? "props.actionController.select({ type: 'Cards', key: '7', label: 'Card 7' })" : "own.value = { type: 'Cards', key: '7' }";
+  const marked = shared ? 'props.actionController.selection.value' : 'own';
+  return {
+    ...aceGame(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+import { selectedAttrs, type TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const own = ref<{ type: string; key: string } | null>(null);
+function choose() {
+  ${choose};
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" v-bind="selectedAttrs(${marked})" @click="choose">Card 7</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
+  };
+}

@@ -104,6 +104,8 @@ export {
   // controller's offered choice) and named so the two can't be confused.
   type BoardTarget,
 } from './composables/useBoardInteraction.js';
+// #1642: a board marks the thing it shows selected, so the smoke walk can hold it to the panel's selection.
+export { selectedAttrs } from './composables/sharedSelection.js';
 
 // Keyboard operability for custom boards: the same click+keydown+ARIA wiring
 // the library's own board renderers use, so a hand-written board gets a real

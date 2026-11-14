@@ -19,6 +19,7 @@ import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
 import { DICE, Die, TOWERS, Tower, WorkshopGame } from './shared-selection.test-helper.js';
 import type { SubjectChoice } from './useActionControllerTypes.js';
 import { setupDragDropOrchestration } from './useDragDropTargets.js';
+import { selectedAttrs } from './sharedSelection.js';
 
 const mounted: VueWrapper[] = [];
 afterEach(() => {
@@ -223,5 +224,12 @@ describe('a start with every pick given, around the send (#1641 review F1, F2)',
     await Promise.resolve();
     expect(sent).toEqual(['move']);
     expect(heard).toEqual(['before move', 'after true']);
+  });
+});
+
+describe('a board marking its selected thing (#1642)', () => {
+  it('marks a thing with its type and key, and nothing at all for no thing', () => {
+    expect(selectedAttrs({ type: 'Dice', key: '7' })).toEqual({ 'data-bs-selected': 'Dice / 7' });
+    expect(selectedAttrs(null)).toEqual({});
   });
 });

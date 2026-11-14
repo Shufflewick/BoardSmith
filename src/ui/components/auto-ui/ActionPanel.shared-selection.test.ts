@@ -24,6 +24,7 @@ import { BOARD_INTERACTION_KEY } from '../../composables/useBoardInteraction.js'
 import { mountLiveSeat, settle } from '../../composables/table-wiring.test-helper.js';
 import { DICE, DiceTrayGame, Die, TOWERS, Tower, WorkshopGame } from '../../composables/shared-selection.test-helper.js';
 import type { SubjectChoice } from '../../composables/useActionControllerTypes.js';
+import { selectedAttrs } from '../../composables/sharedSelection.js';
 
 const mounted: VueWrapper[] = [];
 afterEach(() => {
@@ -100,6 +101,20 @@ describe('the panel with nothing selected (#1641)', () => {
     await press(wrapper, 'blue showing 1');
     expect(controller.selection.value).toMatchObject({ type: 'Dice', label: 'blue showing 1' });
     expect(heading(wrapper)).toBe('Dice / blue showing 1');
+  });
+});
+
+describe('the shared selection on the page (#1642)', () => {
+  it('marks the panel with the selected thing as a board marks it with selectedAttrs, and with nothing when none is', async () => {
+    const { wrapper, controller, die } = await panel(WorkshopGame);
+    const root = () => wrapper.get('.action-panel-root').attributes('data-bs-selection');
+    expect(root()).toBeUndefined();
+    controller.select(die('red'));
+    await settle();
+    expect(root()).toBe(selectedAttrs(die('red'))['data-bs-selected']);
+    controller.select(null);
+    await settle();
+    expect(root()).toBeUndefined();
   });
 });
 
