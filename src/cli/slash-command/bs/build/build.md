@@ -241,8 +241,8 @@ panel, and switching it off without the client is exactly the never-suppress-bui
 named in "## Boundaries" above. Never CSS-hide the panel either: that leaves operable controls in
 the tab order with nothing visible, which is strictly worse.
 
-No action's start button can be hidden from the Action Panel: every action a player can take is
-in it, and there is no per-action way to drop one.
+No action can be hidden from the Action Panel: every action a player can take is in it, and there
+is no per-action way to drop one.
 
 If the panel is CROWDED — many verbs available at once, and the rare ones
 sitting as prominently as the ones the player takes every turn — the mechanism is

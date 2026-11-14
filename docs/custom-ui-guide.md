@@ -47,7 +47,7 @@ and they cannot drift. If you find yourself keeping a
 second, board-local copy of "what is selectable right now", that copy is the
 bug.
 
-Every action has a start button in the panel; no action can be hidden from it.
+No action can be hidden from the panel.
 `boardsmith smoke` holds a board to the shared selection (#1642). It fails a
 board whose marked selection is not the panel's: mark the thing your board shows selected with
 `selectedAttrs()` (see [The shared selection](./ui-components.md#the-shared-selection)).

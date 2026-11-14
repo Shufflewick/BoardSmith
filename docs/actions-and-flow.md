@@ -1485,11 +1485,12 @@ A custom board reads the same flag off the same metadata
 about which verb is the dangerous one -- the parity rule above applies to
 emphasis exactly as it applies to everything else.
 
-#### Every action has a start button
+#### No action can be hidden from the Action Panel
 
-There is no way to hide an action from the Action Panel. A board control is in
-addition to the panel's button, never instead of it, so a player using the panel
-alone can take every action the board can. A panel crowded with buttons is
+Every action a player can take is in the panel, as its own start button or on
+the menu of a thing it is about. A board control is in addition to the panel,
+never instead of it, so a player using the panel alone can take every action the
+board can. A panel crowded with buttons is
 arranged with `.group()` and `.order()` below, which hide nothing.
 
 #### `.group()` and `.order()` arrange the start buttons

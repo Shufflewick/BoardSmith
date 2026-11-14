@@ -1293,7 +1293,7 @@ describe('SKILLDEF-03 — fenced escape hatch', () => {
   it('build.md says no action can be hidden from the Action Panel (#1643)', () => {
     const build = read('build/build.md');
     expect(build).not.toContain(SUPPRESS_FROM_ACTION_PANEL);
-    expect(build).toMatch(/No action's start button can be hidden from the Action Panel/);
+    expect(build).toMatch(/No action can be hidden from the Action Panel/);
   });
 
   it('build.md never references the retired suppressActionPanel name', () => {
