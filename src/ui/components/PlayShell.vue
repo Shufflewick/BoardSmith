@@ -742,7 +742,7 @@ const mobileToggleLabel = computed(() => {
 
   /* A menu level's ceiling (#1627): the strip, raised on a phone so a whole
      level is in view (see the phone and short-landscape tiers). A level has
-     no board pick open, so the extra rows cover board the player can scroll. */
+     no board pick open, and the board's scroll room covers what it adds. */
   --bsg-panel-menu-max: var(--bsg-panel-max);
 
   /* The exceptions to that cap: a typed editor (#229, #237) and a choice
@@ -1025,16 +1025,17 @@ const mobileToggleLabel = computed(() => {
   overflow-y: auto;
 }
 
+/* A menu level has its own cap (#1627), the strip but on a phone. */
+.actionbar:has([data-bs-menu-level]) {
+  max-height: var(--bsg-panel-menu-max);
+}
+
 /* While a typed editor or a choice list is open, and only then,
    the bar may grow past the strip (see --bsg-panel-editor-max). Keyed on the
    pick's own mark, so the exception lives exactly as long as the pick's DOM:
    submitting, cancelling or putting the bar down all unmount it and the strip
    cap is back. `max()` so a very short screen can never cap the bar below the
    strip itself. */
-.actionbar:has([data-bs-menu-level]) {
-  max-height: var(--bsg-panel-menu-max);
-}
-
 .actionbar:has([data-bs-grows-panel="box"]) {
   max-height: max(var(--bsg-panel-max), var(--bsg-panel-editor-max));
 }
@@ -1311,11 +1312,10 @@ const mobileToggleLabel = computed(() => {
   }
   /* A pick keeps the two-row cap, and ActionPanel compacts its own layout at
      this width to fit it (issue 444). A menu level is a grid of three columns
-     here (ActionPanel), so four rows hold the chrome row and nine buttons. Four
-     gaps: the break that ends the chrome row is a flex line of its own. */
+     here (ActionPanel) whose labels wrap whole, so no row count holds it: it
+     grows the bar to what it needs, bounded at half the screen's height. */
   .game-shell__game {
-    --bsg-panel-menu-max: calc(4 * var(--bsg-panel-row) + 4 * var(--bsg-panel-gap)
-                               + 2 * var(--bsg-panel-pad) + var(--bsg-safe-bottom));
+    --bsg-panel-menu-max: max(var(--bsg-panel-max), 50dvh);
   }
 }
 

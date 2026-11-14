@@ -1325,9 +1325,11 @@ What follows for a custom board:
   the chosen items and wraps the prompt beside its control), and on a step with
   more than fits, it scrolls inside the cap. A menu level (the list of actions
   to take, or a group's) has its own cap, `--bsg-panel-menu-max`, so a whole
-  level is in view: at phone width its buttons are three columns under the
-  row of menu, seat and Back, and it may take four rows; on a short landscape
-  screen it may take two. The other exceptions are a typed
+  level is in view: on an upright phone its buttons and Undo are three columns
+  under the row of menu, seat and Back, each label wrapped whole, and it may
+  grow the panel to what it needs, bounded at half the screen's height; on a
+  short landscape screen its labels wrap to two lines and it may take two rows.
+  The other exceptions are a typed
   editor (a text or number pick) and a choice list (a `chooseFrom` pick's
   buttons, an `orderedList`'s Adds, a multiSelect's checkboxes, or an element
   pick's list): while one is open the panel may grow past the cap. A choice

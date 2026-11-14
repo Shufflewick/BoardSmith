@@ -9,7 +9,10 @@
  * three columns at phone width and may take four rows there (two on a short
  * landscape screen), so a whole level is in view, and the board's scroll room
  * covers the taller bar. jsdom lays nothing out, so only a real browser can see
- * which buttons are on screen.
+ * which buttons are on screen. A sentence-long label takes four or five lines
+ * at 360px, so a level's rows are taller than a control row there (#1627
+ * review F5), and a landscape phone narrower than 640px lays a level out as the
+ * short-landscape tier does, not as the upright phone's grid (review F3).
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-menu-phone-browser.mjs`; a missing Chromium says to run
@@ -27,7 +30,7 @@ import {
   waitForAction,
 } from './browser-harness.mjs';
 
-/** Example Legacy's three verbs at the top, Example MUD's four in a group, and a level of seven. */
+/** Example Legacy's three verbs at the top, Example MUD's four in a group, a level of seven and one of five short ones. */
 const RULES = `import { Game, Player, Space } from 'boardsmith';
 import type { GameElement, GameOptions } from 'boardsmith';
 import type { GameDefinition } from 'boardsmith/session';
@@ -74,6 +77,7 @@ export const gameDefinition: GameDefinition = {
       verb('pray', 'Pray for fair weather', 'Camp'),
       verb('sleep', 'Sleep until dawn', 'Camp'),
       verb('scout', 'Scout the next ford', 'Camp'),
+      ...['Buy salt', 'Sell hides', 'Barter', 'Haggle', 'Give a gift'].map((prompt, i) => verb('trade' + i, prompt, 'Trade')),
     ],
   },
 };
@@ -92,9 +96,16 @@ export default defineComponent({
 `;
 
 const TOP = ['haul', 'forage', 'mend'].map((name) => `[data-bs-action="${name}"]`)
-  .concat(['Wander', 'Camp'].map((group) => `[data-bs-action-group="${group}"]`));
+  .concat(['Wander', 'Camp', 'Trade'].map((group) => `[data-bs-action-group="${group}"]`));
 const WANDER = ['[data-bs-menu-back]', ...['look', 'walk', 'say', 'note'].map((name) => `[data-bs-action="${name}"]`)];
 const CAMP = ['[data-bs-menu-back]', ...['sing', 'rest', 'cook', 'fish', 'pray', 'sleep', 'scout'].map((name) => `[data-bs-action="${name}"]`)];
+const TRADE = ['[data-bs-menu-back]', ...[0, 1, 2, 3, 4].map((i) => `[data-bs-action="trade${i}"]`)];
+const LEVELS = {
+  top: ['the top level', TOP],
+  wander: ['the Wander level', WANDER, 'Wander'],
+  camp: ['the seven-action Camp level', CAMP, 'Camp'],
+  trade: ['the five-action Trade level', TRADE, 'Trade'],
+};
 
 await runBrowserRegression(
   {
@@ -116,7 +127,13 @@ async function driveThrough({ launch, hostUrl }) {
   const browser = await launch();
   try {
     const ready = (page) => waitForAction(page, 'haul');
-    await onEachPhone(browser, hostUrl, ready, (page, size) => everyLevelInView(surfaceOf(page), size));
+    const all = Object.values(LEVELS);
+    const player = await onEachPhone(browser, hostUrl, ready, (page, size) => everyLevelInView(surfaceOf(page), size, all));
+    // An upright phone narrower than 390px, and a landscape one narrower than the grid's 640px (iPhone SE).
+    for (const [viewport, levels] of [[{ width: 360, height: 740 }, all], [{ width: 568, height: 320 }, [LEVELS.trade]]]) {
+      const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
+      await onFreshPage(browser, hostUrl, phone, ready, (page) => everyLevelInView(surfaceOf(page), `${viewport.width}x${viewport.height}`, levels));
+    }
     await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 } }, ready, async (_page, surface) => {
       await check('1440x900: the top level stays inside the two-row strip', async () => {
         const bar = await barGeometry(surface, TOP);
@@ -130,8 +147,7 @@ async function driveThrough({ launch, hostUrl }) {
   return summarise('for a menu level in the Action Panel on a phone');
 }
 
-async function everyLevelInView(surface, size) {
-  const levels = [['the top level', TOP], ['the Wander level', WANDER, 'Wander'], ['the seven-action Camp level', CAMP, 'Camp']];
+async function everyLevelInView(surface, size, levels) {
   for (const [name, selectors, group] of levels) {
     await check(`${size}: every button of ${name} is in view without scrolling, its labels whole`, async () => {
       if (group) await surface.locator(`[data-bs-action-group="${group}"]`).click();

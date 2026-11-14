@@ -3385,25 +3385,26 @@ button {
   }
 }
 
-/* A menu level on a phone (#1627): the level's buttons are a grid of three
-   columns under the chrome row, so nine buttons are three rows, and a label
-   wraps whole, three lines to one 44px row, rather than being cut. PlayShell
-   lets a menu level take four rows here. On a short landscape screen a label
-   wraps to two lines instead of widening its button onto a second row, and
-   PlayShell lets the level take two. The fold's opened entries are not
-   direct children, so they keep their own width for their reasons. */
+/* A menu level on a phone held upright (#1627): the level's buttons and Undo
+   are a grid of three columns under the chrome row, so nine are three rows,
+   and a label wraps whole rather than being cut. PlayShell lets a menu level
+   grow to what it needs here, within a bound. On a short landscape screen,
+   however narrow, a label wraps to two lines instead (below). The fold's
+   opened entries are not direct children, so they keep their own width for
+   their reasons. */
 .menu-level-break {
   display: none;
 }
 
-@media (max-width: 639px) {
+@media (max-width: 639px) and (orientation: portrait) {
   .menu-level-break {
     display: block;
     flex-basis: 100%;
     height: 0;
   }
 
-  [data-bs-menu-level] > .action-btn-group {
+  [data-bs-menu-level] > .action-btn-group,
+  [data-bs-menu-level] > .undo-btn {
     flex: 0 0 calc((100% - 16px) / 3);
     min-width: 0;
   }
@@ -3411,14 +3412,14 @@ button {
   [data-bs-menu-level] > .action-btn-group > .action-btn {
     width: 100%;
     min-width: 0;
-    padding: 1px 6px;
-    font-size: 0.75rem;
-    line-height: 14px;
+    padding: 4px 6px;
+    font-size: 0.8rem;
+    line-height: 15px;
     white-space: normal;
     overflow-wrap: anywhere;
   }
 
-  [data-bs-menu-level] .action-menu-label {
+  .action-menu-header .action-menu-label {
     flex: 1 1 2rem;
     min-width: 0;
     font-size: 0.8rem;
