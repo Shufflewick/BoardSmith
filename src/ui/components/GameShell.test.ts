@@ -167,6 +167,22 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
     }
   });
 
+  it('still toasts a failure the board finds itself while the connection shows as stale (#1649)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper } = await mountRefusingTable();
+      window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
+      vi.advanceTimersByTime(10_001);
+      await wrapper.get('[data-bs-action="move"]').trigger('click');
+      await flushPromises();
+      await wrapper.get('[data-testid="bad-move"]').trigger('click');
+      await flushPromises();
+      expect(shownToasts()).toEqual([['error', 'Invalid selection for "to"']]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('tells a refusal that gives no reason in words, never undefined', async () => {
     const { wrapper, posted, assertive } = await mountRefusingTable();
     await refusePass(wrapper, posted, {});

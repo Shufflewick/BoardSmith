@@ -48,9 +48,9 @@ export interface TeachingActionsOptions {
    * pass for every game in the catalogue -- nothing could be published at all.
    * `GameShell` is a `.vue` file, so plain `tsc` never saw it; only a consumer
    * running `vue-tsc` did. Deriving the type is what keeps the copy from
-   * drifting again.
+   * drifting again. `error` alone is the shell's, which may hold back a refusal the connection dot explains (#1649).
    */
-  toast: Pick<ReturnType<typeof useToast>, 'show' | 'error' | 'remove'>;
+  toast: Pick<ReturnType<typeof useToast>, 'show' | 'remove'> & { error: (message: string) => void };
 }
 
 interface TeachingActionsReturn {

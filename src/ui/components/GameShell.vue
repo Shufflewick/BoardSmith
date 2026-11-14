@@ -495,19 +495,25 @@ const platformTransport = usePlatformTransport({
   boundaryState: () => state.value?.flowState as BoundaryKeyState | null | undefined,
 });
 
-function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
-  return platformTransport.request(op, payload);
+// The host sends heartbeats only while its socket is open, so a refusal that arrives while stale is the disconnect's own (#1649).
+const disconnectRefusals = new Set<string>();
+
+async function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
+  const result = await platformTransport.request(op, payload);
+  const reply = readHostReply(result);
+  if (!reply.accepted && reply.error && connectionHealth.value === 'stale') disconnectRefusals.add(reply.error);
+  return result;
 }
 
-/** Toast a failed request, unless the stale connection dot already says why it failed (#1649). */
-function toastRequestError(text: string): void {
-  if (connectionHealth.value !== 'stale') toast.error(text);
+/** Toast an error, unless it is a refusal the stale connection dot already explains (#1649). */
+function toastError(text: string): void {
+  if (!disconnectRefusals.has(text)) toast.error(text);
 }
 
 /** Show the player a host refusal; the transport resolves one rather than rejecting. */
 function toastRefusal(result: Record<string, unknown>, failed: string, unsupported?: string): void {
   const refusal = hostRefusal(result, failed, unsupported);
-  if (refusal) toastRequestError(refusal);
+  if (refusal) toastError(refusal);
 }
 
 // Board interaction state (shared between ActionPanel and game board)
@@ -952,7 +958,7 @@ const { handleTeachingAction } = useTeachingActions({
   isHeatmapVisible: () => isHeatmapVisibleProp.value,
   heatmapPending,
   heatmapToggling,
-  toast,
+  toast: { show: toast.show, remove: toast.remove, error: toastError },
 });
 
 // Gate for the game UI (the registry's board component): it must
@@ -1125,6 +1131,7 @@ if (inHost) {
         data.type === 'heartbeat'
       ) {
         connectionHealth.value = 'connected';
+        disconnectRefusals.clear();
         if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
         heartbeatTimer = setTimeout(() => {
           connectionHealth.value = 'stale';
@@ -1284,7 +1291,7 @@ watch(actionController.errorTick, () => {
   const text = typeof err === 'string' && err.length > 0
     ? err
     : `${actionController.currentAction.value ?? 'Action'} failed — try again or check the current selection.`;
-  toastRequestError(text);
+  toastError(text);
   announcer.announce(text, { assertive: true });
 }, { immediate: false });
 
