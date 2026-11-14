@@ -11,7 +11,7 @@
  * `server_request`, the host answers it, and the toast is read off the one
  * global toast list.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
 import { useToast } from '../composables/useToast.js';
@@ -127,6 +127,27 @@ describe('GameShell shows a host refusal of undo and the debug ops (#859)', () =
     expect(shownToasts()).toEqual([['error', 'Nothing to undo.']]);
   });
 
+  it('toasts no undo refusal while the connection already shows as stale (#1649)', async () => {
+    // Only the timers the heartbeat uses, so flushPromises keeps its real setImmediate.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted } = await mountTableWithDebugPanel(Board);
+      mounted.push(wrapper);
+      fromHost({ type: 'heartbeat' });
+      vi.advanceTimersByTime(10_001);
+      await nextTick();
+      expect(wrapper.find('[data-testid="bs-connection"]').classes()).toContain('stale');
+
+      wrapper.findComponent(PlayShell).vm.$emit('undo');
+      await flushPromises();
+      answerer(posted)('undo', { success: false, error: 'You are not connected to the table right now, so this was not sent.' });
+      await flushPromises();
+      expect(shownToasts()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it.each([
     ['debug:switch-seat', 'switch-player', [2]],
     ['debug:restart', 'restart-game', []],
@@ -144,6 +165,23 @@ describe('GameShell shows a host refusal of undo and the debug ops (#859)', () =
 describe('GameShell shows the host\'s reason for refusing a hint or heatmap (#952)', () => {
   // The host's refusal of a result worked out on a position the game has since left (#742).
   const stale = 'The game moved on while this was being worked out. Ask again for the position as it is now.';
+
+  it('toasts no hint refusal while the connection already shows as stale (#1649)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted } = await mountTableWithDebugPanel(Board);
+      mounted.push(wrapper);
+      fromHost({ type: 'heartbeat' });
+      vi.advanceTimersByTime(10_001);
+      wrapper.findComponent(ControlsMenu).vm.$emit('teaching-action', 'hint');
+      await flushPromises();
+      answerer(posted)('hint', { success: false, error: 'You are not connected to the table right now, so this was not sent.' });
+      await flushPromises();
+      expect(shownToasts()).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 
   it.each(['hint', 'heatmap-toggle'] as const)('%s', async (op) => {
     const { wrapper, posted } = await mountTableWithDebugPanel(Board);

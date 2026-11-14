@@ -143,11 +143,44 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
     await flushPromises();
     await wrapper.get('[data-testid="bad-move"]').trigger('click');
     await flushPromises();
-    expect(shownToasts()).toEqual([
-      ['error', 'Invalid selection for "to"'],
-      ['error', 'Invalid selection for "to"'],
-    ]);
+    // One toast on screen for both (#1649): the retry restarts it rather than stacking a second.
+    expect(shownToasts()).toEqual([['error', 'Invalid selection for "to"']]);
     expect(await assertive()).toEqual(['Invalid selection for "to"', 'Invalid selection for "to"']);
+  });
+
+  it('toasts no failure while the connection already shows as stale, and still says it (#1649)', async () => {
+    // Only the timers the heartbeat and toasts use, so flushPromises keeps its real setImmediate.
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted, assertive } = await mountRefusingTable();
+      window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
+      vi.advanceTimersByTime(10_001);
+      await nextTick();
+      expect(wrapper.find('[data-testid="bs-connection"]').classes()).toContain('stale');
+
+      const notSent = 'You are not connected to the table right now, so this was not sent.';
+      await refusePass(wrapper, posted, { error: notSent });
+      expect(shownToasts()).toEqual([]);
+      expect(await assertive()).toEqual([notSent]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still toasts a failure the board finds itself while the connection shows as stale (#1649)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper } = await mountRefusingTable();
+      window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
+      vi.advanceTimersByTime(10_001);
+      await wrapper.get('[data-bs-action="move"]').trigger('click');
+      await flushPromises();
+      await wrapper.get('[data-testid="bad-move"]').trigger('click');
+      await flushPromises();
+      expect(shownToasts()).toEqual([['error', 'Invalid selection for "to"']]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('tells a refusal that gives no reason in words, never undefined', async () => {

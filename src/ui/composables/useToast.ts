@@ -17,6 +17,9 @@ export function useToast() {
     options: { type?: Toast['type']; duration?: number } = {}
   ) {
     const { type = 'info', duration = 2000 } = options;
+    // A timed repeat replaces its twin on screen, so repeats never stack and the fresh node is announced again (#1649).
+    const twin = duration > 0 && toasts.value.find((t) => t.duration > 0 && t.message === message && t.type === type);
+    if (twin) remove(twin.id);
     const id = nextId++;
 
     const toast: Toast = { id, message, type, duration };
