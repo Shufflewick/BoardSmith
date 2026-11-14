@@ -15,7 +15,6 @@ import {
   recordGreyed,
   recordResolved,
   selectionsDiffer,
-  startsOffThePanel,
   SMOKE_SPEC_PATH,
   startAnswering,
   walkStopped,
@@ -798,22 +797,6 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect(w.errors).toHaveLength(1);
     expect(w.errors[0]).toContain('taking it failed: The "kindle" action could not be completed');
     expect(m.refused.get('kindle')).toBeUndefined();
-  });
-});
-
-describe('startsOffThePanel: an action started that the Action Panel did not offer (#1642)', () => {
-  const after = 'after the walk pressed the board\'s "Fast" at step 3 of the game dealt from seed "smoke"';
-
-  it('fails a start of an action the panel did not offer, naming it, the press and what the panel offered', () => {
-    expect(startsOffThePanel([{ action: 'vote', offered: ['draw', 'play'] }], after)).toEqual([
-      '"vote" started after the walk pressed the board\'s "Fast" at step 3 of the game dealt from seed "smoke", but the Action Panel ' +
-        'did not offer it then: it offered "draw", "play". Every action the board starts must be in the panel, so a player can take it ' +
-        'from the panel alone. Give it a place there: an action declared with .suppressFromActionPanel() has none.',
-    ]);
-  });
-
-  it('passes a start of an action the panel offered', () => {
-    expect(startsOffThePanel([{ action: 'draw', offered: ['draw', 'play'] }], after)).toEqual([]);
   });
 });
 

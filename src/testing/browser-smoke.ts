@@ -89,14 +89,12 @@ import {
   smokeWalkLimit,
   smokeWorldSeats,
   startAnswering,
-  startsOffThePanel,
   walkStopped,
   type ResolvedAction,
   type ResolvedMemory,
   type SmokeInputs,
   type SmokeInputView,
   type SmokeWalk,
-  type StartedAction,
   type TypedValue,
 } from './browser-smoke-verdict.js';
 
@@ -197,7 +195,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const memories: WalkMemory[] = [];
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
-    await recordActionEvents(page);
+    await recordResolvedActions(page);
     await page.addInitScript(tracePointerWork);
     startClock(page);
     try {
@@ -318,21 +316,18 @@ function watchForErrors(page: Page, walk: SmokeWalk): void {
   });
 }
 
-/** Keeps every `boardsmith:action-resolved` and `boardsmith:action-started` (#1642) event a frame fires, for {@link drainThePage}. */
-async function recordActionEvents(page: Page): Promise<void> {
+/** Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainThePage}. */
+async function recordResolvedActions(page: Page): Promise<void> {
   await page.addInitScript(() => {
-    for (const [event, log] of [['boardsmith:action-resolved', '__boardsmithSmokeResolved'], ['boardsmith:action-started', '__boardsmithSmokeStarted']] as const) {
-      const kept: unknown[] = [];
-      Object.defineProperty(window, log, { value: kept });
-      window.addEventListener(event, (fired) => kept.push((fired as CustomEvent).detail));
-    }
+    const resolved: unknown[] = [];
+    Object.defineProperty(window, '__boardsmithSmokeResolved', { value: resolved });
+    window.addEventListener('boardsmith:action-resolved', (event) => resolved.push((event as CustomEvent).detail));
   });
 }
 
-/** What `frame` did since the last look: the actions it started and resolved, and the selection its board and panel show. */
+/** What `frame` did since the last look: the actions it resolved, and the selection its board and panel show. */
 interface PageDid {
   readonly resolved: ResolvedAction[];
-  readonly started: StartedAction[];
   /** What the board marks selected (`selectedAttrs`). */
   readonly marked: string[];
   /** The panel's shared selection, null for none; undefined when no panel is on the page. */
@@ -340,30 +335,24 @@ interface PageDid {
 }
 
 /**
- * What `frame` did since the last call, recorded: each action it started that the Action Panel did not
- * offer, and a board selection that is not the panel's (#1642), are reported after the press that
- * led there (`WalkMemory.lastPress`); the actions resolved are recorded (`recordResolved`). Returns
+ * What `frame` did since the last call, recorded: a board selection that is not the panel's (#1642) is
+ * reported after the press that led there (`WalkMemory.lastPress`); the actions resolved are recorded (`recordResolved`). Returns
  * how many resolved.
  */
 async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
   const page = frame.page();
   const did = await inPageTime(page, 'reading what the page did', () =>
     frame.evaluate((): PageDid => {
-      const take = (log: string) => {
-        const kept = (window as unknown as Record<string, unknown[] | undefined>)[log] ?? [];
-        return kept.splice(0, kept.length);
-      };
+      const kept = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
       const panel = document.querySelector('.action-panel-root');
       return {
-        resolved: take('__boardsmithSmokeResolved') as ResolvedAction[],
-        started: take('__boardsmithSmokeStarted') as StartedAction[],
+        resolved: kept.splice(0, kept.length) as ResolvedAction[],
         marked: [...document.querySelectorAll('[data-testid="bs-board"] [data-bs-selected]')].map((thing) => thing.getAttribute('data-bs-selected') ?? ''),
         selection: panel === null ? undefined : panel.getAttribute('data-bs-selection'),
       };
     }),
   );
   const after = memory.lastPress.get(page) ?? `before the walk pressed anything, ${stepWhere(memory)}`;
-  for (const problem of startsOffThePanel(did.started, after)) noteIn(page, walk, problem);
   if (did.selection !== undefined) noteASelectionApart(page, walk, memory, did.marked, did.selection, after);
   recordResolved(did.resolved, walk, memory, browserNames.get(page));
   return did.resolved.length;
@@ -598,7 +587,7 @@ async function seatTheWorld(
       seated = await opened.newPage();
       browserNames.set(seated, `In seat ${seat}'s browser: `);
       watchForErrors(seated, walk);
-      await recordActionEvents(seated);
+      await recordResolvedActions(seated);
       await seated.addInitScript(tracePointerWork);
       startClock(seated);
       await seated.goto('/', { waitUntil: 'commit' });

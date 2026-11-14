@@ -1,6 +1,6 @@
 {
-  "revision": 372,
-  "surfaceHash": "f105072b5ce712c4",
+  "revision": 373,
+  "surfaceHash": "42b365841767d5b0",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2919,6 +2919,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith smoke fails a board start the Action Panel does not offer, and a board selection that is not the panel's; boards mark their selected thing with selectedAttrs (#1642)"
+    },
+    {
+      "revision": 373,
+      "date": "2026-11-14",
+      "surfaceHash": "42b365841767d5b0",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Removed ActionBuilder.suppressFromActionPanel() and its actionMetadata field: every action is in the Action Panel; the dev-only boardsmith:action-started event and smoke's start-not-in-panel check went with it (#1643)."
     }
   ]
 }

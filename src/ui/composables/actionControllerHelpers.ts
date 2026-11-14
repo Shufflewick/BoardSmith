@@ -176,15 +176,6 @@ export function labelOfPick(
 }
 
 /**
- * The actions the Action Panel offers of those available: every one but those suppressed from it,
- * unless that would leave it none, since then it is a player's only way to act (LIBX-01).
- */
-export function panelOffer<T extends { suppressFromActionPanel?: boolean }>(actions: readonly T[]): readonly T[] {
-  const unsuppressed = actions.filter((action) => !action.suppressFromActionPanel);
-  return unsuppressed.length > 0 ? unsuppressed : actions;
-}
-
-/**
  * An action's name as a fallback prompt: `playCard` reads as `Play Card`, and
  * an acronym or a digit stays with its word, `drawUSB` as `Draw USB` (#1298).
  */

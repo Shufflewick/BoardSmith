@@ -28,12 +28,6 @@ interface BoardsmithActionResolvedDetail {
   error?: string;
 }
 
-interface BoardsmithActionStartedDetail {
-  action: string;
-  /** The actions the Action Panel offered when it started. */
-  offered: string[];
-}
-
 // NO `declare module '*.vue'` here — deliberately, and do not add one back.
 //
 // This file is ambient, and `boardsmith/ui` resolves to raw TypeScript source,

@@ -134,13 +134,13 @@ const NODE_MODULES_BOARDSMITH = 'node_modules/boardsmith';
 /** SKILLDEF-03: the LIBX-01 rename of the retired `suppressActionPanel` fenced escape hatch. */
 const ESCAPE_HATCH_PROP = 'platformActionPanelEscapeHatch';
 
-/** SKILLDEF-03: the only sanctioned per-Action Panel-hiding mechanism. */
+/** #1643: the removed per-action way to hide a start button, which build.md must not offer. */
 const SUPPRESS_FROM_ACTION_PANEL = 'suppressFromActionPanel';
 
 /** SKILLDEF-03: the retired name that must appear nowhere in build.md. */
 const RETIRED_SUPPRESS_ACTION_PANEL = 'suppressActionPanel';
 
-/** #228: how a crowded panel is arranged, as distinct from a redundant button hidden. */
+/** #228: how a crowded panel is arranged. */
 const ACTION_MENU_GROUPING = ['.group(', '.order('];
 
 describe('BUILD-01 — resume routing', () => {
@@ -1290,10 +1290,10 @@ describe('SKILLDEF-03 — fenced escape hatch', () => {
     expect(build).toMatch(/without EXPLICIT client direction|without the client/i);
   });
 
-  it('build.md names .suppressFromActionPanel() as the only sanctioned per-Action Panel-hiding mechanism', () => {
+  it('build.md says no action can be hidden from the Action Panel (#1643)', () => {
     const build = read('build/build.md');
-    expect(build).toContain(SUPPRESS_FROM_ACTION_PANEL);
-    expect(build).toMatch(/ONLY sanctioned/i);
+    expect(build).not.toContain(SUPPRESS_FROM_ACTION_PANEL);
+    expect(build).toMatch(/No action's start button can be hidden from the Action Panel/);
   });
 
   it('build.md never references the retired suppressActionPanel name', () => {
@@ -1305,15 +1305,11 @@ describe('SKILLDEF-03 — fenced escape hatch', () => {
   // capability game authors will not find, which was most of the point of #228:
   // the reported panel had seventeen buttons because nothing told its author
   // there was another arrangement available.
-  it('build.md names .group()/.order() for a CROWDED panel, beside suppression for a redundant one', () => {
+  it('build.md names .group()/.order() for a CROWDED panel', () => {
     const build = read('build/build.md');
     for (const call of ACTION_MENU_GROUPING) {
       expect(build, `build.md must name ${call}`).toContain(call);
     }
-    // And must not confuse the two: grouping is arrangement, suppression is
-    // hiding, and a chunk that reaches for the wrong one either clutters the
-    // panel or takes an action off it.
-    expect(build).toMatch(/CROWDED rather than redundant/i);
     expect(build).toMatch(/Grouping hides\s+nothing/i);
   });
 });

@@ -344,28 +344,6 @@ export interface ResolvedAction {
   readonly error?: string;
 }
 
-/** What the page's `boardsmith:action-started` events carry: the action, and what the Action Panel offered as it started (#1642). */
-export interface StartedAction {
-  readonly action: string;
-  readonly offered: readonly string[];
-}
-
-/**
- * The problem each of `started` is when the Action Panel did not offer its action as it started, said
- * with `after`, the press that started it and where: every action the board starts must be in the
- * panel (#1642).
- */
-export function startsOffThePanel(started: readonly StartedAction[], after: string): string[] {
-  return started
-    .filter(({ action, offered }) => !offered.includes(action))
-    .map(
-      ({ action, offered }) =>
-        `"${action}" started ${after}, but the Action Panel did not offer it then: it offered ${offered.length > 0 ? quoted(offered) : 'nothing'}. ` +
-        'Every action the board starts must be in the panel, so a player can take it from the panel alone. ' +
-        'Give it a place there: an action declared with .suppressFromActionPanel() has none.',
-    );
-}
-
 /**
  * The problem it is when the things the board marks selected (`board`, `data-bs-selected`) are not
  * the Action Panel's selection (`panel`), said with `after`, the press that led there; undefined when

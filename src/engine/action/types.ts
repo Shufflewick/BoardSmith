@@ -759,12 +759,6 @@ export interface ActionDefinition {
    * plays a sole legal move unconditionally.
    */
   manual?: boolean;
-  /**
-   * Hide this action's Action Panel button in the auto-UI ActionPanel. The action stays
-   * fully executable via the board / custom UI (useBoardInteraction) — only the
-   * Action Panel button is hidden. Not a security control. Set via `.suppressFromActionPanel()`.
-   */
-  suppressFromActionPanel?: boolean;
   /** Things the action is about without picking them, for one seat now; set via `.about()` (#1640). */
   about?: ((context: ActionContext) => PickSubject[])[];
   /**

@@ -338,10 +338,6 @@ describe('startButtonLevels', () => {
     expect(top(startButtonLevels(tenVerbs, (name) => name === 'chore0')).actions).toHaveLength(9);
   });
 
-  it('leaves out suppressed actions while anything else is offered', () => {
-    expect(top(startButtonLevels([...tenVerbs.slice(0, 9), verb('chore9', { suppressFromActionPanel: true })], never)).actions).toHaveLength(9);
-  });
-
   it('keeps a lone destructive action in its group', () => {
     expect(top(startButtonLevels([verb('a'), verb('scuttle', { group: ['Fleet'], destructive: true })], never)).actions).toEqual(['a']);
   });
