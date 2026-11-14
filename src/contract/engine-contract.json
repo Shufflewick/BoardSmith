@@ -1,5 +1,5 @@
 {
-  "revision": 371,
+  "revision": 372,
   "surfaceHash": "f105072b5ce712c4",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2911,6 +2911,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel shows a whole menu level on a phone: three columns of whole labels growing up to half the screen when upright, two rows on a short landscape screen (#1627)."
+    },
+    {
+      "revision": 372,
+      "date": "2026-11-14",
+      "surfaceHash": "f105072b5ce712c4",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith smoke fails a board start the Action Panel does not offer, and a board selection that is not the panel's; boards mark their selected thing with selectedAttrs (#1642)"
     }
   ]
 }
