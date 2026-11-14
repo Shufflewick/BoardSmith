@@ -740,6 +740,11 @@ const mobileToggleLabel = computed(() => {
   --bsg-panel-max: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap)
                              + 2 * var(--bsg-panel-pad) + var(--bsg-safe-bottom));
 
+  /* A menu level's ceiling (#1627): the strip, raised on a phone so a whole
+     level is in view (see the phone and short-landscape tiers). A level has
+     no board pick open, and the board's scroll room covers what it adds. */
+  --bsg-panel-menu-max: var(--bsg-panel-max);
+
   /* The exceptions to that cap: a typed editor (#229, #237) and a choice
      list (#1573, #1580, #1587). While one is open the bar may grow past the strip and
      cover more of the board, and the cap returns when it closes. See `.actionbar:has([data-bs-grows-panel=...])`.
@@ -960,13 +965,13 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Scroll room after the board, so the player can scroll what the rows beyond the
-   reserved one cover into view. The bar's cap, not its live height:
+   reserved one cover into view. The resting bar's cap, not its live height:
    room that changed as the bar re-wrapped would clamp the scroll and move the board
    under the cursor. */
 .boardregion::after {
   content: '';
   flex: none;
-  height: calc(var(--bsg-panel-max) - var(--bsg-panel-reserved));
+  height: calc(var(--bsg-panel-menu-max) - var(--bsg-panel-reserved));
 }
 /* Down until the player's own toggle: only the reserved line covers the board, so no room (#1525). */
 .action-bar-stays-down .boardregion::after {
@@ -1018,6 +1023,11 @@ const mobileToggleLabel = computed(() => {
   max-height: var(--bsg-panel-max);
   min-height: var(--bsg-panel-reserved);
   overflow-y: auto;
+}
+
+/* A menu level has its own cap (#1627), the strip but on a phone. */
+.actionbar:has([data-bs-menu-level]) {
+  max-height: var(--bsg-panel-menu-max);
 }
 
 /* While a typed editor or a choice list is open, and only then,
@@ -1300,9 +1310,13 @@ const mobileToggleLabel = computed(() => {
     border-bottom: 1px solid var(--bsg-line);
     box-shadow: var(--bsg-shadow);
   }
-  /* Phones use the SAME two-row Action Panel cap as desktop (no override) — the
-     base .actionbar max-height applies, and ActionPanel compacts its own layout
-     at this width to fit it (issue 444). */
+  /* A pick keeps the two-row cap, and ActionPanel compacts its own layout at
+     this width to fit it (issue 444). A menu level is a grid of three columns
+     here (ActionPanel) whose labels wrap whole, so no row count holds it: it
+     grows the bar to what it needs, bounded at half the screen's height. */
+  .game-shell__game {
+    --bsg-panel-menu-max: max(var(--bsg-panel-max), 50dvh);
+  }
 }
 
 /* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
@@ -1333,6 +1347,9 @@ const mobileToggleLabel = computed(() => {
     --bsg-panel-max: calc(var(--bsg-panel-row) + var(--bsg-panel-pad)
                           + max(var(--bsg-panel-pad), var(--bsg-safe-bottom)));
     --bsg-panel-reserved: var(--bsg-panel-max);
+    /* A menu level may take a second row, so the actions that wrap are not hidden under the first (#1627). */
+    --bsg-panel-menu-max: calc(2 * var(--bsg-panel-row) + var(--bsg-panel-gap) + var(--bsg-panel-pad)
+                               + max(var(--bsg-panel-pad), var(--bsg-safe-bottom)));
   }
 
   .actionbar {

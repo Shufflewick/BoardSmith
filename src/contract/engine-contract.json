@@ -1,5 +1,5 @@
 {
-  "revision": 370,
+  "revision": 371,
   "surfaceHash": "f105072b5ce712c4",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2903,6 +2903,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "One shared selection: the board and the Action Panel select the same thing, a click on a thing several verbs take selects it, and boards start actions with start (no execute) (#1641)"
+    },
+    {
+      "revision": 371,
+      "date": "2026-11-14",
+      "surfaceHash": "f105072b5ce712c4",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel shows a whole menu level on a phone: three columns of whole labels growing up to half the screen when upright, two rows on a short landscape screen (#1627)."
     }
   ]
 }

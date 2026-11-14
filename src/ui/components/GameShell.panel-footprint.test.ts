@@ -11,8 +11,9 @@
  * restated the numbers would pass while the shell shipped different ones. The
  * on-screen geometry is measured in `scripts/action-bar-collapse-browser.mjs`.
  *
- * The bar keeps its own two-row cap (`--bsg-panel-max`); the one exception, a
- * typed editor that may grow the bar while it is open, is held in
+ * The bar keeps its own two-row cap (`--bsg-panel-max`), and a menu level has
+ * its own (`--bsg-panel-menu-max`, #1627); the exception, a typed editor that
+ * may grow the bar while it is open, is held in
  * ActionPanel.editor-grows-panel.test.ts.
  */
 import { describe, it, expect } from 'vitest';
@@ -97,6 +98,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
     '--bsg-panel-pad': declaration('.game-shell__game', '--bsg-panel-pad'),
     '--bsg-panel-max': declaration('.game-shell__game', '--bsg-panel-max'),
     '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
+    '--bsg-panel-menu-max': declaration('.game-shell__game', '--bsg-panel-menu-max'),
     '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
     '--bsg-action-bar-line': declaration('.game-shell__game', '--bsg-action-bar-line'),
     '--bsg-bar-edge': declaration('.game-shell__game', '--bsg-bar-edge'),
@@ -105,7 +107,7 @@ function tokensFor(tier: 'base' | 'landscape-short'): Record<string, string> {
   if (tier === 'base') return base;
   const overrides = Array.from(landscapeTokens().matchAll(/(--bsg-panel-[\w-]+)\s*:\s*([\s\S]*?);/g));
   expect(overrides.map(([, name]) => name), 'the landscape-short tier does not override the panel tokens')
-    .toEqual(['--bsg-panel-pad', '--bsg-panel-max', '--bsg-panel-reserved']);
+    .toEqual(['--bsg-panel-pad', '--bsg-panel-max', '--bsg-panel-reserved', '--bsg-panel-menu-max']);
   for (const [, name, value] of overrides) base[name] = value.trim();
   return base;
 }
@@ -152,11 +154,11 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
   });
 
   it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {
-    // Scroll room after the board, as tall as what the bar's cap adds to the
-    // reserved row. A constant: room that followed the bar's live height shrank
+    // Scroll room after the board, as tall as what a resting bar's cap adds to
+    // the reserved row: a menu level's, the highest (#1627). A constant: room that followed the bar's live height shrank
     // as the bar re-wrapped, clamped the scroll and moved the board under the
     // player's cursor (#1514 review F1).
-    expect(declaration('.boardregion::after', 'height')).toBe('calc(var(--bsg-panel-max) - var(--bsg-panel-reserved))');
+    expect(declaration('.boardregion::after', 'height')).toBe('calc(var(--bsg-panel-menu-max) - var(--bsg-panel-reserved))');
     expect(declaration('.boardregion::after', 'flex')).toBe('none');
     // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it,
     // also while an editor or a multiSelect has grown the bar past its cap (#1573).
@@ -227,6 +229,20 @@ describe('the Action Panel\'s own height cap', () => {
     expect(px(padBottom, tokens, env) + env.safeArea).toBe(Math.max(pad, env.safeArea));
     expect(px('var(--bsg-panel-reserved)', tokens, env)).toBe(row + pad + Math.max(pad, env.safeArea));
     expect(px('var(--bsg-panel-max)', tokens, env)).toBe(px('var(--bsg-panel-reserved)', tokens, env));
+  });
+
+  it('caps a menu level at the strip, at half the screen on a phone, and at two rows on a short landscape screen (#1627)', () => {
+    expect(declaration('.actionbar:has([data-bs-menu-level])', 'max-height')).toBe('var(--bsg-panel-menu-max)');
+    expect(declaration('.game-shell__game', '--bsg-panel-menu-max')).toBe('var(--bsg-panel-max)');
+    // The phone tier: a level's labels wrap whole, so it grows to what it needs, bounded by the screen.
+    const phone = source.slice(source.indexOf('@media (max-width: 639px) {'));
+    expect(phone.match(/--bsg-panel-menu-max:\s*([^;]+);/)![1]).toBe('max(var(--bsg-panel-max), 50dvh)');
+    for (const env of ENVIRONMENTS) {
+      const tokens = tokensFor('landscape-short');
+      const row = px('var(--bsg-panel-row)', tokens, env);
+      expect(px('var(--bsg-panel-menu-max)', tokens, env), `safe-area ${env.safeArea}`)
+        .toBe(row + px('var(--bsg-panel-gap)', tokens, env) + px('var(--bsg-panel-reserved)', tokens, env));
+    }
   });
 
   it('keeps the board region inside the stage on a short landscape screen', () => {

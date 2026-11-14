@@ -12,6 +12,9 @@
  * table wiring GameShell uses, and the real ActionPanel.
  */
 import { describe, it, expect, afterEach } from 'vitest';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
@@ -152,6 +155,22 @@ describe('the panel on a selected thing (#1641)', () => {
     controller.select({ type: 'Towers', key: 'ruin', label: 'the ruined tower' });
     await settle();
     expect(wrapper.get('[data-bs-thing-empty]').text()).toBe('Nothing can be done with the ruined tower right now.');
+  });
+
+  it('keeps that sentence whole on a phone, where the breadcrumb is cut short (#1627 review F6)', async () => {
+    const { wrapper, controller } = await panel(WorkshopGame);
+    controller.select({ type: 'Towers', key: 'ruin', label: 'the ruined tower' });
+    await settle();
+    const style = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'), 'utf-8');
+    const at = style.indexOf('@media (max-width: 639px) and (orientation: portrait) {');
+    expect(at, 'ActionPanel.vue has no upright-phone block').toBeGreaterThan(-1);
+    const phone = style.slice(at, style.indexOf('\n}\n', at));
+    const cutting = Array.from(phone.matchAll(/([^{}]+)\{([^}]*)\}/g))
+      .filter(([, , body]) => /text-overflow:\s*ellipsis/.test(body))
+      .flatMap(([, selectors]) => selectors.split(',').map((selector) => selector.trim()));
+    expect(cutting, 'the phone block cuts the breadcrumb short').not.toEqual([]);
+    const status = wrapper.get('[data-bs-thing-empty]').element;
+    expect(cutting.filter((selector) => status.matches(selector))).toEqual([]);
   });
 
   it('goes Back to the list the thing sits in, clearing the selection', async () => {
