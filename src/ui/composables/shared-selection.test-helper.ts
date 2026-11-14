@@ -92,31 +92,3 @@ export class DiceTrayGame extends Game<DiceTrayGame, Player> {
     this.setFlow({ root: actionStep({ actions: ['reroll', 'keep'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
   }
 }
-
-/**
- * A game whose things have verbs suppressed from the panel's start buttons (#1642): Reroll beside
- * Draft on each die, and Upgrade, a tower's only verb. The panel still reaches each through its thing.
- */
-export class HiddenVerbsGame extends Game<HiddenVerbsGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-    this.create(Die, 'red');
-    this.create(Tower, 'Bank');
-    this.registerActions(
-      Action.create<HiddenVerbsGame>('reroll').prompt('Reroll').suppressFromActionPanel()
-        .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
-        .execute(() => {}),
-      Action.create<HiddenVerbsGame>('draft').prompt('Draft')
-        .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
-        .execute(() => {}),
-      Action.create<HiddenVerbsGame>('upgrade').prompt('Upgrade').suppressFromActionPanel()
-        .chooseElement('tower', { elements: (ctx) => [...ctx.game.all(Tower)], subject: TOWERS })
-        .execute(() => {}),
-      Action.create<HiddenVerbsGame>('vote').prompt('Vote').suppressFromActionPanel()
-        .execute(() => {}),
-      Action.create<HiddenVerbsGame>('pass').prompt('Pass')
-        .execute(() => {}),
-    );
-    this.setFlow({ root: actionStep({ actions: ['reroll', 'draft', 'upgrade', 'vote', 'pass'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
-  }
-}

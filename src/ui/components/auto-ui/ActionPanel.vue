@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, panelOffer, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -278,7 +278,7 @@ const heldFollowUpButton = computed(() => {
 // Get metadata for available actions
 // Annotated as EnrichedActionMetadata[] on purpose: without it the synthesized
 // fallback entries below form a union with the real metadata, and reading an
-// OPTIONAL field (help, suppressFromActionPanel) off that union fails to compile even
+// OPTIONAL field (help) off that union fails to compile even
 // though it is valid on both arms. The annotation says what this list is — action
 // metadata, with a minimal entry synthesized for actions that have none.
 const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
@@ -302,33 +302,6 @@ const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
     };
   });
 });
-
-// Actions to display in the UI
-// endTurn is always shown so users can manually end their turn
-// Auto-execute only happens when endTurn is the only available action
-// LIBX-01: actions declared with .suppressFromActionPanel() are filtered out of the
-// rendered Action Panel here ONLY -- they remain in actionsWithMetadata / the board
-// substrate (useBoardActionBridge) and stay fully executable there.
-//
-// ...UNLESS suppressing them would leave the Action Panel empty. `.suppressFromActionPanel()`
-// means "this button is redundant with the board affordance", and a button is
-// only redundant while something else is offered. When every available action
-// is suppressed, the Action Panel is the player's only remaining control: emptying it
-// leaves a prompt with nothing to press, and for an action with NO selections
-// that state is terminal — no pick can start, so the mid-pick keyboard/SR
-// safety net (A11Y C-2) never engages either. Falling back to the full list
-// keeps the API's purpose (remove clutter) and drops its trap (remove the last
-// way to act).
-//
-// SUPPRESSION DECIDES MEMBERSHIP; GROUPING DECIDES ARRANGEMENT (#228). This is
-// the whole of the relationship between the two, and it is why the fallback
-// restores the LIST rather than the FLATNESS: the menu below is built from
-// whatever this returns, so an all-suppressed panel comes back as the game's own
-// hierarchy and not as the flat list the fallback used to imply. Two mechanisms
-// that disagreed about arrangement would have made "grouping remains effective
-// when no ungrouped action is available" false in exactly the case the fallback
-// fires.
-const visibleActions = computed(() => panelOffer(actionsWithMetadata.value));
 
 // ── The start-button hierarchy (#228) ──────────────────────────────────────
 //
@@ -366,13 +339,13 @@ function thingsAtTop(menu: readonly ActionMenuNode<PanelMenuItem>[]): readonly A
   const only = menu.length === 1 ? menu[0]! : undefined;
   return only?.kind === 'group' && only.children.every((child) => child.kind === 'item' && child.item.thing) ? only.children : menu;
 }
-const ordinaryMenu = computed(() => thingsAtTop(buildActionMenu(ordinaryMenuItems(visibleActions.value.filter((a) => !disabledReasonOf(a.name)), subjects.value, true))));
+const ordinaryMenu = computed(() => thingsAtTop(buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value.filter((a) => !disabledReasonOf(a.name)), subjects.value, true))));
 const selectionMenu = computed(() => buildActionMenu(thingMenu.value.items));
 const actionMenu = computed(() => (shownThing.value ? selectionMenu.value : ordinaryMenu.value));
 /** Every offered action, disabled ones included: a level whose actions are only held is kept to come back to. */
 const offeredMenu = computed(() => (shownThing.value
   ? selectionMenu.value
-  : thingsAtTop(buildActionMenu(ordinaryMenuItems(visibleActions.value, subjects.value, false)))));
+  : thingsAtTop(buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value, subjects.value, false)))));
 /** Which menu is drawn: a move between two is the player's own, never a level going away. */
 const shownMenuKey = computed(() => (shownThing.value ? `thing\u0000${shownThing.value.type}\u0000${shownThing.value.key}` : 'menu'));
 
@@ -430,7 +403,7 @@ const foldedActions = computed<FoldedVerb[]>(() => {
   const here = menuLevel.value.group?.path ?? [];
   const atHere = (group: readonly string[] | undefined) => levelShowing(actionMenu.value, group ?? [], here, promotable).join('\u0000') === here.join('\u0000');
   if (shownThing.value) return thingMenu.value.folded.filter((verb) => atHere(verb.group));
-  return visibleActions.value.flatMap((a) => {
+  return actionsWithMetadata.value.flatMap((a) => {
     const reason = disabledReasonOf(a.name);
     return reason && atHere(a.group) ? [{ ...a, reason }] : [];
   });
@@ -598,7 +571,7 @@ watch(() => actionController.actionStartTick.value, () => {
  * an action there is usable again (#1638).
  */
 watch([actionMenu, shownMenuKey], (_, [, wasKey]) => {
-  if (visibleActions.value.length === 0 || shownMenuKey.value !== wasKey) return;
+  if (actionsWithMetadata.value.length === 0 || shownMenuKey.value !== wasKey) return;
   const kept = resolveMenuPath(offeredMenu.value, openPath.value);
   const shown = resolveMenuPath(actionMenu.value, kept);
   if (shown.length === openPath.value.length) return;

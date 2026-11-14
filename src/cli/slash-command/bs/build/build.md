@@ -241,18 +241,15 @@ panel, and switching it off without the client is exactly the never-suppress-bui
 named in "## Boundaries" above. Never CSS-hide the panel either: that leaves operable controls in
 the tab order with nothing visible, which is strictly worse.
 
-If a specific action legitimately needs its redundant START BUTTON hidden from the Action Panel —
-a game-design call, not a workaround — the ONLY sanctioned mechanism is the per-action
-`.suppressFromActionPanel()` metadata field, applied to that one action. Its reach stops at the
-button: the panel still renders that action's full choice list once the action is under way, and
-nothing suppresses a live choice list. It is never a way to suppress the panel wholesale.
+No action can be hidden from the Action Panel: every action a player can take is in it, and there
+is no per-action way to drop one.
 
-If the panel is CROWDED rather than redundant — many verbs available at once, and the rare ones
+If the panel is CROWDED — many verbs available at once, and the rare ones
 sitting as prominently as the ones the player takes every turn — the mechanism is
-`.group()`/`.order()` on the action, NOT suppression. `.group('Dump')` puts that action's start
+`.group()`/`.order()` on the action. `.group('Dump')` puts that action's start
 button inside a menu group that takes one button at its level and opens onto its members;
 `.group('More', 'Empire settings')` nests one level deeper; `.order(10)` places buttons within a
-level, lower first. Both are chunk-local, per-action calls, exactly like the two above.
+level, lower first. Both are chunk-local, per-action calls.
 
 Reach for it when a chunk leaves more than about six or seven start buttons available at once, and
 group by what the player is trying to DO, never by which chunk built the action. Grouping hides

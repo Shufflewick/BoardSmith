@@ -156,20 +156,6 @@ iframe.contentWindow.addEventListener('boardsmith:action-resolved', (e) => {
 Attach the listener **before** driving the action — there's no buffering or
 polling, so a listener added after the event fires misses it.
 
-### `boardsmith:action-started`
-
-Dispatched on the same `window`, in development, each time `start` accepts an
-action, before it opens or is sent (#1642). `offered` is what the Action Panel
-offered at that moment, every level of it, so a listener can tell a start the
-panel could not have made:
-
-```ts
-interface BoardsmithActionStartedDetail {
-  action: string;
-  offered: string[];
-}
-```
-
 ### Important: what `success: false` does and does not cover
 
 `success: false` fires **only when a server round-trip rejects an
@@ -628,13 +614,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   and goes on in it (#458, #460). An action whose taking has ended every game it
   was taken in, such as resigning, is taken again only when the panel offers
   nothing else, so it does not cut each game short. A world has no new game.
-- It holds the board to the Action Panel (#1642). It reads
-  `boardsmith:action-started` and tags each start with the press that led to
-  it, the board's control or the panel's button. It fails a start of an action
-  the panel did not offer then, naming the action, the press, the step, the
-  deal and what the panel offered. After each press it compares what the board
-  marks selected (`data-bs-selected`, from `selectedAttrs`) with the panel's
-  shared selection (`data-bs-selection` on the panel root). It fails a board
+- It holds the board to the Action Panel's selection (#1642). After each press
+  it compares what the board marks selected (`data-bs-selected`, from
+  `selectedAttrs`) with the panel's shared selection (`data-bs-selection` on the panel root). It fails a board
   that marks another thing, or marks a thing while the panel has none, once for
   each time the two change. A board that marks nothing is not compared. It
   cannot catch a board that collects picks in state of its own and sends them

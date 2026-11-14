@@ -155,16 +155,13 @@ export interface ChoiceAudit {
 
 /**
  * Every level of the Action Panel a seat offered `actions` can reach, read the way the panel draws
- * it (`ActionPanel.vue`): suppressed actions only when nothing else is offered, disabled ones folded
- * into one row, and a group holding one thing drawn as that thing.
+ * it (`ActionPanel.vue`): disabled actions folded into one row, and a group holding one thing drawn as that thing.
  */
 export function startButtonLevels(
   actions: readonly ActionMetadata[],
   isDisabled: (name: string) => boolean,
 ): CrowdedLevel[] {
-  const unsuppressed = actions.filter((action) => !action.suppressFromActionPanel);
-  const visible = unsuppressed.length > 0 ? unsuppressed : actions;
-  return levelButtons(buildActionMenu(visible.filter((action) => !isDisabled(action.name))), (action) => !action.destructive)
+  return levelButtons(buildActionMenu(actions.filter((action) => !isDisabled(action.name))), (action) => !action.destructive)
     .map((level) => ({ path: level.path, actions: level.buttons.map((action) => action.name) }));
 }
 

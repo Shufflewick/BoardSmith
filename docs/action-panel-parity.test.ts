@@ -103,13 +103,10 @@ describe('Action Panel parity doctrine', () => {
     );
   });
 
-  it.each(PARITY_SURFACES)('%s scopes suppression to the START BUTTON only', (path) => {
-    const text = flowed(path);
-    expect(
-      /start button/i.test(text),
-      `${path} must scope .suppressFromActionPanel() to the start button. Its reach stopping ` +
-        `short of a live choice list is the exact confusion BUG-011 was filed about.`,
-    ).toBe(true);
+  it.each(PARITY_SURFACES)('%s offers no way to hide an action from the panel (#1643)', (path) => {
+    expect(read(path), `${path} names .suppressFromActionPanel(), which is gone: every action is in the panel.`).not.toMatch(
+      /suppressFromActionPanel/,
+    );
   });
 
   it('names the panel as the accessibility path, not just as a convention', () => {
@@ -201,6 +198,5 @@ describe('one name for the surface: "Action Panel"', () => {
     // of one flag is how the two-names problem started.
     const hits = read('src/engine/action/action-builder.ts') + read('src/ui/types.ts');
     expect(hits).not.toMatch(/suppressFromDock/);
-    expect(read('src/engine/action/action-builder.ts')).toMatch(/suppressFromActionPanel\(\): this/);
   });
 });

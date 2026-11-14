@@ -752,14 +752,6 @@ export interface ActionMetadata<TElement extends ValidElement = ValidElement> {
    */
   manual?: boolean;
   /**
-   * When true, the Action Panel button for this action is hidden from the auto-UI
-   * ActionPanel (LIBX-01). The action stays fully executable via the board /
-   * custom UI — see ActionBuilder.suppressFromActionPanel(). Presentation only,
-   * NOT a security control. Emitted by the engine
-   * (`engine/element/action-metadata.ts`).
-   */
-  suppressFromActionPanel?: boolean;
-  /**
    * THIS VERB PERMANENTLY ENDS SOMETHING (#268). Set via
    * `ActionBuilder.destructive()`, emitted by the engine
    * (`engine/element/action-metadata.ts`) and carried on a world's offer.

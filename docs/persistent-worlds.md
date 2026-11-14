@@ -473,7 +473,7 @@ export const tend = worldAction<VillageGame>('tend')
 The builder is the engine's own with every callback's context re-typed, so what
 you write is a table action with `ctx.world` in scope and two methods added:
 `.needs()` and `.reads()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
-`suppressFromActionPanel`, `destructive`, `group`, `order`, `chooseFrom`, `chooseElement`,
+`destructive`, `group`, `order`, `chooseFrom`, `chooseElement`,
 `chooseElements`, `enterText`, `enterNumber`, `execute` and `build` all mean what
 they mean on a table. One more method is a world's own: `.quote()`,
 which prices the draft in front of the player before they commit it -- see

@@ -453,34 +453,6 @@ describe('the level survives the moment a push has no offers in it yet (#253)', 
   });
 });
 
-describe('suppressFromActionPanel and grouping are one mechanism, not two', () => {
-  it('keeps the hierarchy when every available action is suppressed', async () => {
-    // The restore-everything fallback exists so the panel is never a prompt
-    // with nothing to press. It decides MEMBERSHIP -- which actions are drawn --
-    // and grouping decides ARRANGEMENT. Restoring them as a FLAT list would be
-    // the fallback overruling the game's hierarchy, which is the one thing
-    // #228 says must not happen.
-    const { wrapper } = mountPanel([
-      { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], suppressFromActionPanel: true },
-      { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'], suppressFromActionPanel: true },
-    ]);
-    expect(groupLabels(wrapper)).toEqual(['Dump']);
-    expect(leafNames(wrapper)).toEqual([]);
-
-    await wrapper.find('[data-bs-action-group="Dump"]').trigger('click');
-    expect(leafNames(wrapper)).toEqual(['dumpOre', 'dumpWater']);
-  });
-
-  it('still hides a suppressed member while an unsuppressed sibling is offered', () => {
-    const { wrapper } = mountPanel([
-      { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], suppressFromActionPanel: true },
-      { name: 'construct', prompt: 'Construct' },
-    ]);
-    expect(groupLabels(wrapper)).toEqual([]);
-    expect(leafNames(wrapper)).toEqual(['construct']);
-  });
-});
-
 describe('grouping survives having no ungrouped action at all', () => {
   it('does not collapse into a flat list when every available action is grouped', () => {
     const { wrapper } = mountPanel([

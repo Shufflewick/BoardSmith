@@ -3949,7 +3949,7 @@ function offerOf(
     // holding `undefined` is a key that vanishes on the way -- so "absent" and
     // "sent as nothing" would be indistinguishable to the panel reading it.
     //
-    //   `manual` / `suppressFromActionPanel` / `destructive` are FLAGS: false is
+    //   `manual` / `destructive` are FLAGS: false is
     //     the same as absent, so only true is carried. `destructive` (#268) is
     //     the Action Panel's emphasis, and a world is the mode that asked for it.
     //   `group` / `order` are the action panel's menu placement (#228).
@@ -3962,7 +3962,6 @@ function offerOf(
       prompt: evaluatePrompt(definition.name, definition, ctx),
       help: definition.help,
       manual: definition.manual === true ? true : undefined,
-      suppressFromActionPanel: definition.suppressFromActionPanel === true ? true : undefined,
       destructive: definition.destructive === true ? true : undefined,
       group: definition.group,
       order: definition.order,

@@ -47,23 +47,19 @@ and they cannot drift. If you find yourself keeping a
 second, board-local copy of "what is selectable right now", that copy is the
 bug.
 
-`boardsmith smoke` holds a board to this (#1642). It fails a board control
-that starts an action the panel is not offering then, and a board whose marked
-selection is not the panel's: mark the thing your board shows selected with
+No action can be hidden from the panel.
+`boardsmith smoke` holds a board to the shared selection (#1642). It fails a
+board whose marked selection is not the panel's: mark the thing your board shows selected with
 `selectedAttrs()` (see [The shared selection](./ui-components.md#the-shared-selection)).
 It cannot see a board that collects picks in state of its own and sends them in
 one call, as a two-card plan or a dice draft can. That is allowed, since the
 panel still offers the action, but the panel shows none of those picks until then.
 
-`.suppressFromActionPanel()` on an action drops its **start button** while the
-panel keeps rendering everything else, including that action's full choice list
-once it is under way. A board that starts such an action fails `boardsmith
-smoke`, since a player using the panel alone cannot start it. Nothing
-suppresses a live choice list, and `platformActionPanelEscapeHatch` belongs to
-the host platform, not to a game. See
+`platformActionPanelEscapeHatch` belongs to the host platform, not to a game.
+See
 [Actions & Flow](./actions-and-flow.md#the-action-panel-is-complete-and-the-board-never-disagrees-with-it).
 
-Hiding the panel in CSS is worse than either option: the controls stay operable
+Hiding the panel in CSS is worse still: the controls stay operable
 and in the tab order, but nobody can see them.
 
 ## Step 1: Understanding gameView Structure

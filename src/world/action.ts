@@ -1119,12 +1119,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     return this;
   }
 
-  /** Keep it off the action panel; the board can still drive it. */
-  suppressFromActionPanel(): this {
-    this.inner.suppressFromActionPanel();
-    return this;
-  }
-
   /**
    * This verb permanently ends something, so the action panel draws it apart
    * (#268) -- a different plate, an inset ring, a marker glyph and a

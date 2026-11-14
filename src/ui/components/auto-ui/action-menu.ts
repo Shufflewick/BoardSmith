@@ -225,7 +225,7 @@ export function resolveMenuPath<A extends MenuItem>(
  *
  * A path that no longer exists answers the root rather than nothing, because
  * the panel must always have something to draw: an empty level is a prompt with
- * nothing to press, which is the trap `suppressFromActionPanel` already learned.
+ * nothing to press.
  */
 export function menuLevelAt<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],

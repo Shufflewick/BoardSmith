@@ -92,9 +92,8 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
-import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal, panelOffer } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import { panelReach } from '../components/auto-ui/subject-menu.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
@@ -232,15 +231,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         },
       }),
     );
-  }
-
-  // The dev-only `boardsmith:action-started` signal: each start the controller accepts, with what the
-  // Action Panel offers then, so the smoke walk can fail a board start the panel does not offer (#1642).
-  function announceStart(action: string): void {
-    if (!isDevBuild || typeof window === 'undefined') return;
-    const available = (availableActions.value ?? []).map((name): EnrichedActionMetadata => getActionMetadata(name) ?? { name, prompt: name, selections: [] });
-    const offered = panelReach(panelOffer(available), sharedSelection.subjects.value, getActionMetadata, disabledReasonFor, sharedSelection.selection.value);
-    window.dispatchEvent(new CustomEvent<BoardsmithActionStartedDetail>('boardsmith:action-started', { detail: { action, offered } }));
   }
 
   // Before-auto-execute hooks (accumulated, via onBeforeAutoExecute). Multiple
@@ -2366,7 +2356,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: onThing.error };
     }
     const initialArgs = onThing.args;
-    announceStart(actionName);
     if (sendsAtOnce(meta, initialArgs)) return sendAtOnce(actionName, initialArgs);
 
     currentAction.value = actionName;

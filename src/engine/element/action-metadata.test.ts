@@ -28,6 +28,7 @@ import {
   type GameOptions,
 } from '../index.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
+import { worldAction } from '../../world/action.js';
 import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
 import { useActionController, type EnrichedActionMetadata } from '../../ui/composables/useActionController.js';
 import type { ChoiceSelection, ElementsSelection } from '../action/types.js';
@@ -266,81 +267,10 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
   });
 });
 
-// ============================================================================
-// LIBX-01 / D28: per-action suppressFromActionPanel rides the actionMetadata channel
-// exactly like `manual` (163-... mirrors the manual precedent).
-// ============================================================================
-
-class ActionPanelSuppressionGame extends Game<ActionPanelSuppressionGame, Player> {
-  board!: Space<ActionPanelSuppressionGame>;
-
-  constructor(options: GameOptions) {
-    super(options);
-    this.board = this.create(Space<ActionPanelSuppressionGame>, 'board');
-
-    this.registerAction(
-      Action.create<ActionPanelSuppressionGame>('hiddenAction')
-        .suppressFromActionPanel()
-        .execute(() => ({ success: true })),
-    );
-
-    this.registerAction(
-      Action.create<ActionPanelSuppressionGame>('visibleAction')
-        .execute(() => ({ success: true })),
-    );
-
-    this.setFlow({
-      root: loop({
-        maxIterations: 5,
-        do: eachPlayer({
-          do: actionStep({ actions: ['hiddenAction', 'visibleAction'] }),
-        }),
-      }),
-    });
-  }
-}
-
-describe('buildActionMetadata: suppressFromActionPanel (LIBX-01, mirrors `manual`)', () => {
-  it('emits suppressFromActionPanel:true for an action built with .suppressFromActionPanel()', () => {
-    const game = new ActionPanelSuppressionGame({
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'action-panel-suppression-test',
-    });
-    game.startFlow();
-    const player = game.getPlayer(1)!;
-
-    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
-
-    expect(metadata.hiddenAction.suppressFromActionPanel).toBe(true);
-  });
-
-  it('omits suppressFromActionPanel entirely for an action that did not call .suppressFromActionPanel()', () => {
-    const game = new ActionPanelSuppressionGame({
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'action-panel-suppression-test',
-    });
-    game.startFlow();
-    const player = game.getPlayer(1)!;
-
-    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
-
-    expect('suppressFromActionPanel' in metadata.visibleAction).toBe(false);
-  });
-
-  it('does not remove the suppressed action from the action list (metadata-only, not availability)', () => {
-    const game = new ActionPanelSuppressionGame({
-      playerCount: 2,
-      playerNames: ['Alice', 'Bob'],
-      seed: 'action-panel-suppression-test',
-    });
-    game.startFlow();
-    const player = game.getPlayer(1)!;
-
-    const metadata = buildActionMetadata(game, player, ['hiddenAction', 'visibleAction']);
-
-    expect(Object.keys(metadata).sort()).toEqual(['hiddenAction', 'visibleAction']);
+describe('every action is in the Action Panel (#1643)', () => {
+  it('gives an action builder no way to hide the action from the panel', () => {
+    expect('suppressFromActionPanel' in Action.create('anything')).toBe(false);
+    expect('suppressFromActionPanel' in worldAction('anything')).toBe(false);
   });
 });
 
@@ -471,7 +401,7 @@ describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', (
 
 // ============================================================================
 // #268: per-action emphasis rides the actionMetadata channel exactly like
-// `suppressFromActionPanel`. A verb that permanently ends something says so on
+// `manual`. A verb that permanently ends something says so on
 // its definition, and the panel and a custom board read it from the same place.
 // ============================================================================
 

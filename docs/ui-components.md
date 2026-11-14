@@ -581,8 +581,7 @@ not there.
 turn consumed, no persistent state moved -- and grouping changes neither
 executability nor server-side validation. A game that declares no grouping keeps
 the flat panel exactly as it is. The same metadata reaches this panel in world
-mode, where it matters most. The full rule, including how it relates to
-`.suppressFromActionPanel()`, is in
+mode, where it matters most. The full rule is in
 [Actions & Flow](./actions-and-flow.md#group-and-order-arrange-the-start-buttons).
 
 #### A pick's choices can be grouped too

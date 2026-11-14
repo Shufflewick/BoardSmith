@@ -1213,7 +1213,6 @@ Action.create('move')
   .help('Moves one space, orthogonally.')  // Help popover text
   .notUndoable()                    // Cannot undo this action
   .manual()                         // Never auto-execute for the player
-  .suppressFromActionPanel()        // Hide the redundant Action Panel button (see below)
   .destructive()                    // This verb permanently ends something (see below)
   .group('More', 'Empire settings') // Put its start button inside a menu group (see below)
   .order(20)                        // Where its button sits in its level
@@ -1486,35 +1485,13 @@ A custom board reads the same flag off the same metadata
 about which verb is the dangerous one -- the parity rule above applies to
 emphasis exactly as it applies to everything else.
 
-#### `.suppressFromActionPanel()` hides a *redundant* button, never the last one
+#### No action can be hidden from the Action Panel
 
-Use it for an action whose board affordance is inherent — drag-drop,
-click-to-select — where a second *start button* in the panel is clutter. The
-action stays fully executable from the board or a custom UI; this is a rendering
-filter, not a security control.
-
-Its reach is deliberately narrow, and worth stating plainly because it is
-routinely mistaken for a way to turn the panel off:
-
-- It hides the **start button only**. Once the action is under way, the panel
-  renders that action's prompt and its full choice list exactly as always —
-  by design, per the parity rule above. There is no flag that suppresses a live
-  choice list, and there will not be one.
-- **If every available action is suppressed, they are all shown anyway** --
-  arranged by whatever `.group()` the game declared for them, not flattened. A
-  button is only redundant while something else is offered; when nothing is, the
-  panel is the player's last control. That guarantee exists because the
-  alternative has a dead end in it: an action with **no selections** can never
-  start a pick, so if its button were hidden the player would get a prompt,
-  nothing to press, and no mid-pick choice list to fall back on either — a state
-  with no way out.
-
-Design the board affordance as the primary path, not the only one.
-
-`boardsmith smoke` fails a board that starts a suppressed action while the panel
-offers others (#1642): the panel then has no start button for it, so a player
-using the panel alone cannot take it, which breaks the one-way parity rule. The
-method goes in #1643; until then, keep it off any action a board control starts.
+Every action a player can take is in the panel, as its own start button or on
+the menu of a thing it is about. A board control is in addition to the panel,
+never instead of it, so a player using the panel alone can take every action the
+board can. A panel crowded with buttons is
+arranged with `.group()` and `.order()` below, which hide nothing.
 
 #### `.group()` and `.order()` arrange the start buttons
 
@@ -1599,15 +1576,6 @@ rules to be told.
   show the same state.
 - **A game that declares nothing.** With no `.group()` anywhere the panel is the
   flat list it has always been, with no menu chrome at all.
-
-##### How it relates to `.suppressFromActionPanel()`
-
-They are one mechanism with two halves, and they are deliberately not allowed to
-disagree: **suppression decides membership** (which actions are drawn) and
-**grouping decides arrangement** (where each drawn button sits). So when the
-all-suppressed fallback above restores the list, it restores it *as the game's
-hierarchy* -- never as a flat list, which would be the fallback overruling the
-arrangement the game declared.
 
 ##### Keyboard and screen reader
 

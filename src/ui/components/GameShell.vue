@@ -60,9 +60,8 @@ interface GameShellProps {
   /**
    * Platform-only escape hatch that suppresses the entire Action Panel
    * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
-   * scaffold/bridge — use per-action `.suppressFromActionPanel()` on the action
-   * definition instead. Referenced by the platform client and Phase 166
-   * SKILLDEF-03. Default: false.
+   * scaffold/bridge: every action a game offers is in the Action Panel.
+   * Referenced by the platform client and Phase 166 SKILLDEF-03. Default: false.
    */
   platformActionPanelEscapeHatch?: boolean;
   /**
@@ -403,19 +402,6 @@ watch(turnIsMine, (now, before) => {
 });
 
 const isActionHelpVisible = actionHelpPreference().use('actionHelp');
-
-// LIBX-01 / A11Y C-2: GameShell no longer unmounts ActionPanel when every
-// available action is `.suppressFromActionPanel()`. It used to, with a mid-pick escape
-// hatch to keep the keyboard/SR safety net alive for the action the net exists
-// to protect. That guard only covered actions that HAVE a pick in progress: an
-// action with no selections can never start one, so a game whose sole
-// available action was a suppressed no-selection confirm emptied the Action Panel with
-// nothing left to press and no way to reach the net — a state the player cannot
-// leave. The fix belongs at the mechanism, not the guard: ActionPanel's own
-// suppression filter now falls back to the full list rather than emptying the
-// Action Panel (see its `visibleActions`), so "all suppressed" is no longer a state
-// this component has to defend against. The only thing that removes the panel
-// is the explicit platform escape hatch below.
 
 // True while a simultaneous step is active (`awaitingPlayers` non-empty).
 // Single source for every D27 guard below: while true, status must never be
