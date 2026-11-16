@@ -133,6 +133,16 @@ export async function onTablePage(browser, hostUrl, viewport, body) {
   await body(page, await openTableSample(page, hostUrl));
 }
 
+/** Launch a browser, run `body(page, frame)` on the table sample at a desktop size, then close the browser. */
+export async function onDesktopTable(launch, hostUrl, body) {
+  const browser = await launch();
+  try {
+    await onTablePage(browser, hostUrl, { width: 1440, height: 900 }, body);
+  } finally {
+    await browser.close();
+  }
+}
+
 /** Resize `page` to `viewport`, then the text of everything `locator` matches once one of them says `expected`. */
 export async function textsAt(page, locator, viewport, expected) {
   await page.setViewportSize(viewport);

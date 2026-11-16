@@ -173,6 +173,27 @@ function reportMissingAnchor(el: Element): void {
 }
 
 /**
+ * Each element `handler` captured that is still in `container`, with where it
+ * was and where it is now. An element captured but not re-found is a transient
+ * render state, not a missing-anchor error, so it is skipped silently.
+ */
+function forEachCaptured(
+  handler: ContainerHandler,
+  container: HTMLElement,
+  visit: (el: Element, id: string, oldRect: DOMRect, newRect: DOMRect) => void,
+): void {
+  container.querySelectorAll(handler.selector).forEach((el) => {
+    const id = getElementId(el);
+    if (!id) {
+      reportMissingAnchor(el);
+      return;
+    }
+    const oldRect = handler.positions.get(id);
+    if (oldRect) visit(el, id, oldRect, el.getBoundingClientRect());
+  });
+}
+
+/**
  * Internal handler for a single container's FLIP animations
  */
 interface ContainerHandler {
@@ -181,6 +202,17 @@ interface ContainerHandler {
   duration: number;
   easing: string;
   positions: Map<string, DOMRect>;
+}
+
+/**
+ * The scale the shell's magnifier applies to `container` (#1619): FLIP measures
+ * moves in screen pixels and plays them back as a translate inside the board,
+ * so it divides by this. It is the `--zoom-level` PlayShell's zoom container
+ * applies, 1 outside a shell.
+ */
+function boardZoomAt(container: Element): number {
+  const zoomContainer = container.closest('.game-shell__zoom-container');
+  return zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
 }
 
 /**
@@ -270,18 +302,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         const container = handler.containerRef?.value;
         if (container && handler.positions.size > 0) {
           const containerLabel = getElementId(container) ?? handler.selector;
-          const elements = container.querySelectorAll(handler.selector);
-          elements.forEach((el) => {
-            const id = getElementId(el);
-            if (!id) {
-              reportMissingAnchor(el);
-              return;
-            }
-
-            const oldRect = handler.positions.get(id);
-            if (!oldRect) return; // not previously captured => not a moved element
-
-            const newRect = el.getBoundingClientRect();
+          forEachCaptured(handler, container, (_el, id, oldRect, newRect) => {
             recordTrace({
               kind: 'flip',
               element: id,
@@ -317,21 +338,8 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         continue;
       }
 
-      const elements = container.querySelectorAll(handler.selector);
-
-      elements.forEach((el) => {
-        const id = getElementId(el);
-        if (!id) {
-          reportMissingAnchor(el);
-          return;
-        }
-
-        // Per-frame re-check: an element captured but not re-found here is a
-        // transient render state, not a missing-anchor error — stays a silent skip.
-        const oldRect = handler.positions.get(id);
-        if (!oldRect) return;
-
-        const newRect = el.getBoundingClientRect();
+      const zoom = boardZoomAt(container);
+      forEachCaptured(handler, container, (el, _id, oldRect, newRect) => {
         const deltaX = oldRect.left - newRect.left;
         const deltaY = oldRect.top - newRect.top;
 
@@ -343,7 +351,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         // Create FLIP animation
         const animation = (el as HTMLElement).animate(
           [
-            { transform: `translate(${deltaX}px, ${deltaY}px)` },
+            { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
             { transform: 'translate(0, 0)' },
           ],
           {
@@ -468,6 +476,7 @@ export function createFLIPSnapshot(
       }
 
       const animations: Animation[] = [];
+      const zoom = boardZoomAt(containerRef.value);
       const elements = containerRef.value.querySelectorAll(selector);
 
       elements.forEach((el) => {
@@ -488,7 +497,7 @@ export function createFLIPSnapshot(
         animations.push(
           (el as HTMLElement).animate(
             [
-              { transform: `translate(${deltaX}px, ${deltaY}px)` },
+              { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
               { transform: 'translate(0, 0)' },
             ],
             { duration, easing, fill: 'backwards' }
