@@ -1,5 +1,5 @@
 {
-  "revision": 404,
+  "revision": 405,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3175,6 +3175,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "The boardsmith dev page's own controls are at least 44px under pointer: coarse, a checkbox or radio by its label (#1668)"
+    },
+    {
+      "revision": 405,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The smoke walk says how many points of a pointer-aimed board it could not reach when it reports the rest refused (#1671)"
     }
   ]
 }

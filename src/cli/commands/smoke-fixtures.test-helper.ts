@@ -944,17 +944,24 @@ const POINTER_AIMED_SHAPES = {
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
-const POINTER_COVERS = {
-  none: { setup: '', aim: '', template: '', style: '' },
-  accepted: {
+const TOP_LEFT_QUARTER = "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')";
+
+const NO_COVER = { setup: '', aim: '', template: '', style: '' };
+const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }';
+
+/** The cover each `accepts` lays over the top-left quarter, where the game accepts the cells: from the second accepted aim on, or from the start. */
+const POINTER_COVERS: Partial<Record<string, typeof NO_COVER>> = {
+  underACover: {
     setup: '\nconst coverShown = ref(false);\n// Discovery aims once before the press; the tray opens when the player aims again.\nlet acceptedAims = 0;',
     aim: `
   if (choosing.value && !refused.value && ++acceptedAims >= 2) coverShown.value = true;`,
     template: `
     <div v-if="coverShown" class="cover"></div>`,
-    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
+    style: COVER_STYLE,
   },
+  alwaysCovered: { ...NO_COVER, template: '\n    <div class="cover"></div>', style: COVER_STYLE },
 };
+const coverOf = (accepts: string | undefined) => (accepts === undefined ? undefined : POINTER_COVERS[accepts]) ?? NO_COVER;
 
 /**
  * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
@@ -968,20 +975,23 @@ const POINTER_COVERS = {
  * points land on refused cells and only a finer search finds one the game accepts; with 'topRow'
  * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at;
  * with 'underAToast' (#1478) only the top-left quarter, which a toast covers from the moment the
- * pointer first moves over the board until it has been still for two seconds. With a `shape`, it
+ * pointer first moves over the board until it has been still for two seconds; with 'alwaysCovered'
+ * (#1671) only the top-left quarter, which a cover lies over from the start, as Windup Warfare's
+ * own Action Panel lay over its deployment area. With a `shape`, it
  * opens aimed at a refused cell: 'clipped' (#1521) makes the field twice as tall as the board, which
  * clips it (`overflow: clip`) to its middle half, so the walk cannot point at either of its corners;
  * 'twoRows' (#1521 review) has `claim` offer only rows 4 and 5, so the field names no cell (it has
  * no `data-bs-candidate`) over the other rows.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' | 'underACover'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' | 'underACover' | 'alwaysCovered'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
-    underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
-    underACover: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
+    underAToast: TOP_LEFT_QUARTER,
+    underACover: TOP_LEFT_QUARTER,
+    alwaysCovered: TOP_LEFT_QUARTER,
   };
-  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : 'none'];
+  const cover = coverOf(options.accepts);
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];

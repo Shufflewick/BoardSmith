@@ -1218,11 +1218,13 @@ function unreachable(covers: ReadonlySet<Exclude<OnTop, 'it'>>): never {
 async function aimAndClick(control: Control): Promise<void> {
   const covers = new Set<Exclude<OnTop, 'it'>>();
   let reached = 0;
+  let unreached = 0;
   let acceptedButCovered = false;
   for (const [x, y] of FINE_AIM_POINTS) {
     const at = await pointAt(control, x, y);
     if (typeof at === 'string') {
       covers.add(at);
+      unreached++;
       continue;
     }
     const accepted = await withinPageTime(control.frame.page(), PRESS_MS, 'reading whether the control accepts the point aimed at', (timeout) =>
@@ -1237,7 +1239,9 @@ async function aimAndClick(control: Control): Promise<void> {
       acceptedButCovered = true;
     } else reached++;
   }
-  if (reached > 0 && !acceptedButCovered && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses`);
+  // The points it never reached are named too: there the game may accept it, as under a panel listing every choice (#1671).
+  const rest = unreached > 0 ? `, and something on top of it, or out of sight, kept the walk from the other ${unreached}` : '';
+  if (reached > 0 && !acceptedButCovered && !covers.has('toast')) throw new Error(`at each of the ${reached} points the walk aimed at on it, it stands for a choice the game refuses${rest}`);
   unreachable(covers);
 }
 
