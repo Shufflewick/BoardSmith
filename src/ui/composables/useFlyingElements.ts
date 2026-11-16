@@ -95,6 +95,7 @@ import { ref, shallowRef, shallowReactive, computed, watch, onUnmounted, onScope
 import { prefersReducedMotion } from './reducedMotion.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
+import { injectBoardZoom } from './boardRegionPin.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder, isPlaceholderId } from '../../engine/element/hidden-placeholder.js';
@@ -498,6 +499,8 @@ export function useFlyingElements(
   const activeAnimations = new Map<string, { cancel: () => void }>();
   const isAnimating = ref(false);
   const boardInteraction = tryUseBoardInteraction();
+  // The ghost flies outside the board's magnifier, so it scales itself to match the cards it leaves and joins (#1664).
+  const boardZoom = injectBoardZoom();
 
   /**
    * Internal options type for the core animation implementation
@@ -600,7 +603,7 @@ export function useFlyingElements(
         top: `${startY}px`,
         width: `${cardWidth}px`,
         height: `${cardHeight}px`,
-        transform: 'rotateY(0deg)',
+        transform: `rotateY(0deg) scale(${boardZoom.value})`,
         transition: 'none',
         zIndex,
         pointerEvents: 'none',
@@ -661,7 +664,7 @@ export function useFlyingElements(
         // A new style object: Vue skips a style it has already applied by reference.
         flyingCard.style = {
           ...flyingCard.style,
-          transform: `translate(${currentCenterX - startCenterX}px, ${currentCenterY - startCenterY}px) rotateY(${flipRotation}deg)`,
+          transform: `translate(${currentCenterX - startCenterX}px, ${currentCenterY - startCenterY}px) rotateY(${flipRotation}deg) scale(${boardZoom.value})`,
         };
         flyingCard.progress = progress;
 

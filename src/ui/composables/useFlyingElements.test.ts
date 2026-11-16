@@ -63,6 +63,7 @@ const { useFlyingElements } = await import('./useFlyingElements.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
 const { prefersReducedMotion } = await import('./reducedMotion.js');
+const { provideBoardZoom } = await import('./boardRegionPin.js');
 type AutoWatchGameElement = import('./useFlyingElements.js').AutoWatchGameElement;
 
 function makeContainer(): HTMLElement {
@@ -687,6 +688,39 @@ describe('useFlyingElements', () => {
       expect(flyingElements.value).toHaveLength(0);
       // Not in test mode: no trace should have been recorded.
       expect(getAnimationTrace()).toHaveLength(0);
+    });
+  });
+
+  describe('board magnifier (#1664)', () => {
+    it('scales the ghost by the board zoom, from its first frame to its last', () => {
+      const rafQueue: FrameRequestCallback[] = [];
+      vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
+      vi.stubGlobal('cancelAnimationFrame', vi.fn());
+
+      let flying!: ReturnType<typeof useFlyingElements>;
+      const Board = defineComponent({
+        setup() {
+          flying = useFlyingElements({ duration: 50, holdDuration: 0 });
+          return () => h('div');
+        },
+      });
+      mount(defineComponent({
+        setup() {
+          provideBoardZoom(ref(2));
+          return () => h(Board);
+        },
+      }));
+      void flying.fly({
+        id: 'zoomed-fly',
+        startRect: makeRect({ width: 120, height: 168 }),
+        endRect: makeRect({ left: 400, top: 400, width: 120, height: 168 }),
+        elementData: { faceUp: true },
+      });
+
+      const ghost = () => flying.flyingElements.value[0]!.style;
+      expect(ghost().transform).toContain('scale(2)');
+      rafQueue.shift()!(performance.now() + 25);
+      expect(ghost().transform).toContain('scale(2)');
     });
   });
 
