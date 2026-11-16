@@ -36,10 +36,35 @@ interface LintResult {
   warningCount: number;
 }
 
+/** The engine's element classes, which a game's own element classes extend. */
+const ENGINE_ELEMENT_CLASSES = ['GameElement', 'Piece', 'Card', 'Die', 'Space', 'Deck', 'Hand', 'DicePool', 'Grid', 'GridCell', 'HexGrid', 'HexCell'];
+
+/** The element classes a game declares across `contents`, following `extends` chains back to an engine class. */
+function gameElementClasses(contents: Iterable<string>): string[] {
+  const parents = new Map<string, string>();
+  for (const content of contents) {
+    for (const [, name, parent] of content.matchAll(/class\s+(\w+)(?:\s*<[^{]*?>)?\s+extends\s+(\w+)/g)) {
+      parents.set(name, parent);
+    }
+  }
+  const known = new Set(ENGINE_ELEMENT_CLASSES);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const [name, parent] of parents) {
+      if (!known.has(name) && known.has(parent)) {
+        known.add(name);
+        grew = true;
+      }
+    }
+  }
+  return [...known].filter((name) => !ENGINE_ELEMENT_CLASSES.includes(name));
+}
+
 /**
- * Patterns that indicate potential bugs in BoardSmith games
+ * Patterns that indicate potential bugs in BoardSmith games. The element words
+ * are the game's own element classes plus the generic card, piece and element.
  */
-const LINT_RULES = {
+const lintRules = (elementClasses: string[]) => ({
   // Element comparison issues
   'element-includes': {
     // Match .includes( preceded by element-like contexts
@@ -76,7 +101,7 @@ const LINT_RULES = {
   // indexOf on element arrays. The trailing `\b(?!\w*[Ii]d\b)` keeps
   // `ids.indexOf(cardId)` out of it — comparing ids IS the recommended form.
   'element-indexof': {
-    pattern: /\.indexOf\s*\(\s*(?:card|piece|element)\w*\b(?<![Ii]d)\s*\)/gi,
+    pattern: new RegExp(String.raw`\.indexOf\s*\(\s*(?:${['card', 'piece', 'element', ...elementClasses].join('|')})\w*\b(?<![Ii]d)\s*\)`, 'gi'),
     severity: 'warning' as const,
     message: 'indexOf() on elements may fail - use .findIndex(e => e.id === target.id)',
     suggestion: 'Replace with .findIndex(e => e.id === target.id)',
@@ -110,7 +135,7 @@ const LINT_RULES = {
 
   // Element reference on player
   'player-element-ref': {
-    pattern: /class\s+\w+Player[^{]*\{[^}]*:\s*(?:Card|Piece|Element)(?:\s*\||\s*;|\s*=)/g,
+    pattern: new RegExp(String.raw`class\s+\w+Player[^{]*\{[^}]*:\s*(?:${['Card', 'Piece', 'Element', ...elementClasses].join('|')})(?:\s*\||\s*;|\s*=)`, 'g'),
     severity: 'info' as const,
     message: 'Storing element reference on Player class - may not survive serialization',
     suggestion: 'Store element ID instead: selectedCardId: number, then use game.getElementById()',
@@ -125,19 +150,17 @@ const LINT_RULES = {
     // Only warn if registerElements is not found nearby
     negativePattern: /registerElements/,
   },
-};
+});
 
 /**
- * Lint a single file for BoardSmith-specific issues
+ * Lint a single file for BoardSmith-specific issues. `elementClasses` are the
+ * game's own element classes, from gameElementClasses() over all its files.
  */
-export function lintFile(filePath: string, content: string): LintIssue[] {
+export function lintFile(filePath: string, content: string, elementClasses: string[]): LintIssue[] {
   const issues: LintIssue[] = [];
   const lines = content.split('\n');
 
-  for (const [ruleName, rule] of Object.entries(LINT_RULES)) {
-    // Reset regex state
-    rule.pattern.lastIndex = 0;
-
+  for (const [ruleName, rule] of Object.entries(lintRules(elementClasses))) {
     let match;
     while ((match = rule.pattern.exec(content)) !== null) {
       // Find line number
@@ -184,7 +207,7 @@ function checkElementRegistration(filePath: string, content: string): LintIssue[
   const issues: LintIssue[] = [];
 
   // Find all custom element classes (extends GameElement, Card, Piece, etc.)
-  const elementClassPattern = /class\s+(\w+)\s+extends\s+(?:GameElement|Card|Piece|Space|Deck|Hand|Die|Grid|GridCell)/g;
+  const elementClassPattern = new RegExp(String.raw`class\s+(\w+)\s+extends\s+(?:${ENGINE_ELEMENT_CLASSES.join('|')})`, 'g');
   const customClasses: string[] = [];
 
   let match;
@@ -289,9 +312,10 @@ async function runPitfallLint(cwd: string): Promise<number> {
     warningCount: 0,
   };
 
+  const elementClasses = gameElementClasses(fileContents.values());
   for (const [filePath, content] of fileContents) {
     // Run pattern-based rules
-    const fileIssues = lintFile(filePath, content);
+    const fileIssues = lintFile(filePath, content, elementClasses);
     result.issues.push(...fileIssues);
 
     // Run element registration check
