@@ -240,11 +240,11 @@ watch(effectivePieceImage, () => {
   }
 }
 
-/* is-board-highlighted: dashed accent + selectable fill */
+/* is-board-highlighted: solid accent-2 + stronger fill, so a preview stands out from selectable neighbours (#1635) */
 .piece.is-board-highlighted {
-  outline: 2px dashed var(--bsg-accent);
+  outline: 3px solid var(--bsg-accent-2);
   outline-offset: 2px;
-  background: var(--bsg-selectable);
+  background: var(--bsg-droptarget-hover);
 }
 
 /* is-board-selected: solid accent ring + selected fill + accent ring shadow */

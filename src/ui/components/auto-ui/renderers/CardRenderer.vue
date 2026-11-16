@@ -264,7 +264,9 @@ function handlePointerdown(event: PointerEvent) {
 
 /* Board interaction highlights */
 .card-container.is-board-highlighted {
-  background: var(--bsg-selectable);
+  outline: 3px solid var(--bsg-accent-2);
+  outline-offset: 2px;
+  background: var(--bsg-droptarget-hover);
 }
 
 .card-container.is-board-selected {

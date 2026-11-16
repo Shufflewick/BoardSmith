@@ -88,10 +88,14 @@ it('a first tap on a choice highlights its pieces without committing it, and a s
   await tap(button('Sevens'));
   expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 41 }]);
   expect(sendAction).not.toHaveBeenCalled();
+  expect(button('Sevens').hasAttribute('data-bs-armed')).toBe(true);
 
   await tap(button('Kings'));
   expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
   expect(sendAction).not.toHaveBeenCalled();
+  // #1635: the armed button is the one a second tap commits, so only it says so.
+  expect(button('Sevens').hasAttribute('data-bs-armed')).toBe(false);
+  expect(button('Kings').hasAttribute('data-bs-armed')).toBe(true);
 
   await tap(button('Kings'));
   expect(sendAction).toHaveBeenCalledWith('ask', { rank: 'K' });
@@ -160,9 +164,25 @@ it('a tap elsewhere ends a preview, so the next tap on the same choice previews 
   await tap(button('Kings'));
   document.body.dispatchEvent(Object.assign(new MouseEvent('pointerdown', { bubbles: true }), { pointerType: 'touch' }));
   board.setHoveredChoice(null);
+  await flush();
+  expect(button('Kings').hasAttribute('data-bs-armed')).toBe(false);
 
   await tap(button('Kings'));
   expect(board.hoveredChoice?.targetRefs).toEqual([{ id: 52 }]);
+  expect(sendAction).not.toHaveBeenCalled();
+  wrapper.unmount();
+});
+
+it('an armed choice disarms when its pick closes, so reopening it needs a fresh preview', async () => {
+  const { wrapper, sendAction, button } = await mountPanel();
+  await tap(button('Kings'));
+  await wrapper.find('.cancel-btn').trigger('click');
+  await flush();
+  await wrapper.find('[data-bs-action="ask"]').trigger('click');
+  await flush();
+  expect(button('Kings').hasAttribute('data-bs-armed')).toBe(false);
+
+  await tap(button('Kings'));
   expect(sendAction).not.toHaveBeenCalled();
   wrapper.unmount();
 });

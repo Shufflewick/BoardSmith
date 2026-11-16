@@ -148,11 +148,11 @@ const ariaLabel = computed(() => {
   }
 }
 
-/* Board interaction highlights — dashed = highlighted, solid = selected */
+/* Board interaction highlights: thick accent-2 = highlighted, accent = selected */
 .die-container.is-board-highlighted {
-  background: var(--bsg-selectable);
-  outline: 2px dashed var(--bsg-accent);
+  outline: 3px solid var(--bsg-accent-2);
   outline-offset: 2px;
+  background: var(--bsg-droptarget-hover);
 }
 
 .die-container.is-board-selected {

@@ -292,7 +292,9 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 
 /* Board interaction highlights */
 .hand-container.is-board-highlighted {
-  background: var(--bsg-selectable);
+  outline: 3px solid var(--bsg-accent-2);
+  outline-offset: 4px;
+  background: var(--bsg-droptarget-hover);
 }
 
 .hand-container.is-board-selected {

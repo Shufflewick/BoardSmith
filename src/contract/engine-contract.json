@@ -1,5 +1,5 @@
 {
-  "revision": 386,
+  "revision": 387,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3031,6 +3031,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "AutoUI names a piece in full and lists its game attributes beside it in spaces and top-level rows (#1628)"
+    },
+    {
+      "revision": 387,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A first tap on an AutoUI choice arms its button visibly, and board-highlighted elements draw apart from selectable ones (#1635)"
     }
   ]
 }
