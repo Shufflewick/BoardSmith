@@ -11,8 +11,8 @@ step. Mirrors `build/ask.md`'s no-subagent shape exactly, not `build/redteam.md`
 
 ## Who Signs Off
 
-Only the designer answers an ask gate or signs off a playtest. An unattended run parks the chunk at
-that gate and moves on only to work that does not need the answer. A chunk's `Status: verified` is
+Only the designer answers a rules question or signs off a playtest. An unattended run parks the
+chunk at that question and keeps building the chunks that do not need the answer. A chunk's `Status: verified` is
 never typed: it is derived from a sign-off that `boardsmith chunk-signoff` records (who, when, and
 which checklist items were observed), and the provenance check at close refuses a verified status
 that no sign-off backs. A designer decision about one chunk is never a precedent for another: a
@@ -61,8 +61,8 @@ The human client-playtest stop below — "The Numbered Click-By-Click Test Scrip
 Verified Gate" — runs ONLY when BOTH are true for this chunk:
 
 1. Its SKETCH.md entry's `Milestone:` flag (`templates/SKETCH.template.md`, set at
-   sketch-derivation time — see `ingest/sketch-derivation.md`) is one of the three milestone
-   values: `core-loop`, `scoring`, `final-acceptance`.
+   sketch-derivation time — see `ingest/sketch-derivation.md`) is one of the checkpoint values:
+   `core-loop`, `mid-build`, `scoring`, `animation`, `final-acceptance`.
 2. Its `ui:` tag is `touches` or `major` — a chunk with no visible UI (`ui: none`) is never
    routed to a human playtest, milestone or not.
 
@@ -78,12 +78,30 @@ in git (`state-machine.md` "Project Layout"). That command writes the sign-off, 
 mirrors SKETCH.md's pointer (CHUNK.md first, then SKETCH.md second, per "Write Order"). It refuses an
 automated sign-off for a chunk that does need a designer playtest. Then flow straight through to
 `close`/the next chunk per
-`state-machine.md` "Session Handoff Seams" — no session stop here. A genuine rules-adjudication /
-open-question escalation discovered during this chunk's work is the one exception: it always
-stops the session regardless of milestone/UI status (see `state-machine.md`'s human-gate list).
+`state-machine.md` "Session Handoff Seams" — no session stop here. A genuine rules question
+discovered during this chunk's work is the one exception: it parks the chunk regardless of
+milestone/UI status until the designer answers (see `build/ask.md` "Parking the Chunk on a Rules
+Question").
 
-The remainder of this file (numbered script, Verified Gate, etc.) describes the milestone-chunk
-path — read it as conditioned on the gate above.
+The remainder of this file (decision review, numbered script, Verified Gate, etc.) describes the
+milestone-chunk path — read it as conditioned on the gate above.
+
+## Reviewing the Decisions
+
+Every blocking playtest opens with the decisions the build took without stopping: every
+`DECISIONS.md` entry whose `- Designer review:` reads `pending`, from this chunk and every chunk
+built since the last blocking playtest (`build/ask.md` "The Write Sequence"). Present them as one
+short numbered list in the designer's language (`reporting.md`), each with the choice taken and
+the alternative, and ask which they want changed. They are reviewed together, once, here, never
+one at a time as they were made.
+
+For each, record the designer's verdict in its `- Designer review:` line, once:
+`approved at <this chunk> playtest`, or `rejected at <this chunk> playtest — fix chunk <slug>`.
+A rejected decision becomes a fix chunk: insert it with `/bs-insert-chunk` (under `/bs-build-game`,
+a dispatch at the `judgement` role, as `build-game.md` Step 6 inserts a bot chunk), placed where its
+dependencies allow, and name it in the verdict. A decision whose rejection breaks what the designer
+is about to play (the chunk under test depends on it) is fixed before this playtest instead:
+record the verdict and the reopen, and play after the fix. Then go on to the test script.
 
 ## The User Owns the Server
 
@@ -185,7 +203,22 @@ dedicated leak-inspector panel in the dev host, only the seat switcher plus look
 renders. For chunks with no hidden information, fill this line with "n/a — no hidden info in
 this chunk" instead of omitting the line entirely.
 
-## The Verified Gate (mirror `ask.md`'s Gate-Before-Write) — milestone chunks only
+## The Animation Playtest
+
+The sketch's animation chunk (`Milestone: animation`) builds the motion intents in `DESIGN.md`'s
+"## Motion Intents" and ends here, with the designer choosing between motions they can see. For
+each key interaction it builds two or three motion variants (for example a quick slide, an arc
+with a settle, a flip), each registered as its own entry in the game's `src/ui/uis.ts`, so the
+dev host's UI switcher swaps between them live on the same game. The numbered script names each
+interaction and the variants to compare, and asks which one the designer wants.
+
+After the designer chooses, the chosen variant becomes the game's motion, the other variants and
+their `uis.ts` entries are deleted (no dead code), and the choices are recorded in `DESIGN.md`'s
+"## Motion Intents" (a design change, under `state-machine.md` "Restyle Rule"). Reduced motion
+still holds for every variant: `build/test.md`'s A11y Floor item 5 pins it by test, so a variant
+that ignores it fails before the designer ever sees it.
+
+## The Verified Gate (Gate-Before-Write) — milestone chunks only
 
 This gate applies to a milestone chunk with visible UI, per the "Milestone/UI Gate" above.
 

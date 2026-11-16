@@ -108,7 +108,7 @@ const REFERENCED_PATHS = [
   'build/audit.md',
   'build/repair.md',
   'build/design-review.md',
-  'build/design-ask.md',
+  'ingest/design-session.md',
   'build/playtest.md',
   'build/revise.md',
   'build/close.md',
@@ -321,6 +321,37 @@ describe('BUILD-04 — ask gate', () => {
     // Pin the write-LAST ordering rule itself, not just the strings' presence — a reword that
     // drops "last, after every other write" must fail here.
     expect(ask).toContain('**last**, after every other write');
+  });
+
+  it('does not stop the run: it records the interpretation and defaults in DECISIONS.md for batch review (#1660)', () => {
+    const ask = read('build/ask.md').replace(/\s+/g, ' ');
+    expect(ask).toMatch(/\*\*The ask step does not stop the run\.\*\*/);
+    expect(ask).toMatch(/one `DECISIONS\.md` entry \("Interpretation of <chunk>"\)/);
+    expect(ask).toMatch(/`- Designer review: pending`/);
+    expect(ask).toMatch(/Then continue straight into `\{spec, build, test\}`: no designer stop\./);
+  });
+
+  it('parks the chunk on a rules question and lets the run build the chunks that do not depend on it (#1660)', () => {
+    const ask = read('build/ask.md').replace(/\s+/g, ' ');
+    expect(ask).toContain('## Parking the Chunk on a Rules Question');
+    expect(ask).toMatch(/`gate\.kind: rules-adjudication`/);
+    expect(ask).toMatch(/moves on to the chunks that do not depend on it/);
+  });
+
+  it('playtest.md opens every blocking playtest with the batch review of pending decisions, a rejection becoming a fix chunk (#1660)', () => {
+    const playtest = read('build/playtest.md').replace(/\s+/g, ' ');
+    expect(playtest).toContain('## Reviewing the Decisions');
+    expect(playtest).toMatch(/every `DECISIONS\.md` entry whose `- Designer review:` reads `pending`/);
+    expect(playtest).toMatch(/A rejected decision becomes a fix chunk/);
+    expect(read('templates/DECISIONS.template.md')).toMatch(/- Designer review \(on entries the `ask` step writes\)/);
+  });
+
+  it('playtest.md has the animation playtest: two or three motion variants compared live in the dev host (#1660)', () => {
+    const playtest = read('build/playtest.md').replace(/\s+/g, ' ');
+    expect(playtest).toContain('## The Animation Playtest');
+    expect(playtest).toMatch(/two or three motion variants/);
+    expect(playtest).toMatch(/dev host's UI switcher swaps between them live/);
+    expect(playtest).toMatch(/Reduced motion still holds for every variant/);
   });
 });
 
@@ -773,25 +804,48 @@ describe('UIQ-04 — design-review', () => {
   });
 });
 
-describe('UIQ-01 — design ask', () => {
-  it('names the three direction names, with Derive as default recommendation', () => {
-    const designAsk = read('build/design-ask.md');
-    expect(designAsk).toContain('Adopt');
-    expect(designAsk).toContain('Derive');
-    expect(designAsk).toContain('Original');
-    expect(designAsk).toMatch(/Derive.{0,80}default/is);
+describe('UIQ-01 — the design session before the first chunk (#1660)', () => {
+  const session = () => read('ingest/design-session.md').replace(/\s+/g, ' ');
+
+  it('runs with the frontend-design skill and makes five directions as static HTML mocks, before any code', () => {
+    expect(session()).toMatch(/`frontend-design` skill/);
+    expect(session()).toMatch(/\*\*Five distinct directions\*\*/);
+    expect(session()).toMatch(/static HTML and CSS/);
+    expect(session()).toMatch(/No game code is written until the designer signs off/);
   });
 
-  it('writes DESIGN.md', () => {
-    const designAsk = read('build/design-ask.md');
-    expect(designAsk).toContain('DESIGN.md');
+  it('has a whole-screen direction switcher and a per-component switcher whose picks render together', () => {
+    expect(session()).toMatch(/\*\*A direction switcher\*\*/);
+    expect(session()).toMatch(/\*\*A per-component switcher\*\*/);
+    expect(session()).toMatch(/inside the whole-screen mock/);
   });
 
-  it('build/ask.md carries the first-UI-chunk pre-check hook', () => {
-    const ask = read('build/ask.md');
-    expect(ask).toMatch(/## ui:/);
-    expect(ask).toMatch(/touches.{0,20}major/i);
-    expect(ask).toMatch(/DESIGN\.md does not (yet )?exist/i);
+  it('uses real rulebook content, shows the Action Panel, and offers light, dark, 1440px and 390px', () => {
+    expect(session()).toMatch(/\*\*real content\*\*: real card names/);
+    expect(session()).toMatch(/\*\*The Action Panel in every mock\*\*/);
+    expect(session()).toMatch(/\*\*Light and dark\*\*, and \*\*1440px and 390px\*\*/);
+  });
+
+  it('lets the designer ask for more variants and iterate', () => {
+    expect(session()).toMatch(/ask for more variants of any screen or component/);
+  });
+
+  it('checks contrast and colorblind readability before sign-off, and records motion intents without building them', () => {
+    expect(session()).toMatch(/\*\*Contrast:\*\* axe's `color-contrast` rule/);
+    expect(session()).toMatch(/\*\*Colorblind:\*\*.*protanopia, deuteranopia, tritanopia and achromatopsia/);
+    expect(session()).toMatch(/\*\*Motion is described, not built\.\*\*/);
+  });
+
+  it('writes DESIGN.md, the theme file the game imports, and archives the gallery, only after an explicit yes', () => {
+    expect(session()).toMatch(/write nothing below until they say yes/);
+    expect(session()).toContain('src/ui/theme.css');
+    expect(session()).toContain('design/DESIGN.md');
+    expect(session()).toMatch(/Commit the gallery as it stands, as the archived reference/);
+  });
+
+  it('build/ask.md no longer opens a design choice, and build-chunk.md builds no chunk before the sign-off', () => {
+    expect(read('build/ask.md')).not.toMatch(/design-ask|First-UI-Chunk Design Check/);
+    expect(read('build-chunk.md').replace(/\s+/g, ' ')).toMatch(/\*\*No chunk is built before the design sign-off\.\*\*/);
   });
 });
 
@@ -1390,30 +1444,31 @@ describe('cross-file consistency — every current-phase referenced path resolve
 });
 
 describe('SKILLAUTO-01 — milestone playtest gates', () => {
-  it('state-machine.md scopes the playtest human-verification gate to milestone chunks, not every chunk', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/playtest.*human-verification gate.*scoped to milestone chunks/i);
-    expect(stateMachine).toContain('core-loop');
-    expect(stateMachine).toContain('final-acceptance');
+  const flatStateMachine = () => read('state-machine.md').replace(/\s+/g, ' ');
+
+  it('state-machine.md scopes the playtest human-verification gate to the checkpoint chunks, not every chunk', () => {
+    expect(flatStateMachine()).toMatch(/playtest.*human-verification gate.*scoped to the sketch's checkpoint chunks/i);
+    expect(flatStateMachine()).toMatch(/`core-loop`, the `mid-build` checkpoints, `scoring` \(game-end\/scoring\/winner-determination\), `animation`, and `final-acceptance`/);
   });
 
-  it('state-machine.md still lists a rules-adjudication / open-question escalation as an always-stop regardless of milestone', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/genuine rules adjudication \/ open-question escalation/i);
-    expect(stateMachine).toMatch(/always stops the session\s+regardless of milestone/i);
+  it('state-machine.md lists the design sign-off as a blocking checkpoint', () => {
+    expect(flatStateMachine()).toMatch(/The \*\*design sign-off\*\*/);
+  });
+
+  it('state-machine.md says neither the ask step nor a rules question stops the work while other chunks remain (#1660)', () => {
+    expect(flatStateMachine()).toMatch(/\*\*Not a stop: the `ask` step, and a rules question\.\*\*/);
+    expect(flatStateMachine()).toMatch(/parks only the chunk that needs the answer/);
+    expect(flatStateMachine()).toMatch(/stops only when every remaining chunk waits on the designer \(`boardsmith next-chunk`/);
   });
 
   it('state-machine.md never routes a human playtest for a UI-less chunk', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/never routed to a human playtest/i);
+    expect(flatStateMachine()).toMatch(/never routed to a human playtest/i);
   });
 
   it('build/playtest.md gates its human stop on milestone flag AND visible ui: presence', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toMatch(/Milestone\/UI Gate/);
-    expect(playtest).toContain('core-loop');
-    expect(playtest).toContain('scoring');
-    expect(playtest).toContain('final-acceptance');
+    expect(playtest).toMatch(/`core-loop`, `mid-build`, `scoring`, `animation`, `final-acceptance`/);
     expect(playtest).toMatch(/ui:.*is.*touches.*or.*major/i);
   });
 
@@ -1480,11 +1535,10 @@ describe('SKILLAUTO-04 — run-while-away', () => {
     expect(stateMachine).toMatch(/keeps making progress on reasonable defaults/i);
   });
 
-  it('state-machine.md states progress is bounded only by the milestone gates + rules adjudication + context\\/stuck-state', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/bounded\s+only by/i);
-    expect(stateMachine).toMatch(/milestone gates/i);
-    expect(stateMachine).toMatch(/rules adjudication/i);
+  it('state-machine.md states progress is bounded only by the planned checkpoints, a rules question that leaves nothing to build, and stuck-state', () => {
+    const stateMachine = read('state-machine.md').replace(/\s+/g, ' ');
+    expect(stateMachine).toMatch(/bounded only by the planned checkpoints/);
+    expect(stateMachine).toMatch(/a genuine rules question that leaves nothing else to build, and the stuck-state condition/);
   });
 });
 
@@ -2227,7 +2281,7 @@ describe('#452: the done gate is `boardsmith verify`', () => {
   });
 
   it("build-game.md records a playtest gate's sign-off only after the chunk's verify command passed", () => {
-    const gate = flatRead('build-game.md').split('- **`gate`**')[1].split('- **`filing`**')[0];
+    const gate = flatRead('build-game.md').split('- **`gate`, any other kind**')[1].split('- **`filing`**')[0];
     expect(gate).toMatch(/commit.{0,200}npx boardsmith verify --chunk <slug>.{0,300}chunk-signoff/);
   });
 

@@ -27,7 +27,7 @@ Session Lock: <!-- none | "<slug> @ <session-id> — locked at <ISO timestamp>" 
      same-day session that later resumes a DIFFERENT next chunk finds no live lock here at all. -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: "Sketch Version:", "Session Lock:",
-     "## Player Counts", "## UI Strategy", "## Ordered Chunk List", "## Variants (deferred)",
+     "## Player Counts", "## Design Session", "## Ordered Chunk List", "## Variants (deferred)",
      "## Ideas Backlog", "## Mandated Chunks". If any required heading is missing or malformed,
      a resuming session STOPS and asks the user — it never guesses the intended state. See
      state-machine.md "Cold-Resume Parse Contract". -->
@@ -39,19 +39,16 @@ Min players: <!-- N -->
 Max players: <!-- N -->
 Per-count setup differences: <!-- e.g. "3-player variant removes the yellow deck", or "none" -->
 
-## UI Strategy
-<!-- Decided at ingest, with the user (Open Question 1 / RESEARCH.md): Custom UI from chunk 1,
-     or AutoUI with a scheduled cutover to Custom UI at a later named chunk. Recorded here because
-     DESIGN.md doesn't exist until the first UI chunk's `ask` step, which may be several chunks
-     later — this decision needs a home before then. -->
+## Design Session
+<!-- The game's visual design is settled with the designer right after this sketch is approved and
+     before the first chunk is built (ingest/design-session.md): five directions as throwaway
+     mocks, the designer mixes and matches, and signs off. No game code is written until then.
+     Every game builds its custom board from the first chunk, with the Action Panel always beside
+     it. The status lives in DESIGN.md; this line is its derived pointer, like a chunk's. Any later
+     change to DESIGN.md flips every chunk whose verified surface it re-styles (state-machine.md
+     "Restyle Rule"). There is no silent "we'll re-verify later." -->
 
-Strategy: <!-- custom-from-chunk-1 | autoui-with-cutover -->
-Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
-
-<!-- Reminder: any later change to UI strategy (the AutoUI→Custom-UI cutover) flips ALL
-     previously verified chunks back to `built` and re-opens their test scripts; any change to
-     DESIGN.md flips every chunk whose verified surface it re-styles (state-machine.md
-     "Restyle/Cutover Rule"). There is no silent "we'll re-verify later." -->
+- Status (derived from DESIGN.md): <!-- pending | signed-off -->
 
 ## Ordered Chunk List
 <!-- Keyed by stable slug, not ordinal position — reordering this list never breaks
@@ -77,12 +74,14 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      to derive it from.
 
      Milestone-flag grammar (SKILLAUTO-01): every chunk entry — detailed or tail — carries a
-     `Milestone:` line with exactly one of `none | core-loop | scoring | final-acceptance`. This
-     flag is what state-machine.md's human-gate list and build/playtest.md's Verified Gate read
-     to decide whether a chunk gets the human client-playtest stop — it is set explicitly HERE,
-     at sketch-derivation time (see ingest/sketch-derivation.md), never inferred at runtime. Only
-     the three milestone anchors named in "## Mandated Chunks" below ever carry a non-`none`
-     value; every other chunk (including every tail entry) is `Milestone: none`.
+     `Milestone:` line with exactly one of
+     `none | core-loop | mid-build | scoring | animation | final-acceptance`. This flag is what
+     state-machine.md's human-gate list, build/playtest.md's Verified Gate and `boardsmith
+     chunk-signoff` read to decide whether a chunk gets the human client-playtest stop — it is set
+     explicitly HERE, at sketch-derivation time (see ingest/sketch-derivation.md), and approved by
+     the designer with the sketch, never inferred at runtime. Only the checkpoints named in
+     "## Mandated Chunks" below ever carry a non-`none` value; every other chunk is
+     `Milestone: none`.
 
      Depends-on grammar (#294): every chunk entry — detailed or tail — carries a `Depends on:` line
      naming, comma-separated, the chunks whose work it builds on (their state, verbs, or rules), or
@@ -103,7 +102,7 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 - Citations: <!-- rulebook section(s) -->
 - Depends on: <!-- none | comma-separated chunk slugs -->
 - ui: <!-- none | touches | major -->
-- Milestone: <!-- none | core-loop | scoring | final-acceptance -->
+- Milestone: <!-- none | core-loop | mid-build | scoring | animation | final-acceptance -->
 - Status (derived from chunks/<!-- slug -->/CHUNK.md): <!-- proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->
 - Rules Staleness (derived from chunks/<!-- slug -->/CHUNK.md): <!-- clear | rules-stale — rulebook moved since this chunk was verified -->
 - Test script (outcome-based): <!-- "move a pawn one space; the board reflects it" style description -->
@@ -120,7 +119,7 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 - What it builds: <!-- one-line description -->
 - Depends on: <!-- none | comma-separated chunk slugs -->
 - ui: <!-- none | touches | major -->
-- Milestone: <!-- none | core-loop | scoring | final-acceptance -->
+- Milestone: <!-- none | core-loop | mid-build | scoring | animation | final-acceptance -->
 - Status: proposed (sketch-level — no CHUNK.md yet)
 
 ## Variants (deferred)
@@ -140,13 +139,20 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 
 - The first chunk in the Ordered Chunk List above is always the core event loop.
 - The sketch must contain a game-end / scoring / winner-determination chunk.
+- The sketch must contain an animation chunk, after the game-end/scoring chunk and before the
+  bot-opponent chunk (if any) and final acceptance: it builds the motion intents DESIGN.md
+  records, once the screens and state changes are stable.
 - The sketch must contain a final-acceptance chunk: the full game played start-to-finish, a
   coverage check confirming every non-variant rulebook slice was built, plus the design-QA/a11y
   audit (gated by any chunk tagged `ui: touches` or `ui: major`).
 
-These three chunks — core event loop, game-end/scoring, final-acceptance — are the sketch's
-three **milestone anchors** (SKILLAUTO-01): the ONLY chunks that ever carry a non-`none`
-`Milestone:` value (`core-loop`, `scoring`, and `final-acceptance` respectively, matching their
-Milestone-flag value one-to-one). Every other chunk entry's `Milestone:` line MUST be `none`.
-These are the only chunks where a human client-playtest stop occurs by default — see
+These chunks are the sketch's planned **checkpoints** (SKILLAUTO-01), where the run stops for the
+designer to play the game: the core event loop (`Milestone: core-loop`), the mid-build
+checkpoints (`Milestone: mid-build`, placed by ingest/sketch-derivation.md "Mid-Build
+Checkpoints": after the first chunk of each major mechanic family lands, at most about one per
+quarter of the chunk list), game-end/scoring (`Milestone: scoring`), animation
+(`Milestone: animation`), and final acceptance (`Milestone: final-acceptance`). They are the ONLY
+chunks that ever carry a non-`none` `Milestone:` value. Every other chunk entry's `Milestone:` line
+MUST be `none`. These are the only chunks where a human client-playtest stop occurs by default, and
+`boardsmith chunk-signoff` refuses an automated sign-off for any of them that has visible UI — see
 state-machine.md's human-gate list and build/playtest.md's Verified Gate.

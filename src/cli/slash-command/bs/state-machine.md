@@ -90,7 +90,7 @@ The chunk status enum, in order, is exactly:
 `proposed` | `approved` | `built` | `verified` | `verified (user-waived)`
 
 - `proposed` — the chunk exists in SKETCH.md but its CHUNK.md has not been approved yet.
-- `approved` — the user authorized the design at the `ask` step.
+- `approved` — the chunk's interpretation is settled at the `ask` step: every rules question answered by the designer, every default recorded in `DECISIONS.md` for their review.
 - `built` — the code exists and has passed automated `test`.
 - `verified` — the human playtested the chunk and confirmed every item on the verification checklist.
 - `verified (user-waived)` — the human explicitly chose to skip playtesting this chunk; recorded honestly rather than silently marked `verified`.
@@ -240,9 +240,9 @@ the code does is exactly the "paperwork lagging the code" failure this re-touch 
 prevent; the same rulebook-plus-`RULINGS.md` composite-source-of-truth guarantee above only holds
 if `RULINGS.md` itself stays current.
 
-## Restyle/Cutover Rule
+## Restyle Rule
 
-Any change that re-styles or re-lays-out previously verified surfaces flips those chunks back to `built`. The AutoUI→Custom-UI cutover (any change of UI strategy) is the total case: it explicitly flips **all** previously verified chunks back to `built` and re-opens their test scripts — the entire presentation changed, so no prior verification survives, per the plan's UI-strategy rule. Changing `DESIGN.md` flips every chunk whose verified surface it re-styles or re-lays-out. There is no silent "we'll re-verify later" — the flip happens immediately and is visible in CHUNK.md and SKETCH.md.
+Any change that re-styles or re-lays-out previously verified surfaces flips those chunks back to `built`. Changing `DESIGN.md` or the theme file it names (`src/ui/theme.css`) after the design sign-off flips every chunk whose verified surface it re-styles or re-lays-out. There is no AutoUI stage and no cutover: every game builds its own board from the first chunk, in the signed-off design. There is no silent "we'll re-verify later" — the flip happens immediately and is visible in CHUNK.md and SKETCH.md.
 
 ## Session Lock
 
@@ -451,39 +451,48 @@ across chunk boundaries.** It stops only when (a) it reaches a human-input gate 
 to answer a question or to test/playtest something — or (b) an automated step hits an unrecoverable or stuck state it
 cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
 on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
-looping or plowing ahead. Between those points it flows straight through: after `ask` approval it
+looping or plowing ahead. Between those points it flows straight through: after `ask` settles the interpretation it
 runs `spec → build → test → audit → repair` into `playtest`, where it stops for the human client-playtest
-gate ONLY if this chunk is one of the three milestone chunks with visible UI (see the `playtest`
+gate ONLY if this chunk is one of the sketch's checkpoint chunks with visible UI (see the `playtest`
 bullet below, SKILLAUTO-01) — a non-milestone or UI-less chunk runs its internal `playtest`
 verification (test/self-sim) and flows straight through into `revise`/`close` with no human stop.
 After a human playtest stop (and any `revise` loop) it runs `close`, stops at close's sketch-tail
 delta gate **only if that gate needs approval**, and then — see "Cross-chunk continuation" below —
 rolls straight into the next chunk rather than ending the session.
 
-**Human-input gates that DO stop the session:**
+**The planned blocking checkpoints — the human-input gates that DO stop the session:**
 
-- The `ask` approval gate — the full 4-part presentation ceremony; the user approves the
-  interpretation before `Status: approved` is written and `spec` begins.
-- The `playtest` human-verification gate — **scoped to milestone chunks, not every chunk**
-  (SKILLAUTO-01). SKETCH.md's `Milestone:` flag (`templates/SKETCH.template.md`'s "## Mandated
-  Chunks", set at sketch-derivation time — see `ingest/sketch-derivation.md`) names exactly three
-  milestone chunks: `core-loop`, `scoring` (game-end/scoring/winner-determination), and
-  `final-acceptance`. Only a chunk whose `Milestone:` flag is non-`none` AND which has visible UI
-  (its `ui:` tag is `touches` or `major`) routes to the human client-playtest stop — the human
-  plays the numbered test script and confirms it item-by-item; no subagent can stand in for this.
-  A chunk with no visible UI (`ui: none`) is NEVER routed to a human playtest, milestone or not.
-  Every non-milestone chunk keeps all of its internal steps unchanged — `test`, `audit`, and its
-  self-playtest/sim pass in `playtest` all still run exactly as before — only the *human*
-  client-playtest stop moves off of it; the chunk auto-advances through `playtest` into `revise`/
-  `close` without waiting on a human (see "Session Handoff Seams" and "Cross-chunk continuation"
-  below). This gate ALWAYS fires regardless of milestone/UI status for a genuine rules
-  adjudication / open question surfaced during that chunk's work — see the next bullet.
-- A **genuine rules adjudication / open-question escalation** — always stops the session
-  regardless of milestone status, whenever the rules themselves (not the build approach) are
-  genuinely undetermined; recorded in `RULINGS.md`.
-- A **redteam refuted-twice escalation** — a claim refuted twice is by definition an ambiguity,
-  raised to the user as a plain-language question and recorded in `RULINGS.md` (see "Redteam
-  Escalation").
+- The **design sign-off** — the design session after sketch approval and before the first chunk
+  (`ingest/design-session.md`). No game code is written until the designer signs off.
+- The `playtest` human-verification gate — **scoped to the sketch's checkpoint chunks, not every
+  chunk** (SKILLAUTO-01). SKETCH.md's `Milestone:` flag (`templates/SKETCH.template.md`'s "## Mandated
+  Chunks", set at sketch-derivation time and approved with the sketch — see
+  `ingest/sketch-derivation.md`) names them: `core-loop`, the `mid-build` checkpoints, `scoring`
+  (game-end/scoring/winner-determination), `animation`, and `final-acceptance`. Only a chunk
+  whose `Milestone:` flag is non-`none` AND which has visible UI (its `ui:` tag is `touches` or
+  `major`) routes to the human client-playtest stop — the human plays the numbered test script and
+  confirms it item-by-item; no subagent can stand in for this, and `boardsmith chunk-signoff`
+  refuses an automated sign-off for it. A chunk with no visible UI (`ui: none`) is NEVER routed to a
+  human playtest, milestone or not. Every non-milestone chunk keeps all of its internal steps
+  unchanged — `test`, `audit`, and its self-playtest/sim pass in `playtest` all still run exactly as
+  before — only the *human* client-playtest stop moves off of it; the chunk auto-advances through
+  `playtest` into `revise`/`close` without waiting on a human (see "Cross-chunk continuation"
+  below). Each blocking playtest opens with the designer's batch review of every decision taken
+  since the last one (`build/playtest.md` "Reviewing the Decisions").
+
+**Not a stop: the `ask` step, and a rules question.** The `ask` step settles the interpretation
+and records it, with every default it took, in `DECISIONS.md` for the designer's batch review; it
+never waits for approval (`build/ask.md`). A **rules question** — the rules themselves, not the
+build approach, genuinely undetermined, or a redteam refuted-twice escalation (a claim refuted
+twice is by definition an ambiguity, see "Redteam Escalation") — parks only the
+chunk that needs the answer: it is put to the designer and recorded in `RULINGS.md` when they
+answer, and the work continues on every chunk that does not depend on it. A session with the
+designer in it asks at once. A `/bs-build-game` run records the chunk in `RUN.md`'s `Open Gate:`
+and stops only when every remaining chunk waits on the designer (`boardsmith next-chunk`,
+`build-game.md` Step 3).
+
+**The rare stops:**
+
 - A **repair round-3 triage** — after 3 audit rounds any remaining findings are triaged with the
   user: real blocker, defer, or refuted (see "Repair Loop Bound").
 - Any step that has failed twice at the `judgement` role, the top of the ladder (`routing.md`):
@@ -507,11 +516,11 @@ chunk doesn't need settled to proceed — is appended to an open-questions queue
 stopping the session. **Unblocked work continues**: the session keeps building whatever chunks
 and steps do not depend on the queued item's answer, exactly as it would if the item didn't
 exist. The queue is not read one item at a time as it accrues; instead the whole batch **surfaces
-at the next human gate/milestone** — the next `ask` approval presentation, the next milestone
-`playtest` stop, or `close`'s sketch-tail delta gate, whichever comes first — presented together
-rather than as a string of one-off interruptions. This is distinct from a **blocking** question: a
-question this chunk's own design cannot proceed without still gates that chunk's `ask` directly
-(`build/ask.md` "Ask Triple-Gate"), it is never queued past the chunk that needs it answered.
+at the next human gate/milestone** — the next blocking checkpoint `playtest` stop, or `close`'s
+sketch-tail delta gate, whichever comes first — presented together rather than as a string of
+one-off interruptions. This is distinct from a **blocking** rules question: one this chunk's own
+design cannot proceed without parks that chunk at its `ask` (`build/ask.md` "Parking the Chunk on a
+Rules Question"); it is never queued past the chunk that needs it answered.
 
 **Cross-chunk continuation (the chunk→chunk seam) — run-while-away + auto-advance (SKILLAUTO-04/
 05).** The boundary between one chunk's `close` and the next chunk's `investigate` is itself a seam
@@ -520,14 +529,13 @@ terminus. When `close` finishes (its bookkeeping written, its sketch-tail delta 
 approved if there was a delta, silently skipped if there was none), the session does NOT stop and
 tell the user to re-invoke. Instead, if neither stop condition (a)/(b) above applies
 and the user has not said stop, it **auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded
-only by the milestone gates (SKILLAUTO-01's three milestone chunks), a genuine rules adjudication /
-open-question escalation, and the stuck-state condition above — this is the run-while-away
+only by the planned checkpoints (SKILLAUTO-01's checkpoint chunks), a genuine rules question that
+leaves nothing else to build, and the stuck-state condition above — this is the run-while-away
 model the human being away does not pause. It re-enters `build-chunk.md` Step 2 (Resume Routing),
 routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the tail
-entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam`
-continuously, stopping at that next chunk's `ask` approval gate — a new chunk's first human-input
-gate. (A light-path next chunk has no `ask`; it continues to that chunk's `playtest` gate, its first
-human gate, instead. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
+entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam → ask`
+and on through the chunk without a stop, unless the chunk is a checkpoint or a rules question parks
+it. (A light-path next chunk has no `ask`; it runs straight to its `playtest`. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
 "Final-acceptance chunk exception" below.) Auto-advance is not limited to ordinary chunk-to-chunk
 continuation: it carries into the next LOGICAL step across chunk types, including the **generate-bot
 → final-acceptance** progression — once a sketch's `bs-build-bot` chunk closes, the same session
@@ -543,8 +551,9 @@ from the user means auto-advance, not a wait for re-invocation.
 **The ingest→build seam is a continuation seam too.** `/bs-ingest-rules` Step 7 writing `SKETCH.md`
 and the first `CHUNK.md` files is the same kind of boundary as `close`→next chunk: durable, and NOT
 a session terminus. The ingest session auto-advances into the build — by default the whole-game run
-(`/bs-build-game`, see "Orchestrated Runs" below), which dispatches the first chunk's
-`/bs-build-chunk` work — and stops at that chunk's `ask` gate, subject to the identical (a)/(b) stop conditions. See `ingest-rules.md` "Step 8: Continue Into the First Chunk".
+(`/bs-build-game`, see "Orchestrated Runs" below), which opens with the design session and then
+dispatches the first chunk's `/bs-build-chunk` work — and stops at the design sign-off, the run's
+first human gate, subject to the identical (a)/(b) stop conditions. See `ingest-rules.md` "Step 8: Continue Into the Build".
 
 **There is no context stop.** A session never winds down, wraps up, or suggests a `/clear` because
 its context "feels" full: a model cannot read its own context usage reliably, the harness compacts
@@ -578,10 +587,10 @@ subagent. Three rules govern the seam between the two:
    ordinary session and auto-advances across chunk boundaries as "Cross-chunk continuation" above
    describes; a session that WAS told it builds that one chunk and returns instead.
 2. **A dispatched subagent has no designer.** It never asks a question, never waits for approval,
-   and never assumes approval — it stops at the human gate and returns the gate's own text for the
-   orchestrator to put to the designer. Gate-before-write is unchanged: no `Status: approved`, no
-   ruling, no verified checklist until a later dispatch arrives carrying the designer's actual
-   answer. Only *who relays* the answer changes, never *who decides* it (the same "How, Never What"
+   and never assumes approval — it stops at a human gate (a rules question, a checkpoint playtest,
+   a triage) and returns the gate's own text for the orchestrator to put to the designer.
+   Gate-before-write is unchanged: no ruling and no verified checklist until a later dispatch
+   arrives carrying the designer's actual answer. Only *who relays* the answer changes, never *who decides* it (the same "How, Never What"
    boundary "Autonomy Scope" above draws).
 3. **The run journal is not an authority.** `RUN.md` records which gate is open, why a run stopped,
    and how many passes a chunk took. Chunk status still lives in `CHUNK.md` with `SKETCH.md`'s

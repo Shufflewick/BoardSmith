@@ -259,7 +259,8 @@ Once the delta is approved and the next chunk is proposed, this chunk's lifecycl
 its `Status` is `verified` (or `verified (user-waived)`), its `## Verified Commit Hash` is set,
 and SKETCH.md reflects the (possibly updated) tail. By default **the same session auto-advances**
 into a fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md`
-"Session Handoff Seams" → "Cross-chunk continuation"), stopping at its `ask` gate — or, if the
+"Session Handoff Seams" → "Cross-chunk continuation"), stopping only at a checkpoint or a rules
+question — or, if the
 sketch's `## Mandated Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md`
 instead — carrying the same auto-advance through a `bs-build-bot` chunk into the
 final-acceptance chunk that follows it. Only when a stop condition fires at the chunk boundary does

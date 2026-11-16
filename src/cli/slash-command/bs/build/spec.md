@@ -146,7 +146,7 @@ which of the two cases it is and act on that.
 ## What `spec` Never Does
 
 - **Never writes implementation.** Signature-only stubs, nothing more (above).
-- **Never re-litigates the interpretation.** `ask` gated it; if writing the tests exposes a genuine
+- **Never re-litigates the interpretation.** `ask` settled it; if writing the tests exposes a genuine
   rules gap the rulebook and `RULINGS.md` do not settle, it is SURFACED — queued per
   `state-machine.md`'s batched-question model, see `build/ask.md` "Ask Triple-Gate
   (SKILLAUTO-02)" — never quietly decided here. Same "surface, don't unilaterally decide" boundary

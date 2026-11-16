@@ -40,9 +40,9 @@ names, by exact filename, the docs relevant to this chunk:
 - `node_modules/boardsmith/docs/custom-ui-guide.md` and `node_modules/boardsmith/docs/ui-components.md` — for `ui: touches` or `ui: major`
   chunks (this chunk's CHUNK.md `## ui:` tag).
 - `node_modules/boardsmith/docs/dice-and-scoring.md` — for dice-mechanic chunks.
-- `DESIGN.md` — for `ui: touches` or `ui: major` chunks. (`DESIGN.md` does not exist until the
-  first UI chunk's `ask` writes it, which is why `ingest/scaffold.md` could not name it —
-  investigate is the first step downstream of that write.)
+- `DESIGN.md` and the theme file it names — for `ui: touches` or `ui: major` chunks. (`DESIGN.md`
+  is written by the design session after ingest, which is why `ingest/scaffold.md` could not
+  name it.)
 
 Also carry `build/build.md`'s "## Boundaries" rule forward into this chunk's interpretation:
 `node_modules/boardsmith` is the client's BoardSmith, an installed copy or a link to their

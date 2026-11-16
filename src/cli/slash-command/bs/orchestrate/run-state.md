@@ -86,9 +86,11 @@ entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specif
   `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
   from another entry or type one; `boardsmith ledger-check` compares both times against the
   commits that recorded them and fails a time that could not have been read from the clock.
-- When a gate opens: set `Open Gate:` to that gate (during a parallel batch, add it to the list,
-  separated by `; `); when it is answered and recorded, set it back
-  to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
+- When a gate opens: set `Open Gate:` to that gate, or add it to the list, separated by `; `,
+  when another is already open (a parked rules question, or a parallel batch). Each entry starts
+  with the chunk's slug (`<slug> — <what>`), since `boardsmith next-chunk` reads the slugs to know
+  which chunks wait. When a gate is answered and recorded, remove it; with none left, set the line
+  back to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
   and never cleared before.
 - When the run stops: set `Run Status:` and `Stop Reason:` as the LAST writes of the run, after
   everything else has landed — the same status-last discipline `state-machine.md` "Write Order"
@@ -102,9 +104,12 @@ An orchestrated run stops for exactly three reasons, and says which one in the d
 
 1. **The designer said stop.** Immediately, at the next dispatch boundary — never mid-dispatch, so
    the chunk in flight persists its own step first. `Stop Reason: designer-stopped`.
-2. **A gate the designer has not answered.** The run put a question or a playtest to them and is
-   waiting. `Stop Reason: gate-open`, with `Open Gate:` naming it. This is the ordinary,
-   healthy stop.
+2. **A gate the designer has not answered, and nothing else to build.** A planned blocking
+   checkpoint (the design sign-off, a checkpoint playtest) or a rare escalation (a repair round-3
+   triage, a step failed twice at the top role) stops the run at once. A parked rules question
+   stops it only when `boardsmith next-chunk` exits non-zero: every remaining chunk waits on the
+   designer. `Stop Reason: gate-open`, with `Open Gate:` naming every open gate. This is the
+   ordinary, healthy stop.
 3. **A stuck dispatch.** A subagent returned `stuck` — a gate that keeps failing, a typecheck that
    will not go green, a subagent that died on a terminal error. `Stop Reason: stuck`, and the
    chunk's run log entry names what was stuck. Never retry a stuck dispatch a third time; surface it.

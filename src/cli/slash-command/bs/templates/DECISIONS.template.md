@@ -12,6 +12,10 @@
      "fix" what looks like a bug but is actually a deliberate invariant.
 
      WHO WRITES HERE:
+     - The `ask` step, recording each chunk's interpretation and every default it took instead
+       of stopping to ask (build/ask.md "The Write Sequence"). These carry
+       `- Designer review: pending` until the designer reviews them in one batch at the next
+       blocking playtest (build/playtest.md "Reviewing the Decisions").
      - The `build` step, as data-model/naming/invariant decisions are made while implementing
        a chunk.
      - The `close` step, as a rollup — summarizing/confirming the decisions the chunk actually
@@ -26,7 +30,8 @@
      A decision the code no longer honours is superseded this way the moment the code changes;
      left unmarked, the next chunk cites it as authority.
 
-     The only sanctioned edits to a prior entry are the `- Superseded by:` line and correcting a
+     The only sanctioned edits to a prior entry are the `- Superseded by:` line, filling a
+     `- Designer review: pending` line once with the designer's verdict, and correcting a
      cited file in place: a path or line range that names the wrong file is fixed where it
      stands, since it points at the evidence and is not the decision. The decision and its
      reasons stay as written.
@@ -48,6 +53,10 @@
      - Invariant: the specific invariant this decision establishes (what must always hold true
        elsewhere in the codebase because of this choice) — or "n/a — naming only, no invariant"
        if the decision is purely a naming convention with no enforced invariant
+     - Designer review (on entries the `ask` step writes): `pending` until the next blocking
+       playtest, then filled once: `approved at <checkpoint chunk> playtest` or
+       `rejected at <checkpoint chunk> playtest — fix chunk <slug>`. A rejected decision is
+       superseded by the fix chunk's own decision when that chunk lands.
 
      Example shape (illustrative only — not real content, delete-and-replace guidance stays):
 

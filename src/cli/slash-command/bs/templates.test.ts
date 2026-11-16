@@ -330,7 +330,7 @@ describe('TMPL-01 — six templates ship with required content', () => {
   it('DESIGN.template.md contains --bsg- and the theme-block color rule phrase', () => {
     expect(designTemplate).toContain('--bsg-');
     expect(designTemplate).toContain(
-      'color literals live only in the theme block, everything else references tokens'
+      'color literals live only in the theme file, everything else references tokens'
     );
   });
 
@@ -372,7 +372,7 @@ describe('TMPL-02 — each template declares its parse contract', () => {
     expect(decisionsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
     expect(decisionsTemplate).toContain('## Ledger');
     expect(designTemplate).toContain('PARSE CONTRACT (TMPL-02)');
-    expect(designTemplate).toContain('## Chosen Direction');
+    expect(designTemplate).toContain('## Chosen Design');
     expect(assetsTemplate).toContain('PARSE CONTRACT (TMPL-02)');
     expect(assetsTemplate).toContain('## Ledger');
   });
@@ -382,7 +382,7 @@ describe('SKILLAUTO-01 — SKETCH milestone flag', () => {
   const sketchTemplate = read('templates/SKETCH.template.md');
 
   it('the Ordered Chunk List entry shape declares a Milestone field', () => {
-    expect(sketchTemplate).toMatch(/Milestone: *<!--[^>]*none[^>]*core-loop[^>]*scoring[^>]*final-acceptance/);
+    expect(sketchTemplate).toContain('Milestone: <!-- none | core-loop | mid-build | scoring | animation | final-acceptance -->');
   });
 
   it('the tail-entry shape also carries the Milestone field', () => {
@@ -393,12 +393,18 @@ describe('SKILLAUTO-01 — SKETCH milestone flag', () => {
     expect(tailBlockMatch![0]).toContain('Milestone:');
   });
 
-  it('Mandated Chunks names the core-loop, scoring/endgame, and final-acceptance chunks as the three milestone anchors', () => {
-    const mandatedSection = sketchTemplate.slice(sketchTemplate.indexOf('## Mandated Chunks'));
-    expect(mandatedSection).toContain('milestone anchor');
-    expect(mandatedSection).toMatch(/core-loop/);
-    expect(mandatedSection).toMatch(/scoring/i);
-    expect(mandatedSection).toMatch(/final-acceptance/);
+  it('Mandated Chunks names every planned checkpoint, and the animation chunk between scoring and the bot (#1660)', () => {
+    const mandatedSection = sketchTemplate.slice(sketchTemplate.indexOf('## Mandated Chunks')).replace(/\s+/g, ' ');
+    expect(mandatedSection).toContain("planned **checkpoints**");
+    for (const milestone of ['core-loop', 'mid-build', 'scoring', 'animation', 'final-acceptance']) {
+      expect(mandatedSection).toContain(`\`Milestone: ${milestone}\``);
+    }
+    expect(mandatedSection).toMatch(/an animation chunk, after the game-end\/scoring chunk and before the bot-opponent chunk \(if any\) and final acceptance/);
+  });
+
+  it('records the design session, and no UI strategy (#1660)', () => {
+    expect(sketchTemplate).toContain('- Status (derived from DESIGN.md): <!-- pending | signed-off -->');
+    expect(sketchTemplate).not.toMatch(/UI Strategy|autoui-with-cutover/);
   });
 });
 
@@ -534,7 +540,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
     ],
     'templates/SKETCH.template.md': [
       '## Player Counts',
-      '## UI Strategy',
+      '## Design Session',
       '## Ordered Chunk List',
       '## Variants (deferred)',
       '## Ideas Backlog',
@@ -544,10 +550,12 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
     'templates/DECISIONS.template.md': ['## Ledger'],
     'templates/CONSTRAINTS.template.md': ['## Hard Constraints', '## Growing Structures'],
     'templates/DESIGN.template.md': [
-      '## Chosen Direction',
-      '## Theme Block (--bsg-* / applyTheme() overrides)',
+      '## Sign-Off',
+      '## Chosen Design',
+      '## Theme File',
       '## Typography & Spacing',
       '## Component Recipes',
+      '## Motion Intents',
       '## Placeholder Policy',
       "## Do / Don't",
     ],

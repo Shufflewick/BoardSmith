@@ -64,6 +64,7 @@ token such as `BS-DISPATCH-V3` still comes first after it).
 |------|------|----------------|
 | A whole chunk dispatched by `/bs-build-game` (`bs-build-chunk`, `bs-build-bot`) and a sketch reshape (`bs-insert-chunk`) | `judgement` | no |
 | `investigate`, and `spec` | `judgement` | no |
+| The design session's mocks (`design-session`) and its sign-off checks (`design-check`), before the first chunk | `judgement` | no |
 | `redteam`: both refuters and the coverage adversary | `judgement` | yes |
 | `build` | `bounded` | no |
 | `audit`: the fidelity lens | `judgement` | yes |
@@ -87,7 +88,7 @@ name, `transcribe rulebook.pdf pp. 1-8` or `enumerate rulebook/03-scoring.md`, b
 tells a retry from new work by its `Work`: a second dispatch of the same unit after it failed is a
 retry, and the next unit's first dispatch is not.
 
-The gates where the designer decides (`ask`, `playtest`, a triage) are never dispatched.
+The gates where the designer decides (a rules question, the design sign-off, `playtest`, a triage) are never dispatched.
 
 ## No Review Before Verify
 
@@ -159,7 +160,7 @@ changes. Then:
   the designer**: what the step was for, what failed, and what each attempt tried, in the
   designer's terms (`reporting.md`). Nothing more is dispatched for that step until the designer
   answers. In orchestrated mode that is a gate returned to `/bs-build-game` (`repair-triage` for a
-  build or repair, the ordinary `ask` gate for a red team finding); a whole chunk that returns
+  build or repair, a `rules-adjudication` gate for a red team finding); a whole chunk that returns
   `closed` but fails its check has failed at `judgement`, and goes to the designer once its retry
   has failed too.
 

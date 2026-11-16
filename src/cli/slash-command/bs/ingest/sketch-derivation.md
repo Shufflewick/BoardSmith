@@ -34,10 +34,10 @@ that is cheapest to make correct) so the result is a genuine, observable core-lo
 `Milestone:` field, on the Ordered Chunk List entry — to `core-loop` at sketch-derivation time.
 This is an explicit sketch-time assignment, never inferred at runtime: write the value into this
 chunk's entry the moment it is placed in the Ordered Chunk List, so a resuming session never has
-to guess which chunk is the core-loop milestone. This is one of the sketch's three milestone
-anchors (see Section 3 and `templates/SKETCH.template.md`'s "## Mandated Chunks"); it is where the
-human client-playtest stop occurs (state-machine.md's human-gate list, `build/playtest.md`'s
-Verified Gate) — not on every chunk.
+to guess which chunk is the core-loop milestone. This is one of the sketch's planned checkpoints
+(see Section 3 and `templates/SKETCH.template.md`'s "## Mandated Chunks"); it is where a human
+client-playtest stop occurs (state-machine.md's human-gate list, `build/playtest.md`'s Verified
+Gate) — not on every chunk.
 
 ## 2. Prefer Many Small, Single-Behavior Chunks — Split Families of Similar Mechanics
 
@@ -79,23 +79,48 @@ Per the same "## Mandated Chunks" section, the sketch MUST also contain:
 
 - A **game-end / scoring / winner-determination chunk** — the point at which the game reaches its
   actual finishing condition and a winner (or outcome) is determined.
+- An **animation chunk** — placed after the game-end/scoring chunk and before the bot-opponent
+  chunk (if the sketch has one) and the final-acceptance chunk, when the screens and state changes
+  are stable. It builds the motion intents the design session recorded in `DESIGN.md`'s
+  "## Motion Intents" and ends in a playtest where the designer compares two or three motion
+  variants live in the dev host (`build/playtest.md` "The Animation Playtest"). `ui: major`,
+  `Depends on:` the game-end/scoring chunk.
 - A **final-acceptance chunk** — the full game played start-to-finish, a coverage check confirming
   every non-variant rulebook slice was built, plus the design-QA/a11y audit (gated by any chunk
   tagged `ui: touches` or `ui: major`).
 
-Do not treat either of these as optional or "implied by the last chunk" — each must appear as its
+Do not treat any of these as optional or "implied by the last chunk" — each must appear as its
 own explicit entry in the Ordered Chunk List.
 
 **Milestone flags (SKILLAUTO-01):** set the milestone flag — SKETCH.template.md's `Milestone:`
-field — on these two chunks at sketch-derivation time, the same explicit sketch-time assignment
+field — on these chunks at sketch-derivation time, the same explicit sketch-time assignment
 described in Section 1: the game-end/scoring/winner-determination chunk gets `Milestone: scoring`,
-and the final-acceptance chunk gets `Milestone: final-acceptance`. Together with the core-loop
-chunk (Section 1, `Milestone: core-loop`) these are the sketch's three milestone anchors, exactly
-matching `templates/SKETCH.template.md`'s "## Mandated Chunks" list. **Every other chunk in the
-Ordered Chunk List — every non-anchor chunk, including every tail entry — gets `Milestone: none`.**
-This flag is never inferred at runtime; the human client-playtest stop is scoped to these three
-milestones plus a genuine rules-adjudication escalation (see state-machine.md's human-gate list),
-so getting the flag right here is load-bearing for the whole autonomous run.
+the animation chunk gets `Milestone: animation`, and the final-acceptance chunk gets
+`Milestone: final-acceptance`. Together with the core-loop chunk (Section 1, `Milestone:
+core-loop`) and the mid-build checkpoints below (`Milestone: mid-build`), these are the sketch's
+planned checkpoints, exactly matching `templates/SKETCH.template.md`'s "## Mandated Chunks" list.
+**Every other chunk in the Ordered Chunk List gets `Milestone: none`.** This flag is never inferred
+at runtime; the human client-playtest stop is scoped to these checkpoints (see state-machine.md's
+human-gate list), so getting the flag right here is load-bearing for the whole autonomous run.
+
+### Mid-Build Checkpoints
+
+Between the core loop and scoring, the designer would otherwise see nothing. So place mid-build
+checkpoints in the sketch, where the designer approves them with the rest of it:
+
+- **Where:** on the chunk that lands the **first member of each major mechanic family**
+  (Section 2) after the core loop: the first card type, the first movement type, the first
+  trading rule. That is the earliest point where the designer can tell whether the family feels
+  right, before its siblings copy it. A family is major when it is a pillar of play the rulebook
+  gives its own section, not a single exception rule.
+- **How many:** at most about one per quarter of the Ordered Chunk List. With N chunks, place at
+  most `max(1, floor(N / 4))`, choosing the earliest-landing major families first. A small game
+  gets one; a large game gets three or four.
+- **Never on** the core-loop, scoring, animation or final-acceptance chunk, which are checkpoints
+  already, nor on a `ui: none` chunk, which has nothing for the designer to play.
+
+Each one gets `Milestone: mid-build`. When the sketch is presented at the approval gate, name each
+checkpoint and why it falls there, so the designer approves where the run will stop.
 
 ## 4. The `ui:` Tag
 

@@ -36,9 +36,9 @@ chunk puts these four rules in force for this session (`state-machine.md` "Orche
    cross-chunk continuation described below is the ordinary-session behavior, and the run's own loop
    replaces it here.
 2. **There is no designer on the other end of this context.** Never ask a question, never wait for
-   approval, never assume approval. At a human gate (`ask`, a milestone `playtest`, a refuted-twice
-   escalation, a repair round-3 triage, a step that failed twice at `judgement`, `close`'s tail delta),
-   stop and return the gate's own
+   approval, never assume approval. At a human gate (a rules question at `ask`, including a
+   refuted-twice escalation; a checkpoint `playtest`; a repair round-3 triage; a step that failed
+   twice at `judgement`; `close`'s tail delta), stop and return the gate's own
    composed text as the report's `gate.payload`. Gate-before-write is unchanged: nothing a gate
    authorizes is written until a later dispatch arrives carrying the designer's actual answer.
 3. **Read the brief's answered-questions digest before any gate.** Every question the designer has
@@ -215,6 +215,13 @@ Before any step dispatch, intercept intents that are not "build the next thing":
 
 ## Step 2: Resume Routing (BUILD-01)
 
+**No chunk is built before the design sign-off.** If `DESIGN.md` does not exist (`ls
+DESIGN.md` in `design/`), run the design session first, in this session with the designer, per
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`, and route only once they have signed
+off. In orchestrated mode there is no designer to run it with: return `outcome: stuck` with
+`stuckDetail` saying the design session has not been signed off (`/bs-build-game` Step 1b runs it
+before any dispatch, so this means the run skipped it).
+
 Read `SKETCH.md` → find the first chunk whose status is neither `verified` nor
 `verified (user-waived)` (a waived chunk is closed — the user explicitly waived its playtest;
 never resume it here — surfacing accumulated waived chunks for a batch playtest is
@@ -369,8 +376,8 @@ is the `ask` approval gate below; if the user approves, this same session contin
 off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
 next step — `investigate` is checked off after its return is recorded, `redteam` after its
 `### Redteam Round N` entry lands in CHUNK.md's `## Redteam Rounds` (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`
-"Persisting the Round"), and `ask` as part of the gate's write order (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md`
-"Gate-Before-Write"). This is the state Step 2's first-incomplete-step routing routes on: an
+"Persisting the Round"), and `ask` as part of its write order (see `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md`
+"The Write Sequence"). This is the state Step 2's first-incomplete-step routing routes on: an
 unchecked step is re-run from scratch on a cold resume, so a completed-but-unchecked step would
 duplicate work — never leave a completed step unchecked.
 
@@ -394,20 +401,18 @@ of the investigator's framing. Consume the refuters' return by field name — `c
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Redteam Escalation"'s to own — this router only routes the aggregated
 outcome to the next step or to the user.
 
-**ask:** Delegate the ask-gate presentation to `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` — presenting the 4-part format
-(interpretation, ambiguities, deferred list, zero implementation vocabulary), requesting assets,
-and gating the write. **Gate-before-write** (cite `state-machine.md` "Write Order"): `ask`
-presents, the user decides, and only after explicit approval does `Status: approved` get written
-— last, never speculatively. A resumed session that finds `Status: approved` on disk therefore
-knows a real approval happened; it never infers approval from anything else. Any `RULINGS.md`
-entries from house-rule choices made during the ask conversation are likewise written only after
-that same explicit approval. Investigate's claims list and visibility declaration are **not**
-gated — they were already written progressively at the investigate step, per the same precedent
-`ingest-rules.md` Step 7 established for `ASSETS.md`/`rulebook/00-visual-survey.md`.
+**ask:** Delegate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` — recording the 4-part
+interpretation (interpretation, ambiguities, deferred list, zero implementation vocabulary) and
+every default taken in `DECISIONS.md` for the designer's batch review, requesting assets, and
+writing `Status: approved` **last** (cite `state-machine.md` "Write Order"). The ask step does not
+wait for the designer: only a rules question parks the chunk here (`build/ask.md` "Parking the
+Chunk on a Rules Question"), and any `RULINGS.md` entry is written only from the designer's own
+answer. A resumed session that finds `Status: approved` on disk therefore knows the interpretation
+was settled and recorded; it never infers that from anything else. Investigate's claims list and
+visibility declaration were already written progressively at the investigate step, per the same
+precedent `ingest-rules.md` Step 7 established for `ASSETS.md`/`rulebook/00-visual-survey.md`.
 
-End of group 1: the `ask` step is itself the human-input gate that stops this group — the session
-pauses for the user's approval decision, not for a session handoff. When approval lands, confirm
-everything written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist
+End of group 1: unless a rules question parked the chunk, confirm everything written so far (claims list, the `## Redteam Rounds` entry, checked-off Step Checklist
 items, `Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
 second, per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
 saved in the game folder, then **continue in this same session into group 2** (`spec → build → test`) —
@@ -501,8 +506,8 @@ Rounds` entries if any, `## Verified Commit Hash`, `DECISIONS.md` rollup, the ap
 delta, `Status: verified`/`verified (user-waived)`, SKETCH.md's updated derived-status pointer —
 CHUNK.md first, SKETCH.md second) is saved in the game folder — a non-programmer-legible
 checkpoint. From here, by default, **the same session auto-advances into the next chunk** — it
-re-enters Step 2, routes to the next chunk's `investigate`, and runs continuously to that chunk's
-`ask` gate (a new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" →
+re-enters Step 2, routes to the next chunk's `investigate`, and runs continuously through that
+chunk, stopping only at a checkpoint or a rules question, per `state-machine.md` "Session Handoff Seams" →
 "Cross-chunk continuation" (SKILLAUTO-04/05) — carrying the same auto-advance into the next logical
 step across chunk types, including the generate-bot → final-acceptance progression. The printed
 `/bs-build-chunk` re-invocation is the crash/`/clear` resume, never the default stop: it
@@ -563,8 +568,8 @@ This skill delegates its heavyweight, step-scoped prose to:
   visibility declaration authoring
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` — 3-way fresh-context adversarial fan-out, escalation
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` — 4-part presentation format, gate-before-write, asset requests
-- `${CLAUDE_SKILL_DIR}/../bs-shared/build/design-ask.md` — first-UI-chunk visual identity gate (Adopt/Derive/Original), writes
-  DESIGN.md
+- `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md` — the design session before the first
+  chunk: five directions, mix and match, sign-off; writes DESIGN.md and the theme file
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md` — tests-first step: one test per numbered claim, signature-only stubs,
   observed-failing RED evidence, per-file spec manifest
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build

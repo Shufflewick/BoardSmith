@@ -482,8 +482,8 @@ describe('WF-09 — state-machine.md owns the orchestrated-run rules once', () =
  * playtest step routes Status through the command that enforces it, never a hand-written line.
  */
 const GATE_POLICY =
-  'Only the designer answers an ask gate or signs off a playtest. An unattended run parks the ' +
-  'chunk at that gate and moves on only to work that does not need the answer.';
+  'Only the designer answers a rules question or signs off a playtest. An unattended run parks the ' +
+  'chunk at that question and keeps building the chunks that do not need the answer.';
 
 describe('#291: one gate policy for orchestrated runs', () => {
   for (const file of ['build-game.md', 'build/ask.md', 'build/playtest.md']) {
@@ -513,6 +513,22 @@ describe('#291: one gate policy for orchestrated runs', () => {
   it('build-game.md re-checks a closed chunk with chunk-check before continuing', () => {
     const buildGame = flat(read('build-game.md'));
     expect(buildGame).toMatch(/`closed`[^]*?boardsmith chunk-check <slug>/);
+  });
+
+  it('a rules question parks its chunk and the run keeps building what does not depend on it (#1660)', () => {
+    const buildGame = flat(read('build-game.md'));
+    expect(buildGame).toMatch(/Derive the target chunk\*\* with `npx boardsmith next-chunk`/);
+    expect(buildGame).toMatch(/\*\*`gate` with `kind: rules-adjudication`\*\* — park the chunk/);
+    expect(buildGame).toMatch(/The run stops on it only when `next-chunk` finds nothing else to build/);
+    const runState = flat(read('orchestrate/run-state.md'));
+    expect(runState).toMatch(/A parked rules question stops it only when `boardsmith next-chunk` exits non-zero/);
+  });
+
+  it('build-game.md runs the design session before the first dispatch, and adds a missing animation chunk (#1660)', () => {
+    const buildGame = flat(read('build-game.md'));
+    expect(buildGame).toContain('## Step 1b: The Design Session');
+    expect(buildGame).toMatch(/If `DESIGN\.md` does not exist, the game's look has not been signed off, and no chunk may be built yet/);
+    expect(buildGame).toMatch(/\*\*The animation chunk\.\*\*.*comes after scoring and before the bot and final acceptance/);
   });
 
   it('ask.md does not let an unrecorded precedent stand in for an answer', () => {

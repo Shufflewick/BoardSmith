@@ -429,8 +429,8 @@ const WAIVERS_HEADER = `# Waivers
 <!-- MACHINE-OWNED. Written by \`boardsmith chunk-waiver\` and by nothing else. Each waiver is
      the designer's own decision to skip playtesting the chunks it names, until it expires. It
      covers exactly those chunks: \`boardsmith chunk-signoff --waiver\` refuses it for any other
-     chunk, and a decision about one chunk is never a precedent for the next. An ask gate cannot
-     be waived at all. -->
+     chunk, and a decision about one chunk is never a precedent for the next. A rules question
+     cannot be waived at all. -->
 `;
 
 function parseWaivers(text: string): Waiver[] {

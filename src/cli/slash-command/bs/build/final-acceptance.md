@@ -107,8 +107,8 @@ This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
-Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", and "## Do / Don't"
-sections) and the finished game's UI code.
+Read fresh: DESIGN.md (its "## Chosen Design", "## Theme File", "## Component Recipes", and
+"## Do / Don't" sections), the theme file `src/ui/theme.css`, and the finished game's UI code.
 
 Serve → capture → kill: start the dev host with `npx boardsmith dev --no-open`, wait for the
 exact string `Ready! Press Ctrl+C to stop.` (never `networkidle` — the dev host holds an open

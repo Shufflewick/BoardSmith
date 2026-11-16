@@ -193,16 +193,24 @@ describe('INGEST-05 — sketch derivation heuristic', () => {
   });
 });
 
-describe('INGEST-06 — UI strategy step', () => {
-  it('references SKETCH.template.md\'s "## UI Strategy" section by name', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('## UI Strategy');
+describe('INGEST-06 — checkpoints, no UI strategy (#1660)', () => {
+  it('places the checkpoints in the proposed sketch, and offers no UI strategy choice', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toContain('## Step 5: Place the Checkpoints');
+    expect(ingestRules).toMatch(/There is no UI strategy to choose\. Every game builds its custom board from the first chunk/);
+    expect(ingestRules).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|## UI Strategy/);
   });
 
-  it('names both strategy values: custom-from-chunk-1 and autoui-with-cutover', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('custom-from-chunk-1');
-    expect(ingestRules).toContain('autoui-with-cutover');
+  it('writes the design session as pending, and hands the build to a run that opens with it', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/the `## Design Session` status `pending`/);
+    expect(ingestRules).toMatch(/opens with the design session \(`\/bs-build-game` Step 1b\)/);
+  });
+
+  it('no skill text keeps the AutoUI-then-cutover strategy', () => {
+    for (const path of SKILL_FILES) {
+      expect(skillMarkdown(path), path).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|Restyle\/Cutover/);
+    }
   });
 });
 
@@ -253,6 +261,20 @@ describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
   it('sketch-derivation.md cites SKETCH.template.md\'s Milestone field by name', () => {
     const sketchDerivation = read('ingest/sketch-derivation.md');
     expect(sketchDerivation).toContain('Milestone');
+  });
+
+  it('sketch-derivation.md places mid-build checkpoints after the first member of each major family, about one per quarter (#1660)', () => {
+    const sketchDerivation = flat(read('ingest/sketch-derivation.md'));
+    expect(sketchDerivation).toContain('### Mid-Build Checkpoints');
+    expect(sketchDerivation).toMatch(/on the chunk that lands the \*\*first member of each major mechanic family\*\*/);
+    expect(sketchDerivation).toMatch(/at most `max\(1, floor\(N \/ 4\)\)`/);
+    expect(sketchDerivation).toContain('`Milestone: mid-build`');
+  });
+
+  it('sketch-derivation.md mandates the animation chunk after scoring and before the bot and final acceptance (#1660)', () => {
+    const sketchDerivation = flat(read('ingest/sketch-derivation.md'));
+    expect(sketchDerivation).toMatch(/An \*\*animation chunk\*\* — placed after the game-end\/scoring chunk and before the bot-opponent chunk/);
+    expect(sketchDerivation).toContain('`Milestone: animation`');
   });
 
   it('sketch-derivation.md assigns `none` as the milestone value for non-milestone chunks', () => {
