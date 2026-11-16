@@ -65,6 +65,25 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it("#1677: each seat types a list's values from the first, whatever another seat had refused", async () => {
+    const { outcome, steps } = await smokeOf(true, {
+      ...gladeWorld(),
+      'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 30, whom: "['seat 4', 'seat 1']" }),
+    });
+
+    expect(outcome.summary).not.toContain('refused each of');
+    expect(outcome.passed).toBe(true);
+    // Each seat's first greeting starts at the list's first value, never where the other seat's refusals left it.
+    const firsts = new Map<string, string>();
+    let seat = '1';
+    for (const line of steps) {
+      seat = line.match(/: acting as seat (\d+)$/)?.[1] ?? seat;
+      const typed = line.match(/: entering "(seat \d)" for "greet", from `inputs`$/)?.[1];
+      if (typed !== undefined && !firsts.has(seat)) firsts.set(seat, typed);
+    }
+    expect(Object.fromEntries(firsts)).toEqual({ 1: 'seat 4', 4: 'seat 4' });
+  });
+
   it('#1659: a seat after the first takes what only it is offered before the board controls its board keeps offering', async () => {
     const { steps } = await smokeOf(true, { ...gladeWorld({ watching: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
 

@@ -2226,17 +2226,18 @@ const watched = ref(1);
 
 /**
  * A smoke spec for {@link gladeWorld} playing `seats` (#471), whose `greet` names the other seat the
- * board shows standing here.
+ * board shows standing here, or gives `whom`, written as source.
  */
-export function gladeSpec(more: { seats?: string; steps: number; manners?: boolean }): string {
+export function gladeSpec(more: { seats?: string; steps: number; manners?: boolean; whom?: string }): string {
+  const whom = more.whom ?? `async ({ texts, otherSeats }: SmokeInputView) =>
+        (await texts('.here li')).find((name) => otherSeats.some((seat) => name === \`seat \${seat}\`))`;
   return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
 
 defineSmokeTest({
   actions: ['arrive', 'greet', 'look', 'rest', 'stroll'${more.manners ? ", 'bow', 'nod'" : ''}],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
   inputs: {
     greet: {
-      whom: async ({ texts, otherSeats }: SmokeInputView) =>
-        (await texts('.here li')).find((name) => otherSeats.some((seat) => name === \`seat \${seat}\`)),
+      whom: ${whom},
     },
   },
   steps: ${more.steps},

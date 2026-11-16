@@ -13,6 +13,7 @@ import {
   MOST_ANSWERS,
   readyToTake,
   recordGreyed,
+  recordPutOff,
   recordResolved,
   selectionsDiffer,
   SMOKE_SPEC_PATH,
@@ -29,6 +30,7 @@ import {
   smokeWalkLimit,
   smokeWorldSeats,
   type ResolvedMemory,
+  type SeatAttempts,
   type SmokeInputView,
   type SmokeWalk,
   type TypedValue,
@@ -732,7 +734,8 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
 });
 
 describe('recordResolved: what a resolved action leaves the walk remembering (#466)', () => {
-  function memory(): ResolvedMemory {
+  /** A deal's memory, with the attempts of the one seat it plays. */
+  function memory(): ResolvedMemory & SeatAttempts {
     return {
       resolved: new Map(),
       lastResolved: undefined,
@@ -745,19 +748,20 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   }
   const failed = (action: string, error: string) => ({ action, success: false, error });
   /** The walk typed `value` in the number field `field` of `action`, a number it chose itself. */
-  const typedANumber = (m: ResolvedMemory, action: string, field: string, value: string, from: 'walk' | 'inputs' = 'walk') =>
+  const typedANumber = (m: SeatAttempts, action: string, field: string, value: string, from: 'walk' | 'inputs' = 'walk') =>
     m.typed.set(action, [{ field, value, from, kind: 'number' }]);
 
   it('#471: names the browser a failed action was taken in, in a world walk of several seats', () => {
     const w = walk({});
-    recordResolved([failed('arrive', 'The glade is shut.')], w, memory(), "In seat 4's browser: ");
+    const m = memory();
+    recordResolved([failed('arrive', 'The glade is shut.')], w, m, m, "In seat 4's browser: ");
     expect(w.errors).toEqual([`In seat 4's browser: The panel offered "arrive", and taking it failed: The glade is shut.`]);
   });
 
   it('records a taken action as offered, enabled and taken, and reports one that failed, which is not taken again', () => {
     const w = walk({});
     const m = memory();
-    recordResolved([{ action: 'draw', success: true }, failed('play', 'No card to play.')], w, m);
+    recordResolved([{ action: 'draw', success: true }, failed('play', 'No card to play.')], w, m, m);
     expect([...w.taken]).toEqual(['draw']);
     expect([...w.offered].sort()).toEqual(['draw', 'play']);
     expect(m.resolved.get('draw')).toBe(1);
@@ -771,7 +775,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const m = memory();
     for (const [logs, error] of [['1', 'A fire needs two logs.'], ['2', 'A fire needs three logs.']]) {
       typedANumber(m, 'kindle', 'logs', logs);
-      recordResolved([failed('kindle', error)], w, m);
+      recordResolved([failed('kindle', error)], w, m, m);
     }
     expect(w.errors).toEqual([]);
     expect(m.failed.size).toBe(0);
@@ -781,7 +785,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect(m.typed.has('kindle')).toBe(false);
 
     typedANumber(m, 'kindle', 'logs', '3');
-    recordResolved([failed('kindle', 'A fire needs four logs.')], w, m);
+    recordResolved([failed('kindle', 'A fire needs four logs.')], w, m, m);
     expect(w.errors).toEqual([
       'The panel offered "kindle", and taking it failed: A fire needs four logs. The game refused each of the 3 values the walk ' +
         `entered. The walk typed "3" in its field "logs". If the game needs a particular value there, such as a name the board ` +
@@ -794,10 +798,10 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const w = walk({});
     const m = memory();
     typedANumber(m, 'kindle', 'logs', '2');
-    recordResolved([{ action: 'kindle', success: true }], w, m);
+    recordResolved([{ action: 'kindle', success: true }], w, m, m);
     expect(m.typed.has('kindle')).toBe(false);
 
-    recordResolved([failed('kindle', 'The hearth is cold.')], w, m);
+    recordResolved([failed('kindle', 'The hearth is cold.')], w, m, m);
     expect(w.errors).toEqual(['The panel offered "kindle", and taking it failed: The hearth is cold.']);
     expect(m.refused.get('kindle')).toBeUndefined();
   });
@@ -807,9 +811,9 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const m = memory();
     for (const [low, high] of [['1', '2'], ['2', '3'], ['3', '4']]) {
       typedANumber(m, 'bid', 'amount', low);
-      recordResolved([failed('bid', `Bid more than ${low}.`)], w, m);
+      recordResolved([failed('bid', `Bid more than ${low}.`)], w, m, m);
       typedANumber(m, 'bid', 'amount', high);
-      recordResolved([{ action: 'bid', success: true }], w, m);
+      recordResolved([{ action: 'bid', success: true }], w, m, m);
     }
     expect(w.errors).toEqual([]);
     expect(m.failed.size).toBe(0);
@@ -822,7 +826,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const m = memory();
     const nobody = { field: 'whom', value: 'Nobody', from: 'inputs', kind: 'text' } as const;
     m.typed.set('greet', [nobody]);
-    recordResolved([failed('greet', 'Nobody is called that.'), { action: 'wave', success: true }], w, m);
+    recordResolved([failed('greet', 'Nobody is called that.'), { action: 'wave', success: true }], w, m, m);
     expect(w.errors).toEqual([actionFailed('greet', 'Nobody is called that.', [nobody], 0)]);
     expect(m.typed.size).toBe(0);
     // Resolved either way, so neither is waiting on an input any more; only the taken one moved the game on.
@@ -834,7 +838,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const w = walk({ inputs: { pledge: { coins: 3 } } });
     const m = memory();
     typedANumber(m, 'pledge', 'coins', '3', 'inputs');
-    recordResolved([failed('pledge', 'The pot takes seven coins.')], w, m);
+    recordResolved([failed('pledge', 'The pot takes seven coins.')], w, m, m);
     expect(w.errors).toEqual([
       'The panel offered "pledge", and taking it failed: The pot takes seven coins. The walk typed "3" in its field "coins", ' +
         `as \`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives it.`,
@@ -853,17 +857,45 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
       ]);
     for (const value of ['-1', '1']) {
       typedColumns(value);
-      recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m);
+      recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
     }
     expect(w.errors).toEqual([]);
     expect(m.refused.get('movePacks')).toBe(2);
     typedColumns('-2');
-    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m);
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
     expect(w.errors).toEqual([
       'The panel offered "movePacks", and taking it failed: A pack would leave its deployment area. The game refused each ' +
         `of the 3 values the walk entered. The walk typed "-2" in its field "columns", as \`inputs.movePacks.columns\` in ` +
         `${SMOKE_SPEC_PATH} gives it. The walk typed "0" in its field "rows", as \`inputs.movePacks.rows\` in ${SMOKE_SPEC_PATH} gives it.`,
     ]);
+  });
+
+  it("#1677: counts each seat's refused values apart, so a seat starts a list from its first value whatever another seat had refused", () => {
+    const w = walk({ inputs: { movePacks: { columns: [-1, 1] } } });
+    const m = memory();
+    const seat4: SeatAttempts = { refused: new Map(), typed: new Map() };
+    const typedColumns = (attempts: SeatAttempts, value: string) => attempts.typed.set('movePacks', [{ field: 'columns', value, from: 'inputs', kind: 'number' }]);
+    typedColumns(m, '-1');
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
+    expect(m.refused.get('movePacks')).toBe(1);
+    expect(seat4.refused.get('movePacks')).toBeUndefined();
+    typedColumns(seat4, '-1');
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, seat4);
+    expect(w.errors).toEqual([]);
+    expect(seat4.refused.get('movePacks')).toBe(1);
+  });
+
+  it("#1677: forgets every seat's values refused in an action put off, so once the game moves on each starts from the first again", () => {
+    const w = walk({ inputs: { movePacks: { columns: [-1, 1], rows: () => undefined } } });
+    const m = memory();
+    const seat4: SeatAttempts = { refused: new Map([['movePacks', 1], ['draw', 1]]), typed: new Map() };
+    m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', kind: 'number' }]);
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
+    expect(m.refused.get('movePacks')).toBe(1);
+    recordPutOff(w, [m, seat4], 'movePacks', 'rows');
+    expect(w.wanting.get('movePacks')).toBe('rows');
+    expect(m.refused.get('movePacks')).toBeUndefined();
+    expect([...seat4.refused]).toEqual([['draw', 1]]);
   });
 
   it('#1663: tries an action as many times as its longest list, or the walk\'s own three numbers when that is more', () => {
@@ -873,7 +905,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
       let attempts = 0;
       while (w.errors.length === 0) {
         m.typed.set('aim', typed);
-        recordResolved([failed('aim', 'Off the board.')], w, m);
+        recordResolved([failed('aim', 'Off the board.')], w, m, m);
         attempts++;
       }
       return attempts;
@@ -892,7 +924,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
       { field: 'note', value: 'smoke test', from: 'walk', kind: 'text' },
       { field: 'amount', value: '40', from: 'inputs', kind: 'number' },
     ]);
-    recordResolved([failed('bid', 'Too low.')], w, m);
+    recordResolved([failed('bid', 'Too low.')], w, m, m);
     expect(m.refused.get('bid')).toBeUndefined();
     expect(w.errors).toHaveLength(1);
   });
@@ -901,7 +933,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const w = walk({});
     const m = memory();
     typedANumber(m, 'kindle', 'logs', '1');
-    recordResolved([failed('kindle', `${rulesErrorSentence('kindle')} (the hearth cracked)`)], w, m);
+    recordResolved([failed('kindle', `${rulesErrorSentence('kindle')} (the hearth cracked)`)], w, m, m);
     expect(w.errors).toHaveLength(1);
     expect(w.errors[0]).toContain('taking it failed: The "kindle" action could not be completed');
     expect(m.refused.get('kindle')).toBeUndefined();
