@@ -1,5 +1,5 @@
 {
-  "revision": 374,
+  "revision": 375,
   "surfaceHash": "42b365841767d5b0",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2935,6 +2935,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke walk can deal a table at a chosen player count: a spec seed entry may be { seed, players }, boardsmith smoke takes --players, and the dev host's Table setup deals at the count typed in its new Players field (#1602)."
+    },
+    {
+      "revision": 375,
+      "date": "2026-11-16",
+      "surfaceHash": "42b365841767d5b0",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith lint's element-indexof and player-element-ref checks recognise the element classes a game declares (#1617)"
     }
   ]
 }
