@@ -171,7 +171,7 @@ describe('boardsmith verify: the smoke check', () => {
       );
       expect(outcome.summary).toContain(
         '- The panel offered "pledge", and taking it failed: The pot takes seven coins. The game refused each of the 3 ' +
-          'numbers the walk entered. The walk typed "3" in its field "coins". If the game needs a particular value there, ' +
+          'values the walk entered. The walk typed "3" in its field "coins". If the game needs a particular value there, ' +
           'such as a name the board shows, give it in `inputs` in tests/browser/smoke.spec.ts.',
       );
       expect(outcome.summary).toContain(
@@ -215,6 +215,18 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => /: entering "\d+" for "pledge"/.test(line))).toEqual([expect.stringMatching(/: entering "3" for "pledge", from `inputs`$/)]);
     },
   );
+
+  it("#1663: types the next value of a list in the spec's `inputs` each time the game refuses one, and passes once it takes one", async () => {
+    const { outcome, steps } = await walkGreetings(`{
+    greet: { whom: theOther },
+    wave: { whom: theOther },
+    pledge: { coins: [3, 7] },
+  }`);
+
+    expect(outcome.passed).toBe(true);
+    const entered = steps.flatMap((line) => line.match(/: entering "(\d+)" for "pledge", from `inputs`$/)?.[1] ?? []);
+    expect(entered.slice(0, 2)).toEqual(['3', '7']);
+  });
 
   it(
     "#1598: presses the choice a spec's `inputs` name for a pick by its label, reading which deal it walks, so each deal " +

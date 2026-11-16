@@ -501,7 +501,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   `validate` message, or a refusal it throws for the player to read), the walk
   takes the action again with the next number up, three numbers in all, and
   neither the refusal nor the error toast that repeats it is a problem (#466). A
-  number from `inputs` is never moved up: the game refusing it fails the walk.
+  number from `inputs` is never moved up: the game refusing it fails the walk,
+  unless `inputs` gives a list, whose next value the walk then types (#1663).
   A failure the engine words as an error in the game's rules is a crash, and is
   reported at once. Each press is narrated (`smoke step 4: pressing "Done" for
   "kindle"`).
@@ -875,12 +876,28 @@ defineSmokeTest({
 
 A label the pick does not offer fails the walk, naming the labels it does.
 
+When the value the game accepts depends on the whole position, such as a shift
+that must keep every one of a seat's pieces on its own ground, give a list for
+a text or number field (#1663). The walk types its first value, and each time
+the game refuses the action it takes it again with the next, failing only once
+the game has refused every one. In an action with lists in several fields, each
+try takes the next value of each list, and a shorter list stays at its last:
+
+```ts
+defineSmokeTest({
+  actions: ['movePacks' /* ... */],
+  inputs: { movePacks: { columns: [-1, 1, -2, 2, -3, 3], rows: 0 } },
+});
+```
+
 The walk fails on everything it would fail on without them:
 
 - The game refusing a value from `inputs` fails the walk, as any failed action
   does, and the report names the value and the input it came from. A number
   from `inputs` is not moved up and tried again, as the walk's own is: it is the
-  spec's answer.
+  spec's answer. A list fails the walk once the game refused all its values.
+- A list for a pick of choices, an empty list, or one with a blank value fails
+  the walk, naming the input.
 - When the game refuses a value the walk chose itself, the report says what it
   typed and that a value the game needs goes in `inputs`.
 - A function that returns nothing (or blank text) says the page gives no value
