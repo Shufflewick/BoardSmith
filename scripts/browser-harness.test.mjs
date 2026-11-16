@@ -116,6 +116,14 @@ describe('every browser regression launches the one Chromium build the harness p
   });
 });
 
+describe('#1669: a regression waits for transitions through the harness settle', () => {
+  it.each(browserScripts())('%s does not wait on an animation finished promise itself', (name) => {
+    // getAnimations() lists a finished transition until the next frame, and a loop awaiting its
+    // already settled promise never lets that frame come (#1645); settle() waits only on running ones.
+    expect(read(name), `${name} must wait for transitions with the harness's settle(frame)`).not.toMatch(/\.finished\b/);
+  });
+});
+
 describe('#1604: a regression that lays a page out at phone size names its browsers', () => {
   it.each(browserScripts())('%s names its engines when it uses a phone viewport or touch', (name) => {
     const source = read(name);

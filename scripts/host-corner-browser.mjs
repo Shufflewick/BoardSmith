@@ -20,7 +20,7 @@
  * `node scripts/host-corner-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
  */
-import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, openTableSample, runBrowserRegression, settle, summarise } from './browser-harness.mjs';
 
 const VIEWPORTS = [
   { width: 1440, height: 900 },
@@ -33,13 +33,10 @@ const VIEWPORTS = [
 const NARRATION = 'Player 2 draws the top card of the deck and plays it onto the discard pile, ending their turn';
 
 /** The shell elements drawn in the host's corner, after the shell's easing settles. */
-function inCorner(frame) {
+async function inCorner(frame) {
+  await settle(frame);
   return frame.locator('body').evaluate(async (body, narration) => {
     const doc = body.ownerDocument;
-    // A tier change can cancel one easing and start another, so wait until none is left.
-    const easing = () => doc.getAnimations().filter((a) => a.transitionProperty);
-    while (easing().length > 0) await Promise.allSettled(easing().map((a) => a.finished));
-
     // A bot demo's narration and the unread-log badge need a demo and a game that logs; draw them with their components' own scoped classes.
     const scopeOf = (cls) => {
       const walk = (rules) => {
