@@ -52,6 +52,9 @@ export enum ErrorCode {
   /** The host has no handler for this op at all (#1046): a table without
    *  teaching support, say. Clients recognise it by this code, never the text. */
   UNKNOWN_OP = 'UNKNOWN_OP',
+  /** The host did not send the request on, because it is not connected to the table (#1646). The shell
+   *  holds back its toast while the connection dot shows stale, since the dot already says so. */
+  NOT_CONNECTED = 'NOT_CONNECTED',
   // Pick errors
   INVALID_PICK = 'INVALID_PICK',
   PICK_NOT_FOUND = 'PICK_NOT_FOUND',

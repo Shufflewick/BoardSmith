@@ -111,13 +111,14 @@ const ink = computed(() => seatInk(props.color, 'PlayerToken'));
   font-family: var(--bsg-font);
 }
 
-/* Letter-friendly shape set (every one centers a glyph) */
-.sh-circle .shape    { clip-path: circle(50%); }
-.sh-square .shape    { clip-path: inset(3% round 26%); }
-.sh-hexagon .shape   { clip-path: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
-.sh-octagon .shape   { clip-path: polygon(31% 3%, 69% 3%, 97% 31%, 97% 69%, 69% 97%, 31% 97%, 3% 69%, 3% 31%); }
-.sh-diamond .shape   { clip-path: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
-.sh-pentagon .shape  { clip-path: polygon(50% 2%, 98% 39%, 80% 98%, 20% 98%, 2% 39%); }
-.sh-shield .shape    { clip-path: polygon(50% 1%, 95% 15%, 90% 63%, 50% 99%, 10% 63%, 5% 15%); }
-.sh-plus .shape      { clip-path: polygon(36% 2%, 64% 2%, 64% 36%, 98% 36%, 98% 64%, 64% 64%, 64% 98%, 36% 98%, 36% 64%, 2% 64%, 2% 36%, 36% 36%); }
+/* Letter-friendly shape set (every one centers a glyph). On the token, so an outline drawn round it can take its shape. */
+.sh-circle   { --tok-shape: circle(50%); }
+.sh-square   { --tok-shape: inset(3% round 26%); }
+.sh-hexagon  { --tok-shape: polygon(25% 5%, 75% 5%, 100% 50%, 75% 95%, 25% 95%, 0 50%); }
+.sh-octagon  { --tok-shape: polygon(31% 3%, 69% 3%, 97% 31%, 97% 69%, 69% 97%, 31% 97%, 3% 69%, 3% 31%); }
+.sh-diamond  { --tok-shape: polygon(50% 1%, 99% 50%, 50% 99%, 1% 50%); }
+.sh-pentagon { --tok-shape: polygon(50% 2%, 98% 39%, 80% 98%, 20% 98%, 2% 39%); }
+.sh-shield   { --tok-shape: polygon(50% 1%, 95% 15%, 90% 63%, 50% 99%, 10% 63%, 5% 15%); }
+.sh-plus     { --tok-shape: polygon(36% 2%, 64% 2%, 64% 36%, 98% 36%, 98% 64%, 64% 64%, 64% 98%, 36% 98%, 36% 64%, 2% 64%, 2% 36%, 36% 36%); }
+.tok .shape  { clip-path: var(--tok-shape); }
 </style>

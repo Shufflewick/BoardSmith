@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { useToast } from '../composables/useToast';
 
-const { toasts, remove } = useToast();
+const { toasts, dismiss } = useToast();
 </script>
 
 <template>
@@ -22,7 +22,7 @@ const { toasts, remove } = useToast();
           <button
             class="toast-dismiss"
             aria-label="Dismiss"
-            @click.stop="remove(toast.id)"
+            @click.stop="dismiss(toast.id)"
           >
             <span aria-hidden="true">✕</span>
           </button>
