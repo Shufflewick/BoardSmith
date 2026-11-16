@@ -24,7 +24,7 @@ describe('boardsmith verify: the smoke check', () => {
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], { showAce: 'Offered only to a seat dealt the ace.' }, { seed: SLOW_SEED, steps: 4 }),
     });
 
-    expect(said).toContain(`smoke: dealing a game from seed "${SLOW_SEED}"`);
+    expect(said).toContain(`smoke: dealing a game from seed "${SLOW_SEED}" at 2 players`);
     expect(outcome.summary).not.toContain('had not dealt');
     expect(outcome.passed).toBe(true);
   });

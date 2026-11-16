@@ -1113,6 +1113,7 @@ describe('MultiplayerHost — debugToggle/uiSwitch relay', () => {
 describe('MultiplayerHost — restart from a finished game (D11 characterization + adversarial)', () => {
   function makeAltHostWithSeedCapture(options: Pick<MultiplayerHostOptions, 'seedSnapshot'> = {}) {
     const seeds: string[] = [];
+    const counts: number[] = [];
     let seedCounter = 0;
     const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
     const host = new MultiplayerHost({
@@ -1122,8 +1123,11 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
       maxPlayers: def.maxPlayers,
       makeSeed: () => `seed-${seedCounter++}`,
       executeOp: (gameOptions, snap, pend, op, hostOptions) => {
-        if (op.type === 'start') seeds.push((gameOptions as { seed?: string }).seed ?? '');
-        return executeOp(altDef, gameOptions, snap, pend, op, hostOptions);
+        if (op.type === 'start') {
+          seeds.push((gameOptions as { seed?: string }).seed ?? '');
+          counts.push(gameOptions.playerCount);
+        }
+        return executeOp({ ...altDef, maxPlayers: def.maxPlayers }, gameOptions, snap, pend, op, hostOptions);
       },
       send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
     });
@@ -1137,7 +1141,7 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
         op: 'action',
         payload: { actionName: 'pass', args: {}, boundaryKey: clientKey(clientId) },
       });
-    return { host, sent, to, lastOfType, pass, seeds, clear: () => (sent.length = 0) };
+    return { host, sent, to, lastOfType, pass, seeds, counts, clear: () => (sent.length = 0) };
   }
 
   it("CHARACTERIZATION (already passes pre-fix): a {type:'restart'} sent to a FINISHED game restarts with a fresh runner+seed (the guard never rejected this)", async () => {
@@ -1193,6 +1197,29 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     // A restart naming no seed deals a fresh one again.
     await host.handleMessage('A', { type: 'restart' });
     expect(seeds).toEqual(['seed-0', 'deal-7', 'seed-1']);
+  });
+
+  it('#1602: a deal naming a player count deals at that many seats, and a deal naming none keeps the count', async () => {
+    const { host, lastOfType, seeds, counts } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'restart', seed: 'deal-7', playerCount: 3 });
+    await host.handleMessage('A', { type: 'restart', seed: 'deal-8' });
+
+    expect(seeds).toEqual(['seed-0', 'deal-7', 'deal-8']);
+    expect(counts).toEqual([2, 3, 3]);
+    expect(lastOfType('A', 'lobby').seats).toHaveLength(3);
+  });
+
+  it('#1602: refuses a deal at a player count the game does not seat, saying which it does, and leaves the game as it was', async () => {
+    const { host, lastOfType, seeds, counts } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'restart', seed: 'deal-7', playerCount: 5 });
+
+    expect(seeds).toEqual(['seed-0']);
+    expect(counts).toEqual([2]);
+    expect(lastOfType('A', 'error').message).toBe('This game seats 2 to 4 players, so it cannot be dealt at 5. Choose a count from 2 to 4.');
   });
 
   it('#460: refuses a blank seed, saying what a seed is, and leaves the game as it was', async () => {

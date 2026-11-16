@@ -8,7 +8,7 @@ import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
 import { runSmoke } from './smoke.js';
 import { smokeProject } from './smoke-project.test-helper.js';
 import { quiet, smokeIn, smokeOf } from './smoke-walk.test-helper.js';
-import { ACE_SEEDS, aceGame, smokeSpec } from './smoke-fixtures.test-helper.js';
+import { ACE_SEEDS, aceGame, crowdGame, smokeSpec } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -32,11 +32,25 @@ describe('boardsmith verify: the smoke check', () => {
       );
       expect(first.outcome.passed).toBe(true);
       // The steps name the cards each choice pressed, so the same steps are the same deals walked the same way.
-      expect(first.steps).toContain('smoke: dealing a game from seed "blank"');
+      expect(first.steps).toContain('smoke: dealing a game from seed "blank" at 2 players');
       expect(first.steps.some((line) => /pressing "[^"]+" for "play"/.test(line))).toBe(true);
       expect(second.steps).toEqual(first.steps);
     },
   );
+
+  it('#1602: deals each game at the player count its deal names, and one naming none at the game\'s fewest', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...crowdGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'huddle', 'pair'], undefined, { seed: [{ seed: 'crowded', players: 3 }, 'paired'], steps: 12 }),
+    });
+
+    expect(outcome.summary).toMatch(
+      /^Served by `boardsmith dev` from a fresh start and dealt from seed "crowded" at 3 players, then from seed "paired", a seated player took "draw", "huddle", "pair"/,
+    );
+    expect(outcome.passed).toBe(true);
+    expect(steps).toContain('smoke: dealing a game from seed "crowded" at 3 players');
+    expect(steps).toContain('smoke: dealing a game from seed "paired" at 2 players');
+  });
 
   it('#460: `boardsmith smoke --seed` deals from the seeds it names instead of the spec\'s', async () => {
     const dir = await smokeProject(false, {

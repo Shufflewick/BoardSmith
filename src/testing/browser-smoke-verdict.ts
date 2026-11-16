@@ -33,31 +33,65 @@ export const DEFAULT_SMOKE_SEED = 'smoke';
 export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
 
 /**
- * The seeds a walk deals from, in order: those `boardsmith smoke --seed` names (`chosen`), else the
- * spec's `seed`, one seed or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
- * write instead, on an empty list, a blank seed or a seed listed twice.
+ * A game a table's walk deals (#1602): a seed, dealt at the game's `minPlayers`, as `boardsmith dev`
+ * starts, or a seed and how many players sit at it.
  */
-export function smokeSeeds(seed: string | readonly string[] | undefined, chosen?: readonly string[]): string[] {
+export type SmokeDeal = string | { readonly seed: string; readonly players: number };
+
+/** "seed "a"", or "seed "a" at 3 players" for a deal that names its player count. */
+const dealName = (deal: SmokeDeal) => (typeof deal === 'string' ? `seed "${deal}"` : `seed "${deal.seed}" at ${deal.players} players`);
+
+/**
+ * The deals a walk deals, in order: the seeds `boardsmith smoke --seed` names (`chosen`), else the
+ * spec's `seed`, one deal or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
+ * write instead, on an empty list, a blank seed, a player count that is not one, or a deal listed twice.
+ */
+export function smokeSeeds(seed: SmokeDeal | readonly SmokeDeal[] | undefined, chosen?: readonly string[]): SmokeDeal[] {
   if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
-  return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed], `\`seed\` in ${SMOKE_SPEC_PATH}`);
+  return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : Array.isArray(seed) ? [...seed] : [seed as SmokeDeal], `\`seed\` in ${SMOKE_SPEC_PATH}`);
 }
 
-/** `seeds`, which `from` gave, once none is blank or listed twice and there is one at least. */
-function checkedSeeds(seeds: string[], from: string): string[] {
-  if (seeds.length === 0) {
+/** `deals`, which `from` gave, once none has a blank seed or a count that is not one, none is listed twice, and there is one at least. */
+function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
+  if (deals.length === 0) {
     throw new Error(
       `${from} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
         `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
     );
   }
-  if (seeds.some((s) => s.trim() === '')) {
+  if (deals.some((deal) => dealSeed(deal).trim() === '')) {
     throw new Error(`${from} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
   }
-  const twice = seeds.find((s, i) => seeds.indexOf(s) !== i);
-  if (twice !== undefined) {
-    throw new Error(`${from} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
+  const notACount = deals.find((deal) => typeof deal !== 'string' && !(Number.isInteger(deal.players) && deal.players >= 1));
+  if (typeof notACount === 'object') {
+    throw new Error(
+      `${from} deals "${notACount.seed}" at ${notACount.players} players, which is not a number of players. Name how many players sit at the deal, such as 3.`,
+    );
   }
-  return seeds;
+  const names = deals.map(dealName);
+  const twice = deals.find((_, i) => names.indexOf(names[i]) !== i);
+  if (twice !== undefined) {
+    const what = typeof twice === 'string' ? `"${twice}"` : `"${twice.seed}" at ${twice.players} players`;
+    throw new Error(`${from} lists ${what} twice, which walks the same deal twice. List each ${typeof twice === 'string' ? 'seed' : 'deal'} once.`);
+  }
+  return deals;
+}
+
+/** The seed `deal` is dealt from. */
+export const dealSeed = (deal: SmokeDeal) => (typeof deal === 'string' ? deal : deal.seed);
+
+/**
+ * How many players sit at `deal`, at a game that `seats` from `min` to `max` (#1602): the count it
+ * names, else `min`, as `boardsmith dev` starts. Throws, saying what to write instead, on a count
+ * the game does not seat.
+ */
+export function smokeDealPlayers(deal: SmokeDeal, seats: { min: number; max: number }): number {
+  if (typeof deal === 'string') return seats.min;
+  if (deal.players >= seats.min && deal.players <= seats.max) return deal.players;
+  throw new Error(
+    `\`seed\` in ${SMOKE_SPEC_PATH} deals "${deal.seed}" at ${deal.players} players, and this game seats ${seats.min} to ${seats.max}. ` +
+      `Choose a count from ${seats.min} to ${seats.max}.`,
+  );
 }
 
 /** The spec's `actions`, once none is blank or listed twice (#926). */
@@ -298,8 +332,8 @@ export interface SmokeWalk {
   readonly steps: number;
   /** Every error the page showed, in the order it showed them. */
   readonly errors: string[];
-  /** The seeds the spec's deals were dealt from, in order (#460); none in a world. */
-  readonly seeds: string[];
+  /** The spec's deals, in order (#460, #1602); none in a world. */
+  readonly seeds: SmokeDeal[];
   /** Every deal the walk stopped early because no seat was offered anything. */
   readonly stalls: SmokeStall[];
   /** The values the spec gives the walk to type, by action and field (#470). */
@@ -428,9 +462,9 @@ function refusedANumber(action: string, error: string | undefined, typed: readon
   return true;
 }
 
-/** "dealt from seed "a", then from seed "b"", or the empty string for a world, which names no seed. */
-function dealtFrom(seeds: readonly string[], then = 'then'): string {
-  return seeds.length === 0 ? '' : `dealt from ${seeds.map((seed) => `seed "${seed}"`).join(`, ${then} from `)}`;
+/** "dealt from seed "a", then from seed "b" at 3 players", or the empty string for a world, which names no seed. */
+function dealtFrom(seeds: readonly SmokeDeal[], then = 'then'): string {
+  return seeds.length === 0 ? '' : `dealt from ${seeds.map(dealName).join(`, ${then} from `)}`;
 }
 
 /** Whether a walk was dealt at a table: a world's is dealt by `boardsmith dev`, and names no seed. */
@@ -635,8 +669,8 @@ export function smokeFailure(walk: SmokeWalk, problems: readonly string[]): stri
 
 /** What a passing walk did, as `boardsmith verify` reports it. */
 export interface SmokeRecord {
-  /** The seeds the spec's deals were dealt from, in order; none in a world. */
-  readonly seeds: string[];
+  /** The spec's deals, in order; none in a world. */
+  readonly seeds: SmokeDeal[];
   /** The world seats the walk played, when the spec named them (#471); none at a table. */
   readonly seats: number[];
   /** The actions taken, sorted. */

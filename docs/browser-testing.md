@@ -435,7 +435,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   [Several seats in a world](#several-seats-in-a-world-seats).
 - At a table it then deals a game from a seed (#460): it opens Table setup
   (`[data-testid="table-setup-toggle"]`), types the seed into
-  `[data-testid="deal-seed"]`, presses `[data-testid="deal"]`, and waits until
+  `[data-testid="deal-seed"]` and the deal's player count into
+  `[data-testid="deal-players"]` (#1602), presses `[data-testid="deal"]`, and waits until
   `[data-testid="game-seed"]` shows that seed, which the dev host shows only once
   the dealt game's state has reached the game frame. Follow-mode carries over a
   new game, so no bot moves in it, and the same seed walked the same way is the
@@ -676,9 +677,27 @@ defineSmokeTest({
 The walk requires every listed action across all its deals together, so the
 second seed above is there for the action the first deal does not offer. To
 find one, deal seeds in `boardsmith dev`: Table setup shows the seed of the game
-on screen and deals a new game from any seed typed there. `boardsmith smoke
+on screen and deals a new game from any seed typed there, at the player count
+typed beside it. `boardsmith smoke
 --seed 17` (or `--seed 17 23`) walks those deals instead of the spec's, without
 editing it, and `--seed smoke/3` walks again the third game a failing run dealt.
+
+Each deal sits the game's `minPlayers`, as `boardsmith dev` starts, unless it
+names how many players sit at it. An action only a fuller table offers (one that
+needs a second player on the same side, say) is reached by a deal at that count:
+
+```ts
+defineSmokeTest({
+  actions: ['move', 'declareMultiPlayerAttack'],
+  seed: ['smoke', { seed: 'Kim', players: 3 }],
+});
+```
+
+The walk deals it from Table setup's Players field, acts for every seat of it,
+and deals each new game of that deal (`Kim/2`, ...) at the same count. A count
+the game does not seat fails the check, naming the counts it does. The summary
+names the count of a deal that names one (`dealt from seed "Kim" at 3 players`).
+`boardsmith smoke --seed` deals at `minPlayers`.
 
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.

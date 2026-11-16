@@ -161,7 +161,9 @@ describe('MultiplayerHost — gameOption/preset selection reaches the start op (
     await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 6 } });
     const err = lastOfType('A', 'error');
     expect(err).toBeTruthy();
-    expect((err as Extract<HostOutbound, { type: 'error' }>).message).toMatch(/out of range/i);
+    expect((err as Extract<HostOutbound, { type: 'error' }>).message).toBe(
+      'This game seats 1 to 4 players, so it cannot be dealt at 6. Choose a count from 1 to 4.',
+    );
     // No restart with the out-of-range count occurred (start op unchanged).
     expect(getStartOptions()).toBe(startBefore);
   });

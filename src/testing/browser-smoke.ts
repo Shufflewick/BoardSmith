@@ -70,6 +70,7 @@ import {
 import {
   answered,
   choiceNotOffered,
+  dealSeed,
   DEFAULT_SMOKE_SEED,
   inputFor,
   note,
@@ -81,6 +82,7 @@ import {
   SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
   smokeActions,
+  smokeDealPlayers,
   smokeFailure,
   smokeProblems,
   smokeRecord,
@@ -92,6 +94,7 @@ import {
   walkStopped,
   type ResolvedAction,
   type ResolvedMemory,
+  type SmokeDeal,
   type SmokeInputs,
   type SmokeInputView,
   type SmokeWalk,
@@ -115,8 +118,12 @@ export interface SmokeTestOptions {
    * action in {@link unreachable}. An input reads the deal's seed (`seed` in what it reads), so a deal
    * can make its own choice, such as which character a player picks (#1598). A world is dealt by
    * `boardsmith dev` from its own seed and takes none.
+   *
+   * A deal is dealt at the game's `minPlayers`, as `boardsmith dev` starts, unless it names how many
+   * players sit at it: `{ seed: 'Kim', players: 3 }` (#1602), for an action only a fuller table offers.
+   * The walk acts for every seat of each deal.
    */
-  readonly seed?: string | readonly string[];
+  readonly seed?: SmokeDeal | readonly SmokeDeal[];
   /**
    * The listed actions no walk from a fresh game can reach, whatever the deal, each with a sentence
    * saying why: one offered only in a position play does not get to, such as a draw by threefold
@@ -208,7 +215,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
       } else {
         if (options.seed !== undefined || chosen !== undefined) note(walk, WORLD_TAKES_NO_SEED);
         const plays = await seatTheWorld(page, browser, seats, walk, browsers);
-        memories.push(newMemory(null));
+        memories.push(newMemory(null, null));
         await walkTheGame(plays, walk, memories[0]);
       }
     } catch (error) {
@@ -234,12 +241,13 @@ async function closeTheWalk(page: Page, browsers: readonly BrowserContext[]): Pr
   }
 }
 
-/** Walks a table's game dealt from each of `seeds` in turn (#460), remembering each deal's walk in `memories`. */
-async function walkEveryDeal(page: Page, seeds: readonly string[], walk: SmokeWalk, memories: WalkMemory[]): Promise<void> {
-  for (const seed of seeds) {
-    walk.seeds.push(seed);
-    await dealFrom(page, seed);
-    memories.push(newMemory(seed));
+/** Walks a table's game dealt as each of `seeds` says in turn (#460, #1602), remembering each deal's walk in `memories`. */
+async function walkEveryDeal(page: Page, seeds: readonly SmokeDeal[], walk: SmokeWalk, memories: WalkMemory[]): Promise<void> {
+  for (const deal of seeds) {
+    walk.seeds.push(deal);
+    const players = smokeDealPlayers(deal, await seatRange(page));
+    await dealFrom(page, dealSeed(deal), players);
+    memories.push(newMemory(dealSeed(deal), players));
     await walkTheGame([newPlay(page, null)], walk, memories[memories.length - 1]);
   }
 }
@@ -508,15 +516,29 @@ async function canDeal(page: Page): Promise<boolean> {
   return (await inPageTime(page, 'looking for "Table setup"', () => tableSetup(page).count())) > 0;
 }
 
+/** The fewest and most players the game seats, as Table setup's Players field bounds them. */
+async function seatRange(page: Page): Promise<{ min: number; max: number }> {
+  const field = page.getByTestId('deal-players');
+  await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
+  const range = await inPageTime(page, 'reading how many players the game seats', () =>
+    field.evaluate((input: HTMLInputElement) => ({ min: Number(input.min), max: Number(input.max) })),
+  );
+  await actWithinPageTime(page, PRESS_MS, 'closing "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
+  return range;
+}
+
 /**
- * Deals a new game from `seed` in the dev host's Table setup (#460), and waits until the game frame
- * has been handed that game. Follow-mode carries over the new game, so no bot moves in it: the same
- * seed and the same walk make the same game.
+ * Deals a new game from `seed` at `players` players in the dev host's Table setup (#460, #1602), and
+ * waits until the game frame has been handed that game. Follow-mode carries over the new game, so no
+ * bot moves in it: the same seed and the same walk make the same game.
  */
-async function dealFrom(page: Page, seed: string): Promise<void> {
-  console.log(`smoke: dealing a game from seed "${seed}"`);
+async function dealFrom(page: Page, seed: string, players: number): Promise<void> {
+  console.log(`smoke: dealing a game from seed "${seed}" at ${players} players`);
   await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
   await actWithinPageTime(page, PRESS_MS, 'entering the seed to deal from', (timeout) => page.getByTestId('deal-seed').fill(seed, { timeout }));
+  await actWithinPageTime(page, PRESS_MS, 'entering how many players to deal for', (timeout) =>
+    page.getByTestId('deal-players').fill(String(players), { timeout }),
+  );
   await actWithinPageTime(page, PRESS_MS, 'pressing "Deal"', (timeout) => page.getByTestId('deal').click({ timeout }));
   await withinPageTime(page, TURN_WAIT_MS, 'waiting for the game to be dealt', (timeout) =>
     page.waitForFunction((dealt) => document.querySelector('[data-testid="game-seed"]')?.textContent === dealt, seed, { timeout }),
@@ -1873,6 +1895,8 @@ interface WalkMemory extends ResolvedMemory {
   games: number;
   /** The seed the spec dealt this walk from; null in a world, which `boardsmith dev` deals itself. */
   readonly seed: string | null;
+  /** How many players sit at this walk's deal, its every new game included (#1602); null in a world. */
+  readonly players: number | null;
   /** The seed the game being played was dealt from: `seed`, then `seed/2`, `seed/3`... for each new game. */
   dealt: string | null;
   /** Which of the walk's browsers (`SeatPlay`) the next step is tried in first: each takes a step in turn (#471). */
@@ -1895,9 +1919,10 @@ interface WalkMemory extends ResolvedMemory {
   readonly selections: Map<Page, string>;
 }
 
-function newMemory(seed: string | null): WalkMemory {
+function newMemory(seed: string | null, players: number | null): WalkMemory {
   return {
     seed,
+    players,
     dealt: seed,
     pressed: new Set(),
     controls: 0,
@@ -2036,14 +2061,14 @@ async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, ste
     narrate(step, 'the game is over');
     return false;
   }
-  if (memory.seed === null) {
+  if (memory.seed === null || memory.players === null) {
     narrate(step, 'the game is over, and a world has no new game');
     return false;
   }
   narrate(step, `the game is over with ${left.map((name) => `"${name}"`).join(', ')} still to take; dealing a new game`);
   memory.games++;
   memory.dealt = `${memory.seed}/${memory.games}`;
-  await dealFrom(page, memory.dealt);
+  await dealFrom(page, memory.dealt, memory.players);
   return true;
 }
 
