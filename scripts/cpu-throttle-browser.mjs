@@ -61,21 +61,28 @@ await runBrowserRegression({ script: 'cpu-throttle-browser.mjs', engines: ['chro
     await cdp.send('Performance.enable');
 
     const frame = await openTableSample(page, hostUrl);
+    // The dev Debug panel mounts by itself after the board, so a busy machine would otherwise count before it lands (#1672).
+    await frame.locator('.debug-panel').waitFor({ state: 'attached', timeout: 30_000 });
     const rendered = await counts(cdp, frame);
     console.log(`  render: ${JSON.stringify(rendered)}`);
     await check('rendering the whole game at a quarter of the CPU does no more work than recorded', () => holdTo('render', rendered));
 
     // The sample draws by itself, so its first question is which card to play. The push measured is that play,
-    // seat 2's turn and this seat's next draw, which all follow by themselves: it is over when the hand is full again.
+    // seat 2's turn and this seat's next draw, which all follow by themselves: it is over when the hand is full again
+    // and the Action Panel offers each of its cards, not while it is still loading them (#1672).
     const myHand = frame.locator('[data-bs-el-name="hand-1"]');
     const hand = myHand.locator('.hand-card');
     const full = await hand.count();
-    const choice = frame.locator('[data-testid="bs-actionbar"] .choice-btn').first();
+    const choices = frame.locator('[data-testid="bs-actionbar"] .choice-btn');
+    const offered = await choices.count();
+    const choice = choices.first();
     const card = (await choice.innerText()).trim();
     await choice.click();
     await myHand.locator(`[data-bs-el-name="${card}"]`).waitFor({ state: 'detached', timeout: 30_000 });
     const refilled = await waitUntil(() => hand.count(), (now) => now === full, 60_000);
     assert(refilled === full, `the hand never filled again after the play: ${refilled} cards, not ${full}`);
+    const reoffered = await waitUntil(() => choices.count(), (now) => now === offered, 30_000);
+    assert(reoffered === offered, `the Action Panel never offered the next play: ${reoffered} choices, not ${offered}`);
     const after = await counts(cdp, frame);
     const pushed = { layouts: after.layouts - rendered.layouts, styles: after.styles - rendered.styles, elements: after.elements };
     console.log(`  push: ${JSON.stringify(pushed)}`);
