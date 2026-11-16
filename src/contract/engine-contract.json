@@ -1,5 +1,5 @@
 {
-  "revision": 403,
+  "revision": 404,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3167,6 +3167,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "Every Space now serializes $type 'space' (subclasses keep their own), so AutoUI draws an empty space as a space with its game attributes; a piece on a board cell, in a hand or in a deck shows its full name and attributes in a tip on hover, tap or keyboard focus (#1667)."
+    },
+    {
+      "revision": 404,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The boardsmith dev page's own controls are at least 44px under pointer: coarse, a checkbox or radio by its label (#1668)"
     }
   ]
 }
