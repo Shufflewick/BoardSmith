@@ -185,15 +185,17 @@ export function takeWorldLock(path: string, holder: { readonly port?: number } =
     db.close();
     throw (error as { errcode?: number }).errcode === SQLITE_BUSY ? heldElsewhere(path) : error;
   }
-  let released = false;
+  heldLocks.add(db);
   return {
     release(): void {
-      if (released) return;
-      released = true;
+      if (!heldLocks.delete(db)) return;
       db.close();
     },
   };
 }
+
+/** The lock connections this process holds: a connection nothing references is closed when collected, dropping its lock (#1673). */
+const heldLocks = new Set<SqliteDatabase>();
 
 /**
  * What `boardsmith dev --reset` says it did.

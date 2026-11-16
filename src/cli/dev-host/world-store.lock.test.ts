@@ -24,7 +24,7 @@ const BUDGETS = worldBudgets();
 
 /** A child process holding the store at `path` open, resolved once it says so. */
 function holdInChild(path: string, env: NodeJS.ProcessEnv): Promise<ChildProcess> {
-  const child = spawn(process.execPath, [CHILD, 'hold', path, dirname(path)], {
+  const child = spawn(process.execPath, ['--expose-gc', CHILD, 'hold', path, dirname(path)], {
     // tsx needs a worker thread and an esbuild process; node writes stay confined to the sandbox.
     env: { ...env, NODE_OPTIONS: `${env.NODE_OPTIONS} --allow-worker --allow-child-process` },
     stdio: ['ignore', 'pipe', 'pipe'],

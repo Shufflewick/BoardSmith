@@ -16,7 +16,7 @@
  * loads it, so the store runs from source with no build step.
  *
  * `hold` mode is `world-store.lock.test.ts`'s other run: it takes the run's lock, opens the store,
- * prints `holding`, and keeps it open until it is killed.
+ * collects garbage, prints `holding`, and keeps it open until it is killed.
  *
  * Usage: `node world-store-child.test-helper.mjs <mode> <storePath> <markerDir> [count] [bytes]`
  */
@@ -71,6 +71,8 @@ function armedEvents() {
 }
 
 if (mode === 'hold') {
+  // A collection before `holding`, so a lock nothing here references must still hold (#1673).
+  globalThis.gc();
   process.stdout.write('holding\n');
   setInterval(() => {}, 60_000);
 } else if (mode === 'live') {
