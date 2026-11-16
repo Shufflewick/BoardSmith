@@ -766,6 +766,7 @@ export function generateWorldA11yTestTs(): string {
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import axe from 'axe-core';
+import type { WorldBoardProps } from 'boardsmith/ui';
 import WorldBoard from '../src/ui/components/WorldBoard.vue';
 
 describe('WorldBoard — a11y floor (axe-core scan)', () => {
@@ -781,12 +782,19 @@ describe('WorldBoard — a11y floor (axe-core scan)', () => {
     const wrapper = mount(WorldBoard, {
       attachTo: document.body,
       props: {
-        gameView: { className: 'Game', children: [] },
+        gameView: { id: 0, className: 'Game', children: [], phase: 'started', isFinished: false, settings: {} },
+        players: [],
         playerSeat: 1,
+        isMyTurn: true,
         availableActions: ['tend'],
+        actionController: {} as never,
+        formFactor: 'wide',
+        orientation: 'landscape',
         worldName: 'A world',
         presence: [1],
-      },
+        events: [],
+        phase: 'watching',
+      } satisfies WorldBoardProps,
     });
     try {
       const results = await axe.run(wrapper.element);

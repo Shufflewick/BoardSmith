@@ -140,6 +140,7 @@
     "@types/picomatch": "4.0.3",
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@vitejs/plugin-vue": "^5.2.4",
+    "axe-core": "^4.14.0",
     "jsdom": "^29.1.1",
     "postcss-html": "^1.8.1",
     "stylelint": "^17.13.0",

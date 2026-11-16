@@ -3,9 +3,9 @@
  * `boardsmith init` scaffolds it, installed the way a real game is (`devProject`), with the tools
  * the test and typecheck checks run through linked from this checkout's install.
  *
- * The scaffold's `tests/a11y.example.test.ts` is left out: it runs axe-core, which this checkout
- * does not install. Everything else, a world's own `tests/world.test.ts` included (#456), is the
- * scaffold as a designer receives it, so the smoke test a fixture runs is the one `init` writes.
+ * Everything, a world's own `tests/world.test.ts` (#456) and the a11y example that mounts the board
+ * (#1658) included, is the scaffold as a designer receives it, so the smoke test a fixture runs is
+ * the one `init` writes.
  */
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
@@ -30,12 +30,11 @@ export async function smokeProject(
   const modules = join(dir, 'node_modules');
   await fs.mkdir(join(modules, '.bin'), { recursive: true });
   await fs.mkdir(join(modules, '@vue'), { recursive: true });
-  for (const name of ['typescript', 'vue-tsc', 'vitest', 'jsdom', '@vue/test-utils']) {
+  for (const name of ['typescript', 'vue-tsc', 'vitest', 'jsdom', 'axe-core', '@vue/test-utils']) {
     await fs.symlink(join(INSTALLED_MODULES, name), join(modules, name), 'dir');
   }
   await fs.symlink('../vue-tsc/bin/vue-tsc.js', join(modules, '.bin', 'vue-tsc'));
   await fs.symlink('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
-  await fs.rm(join(dir, 'tests', 'a11y.example.test.ts'), { force: true });
   await writeFiles(dir, files);
   commitAll(dir, 'fixture: the scaffolded game');
   return dir;

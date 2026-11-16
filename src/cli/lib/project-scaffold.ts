@@ -536,6 +536,7 @@ export function generateA11yExampleTestTs(): string {
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
 import axe from 'axe-core';
+import type { TableBoardProps } from 'boardsmith/ui';
 import GameTable from '../src/ui/components/GameTable.vue';
 
 describe('GameTable — a11y floor (axe-core scan)', () => {
@@ -553,11 +554,19 @@ describe('GameTable — a11y floor (axe-core scan)', () => {
       attachTo: document.body,
       props: {
         gameView: null,
+        players: [],
         playerSeat: 0,
         isMyTurn: true,
         availableActions: ['draw'],
         actionController: {} as never,
-      },
+        formFactor: 'wide',
+        orientation: 'landscape',
+        state: null,
+        isViewingHistory: false,
+        canUndo: false,
+        undo: async () => {},
+        setBoardPrompt: () => {},
+      } satisfies TableBoardProps,
     });
     try {
       const results = await axe.run(wrapper.element);

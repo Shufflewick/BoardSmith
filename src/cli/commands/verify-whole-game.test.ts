@@ -139,10 +139,9 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     git(dir, 'rm', '-q', 'index.html');
     commitAll(dir, 'lose the page');
     const { run, result } = await verifyAsAUser(dir);
-    // smokeProject leaves out the a11y example, which needs axe-core.
     const broken =
       'index.html is missing, but this project has UI files (src/main.ts, src/ui/index.ts, src/ui/uis.ts, ' +
-      'src/ui/App.vue, src/ui/components/GameTable.vue, tests/browser/smoke.spec.ts); ' +
+      'src/ui/App.vue, src/ui/components/GameTable.vue, tests/a11y.example.test.ts, tests/browser/smoke.spec.ts); ' +
       'restore index.html, or remove them and run `boardsmith add-ui`.';
     for (const name of ['build', 'smoke']) {
       expect(check(result, name)).toMatchObject({ passed: false, summary: broken });
@@ -158,6 +157,9 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       'src/ui/components/WorldBoard.vue': TABLE_KEY_WORLD_BOARD,
       'tests/board.test.ts': HAND_BUILT_STUB_TEST,
     });
+    // The stub is this board's only test: the scaffold's a11y example mounts it with no context and would fail too.
+    git(dir, 'rm', '-q', 'tests/a11y.example.test.ts');
+    commitAll(dir, 'the stub replaces the a11y example');
 
     const { run, result } = await verifyAsAUser(dir, ['--base', 'HEAD']);
 
