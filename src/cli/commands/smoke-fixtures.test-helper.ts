@@ -961,6 +961,7 @@ const POINTER_COVERS: Partial<Record<string, typeof NO_COVER>> = {
   },
   alwaysCovered: { ...NO_COVER, template: '\n    <div class="cover"></div>', style: COVER_STYLE },
 };
+const coverOf = (accepts: string | undefined) => (accepts === undefined ? undefined : POINTER_COVERS[accepts]) ?? NO_COVER;
 
 /**
  * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
@@ -990,7 +991,7 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
     underACover: TOP_LEFT_QUARTER,
     alwaysCovered: TOP_LEFT_QUARTER,
   };
-  const cover = POINTER_COVERS[options.accepts ?? ''] ?? NO_COVER;
+  const cover = coverOf(options.accepts);
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];
