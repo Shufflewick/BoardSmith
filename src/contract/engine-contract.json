@@ -1,5 +1,5 @@
 {
-  "revision": 379,
+  "revision": 380,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2970,6 +2970,14 @@
     },
     {
       "revision": 379,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "package.json now approves the esbuild and fsevents install scripts; no engine behavior changed."
+    },
+    {
+      "revision": 380,
       "date": "2026-11-16",
       "surfaceHash": "fdc7cc4945f0b03c",
       "payloadHash": "edb4aa0a4f069a29",
