@@ -5,7 +5,7 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 import { smokeOf } from './smoke-walk.test-helper.js';
-import { boardThatReplacesItsFrame, boardWithDialogs } from './smoke-fixtures.test-helper.js';
+import { ACE_SEEDS, boardThatReplacesItsFrame, boardWithDialogs, frameReplacedBetweenPresses, smokeSpec } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -78,5 +78,19 @@ describe('boardsmith verify: the smoke check', () => {
     );
     expect(outcome.summary).not.toContain('could not go on');
     expect(steps).toContain('smoke step 2: nothing is offered; waiting for a turn');
+  });
+
+  it('#1656: a frame replaced between two presses of one action is said, and the walk goes on in the new frame', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...frameReplacedBetweenPresses(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
+    });
+
+    expect(outcome.summary).not.toContain('could not go on');
+    expect(outcome.summary).not.toContain('replaced');
+    const answering = steps.find((line) => line.endsWith(' answering "play"'));
+    const step = answering?.match(/^smoke step (\d+):/)?.[1];
+    expect(step).toBeDefined();
+    expect(steps).toContain(`smoke step ${step}: the game's frame was put up again while the walk read it, so the walk goes on in the new one`);
   });
 });
