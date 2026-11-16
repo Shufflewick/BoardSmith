@@ -22,7 +22,7 @@ const alive = (pid: number) => {
  */
 async function groupRun(
   runner: string,
-  afterReady: (driver: ReturnType<typeof spawn>, workerPid: number) => void | Promise<void>,
+  afterReady: (driver: ReturnType<typeof spawn>, workerPid: number) => unknown,
 ): Promise<string> {
   // Detached, so SIGTERM to its group reaches what a tool's time limit reaches, and not this test.
   const driver = spawn(process.execPath, [GROUP_RUN, 'driver', runner], { detached: true, stdio: ['ignore', 'pipe', 'inherit'] });
