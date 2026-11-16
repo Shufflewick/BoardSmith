@@ -2595,6 +2595,11 @@ button {
   white-space: nowrap;
 }
 
+/* A sentence, not a name: it wraps within the bar (#1652). */
+[data-bs-thing-empty] {
+  white-space: normal;
+}
+
 /* Back reads as a way out, not as a move: the neutral plate the Undo button
    uses, so a group's own actions keep the accent to themselves. */
 .menu-back-btn,

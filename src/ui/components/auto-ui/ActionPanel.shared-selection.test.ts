@@ -26,6 +26,8 @@ import { DICE, DiceTrayGame, Die, TOWERS, Tower, WorkshopGame } from '../../comp
 import type { SubjectChoice } from '../../composables/useActionControllerTypes.js';
 import { selectedAttrs } from '../../composables/sharedSelection.js';
 
+const style = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'), 'utf-8');
+
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
@@ -129,6 +131,14 @@ describe('the panel on a selected thing (#1641)', () => {
     expect(game().log).toEqual(['draft red']);
   });
 
+  it('draws the contents of the one group all its verbs sit in, not a button to open it (#1652)', async () => {
+    const { wrapper, controller, die } = await panel(DiceTrayGame);
+    controller.select(die('red'));
+    await settle();
+    expect(heading(wrapper)).toBe('Dice / red showing 1');
+    expect(shown(wrapper)).toEqual(['Reroll', 'Keep']);
+  });
+
   it('starts a related thing\'s verb on that thing', async () => {
     const { wrapper, controller, game, die } = await panel(WorkshopGame);
     controller.select(die('blue'));
@@ -176,7 +186,6 @@ describe('the panel on a selected thing (#1641)', () => {
     const { wrapper, controller } = await panel(WorkshopGame);
     controller.select({ type: 'Towers', key: 'ruin', label: 'the ruined tower' });
     await settle();
-    const style = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'), 'utf-8');
     const at = style.indexOf('@media (width < 640px) and (orientation: portrait) {');
     expect(at, 'ActionPanel.vue has no upright-phone block').toBeGreaterThan(-1);
     const phone = style.slice(at, style.indexOf('\n}\n', at));
@@ -186,6 +195,21 @@ describe('the panel on a selected thing (#1641)', () => {
     expect(cutting, 'the phone block cuts the breadcrumb short').not.toEqual([]);
     const status = wrapper.get('[data-bs-thing-empty]').element;
     expect(cutting.filter((selector) => status.matches(selector))).toEqual([]);
+  });
+
+  it('wraps that sentence within the bar rather than running past its edge (#1652)', async () => {
+    const { wrapper, controller } = await panel(WorkshopGame);
+    controller.select({ type: 'Towers', key: 'ruin', label: 'the ruined tower' });
+    await settle();
+    const status = wrapper.get('[data-bs-thing-empty]').element;
+    // Rules of one specificity, so the last in the file that matches is the one that holds.
+    const matches = (selector: string) => {
+      try { return status.matches(selector.trim()); } catch { return false; } // Vue's :deep() is no selector the DOM knows.
+    };
+    const wrapping = Array.from(style.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/([^{}]+)\{([^{}]*)\}/g))
+      .filter(([, selectors]) => selectors.split(',').some(matches))
+      .flatMap(([, , body]) => Array.from(body.matchAll(/white-space:\s*([\w-]+)/g), (match) => match[1]));
+    expect(wrapping.at(-1)).toBe('normal');
   });
 
   it('goes Back to the list the thing sits in, clearing the selection', async () => {
