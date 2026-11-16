@@ -524,6 +524,17 @@ describe('#291: one gate policy for orchestrated runs', () => {
     expect(runState).toMatch(/A parked rules question stops it only when `boardsmith next-chunk` exits non-zero/);
   });
 
+  it('every entry point converts state written before the design session, and a resume derives its target with next-chunk (#1660 review F2, F5)', () => {
+    const upgrade = flat(read('state-machine.md')).split('## Upgrading State Written Before the Design Session')[1].split('## Consistency Check')[0];
+    expect(upgrade).toMatch(/`SKETCH\.md` with `## UI Strategy`/);
+    expect(upgrade).toMatch(/`DESIGN\.md` with `## Chosen Direction` and `## Theme Block`/);
+    for (const file of ['build-game.md', 'build-chunk.md']) {
+      expect(flat(read(file)), file).toContain('"Upgrading State Written Before the Design Session"');
+    }
+    expect(flat(read('orchestrate/run-state.md'))).toMatch(/derive the true build position with `npx boardsmith next-chunk`/);
+    expect(flat(read('ingest/sketch-derivation.md'))).toMatch(/its `Depends on:` names every chunk listed before it/);
+  });
+
   it('build-game.md runs the design session before the first dispatch, and adds a missing animation chunk (#1660)', () => {
     const buildGame = flat(read('build-game.md'));
     expect(buildGame).toContain('## Step 1b: The Design Session');

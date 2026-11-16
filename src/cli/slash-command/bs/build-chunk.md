@@ -166,8 +166,9 @@ lines separated from presentation description. Investigate reads `INDEX.md`, so 
 first chunk is designed against a rulebook index that is missing three named-but-undefined rules.
 `ingest-check` is a no-op in a project whose synthesis is current, so it costs nothing to run.
 
-Then run the consistency check described in `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
-("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
+Then convert any state written before the design session (`state-machine.md` "Upgrading State
+Written Before the Design Session"), and run the consistency check described in
+`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Consistency Check"). Use literal `ls <file>` checks in the current directory, never
 `**/glob` patterns that search subfolders.
 
 Then resolve the session lock (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Lock"). **First, check for the released/no-lock

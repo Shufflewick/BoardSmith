@@ -207,9 +207,10 @@ describe('INGEST-06 — checkpoints, no UI strategy (#1660)', () => {
     expect(ingestRules).toMatch(/opens with the design session \(`\/bs-build-game` Step 1b\)/);
   });
 
-  it('no skill text keeps the AutoUI-then-cutover strategy', () => {
+  it('no skill text keeps the AutoUI-then-cutover strategy, beyond converting an old sketch', () => {
+    const upgrade = /## Upgrading State Written Before the Design Session[\s\S]*?(?=\n## )/;
     for (const path of SKILL_FILES) {
-      expect(skillMarkdown(path), path).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|Restyle\/Cutover/);
+      expect(skillMarkdown(path).replace(upgrade, ''), path).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|Restyle\/Cutover/);
     }
   });
 });

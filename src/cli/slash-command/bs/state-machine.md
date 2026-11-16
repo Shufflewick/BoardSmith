@@ -200,6 +200,24 @@ Where present, the rules-staleness marker (see "Rules Staleness Marker" above) p
 
 This is the TMPL-02 parse-contract rule. "Guessing" includes silently picking the most likely status, silently repairing the file without telling the user, or proceeding as if the file were valid. All of these are prohibited; the only correct behavior on a parse failure is to stop and ask.
 
+## Upgrading State Written Before the Design Session
+
+A project built before the design session existed has state files the parse contracts below no
+longer accept. Every `bs-` entry point converts them once, before the consistency check, tells the
+designer in a sentence what it converted, and commits the conversion on its own:
+
+- **`SKETCH.md` with `## UI Strategy` and no `## Design Session`:** replace that section with the
+  template's `## Design Session` (`templates/SKETCH.template.md`), its status `signed-off` when
+  `DESIGN.md` exists and `pending` otherwise. A sketch whose strategy was `autoui-with-cutover`
+  keeps its named cutover chunk in the Ordered Chunk List: building it re-lays-out every verified
+  surface, so it flips every chunk verified against AutoUI back to `built` ("Restyle Rule").
+- **`DESIGN.md` with `## Chosen Direction` and `## Theme Block`:** the designer signed it off at a
+  chunk's `ask`, so it stands. Rename `## Chosen Direction` to `## Chosen Design` and
+  `## Theme Block (--bsg-* / applyTheme() overrides)` to `## Theme File`, keeping their text; under
+  `## Theme File` name where the game's theme lives in code now. Add `## Sign-Off` reading "signed
+  off at the first UI chunk's ask, before the design session existed", and an empty
+  `## Motion Intents`, which the animation chunk fills, in the template's order.
+
 ## Consistency Check (every bs- entry point, before proceeding)
 
 Every `bs-` skill, on entry, runs a consistency check before doing any other work:

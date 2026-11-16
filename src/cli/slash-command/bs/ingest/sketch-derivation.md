@@ -83,8 +83,9 @@ Per the same "## Mandated Chunks" section, the sketch MUST also contain:
   chunk (if the sketch has one) and the final-acceptance chunk, when the screens and state changes
   are stable. It builds the motion intents the design session recorded in `DESIGN.md`'s
   "## Motion Intents" and ends in a playtest where the designer compares two or three motion
-  variants live in the dev host (`build/playtest.md` "The Animation Playtest"). `ui: major`,
-  `Depends on:` the game-end/scoring chunk.
+  variants live in the dev host (`build/playtest.md` "The Animation Playtest"). `ui: major`, and
+  its `Depends on:` names every chunk listed before it, so it is never built until every screen
+  before it is verified, a chunk parked on a rules question included.
 - A **final-acceptance chunk** — the full game played start-to-finish, a coverage check confirming
   every non-variant rulebook slice was built, plus the design-QA/a11y audit (gated by any chunk
   tagged `ui: touches` or `ui: major`).

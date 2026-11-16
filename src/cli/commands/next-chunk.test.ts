@@ -63,6 +63,12 @@ describe('nextChunks', () => {
     expect(next.buildable).toEqual([]);
   });
 
+  it('reads a gate written in quotes, or with a hyphen or en dash instead of an em dash', async () => {
+    for (const gate of ['"trading — a debt question"', 'trading - a debt question', 'trading – a debt question', '`trading`']) {
+      expect((await nextChunks(await project(GAME, run(gate)))).waiting, gate).toEqual(['trading']);
+    }
+  });
+
   it('reports nothing remaining when every chunk is verified', async () => {
     const done = sketch(entry('core-loop', 'verified', 'none'), entry('final', 'verified (user-waived)', 'core-loop'));
     expect(await nextChunks(await project(done, run('none')))).toEqual({ buildable: [], waiting: [], remaining: 0 });

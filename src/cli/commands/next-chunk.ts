@@ -12,6 +12,7 @@ import { promises as fs } from 'node:fs';
 import { resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { RUN_MD, SKETCH_MD, designPath } from '../lib/project-paths.js';
+import { readIfExists } from '../lib/read-if-exists.js';
 import { readSketchChunks } from './parallel-check.js';
 import { dependencyClosure } from './sketch-chunks.js';
 
@@ -24,20 +25,18 @@ export interface NextChunks {
   remaining: number;
 }
 
-/** The chunk slugs RUN.md's `Open Gate:` names: `none`, or `<slug> — <what>` entries split by "; ". */
+/**
+ * The chunk slugs RUN.md's `Open Gate:` names: `none`, or `<slug> — <what>` entries split by "; ".
+ * A slug is a bare name, so it ends at the first space or dash of any kind; quotes are dropped.
+ */
 async function waitingChunks(projectDir: string): Promise<string[]> {
-  let run: string;
-  try {
-    run = await fs.readFile(designPath(projectDir, RUN_MD), 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
-    throw err;
-  }
+  const run = await readIfExists(designPath(projectDir, RUN_MD), (p) => fs.readFile(p, 'utf-8'));
+  if (run === undefined) return [];
   const value = /^Open Gate:[ \t]*(.*)$/m.exec(run)?.[1].trim() ?? '';
   if (value === '' || value.toLowerCase() === 'none' || value.startsWith('<!--')) return [];
   return value
     .split(';')
-    .map((gate) => gate.split('—')[0].replace(/`/g, '').trim())
+    .map((gate) => gate.replace(/[`"]/g, '').trim().split(/\s|[—–]/)[0])
     .filter(Boolean);
 }
 

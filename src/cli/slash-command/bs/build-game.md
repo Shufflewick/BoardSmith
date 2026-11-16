@@ -113,7 +113,9 @@ npx boardsmith ingest-check
 artifacts under `design/` with `git mv` and deletes nothing) and continue; never proceed against a
 project that failed it. `ingest-check` repairs `rulebook/` synthesis when needed: on a non-zero exit
 re-read `rulebook/INDEX.md`, re-run it, and only then continue. A slice it reports as not naming its
-document is not repaired; handle it as `/bs-build-chunk` Step 0 says before continuing. Then run the consistency check in
+document is not repaired; handle it as `/bs-build-chunk` Step 0 says before continuing. Then convert any state written before the design session
+(`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Upgrading State Written Before the Design
+Session") and run the consistency check in
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Consistency Check", using literal `ls <file>`
 checks, and resolve the session lock per that file's "Session Lock" — all three outcomes (same-chunk
 resume refreshes silently, a different live lock warns and stops, a stale lock is reported for the
@@ -142,11 +144,9 @@ If this project predates the filings ledger — no `FILINGS.md`, but a hand-roll
 chunk never files into two places (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`
 "Adopting a Pre-Existing Bug Ledger").
 
-If this project's sketch predates the design session — `SKETCH.md` has a `## UI Strategy` section
-and no `## Design Session` — convert it once, now: replace that section with the template's
-`## Design Session` section (`templates/SKETCH.template.md`), its status `signed-off` when
-`DESIGN.md` exists and `pending` otherwise, and commit. A sketch with no animation chunk gets one
-the way Step 6 adds a missing bot chunk.
+A project whose state predates the design session was converted at Step 0
+(`state-machine.md` "Upgrading State Written Before the Design Session"). A sketch with no
+animation chunk gets one the way Step 6 adds a missing bot chunk.
 
 Then tell the designer where the run stands and what it will do next, in one or two sentences. On a
 resume, lead with the open gate if there is one — that is the thing they are holding.

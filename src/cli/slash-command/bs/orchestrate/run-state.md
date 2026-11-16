@@ -46,9 +46,11 @@ has. In this exact order:
    its Outcome is still `pending`). During a parallel batch there can be several; also run
    `git worktree list` to see which chunk checkouts are still open
    (`orchestrate/chunk-dispatch.md` "Parallel Dispatch").
-2. **Read `SKETCH.md`'s `## Ordered Chunk List`** and derive the true build position exactly as
-   `build-chunk.md` Step 2 does: the first chunk whose derived status is neither `verified` nor
-   `verified (user-waived)`. This — not the journal — is what gets built next.
+2. **Read `SKETCH.md`'s `## Ordered Chunk List`** and derive the true build position with
+   `npx boardsmith next-chunk`: the first chunk that is not verified, not parked in `Open Gate:`,
+   and has everything it depends on verified (`build-game.md` Step 3). Chunk status comes from
+   `SKETCH.md`, never from the journal; a parked chunk is built again only once its question is
+   answered (step 5).
 3. **Reconcile.** If a chunk's run log disagrees with its `CHUNK.md` (its last entry still says
    `pending` for a chunk that has since closed, or says `closed` for one that is still `built`),
    the journal is behind: a dispatch returned but its Outcome was never written, or the run died

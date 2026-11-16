@@ -1,6 +1,6 @@
 # Design Session — Settle the Look Before Any Code
 
-Referenced by `build-game.md` Step 1b and `build-chunk.md` Step 0: it runs once per game, after
+Referenced by `build-game.md` Step 1b and `build-chunk.md` Step 2: it runs once per game, after
 the sketch is approved and before the first chunk is built, whenever `DESIGN.md` does not exist.
 **No game code is written until the designer signs off here.** It replaces any per-chunk design
 choice: the first chunk already builds the game's own board, in the signed-off design, with the
