@@ -585,8 +585,12 @@ interface SeatPlay {
   took: { readonly name: string; readonly step: number } | undefined;
   /** The step of the first seat's action this one last followed (`companionStep`). */
   followed: number;
-  /** The panel's action groups the walk has opened in this browser, by path, and the things it has selected, as `thing:<mark>`. */
-  readonly opened: Set<string>;
+  /** The ways into the panel's menu (`Way`) the walk has opened in this browser, by selector, with how many actions had been taken then, the one opened longest ago first. */
+  readonly opened: Map<string, number>;
+  /** How many actions had been taken when the walk last went back out of a level here, which ends its look into levels opened before (`nextPress`). */
+  wentBackAt: number | undefined;
+  /** Whether a level opened because the panel offered nothing else is open here, so the walk takes what it offers rather than go back out (`nextPress`). */
+  lastResort: boolean;
   /** Whether the last step here found a modal dialog open (#461). */
   inDialog: boolean;
   /** The board control the last step here pressed, which opened a dialog the next step finds open. */
@@ -606,7 +610,7 @@ interface SeatPlay {
 }
 
 function newPlay(page: Page, seat: number | null): SeatPlay {
-  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Set(), inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined, resolvedOpen: undefined };
+  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Map(), wentBackAt: undefined, lastResort: false, inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined, resolvedOpen: undefined };
 }
 
 /**
@@ -697,16 +701,20 @@ async function settle(frame: Frame): Promise<void> {
   await framesPass(frame);
 }
 
+/** A panel button that opens a level of its menu: a group, by path, since two may share a label (#1639), or a thing, by mark. */
+interface Way {
+  readonly press: string;
+  readonly what: string;
+}
+
 /** What the page offers now: its action buttons, the open action, and the board's untried controls. */
 interface Offers {
   /** The actions the panel shows that may be taken now. */
   readonly enabled: string[];
   /** The actions the panel shows greyed out, for a reason of their own: none while an action in flight greys them all. */
   readonly greyed: string[];
-  /** The groups the panel shows, each a menu of more actions, by path: two may share a label (#1639). */
-  readonly groups: string[];
-  /** The things the panel lists, each selected to reach the verbs listed under it, by mark (#1651). */
-  readonly things: string[];
+  /** The groups the panel shows, each a menu of more actions, then the things it lists, each selected to reach its verbs (#1651). */
+  readonly ways: Way[];
   /** Whether the panel is showing a group's or a thing's menu, which has a way back. */
   readonly inGroup: boolean;
   /** The action the panel has open, if any. */
@@ -740,7 +748,11 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   for (const name of [...offers.enabled, ...open]) walk.enabled.add(name);
   // An action in flight greys every button for itself, which is no reason of the action's own.
   if (!offers.submitting) recordGreyed(walk, offers.greyed);
-  return { enabled: offers.enabled, greyed: offers.submitting ? [] : offers.greyed.map(([name]) => name), groups: offers.groups, things: offers.things, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
+  const ways = [
+    ...offers.groups.map((path) => ({ press: `[data-bs-group-path=${JSON.stringify(path)}]`, what: `group "${path}"` })),
+    ...offers.things.map((mark) => ({ press: `[data-bs-thing=${JSON.stringify(mark)}]`, what: `thing "${mark}"` })),
+  ];
+  return { enabled: offers.enabled, greyed: offers.submitting ? [] : offers.greyed.map(([name]) => name), ways, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
 }
 
 /** How many times the walk settles a panel that was unsettled again by the time it was read. */
@@ -1865,36 +1877,47 @@ async function readyNow(offered: readonly string[], view: SmokeInputView, walk: 
   return ready;
 }
 
+/** Opens `way` in `play`'s browser, remembering it as the one opened last. */
+function openWay(play: SeatPlay, way: Way, moves: number): NextPress {
+  play.opened.delete(way.press);
+  play.opened.set(way.press, moves);
+  return way;
+}
+
 /**
  * An action whose input reads a value off the page now (`ready`, #471), else an action not taken,
- * failed or put off for want of an input (#470) yet, else a group of actions this browser has not
- * opened yet (`opened`), else a thing it has not selected yet (#1651), else the way back out of a
- * group or thing, else the action taken least, preferring
- * one that has neither ended the game nor failed, nor been put off with no action taken since. So an
- * action put off whose input still gives nothing is tried again in turn with the actions taken
- * before, not after every move, and however many are put off, the rest of the game keeps its steps.
- * Undefined when the panel offers nothing.
+ * failed or put off for want of an input (#470) yet, else a way into the menu (a group, or a thing
+ * to select, #1651) this browser has not opened yet (`opened`), else, once for each action taken,
+ * the one opened longest ago before that action, since what it holds may have changed, else the way
+ * back out of a level, else the action taken least, preferring one that has neither ended the game
+ * nor failed, nor been put off with no action taken since, else the way opened longest ago, as the
+ * last resort of a panel that offers only ways in. So an action put off whose input still gives
+ * nothing is tried again in turn with the actions taken before, not after every move, and however
+ * many are put off, the rest of the game keeps its steps. Undefined when the panel offers nothing.
  */
-function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: ReadonlySet<string>, opened: Set<string>): NextPress {
+function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: ReadonlySet<string>, play: SeatPlay): NextPress {
   const now = offers.enabled.find((name) => ready.has(name));
   if (now !== undefined) return { take: now };
   const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   if (untaken !== undefined) return { take: untaken };
-  const group = offers.groups.find((path) => !opened.has(path));
-  if (group !== undefined) {
-    opened.add(group);
-    return { press: `[data-bs-group-path=${JSON.stringify(group)}]`, what: `group "${group}"` };
+  const fresh = offers.ways.find((way) => !play.opened.has(way.press));
+  if (fresh !== undefined) return openWay(play, fresh, memory.moves);
+  const oldestFirst = [...play.opened.keys()].flatMap((press) => offers.ways.filter((way) => way.press === press));
+  const stale = oldestFirst.find((way) => play.opened.get(way.press)! < memory.moves);
+  if (stale !== undefined && play.wentBackAt !== memory.moves) return openWay(play, stale, memory.moves);
+  if (offers.inGroup && !play.lastResort) {
+    play.wentBackAt = memory.moves;
+    return { press: '[data-bs-menu-back]', what: 'way back' };
   }
-  const thing = offers.things.find((mark) => !opened.has(`thing:${mark}`));
-  if (thing !== undefined) {
-    opened.add(`thing:${thing}`);
-    return { press: `[data-bs-thing=${JSON.stringify(thing)}]`, what: `thing "${thing}"` };
-  }
-  if (offers.inGroup) return { press: '[data-bs-menu-back]', what: 'way back' };
   const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
   const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name) && !puttingOff(name, memory));
   const least = [...(goesOn.length > 0 ? goesOn : offers.enabled)].sort(byTimes)[0];
-  return least === undefined ? undefined : { take: least };
+  if (least !== undefined) return { take: least };
+  if (oldestFirst[0] !== undefined) {
+    play.lastResort = true;
+    return openWay(play, oldestFirst[0], memory.moves);
+  }
+  return offers.inGroup ? { press: '[data-bs-menu-back]', what: 'way back' } : undefined;
 }
 
 /** The shell's mark of a game whose ending is on screen, drawn by the shell's card or by the board itself (#1463). */
@@ -1906,7 +1929,7 @@ const GAME_OVER = '[data-bs-game-over]';
  */
 async function waitForATurn(frames: readonly Frame[]): Promise<boolean> {
   const offered = (frame: Frame, timeout: number) =>
-    frame.locator(`[data-bs-action]:not([aria-disabled="true"]), [data-bs-open-action], ${GAME_OVER}`).first().waitFor({ timeout });
+    frame.locator(`[data-bs-action]:not([aria-disabled="true"]), [data-bs-thing], [data-bs-open-action], ${GAME_OVER}`).first().waitFor({ timeout });
   // Counted on the first browser's clock: a world's browsers share the machine that starves them.
   return anyWithinPageTime(frames[0].page(), TURN_WAIT_MS, 'waiting for a turn', frames.map((frame) => (timeout: number) => offered(frame, timeout)));
 }
@@ -1997,7 +2020,7 @@ async function pressWhatThePanelOffers(
   step: number,
   view: SmokeInputView,
 ): Promise<true | typeof IDLE> {
-  const next = nextPress(offers, walk, memory, await readyNow(offers.enabled, view, walk, memory), play.opened);
+  const next = nextPress(offers, walk, memory, await readyNow(offers.enabled, view, walk, memory), play);
   if (next === undefined) return IDLE;
   if ('take' in next) {
     await takeAction(play, frame, next.take, walk, memory, step);
@@ -2024,6 +2047,7 @@ async function takeAction(
 ): Promise<void> {
   memory.times.set(name, (memory.times.get(name) ?? 0) + 1);
   play.took = { name, step };
+  play.lastResort = false;
   play.resolvedOpen = undefined;
   narrate(step, said);
   const selector = `[data-bs-action=${JSON.stringify(name)}]`;
@@ -2052,11 +2076,12 @@ async function companionStep(
   step: number,
 ): Promise<true | Offers> {
   const leading = await settledOffers(await gameFrame(lead.page), walk);
-  if (leading.open === null) lead.offered = leading.enabled;
+  // Inside a group or thing the lead's panel shows only that level, not all it offers.
+  if (leading.open === null && !leading.inGroup) lead.offered = leading.enabled;
   const mine = offers.enabled.filter((name) => !lead.offered.includes(name));
   const untaken = mine.some((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   // A group or thing this browser has not opened may hold what only it is offered, and one open is left first.
-  const ownBusiness = untaken || offers.inGroup || offers.groups.some((path) => !play.opened.has(path)) || offers.things.some((mark) => !play.opened.has(`thing:${mark}`));
+  const ownBusiness = untaken || offers.inGroup || offers.ways.some((way) => !play.opened.has(way.press));
   const { took } = lead;
   if (!ownBusiness && took !== undefined && took.step !== play.followed && offers.enabled.includes(took.name)) {
     play.followed = took.step;
