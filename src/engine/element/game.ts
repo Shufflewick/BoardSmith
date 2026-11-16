@@ -4207,13 +4207,15 @@ export class Game<
   }
 
   /**
-   * End the game with optional winners.
+   * End the game with optional winners, or as a draw.
    *
    * Transitions the game to 'finished' phase. Once finished, no more
-   * actions can be taken. Use `getWinners()` to retrieve the winners.
+   * actions can be taken. Use `getWinners()` to retrieve the winners and
+   * `isDraw()` to ask whether it was a draw.
    *
-   * @param winners - Optional array of winning players. If not provided, the
-   *                  game names none unless it overrides `getWinners()`.
+   * @param result - The winning players, or `'draw'`. If not provided, the
+   *                 game names no winners unless it overrides `getWinners()`,
+   *                 which is a loss for everyone, not a draw (#1625).
    *
    * @example
    * ```typescript
@@ -4223,16 +4225,34 @@ export class Game<
    * // End with multiple winners (tie)
    * this.finish([player1, player2]);
    *
-   * // End without specifying winners (a draw, unless getWinners() is overridden)
+   * // End in a draw
+   * this.finish('draw');
+   *
+   * // End with nobody winning (a solo game lost, a cooperative game lost)
    * this.finish();
    * ```
    */
-  finish(winners?: P[]): void {
+  finish(result?: P[] | 'draw'): void {
     this.phase = 'finished';
     stateChanged(this._ctx);
-    if (winners) {
-      this.settings.winners = winners.map(p => p.seat);
+    if (result === 'draw') {
+      this.settings.draw = true;
+    } else if (result) {
+      this.settings.winners = result.map(p => p.seat);
     }
+  }
+
+  /**
+   * Whether the game ended in a draw. A draw is declared, never inferred from
+   * an empty `getWinners()`: a game nobody won is a loss for everyone (#1625).
+   *
+   * Override it to declare a draw from the game's own state, beside
+   * `isFinished()` and `getWinners()`; otherwise it is true once
+   * `finish('draw')` was called. Read only once the game is finished, and a
+   * draw names no winners.
+   */
+  isDraw(): boolean {
+    return this.settings.draw === true;
   }
 
   /**

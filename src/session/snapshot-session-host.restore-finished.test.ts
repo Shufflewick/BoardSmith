@@ -21,8 +21,8 @@ import {
 } from './snapshot-session-host.js';
 import { boundaryKeyOfHost } from './testing/boundary-stamp.js';
 
-/** A game whose flow ends inside start(), declaring `winnerSeats` the winners. */
-function finishedGameDef(winnerSeats: number[]): GameDefinitionLike {
+/** A game whose flow ends inside start(), declaring `winnerSeats` the winners, and a draw when `draw`. */
+function finishedGameDef(winnerSeats: number[], draw = false): GameDefinitionLike {
   class FinishedGame extends Game<FinishedGame, Player> {
     constructor(options: GameOptions) {
       super(options);
@@ -34,6 +34,10 @@ function finishedGameDef(winnerSeats: number[]): GameDefinitionLike {
 
     override getWinners(): Player[] {
       return this.isFinished() ? winnerSeats.map((seat) => this.getPlayer(seat)!) : [];
+    }
+
+    override isDraw(): boolean {
+      return draw;
     }
   }
   return { gameClass: FinishedGame, gameType: 'finished', minPlayers: 1, maxPlayers: 4 };
@@ -137,8 +141,8 @@ function restoreSecond(def: GameDefinitionLike, first: ReturnType<typeof makeHos
 }
 
 /** Steps 1-3: finish a game on one host, restore a second from what it left. */
-async function restoredFromFinished(winnerSeats: number[]) {
-  const def = finishedGameDef(winnerSeats);
+async function restoredFromFinished(winnerSeats: number[], draw = false) {
+  const def = finishedGameDef(winnerSeats, draw);
   const first = makeHost(def);
   await first.host.start();
   expect(first.host.isComplete).toBe(true);
@@ -170,10 +174,24 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     expect(records.at(-1)!.meta).toMatchObject({ cause: 'republish', isComplete: true, winners: [1, 3], isDraw: false });
   });
 
-  it('a finished game with no winners is restored as a draw, not as a running game', async () => {
-    const { records } = await restoredFromFinished([]);
+  it('a finished game that declares a draw is restored as a draw, not as a running game', async () => {
+    const { records } = await restoredFromFinished([], true);
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [], isDraw: true });
     expect(records.at(-1)!.meta.turnBoundary.dueSeats).toEqual([]);
+  });
+
+  it('a finished game with no winners and no declared draw is a loss for everyone, not a draw (#1625)', async () => {
+    const { records } = await restoredFromFinished([]);
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [], isDraw: false });
+  });
+
+  it('a finished game from an engine that wrote no draw flag is not a draw (#1625)', async () => {
+    const { host } = makeHost(finishedGameDef([], true));
+    await host.start();
+    const { draw: _d, ...older } = host.durableState().snapshot!;
+    const { adapters, records } = makeAdapters(finishedGameDef([], true));
+    SnapshotSessionHost.restore(adapters, { ...host.durableState(), snapshot: older as SnapshotHostState['snapshot'], botSeats: [] });
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [], isDraw: false });
   });
 
   it('durableState() is the snapshot and the pending selections, and nothing else (#536)', async () => {

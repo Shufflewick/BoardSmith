@@ -109,7 +109,7 @@ type GameStateFields = {
   isComplete: boolean;
   winners: number[];
   /**
-   * Explicit draw signal (D10/ENDGAME-01): isComplete && winners.length === 0.
+   * Explicit draw signal (D10/ENDGAME-01): the game is complete and declared a draw (#1625).
    * Absent/false does NOT mean "not a draw" — it means the field carries no
    * claim either way; the client must not fabricate "Draw" from a bare [].
    */

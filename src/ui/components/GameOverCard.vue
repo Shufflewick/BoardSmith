@@ -36,10 +36,9 @@ const props = withDefaults(defineProps<{
   /** All players in the game — used for name lookup. */
   players: Player[];
   /**
-   * Explicit signal that the game ended with zero winners (a genuine draw),
-   * as opposed to winner data merely being unavailable. Sourced from the
-   * session (isComplete && winners.length === 0) — never inferred from a
-   * bare empty winnerSeats array, which also occurs on the dev-WS degrade.
+   * Explicit signal that the game declared a draw, as opposed to everyone
+   * losing or winner data being unavailable. Sourced from the session (the
+   * game's own isDraw(), #1625), never inferred from a bare empty winnerSeats.
    */
   isDraw?: boolean;
 }>(), {
@@ -68,7 +67,7 @@ const winners = computed(() => props.winnerSeats.map((seat) => seatDisplay(props
  *   1 winner    → "{name} wins"
  *   >1 winners  → "{names} win"
  *   0 winners, isDraw   → "Draw"
- *   0 winners, !isDraw  → "Game Over" (winner data unavailable, e.g. dev-WS degrade)
+ *   0 winners, !isDraw  → "Game Over" (everyone lost, or winner data unavailable)
  */
 const titleText = computed(() => {
   if (winners.value.length === 1) return `${winners.value[0].name} wins`;

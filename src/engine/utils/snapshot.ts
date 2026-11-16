@@ -93,6 +93,13 @@ interface SnapshotFields {
   winners: number[];
 
   /**
+   * Whether the game is finished and declared a draw (`game.isDraw()`): a
+   * finished game with no winners and no draw is a loss for everyone (#1625).
+   * Recorded for the same hosts as `winners`, and likewise not read back.
+   */
+  draw: boolean;
+
+  /**
    * Action history: every action taken and every seat the host closed at a
    * deadline, for undo and replay. Entry `i` is action `actionHistoryBase + i`.
    */
@@ -374,6 +381,9 @@ export interface ActionCheckpoint {
   /** The seats `game.getWinners()` named at this checkpoint (see `GameStateSnapshot.winners`). */
   winners: number[];
 
+  /** Whether the game was a declared draw at this checkpoint (see `GameStateSnapshot.draw`). */
+  draw: boolean;
+
   /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
   sequence?: number;
 
@@ -548,6 +558,20 @@ function snapshotRandom(game: Game, seat: { reseed: string } | undefined): Pick<
   return { randomState: new SeededRandom(seat.reseed).getState(), gameOptions: { ...game.getConstructorOptions(), seed: seat.reseed } };
 }
 
+/** The outcome the game declares: its winners, and whether a finished game is a draw (#1625). */
+function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw'> {
+  const winners = game.getWinners().map((p) => p.seat);
+  const draw = game.isFinished() && game.isDraw();
+  if (draw && winners.length > 0) {
+    throw new Error(
+      `The game declares a draw (isDraw() is true) but getWinners() names ` +
+        `${winners.length === 1 ? `seat ${winners[0]} as a winner` : `seats ${winners.join(', ')} as winners`}. ` +
+        `A draw has no winners: return [] from getWinners() for a draw, or false from isDraw() when someone won.`,
+    );
+  }
+  return { winners, draw };
+}
+
 /** How many actions a snapshot's game has recorded, those dropped from its history included (#997). */
 export function actionCountOf(snapshot: Pick<GameStateSnapshot, 'actionHistory' | 'actionHistoryBase'>): number {
   return (snapshot.actionHistoryBase ?? 0) + snapshot.actionHistory.length;
@@ -573,7 +597,7 @@ function snapshotFields(
     // would hold every seat's private log.
     messageLog: game.serializeMessageLog(opts?.forSeat),
     flowState: snapshotFlowState(game, opts) ?? undefined,
-    winners: game.getWinners().map((p) => p.seat),
+    ...outcomeOf(game),
     actionHistory: [...actionHistory],
     seed,
     ...(game._hostNow !== undefined && { now: game._hostNow }),
@@ -689,7 +713,7 @@ export function createActionCheckpoint(game: Game): ActionCheckpoint {
   return {
     state: game.toJSON(),
     flowState: flowState ?? undefined,
-    winners: game.getWinners().map((p) => p.seat),
+    ...outcomeOf(game),
     sequence: game._ctx.sequence,
     randomState: game.getRandomState(),
     // A watermark into the snapshot-level log, not a copy of it — see
