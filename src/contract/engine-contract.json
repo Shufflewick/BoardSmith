@@ -1,5 +1,5 @@
 {
-  "revision": 380,
+  "revision": 381,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2983,6 +2983,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "CLI: boardsmith catalogue is no longer a step of verify or merge and is run by hand (#1662). Published games need no rebuild."
+    },
+    {
+      "revision": 381,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The focus trap keeps focus in its dialog when WebKit removes the focused item without a focusout (#1618)."
     }
   ]
 }
