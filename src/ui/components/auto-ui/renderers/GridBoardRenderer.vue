@@ -13,11 +13,13 @@
  * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, watch, watchEffect, ref, nextTick } from 'vue';
+import { computed, watch, watchEffect, ref, nextTick, useId } from 'vue';
 import { placedCells, resolveGridSize } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
+import PieceDetailsTip from './PieceDetailsTip.vue';
+import { isKeyboardModality, trackInputModality } from '../../../composables/useDisabledReasonTooltip.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { boardCellStates } from './board-cell-states.js';
 import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
@@ -105,6 +107,30 @@ function cellPosition(cell: GameElement) {
 function cellPlacement(cell: GameElement) {
   const { row, col } = cellPosition(cell);
   return { 'grid-row': row + 1, 'grid-column': col + 1 };
+}
+
+// ── The pieces on the cell the keyboard focuses, in one tip the cell is described by (#1667) ──
+trackInputModality(document);
+const cellTipId = `bs-cell-tip-${useId()}`;
+const tipCell = ref<{ id: number; anchor: HTMLElement } | null>(null);
+// The open tip, or null while the focused cell holds no piece.
+const cellTip = computed(() => {
+  const open = tipCell.value;
+  const pieces = children.value.find((cell) => cell.id === open?.id)?.children ?? [];
+  return open && pieces.length ? { ...open, pieces } : null;
+});
+
+function cellDescribedBy(cell: GameElement) {
+  return cellTip.value?.id === cell.id ? cellTipId : undefined;
+}
+
+// Focus a redraw places is not the player reaching the cell, and nothing would close its tip (#261).
+function onCellFocus(cell: GameElement, event: FocusEvent) {
+  if (isKeyboardModality()) tipCell.value = { id: cell.id, anchor: event.currentTarget as HTMLElement };
+}
+
+function closeCellTip() {
+  tipCell.value = null;
 }
 
 // ── A11Y-01: useSelectableGrid — roving tabindex for 2D grid navigation ────
@@ -217,6 +243,7 @@ function cellAriaLabel(cell: GameElement): string {
             role="gridcell"
             :tabindex="idx === currentIdx ? '0' : '-1'"
             :aria-label="cellAriaLabel(cell)"
+            :aria-describedby="cellDescribedBy(cell)"
             :aria-selected="isCellSelected(cell) || undefined"
             :aria-disabled="isCellDisabled(cell) || undefined"
             :class="{
@@ -231,6 +258,8 @@ function cellAriaLabel(cell: GameElement): string {
             }"
             :title="cell.name ?? undefined"
             @click.stop="handleCellActivate(cell)"
+            @focus="onCellFocus(cell, $event)"
+            @blur="closeCellTip"
           >
             <!-- Coordinate notation label (shown on hover) -->
             <span v-if="cell.name" class="cell-notation">{{ cell.name }}</span>
@@ -242,6 +271,13 @@ function cellAriaLabel(cell: GameElement): string {
               :stands-on="cellIdentity(cell)"
             />
           </div>
+          <PieceDetailsTip
+            v-if="cellTip"
+            :id="cellTipId"
+            :elements="cellTip.pieces"
+            :anchor="cellTip.anchor"
+            @close="closeCellTip"
+          />
         </div>
       </div>
     </div>

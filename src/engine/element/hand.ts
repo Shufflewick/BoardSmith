@@ -35,7 +35,7 @@ export class Hand<G extends Game = any, P extends Player = any> extends Space<G,
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'hand';
+  declare $type: 'hand';
 
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);

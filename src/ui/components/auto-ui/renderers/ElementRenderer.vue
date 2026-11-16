@@ -36,7 +36,7 @@ const showsDetails = computed(() => props.details && rendererComponent.value ===
 
 <template>
   <div v-if="showsDetails" class="piece-with-details">
-    <PieceRenderer :element="element" />
+    <PieceRenderer :element="element" details-beside />
     <PieceDetails :element="element" />
   </div>
   <component

@@ -17,6 +17,7 @@
  */
 
 import { registerRenderer } from './renderer-registry.js';
+import { SPACE_TYPES } from '../../../engine/element/engine-attributes.js';
 import CardRenderer from './renderers/CardRenderer.vue';
 import HandRenderer from './renderers/HandRenderer.vue';
 import DeckRenderer from './renderers/DeckRenderer.vue';
@@ -81,9 +82,9 @@ registerRenderer({
 // ---------------------------------------------------------------------------
 registerRenderer({
   test: (element) => {
-    // Skip if a recognised $type is set (handled above at higher priorities)
-    const t = element.attributes?.$type as string | undefined;
-    if (t === 'card' || t === 'hand' || t === 'deck' || t === 'die') return -1;
+    // Skip a card, a die or any Space: an empty Space is still a space (#1667)
+    const t = element.attributes?.$type as string;
+    if (t === 'card' || t === 'die' || SPACE_TYPES.has(t)) return -1;
     // Skip if a board $layout is set
     const l = element.attributes?.$layout as string | undefined;
     if (l === 'grid' || l === 'hex-grid') return -1;

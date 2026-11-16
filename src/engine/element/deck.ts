@@ -39,7 +39,7 @@ export class Deck<G extends Game = any, P extends Player = any> extends Space<G,
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'deck';
+  declare $type: 'deck';
 
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);

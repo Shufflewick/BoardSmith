@@ -4,27 +4,18 @@
  * beside its token where the row has room, so a player sees the state their
  * actions change without hovering or tapping anything (#1628).
  */
-import { computed, inject } from 'vue';
-import { GAME_VIEW_KEY, gameAttributeRows, type GameElement } from '../auto-ui-helpers.js';
+import type { GameElement } from '../auto-ui-helpers.js';
+import AttributeList from './AttributeList.vue';
 
-const props = defineProps<{
+defineProps<{
   element: GameElement;
 }>();
-
-const gameView = inject(GAME_VIEW_KEY, undefined);
-
-const rows = computed(() => gameAttributeRows(props.element, gameView?.value));
 </script>
 
 <template>
   <div class="piece-details">
     <span class="piece-name">{{ element.name ?? element.className }}</span>
-    <dl v-if="rows.length" class="piece-attributes">
-      <div v-for="[key, text] in rows" :key="key">
-        <dt>{{ key }}</dt>
-        <dd>{{ text }}</dd>
-      </div>
-    </dl>
+    <AttributeList :element="element" />
   </div>
 </template>
 
@@ -41,28 +32,6 @@ const rows = computed(() => gameAttributeRows(props.element, gameView?.value));
 .piece-name {
   font-weight: 700;
   color: var(--bsg-ink);
-  overflow-wrap: anywhere;
-}
-
-.piece-attributes {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-}
-
-.piece-attributes > div {
-  display: flex;
-  gap: 4px;
-}
-
-.piece-attributes dt {
-  color: var(--bsg-ink-3);
-}
-
-.piece-attributes dd {
-  margin: 0;
-  font-weight: 600;
   overflow-wrap: anywhere;
 }
 </style>

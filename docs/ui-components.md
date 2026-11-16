@@ -568,6 +568,7 @@ The auto-generated UI includes:
 - **AutoRenderer**: Selects an archetype template by introspection and renders the game element tree via a ranked-tester renderer registry
 - **registerRenderer**: Register a higher-priority renderer for an element type to upgrade the auto-UI in place (no core edits)
 - **ActionPanel**: Displays available actions with selection UI
+- **Piece details**: a piece is named in full with its game attributes beside it where its row has room. On a board cell, in a hand or in a deck they show in a tip on hover, on tap, and on keyboard focus of the piece or its cell. A space lists its own game attributes beside its name. Every `Space` carries `$type: 'space'` (or its subclass's own), so an empty one is drawn as a space, not a piece
 - Ships as your production UI for simple games — no custom UI required
 
 #### The start buttons can be a game-authored hierarchy

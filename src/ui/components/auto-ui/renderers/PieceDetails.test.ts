@@ -43,7 +43,7 @@ function render(element: GameElement, details: boolean) {
   return {
     wrapper,
     name: wrapper.find('.piece-name').exists() ? wrapper.find('.piece-name').text() : undefined,
-    rows: wrapper.findAll('.piece-attributes > div').map((row) => [row.find('dt').text(), row.find('dd').text()]),
+    rows: wrapper.findAll('.attribute-list > div').map((row) => [row.find('dt').text(), row.find('dd').text()]),
   };
 }
 

@@ -149,7 +149,7 @@ describe('a grid cell hidden from a seat (#1055)', () => {
     cell.secret = 'treasure';
     cell.hideFromAll();
     const view = cellsInView(game).find((c) => c.id === cell.id)!;
-    expect(view.attributes).toEqual({ __hidden: true, $layout: 'list', rank: 2, file: 3 });
+    expect(view.attributes).toEqual({ __hidden: true, $type: 'space', $layout: 'list', rank: 2, file: 3 });
   });
 
   it('keeps its coordinates as an anonymous placeholder of a count-only grid', () => {
@@ -158,7 +158,7 @@ describe('a grid cell hidden from a seat (#1055)', () => {
     game.board.contentsCountOnly();
     const placeholders = cellsInView(game);
     expect(placeholders).toHaveLength(9);
-    expect(placeholders.every((c) => c.id < 0 && Object.keys(c.attributes!).sort().join() === '$layout,__hidden,file,rank')).toBe(true);
+    expect(placeholders.every((c) => c.id < 0 && Object.keys(c.attributes!).sort().join() === '$layout,$type,__hidden,file,rank')).toBe(true);
   });
 });
 

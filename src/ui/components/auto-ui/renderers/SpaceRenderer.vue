@@ -17,6 +17,7 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { directChildren, getElementCount, isSizeHidden } from '../../../composables/useGameViewHelpers.js';
 import GrantedCards from './GrantedCards.vue';
+import AttributeList from './AttributeList.vue';
 import type { GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
@@ -130,6 +131,7 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
     <div v-if="element.name" class="space-header">
       <span class="space-label">{{ element.name }}</span>
       <span v-if="childCountDisplay > 0" class="space-count">({{ childCountDisplay }})</span>
+      <AttributeList :element="element" />
     </div>
 
     <!-- Children dispatched via ElementRenderer (registry-based, not direct recursion) -->
@@ -218,6 +220,7 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 
 .space-header {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   align-items: center;
   margin-bottom: 8px;

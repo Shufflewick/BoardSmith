@@ -166,7 +166,7 @@ export class HexCell<G extends Game = any, P extends Player = any> extends Space
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'hex-cell';
+  declare $type: 'hex-cell';
 
   constructor(ctx: Partial<import('./types.js').ElementContext>) {
     super(ctx);

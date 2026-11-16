@@ -61,6 +61,12 @@ export type LayoutAlignment = 'start' | 'center' | 'end' | 'stretch';
  * @typeParam P - The Player subclass type
  */
 export class Space<G extends Game = any, P extends Player = any> extends GameElement<G, P> {
+  /**
+   * System property that marks a space for AutoUI, so an empty one is not
+   * drawn as a piece (#1667). Deck, Hand, HexCell and DicePool set their own.
+   */
+  $type!: string;
+
   // ============================================
   // Layout Properties (for AutoUI rendering)
   // ============================================
@@ -187,6 +193,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
 
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);
+    this.$type = 'space';
   }
 
   // ============================================

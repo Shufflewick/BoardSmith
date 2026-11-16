@@ -26,11 +26,11 @@ import { assert, check, openTableSample, runBrowserRegression, summarise, waitUn
  * by a few from run to run with how the frames fall, so their figures are twice
  * the most seen when recorded: a change that thrashes layout multiplies them.
  * `elements` counts the dev server's `<style>` tags too, one per component stylesheet:
- * 347 since AutoUI names each free-standing piece and lists its attributes beside it (#1628).
+ * 349 since AutoUI's attribute list and piece details tip each brought their own stylesheet (#1667).
  */
 const RECORDED = {
-  render: { layouts: 64, styles: 116, elements: 347 },
-  push: { layouts: 64, styles: 146, elements: 347 },
+  render: { layouts: 64, styles: 116, elements: 349 },
+  push: { layouts: 64, styles: 146, elements: 349 },
 };
 
 /** The layouts and style recalculations the page has done so far, and the game frame's elements now. */
