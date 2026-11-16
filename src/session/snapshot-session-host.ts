@@ -960,7 +960,8 @@ export class SnapshotSessionHost {
       cause,
       isComplete: this.isComplete,
       winners: this.winners,
-      isDraw: this.isComplete && this.winners.length === 0,
+      // A snapshot from an engine before r384 has no draw flag: that game declared no draw.
+      isDraw: this.isComplete && this.snapshot?.draw === true,
       turnBoundary: this.turnBoundary(),
     };
     const views = this.mergedViews();

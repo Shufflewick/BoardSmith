@@ -26,8 +26,8 @@ export function announceTurnChange(newIsMyTurn: boolean): string {
  * Returns the game-over announcement for the assertive live region.
  * winnerNames should be the resolved display names of winning players.
  *
- * isDraw (D10/ENDGAME-01) distinguishes a genuine draw (game complete with
- * explicit zero winners) from winner data that is merely unavailable. A bare empty winnerNames array is ambiguous between the
+ * isDraw (D10/ENDGAME-01) distinguishes a draw the game declared (#1625) from
+ * a game everyone lost or winner data that is merely unavailable. A bare empty winnerNames array is ambiguous between the
  * two — callers must pass the explicit signal rather than relying on length.
  */
 export function announceGameOver(winnerNames: string[], isDraw = false): string {

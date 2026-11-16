@@ -2137,6 +2137,13 @@ class MyGame extends Game<MyGame, MyPlayer> {
 }
 ```
 
+**A draw is declared too, never inferred.** A finished game with no winners is
+a loss for everyone (a solo game lost, a cooperative game lost), and the
+game-over card says "Game Over". To end in a draw, call `finish('draw')`, or
+override `isDraw()` beside `isFinished()` and `getWinners()`; the card then says
+"Draw". A draw names no winners: a snapshot of a finished game whose `isDraw()`
+is true while `getWinners()` names a seat throws, naming both.
+
 The flow engine checks before every node, so once the game is finished no
 further node runs and no seat is offered an action, not even a `followUp` the
 finishing action asked for. That holds in every construct: `eachPlayer`,

@@ -347,7 +347,7 @@ let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
 const winnerSeats = ref<number[]>([]);
 
 // Explicit draw signal captured from the game_state postMessage (D10/ENDGAME-01).
-// Sourced from the session (isComplete && winners.length === 0), threaded via
+// Sourced from the session (the game's own isDraw(), #1625), threaded via
 // snapshot-session-host meta -> multiplayer-host game_state frame. Absent on
 // the frame -> stays false ("unknown", not a draw) —
 // never inferred from a bare empty winnerSeats, which also occurs pre-completion.

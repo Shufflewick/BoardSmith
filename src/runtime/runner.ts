@@ -1781,6 +1781,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         messageLog,
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
+        draw: checkpoint.draw,
         actionHistory: historyBefore(snapshot, actionIndex),
         actionHistoryBase: snapshot.actionHistoryBase,
         seed: snapshot.seed,
