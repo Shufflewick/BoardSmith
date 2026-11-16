@@ -31,6 +31,7 @@ import {
   type ResolvedMemory,
   type SmokeInputView,
   type SmokeWalk,
+  type TypedValue,
 } from './browser-smoke-verdict.js';
 
 function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
@@ -614,6 +615,10 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     expect(await inputFor({ dig: { spot: ['north', ' '] } }, 'dig', 'spot', 'text', page(), 1)).toEqual({
       problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
     });
+    // A value that is no number fails the list before the walk types any of it.
+    expect(await inputFor({ pledge: { coins: [3, 'seven'] } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({
+      problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "seven" for a number field. Give a number, such as 7.`,
+    });
     expect(await inputFor({ dig: { spot: [] } }, 'dig', 'spot', 'text', page(), 0)).toEqual({
       problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives an empty list. Give the values to try, in order, such as [-1, 1, -2, 2].`,
     });
@@ -859,6 +864,25 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
         `of the 3 values the walk entered. The walk typed "-2" in its field "columns", as \`inputs.movePacks.columns\` in ` +
         `${SMOKE_SPEC_PATH} gives it. The walk typed "0" in its field "rows", as \`inputs.movePacks.rows\` in ${SMOKE_SPEC_PATH} gives it.`,
     ]);
+  });
+
+  it('#1663: tries an action as many times as its longest list, or the walk\'s own three numbers when that is more', () => {
+    const tries = (inputs: SmokeWalk['inputs'], typed: TypedValue[]) => {
+      const w = walk({ inputs });
+      const m = memory();
+      let attempts = 0;
+      while (w.errors.length === 0) {
+        m.typed.set('aim', typed);
+        recordResolved([failed('aim', 'Off the board.')], w, m);
+        attempts++;
+      }
+      return attempts;
+    };
+    const fromList = (field: string, value: string): TypedValue => ({ field, value, from: 'inputs', kind: 'number' });
+    const walkNumber: TypedValue = { field: 'range', value: '1', from: 'walk', kind: 'number' };
+    expect(tries({ aim: { x: [1, 2], y: [1, 2, 3, 4] } }, [fromList('x', '1'), fromList('y', '1')])).toBe(4);
+    expect(tries({ aim: { x: [1, 2] } }, [fromList('x', '1'), walkNumber])).toBe(3);
+    expect(tries({ aim: { x: [1, 2, 3, 4, 5] } }, [fromList('x', '1'), walkNumber])).toBe(5);
   });
 
   it('#470: tells the numbers apart by field: a refusal is the walk\'s to answer with the next number up only when it chose a number', () => {

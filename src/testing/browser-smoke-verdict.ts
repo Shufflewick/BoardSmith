@@ -264,7 +264,8 @@ function listAnswer(values: readonly (string | number)[], refused: number, kind:
       problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
     };
   }
-  return answerOf(String(values[Math.min(refused, values.length - 1)]), kind, action, field);
+  const answers = values.map((value) => answerOf(String(value), kind, action, field));
+  return answers.find((answer) => 'problem' in answer) ?? answers[Math.min(refused, values.length - 1)];
 }
 
 /** How the text an input gave answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
@@ -423,9 +424,9 @@ export interface ResolvedMemory {
   lastResolved: string | undefined;
   /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
   readonly failed: Set<string>;
-  /** How many numbers the game's own rules have refused in each action since it was last taken, so the walk types the next one up (#923). */
+  /** How many values the game's own rules have refused in each action since it was last taken, so the walk types the next number up, or a list's next value (#923, #1663). */
   readonly refused: Map<string, number>;
-  /** What the game said when it refused a number, which its error toasts repeat. */
+  /** What the game said when it refused a value the walk had another to try for, which its error toasts repeat. */
   readonly refusals: Set<string>;
   /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
   readonly typed: Map<string, TypedValue[]>;
@@ -439,7 +440,7 @@ const NUMBER_TRIES = 3;
 /**
  * Records the actions the page resolved since the walk last looked: a taken one is offered, enabled
  * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
- * game refused a number the walk chose and typed in it (`refusedANumber`). What the walk typed is
+ * game refused a value it has another to try for (`refusedAValue`). What the walk typed is
  * spent either way, so a later failure of the action is never taken for a refusal of a number it did
  * not type, and a failure is reported with it (`actionFailed`, #470), after `where`, the browser it
  * was taken in when a world walk plays several seats (#471). Either way the action no longer waits on
