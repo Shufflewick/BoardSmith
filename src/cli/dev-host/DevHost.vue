@@ -1780,12 +1780,23 @@ onUnmounted(() => {
   margin-left: 8px;
 }
 
-/* A finger's target, as the shell's controls have (#1611, #1668): WCAG 2.5.5 and Apple's 44pt. */
+/* A finger's target, as the shell's controls have (#1611, #1668): WCAG 2.5.5 and Apple's 44pt.
+   A checkbox or radio keeps its glyph's size; the label around it is its target. */
 @media (pointer: coarse) {
   .dev-host button,
   .dev-host select,
-  .dev-host input {
+  .dev-host input:not([type='checkbox'], [type='radio']) {
     min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* WebKit's menu list theme resets a select's min-height, but keeps its height. */
+  .dev-host select {
+    height: 44px;
+  }
+
+  .lobby__option,
+  .table-setup__seat-option {
     min-height: 44px;
   }
 }
