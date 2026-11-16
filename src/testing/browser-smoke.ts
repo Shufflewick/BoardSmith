@@ -1885,7 +1885,7 @@ function openWay(play: SeatPlay, way: Way, moves: number): NextPress {
 }
 
 /** The ways into the menu `offers` shows, the one `play`'s browser opened longest ago first, less those it never opened. */
-const oldestFirst = (offers: Offers, play: SeatPlay): Way[] => [...play.opened.keys()].flatMap((press) => offers.ways.filter((way) => way.press === press));
+const oldestFirst = (offers: Offers, play: SeatPlay): Way[] => [...play.opened.keys()].flatMap((key) => offers.ways.filter((way) => way.press === key));
 
 /**
  * The way into the menu to open next: one this browser never opened, else, until it next goes back
