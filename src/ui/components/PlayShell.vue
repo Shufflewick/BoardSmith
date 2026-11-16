@@ -330,15 +330,28 @@ watch(actionBarCollapsed, async (down) => {
  */
 const actionBarEl = ref<HTMLElement | null>(null);
 const barClearance = ref(0);
+/** The bar's content runs past its cap below what is scrolled into view, so its edge says there is more (#1650). */
+const barHasMoreBelow = ref(false);
 // Only the overlays that stop at the bar, and focus scrolling, follow its height; board fitting and scroll layout never read it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
-  const measure = () => { barClearance.value = bar.getBoundingClientRect().height; };
+  const measure = () => {
+    barClearance.value = bar.getBoundingClientRect().height;
+    barHasMoreBelow.value = bar.scrollHeight - bar.scrollTop - bar.clientHeight > 1;
+  };
   const observer = new ResizeObserver(measure);
   // The border box: the bottom safe area is the bar's border, which the content box never sees change (#1611).
   observer.observe(bar, { box: 'border-box' });
+  // A capped bar keeps its size while its content changes, so only the content says whether more is below.
+  const content = new MutationObserver(measure);
+  content.observe(bar, { childList: true, subtree: true, characterData: true, attributes: true });
+  bar.addEventListener('scroll', measure, { passive: true });
   measure();
-  onCleanup(() => observer.disconnect());
+  onCleanup(() => {
+    observer.disconnect();
+    content.disconnect();
+    bar.removeEventListener('scroll', measure);
+  });
 }, { flush: 'post' });
 
 const boardRegionEl = ref<HTMLElement | null>(null);
@@ -657,6 +670,14 @@ const mobileToggleLabel = computed(() => {
             <slot name="actionbar-extra"></slot>
           </template>
         </template>
+      </div>
+
+      <!-- More below the bar's edge (#1650): drawn over the bar's own bottom, never the board. Visual only, since every
+           action is in the DOM for assistive tech, and taps pass through to the half-shown row. -->
+      <div v-if="barHasMoreBelow && !actionBarCollapsed" class="bar-more" data-testid="bs-actionbar-more" aria-hidden="true">
+        <span class="bar-more__label">More
+          <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
       </div>
 
       <!-- The restore affordance, and it CANNOT be lost: it rides the bar's own
@@ -1086,6 +1107,41 @@ const mobileToggleLabel = computed(() => {
   width: var(--bsg-action-bar-line);
   height: var(--bsg-action-bar-line);
   transform: rotate(90deg);
+}
+
+/* The bar's bottom edge fades into a "More" mark while actions sit below it (#1650). Above the bar, under the toggle. */
+.bar-more {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: var(--bsg-safe-bottom);
+  z-index: 31;
+  height: 22px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  background: linear-gradient(transparent, var(--bsg-surface) 70%);
+  pointer-events: none;
+}
+.bar-more__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 0 8px;
+  border: 1px solid var(--bsg-line);
+  border-bottom: none;
+  border-radius: 8px 8px 0 0;
+  background: var(--bsg-surface);
+  color: var(--bsg-ink-2);
+  font-size: 0.75rem;
+  line-height: 16px;
+}
+.bar-more__label svg {
+  width: 12px;
+  height: 12px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
 }
 
 /* The bar's edge toggle: the sidebar rail's control, on the other edge. Same

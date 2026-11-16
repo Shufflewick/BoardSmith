@@ -12,7 +12,9 @@
  * which buttons are on screen. A sentence-long label takes four or five lines
  * at 360px, so a level's rows are taller than a control row there (#1627
  * review F5), and a landscape phone narrower than 640px lays a level out as the
- * short-landscape tier does, not as the upright phone's grid (review F3).
+ * short-landscape tier does, not as the upright phone's grid (review F3). A
+ * level that still runs past its cap, the top level at 568x320, shows a cue on
+ * the bar's bottom edge until the bar is scrolled to its end (#1650).
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/action-menu-phone-browser.mjs`; a missing Chromium says to run
@@ -100,6 +102,7 @@ const TOP = ['haul', 'forage', 'mend'].map((name) => `[data-bs-action="${name}"]
 const WANDER = ['[data-bs-menu-back]', ...['look', 'walk', 'say', 'note'].map((name) => `[data-bs-action="${name}"]`)];
 const CAMP = ['[data-bs-menu-back]', ...['sing', 'rest', 'cook', 'fish', 'pray', 'sleep', 'scout'].map((name) => `[data-bs-action="${name}"]`)];
 const TRADE = ['[data-bs-menu-back]', ...[0, 1, 2, 3, 4].map((i) => `[data-bs-action="trade${i}"]`)];
+const MORE = '[data-testid="bs-actionbar-more"]';
 const LEVELS = {
   top: ['the top level', TOP],
   wander: ['the Wander level', WANDER, 'Wander'],
@@ -134,6 +137,8 @@ async function driveThrough({ launch, hostUrl }) {
       const phone = { viewport, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
       await onFreshPage(browser, hostUrl, phone, ready, (page) => everyLevelInView(surfaceOf(page), `${viewport.width}x${viewport.height}`, levels));
     }
+    const shortLandscape = { viewport: { width: 568, height: 320 }, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player };
+    await onFreshPage(browser, hostUrl, shortLandscape, ready, (_page, surface) => moreShownUntilTheEnd(surface));
     await onFreshPage(browser, hostUrl, { viewport: { width: 1440, height: 900 } }, ready, async (_page, surface) => {
       await check('1440x900: the top level stays inside the two-row strip', async () => {
         const bar = await barGeometry(surface, TOP);
@@ -145,6 +150,22 @@ async function driveThrough({ launch, hostUrl }) {
     await browser.close();
   }
   return summarise('for a menu level in the Action Panel on a phone');
+}
+
+async function moreShownUntilTheEnd(surface) {
+  const bar = surface.locator('[data-testid="bs-actionbar"]');
+  await check('568x320: the top level runs past its two rows, and the bar says there is more below its edge', async () => {
+    assert((await barGeometry(surface, TOP)).scrolls, 'the top level fits its cap here, so this check proves nothing');
+    await surface.locator(MORE).waitFor({ timeout: 15_000 });
+    const [cue, edge] = await Promise.all([surface.locator(MORE).boundingBox(), bar.boundingBox()]);
+    assert(cue.y >= edge.y && cue.y + cue.height <= edge.y + edge.height + 1, `the cue (${cue.y}..${cue.y + cue.height}) is not inside the bar (${edge.y}..${edge.y + edge.height}), so it covers the board`);
+  });
+  await check('568x320: the cue goes once the bar is scrolled to its end, and comes back scrolled up', async () => {
+    await bar.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    await surface.locator(MORE).waitFor({ state: 'hidden', timeout: 15_000 });
+    await bar.evaluate((el) => { el.scrollTop = 0; });
+    await surface.locator(MORE).waitFor({ timeout: 15_000 });
+  });
 }
 
 async function everyLevelInView(surface, size, levels) {
@@ -162,6 +183,7 @@ async function everyLevelInView(surface, size, levels) {
             return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
           }), selectors);
         assert(cut.length === 0, `labels cut short: ${cut.join(', ')}`);
+        assert(!(await surface.locator(MORE).isVisible()), 'the bar shows its "more" cue with nothing below its edge');
       } finally {
         if (group) await surface.locator('[data-bs-menu-back]').click();
       }

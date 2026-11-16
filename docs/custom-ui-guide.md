@@ -1344,7 +1344,8 @@ What follows for a custom board:
   screen, where height is the scarce axis), declared as `--bsg-panel-max`. It
   lays itself out to fit them (at phone width it stacks the action's name over
   the chosen items and wraps the prompt beside its control), and on a step with
-  more than fits, it scrolls inside the cap. A menu level (the list of actions
+  more than fits, it scrolls inside the cap, and a "More" mark on the bar's
+  bottom edge shows there is more until it is scrolled to the end. A menu level (the list of actions
   to take, or a group's) has its own cap, `--bsg-panel-menu-max`, so a whole
   level is in view: on an upright phone its buttons and Undo are three columns
   under the row of menu, seat and Back, each label wrapped whole, and it may
