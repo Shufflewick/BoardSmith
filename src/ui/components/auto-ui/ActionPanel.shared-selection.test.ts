@@ -22,7 +22,7 @@ import type { Game, GameClass } from '../../../engine/index.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { BOARD_INTERACTION_KEY } from '../../composables/useBoardInteraction.js';
 import { mountLiveSeat, settle } from '../../composables/table-wiring.test-helper.js';
-import { DICE, DiceCupGame, DiceTrayGame, Die, TOWERS, Tower, WorkshopGame } from '../../composables/shared-selection.test-helper.js';
+import { CUPS, DICE, DiceCupGame, DiceTrayGame, NestedCupsGame, Die, TOWERS, Tower, WorkshopGame } from '../../composables/shared-selection.test-helper.js';
 import type { SubjectChoice } from '../../composables/useActionControllerTypes.js';
 import { selectedAttrs } from '../../composables/sharedSelection.js';
 
@@ -146,7 +146,19 @@ describe('the panel on a selected thing (#1641)', () => {
     expect(heading(wrapper)).toBe('Dice / red showing 1');
     expect(shown(wrapper)).toEqual(['Reroll', '[Hold]', 'Place a die']);
     await press(wrapper, 'Hold');
+    expect(heading(wrapper)).toBe('Dice / red showing 1 / Hold');
     expect(shown(wrapper)).toEqual(['Keep', 'Turn', 'Flip']);
+    await wrapper.get('[data-bs-menu-back]').trigger('click');
+    await settle();
+    expect(heading(wrapper)).toBe('Dice / red showing 1');
+    expect(shown(wrapper)).toEqual(['Reroll', '[Hold]', 'Place a die']);
+  });
+
+  it('keeps the things that belong to it under their type when that type is its own (#1653)', async () => {
+    const { wrapper, controller, game } = await panel(NestedCupsGame);
+    controller.select(CUPS.ref(game().first(Die, 'big')!));
+    await settle();
+    expect(shown(wrapper)).toEqual(['Lift', 'Tip', '[Cups]']);
   });
 
   it('folds a verb under that group the thing cannot take now at the level its group is drawn as (#1653)', async () => {

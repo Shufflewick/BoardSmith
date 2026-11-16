@@ -57,13 +57,17 @@ interface SelectionMenu {
 interface Building extends SelectionMenu {
   seen: Set<string>;
   metadataOf: (action: string) => EnrichedActionMetadata | undefined;
+  /** The selected thing's type, which its heading already names. */
+  type: string;
 }
 
 function offer(menu: Building, action: string, of: SubjectRef, reason: string | undefined, label?: string): void {
   const meta = menu.metadataOf(action);
   if (!meta || menu.seen.has(action)) return;
   menu.seen.add(action);
-  const item = { ...meta, ...(label ? { prompt: label } : {}), verbOf: of };
+  // A group named as the type the heading names would only add a press (#1653).
+  const group = meta.group?.[0] === menu.type ? { group: meta.group.slice(1) } : {};
+  const item = { ...meta, ...group, ...(label ? { prompt: label } : {}), verbOf: of };
   if (reason) menu.folded.push({ ...item, reason });
   else menu.items.push(item);
 }
@@ -84,7 +88,7 @@ export function selectionMenuItems(
   metadataOf: (action: string) => EnrichedActionMetadata | undefined,
   disabledReason: (action: string) => string | undefined,
 ): SelectionMenu {
-  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf };
+  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf, type: selection.type };
   offerVerbsOf(menu, selection);
   for (const later of subjects.laterVerbs.filter((verb) => verb.type === selection.type)) offer(menu, later.action, selection, disabledReason(later.action));
   const parts = subjects.things.filter((thing) => sameThing(thing.within, selection));
@@ -93,7 +97,5 @@ export function selectionMenuItems(
   const related = (selection.related ?? []).flatMap((ref) => subjects.things.filter((thing) => sameThing(thing, ref)));
   for (const thing of related) offerVerbsOf(menu, thing, (prompt) => `${prompt}: ${thing.label}`);
   menu.items.push(...parts.filter((part) => part.onBoard && usableVerbs(part).length > 0).map((part) => thingItem(part, Infinity)));
-  // The heading already names the type, so a group named as it would only add a press (#1653).
-  const unnested = <T extends PanelMenuItem>(item: T): T => (item.group?.[0] === selection.type ? { ...item, group: item.group.slice(1) } : item);
-  return { items: menu.items.map(unnested), folded: menu.folded.map(unnested) };
+  return { items: menu.items, folded: menu.folded };
 }

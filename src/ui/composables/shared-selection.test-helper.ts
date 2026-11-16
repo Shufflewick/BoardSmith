@@ -114,3 +114,24 @@ export class DiceCupGame extends Game<DiceCupGame, Player> {
     this.setFlow({ root: actionStep({ actions: ['reroll', 'keep', 'turn', 'flip', 'placeDie'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
   }
 }
+
+const CUPS: ReturnType<typeof subjectType<Die>> = subjectType<Die>({
+  name: 'Cups',
+  onBoard: true,
+  label: (cup) => cup.name!,
+  within: (cup, ctx) => (cup.name === 'big' ? undefined : CUPS.ref(ctx.game.first(Die, 'big')!)),
+});
+export { CUPS };
+
+/** Cups whose verbs sit in a group named as their type; the small cups sit within the big one (#1653). */
+export class NestedCupsGame extends Game<NestedCupsGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of ['big', 'small', 'tiny']) this.create(Die, name);
+    const verb = (name: string) => Action.create<NestedCupsGame>(name).prompt(name[0]!.toUpperCase() + name.slice(1)).group('Cups')
+      .chooseElement('cup', { elements: (ctx) => [...ctx.game.all(Die)], subject: CUPS })
+      .execute(() => {});
+    this.registerActions(verb('lift'), verb('tip'));
+    this.setFlow({ root: actionStep({ actions: ['lift', 'tip'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
+  }
+}
