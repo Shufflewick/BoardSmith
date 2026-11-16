@@ -1109,7 +1109,7 @@ describe('the field game', () => {
 }
 
 /** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
-type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'coveredWholeAfterPointing' | 'covered' | 'toast' | 'toastAfterPointing' | 'restingHelp';
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'coveredAfterPointing' | 'coveredWholeAfterPointing' | 'covered' | 'toast' | 'toastAfterPointing' | 'toastGoneByThePress' | 'restingHelp';
 
 /** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
 const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string; setup?: string }> = {
@@ -1156,6 +1156,13 @@ onUnmounted(() => document.removeEventListener('click', openHelp));`,
   toastAfterPointing: {
     template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button><div v-if="warning" class="toast error">The ravens are loud.</div>`,
     style: `.card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
+  },
+  // Pointing at a card puts an error toast over its centre, leaving its edges reachable, and pressing
+  // the card takes the toast away, so it is gone before the walk's next look (#1626).
+  toastGoneByThePress: {
+    setup: `const ravens = ref('');`,
+    template: `<div v-for="cell in cells" :key="cell" class="slot" @pointerenter="choosing && (ravens = cell)"><button type="button" class="card" v-bind="attrs(cell)" @click="ravens = ''; claim(cell)">{{ cell }}</button><div v-if="ravens === cell" class="toast error">The ravens are loud.</div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .toast { position: absolute; left: 80px; top: 10px; width: 80px; height: 40px; background: #c33; color: #fff; }`,
   },
   // The first time the bell, or a card, is pointed at, an error toast covers the board for a second
   // and a half, and a second one follows the moment the first goes, as a game that reports twice does.
