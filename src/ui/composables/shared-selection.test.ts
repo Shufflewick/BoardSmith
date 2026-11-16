@@ -16,7 +16,7 @@ import { useActionController } from './useActionController.js';
 import type { VueWrapper } from '@vue/test-utils';
 import type { SubjectRef } from '../../types/protocol.js';
 import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
-import { DICE, Die, TOWERS, Tower, WorkshopGame } from './shared-selection.test-helper.js';
+import { DICE, Die, TenSidedGame, TOWERS, Tower, WorkshopGame } from './shared-selection.test-helper.js';
 import type { SubjectChoice } from './useActionControllerTypes.js';
 import { setupDragDropOrchestration } from './useDragDropTargets.js';
 import { selectedAttrs } from './sharedSelection.js';
@@ -126,6 +126,26 @@ describe('starting a verb of a thing (#1641)', () => {
     await controller.start('buyBlueprint', { subject: works });
     await settle();
     expect(controller.currentChoices.value.map((choice) => choice.value)).toEqual(['Fire Curtain', 'Tar Slick']);
+  });
+
+  it('opens a verb whose first pick names the thing twice narrowed to those rows, and fills one that names it once (#1654)', async () => {
+    const seat = await mountLiveSeat(TenSidedGame, 'shared-selection-ten', mounted);
+    await settle();
+    const { controller } = seat.wiring;
+    const game = () => seat.session.readGame();
+    const red = DICE.ref(game().first(Die, 'red')!);
+    controller.select(red);
+    await controller.start('draft', { subject: red });
+    await settle();
+    expect(controller.currentPick.value?.name).toBe('die');
+    expect(controller.currentChoices.value.map((choice) => choice.value)).toEqual(['red:0', 'red:10']);
+    await controller.fill('die', 'red:10');
+    await settle();
+    const blue = DICE.ref(game().first(Die, 'blue')!);
+    controller.select(blue);
+    await controller.start('draft', { subject: blue });
+    await settle();
+    expect(game().log).toEqual(['draft red:10', 'draft blue:3']);
   });
 
   it('refuses a verb that does not take the thing, naming both', async () => {

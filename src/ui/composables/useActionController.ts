@@ -505,10 +505,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     const run = thingRun.value;
     return run && run.tick === actionStartTick.value && run.start.kind === kind && run.start.pick === pick ? run : null;
   };
-  /** A pick opened on a thing that holds some of its rows lists only those, on the board and in the panel alike. */
+  /** A pick opened on a thing that several of its rows are, or that holds some of them, lists only those, on the board and in the panel alike. */
   function narrowed<T extends { subject?: PickSubject }>(pick: string, rows: T[]): T[] {
     const run = thingRunFor(pick, 'within');
-    return run ? rows.filter((row) => sameThing(row.subject?.within, run.thing)) : rows;
+    return run ? rows.filter((row) => sameThing(row.subject, run.thing) || sameThing(row.subject?.within, run.thing)) : rows;
   }
 
   // === Element Enrichment ===

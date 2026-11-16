@@ -28,7 +28,7 @@ export function selectedAttrs(thing: SubjectRef | null | undefined): Record<stri
   return thing ? { 'data-bs-selected': thingMark(thing) } : {};
 }
 
-/** How a verb reaches a thing: the first-pick row that is it, the rows that belong to it, a later pick that takes one of its type, or `.about()`. */
+/** How a verb reaches a thing: the one first-pick row that is it, the rows that are it or belong to it, a later pick that takes one of its type, or `.about()`. */
 type ThingStart =
   | { kind: 'fill'; pick: string; value: unknown }
   | { kind: 'within'; pick: string }
@@ -96,9 +96,9 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
   function thingStart(meta: ActionMetadata, thing: SubjectRef): ThingStart | undefined {
     const first = meta.selections[0];
     const verbs = entryOf(thing).verbs.filter((verb) => verb.action === meta.name);
-    const filled = verbs.find((verb) => verb.pick && !verb.disabled) ?? verbs.find((verb) => verb.pick);
-    if (filled?.pick) return { kind: 'fill', pick: filled.pick, value: filled.value };
-    const holds = subjects.value.things.some((part) => sameThing(part.within, thing)
+    const rows = verbs.filter((verb) => verb.pick);
+    if (rows.length === 1) return { kind: 'fill', pick: rows[0]!.pick!, value: rows[0]!.value };
+    const holds = rows.length > 1 || subjects.value.things.some((part) => sameThing(part.within, thing)
       && part.verbs.some((verb) => verb.action === meta.name && verb.pick === first?.name));
     if (holds && first) return { kind: 'within', pick: first.name };
     const later = subjects.value.laterVerbs.find((verb) => verb.action === meta.name && verb.type === thing.type);

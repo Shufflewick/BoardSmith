@@ -131,3 +131,20 @@ export class NestedCupsGame extends Game<NestedCupsGame, Player> {
     this.setFlow({ root: firstSeatTakes(['lift', 'tip']) });
   }
 }
+
+/** A draft whose pick lists the red die twice, as a 0 and as a 10, and the blue die once (#1654). */
+export class TenSidedGame extends Game<TenSidedGame, Player> {
+  log: string[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of ['red', 'blue']) this.create(Die, name);
+    const dieOf = (value: string, ctx: { game: Game }) => ctx.game.first(Die, value.split(':')[0])!;
+    this.registerActions(
+      Action.create<TenSidedGame>('draft').prompt('Draft')
+        .chooseFrom('die', { choices: ['red:0', 'red:10', 'blue:3'], subject: DICE.of(dieOf) })
+        .execute(({ die }, ctx) => { ctx.game.log.push(`draft ${die}`); }),
+    );
+    this.setFlow({ root: firstSeatTakes(['draft']) });
+  }
+}
