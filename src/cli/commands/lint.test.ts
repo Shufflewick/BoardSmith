@@ -45,7 +45,7 @@ beforeEach(() => { fakeHome = isolateHome(); });
 afterEach(() => { vi.unstubAllEnvs(); });
 
 const rulesFor = (code: string): string[] =>
-  lintFile('game.ts', code).map((issue) => issue.rule);
+  lintFile('game.ts', code, []).map((issue) => issue.rule);
 
 describe('element identity comparison is left to the AST rule (#34)', () => {
   it.each([
@@ -390,5 +390,94 @@ describe('the pitfall hints read every game source file the sandbox scan reads (
     expect(text).toContain(join('src', 'rules', 'b.mts'));
     expect(text).not.toContain('c.ts');
     expect(text).not.toContain('d.ts');
+  });
+});
+
+describe('element-indexof and player-element-ref know the game\'s own element classes (#1617)', () => {
+  const originalCwd = process.cwd();
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  /** Runs the pitfall lint on a game whose rules are `files`, and returns what it printed. */
+  async function pitfallsFor(files: Record<string, string>): Promise<string> {
+    const dir = tempTree('boardsmith-lint-classes-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    for (const [rel, code] of Object.entries(files)) {
+      mkdirSync(join(dir, dirname(rel)), { recursive: true });
+      writeFileSync(join(dir, rel), code);
+    }
+    process.chdir(dir);
+    const out: string[] = [];
+    vi.spyOn(console, 'log').mockImplementation((...args) => { out.push(args.join(' ')); });
+    await lintCommand({ pitfalls: true });
+    return out.join('\n');
+  }
+
+  const elements = 'export class Sector extends Space<MyGame> {}\nexport class HomeSector<G extends MyGame = MyGame> extends Sector {}\n';
+
+  it('flags indexOf on an element of a class the game declares in another file', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': elements,
+      'src/rules/moves.ts': 'const i = sectors.indexOf(sector);\nconst j = homes.indexOf(homeSector);\n',
+    });
+    expect(text.match(/\(element-indexof\)/g)).toHaveLength(2);
+  });
+
+  it('flags a Player field typed as a class the game declares, through a subclass', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': elements,
+      'src/rules/player.ts': 'export class FooPlayer extends Player {\n  home: HomeSector;\n}\n',
+    });
+    expect(text).toContain('(player-element-ref)');
+  });
+
+  it('leaves an id of a game element class alone', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': elements,
+      'src/rules/moves.ts': 'const i = ids.indexOf(sectorId);\n',
+    });
+    expect(text).not.toContain('(element-indexof)');
+  });
+
+  it('flags a name ending in the class, not one that only starts with it', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': 'export class Location extends Space {}\n',
+      'src/rules/moves.ts': 'const i = names.indexOf(locationName);\nconst j = places.indexOf(startLocation);\n',
+    });
+    expect(text.match(/\(element-indexof\)/g)).toHaveLength(1);
+    expect(text).toMatch(/moves\.ts\n\s+2:/);
+  });
+
+  it('follows a parent named through a namespace import', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': 'export class Sector extends bs.Space {}\n',
+      'src/rules/moves.ts': 'const i = sectors.indexOf(sector);\n',
+    });
+    expect(text).toContain('(element-indexof)');
+  });
+
+  it('counts a class as an element when any file declares it as one, whatever order the files are read in', async () => {
+    for (const [first, second] of [['a', 'b'], ['b', 'a']]) {
+      const text = await pitfallsFor({
+        [`src/${first}.ts`]: 'export class Marker extends Piece {}\n',
+        [`src/${second}.ts`]: 'export class Marker extends Base {}\nconst i = markers.indexOf(marker);\n',
+      });
+      expect(text).toContain('(element-indexof)');
+    }
+  });
+
+  it('suggests registering every element class the game declares, and only those', async () => {
+    const text = await pitfallsFor({
+      'src/rules/sector.ts': 'export class Sector extends Space {}\n',
+      'src/rules/game.ts': [
+        'export class HomeSector<G extends MyGame = MyGame> extends Sector {}',
+        'export class MoveHandler extends HandlerBase {}',
+        'export class MyGame extends Game {',
+        '}',
+      ].join('\n'),
+    });
+    expect(text).toContain('Add: this.registerElements([HomeSector])');
   });
 });
