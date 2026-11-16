@@ -21,7 +21,10 @@ Designer's Session Writes No File"). So when the designer typed `/bs-insert-chun
 runs Steps 0a and 0, works the reshape out with the designer through operations (a) and (b), which
 only read, and once they agree dispatches the `judgement` role's agent, with the reshaped chunk's
 slug as the work package, handed the resolved absolute path of this file and the agreed reshape
-in the designer's words. That agent runs every step of this file and makes the writes; this
+in the designer's words. The brief says Steps 0a and 0 and the lock check have run and the
+designer agreed the reshape, so the agent skips them, runs operations (a) to (e), and makes the
+writes; if it finds anything that needs the designer (a dependency violation, a mandated chunk the
+reshape would break, a live lock that appeared since), it writes nothing and returns that. This
 session relays what it returns and prints the Close step's next command. Dispatched (by
 `/bs-build-game`, or by this hand-off), the agent does everything below itself.
 

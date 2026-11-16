@@ -52,7 +52,8 @@ Its brief carries, verbatim, everything the files need: the designer's words, th
 summaries, and the step that says what to write and in what order (the skill file and step name,
 resolved to an absolute path, for the agent to read). The agent writes, reads the clock itself for
 every time it writes, records its own dispatch in the run log as its first entry (no one can
-record it before launch), commits, and returns the paths and the commit. Writes that fall at one
+record it before launch), in the log of the work package it writes for (a chunk's slug,
+`ingest-rules` or `verify-game`), commits, and returns the paths and the commit. Writes that fall at one
 point go in one record: a return's outcomes, the answers a gate earned and the next dispatch's
 entry with the lock refresh are one dispatch, not three. A record that comes back wrong is a
 failed dispatch, sent back with what is wrong (below); the session never patches it.

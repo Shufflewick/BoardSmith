@@ -188,8 +188,10 @@ happens once per run — a resumed run that already has a yes does not re-ask; i
 continues.
 
 If the designer wants a single chunk instead of a run, the run is that one chunk: skip the
-confirmation, build the chunk Step 3 derives, and stop when it closes (`Stop Reason:
-designer-stopped`). It is still dispatched, never built here: this session writes no file.
+confirmation, and build the chunk they named (or, if they named none, the one Step 3 derives)
+alone, never in a parallel batch. Stop when it closes, or when it parks on a question, rather
+than going on to another chunk (`Stop Reason: designer-stopped`, since they asked for one). It is
+still dispatched, never built here: this session writes no file.
 
 ## Step 3: The Chunk Loop
 
@@ -219,7 +221,10 @@ Loop until there is nothing left to build or a stop condition fires
    `mechanical` role's agent, refreshes the lock and appends the `### Dispatch N` entry to each
    chunk's own `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
    (`orchestrate/run-state.md` "Writing It"), together with anything the last return left to
-   record. Once it returns, dispatch one fresh subagent per chunk, as the agent
+   record. A parallel batch needs a record per checkout instead, in the order
+   `orchestrate/chunk-dispatch.md` "How a Parallel Batch Runs" gives: the lock in the main
+   checkout before the worktrees exist, then each chunk's entry in its own worktree. Once they
+   return, dispatch one fresh subagent per chunk, as the agent
    `npx boardsmith agent judgement` names, per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
@@ -300,7 +305,8 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 Stop for exactly the three reasons `orchestrate/run-state.md` "Stop Conditions" lists — the designer
 said stop, a gate is unanswered, or a dispatch is stuck — and never because the run is long or
-context "feels" full (`orchestrate/run-state.md` "No Context Stop"). Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
+context "feels" full (`orchestrate/run-state.md` "No Context Stop"). The stopping record fills any
+run log entry the last return left `pending`, and writes `RUN.md`'s `Run Status:`/`Stop Reason:` last,
 after everything else has landed, and print the one command that resumes it: `/bs-build-game`.
 
 ## Step 6: The bot Opponent, Then Final Acceptance
