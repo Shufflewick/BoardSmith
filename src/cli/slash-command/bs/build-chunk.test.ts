@@ -1497,7 +1497,7 @@ describe('SKILLAUTO-05 — auto-advance', () => {
 
   it('build-chunk.md frames the printed re-invocation as the crash\\/context-fallback resume, not the default stop', () => {
     const buildChunk = read('build-chunk.md');
-    expect(buildChunk).toMatch(/crash\/context-fallback resume/i);
+    expect(buildChunk).toMatch(/crash\/`\/clear` resume/i);
   });
 
   it('state-machine.md and build/close.md state the session auto-advances into the next chunk and the next logical step (generate-bot → final-acceptance)', () => {
@@ -1516,20 +1516,7 @@ describe('SKILLAUTO-05 — auto-advance', () => {
   });
 });
 
-describe('SKILLAUTO-06 — context floor + offload', () => {
-  it('state-machine.md states a >=50% wind-down floor beneath the existing 60% ceiling (both numbers present)', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/50%/);
-    expect(stateMachine).toMatch(/60%/);
-    expect(stateMachine).toMatch(/never winds? down before/i);
-  });
-
-  it('state-machine.md frames stopping before the floor as the same premature bail the ceiling forbids', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/floor/i);
-    expect(stateMachine).toMatch(/premature\s+bail/i);
-  });
-
+describe('sub-agent offload, and no context stop (#1660)', () => {
   it('state-machine.md and build-chunk.md name sub-agent offload of research, audits, large reads, and repairs', () => {
     const stateMachine = read('state-machine.md');
     const buildChunk = read('build-chunk.md');
@@ -1547,20 +1534,12 @@ describe('SKILLAUTO-06 — context floor + offload', () => {
     expect(buildChunk).toMatch(/orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself/i);
   });
 
-  it('state-machine.md cites the 50% floor as the mechanism that makes long autonomous runs possible', () => {
-    const stateMachine = read('state-machine.md');
-    expect(stateMachine).toMatch(/main thread.s (own )?context fills slowly/i);
-    expect(stateMachine).toMatch(/long autonomous run/i);
-  });
-
-  it('resolves floor-vs-harness-warning precedence: a real harness signal below the floor always wins (both files)', () => {
-    const stateMachine = read('state-machine.md');
-    const buildChunk = read('build-chunk.md');
-    // state-machine.md gives explicit precedence for a harness warning firing below the 50% floor.
-    expect(stateMachine).toMatch(/harness warning always wins|harness signal.*(beats|overrides).*floor|obey it immediately/i);
-    expect(stateMachine).toMatch(/below\W+the 50% floor|below the floor|below 50%/i);
-    // build-chunk.md carries the same precedence so the two mirrored sections cannot diverge.
-    expect(buildChunk).toMatch(/harness context-low warning always wins|below 50%.*obey it immediately|floor governs only/i);
+  it('state-machine.md and build-chunk.md say there is no context stop, and a /clear resumes at the first incomplete step', () => {
+    const stateMachine = read('state-machine.md').replace(/\s+/g, ' ');
+    const buildChunk = read('build-chunk.md').replace(/\s+/g, ' ');
+    expect(stateMachine).toMatch(/\*\*There is no context stop\.\*\*/);
+    expect(stateMachine).toMatch(/resumes at the first incomplete step/);
+    expect(buildChunk).toMatch(/There is no context stop/);
   });
 });
 

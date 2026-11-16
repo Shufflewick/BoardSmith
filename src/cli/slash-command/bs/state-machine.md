@@ -414,7 +414,7 @@ even in a file the branch renamed, does not.
 ## Autonomy Scope: How, Never What (PROC-02)
 
 Every autonomy behavior this file and `build-chunk.md` describe — run-while-away, auto-advance,
-the batched-question queue, the context floor/ceiling — governs **HOW** the game gets built: which
+the batched-question queue — governs **HOW** the game gets built: which
 step runs next, when a session persists and stops, how open items get queued and surfaced. None of
 it EVER governs **WHAT the rules of the game ARE.** Autonomy is a building-process lever, not a
 rules-authorship license.
@@ -448,8 +448,7 @@ Each step still persists its own state to `CHUNK.md` before the next starts, and
 lands at every step completion (see "Write Order" and "Git Protocol"). What has changed is the
 stopping policy: **a single session now runs continuously across these group boundaries — and
 across chunk boundaries.** It stops only when (a) it reaches a human-input gate — it needs the user
-to answer a question or to test/playtest something — (b) the harness surfaces a context-low warning
-(the 60% low-water mark below), or (c) an automated step hits an unrecoverable or stuck state it
+to answer a question or to test/playtest something — or (b) an automated step hits an unrecoverable or stuck state it
 cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
 on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
 looping or plowing ahead. Between those points it flows straight through: after `ask` approval it
@@ -519,11 +518,10 @@ question this chunk's own design cannot proceed without still gates that chunk's
 the session flows across, exactly like the four intra-chunk group boundaries — it is NOT a session
 terminus. When `close` finishes (its bookkeeping written, its sketch-tail delta gate resolved —
 approved if there was a delta, silently skipped if there was none), the session does NOT stop and
-tell the user to re-invoke. Instead, if none of the three stop conditions (a)/(b)/(c) above applies
-— the user has not said stop, context is below the 60% low-water mark, and no automated step is
-stuck — it **auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded
+tell the user to re-invoke. Instead, if neither stop condition (a)/(b) above applies
+and the user has not said stop, it **auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded
 only by the milestone gates (SKILLAUTO-01's three milestone chunks), a genuine rules adjudication /
-open-question escalation, and the context/stuck-state conditions above — this is the run-while-away
+open-question escalation, and the stuck-state condition above — this is the run-while-away
 model the human being away does not pause. It re-enters `build-chunk.md` Step 2 (Resume Routing),
 routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the tail
 entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam`
@@ -535,7 +533,7 @@ continuation: it carries into the next LOGICAL step across chunk types, includin
 → final-acceptance** progression — once a sketch's `bs-build-bot` chunk closes, the same session
 auto-advances into the final-acceptance chunk that follows it exactly as it would any other next
 chunk, rather than stopping to let the human re-invoke between them. This is what makes the router a
-**loop over chunks** bounded by human gates, context, and stuck-state — not a one-shot that halts
+**loop over chunks** bounded by human gates and stuck-state — not a one-shot that halts
 after every `close`. `close` still presents the next-chunk proposal before continuing, so the user
 always sees what is coming (and can say "stop") before that chunk's first gate; the printed
 `/bs-build-chunk` command is retained ONLY as a cold-resume/crash fallback for the case where a stop
@@ -546,35 +544,16 @@ from the user means auto-advance, not a wait for re-invocation.
 and the first `CHUNK.md` files is the same kind of boundary as `close`→next chunk: durable, and NOT
 a session terminus. The ingest session auto-advances into the build — by default the whole-game run
 (`/bs-build-game`, see "Orchestrated Runs" below), which dispatches the first chunk's
-`/bs-build-chunk` work — and stops at that chunk's `ask` gate, subject to the identical (a)/(b)/(c) stop conditions and the
-floor+ceiling below. See `ingest-rules.md` "Step 8: Continue Into the First Chunk".
+`/bs-build-chunk` work — and stops at that chunk's `ask` gate, subject to the identical (a)/(b) stop conditions. See `ingest-rules.md` "Step 8: Continue Into the First Chunk".
 
-**Context floor + ceiling (SKILLAUTO-06).** Two numbers govern context, and both must hold at
-once: a **≥50% wind-down FLOOR** and the existing **60% "obey-the-harness-warning" CEILING**. These
-numbers govern **every** `bs-` session — `bs-ingest-rules` as much as `bs-build-chunk`. The
-floor comes first — **the session never winds down before at least 50% of the context window is
-consumed.** Stopping earlier (e.g. at 40% because the work "feels big") is exactly the premature
-bail this floor forbids, regardless of how the work "feels." Below 60%, the session keeps
-going — it does NOT stop, wrap up, or suggest a `/clear` on a vaguer hunch that it is "getting
-long" (the same premature-bail hunch the 50% floor forbids on the low end). At or above ~60% used
-(or the moment the harness surfaces a context warning earlier than that, whichever comes first),
-the session finishes the step it is on, lets that step persist to `CHUNK.md` under the cold-resume
-parse contract and commit per the git protocol, and then stops at that cold-resume checkpoint —
-telling the user to run `/clear` and re-invoke `/bs-build-chunk`, which picks up at the first
-incomplete step exactly where this one stopped. The 60% figure is a low-water mark, not a hard
-interrupt: never abandon a step mid-write to hit it, and never blow far past it either — stop at
-the next persisted checkpoint once crossed. The one thing that IS a real capability here is
-reading the harness's own context-usage signal against the 50% floor and the 60% ceiling; a
-session must not stop on a generic "this feels long" guess that ignores the actual percentage.
+**There is no context stop.** A session never winds down, wraps up, or suggests a `/clear` because
+its context "feels" full: a model cannot read its own context usage reliably, the harness compacts
+context on its own, and every chunk of an orchestrated run gets a fresh subagent. What a `/clear`
+or a crash costs is bounded by the per-step saves above, not by a context budget: each step
+persists to `CHUNK.md` and commits before the next starts, so a re-invocation resumes at the first
+incomplete step.
 
-**Precedence — a real harness warning always wins.** If the harness itself surfaces a context-low
-warning *below* the 50% floor, obey it immediately: finish the current step, persist, commit, and
-stop at that cold-resume checkpoint. The ≥50% floor governs only the session's OWN self-assessed
-wind-down judgment (the unreliable "feels big" hunch it forbids); it never overrides an actual
-harness signal. Authoritative harness signal beats the floor; the floor beats self-assessment.
-
-**Sub-agent offload is the substantive lever that keeps the main thread under the 60% ceiling
-while still clearing the 50% floor.** Heavy work classes — research, audits, large reads, and
+**Sub-agent offload keeps the main thread lean.** Heavy work classes — research, audits, large reads, and
 repairs — are dispatched to sub-agents rather than performed inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), so the
 main thread's own context fills slowly across a long autonomous run instead of spiking on any one
 step. This is the same mechanism `build-chunk.md`'s Context-Economics Hard Rule already codifies
@@ -583,7 +562,7 @@ that rule is what makes sub-agent offload possible in the first place, and it is
 unchanged: the orchestrator reads structured return-shapes and chunk state, never the big stuff
 behind them.
 
-**Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill. The seam between `final-acceptance` and `playtest` is therefore a first-class **resume checkpoint**: because that content step is so heavy it is the most likely place a context-low warning fires, and its sub-parts persist individually so a resume re-enters mid-pass rather than re-running the whole step. It is NOT a mandatory auto-stop — if context holds, the same session flows from `final-acceptance` straight into the `{playtest, revise, close}` group and stops at the human `playtest` gate that follows, exactly like any other chunk. See `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.
+**Final-acceptance chunk exception.** The sketch's one mandated final-acceptance chunk (`templates/SKETCH.template.md` "## Mandated Chunks") has a fixed 4-item Step Checklist `[final-acceptance, playtest, revise, close]` (`build-chunk.md` "Final-acceptance chunk target"). Its leading `final-acceptance` content step — a coverage check plus a 7-point design-QA pass with a fresh-context agent dispatch and two human-narrated checks — is by far the heaviest single step in the skill. The seam between `final-acceptance` and `playtest` is therefore a first-class **resume checkpoint**: because that content step is so heavy it is the most likely place a crash or a `/clear` lands, and its sub-parts persist individually so a resume re-enters mid-pass rather than re-running the whole step. It is NOT a mandatory auto-stop — the same session flows from `final-acceptance` straight into the `{playtest, revise, close}` group and stops at the human `playtest` gate that follows, exactly like any other chunk. See `build/final-acceptance.md` "Sub-Step Resumability and the Handoff Seam Before `playtest`" for the sub-part persistence that keeps a mid-pass crash resumable.
 
 ## Orchestrated Runs (`/bs-build-game`)
 
@@ -592,7 +571,7 @@ that: a **run** that builds many chunks by dispatching each into its own fresh s
 (`orchestrate/chunk-dispatch.md`). Nothing in this file's machinery changes underneath it — the
 status enum, write order, cold-resume parse contract, session lock, git protocol, and human gates
 are identical whether a chunk is built by a designer typing `/bs-build-chunk` or by a dispatched
-subagent. Four rules govern the seam between the two:
+subagent. Three rules govern the seam between the two:
 
 1. **Orchestrated mode is declared, never inferred.** A subagent is told, in its brief, that it is
    running in orchestrated mode for exactly one named chunk. A session that was not told this is an
@@ -604,12 +583,7 @@ subagent. Four rules govern the seam between the two:
    ruling, no verified checklist until a later dispatch arrives carrying the designer's actual
    answer. Only *who relays* the answer changes, never *who decides* it (the same "How, Never What"
    boundary "Autonomy Scope" above draws).
-3. **The context floor and ceiling apply per subagent, not per run.** Each dispatch gets a fresh
-   window and winds down against the same ≥50% floor / ~60% ceiling; a subagent that crosses its
-   ceiling persists, commits, and returns, and the run re-dispatches the same chunk. The
-   orchestrator's own thread stays flat by reading only state files and structured returns, so the
-   ceiling stops being the thing that ends the designer's session.
-4. **The run journal is not an authority.** `RUN.md` records which gate is open, why a run stopped,
+3. **The run journal is not an authority.** `RUN.md` records which gate is open, why a run stopped,
    and how many passes a chunk took. Chunk status still lives in `CHUNK.md` with `SKETCH.md`'s
    derived pointer, and on any disagreement `CHUNK.md` wins and `RUN.md` is repaired to match — the
    same "Authority" rule this file applies to `SKETCH.md`.

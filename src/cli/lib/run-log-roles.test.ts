@@ -242,10 +242,10 @@ describe('dispatch entries', () => {
     ]);
   });
 
-  it('say that a dispatch carrying on after a gate or context ceiling writes Retry of: none, when it names the failure again', () => {
+  it('say that a dispatch carrying on after a gate writes Retry of: none, when it names the failure again', () => {
     const text = log(
       dispatch(1, { Outcome: 'failed' }),
-      dispatch(2, { 'Retry of': 'Dispatch 1', Outcome: 'context-ceiling' }),
+      dispatch(2, { 'Retry of': 'Dispatch 1', Outcome: 'gate' }),
       dispatch(3, { 'Retry of': 'Dispatch 1' }),
     );
     expect(details(text)).toEqual([
@@ -270,8 +270,8 @@ describe('dispatch entries', () => {
     expect(details(resumedRetry(crash, dispatch(4, { ...J, 'Retry of': 'Dispatch 3' })))).toEqual([]);
   });
 
-  it('never grant a second retry to a retry resumed after a context ceiling', () => {
-    expect(details(resumedRetry({ Outcome: 'context-ceiling' }, dispatch(4, { 'Retry of': 'Dispatch 3' })))).toEqual([
+  it('never grant a second retry to a retry resumed after a gate', () => {
+    expect(details(resumedRetry({ Outcome: 'gate' }, dispatch(4, { 'Retry of': 'Dispatch 3' })))).toEqual([
       expect.stringMatching(/^Dispatch 4: .*failed twice at bounded/),
     ]);
   });
@@ -311,9 +311,9 @@ describe('dispatch entries', () => {
     expect(details(text)).toEqual(matching(/^Dispatch 3: .*does "transcribe rulebook.pdf pp. 1-8" at judgement after Dispatch 1 failed/));
   });
 
-  it('keep the role across a gate or a context ceiling, which are not failures', () => {
+  it('keep the role across a gate or a crash, which are not failures', () => {
     const text = log(
-      dispatch(1, { Outcome: 'context-ceiling' }),
+      dispatch(1, { Outcome: 'pending', 'Finished at': 'pending' }),
       dispatch(2, { Outcome: 'gate', Detail: 'a rules question' }),
       dispatch(3, {}),
     );
@@ -437,9 +437,9 @@ describe('the ladder across verify failures and review rounds (routing.md "When 
       repairOf(4, 2),
     );
 
-  it('carry the attempt count across a context ceiling or a crash, so a resumed attempt is not a fresh one', () => {
+  it('carry the attempt count across a gate or a crash, so a resumed attempt is not a fresh one', () => {
     const designer = [expect.stringMatching(/^Dispatch 4: .*its second failure there.*ask the designer/)];
-    expect(details(resumedRepair({ Outcome: 'context-ceiling' }))).toEqual(designer);
+    expect(details(resumedRepair({ Outcome: 'gate' }))).toEqual(designer);
     expect(details(resumedRepair({ Outcome: 'pending', 'Finished at': 'pending' }))).toEqual(designer);
   });
 });

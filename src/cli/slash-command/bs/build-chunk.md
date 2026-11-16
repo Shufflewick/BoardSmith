@@ -361,7 +361,7 @@ tail entry when routing next reaches it.
 
 This is the first of the four step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
 A session no longer hands off after each group — it runs continuously across the group boundaries
-and stops only at a human-input gate or a harness context-low warning. Group 1's own stopping point
+and stops only at a human-input gate or a stuck automated step. Group 1's own stopping point
 is the `ask` approval gate below; if the user approves, this same session continues into group 2
 (`spec → build → test`) rather than handing off.
 
@@ -411,14 +411,9 @@ everything written so far (claims list, the `## Redteam Rounds` entry, checked-o
 items, `Status: approved`, SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md
 second, per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Write Order" — and any `RULINGS.md`/`ASSETS.md` entries) is
 saved in the game folder, then **continue in this same session into group 2** (`spec → build → test`) —
-no handoff, no "run `/bs-build-chunk` again" prompt. Only a harness context-low warning interrupts
-that continuation, in which case persist (already guaranteed) and tell the user to `/clear` and
-re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
-This continuation is exactly what the **≥50% wind-down floor** (SKILLAUTO-06,
-`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Context floor + ceiling") protects: the group-2 dispatches below
+no handoff, no "run `/bs-build-chunk` again" prompt. The group-2 dispatches below
 (research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
-read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), so the main thread's own context fills slowly enough to clear the
-50% floor before the 60% ceiling ever forces a stop.
+read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), so the main thread stays lean.
 If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
 human-input gate — the session stops there for the user's ruling before reaching `ask`.
 
@@ -462,11 +457,11 @@ resume). Its output — the finished game played start-to-finish — becomes thi
 script; the `{playtest, revise, close}` gate below then runs **on top of** that content, never in
 place of it. Because this content step is exceptionally heavy, the final-acceptance chunk carries an
 **extra** handoff seam ordinary chunks lack — but under the current stopping policy that seam is a
-**resume checkpoint**, not a forced stop: if context holds, the same session flows from
+**resume checkpoint**, not a forced stop: the same session flows from
 `final-acceptance` straight into the `{playtest, revise, close}` gate and stops at the human
 `playtest` gate that follows, exactly like any other chunk. The seam earns its "extra" status
-because `final-acceptance` is the heaviest step and thus the most likely place a harness context-low
-warning fires; its sub-parts persist individually so that if the session does yield there, a resume
+because `final-acceptance` is the heaviest step and thus the most likely place a crash or a `/clear`
+lands; its sub-parts persist individually so that if the session does end there, a resume
 re-enters mid-pass rather than re-dispatching the whole step (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
 "Session Handoff Seams"; see `${CLAUDE_SKILL_DIR}/../bs-shared/build/final-acceptance.md` "Sub-Step Resumability and the
 Handoff Seam Before `playtest`" for that per-sub-part persistence). An ordinary chunk has no
@@ -510,9 +505,9 @@ re-enters Step 2, routes to the next chunk's `investigate`, and runs continuousl
 `ask` gate (a new chunk's first human-input gate), per `state-machine.md` "Session Handoff Seams" →
 "Cross-chunk continuation" (SKILLAUTO-04/05) — carrying the same auto-advance into the next logical
 step across chunk types, including the generate-bot → final-acceptance progression. The printed
-`/bs-build-chunk` re-invocation is the crash/context-fallback resume, never the default stop: it
-only comes into play when a stop condition fires at this boundary — the user said stop, context has
-crossed the 60% low-water mark, or an automated step is stuck/unrecoverable.
+`/bs-build-chunk` re-invocation is the crash/`/clear` resume, never the default stop: it
+only comes into play when a stop condition fires at this boundary — the user said stop, or an
+automated step is stuck/unrecoverable.
 
 ## Session Handoff Seams
 
@@ -528,29 +523,15 @@ boundaries (after `close` it auto-advances straight into the next chunk's `inves
 that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") —
 and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
 `playtest` gate, a repair round-3 triage, a step that failed twice at `judgement`, or `close`'s delta
-gate), when an automated step hits an
-unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
-`state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the exact threshold
-rule). This is the run-while-away model (SKILLAUTO-04): below 60% the session keeps going — it does
-NOT stop early because the work feels large — and auto-advances into the next chunk and the next
-logical step without the human re-invoking (SKILLAUTO-05). At/above ~60% used (or an earlier harness
-context warning, or a stuck automated step), it finishes and persists the current step, then stops
-at that cold-resume checkpoint and tells the user to `/clear` and re-invoke `/bs-build-chunk` to
-resume — this printed re-invocation is the crash/context-fallback resume path, not a routine
-end-of-session handoff.
-
-**≥50% floor (SKILLAUTO-06).** Below 60% is necessary but not sufficient: the session must also
-have consumed **at least 50%** of the context window before it winds down — never stop early
-because a chunk "feels big" at 40%. A real harness context-low warning always wins, though: if the
-harness itself signals below 50%, obey it immediately — the floor governs only the session's own
-self-assessed "feels big" judgment, never an authoritative harness signal. The lever that keeps the
-main thread's own usage climbing slowly enough to clear that 50% floor before the 60% ceiling forces
-a stop is **sub-agent
+gate), or when an automated step hits an unrecoverable/stuck state. This is the run-while-away
+model (SKILLAUTO-04): the session keeps going and auto-advances into the next chunk and the next
+logical step without the human re-invoking (SKILLAUTO-05). There is no context stop: the session
+never winds down because its context "feels" full (`state-machine.md` "Session Handoff Seams" →
+"There is no context stop"). A `/clear` or a crash is resumed by re-invoking `/bs-build-chunk`,
+which picks up at the first incomplete step. What keeps the main thread lean is **sub-agent
 offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
 sub-agents rather than performed inline (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), per this file's own "Context-Economics Hard Rule" above
-("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") — that
-rule is the mechanism the offload rides on, and it is unchanged by this floor. See
-`state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the full framing.
+("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself").
 
 Example one-line progress narration (style guide, not a script — one or two per group):
 

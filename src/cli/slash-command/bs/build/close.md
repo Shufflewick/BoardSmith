@@ -244,8 +244,7 @@ chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated
 final-acceptance chunk that follows it — the generate-bot → final-acceptance progression is one
 continuous run, not two separately re-invoked sessions). The printed command exists **only** as
 the cold-resume/crash fallback for the case where a stop condition *does* fire at this boundary —
-the user said stop, context has crossed the 60% low-water mark, or an automated step is
-stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
+the user said stop, or an automated step is stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
 user see the next chunk (and say "stop") before its first gate, but silence means auto-advance, not
 a wait for re-invocation.
 

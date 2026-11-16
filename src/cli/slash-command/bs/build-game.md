@@ -21,7 +21,7 @@ exactly what this skill dispatches); this skill is the whole-game one.
 Building a game is a long sequence of chunks, and the thing that used to end a session was context,
 not progress: a chunk or two of real work filled the window, the designer was told to `/clear`, and
 the next session started over — re-reading state, and too often re-asking questions they had already
-answered. This skill removes that ceiling from the designer's session by moving the work off it.
+answered. This skill moves that work off the designer's session.
 Each chunk is built by a **fresh subagent** that burns its own context window and returns a short
 report (`orchestrate/chunk-dispatch.md`). The orchestrator keeps only the conversation: the
 questions, the playtests, the decisions, and the run's own journal. So a whole game can be built in
@@ -75,7 +75,7 @@ hands back. Everything else comes from a structured return
 
 This is the rule the whole shape rests on. The moment the orchestrator starts reading slices or code
 "to check the subagent's work," its context fills at the same rate a single session's did and the run
-regains the ceiling it exists to remove. If the work needs checking, that is what the pipeline's own
+loses the lean thread it exists to keep. If the work needs checking, that is what the pipeline's own
 adversarial audit steps are for — dispatch, don't re-read.
 
 ## Who Answers a Gate
@@ -235,17 +235,15 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   then post to `Shufflewick/BoardSmith` with `gh`, or show the designer the issue to post when `gh`
   cannot. If the filing blocked the chunk, ask whether to skip to the next independent chunk or stop;
   if it was worked around, continue.
-- **`context-ceiling`** — re-dispatch the same chunk. This is the ordinary case, not a problem, and
-  the designer does not need to hear about it.
 - **`stuck`** — stop the run. Tell the designer what the game cannot do yet and what would unblock
   it, in their terms, and write `Stop Reason: stuck`. Never retry a stuck chunk a third time, and
   never route around it by marking it verified.
 
 ## Step 5: Stopping
 
-Stop for exactly the four reasons `orchestrate/run-state.md` "Stop Conditions" lists — the designer
-said stop, a gate is unanswered, a dispatch is stuck, or this thread crossed its own context ceiling
-— and never for a vaguer "this is getting long." Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
+Stop for exactly the three reasons `orchestrate/run-state.md` "Stop Conditions" lists — the designer
+said stop, a gate is unanswered, or a dispatch is stuck — and never because the run is long or
+context "feels" full (`orchestrate/run-state.md` "No Context Stop"). Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
 after everything else has landed, and print the one command that resumes it: `/bs-build-game`.
 
 ## Step 6: The bot Opponent, Then Final Acceptance
@@ -277,7 +275,7 @@ This skill delegates its heavyweight prose to:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — the per-chunk subagent contract:
   dispatch mechanics, the seven-field brief, the return shape
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/run-state.md` — `RUN.md`, the resume algorithm, the
-  stop conditions, the orchestrator's own context budget
+  stop conditions, why there is no context stop
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md` — the answer cache: ask once, record
   always, and the answered-questions digest every dispatch carries
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md` — BoardSmith bug/feature reporting via

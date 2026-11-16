@@ -27,7 +27,7 @@
 Run Status: <!-- active | paused | complete -->
 <!-- `active` — a run is in flight (this is what a crash leaves behind, indistinguishable from a
      live run except by the session lock's timestamp — see state-machine.md "Session Lock").
-     `paused` — the designer stopped the run, or the orchestrator stopped it (context ceiling,
+     `paused` — the designer stopped the run, or the orchestrator stopped it (a
      stuck step, an open gate the designer has not answered). `complete` — the final-acceptance
      chunk closed; there is nothing left to orchestrate. -->
 
@@ -39,7 +39,7 @@ Open Gate: <!-- none | "<slug> — <what the designer must answer or play>" (chu
      QUESTIONS.md entry) rather than re-deriving it in new words. Cleared to `none` the moment
      the gate is answered and the answer is recorded. -->
 
-Stop Reason: <!-- none | designer-stopped | context-ceiling | stuck | gate-open -->
+Stop Reason: <!-- none | designer-stopped | stuck | gate-open -->
 <!-- Why the last run ended, so the resume message can lead with something true. `stuck` always
      names what was stuck in that chunk's run log. -->
 

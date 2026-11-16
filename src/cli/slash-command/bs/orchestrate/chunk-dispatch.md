@@ -13,7 +13,7 @@ Dispatching each chunk into a **fresh context** moves that cost off the designer
 subagent burns its window, returns a small structured report, and dies. The orchestrator's own
 context grows by a few hundred tokens per chunk, so a whole game can be built in one sitting.
 
-This is the same sub-agent-offload lever `state-machine.md` "Context floor + ceiling" already names,
+This is the same sub-agent-offload lever `state-machine.md` "Session Handoff Seams" already names,
 applied one level up: there, steps offload to subagents inside a chunk; here, chunks offload to
 subagents inside a run.
 
@@ -174,8 +174,6 @@ already owns:
   - `gate` — work stopped at a human gate. Requires `gate`.
   - `filing` — work stopped because a library gap or bug blocks the chunk outright. Requires
     `filings`, and the chunk is left at its last persisted step.
-  - `context-ceiling` — the subagent hit its own context ceiling, persisted, and committed. Not an
-    error; the orchestrator re-dispatches the same chunk.
   - `stuck` — an automated step cannot be made to pass and `repair` could not fix it. Requires
     `stuckDetail`.
 - `stepsCompleted` — the pipeline step names it checked off this dispatch. For the run log only.

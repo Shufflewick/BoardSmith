@@ -193,8 +193,8 @@ failed. What applies in each step:
 - **`/bs-verify-game` Step 2:** a page range `verify-run-record` refuses is transcribed once more
   at `judgement`, then goes to the designer (`verify/staging-dispatch.md`).
 
-A gate the designer answered, an answer that reshapes the work, a dispatch that stopped at its
-context ceiling and a dispatch that never returned are not failures: the re-dispatch after them
+A gate the designer answered, an answer that reshapes the work, and a dispatch that never
+returned (a crash or a `/clear`) are not failures: the re-dispatch after them
 keeps its role, writes `Retry of: none`, and is the attempt it resumes, so a resumed retry is still
 the one retry. Nor is a returned summary that merely looks incomplete or wrong, with no check
 refusing it: its narrower follow-up keeps the role of the work it follows up.

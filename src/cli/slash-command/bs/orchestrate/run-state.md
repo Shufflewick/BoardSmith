@@ -98,7 +98,7 @@ entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specif
 
 ## Stop Conditions
 
-An orchestrated run stops for exactly four reasons, and says which one in the designer's terms:
+An orchestrated run stops for exactly three reasons, and says which one in the designer's terms:
 
 1. **The designer said stop.** Immediately, at the next dispatch boundary — never mid-dispatch, so
    the chunk in flight persists its own step first. `Stop Reason: designer-stopped`.
@@ -108,22 +108,13 @@ An orchestrated run stops for exactly four reasons, and says which one in the de
 3. **A stuck dispatch.** A subagent returned `stuck` — a gate that keeps failing, a typecheck that
    will not go green, a subagent that died on a terminal error. `Stop Reason: stuck`, and the
    chunk's run log entry names what was stuck. Never retry a stuck dispatch a third time; surface it.
-4. **The orchestrator's own context ceiling.** `Stop Reason: context-ceiling`. See below.
 
-## Context: the Orchestrator's Own Budget
+## No Context Stop
 
-`state-machine.md`'s "Context floor + ceiling" (the ≥50% wind-down floor and the ~60% ceiling)
-governs a session that is doing the work. Under `/bs-build-game` the work happens in dispatched
-subagents, each of which gets a **fresh context window** and applies that floor/ceiling to itself:
-a subagent that crosses its own ceiling mid-chunk persists its step, commits, and returns
-`outcome: context-ceiling` — which the orchestrator treats as an ordinary re-dispatch, not a stop.
-That is the whole point of the orchestrated shape: the context limit stops being the thing that
-ends the designer's session.
-
-The orchestrator's own thread stays nearly flat by construction — it reads state files and
-structured returns, never rulebook slices, docs, or generated code (`build-game.md`
-"Context-Economics Hard Rule"). If it nonetheless crosses ~60% used, or the harness surfaces a
-context-low warning, it finishes the dispatch it is on, writes `RUN.md`, and stops with
-`Stop Reason: context-ceiling`, telling the designer the one command to run after `/clear`. Because
-resume is reconstructed entirely from `RUN.md` + `SKETCH.md` + `QUESTIONS.md`, that restart costs
-the designer nothing but the keystrokes — no re-answered questions, no re-built chunks.
+A run never stops because of context. Each chunk is built by a subagent with a **fresh context
+window**, the harness compacts the orchestrator's own context as it goes, and the orchestrator
+reads only state files and structured returns, never rulebook slices, docs, or generated code
+(`build-game.md` "Context-Economics Hard Rule"). A `/clear` or a crash is still possible, and costs
+nothing but the keystrokes: resume is reconstructed entirely from `RUN.md` + `SKETCH.md` +
+`QUESTIONS.md` and each chunk's per-step saves in `CHUNK.md`, so no question is re-answered and no
+chunk is re-built.

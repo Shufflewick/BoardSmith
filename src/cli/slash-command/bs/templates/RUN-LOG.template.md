@@ -50,8 +50,8 @@
      - Role: mechanical | bounded | judgement | second-opinion (routing.md "Which Role Each Step
        Uses"; reviewers are recorded in review rounds, not here)
      - Agent: the agent type actually dispatched, as `npx boardsmith agent <role>` printed it
-     - Retry of: none, also when this dispatch carries on one that stopped at a gate, its
-       context ceiling or a crash (Outcome gate, context-ceiling, or still pending), which it does
+     - Retry of: none, also when this dispatch carries on one that stopped at a gate or a crash
+       (Outcome gate, or still pending), which it does
        at the same role and as the same attempt; "Dispatch M" for the failed dispatch this one
        retries; or "Review Round M" for the review round that asked for changes to the work this
        one redoes. A first failure is retried once at the role that failed, a second failure there
@@ -65,8 +65,8 @@
      - Finished at: `pending` while the dispatch runs, then an ISO timestamp from `date -u +%Y-%m-%dT%H:%M:%SZ`,
        read when the dispatch returns and written together with Outcome (never fabricated, never
        copied from another entry, never typed from memory)
-     - Outcome: pending | closed | gate | filing | context-ceiling | stuck | failed for a whole
-       chunk; pending | done | failed | gate | context-ceiling for a step or a bulk edit. `failed`
+     - Outcome: pending | closed | gate | filing | stuck | failed for a whole
+       chunk; pending | done | failed | gate for a step or a bulk edit. `failed`
        means its verify failed or a check run on its return refused it (claim-quote-check, for
        investigate and re-investigate; verify-run-record, for a transcribed range), or, for a whole
        chunk, that it returned `closed` but failed its check. A `build` dispatch's Outcome and

@@ -60,20 +60,6 @@ re-reading a slice file the orchestrator just had a subagent write. This applies
 below; `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` restates it because that is the step where the temptation to
 "double-check by reading the slice" is strongest.
 
-## Context Floor + Ceiling (SKILLAUTO-06)
-
-This session obeys the same two numbers every other `bs-` skill does — see
-`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams" → "Context floor +
-ceiling" for the full rule; do not restate it beyond this summary. **≥50% floor, ~60% ceiling.**
-Below 50% used, this session never winds down, never wraps up, and never suggests a `/clear` —
-"the sketch is done, this feels like a clean resume point" is exactly the premature bail the floor
-forbids. Stopping at 24% or 40% because the work ahead "feels big" is a bug, not prudence. The one
-authoritative override is a real harness context-low warning: if the harness itself signals below
-the floor, obey it immediately, persist, and stop.
-
-Read the harness's actual context-usage percentage against these numbers. Never stop on a vague
-"this is getting long" hunch that ignores the real figure.
-
 ## Where Everything This Skill Writes Goes
 
 Every artifact this skill produces — `BRIEF.md`, `SKETCH.md`, `ASSETS.md`, `DECISIONS.md`,
@@ -348,10 +334,9 @@ Read the sibling instructions and execute them in this same turn, exactly as `/b
 off to this file — never re-dispatch it as a separate skill invocation. If the designer has said they
 want one chunk only, read `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` instead.
 
-Stop at this seam ONLY if one of the state-machine's three stop conditions actually holds: the
-designer said stop, an automated step is stuck, or context is at/above the ~60% ceiling (or the
-harness surfaced a real context-low warning) — **and never below the ≥50% floor** on a
-self-assessed hunch, per "Context Floor + Ceiling" above. If a stop condition does hold, print the
+Stop at this seam ONLY if one of the state-machine's stop conditions actually holds: the
+designer said stop, or an automated step is stuck. There is no context stop (`state-machine.md`
+"Session Handoff Seams" → "There is no context stop"). If a stop condition does hold, print the
 exact next command (`/bs-build-game`, or `/bs-build-chunk` for a single chunk) as the cold-resume
 path and say what it will pick up.
 

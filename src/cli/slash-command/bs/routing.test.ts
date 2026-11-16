@@ -281,11 +281,11 @@ describe('a failed step: one retry at the same role, then one role up, then the 
     expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(/A `build` dispatch's Outcome and Finished at stay `pending` until `test`'s done gate answers/);
   });
 
-  it('a dispatch that carries on after a gate, a context ceiling or a crash keeps its role, writes Retry of: none, and is the attempt it resumes', () => {
+  it('a dispatch that carries on after a gate or a crash keeps its role, writes Retry of: none, and is the attempt it resumes', () => {
     expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(
-      /Retry of: none, also when this dispatch carries on one that stopped at a gate, its context ceiling or a crash/,
+      /Retry of: none, also when this dispatch carries on one that stopped at a gate or a crash/,
     );
-    routingSays(/a dispatch that never returned are not failures: the re-dispatch after them keeps its role, writes `Retry of: none`, and is the attempt it resumes, so a resumed retry is still the one retry/);
+    routingSays(/a dispatch that never returned \(a crash or a `\/clear`\) are not failures: the re-dispatch after them keeps its role, writes `Retry of: none`, and is the attempt it resumes, so a resumed retry is still the one retry/);
   });
 });
 

@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { skillMarkdown } from '../skill-markdown.test-helper.js';
+import { SKILL_FILES, skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +53,7 @@ const RETURN_FIELDS = [
 ];
 
 /** The `outcome` enum every dispatch return carries exactly one of. */
-const OUTCOME_VALUES = ['closed', 'gate', 'filing', 'context-ceiling', 'stuck'];
+const OUTCOME_VALUES = ['closed', 'gate', 'filing', 'stuck'];
 
 describe('WF-01 — the skill and its reference tree exist and are wired', () => {
   it('build-game.md exists with the bs-build-game frontmatter name', () => {
@@ -375,21 +375,21 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
     expect(runState).toMatch(/the lock's timestamp is/i);
   });
 
-  it('the run stops for exactly the four named reasons, and no vaguer hunch', () => {
+  it('the run stops for exactly the three named reasons, and never because of context', () => {
     const runState = read('orchestrate/run-state.md');
-    for (const reason of ['designer-stopped', 'gate-open', 'stuck', 'context-ceiling']) {
+    expect(flat(runState)).toMatch(/stops for exactly three reasons/);
+    for (const reason of ['designer-stopped', 'gate-open', 'stuck']) {
       expect(runState, `stop reasons must include ${reason}`).toContain(reason);
     }
+    expect(runState).toContain('## No Context Stop');
     const skill = flat(read('build-game.md'));
-    expect(skill).toMatch(/never for a vaguer "this is getting long\.?"/i);
+    expect(skill).toMatch(/never because the run is long or context "feels" full/i);
   });
 
-  it('the context floor/ceiling applies per subagent, so a ceiling return is a re-dispatch', () => {
-    const runState = flat(read('orchestrate/run-state.md'));
-    expect(runState).toMatch(/fresh context window/i);
-    expect(runState).toMatch(/treats as an ordinary re-dispatch, not a stop/i);
-    const stateMachine = flat(read('state-machine.md'));
-    expect(stateMachine).toMatch(/context floor and ceiling apply per subagent, not per run/i);
+  it('no skill text sets a context stop (#1660)', () => {
+    const contextStop = /context[- ](floor|ceiling)|floor\s*\+\s*ceiling|context-low|low-water mark|[56]0% (used|floor|ceiling)|SKILLAUTO-06/i;
+    const offenders = SKILL_FILES.filter((path) => contextStop.test(flat(skillMarkdown(path))));
+    expect(offenders).toEqual([]);
   });
 
   it('build-game.md prints /bs-build-game as the one resume command', () => {
