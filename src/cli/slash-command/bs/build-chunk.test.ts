@@ -1571,6 +1571,18 @@ describe('SKILLAUTO-05 — the run advances across chunks, a dispatched chunk re
     expect(buildChunk).not.toMatch(/tell the user|warn the user|to the user/i);
   });
 
+  it('build-chunk.md resumes and classifies the lock against the chunk the brief names, never the first unverified one', () => {
+    const buildChunk = flatRead('build-chunk.md');
+    expect(buildChunk).toMatch(/The resume target is the chunk the brief names, never another/);
+    expect(buildChunk).toMatch(/\*\*the chunk this session is about to resume\*\*: the chunk the brief names/);
+    expect(buildChunk).not.toMatch(/the resume target is the first chunk whose status/);
+  });
+
+  it('build/playtest.md sends a light-path chunk on to its bookkeeping, never straight to the return', () => {
+    const playtest = flatRead('build/playtest.md');
+    expect(playtest).toMatch(/`close` \(on the light path, to "Light-Path Bookkeeping" below\)/);
+  });
+
   it('build-chunk.md says a crash or /clear is resumed by re-invoking /bs-build-game, which re-dispatches at the first incomplete step', () => {
     const buildChunk = flatRead('build-chunk.md');
     expect(buildChunk).toMatch(/A `\/clear` or a crash is resumed by re-invoking `\/bs-build-game`/);

@@ -68,8 +68,9 @@ does not say so is the designer's, and follows only "Typed by the Designer" abov
    `orchestrate/chunk-dispatch.md` "The Return Shape" pins, consumed by name. A designer-facing
    summary belongs in its `designerSummary` field, not around the report.
 
-Where a step file this one dispatches says to ask or tell the designer, return that as the gate
-instead: the gate still stops the work, and the designer still decides.
+Where a step file this one dispatches says to ask the designer or stop for their decision, return
+that as the gate instead: the gate still stops the work, and the designer still decides. What only
+informs the designer goes in the return's `designerSummary` and stops nothing.
 
 ## Model Routing
 
@@ -200,11 +201,8 @@ DIFFERENT next chunk finds `Session Lock: none`, not a stale-but-different lock,
 the three outcomes below.
 
 If the lock is NOT `none`, outcomes 1 and 2 below
-compare the lock against **the chunk this session is about to resume**, so identify that target
-first: from `SKETCH.md`'s ordered chunk list (a read the consistency check above already
-performs), the resume target is the first chunk whose status is neither `verified` nor
-`verified (user-waived)` — the same rule Step 2 applies when it routes. Only with that target
-in hand can the lock be classified. Implement ALL THREE outcomes literally, never collapse them
+compare the lock against **the chunk this session is about to resume**: the chunk the brief
+names, the same target Step 2 routes. Only with that target in hand can the lock be classified. Implement ALL THREE outcomes literally, never collapse them
 into one branch:
 
 1. **Same chunk resume** — the lock names the same chunk this session is about to resume.
@@ -225,10 +223,12 @@ DESIGN.md` in `design/`), the design session
 designer's session (`/bs-build-game` Step 1b, before any dispatch). Return `outcome: stuck` with
 `stuckDetail` saying the design session has not been signed off, so the run skipped it.
 
-Read `SKETCH.md` → find the first chunk whose status is neither `verified` nor
-`verified (user-waived)` (a waived chunk is closed — the user explicitly waived its playtest;
-never resume it here — surfacing accumulated waived chunks for a batch playtest is
-`/bs-check-status`'s job) → read that chunk's `chunks/<slug>/CHUNK.md` → route to the
+The resume target is the chunk the brief names, never another: `/bs-build-game` derived it with
+`npx boardsmith next-chunk`, which with nothing parked is the first chunk in `SKETCH.md` whose
+status is neither `verified` nor `verified (user-waived)` (a waived chunk is closed — the designer
+explicitly waived its playtest; surfacing accumulated waived chunks for a batch playtest is
+`/bs-check-status`'s job). A brief naming a `verified` or `verified (user-waived)` chunk returns
+`outcome: stuck` rather than resuming it. Read that chunk's `chunks/<slug>/CHUNK.md` → route to the
 **first incomplete step** on its Step Checklist (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Step Names"). A chunk whose
 Status line reads `stale — re-derive before build` stops routing instead — see "Status Enum and
 Stale Marker" below.
@@ -343,7 +343,7 @@ prose, and this router does no more than route to the right one.
 Chunks tagged `light` at proposal time run `build, test, playtest` only — no
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/light.md` file exists or is needed, because the light path is a routing decision over the
 same `build.md`/`test.md`/`playtest.md` reference files, not a fourth ceremony with its own prose.
-The user is explicitly **told which** ceremony is in effect when the chunk is proposed, so no one
+The designer is explicitly **told which** ceremony is in effect when the chunk is proposed, so no one
 discovers mid-chunk that fewer gates ran than they expected.
 
 The light path also has no `spec` step, which is exactly what bounds the `light` tag: cite
@@ -356,7 +356,7 @@ full ceremony if a `light` chunk turns out mid-build to need new behavior.
 Light-path status transitions (cite `state-machine.md` "Step Names (exact, light path — trivial chunks)" — do not
 restate the transition rule beyond this pointer): the light path has no `ask` step, so
 `approved` is **unreachable** for light chunks — a light chunk moves `proposed → built` directly
-when the user accepts the proposal and `build` + `test` complete. Because the light path has no
+when the designer accepts the proposal and `build` + `test` complete. Because the light path has no
 `close` step, `playtest` performs `close`'s bookkeeping for light chunks — the **four-item**
 sequence `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Step Names (exact, light path — trivial chunks)" lists: bisect-anchor commit hash,
 Status line update CHUNK.md-then-SKETCH.md, decision rollup, and the terminal session-lock
