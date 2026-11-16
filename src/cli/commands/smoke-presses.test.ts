@@ -15,6 +15,7 @@ import {
   boardThatHidesThePanelForAMoment,
   boardThatRedrawsThePanel,
   boardThatHoldsAnOpenAction,
+  boardThatKeepsOfferingControls,
   HELD_OPEN_PLAY,
   PLAY_HOLD,
   panelThatGoesAwayAsItIsPressed,
@@ -28,6 +29,18 @@ import {
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
 describe('boardsmith verify: the smoke check', () => {
+  it('#1659: takes a panel action it still has to take before pressing the board\'s untried controls, so one enabled briefly is taken', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatKeepsOfferingControls(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(steps).toContain('smoke step 1: taking "draw"');
+    expect(outcome.summary).toMatch(/a seated player took "draw", "play" and pressed \d+ board controls, with no error\./);
+    expect(outcome.passed, outcome.summary).toBe(true);
+  });
+
   it('#1592: leaves help opened under the resting pointer before pressing the next panel action', async () => {
     const { outcome, said } = await smokeOf(false, panelWithRestingPointerHelp());
 
@@ -40,7 +53,7 @@ describe('boardsmith verify: the smoke check', () => {
     const { outcome, steps } = await smokeOf(false, panelWithRestingPointerHelp(false, true));
 
     expect(outcome.passed, outcome.summary).toBe(true);
-    expect(steps).toContain('smoke step 2: pressing the board\'s "South bell"');
+    expect(steps).toContain('smoke step 5: pressing the board\'s "South bell"');
   });
 
   it('#1592 F1: leaves hover help before pressing a board candidate', async () => {
@@ -96,8 +109,8 @@ describe('boardsmith verify: the smoke check', () => {
   it('#1475: a board control the game takes away by itself before the walk points at it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl());
 
-    expect(steps).toContain('smoke step 1: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
-    expect(steps.slice(3, 5)).toEqual(['smoke step 2: pressing the board\'s "Start round 1"', 'smoke step 3: pressing the board\'s "Stop"']);
+    expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(steps.slice(5, 7)).toEqual(['smoke step 3: pressing the board\'s "Start round 1"', 'smoke step 4: pressing the board\'s "Stop"']);
     expect(outcome.summary).toContain('pressed 4 board controls, with no error.');
     expect(outcome.passed).toBe(true);
   });
@@ -105,7 +118,7 @@ describe('boardsmith verify: the smoke check', () => {
   it('#1483: a board control a clock an earlier press started takes away just after the pointer reached it is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ startedBy: 'click' }));
 
-    expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(steps).toContain('smoke step 3: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(outcome.summary).toContain('pressed 5 board controls, with no error.');
     expect(outcome.passed).toBe(true);
   });
@@ -113,7 +126,7 @@ describe('boardsmith verify: the smoke check', () => {
   it('#1484 review: a board control a clock the pointer reaching an earlier control started takes away is said, not reported, and pressed when it shows again', async () => {
     const { outcome, steps } = await smokeOf(false, boardWhoseClockTakesAControl({ startedBy: 'pointerenter' }));
 
-    expect(steps).toContain('smoke step 2: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(steps).toContain('smoke step 3: the board\'s "Stop" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(outcome.summary).toContain('pressed 5 board controls, with no error.');
     expect(outcome.passed).toBe(true);
   });
@@ -128,6 +141,17 @@ describe('boardsmith verify: the smoke check', () => {
     expect(steps).toContain('smoke step 1: the panel\'s "draw" went away by itself before the press landed, so the walk presses it when it shows again');
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
+  });
+
+  it('#1659 review: a panel button that goes away by itself each time it is pressed leaves the board its turn', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...panelThatGoesAwayAsItIsPressed({ always: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
+    });
+
+    expect(steps).toContain('smoke step 1: the panel\'s "draw" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(steps.some((line) => line.endsWith('pressing the board\'s "Ring the bell"'))).toBe(true);
   });
 
   it('#1483 review: a panel button the game takes away by itself now and then, with the action taken in between, is not reported', async () => {
@@ -170,12 +194,12 @@ describe('boardsmith verify: the smoke check', () => {
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
     });
 
-    // "draw" was taken at step 2, when its button came back: a press that had not landed would leave
-    // it untaken, and step 3 taking it again.
-    expect(steps.slice(1, 4)).toEqual([
-      'smoke step 1: pressing the board\'s "Look away"',
-      'smoke step 2: taking "draw"',
-      'smoke step 3: taking "play"',
+    // "draw" was taken at step 5, when its button came back: a press that had not landed would leave
+    // it the least taken, and step 6 taking it again.
+    expect(steps.slice(5, 8)).toEqual([
+      'smoke step 4: pressing the board\'s "Look away"',
+      'smoke step 5: taking "draw"',
+      'smoke step 6: taking "play"',
     ]);
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "blank", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
@@ -185,13 +209,12 @@ describe('boardsmith verify: the smoke check', () => {
     const { outcome, steps } = await smokeOf(false, {
       ...aceGame(),
       ...boardThatHidesThePanelForAMoment({ forGood: true }),
-      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 4 }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 5 }),
     });
 
-    expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
+    expect(steps.slice(5, 7)).toEqual(['smoke step 4: pressing the board\'s "Look away"', 'smoke step 5: taking "draw"']);
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain('- The panel showed its "draw", and it was still gone 5s later, when the walk went to press it.');
-    expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
   });
 
   it('#1461: an open action the board holds is cancelled with a notice, not reported as an error', async () => {

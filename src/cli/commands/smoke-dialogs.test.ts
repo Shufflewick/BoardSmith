@@ -19,16 +19,18 @@ describe('boardsmith verify: the smoke check', () => {
       expect(outcome.summary).toMatch(
         /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and pressed 8 board controls, with no error\./,
       );
-      expect(steps.slice(1, 10)).toEqual([
-        'smoke step 1: pressing the board\'s "Look through discards"',
-        'smoke step 2: pressing "Sort" in the dialog "Discards"',
-        'smoke step 3: pressing "Close discards" in the dialog "Discards"',
-        'smoke step 4: pressing the board\'s "Look through discards again"',
-        'smoke step 5: closing the dialog "Discards" with "Close discards"',
-        'smoke step 6: pressing the board\'s "Read the rules"',
-        'smoke step 7: closing the dialog "Rules" with Escape',
-        'smoke step 8: pressing the board\'s "Plan A"',
-        'smoke step 9: pressing the board\'s "Plan B"',
+      expect(steps.slice(1, 12)).toEqual([
+        'smoke step 1: answering "play"',
+        'smoke step 1: pressing "2S" for "play"',
+        'smoke step 2: pressing the board\'s "Look through discards"',
+        'smoke step 3: pressing "Sort" in the dialog "Discards"',
+        'smoke step 4: pressing "Close discards" in the dialog "Discards"',
+        'smoke step 5: pressing the board\'s "Look through discards again"',
+        'smoke step 6: closing the dialog "Discards" with "Close discards"',
+        'smoke step 7: pressing the board\'s "Read the rules"',
+        'smoke step 8: closing the dialog "Rules" with Escape',
+        'smoke step 9: pressing the board\'s "Plan A"',
+        'smoke step 10: pressing the board\'s "Plan B"',
       ]);
     },
   );
@@ -37,12 +39,14 @@ describe('boardsmith verify: the smoke check', () => {
     const { outcome, steps } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: false, closeFirst: true }));
 
     expect(outcome.passed).toBe(true);
-    expect(steps.slice(1, 6)).toEqual([
-      'smoke step 1: pressing the board\'s "Look through discards"',
-      'smoke step 2: pressing "Close discards" in the dialog "Discards"',
-      'smoke step 3: pressing the board\'s "Look through discards" again, to reach what is left in the dialog it opens',
-      'smoke step 4: pressing "Sort" in the dialog "Discards"',
-      'smoke step 5: closing the dialog "Discards" with "Close discards"',
+    expect(steps.slice(1, 8)).toEqual([
+      'smoke step 1: answering "play"',
+      'smoke step 1: pressing "2S" for "play"',
+      'smoke step 2: pressing the board\'s "Look through discards"',
+      'smoke step 3: pressing "Close discards" in the dialog "Discards"',
+      'smoke step 4: pressing the board\'s "Look through discards" again, to reach what is left in the dialog it opens',
+      'smoke step 5: pressing "Sort" in the dialog "Discards"',
+      'smoke step 6: closing the dialog "Discards" with "Close discards"',
     ]);
   });
 
@@ -77,7 +81,7 @@ describe('boardsmith verify: the smoke check', () => {
       '- Pressing the board\'s "Start over" replaced the game\'s page, so the walk could not see what the press did.',
     );
     expect(outcome.summary).not.toContain('could not go on');
-    expect(steps).toContain('smoke step 2: nothing is offered; waiting for a turn');
+    expect(steps).toContain('smoke step 3: nothing is offered; waiting for a turn');
   });
 
   it('#1656: a frame replaced between two presses of one action is said, and the walk goes on in the new frame', async () => {

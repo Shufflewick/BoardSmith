@@ -1857,6 +1857,36 @@ function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
   return walk.listed.filter((name) => !walk.taken.has(name) && !memory.failed.has(name));
 }
 
+/** Whether the walk still has `name` to take: not taken, failed, nor put off for want of an input (#470). */
+function untaken(name: string, walk: SmokeWalk, memory: WalkMemory): boolean {
+  return !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name);
+}
+
+/**
+ * Whether `play`'s browser has an action the walk still has to take (`untaken`): the one it has
+ * open, else one its panel offers (`freshAction`), less, for a world seat after the first, what the
+ * first seat's panel offers, read now (`readTheLead`), which is left to that seat (`companionStep`).
+ */
+async function actionLeftFor(play: SeatPlay, plays: readonly SeatPlay[], offers: Offers, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+  if (offers.open !== null) return untaken(offers.open, walk, memory);
+  const [lead] = plays;
+  if (play === lead) return freshAction(offers.enabled, walk, memory) !== undefined;
+  await readTheLead(lead, walk);
+  return freshAction(offers.enabled.filter((name) => !lead.offered.includes(name)), walk, memory) !== undefined;
+}
+
+/**
+ * The first of `names` the walk still has to take (`untaken`) whose button has not gone away by
+ * itself since it was last pressed (`goneByItself`), so one that keeps going is taken in turn with
+ * the rest, not at every step.
+ */
+function freshAction(names: readonly string[], walk: SmokeWalk, memory: WalkMemory): string | undefined {
+  return names.find((name) => untaken(name, walk, memory) && !memory.wentAway.has(actionButton(name)));
+}
+
+/** The panel's button for the action `name`. */
+const actionButton = (name: string): string => `[data-bs-action=${JSON.stringify(name)}]`;
+
 /** Whether `name` was put off for want of an input (#470) and no action has been taken since. */
 function puttingOff(name: string, memory: WalkMemory): boolean {
   return memory.putOff.get(name) === memory.moves;
@@ -1908,7 +1938,8 @@ function lastResort(offers: Offers, play: SeatPlay, moves: number): NextPress {
 
 /**
  * An action whose input reads a value off the page now (`ready`, #471), else an action not taken,
- * failed or put off for want of an input (#470) yet, else a way into the menu (a group, or a thing
+ * failed or put off for want of an input (#470) yet whose button has not just gone away by itself
+ * (`freshAction`), else a way into the menu (a group, or a thing
  * to select, #1651) this browser has not opened yet (`opened`), else, once for each action taken,
  * the one opened longest ago before that action, since what it holds may have changed, else the way
  * back out of a level, else the action taken least, preferring one that has neither ended the game
@@ -1920,8 +1951,8 @@ function lastResort(offers: Offers, play: SeatPlay, moves: number): NextPress {
 function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: ReadonlySet<string>, play: SeatPlay): NextPress {
   const now = offers.enabled.find((name) => ready.has(name));
   if (now !== undefined) return { take: now };
-  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
-  if (untaken !== undefined) return { take: untaken };
+  const fresh = freshAction(offers.enabled, walk, memory);
+  if (fresh !== undefined) return { take: fresh };
   const way = wayIn(offers, play, memory.moves);
   if (way !== undefined) return openWay(play, way, memory.moves);
   if (offers.inGroup && !play.lastResort) {
@@ -2064,7 +2095,7 @@ async function takeAction(
   play.lastResort = false;
   play.resolvedOpen = undefined;
   narrate(step, said);
-  const selector = `[data-bs-action=${JSON.stringify(name)}]`;
+  const selector = actionButton(name);
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
   if (await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself)) memory.wentAway.delete(selector);
 }
@@ -2072,8 +2103,8 @@ async function takeAction(
 /**
  * What a world seat after the first does in its step once it has nothing open (#471). It may take
  * only what the first seat's (`lead`) panel does not offer now (accepting what another seat offered
- * it, or what the place it is in offers when the two have come apart), as read once that panel has
- * settled (`settledOffers`), or as it last showed its buttons while it has an action open; one of
+ * it, or what the place it is in offers when the two have come apart), as `readTheLead` read it at
+ * the start of this step; one of
  * those not taken yet comes first, and so does opening a group of its panel it has not opened, and
  * leaving the one it is in, as the first seat does. Otherwise it follows the first seat: it takes the action that
  * seat took last, when its own panel offers it, so the two go where the other goes and see what the
@@ -2089,13 +2120,9 @@ async function companionStep(
   memory: WalkMemory,
   step: number,
 ): Promise<true | Offers> {
-  const leading = await settledOffers(await gameFrame(lead.page), walk);
-  // Inside a group or thing the lead's panel shows only that level, not all it offers.
-  if (leading.open === null && !leading.inGroup) lead.offered = leading.enabled;
   const mine = offers.enabled.filter((name) => !lead.offered.includes(name));
-  const untaken = mine.some((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   // A group or thing this browser has not opened may hold what only it is offered, and one open is left first.
-  const ownBusiness = untaken || offers.inGroup || offers.ways.some((way) => !play.opened.has(way.press));
+  const ownBusiness = freshAction(mine, walk, memory) !== undefined || offers.inGroup || offers.ways.some((way) => !play.opened.has(way.press));
   const { took } = lead;
   if (!ownBusiness && took !== undefined && took.step !== play.followed && offers.enabled.includes(took.name)) {
     play.followed = took.step;
@@ -2167,12 +2194,15 @@ async function answerAnOpenDialog(play: SeatPlay, frame: Frame, walk: SmokeWalk,
 
 /**
  * One step in `play`'s browser: deal a new game after one that ended, press a control of an open
- * modal dialog (#461), press an untried board control, answer the open action, or press what the
- * panel offers; {@link IDLE} when it offers nothing. Game over is looked for first, and the game-over
- * card's own controls are never the board's (#462), so the walk cannot dismiss the end of a game it
- * has not seen. A board control comes before the open action because a player can press the board
- * while a pick is open, and because the walk acts for every seat at a table, where a game that opens
- * each turn's action by itself never has a moment with nothing open.
+ * modal dialog (#461), answer or take an action the walk still has to take (`actionLeftFor`), skip
+ * the step clock's wait (`skipAWait`), press an untried board control, answer the open action, or
+ * press what the panel offers; {@link IDLE} when it offers nothing. An action still to take comes
+ * before the skip and the board, since the game may offer it only for a moment, as Windup Warfare
+ * offers its 2x vote only while a battle plays back, which a skip ends (#1659). Game over is looked for first, and
+ * the game-over card's own controls are never the board's (#462), so the walk cannot dismiss the end
+ * of a game it has not seen. A board control comes before an open action taken before because a
+ * player can press the board while a pick is open, and because the walk acts for every seat at a
+ * table, where a game that opens each turn's action by itself never has a moment with nothing open.
  */
 async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   // Looked up at every step: the dev host puts up a new frame when the game restarts.
@@ -2206,6 +2236,7 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   await openACollapsedBar(frame);
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
+  if (await actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
   if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
@@ -2245,6 +2276,17 @@ async function openACollapsedBar(frame: Frame): Promise<void> {
   await inPageTime(frame.page(), 'opening a collapsed action bar', () =>
     frame.evaluate(() => document.querySelector<HTMLElement>('[data-testid="bs-actionbar-toggle"][aria-expanded="false"]')?.click()),
   );
+}
+
+/**
+ * Records what the first seat's (`lead`) panel offers now, once it has settled (`settledOffers`), as
+ * `lead.offered`, for a world seat after the first, which leaves those to it (#471); while the lead
+ * has an action open, or a group or thing's menu, which shows only that level, it keeps what the
+ * lead's panel showed last.
+ */
+async function readTheLead(lead: SeatPlay, walk: SmokeWalk): Promise<void> {
+  const leading = await settledOffers(await gameFrame(lead.page), walk);
+  if (leading.open === null && !leading.inGroup) lead.offered = leading.enabled;
 }
 
 /** The board controls a world seat after the first leaves to the first seat (#471): one may take it away. None for the first seat. */

@@ -454,14 +454,18 @@ markers this page documents, so it keeps up with any game without knowing it:
   of the page, so once no game-over card or modal dialog is up, the walk opens
   it with its toggle (`[data-testid="bs-actionbar-toggle"]`) before it reads
   the panel (#1482).
-- Each step it presses a board control it has not pressed, answers the open
-  action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
-  `[data-bs-action]` button, preferring one whose `inputs` read a value off the
-  page now (#471), then one not taken yet, and opening `[data-bs-action-group]`
-  menus to reach the actions inside them. A board
-  control comes first because a player can press the board while a pick is
-  open, and because a game that opens each turn's action by itself never has a
-  moment with nothing open once the walk acts for every seat.
+- Each step it answers or takes an action it has not taken yet, presses a board
+  control it has not pressed, answers the open action (the panel marks it
+  `data-bs-open-action="<name>"`), or takes the next `[data-bs-action]` button,
+  preferring one whose `inputs` read a value off the page now (#471), then one
+  not taken yet, and opening `[data-bs-action-group]` menus to reach the actions
+  inside them. An action not taken yet comes first because the game may offer it
+  only for a moment, as a vote while a battle plays back is, and a board that
+  keeps putting up new controls would otherwise spend that moment (#1659). A
+  board control comes before an open action taken already because a player can
+  press the board while a pick is open, and because a game that opens each
+  turn's action by itself never has a moment with nothing open once the walk
+  acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
   panel), then the panel's choice, add, done and skip buttons. A follow-up
@@ -652,8 +656,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   opens on the host's clock, and the walk acts far quicker than a player waits.
   So when the panel greys an action the walk still has to take and the dev bar
   shows **Skip wait** (the host will offer the actions again before the step
-  closes), the walk presses it before taking anything else, and the host moves
-  its time on to that instant (#1547). The host does not say which greyed
+  closes), the walk presses it once it has taken what the panel offers that it
+  still has to take, since the skip may end that offer, and the host moves its
+  time on to that instant (#1547, #1659). The host does not say which greyed
   action its clock holds, so the walk waits whatever greys the one it needs, as
   a player would; each skip moves to a later instant before the deadline. Whether
   the walk takes such an action does not depend on how fast the machine runs it.

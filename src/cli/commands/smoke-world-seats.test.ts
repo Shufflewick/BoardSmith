@@ -65,6 +65,12 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it('#1659: a seat after the first takes what only it is offered before the board controls its board keeps offering', async () => {
+    const { steps } = await smokeOf(true, { ...gladeWorld({ watching: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
+
+    expect(steps[steps.findIndex((line) => line.endsWith(': acting as seat 4')) + 1]).toMatch(/: taking "arrive"$/);
+  });
+
   it('#471: fails a walk whose second seat alone fails, naming that seat in every problem from its browser', async () => {
     const { outcome } = await smokeOf(true, { ...gladeWorld({ stumbles: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
 
