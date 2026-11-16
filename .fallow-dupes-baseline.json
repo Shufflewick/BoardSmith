@@ -3,8 +3,8 @@
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:99-113|src/ui/composables/useHexGrid.ts:300-315",
-    "src/ui/components/auto-ui/renderers/HandRenderer.vue:434-440|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:256-262",
-    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:118-136|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:215-233",
+    "src/ui/components/auto-ui/renderers/HandRenderer.vue:434-440|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:259-265",
+    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:144-162|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:215-233",
     "src/session/stateless-ops.ts:1131-1147|src/session/stateless-ops.ts:1220-1234",
     "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
@@ -12,8 +12,8 @@
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/engine/element/game-element.ts:1122-1128|src/engine/element/game-element.ts:1183-1189",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
-    "src/engine/element/game.ts:3972-3978|src/engine/element/game.ts:4002-4008",
-    "src/engine/element/game.ts:4044-4048|src/engine/element/game.ts:4076-4080"
+    "src/engine/element/game.ts:3974-3980|src/engine/element/game.ts:4004-4010",
+    "src/engine/element/game.ts:4046-4050|src/engine/element/game.ts:4078-4082"
   ],
   "clone_fingerprints": [
     "dup:3551213f:2",
