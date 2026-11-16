@@ -32,7 +32,7 @@ import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
 import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue';
-import type { GameElement } from './auto-ui-helpers.js';
+import { GAME_VIEW_KEY, type GameElement } from './auto-ui-helpers.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
 import { REQUEST_HOST_STATE_KEY } from '../../composables/requestHostState.js';
 
@@ -62,6 +62,7 @@ provide(DIE_ANIMATION_CONTEXT_KEY, dieAnimationContext);
 provide('playerSeat', props.playerSeat);
 // Presentation overlay — provided as computed so injectors re-render when prop changes (D-04)
 provide('presentation', computed(() => props.presentation));
+provide(GAME_VIEW_KEY, computed(() => props.gameView));
 
 // ---------------------------------------------------------------------------
 // findDefaultBackImage — scans element tree for the first card back image

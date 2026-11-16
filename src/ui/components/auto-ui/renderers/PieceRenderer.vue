@@ -7,11 +7,11 @@
  *
  * Carry-forward requirements (Phase 92 review):
  *   #1: .piece:hover { transform: scale(1.05) } — MUST be present for affordance.
- *   #2: Single shadow on .piece only — no stacking on inner elements.
+ *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
 import { computed, inject, ref, watch } from 'vue';
-import { gameAttributeRows, resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
+import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
 import { useSelectable } from '../../../composables/useSelectable.js';
@@ -56,9 +56,6 @@ const dragIdentity = computed(() => {
 });
 
 const canDrag = computed(() => dragIdentity.value !== null);
-
-// A piece on a board cell has no room beside it; one drawn on its own shows its name and state (#1628).
-const attributeRows = computed(() => (standsOn() ? null : gameAttributeRows(props.element)));
 
 // A drag carrying the square is this piece's drag too.
 const showsDragging = computed(() => {
@@ -120,95 +117,84 @@ watch(effectivePieceImage, () => {
 
 <template>
   <!--
-    .piece: the token, inside .piece-slot. Hover carries scale(1.05) (carry-forward #1).
+    .piece: outermost element. Hover carries scale(1.05) (carry-forward #1).
     Shadow is on .piece ONLY — never on inner elements (carry-forward #2).
   -->
-  <div class="piece-slot">
-    <div
-      :class="[
-        'piece',
-        {
-          'action-selectable': isActionSelectable,
-          'is-board-highlighted': isHighlighted,
-          'is-board-selected': isBoardSelected,
-          'is-disabled': isDisabled,
-          'is-draggable': canDrag,
-          'is-dragging': showsDragging,
-        },
-      ]"
-      :data-animatable="true"
-      v-bind="selectableAttrs"
-      :aria-label="ariaLabel"
-      :aria-pressed="isBoardSelected || undefined"
-      @click="onActivate"
-      @keydown="onKeydown"
-      @pointerdown="handlePointerdown"
-    >
-      <!-- Overlay render override: full component replacement (D-04) -->
-      <component
-        v-if="presentationEntry?.render"
-        :is="presentationEntry.render"
-        :element="element"
-      />
+  <div
+    :class="[
+      'piece',
+      {
+        'action-selectable': isActionSelectable,
+        'is-board-highlighted': isHighlighted,
+        'is-board-selected': isBoardSelected,
+        'is-disabled': isDisabled,
+        'is-draggable': canDrag,
+        'is-dragging': showsDragging,
+      },
+    ]"
+    :data-animatable="true"
+    v-bind="selectableAttrs"
+    :aria-label="ariaLabel"
+    :aria-pressed="isBoardSelected || undefined"
+    @click="onActivate"
+    @keydown="onKeydown"
+    @pointerdown="handlePointerdown"
+  >
+    <!-- Overlay render override: full component replacement (D-04) -->
+    <component
+      v-if="presentationEntry?.render"
+      :is="presentationEntry.render"
+      :element="element"
+    />
 
-      <!-- Branch 1: image (overlay override or engine pieceVisual image, D-04).
-           Zero-layout-diff (DEF-A guard): the drawn .piece-token fallback is
-           always rendered underneath at the fixed piece box; the <img> overlays
-           it absolutely and is revealed only on @load, reverting to the token
-           fallback on @error. Neither element leaves flow, so toggling `loaded`
-           never resizes the slot. -->
-      <div v-else-if="effectivePieceImage" class="piece-image-container">
-        <div class="piece-token" :style="{ background: pieceFallbackColor }">
-          <span class="piece-token-label">{{ pieceFallbackLabel }}</span>
-        </div>
-        <img
-          class="piece-image piece-image-overlay"
-          :class="{ 'is-loaded': loaded }"
-          :src="effectivePieceImage"
-          alt=""
-          aria-hidden="true"
-          @load="loaded = true"
-          @error="loaded = false"
-        />
+    <!-- Branch 1: image (overlay override or engine pieceVisual image, D-04).
+         Zero-layout-diff (DEF-A guard): the drawn .piece-token fallback is
+         always rendered underneath at the fixed piece box; the <img> overlays
+         it absolutely and is revealed only on @load, reverting to the token
+         fallback on @error. Neither element leaves flow, so toggling `loaded`
+         never resizes the slot. -->
+    <div v-else-if="effectivePieceImage" class="piece-image-container">
+      <div class="piece-token" :style="{ background: pieceFallbackColor }">
+        <span class="piece-token-label">{{ pieceFallbackLabel }}</span>
       </div>
-
-      <!-- Branch 2: sprite sheet -->
-      <div
-        v-else-if="pieceVisual.kind === 'sprite'"
-        class="piece-sprite"
-        :style="getSpriteStyle(pieceVisual.image)"
+      <img
+        class="piece-image piece-image-overlay"
+        :class="{ 'is-loaded': loaded }"
+        :src="effectivePieceImage"
+        alt=""
+        aria-hidden="true"
+        @load="loaded = true"
+        @error="loaded = false"
       />
-
-      <!-- Branch 3: labeled token (player color or neutral ink) -->
-      <!-- Token: no shadow — shadow lives on .piece only (carry-forward #2) -->
-      <!-- `v-else-if` on the discriminant, not a bare `v-else`: it narrows
-           PieceVisual to the token arm so `.color`/`.label` type-check, and a
-           future fourth kind renders nothing here instead of silently falling
-           into the token branch. -->
-      <div
-        v-else-if="pieceVisual.kind === 'token'"
-        class="piece-token"
-        :style="{ background: pieceVisual.color }"
-      >
-        <!-- Overlay label overrides engine label (D-04) -->
-        <span class="piece-token-label">{{ presentationEntry?.label ?? pieceVisual.label }}</span>
-      </div>
     </div>
-    <div v-if="attributeRows" class="piece-details">
-      <span class="piece-name">{{ element.name ?? element.className }}</span>
-      <dl v-if="attributeRows.length" class="piece-attributes">
-        <div v-for="[key, text] in attributeRows" :key="key">
-          <dt>{{ key }}</dt>
-          <dd>{{ text }}</dd>
-        </div>
-      </dl>
+
+    <!-- Branch 2: sprite sheet -->
+    <div
+      v-else-if="pieceVisual.kind === 'sprite'"
+      class="piece-sprite"
+      :style="getSpriteStyle(pieceVisual.image)"
+    />
+
+    <!-- Branch 3: labeled token (player color or neutral ink) -->
+    <!-- Token: no shadow — shadow lives on .piece only (carry-forward #2) -->
+    <!-- `v-else-if` on the discriminant, not a bare `v-else`: it narrows
+         PieceVisual to the token arm so `.color`/`.label` type-check, and a
+         future fourth kind renders nothing here instead of silently falling
+         into the token branch. -->
+    <div
+      v-else-if="pieceVisual.kind === 'token'"
+      class="piece-token"
+      :style="{ background: pieceVisual.color }"
+    >
+      <!-- Overlay label overrides engine label (D-04) -->
+      <span class="piece-token-label">{{ presentationEntry?.label ?? pieceVisual.label }}</span>
     </div>
   </div>
 </template>
 
 <style scoped>
 /*
- * .piece: the token, inside .piece-slot.
+ * .piece: outermost element.
  *
  * Carry-forward #1: .piece:hover { transform: scale(1.05) } — required affordance.
  * Carry-forward #2: single shadow here — never on inner .piece-token or image element.
@@ -236,50 +222,6 @@ watch(effectivePieceImage, () => {
   .piece:hover {
     transform: scale(1.05);
   }
-}
-
-/* ── Details beside a piece drawn on its own (#1628) ── */
-.piece-slot {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.piece-details {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-  font-size: 13px;
-  color: var(--bsg-ink-2);
-}
-
-.piece-name {
-  font-weight: 700;
-  color: var(--bsg-ink);
-  overflow-wrap: anywhere;
-}
-
-.piece-attributes {
-  margin: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px 10px;
-}
-
-.piece-attributes > div {
-  display: flex;
-  gap: 4px;
-}
-
-.piece-attributes dt {
-  color: var(--bsg-ink-3);
-}
-
-.piece-attributes dd {
-  margin: 0;
-  font-weight: 600;
-  overflow-wrap: anywhere;
 }
 
 /* ── Board interaction states (CF-1: pieces get same six states as all other renderers) ── */

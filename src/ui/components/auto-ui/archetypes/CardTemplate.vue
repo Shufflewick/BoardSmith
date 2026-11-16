@@ -44,6 +44,7 @@ const peripheralElements = computed(() =>
         v-for="el in peripheralElements"
         :key="el.id"
         :element="el"
+        details
       />
     </div>
 

@@ -15,24 +15,42 @@ import { computed, provide } from 'vue';
 import { resolveRenderer } from '../renderer-registry.js';
 import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
 import type { ElementRef } from '../../../composables/useBoardInteraction.js';
+import PieceRenderer from './PieceRenderer.vue';
+import PieceDetails from './PieceDetails.vue';
 
 const props = defineProps<{
   element: GameElement;
   /** The grid cell this element stands on, if any. */
   standsOn?: ElementRef;
+  /** The row has room to name a built-in piece in full and list its attributes beside it (#1628). */
+  details?: boolean;
 }>();
 
 // Provided even when absent, so an element never inherits a cell from further up.
 provide(STANDS_ON_KEY, () => props.standsOn);
 
 const rendererComponent = computed(() => resolveRenderer(props.element));
+
+const showsDetails = computed(() => props.details && rendererComponent.value === PieceRenderer);
 </script>
 
 <template>
+  <div v-if="showsDetails" class="piece-with-details">
+    <PieceRenderer :element="element" />
+    <PieceDetails :element="element" />
+  </div>
   <component
-    v-if="rendererComponent"
+    v-else-if="rendererComponent"
     :is="rendererComponent"
     :element="element"
   />
   <!-- null = registry empty or no match; built-in registration (93-06) guarantees a match at runtime -->
 </template>
+
+<style scoped>
+.piece-with-details {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+</style>

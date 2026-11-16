@@ -55,6 +55,7 @@ const chromeElements = computed(() =>
         v-for="el in chromeElements"
         :key="el.id"
         :element="el"
+        details
       />
     </div>
 
