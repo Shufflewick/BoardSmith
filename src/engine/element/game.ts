@@ -943,6 +943,8 @@ export const GAME_ROOT_FIELD_AUDIENCE: Record<string, 'public' | 'seat-scoped' |
   $fanAngle: 'public',
   $align: 'public',
   sealed: 'public',
+  // Set on every Space, the root included: the AutoUI marker for a space (#1667).
+  $type: 'public',
 
   // --- Game's own -------------------------------------------------------
   phase: 'self-serialized',

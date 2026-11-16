@@ -54,7 +54,12 @@ export function engineOwnedAttributeNames(type: unknown): ReadonlySet<string> {
   return type === 'player' ? PLAYER_ENGINE_ATTRIBUTES : ELEMENT_STRUCTURE_ATTRIBUTES;
 }
 
+/** The `$type` of every built-in Space: `Space` itself and the subclasses that set their own (#1667). */
+export const SPACE_TYPES: ReadonlySet<string> = new Set(['space', 'deck', 'hand', 'hex-cell', 'dice-pool']);
+
 /** Is `key` the game's own attribute on an element of `$type` `type`, not engine structure, identity or metadata? */
 export function isGameAttributeName(key: string, type: unknown): boolean {
+  // A Space's `sealed` is the engine's append-only guard, not game state.
+  if (key === 'sealed' && SPACE_TYPES.has(type as string)) return false;
   return !key.startsWith('_') && !key.startsWith('$') && !engineOwnedAttributeNames(type).has(key);
 }

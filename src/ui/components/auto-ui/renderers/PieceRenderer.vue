@@ -10,7 +10,7 @@
  *   #2: Single shadow on outermost .piece only — no stacking on inner elements.
  */
 
-import { computed, inject, ref, watch } from 'vue';
+import { computed, inject, ref, watch, useId, onMounted, onBeforeUnmount } from 'vue';
 import { resolvePieceVisual, type PieceVisual } from '../auto-ui-helpers.js';
 import { getSpriteStyle } from '../../../utils/image.js';
 import { useElementBoardState } from '../../../composables/useElementBoardState.js';
@@ -18,9 +18,13 @@ import { useSelectable } from '../../../composables/useSelectable.js';
 import { startPointerDrag } from '../../../composables/pointerDrag.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
 import { STANDS_ON_KEY, type GameElement } from '../auto-ui-helpers.js';
+import { isKeyboardModality, trackInputModality } from '../../../composables/useDisabledReasonTooltip.js';
+import PieceDetailsTip from './PieceDetailsTip.vue';
 
 const props = defineProps<{
   element: GameElement;
+  /** Its details are drawn beside it, so it needs no tip (#1628, #1667). */
+  detailsBeside?: boolean;
 }>();
 
 const {
@@ -107,6 +111,58 @@ const pieceFallbackColor = computed(() => {
   return 'var(--bsg-ink-3)';
 });
 
+// ── Details tip: where the row has no room, hover, tap or keyboard focus of the
+// piece or the cell it stands on shows its name and attributes (#1667) ──
+const pieceEl = ref<HTMLElement | null>(null);
+const tipOpen = ref(false);
+const tipId = `bs-piece-tip-${useId()}`;
+let focusTarget: HTMLElement | null = null;
+
+function openTip() {
+  if (props.detailsBeside || tipOpen.value) return;
+  tipOpen.value = true;
+  pieceEl.value!.ownerDocument.addEventListener('pointerdown', onDocumentPointerdown, true);
+}
+
+function closeTip() {
+  tipOpen.value = false;
+  pieceEl.value?.ownerDocument.removeEventListener('pointerdown', onDocumentPointerdown, true);
+}
+
+function onDocumentPointerdown(event: Event) {
+  if (!pieceEl.value?.contains(event.target as Node)) closeTip();
+}
+
+// Hover is a mouse's: a board redrawn under a lifted finger must not close the tip its tap opened.
+function onPointerHover(event: PointerEvent, then: () => void) {
+  if (event.pointerType === 'mouse') then();
+}
+
+// Focus a redraw places is not the player reaching the piece, and nothing would close its tip (#261).
+function onFocus() {
+  if (isKeyboardModality()) openTip();
+}
+
+// After a tap the panel takes focus back (#27); only a tip the keyboard opened ends with focus.
+function onBlur() {
+  if (isKeyboardModality()) closeTip();
+}
+
+onMounted(() => {
+  if (props.detailsBeside) return;
+  trackInputModality(pieceEl.value!.ownerDocument);
+  // On a board the cell holds keyboard focus, not the piece on it.
+  focusTarget = pieceEl.value!.closest<HTMLElement>('[role="gridcell"]') ?? pieceEl.value;
+  focusTarget!.addEventListener('focus', onFocus);
+  focusTarget!.addEventListener('blur', onBlur);
+});
+
+onBeforeUnmount(() => {
+  focusTarget?.removeEventListener('focus', onFocus);
+  focusTarget?.removeEventListener('blur', onBlur);
+  closeTip();
+});
+
 // Reset the reveal when the resolved src changes so a piece reused for a
 // different asset re-guards (mirrors CardRenderer's src-watch).
 const loaded = ref(false);
@@ -121,6 +177,7 @@ watch(effectivePieceImage, () => {
     Shadow is on .piece ONLY — never on inner elements (carry-forward #2).
   -->
   <div
+    ref="pieceEl"
     :class="[
       'piece',
       {
@@ -136,10 +193,14 @@ watch(effectivePieceImage, () => {
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
     :aria-pressed="isBoardSelected || undefined"
-    @click="onActivate"
+    :aria-describedby="tipOpen ? tipId : undefined"
+    @click="onActivate($event); openTip()"
     @keydown="onKeydown"
     @pointerdown="handlePointerdown"
+    @pointerenter="onPointerHover($event, openTip)"
+    @pointerleave="onPointerHover($event, closeTip)"
   >
+    <PieceDetailsTip v-if="tipOpen" :id="tipId" :element="element" :anchor="pieceEl!" />
     <!-- Overlay render override: full component replacement (D-04) -->
     <component
       v-if="presentationEntry?.render"

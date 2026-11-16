@@ -29,7 +29,7 @@ export class DicePool<G extends Game = any, P extends Player = any> extends Spac
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'dice-pool';
+  declare $type: 'dice-pool';
 
   constructor(ctx: Partial<ElementContext>) {
     super(ctx);
