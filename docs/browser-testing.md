@@ -881,7 +881,10 @@ that must keep every one of a seat's pieces on its own ground, give a list for
 a text or number field (#1663). The walk types its first value, and each time
 the game refuses the action it takes it again with the next, failing only once
 the game has refused every one. In an action with lists in several fields, each
-try takes the next value of each list, and a shorter list stays at its last:
+try takes the next value of each list, and a shorter list stays at its last.
+Each seat a world walk plays works through the list from its first value, and an
+action put off for want of another input starts from the first again once the
+game moves on (#1677):
 
 ```ts
 defineSmokeTest({

@@ -424,46 +424,62 @@ export interface ResolvedMemory {
   lastResolved: string | undefined;
   /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
   readonly failed: Set<string>;
-  /** How many values the game's own rules have refused in each action since it was last taken, so the walk types the next number up, or a list's next value (#923, #1663). */
-  readonly refused: Map<string, number>;
   /** What the game said when it refused a value the walk had another to try for, which its error toasts repeat. */
   readonly refusals: Set<string>;
-  /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
-  readonly typed: Map<string, TypedValue[]>;
   /** How many actions have been taken on this deal, so the walk knows when the game has moved on (#470). */
   moves: number;
+}
+
+/** What the walk typed in the actions of one seat it plays, and the values the game refused there: each seat tries every value from its own position (#1677). */
+export interface SeatAttempts {
+  /** How many values the game's own rules have refused in each action since the seat last took it or put it off, so the walk types the next number up, or a list's next value (#923, #1663). */
+  readonly refused: Map<string, number>;
+  /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
+  readonly typed: Map<string, TypedValue[]>;
 }
 
 /** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
 const NUMBER_TRIES = 3;
 
 /**
- * Records the actions the page resolved since the walk last looked: a taken one is offered, enabled
- * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
- * game refused a value it has another to try for (`refusedAValue`). What the walk typed is
- * spent either way, so a later failure of the action is never taken for a refusal of a number it did
- * not type, and a failure is reported with it (`actionFailed`, #470), after `where`, the browser it
- * was taken in when a world walk plays several seats (#471). Either way the action no longer waits on
- * an input, and a taken one counts as the game moving on.
+ * Records the actions the page resolved since the walk last looked, in the seat whose `attempts`
+ * they are: a taken one is offered, enabled and taken, and the deal remembers it; a failed one is
+ * reported and not tried again, unless the game refused a value it has another to try for
+ * (`refusedAValue`). What the walk typed is spent either way, so a later failure of the action is
+ * never taken for a refusal of a number it did not type, and a failure is reported with it
+ * (`actionFailed`, #470), after `where`, the browser it was taken in when a world walk plays several
+ * seats (#471). Either way the action no longer waits on an input, and a taken one counts as the game
+ * moving on.
  */
-export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory, where = ''): void {
+export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory, attempts: SeatAttempts, where = ''): void {
   for (const { action, success, error } of resolved) {
     walk.offered.add(action);
     walk.enabled.add(action);
     walk.wanting.delete(action);
-    const typed = memory.typed.get(action) ?? [];
-    memory.typed.delete(action);
+    const typed = attempts.typed.get(action) ?? [];
+    attempts.typed.delete(action);
     if (success) {
       memory.moves++;
-      memory.refused.delete(action);
+      attempts.refused.delete(action);
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
-    } else if (!refusedAValue(action, error, typed, memory, walk.inputs)) {
+    } else if (!refusedAValue(action, error, typed, memory, attempts, walk.inputs)) {
       memory.failed.add(action);
-      note(walk, `${where}${actionFailed(action, error, typed, memory.refused.get(action) ?? 0)}`);
+      note(walk, `${where}${actionFailed(action, error, typed, attempts.refused.get(action) ?? 0)}`);
     }
   }
+}
+
+/**
+ * Records that the walk put `action` off in the seat whose `attempts` they are, because the spec's
+ * `inputs` give no value for its `field` yet (#470): it waits on that input, and the values the game
+ * refused in it are forgotten, since the walk takes it again only once the game has moved on, where
+ * the first may be legal (#1677).
+ */
+export function recordPutOff(walk: SmokeWalk, attempts: SeatAttempts, action: string, field: string): void {
+  walk.wanting.set(action, field);
+  attempts.refused.delete(action);
 }
 
 /**
@@ -475,8 +491,15 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
  * the engine words as an error in the game's rules (`rulesErrorSentence`) is a crash, never a
  * refusal, whatever the walk typed.
  */
-function refusedAValue(action: string, error: string | undefined, typed: readonly TypedValue[], memory: ResolvedMemory, inputs: SmokeInputs): boolean {
-  const refused = memory.refused.get(action) ?? 0;
+function refusedAValue(
+  action: string,
+  error: string | undefined,
+  typed: readonly TypedValue[],
+  memory: ResolvedMemory,
+  attempts: SeatAttempts,
+  inputs: SmokeInputs,
+): boolean {
+  const refused = attempts.refused.get(action) ?? 0;
   const tries = Math.max(
     typed.some(({ from, kind }) => from === 'walk' && kind === 'number') ? NUMBER_TRIES : 1,
     ...typed.map(({ field, from }) => {
@@ -486,7 +509,7 @@ function refusedAValue(action: string, error: string | undefined, typed: readonl
   );
   if (refused >= tries - 1) return false;
   if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
-  memory.refused.set(action, refused + 1);
+  attempts.refused.set(action, refused + 1);
   memory.refusals.add(error);
   return true;
 }

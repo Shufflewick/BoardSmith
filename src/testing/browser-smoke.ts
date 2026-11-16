@@ -76,6 +76,7 @@ import {
   note,
   readyToTake,
   recordGreyed,
+  recordPutOff,
   recordResolved,
   selectionsDiffer,
   SMOKE_ANNOTATION,
@@ -94,6 +95,7 @@ import {
   walkStopped,
   type ResolvedAction,
   type ResolvedMemory,
+  type SeatAttempts,
   type SmokeDeal,
   type SmokeInputs,
   type SmokeInputView,
@@ -379,7 +381,7 @@ async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): 
   );
   const after = memory.lastPress.get(page) ?? `before the walk pressed anything, ${stepWhere(memory)}`;
   if (did.selection !== undefined) noteASelectionApart(page, walk, memory, did.marked, did.selection, after);
-  recordResolved(did.resolved, walk, memory, browserNames.get(page));
+  recordResolved(did.resolved, walk, memory, attemptsIn(memory, page), browserNames.get(page));
   return did.resolved.length;
 }
 
@@ -1523,7 +1525,8 @@ async function fillAnEmptyField(answering: Answering): Promise<void> {
   if (field === undefined || (await withinPageTime(frame.page(), PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }))) !== '') return;
   const typed = await valueToType(answering, field);
   if (typed === undefined) return;
-  memory.typed.set(name, [...(memory.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
+  const attempts = attemptsIn(memory, frame.page());
+  attempts.typed.set(name, [...(attempts.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
   narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
   await withinPageTime(frame.page(), PRESS_MS, 'typing into the field', (timeout) => field.target.fill(typed.value, { timeout }));
 }
@@ -1541,14 +1544,15 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
   );
   const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
   walk.fieldsMet.get(name)?.set(pick, kind);
-  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), memory.refused.get(name) ?? 0);
+  const refused = attemptsIn(memory, page).refused.get(name) ?? 0;
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), refused);
   if (given !== undefined) {
     if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
     return undefined;
   }
   if (kind === 'text') return { field: pick, value: 'smoke test', from: 'walk', kind };
-  const value = await withinPageTime(page, PRESS_MS, 'choosing a number the field accepts', (timeout) => field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout }));
+  const value = await withinPageTime(page, PRESS_MS, 'choosing a number the field accepts', (timeout) => field.target.evaluate(numberToEnter, refused, { timeout }));
   return { field: pick, value, from: 'walk', kind };
 }
 
@@ -1591,7 +1595,7 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
  */
 async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, field: string, step: number): Promise<void> {
   narrate(step, `\`inputs\` gives no value for "${field}" of "${name}" yet; cancelling it until the game moves on`);
-  walk.wanting.set(name, field);
+  recordPutOff(walk, attemptsIn(memory, frame.page()), name, field);
   memory.putOff.set(name, memory.moves);
   await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk, memory);
 }
@@ -1614,7 +1618,7 @@ async function finishOpenAction(
   const answering: Answering = { frame, walk, memory, name, step, otherSeats, picked: new Set(), refused: new Set(), reopened };
   const where = stepWhere(memory);
   const trail = startAnswering(name, where, await openActionState(frame));
-  memory.typed.delete(name);
+  attemptsIn(memory, frame.page()).typed.delete(name);
   if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
   while ((await readOffers(frame, walk)).open === name) {
     const answer = await answerWhenOffered(answering);
@@ -2016,12 +2020,23 @@ interface WalkMemory extends ResolvedMemory {
   readonly wentAway: Map<string, number>;
   /** The actions put off for want of an input (#470), with how many actions had been taken then. */
   readonly putOff: Map<string, number>;
+  /** What the walk typed and had refused in each browser, which plays one seat (#1677). */
+  readonly attempts: Map<Page, SeatAttempts>;
   /** The step the walk is taking. */
   step: number;
   /** The last press in each browser and where, said of what the page does next (#1642). */
   readonly lastPress: Map<Page, string>;
   /** The board's marked selection and the panel's as each browser last showed them, so a disagreement is reported once (#1642). */
   readonly selections: Map<Page, string>;
+}
+
+/** What the walk typed and had refused in the seat `page` plays (#1677). */
+function attemptsIn(memory: WalkMemory, page: Page): SeatAttempts {
+  const kept = memory.attempts.get(page);
+  if (kept !== undefined) return kept;
+  const attempts: SeatAttempts = { refused: new Map(), typed: new Map() };
+  memory.attempts.set(page, attempts);
+  return attempts;
 }
 
 function newMemory(seed: string | null, players: number | null): WalkMemory {
@@ -2042,11 +2057,10 @@ function newMemory(seed: string | null, players: number | null): WalkMemory {
     closers: new Set(),
     reopened: new Map(),
     wentAway: new Map(),
-    refused: new Map(),
     refusals: new Set(),
-    typed: new Map(),
     moves: 0,
     putOff: new Map(),
+    attempts: new Map(),
     step: 0,
     lastPress: new Map(),
     selections: new Map(),
