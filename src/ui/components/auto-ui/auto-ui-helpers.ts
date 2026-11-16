@@ -91,18 +91,23 @@ export function gameAttributeRows(element: GameElement, root: GameElement | null
     .map(([key, value]) => [key, attributeText(value, root)]);
 }
 
+type AttributeRef = Partial<PlayerRef> & { __elementId?: number; __elementRef?: string };
+
 function attributeText(value: unknown, root: GameElement | null | undefined): string {
   if (Array.isArray(value)) return value.map((item) => attributeText(item, root)).join(', ');
   if (value === null || typeof value !== 'object') return String(value);
-  const ref = value as Partial<PlayerRef> & { __elementId?: number; __elementRef?: string };
+  const ref = value as AttributeRef;
   if (ref.__playerRef !== undefined) return ref.name ?? `Seat ${ref.seat}`;
-  if (ref.__elementId !== undefined || ref.__elementRef !== undefined) {
-    const target = ref.__elementId !== undefined
-      ? findElement(root, { id: ref.__elementId })
-      : ref.__elementRef!.split('/').reduce<GameElement | undefined>((at, index) => at?.children?.[Number(index)], root ?? undefined);
-    return target ? (target.name ?? target.className) : 'unseen';
-  }
+  if (ref.__elementId !== undefined || ref.__elementRef !== undefined) return referencedName(ref, root);
   return Object.entries(value).map(([key, nested]) => `${key} ${attributeText(nested, root)}`).join(', ');
+}
+
+/** The name of the element `ref` points at, or 'unseen' when this view does not hold it. */
+function referencedName(ref: AttributeRef, root: GameElement | null | undefined): string {
+  const target = ref.__elementId !== undefined
+    ? findElement(root, { id: ref.__elementId })
+    : ref.__elementRef?.split('/').reduce<GameElement | undefined>((at, index) => at?.children?.[Number(index)], root ?? undefined);
+  return target ? (target.name ?? target.className) : 'unseen';
 }
 
 // ---------------------------------------------------------------------------
