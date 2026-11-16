@@ -113,7 +113,16 @@ function cellPlacement(cell: GameElement) {
 trackInputModality(document);
 const cellTipId = `bs-cell-tip-${useId()}`;
 const tipCell = ref<{ id: number; anchor: HTMLElement } | null>(null);
-const tipPieces = computed(() => children.value.find((cell) => cell.id === tipCell.value?.id)?.children ?? []);
+// The open tip, or null while the focused cell holds no piece.
+const cellTip = computed(() => {
+  const open = tipCell.value;
+  const pieces = children.value.find((cell) => cell.id === open?.id)?.children ?? [];
+  return open && pieces.length ? { ...open, pieces } : null;
+});
+
+function cellDescribedBy(cell: GameElement) {
+  return cellTip.value?.id === cell.id ? cellTipId : undefined;
+}
 
 // Focus a redraw places is not the player reaching the cell, and nothing would close its tip (#261).
 function onCellFocus(cell: GameElement, event: FocusEvent) {
@@ -234,7 +243,7 @@ function cellAriaLabel(cell: GameElement): string {
             role="gridcell"
             :tabindex="idx === currentIdx ? '0' : '-1'"
             :aria-label="cellAriaLabel(cell)"
-            :aria-describedby="tipCell?.id === cell.id && tipPieces.length ? cellTipId : undefined"
+            :aria-describedby="cellDescribedBy(cell)"
             :aria-selected="isCellSelected(cell) || undefined"
             :aria-disabled="isCellDisabled(cell) || undefined"
             :class="{
@@ -263,10 +272,10 @@ function cellAriaLabel(cell: GameElement): string {
             />
           </div>
           <PieceDetailsTip
-            v-if="tipCell && tipPieces.length"
+            v-if="cellTip"
             :id="cellTipId"
-            :elements="tipPieces"
-            :anchor="tipCell.anchor"
+            :elements="cellTip.pieces"
+            :anchor="cellTip.anchor"
             @close="closeCellTip"
           />
         </div>

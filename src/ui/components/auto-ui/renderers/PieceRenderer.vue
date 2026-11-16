@@ -67,6 +67,8 @@ const showsDragging = computed(() => {
   return isDragged.value || (!!square && !!boardInteraction?.isDraggedElement(square));
 });
 
+const ariaPressed = computed(() => isBoardSelected.value || undefined);
+
 // aria-label: piece name/notation + current interaction state
 const ariaLabel = computed(() => {
   const notation = props.element.attributes?.notation as string | undefined;
@@ -116,6 +118,7 @@ const pieceFallbackColor = computed(() => {
 const pieceEl = ref<HTMLElement | null>(null);
 const tipOpen = ref(false);
 const tipId = `bs-piece-tip-${useId()}`;
+const describedBy = computed(() => (tipOpen.value ? tipId : undefined));
 
 function openTip() {
   if (props.detailsBeside || tipOpen.value) return;
@@ -180,8 +183,8 @@ watch(effectivePieceImage, () => {
     :data-animatable="true"
     v-bind="selectableAttrs"
     :aria-label="ariaLabel"
-    :aria-pressed="isBoardSelected || undefined"
-    :aria-describedby="tipOpen ? tipId : undefined"
+    :aria-pressed="ariaPressed"
+    :aria-describedby="describedBy"
     @click="onActivate($event); openTip()"
     @keydown="onKeydown"
     @pointerdown="handlePointerdown"
