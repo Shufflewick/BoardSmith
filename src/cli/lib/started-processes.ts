@@ -21,7 +21,7 @@ const DEV_READY_MS = 180_000;
 const STOP_GRACE_MS = 15_000;
 
 /** Leads an `ownGroup` child's group, and kills it once this run is gone. From the package root, which the bundle shares. */
-const groupLeader = () => join(boardsmithPackageRoot(), 'src', 'cli', 'lib', 'group-leader.mjs');
+export const groupLeader = () => join(boardsmithPackageRoot(), 'src', 'cli', 'lib', 'group-leader.mjs');
 
 /** How many free ports to try when another process takes the one found before dev binds it. */
 const PORT_ATTEMPTS = 3;
@@ -124,7 +124,7 @@ function signalChild(child: ChildProcess, group: boolean, signal: NodeJS.Signals
 }
 
 /** Kills what is left of `child`'s group and resolves once it is empty, so nothing in it writes on (#1648 review F1). */
-async function killGroup(child: ChildProcess): Promise<void> {
+export async function killGroup(child: ChildProcess): Promise<void> {
   // A hang guard, not a budget: SIGKILL ends a process at once unless the system is stuck.
   for (let waited = 0; signalChild(child, true, 'SIGKILL'); waited += GROUP_CHECK_MS) {
     if (waited >= STOP_GRACE_MS) {

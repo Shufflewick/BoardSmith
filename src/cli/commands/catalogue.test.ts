@@ -94,8 +94,8 @@ describe('stopping a run (#591)', () => {
       stdio: 'ignore',
     });
     const exited = new Promise<NodeJS.Signals | null>((resolve) => cli.on('exit', (_, signal) => resolve(signal)));
-    // The stub and the child it starts are both running before the stop is sent.
-    await vi.waitFor(() => expect(runningIn(fx)).toHaveLength(2), { timeout: 90_000, interval: 200 });
+    // The stub's group leader, the stub and the child it starts are all running before the stop is sent.
+    await vi.waitFor(() => expect(runningIn(fx)).toHaveLength(3), { timeout: 90_000, interval: 200 });
 
     cli.kill('SIGTERM');
 

@@ -3,14 +3,18 @@
  * The fixtures are in `catalogue-fixture.test-helper.ts`.
  */
 import { describe, it, expect, vi } from 'vitest';
+import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
 import { CATALOGUE_CLONE_COMMAND, catalogueCachePath, checkCatalogue } from './catalogue-check.js';
-import { checkoutState, fixture, makeGame, makeTree, runningIn, statusOf, workFolders } from './catalogue-fixture.test-helper.js';
+import { checkoutState, fixture, makeGame, makeTree, runningIn, statusOf, workFolders, type Fixture } from './catalogue-fixture.test-helper.js';
+
+const CATALOGUE_CHECK = fileURLToPath(new URL('./catalogue-check.ts', import.meta.url));
 
 describe('which games are checked (#591)', () => {
   it('checks the games whose main links boardsmith to a checkout, and names the ones it does not', async () => {
@@ -450,6 +454,44 @@ describe('the time limit on one game (#591)', () => {
     expect(run.results[0].output).toContain('WindupWarfare did not finish boardsmith validate within 2 seconds, so it was stopped');
     await vi.waitFor(() => expect(runningIn(fx)).toEqual([]), { timeout: 30_000 });
     expect(workFolders(workRoot)).toEqual([]);
+  });
+});
+
+describe('the processes a game\'s steps leave behind (#1657)', () => {
+  const stopAll = (fx: Fixture) => {
+    for (const pid of runningIn(fx)) process.kill(Number(pid), 'SIGKILL');
+  };
+
+  it('stops what a step left running when it exited on its own, as a stopped vitest leaves its workers', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    await makeGame(fx, 'sotf', { files: { ORPHAN: 'leaves a child running' } });
+    try {
+      const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+      expect(statusOf(run)).toEqual({ sotf: 'passed' });
+      expect(runningIn(fx)).toEqual([]);
+    } finally {
+      stopAll(fx);
+    }
+  });
+
+  it('takes every step down when the check is killed outright, which no handler sees', { timeout: 60_000 }, async () => {
+    const fx = fixture();
+    const workRoot = tempTree('bs-catalogue-work-');
+    await makeTree(fx.tree);
+    await makeGame(fx, 'sotf', { files: { HANG: 'never finishes' } });
+    const options = { tree: fx.tree, catalogueRoot: fx.catalogue, workRoot };
+    const program = `const { checkCatalogue } = await import(${JSON.stringify(CATALOGUE_CHECK)}); await checkCatalogue(${JSON.stringify(options)});`;
+    // Detached, so SIGKILL to its group reaches what a tool's time limit reaches, and not this test.
+    const check = spawn(process.execPath, ['--import', 'tsx', '--input-type=module', '-e', program], { detached: true, stdio: 'ignore' });
+    try {
+      await vi.waitFor(() => expect(runningIn(fx).length).toBeGreaterThan(1), { timeout: 30_000 });
+      process.kill(-check.pid!, 'SIGKILL');
+      await vi.waitFor(() => expect(runningIn(fx)).toEqual([]), { timeout: 15_000 });
+    } finally {
+      stopAll(fx);
+    }
   });
 });
 
