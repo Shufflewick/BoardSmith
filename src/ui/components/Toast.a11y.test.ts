@@ -8,8 +8,8 @@
  * Covers:
  *  - role=status on non-error toasts; role=alert on error toasts
  *  - A real <button aria-label="Dismiss"> is rendered per toast
- *  - Clicking the button calls remove(toast.id)
- *  - Clicking the toast body does NOT call remove (only the button does)
+ *  - Clicking the button calls dismiss(toast.id)
+ *  - Clicking the toast body does NOT call dismiss (only the button does)
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
@@ -17,7 +17,7 @@ import { ref, readonly } from 'vue';
 import Toast from './Toast.vue';
 
 // ── useToast mock ─────────────────────────────────────────────────────────────
-const mockRemove = vi.fn();
+const mockDismiss = vi.fn();
 
 const mockToasts = ref([
   { id: 1, message: 'It worked', type: 'success', duration: 2000 },
@@ -29,12 +29,12 @@ const mockToasts = ref([
 vi.mock('../composables/useToast', () => ({
   useToast: () => ({
     toasts: readonly(mockToasts),
-    remove: mockRemove,
+    dismiss: mockDismiss,
   }),
 }));
 
 beforeEach(() => {
-  mockRemove.mockReset();
+  mockDismiss.mockReset();
 });
 
 // ── helpers ───────────────────────────────────────────────────────────────────
@@ -105,20 +105,20 @@ describe('Toast a11y — dismiss button', () => {
     expect(dismissButtons.length).toBe(4);
   });
 
-  it('calls remove(id) when the dismiss button is clicked', async () => {
+  it('calls dismiss(id) when the dismiss button is clicked', async () => {
     // Find the dismiss button inside the first toast (id=1, "It worked")
     const firstToast = toastWithText('It worked')!;
     const dismissBtn = firstToast.querySelector('button[aria-label="Dismiss"]') as HTMLButtonElement;
     expect(dismissBtn).not.toBeNull();
     dismissBtn.click();
-    expect(mockRemove).toHaveBeenCalledWith(1);
+    expect(mockDismiss).toHaveBeenCalledWith(1);
   });
 
-  it('does NOT call remove when clicking the toast body (only the dismiss button dismisses)', async () => {
+  it('does NOT call dismiss when clicking the toast body (only the dismiss button dismisses)', async () => {
     const toasts = allToastEls();
     expect(toasts.length).toBeGreaterThan(0);
     // Click on the toast container div (not a button inside)
     (toasts[0] as HTMLElement).click();
-    expect(mockRemove).not.toHaveBeenCalled();
+    expect(mockDismiss).not.toHaveBeenCalled();
   });
 });

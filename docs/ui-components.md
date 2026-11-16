@@ -114,8 +114,10 @@ When the sidebar is collapsed to the desktop rail, and on phones, the panel
 becomes the seat strip: one token per seat and no cards, so `#player-stats` and
 `#player-token-extra` do not show. For the one number a player needs at a
 glance there (HP, say), fill `#player-strip-extra`. It renders under every
-seat's token, in the rail and in the phone strip, and gets `player` (as the
-state on screen has it, like `#player-stats`), `gameView` and `playerSeat`.
+seat's token in the rail and beside it in the phone strip, and gets `player` (as
+the state on screen has it, like `#player-stats`), `gameView` and `playerSeat`.
+The strip shows whose turn it is with a throbbing outline on the acting token
+(a still one under reduced motion); its turn sentence is for screen readers only.
 
 ```vue
 <template #player-strip-extra="{ player, playerSeat }">

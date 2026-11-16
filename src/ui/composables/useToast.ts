@@ -1,4 +1,4 @@
-import { ref, readonly } from 'vue';
+import { computed, ref } from 'vue';
 
 export interface Toast {
   id: number;
@@ -7,9 +7,14 @@ export interface Toast {
   duration: number;
 }
 
-// Global toast state
-const toasts = ref<Toast[]>([]);
+// Global toast state: every call, each with its own id and timer, so each caller's remove reaches its own.
+const calls = ref<Toast[]>([]);
 let nextId = 0;
+
+const twins = (a: Toast, b: Toast) => a.duration > 0 && b.duration > 0 && a.message === b.message && a.type === b.type;
+
+// A timed repeat shows in place of its twin, so repeats never stack and the fresh node is announced again (#1649).
+const toasts = computed(() => calls.value.filter((t, at) => !calls.value.slice(at + 1).some((later) => twins(t, later))));
 
 export function useToast() {
   function show(
@@ -20,7 +25,7 @@ export function useToast() {
     const id = nextId++;
 
     const toast: Toast = { id, message, type, duration };
-    toasts.value.push(toast);
+    calls.value.push(toast);
 
     if (duration > 0) {
       setTimeout(() => {
@@ -32,10 +37,16 @@ export function useToast() {
   }
 
   function remove(id: number) {
-    const index = toasts.value.findIndex((t) => t.id === id);
+    const index = calls.value.findIndex((t) => t.id === id);
     if (index !== -1) {
-      toasts.value.splice(index, 1);
+      calls.value.splice(index, 1);
     }
+  }
+
+  /** The player closed toast `id`: take its words down for every call showing them. */
+  function dismiss(id: number) {
+    const shown = calls.value.find((t) => t.id === id);
+    if (shown) calls.value = calls.value.filter((t) => t !== shown && !twins(t, shown));
   }
 
   function success(message: string, duration = 2000) {
@@ -55,9 +66,10 @@ export function useToast() {
   }
 
   return {
-    toasts: readonly(toasts),
+    toasts,
     show,
     remove,
+    dismiss,
     success,
     error,
     info,
