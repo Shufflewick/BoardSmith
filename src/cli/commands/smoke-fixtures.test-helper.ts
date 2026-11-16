@@ -2510,3 +2510,64 @@ function choose() {
     'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
   };
 }
+
+/**
+ * THE ACE GAME WITH ITS CARDS AS THINGS (#1651): `play` and `discard` each pick a card of the hand,
+ * bound to the `onBoard` subject type Cards, so the panel lists both under each card (#1640) and
+ * never as a start button. A walk reaches them only by selecting a card.
+ */
+export function cardsAsThingsGame(): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, subjectType, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+const CARDS = subjectType<Card>({ name: 'Cards', onBoard: true, label: (card) => card.name });
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  const inHand = (ctx: { player?: unknown }) => [...(ctx.player as DevGamePlayer).hand.all(Card)];
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('play')
+      .prompt('Play')
+      .chooseElement('card', { prompt: 'Which card?', elements: inHand, subject: CARDS })
+      .execute((args) => {
+        (args.card as Card).remove();
+        return { success: true };
+      }),
+    Action.create('discard')
+      .prompt('Discard')
+      .chooseElement('card', { prompt: 'Which card?', elements: inHand, subject: CARDS })
+      .execute((args) => {
+        (args.card as Card).remove();
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'play', 'discard'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'discard'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),
+  };
+}
