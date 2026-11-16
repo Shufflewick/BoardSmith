@@ -8,6 +8,8 @@ import type { InjectionKey } from 'vue';
 import type { ElementRef } from '../../composables/useBoardInteraction.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { isHiddenPlaceholder } from '../../../engine/element/hidden-placeholder.js';
+import { isGameAttributeName } from '../../../engine/element/engine-attributes.js';
+import type { PlayerRef } from '../../types.js';
 
 // ---------------------------------------------------------------------------
 // GameElement: the element shape every auto-UI module reads (dependency-free)
@@ -71,6 +73,23 @@ export function resolvePieceVisual(element: GameElement): PieceVisual {
     color: player?.color ?? '#888888', // neutral per UI-SPEC; #888888 matches hex-piece-circle neutral
     label: element.name ?? element.className,
   };
+}
+
+/** The game's own attributes of `element` as label and text rows, engine structure left out (#1628). */
+export function gameAttributeRows(element: GameElement): [string, string][] {
+  const attrs = element.attributes ?? {};
+  return Object.entries(attrs)
+    .filter(([key]) => isGameAttributeName(key, attrs.$type))
+    .map(([key, value]) => [key, attributeText(value)]);
+}
+
+function attributeText(value: unknown): string {
+  if (Array.isArray(value)) return value.map(attributeText).join(', ');
+  if (value !== null && typeof value === 'object') {
+    const player = value as Partial<PlayerRef>;
+    return player.__playerRef !== undefined && player.name !== undefined ? player.name : JSON.stringify(value);
+  }
+  return String(value);
 }
 
 // ---------------------------------------------------------------------------
