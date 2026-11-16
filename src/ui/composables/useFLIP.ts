@@ -184,6 +184,18 @@ interface ContainerHandler {
 }
 
 /**
+ * The translate that puts an element back by a move measured in screen pixels.
+ * The rects are in screen pixels and the translate is inside the board, which
+ * the shell's magnifier scales (#1619), so the move is divided by that scale:
+ * the `--zoom-level` PlayShell's zoom container applies, 1 outside a shell.
+ */
+function invertedTranslate(deltaX: number, deltaY: number, container: Element): string {
+  const zoomContainer = container.closest('.game-shell__zoom-container');
+  const zoom = zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
+  return `translate(${deltaX / zoom}px, ${deltaY / zoom}px)`;
+}
+
+/**
  * Unified FLIP animation composable.
  *
  * Provides both manual and automatic modes for FLIP animations.
@@ -343,7 +355,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         // Create FLIP animation
         const animation = (el as HTMLElement).animate(
           [
-            { transform: `translate(${deltaX}px, ${deltaY}px)` },
+            { transform: invertedTranslate(deltaX, deltaY, container) },
             { transform: 'translate(0, 0)' },
           ],
           {
@@ -488,7 +500,7 @@ export function createFLIPSnapshot(
         animations.push(
           (el as HTMLElement).animate(
             [
-              { transform: `translate(${deltaX}px, ${deltaY}px)` },
+              { transform: invertedTranslate(deltaX, deltaY, containerRef.value) },
               { transform: 'translate(0, 0)' },
             ],
             { duration, easing, fill: 'backwards' }
