@@ -51,7 +51,7 @@
 
 <!-- The ONLY place color literals may appear in this game's UI: `src/ui/theme.css`, written at
      sign-off from the chosen design and imported by the game's UI entry (`src/ui/index.ts`). It
-     holds the `--bsg-*` overrides for both schemes, in the four selectors docs/ui-components.md
+     holds the `--bsg-*` overrides for both schemes, in the four selectors node_modules/boardsmith/docs/ui-components.md
      "Theming" gives, and the game's own `--game-*` tokens. The CSS lives there, not here, so the
      signed-off design is carried into code as-is rather than re-interpreted. List here what each
      `--game-*` token is for. -->

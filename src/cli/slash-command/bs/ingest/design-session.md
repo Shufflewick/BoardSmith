@@ -64,7 +64,7 @@ is not Vue and not the engine, which do not exist yet. One page, `design/gallery
    can be named exactly.
 
 Every direction's colors are CSS custom properties: the `--bsg-*` tokens BoardSmith's own chrome
-and Action Panel use (`docs/ui-components.md` "Theming" lists them) and the game's own `--game-*`
+and Action Panel use (`node_modules/boardsmith/docs/ui-components.md` "Theming" lists them) and the game's own `--game-*`
 tokens. That is what lets the signed-off palette become the theme file unchanged.
 
 **Motion is described, not built.** For each key interaction (a card drawn, a piece moved, a
@@ -114,7 +114,7 @@ After the yes, in this order:
 
 1. Fill the sign-off's `QUESTIONS.md` entry with their answer.
 2. Write `src/ui/theme.css` from the chosen combination: the `--bsg-*` overrides for both schemes
-   in the four selectors `docs/ui-components.md` "Theming" gives, and the `--game-*` tokens. Import
+   in the four selectors `node_modules/boardsmith/docs/ui-components.md` "Theming" gives, and the `--game-*` tokens. Import
    it from the game's `src/ui/index.ts`.
 3. Write `design/DESIGN.md` from `templates/DESIGN.template.md`, every section in its order: the
    sign-off and both checks' results, the chosen direction and each component taken from

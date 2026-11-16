@@ -34,7 +34,8 @@ function run(openGate: string): string {
 }
 
 async function project(sketchText: string, runText?: string): Promise<string> {
-  const dir = join(tempTree('bs-next-chunk-'), 'proj');
+  const tree = tempTree('bs-next-chunk-');
+  const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
   await fs.writeFile(join(dir, 'design', 'SKETCH.md'), sketchText);
   if (runText !== undefined) await fs.writeFile(join(dir, 'design', 'RUN.md'), runText);
