@@ -27,6 +27,37 @@ The mechanical checks need no agent at all. The session that needs one runs it i
 `boardsmith verify`, `test-step-check`, `chunk-check`, `ledger-check`, `claim-quote-check`,
 `constraint-check`, `parallel-check`, `chunk-merge` and `review-gate`.
 
+## The Designer's Session Writes No File
+
+The designer's session is the one the designer typed a `/bs-` command into, together with every
+skill file it reads and follows in that same turn (`/bs-create-game` into `/bs-ingest-rules` into
+`/bs-build-game`). It coordinates: it talks with the designer, runs commands (`boardsmith`, `git`,
+`gh`), dispatches agents, relays questions and approvals, and reads returns and the state files its
+skill lets it read. It never writes, creates, copies or edits a file with its own tools, not even
+a ledger line. A subagent works in its own context, so a dispatched skill (`/bs-build-chunk` sent
+by `/bs-build-game`, say) writes as its instructions say.
+
+Wherever a step this session follows says to write, fill, seed, append, record or set something in
+a file, the session dispatches a **record** instead, as soon as what it needs is in hand:
+
+- **What carries the rules or the designer's decisions** (interview slices, the rulebook index
+  tables, `ASSETS.md`, the visual survey, `SKETCH.md`, a `CHUNK.md`, `CONSTRAINTS.md`,
+  `RULINGS.md` and `DECISIONS.md` entries, `DESIGN.md` and the theme file) is recorded by the
+  `judgement` role's agent, `Work: record <what>`.
+- **Bookkeeping** (run log entries, `RUN.md`, `QUESTIONS.md`, `FILINGS.md`, the session lock) is
+  recorded by the `mechanical` role's agent, `Work: record <what>`. A record carrying both is the
+  `judgement` role's.
+
+Its brief carries, verbatim, everything the files need: the designer's words, the returned
+summaries, and the step that says what to write and in what order (the skill file and step name,
+resolved to an absolute path, for the agent to read). The agent writes, reads the clock itself for
+every time it writes, records its own dispatch in the run log as its first entry (no one can
+record it before launch), in the log of the work package it writes for (a chunk's slug,
+`ingest-rules` or `verify-game`), commits, and returns the paths and the commit. Writes that fall at one
+point go in one record: a return's outcomes, the answers a gate earned and the next dispatch's
+entry with the lock refresh are one dispatch, not three. A record that comes back wrong is a
+failed dispatch, sent back with what is wrong (below); the session never patches it.
+
 ## Which Agent a Role Is Dispatched As
 
 Before every dispatch, ask the project:
@@ -75,6 +106,8 @@ token such as `BS-DISPATCH-V3` still comes first after it).
 | `final-acceptance`'s automated design-QA dispatch | `review` | yes |
 | The cross-chunk lens after `chunk-merge` | `judgement` | yes |
 | A bulk edit, search or summary any step hands off | `mechanical` | no |
+| A record of bookkeeping the designer's session would otherwise write ("The Designer's Session Writes No File") | `mechanical` | no |
+| A record of the rules or the designer's decisions the designer's session would otherwise write | `judgement` | no |
 | Rulebook transcription (`transcribe`, `BS-DISPATCH-V3`): `/bs-ingest-rules`' fan-out and `/bs-verify-game` Step 2's staging | `judgement` | no |
 | `/bs-verify-game` Step 3: classification (`classify`, `BS-CLASSIFY-V1`) | `judgement` | no |
 | `/bs-verify-game` Step 5: the ruling re-check (`ruling-recheck`, `BS-RULING-RECHECK-V1`) | `judgement` | no |
@@ -214,7 +247,8 @@ uses the current fields below, even in an old file; see `node_modules/boardsmith
 "Historical run logs keep their unrecorded routing facts" for the exact conditions.
 
 Each work package's run log (`design/run-log/<id>.md`, from `templates/RUN-LOG.template.md`)
-records every dispatch made for it, by whoever makes it: `/bs-build-game` for the chunk,
+records every dispatch made for it, by whoever makes it (in the designer's session, through a
+`record`): `/bs-build-game` for the chunk,
 `/bs-build-chunk` for its steps and reviewers, and `/bs-ingest-rules` and `/bs-verify-game` for
 their own dispatches, in `design/run-log/ingest-rules.md` and `design/run-log/verify-game.md`
 (so no chunk may be named `ingest-rules` or `verify-game`; `ledger-check` refuses one).

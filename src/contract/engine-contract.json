@@ -1,5 +1,5 @@
 {
-  "revision": 397,
+  "revision": 398,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3119,6 +3119,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke walk takes an action it still has to take before it skips the step clock's wait or presses the board's untried controls, so an action a game offers only for a moment is taken (#1659)."
+    },
+    {
+      "revision": 398,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The bs skills now have the designer's session write no file: every write it made is a record dispatch to an agent (#1674)"
     }
   ]
 }

@@ -316,10 +316,10 @@ describe('WF-05 — BoardSmith bugs and gaps are filed and reported upstream', (
     expect(read('check-status.md')).toContain('BOARDSMITH-BUGS.md');
   });
 
-  it('the writes-a-filing scratch path is the gitignored scratch dir, never the project root', () => {
+  it('a filing is posted with its body on standard input, so the designer\'s session writes no file (#1674)', () => {
     const filings = read('orchestrate/filings.md');
-    expect(filings).toContain('.boardsmith/scratch/filing-');
-    expect(flat(filings)).toMatch(/never the project root/i);
+    expect(filings).toContain('--body-file - <<\'BODY\'');
+    expect(filings).not.toContain('.boardsmith/scratch/filing-');
   });
 });
 

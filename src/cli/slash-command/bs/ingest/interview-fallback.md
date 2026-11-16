@@ -153,7 +153,13 @@ Wait for confirmation before proceeding to output writing.
 ## Output Re-Target (the one required adaptation)
 
 The old skill's Phase 2 fed straight into its own Phase 4 PROJECT.md template. This path does
-NOT do that. Each answer, once confirmed, becomes a cited slice written to
+NOT do that, and the session conducting the interview writes none of it (`routing.md` "The
+Designer's Session Writes No File"). Once the answers are confirmed, dispatch the `judgement`
+role's agent once, `Work: record interview slices`, handed the resolved absolute path of this file
+and this section and every confirmed answer in the designer's own words, with its question number
+and the interview date; it writes everything this section and the next describe, commits, and
+returns each slice's `slicePath`, `citedTerms[]` and `componentMentions[]`. Each answer becomes a
+cited slice written to
 `rulebook/NN-topic.md` — grouped by topic (e.g. Q1's vision answer → `rulebook/01-vision.md`,
 Q2's components answer → `rulebook/02-components.md`, Q3's setup answer →
 `rulebook/03-setup.md`, Q5's actions answer → `rulebook/05-actions.md`, and so on) — with
@@ -164,7 +170,7 @@ designer statement, ingest session, Q{n}
 ```
 
 exactly parallel to the transcription path's `p.{N}, {section}` page citations. Terms
-referenced in each answer (component names, mechanic vocabulary) are collected into the same
+referenced in each answer (component names, mechanic vocabulary) are returned in the same
 `citedTerms[]` shape the transcription path's subagents return, and fed into `rulebook/INDEX.md`
 identically — the orchestrator's Step 3 synthesis does not need to know which input path
 produced the terms it's indexing.

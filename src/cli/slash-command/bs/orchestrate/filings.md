@@ -86,12 +86,12 @@ gh issue list --repo Shufflewick/BoardSmith --state all --search "<distinctive w
 If an existing issue already describes this, do not open a second one: record that issue's URL in
 the filing's `Issue:` field with `Reported: posted`, and tell the designer it was already known.
 
-Otherwise write the body to a scratch file — `.boardsmith/scratch/filing-<N>.md`, the gitignored
-scratch directory every throwaway file goes in (`state-machine.md` "Project Layout"), never the
-project root — and create the issue:
+Otherwise create the issue, passing the body on standard input so no file is written:
 
 ```bash
-gh issue create --repo Shufflewick/BoardSmith --title "<the filing's Title>" --body-file .boardsmith/scratch/filing-<N>.md
+gh issue create --repo Shufflewick/BoardSmith --title "<the filing's Title>" --body-file - <<'BODY'
+<the filing's body>
+BODY
 ```
 
 The body is the filing's own content, written for someone who has never seen this game: what was

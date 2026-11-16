@@ -31,9 +31,16 @@ staged output into a live location.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
-Its dispatches use this skill's own name as the work package (`routing.md`), and each one is
-recorded before it is launched as a `### Dispatch N` entry in `design/run-log/verify-game.md`,
+This session is the designer's, so it writes no file: its ledgers are written by the `boardsmith`
+commands it runs, and every other write this file or a `verify/` reference has it make (the
+session lock, a run log entry, a Findings Ledger entry during repair, the provenance record, a fix
+`ledger-check` asks for) is a `record` dispatch, as `routing.md` "The Designer's Session Writes No
+File" says. Its dispatches use this skill's own name as the work package (`routing.md`), and each
+one is recorded before it is launched, by the record before it, as a `### Dispatch N` entry in
+`design/run-log/verify-game.md`,
 created from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN-LOG.template.md`, which `boardsmith
 ledger-check` checks exactly as it checks a chunk's. Its repair of stale chunks runs through the
 build pipeline's audit and repair, so the same review gate and escalation apply there. Step 7's
@@ -160,7 +167,7 @@ vice versa.
 A lock naming the run being resumed (the same `run-id`) is refreshed and continued — the normal
 resume path. Any other live, non-stale lock warns the user instead of silently proceeding. A lock
 older than 24 hours is reported as stale and the user confirms clearing it before this session
-takes it. A clean close (Step 9, below) releases the line to exactly `none`.
+has a record take it. A clean close (Step 9, below) releases the line to exactly `none`.
 
 ## Step 1: Source Resolution (VERIFY-01)
 
@@ -398,10 +405,10 @@ pair classified, the pass closes:
   advisory results never gate a Close. Place this bullet before the commit bullet below, so the
   write is part of what gets committed.
 - Run `npx boardsmith ledger-check`. It checks `design/run-log/verify-game.md`, the record of
-  every dispatch this pass made; fix what it names before committing.
+  every dispatch this pass made; a refusal goes to a record with what it names, before the commit.
 - Commit per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Git Protocol").
-- Release the session lock: rewrite `Session Lock:` in `SKETCH.md` to exactly `none`, the same
-  clean-close release the chunk-build lock already uses.
+- Release the session lock: a record rewrites `Session Lock:` in `SKETCH.md` to exactly `none`,
+  the same clean-close release the chunk-build lock already uses, and commits it.
 
 **In source-free mode**, this Close is reached from `verify/source-free-mode.md`'s own Close
 section rather than from Steps 2-6 completing, the recorded scope is `code-conformance-only` with

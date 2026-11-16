@@ -1,6 +1,7 @@
 # Design Session — Settle the Look Before Any Code
 
-Referenced by `build-game.md` Step 1b and `build-chunk.md` Step 2: it runs once per game, after
+Referenced by `build-game.md` Step 1b, which runs it, and `build-chunk.md` Step 2, which refuses to
+build without it: it runs once per game, after
 the sketch is approved and before the first chunk is built, whenever `DESIGN.md` does not exist.
 **No game code is written until the designer signs off here.** It replaces any per-chunk design
 choice: the first chunk already builds the game's own board, in the signed-off design, with the
@@ -14,8 +15,10 @@ audit's design review (`build/design-review.md`) checks every UI chunk against t
 ## Who Does What
 
 The designer talks to the main thread, never to a subagent. The main thread (the `/bs-build-game`
-orchestrator, or the `/bs-build-chunk` session) conducts the session: it shows the designer the
-gallery, takes their requests, and records the sign-off. It never draws a mock itself.
+orchestrator) conducts the session: it shows the designer the gallery, takes their requests, and
+has the sign-off recorded. It never draws a mock itself, and writes no file
+(`routing.md` "The Designer's Session Writes No File"): each question it records below is a
+`record` dispatch, and so is the sign-off.
 
 The mocks are made by a fresh subagent of the `judgement` role (`npx boardsmith agent judgement`;
 `routing.md`), dispatched with the `frontend-design` skill: its brief says to invoke that skill
@@ -81,8 +84,8 @@ Give the designer the one thing to open, a `file://` link to the gallery, and as
 They may ask for more variants of any screen or component, a change to one direction, or a blend;
 each request is a new dispatch that adds to the gallery (new variants are added beside the old,
 never in place of them, so a choice the designer liked is not lost). Keep going until they are
-satisfied. Every request and answer is the designer's: record each question you put to them in
-`QUESTIONS.md` as you ask it (`orchestrate/questions.md`).
+satisfied. Every request and answer is the designer's: have a record write each question you put
+to them in `QUESTIONS.md` as you ask it (`orchestrate/questions.md`).
 
 ## Checks Before Sign-Off
 
@@ -110,7 +113,10 @@ approving: write nothing below until they say yes. Only the designer signs a des
 orchestrated run with no designer present leaves the session open (`Open Gate:` in `RUN.md`,
 `orchestrate/run-state.md`), and nothing is built until they answer.
 
-After the yes, in this order:
+After the yes, dispatch the `judgement` role's agent once, `Work: record design sign-off`, handed
+the resolved absolute path of this file and this section, the chosen combination and each
+component taken from elsewhere in the designer's words, and both checks' results. It does the
+following, in this order, and returns the commit:
 
 1. Fill the sign-off's `QUESTIONS.md` entry with their answer.
 2. Write `src/ui/theme.css` from the chosen combination: the `--bsg-*` overrides for both schemes

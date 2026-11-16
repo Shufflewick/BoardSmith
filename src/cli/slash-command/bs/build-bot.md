@@ -20,6 +20,8 @@ tell the designer about difficulty.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 Under `/bs-build-game` this skill is dispatched as the `judgement` role's agent for the
 bot-opponent chunk, whose slug is the work package, and it ends with the same verify and review
@@ -37,6 +39,18 @@ BoardSmith game project.
 
 Under a `/bs-build-game` run this skill is not typed by the designer at all: the run dispatches it
 as the bot-opponent chunk's pipeline (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md`).
+
+## Typed by the Designer
+
+The designer's session writes no file (`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` "The
+Designer's Session Writes No File"), and Phases 5-7 write the bot. So when the designer typed
+`/bs-build-bot`, this session runs Phase 1's checks and asks the designer what this file asks them
+(Phase 1's existing-`bot.ts` question, Phases 3 and 4, and Phase 7's games against the bot), and
+dispatches the writing to the `judgement` role's agent in orchestrated mode: the generation and
+validation of Phases 5 and 6, and each fix Phase 7's games call for. Its brief is
+`orchestrate/chunk-dispatch.md`'s, with the resolved absolute path of this file and the designer's
+answers quoted verbatim; the work package is the sketch's bot-opponent chunk's slug, or
+`build-bot` when the sketch has none. Relay each return's `designerSummary`.
 
 ## Orchestrated Mode (dispatched, not typed)
 

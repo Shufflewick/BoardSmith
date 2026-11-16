@@ -82,15 +82,16 @@ five; the last two are dispatches it is never asked about:
 1. **Check.** Run `boardsmith parallel-check <slug> <slug> [...]` from the main checkout. A non-zero
    exit ends the attempt: dispatch the first of them alone and continue in order.
 2. **One worktree per chunk.** From the main checkout, for each chunk:
-   `git worktree add .boardsmith/worktrees/<slug> -b chunk/<slug>`. Set `SKETCH.md`'s session lock to
-   the batch (`state-machine.md` "Session Lock", the comma-separated form) and commit it BEFORE
-   creating the worktrees, so every branch starts from it.
+   `git worktree add .boardsmith/worktrees/<slug> -b chunk/<slug>`. A record sets `SKETCH.md`'s
+   session lock to the batch (`state-machine.md` "Session Lock", the comma-separated form) and
+   commits it BEFORE the worktrees are created, so every branch starts from it.
 3. **Dispatch every chunk of the batch in one message**, so they run at the same time. Each brief is
    the ordinary seven fields plus: the project directory is that chunk's worktree, not the main
    checkout; it is building on a parallel branch, so it numbers every new ledger entry with a
    provisional id, `Ruling @<slug>.<n>` (`state-machine.md` "Ledger Numbers on a Parallel Branch");
-   and it never writes `RUN.md` or another chunk's files. The orchestrator writes each chunk's run
-   log entry in that chunk's own worktree, `design/run-log/<slug>.md`, and commits it there.
+   and it never writes `RUN.md` or another chunk's files. The orchestrator's record writes each
+   chunk's run log entry in that chunk's own worktree, `design/run-log/<slug>.md`, and commits it
+   there.
 4. **Gates.** A chunk that returns a gate is handled as always, one gate at a time with the
    designer. Its answers are written in that chunk's worktree, numbered provisionally, and its
    re-dispatch goes back to the same worktree. `RUN.md`'s `Open Gate:` lists every open gate.
@@ -120,8 +121,8 @@ five; the last two are dispatches it is never asked about:
 6. **Clean up.** After a chunk merges, `git worktree remove .boardsmith/worktrees/<slug>` and
    `git branch -d chunk/<slug>`. Removing the worktree loses nothing review-gate needs:
    `chunk-merge` has already copied the chunk's verify results (`.boardsmith/verify/`) into the
-   main checkout, where the cross-chunk lens's review-gate finds each review round's result. When the last chunk of the batch has merged, set the session lock
-   back to the next chunk the run dispatches.
+   main checkout, where the cross-chunk lens's review-gate finds each review round's result. When the last chunk of the batch has merged, the next record sets the
+   session lock back to the next chunk the run dispatches.
 
 ## The Brief (every field required)
 
@@ -219,11 +220,12 @@ also malformed, stop the run and tell the designer plainly what did not come bac
 
 The orchestrator, in this order: for a `closed` return, first runs
 `npx boardsmith verify --check --chunk <slug>` in the chunk's checkout (`build-game.md` Step 4)
-before it writes anything, since any write to that
+before anything is written, since any write to that
 checkout (the run log included) leaves its tree dirty and the check would refuse the chunk for the
-orchestrator's own change; then fills the chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
-(`orchestrate/run-state.md` "Writing It"), recording a refused check as `failed`; records any `questions` and `filings`
-(`orchestrate/questions.md`, `orchestrate/filings.md`), relays `designerSummary` if there is
+orchestrator's own change; then has a record (`build-game.md` "Every Write Is a Record") fill the
+chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
+(`orchestrate/run-state.md` "Writing It"), recording a refused check as `failed`, and record any `questions` and `filings`
+(`orchestrate/questions.md`, `orchestrate/filings.md`); relays `designerSummary` if there is
 anything the designer can see, and then routes on `outcome` per `build-game.md` Step 4.
 
 **A `gate` outcome is answered, then re-dispatched — never resumed in the orchestrator's own
