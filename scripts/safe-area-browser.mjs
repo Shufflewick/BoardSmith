@@ -11,11 +11,72 @@
  * held either way no control sits inside an inset, with the action bar up and
  * put down, the controls menu open and the phone strip expanded, and on a
  * coarse pointer every shell control takes a 44px tap (WCAG 2.5.5, Apple's 44pt).
+ * The sample's actions carry help, and its play action a second pick, so the
+ * action's "?" and a made pick's clear button are among those controls (#1636).
  *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/safe-area-browser.mjs`.
  */
-import { assert, check, openTableSample, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+
+/** Help on both actions, so each draws its "?", and a second pick, so a made pick shows its clear button (#1636). */
+const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
+import type { TableFixtureGame } from './game.js';
+import { Card } from './elements.js';
+
+export function createDrawAction(): ActionDefinition {
+  return Action.create<TableFixtureGame>('draw')
+    .prompt('Draw a card from the deck')
+    .help('Take the top card of the deck into your hand.')
+    .execute((args, ctx) => {
+      ctx.game.deck.first(Card)?.putInto(ctx.player.hand);
+      return { success: true };
+    });
+}
+
+export function createPlayAction(): ActionDefinition {
+  return Action.create<TableFixtureGame>('play')
+    .prompt('Play a card from your hand')
+    .help('Score a card from your hand.')
+    .chooseFrom('card', {
+      prompt: 'Select a card to play',
+      choices: (ctx) => [...ctx.player.hand.all(Card)],
+    })
+    .chooseFrom('side', {
+      prompt: 'Select a side to play it on',
+      choices: () => ['left', 'right'],
+    })
+    .execute(({ card }, ctx) => {
+      ctx.player.score += card.points;
+      card.remove();
+      return { success: true };
+    });
+}
+`;
+
+/** Both actions on one step, so the panel lists their buttons and each "?". */
+const FLOW = `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { TableFixtureGame } from './game.js';
+
+export function createGameFlow(): FlowDefinition<TableFixtureGame> {
+  return {
+    root: loop({
+      name: 'game-loop',
+      maxIterations: 100,
+      do: eachPlayer({ name: 'player-turns', do: actionStep({ name: 'turn', actions: ['draw', 'play'] }) }),
+    }),
+  };
+}
+`;
+
+/** The game frame on `page`, once its Action Panel offers the draw and its "?". */
+async function openTable(page, hostUrl) {
+  await page.goto(hostUrl);
+  await page.locator('.dev-host__frame').waitFor({ timeout: 60_000 });
+  const frame = page.frameLocator('.dev-host__frame');
+  await frame.locator('button[aria-label="Help for Draw a card from the deck"]').waitFor({ timeout: 60_000 });
+  return frame;
+}
 
 /** What a notched iPhone reports to the page in each orientation. */
 const PHONES = [
@@ -124,7 +185,7 @@ async function inState(frame, insets, size, state, { open, close }) {
   await close();
 }
 
-await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromium', 'webkit'], table: true }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/rules/actions.ts': ACTIONS, 'src/rules/flow.ts': FLOW } } }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   let player;
   try {
@@ -136,7 +197,7 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
       const context = await browser.newContext({ viewport: turned, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player });
       try {
         const page = await context.newPage();
-        const frame = await openTableSample(page, hostUrl);
+        const frame = await openTable(page, hostUrl);
         player ??= await context.storageState();
 
         // The page's own insets, where the dev host reads them, then the phone turned to them.
@@ -165,6 +226,17 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
           close: async () => {
             await page.keyboard.press('Escape');
             await frame.locator('.menu').waitFor({ state: 'detached' });
+          },
+        });
+        await inState(frame, insets, size, 'a pick made in an open action', {
+          open: async () => {
+            await frame.locator('.action-btn[data-bs-action="play"]').click();
+            await frame.locator('[data-testid="bs-actionbar"] .choice-btn').first().click();
+            await frame.locator('.clear-selection-btn').waitFor();
+          },
+          close: async () => {
+            await frame.locator('.cancel-btn').click();
+            await frame.locator('.action-config').waitFor({ state: 'detached' });
           },
         });
         // The phone strip is the compact tier's alone.

@@ -2485,8 +2485,9 @@ button {
 
 /* Action button group — wraps each action + its "?" affordance.
    inline-flex becomes a direct action bar flex item (because .action-buttons has
-   display:contents, propagating the parent flex context). The "?" is absolutely
-   positioned so it does NOT affect the group's intrinsic width (RESEARCH Pitfall 5).
+   display:contents, propagating the parent flex context). With a mouse the "?" is
+   absolutely positioned so it does NOT affect the group's intrinsic width (RESEARCH
+   Pitfall 5); on touch it takes 44px beside the button, as a finger needs (#1636).
    No width or flex-grow set — action-btn retains its own sizing rules. */
 .action-btn-group {
   display: inline-flex;
@@ -2746,6 +2747,13 @@ button {
   line-height: 1;
   min-height: 24px;
   min-width: 24px;
+}
+/* A finger's target (#1636). */
+@media (pointer: coarse) {
+  .clear-selection-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
 }
 
 @media (hover: hover) {
@@ -3324,7 +3332,8 @@ button {
     overflow-wrap: anywhere;
   }
 
-  .cancel-btn {
+  .cancel-btn,
+  .config-header :deep(.action-help-btn) {
     margin-block: -3px;
   }
 

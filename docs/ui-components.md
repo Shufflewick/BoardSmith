@@ -1995,7 +1995,9 @@ ways.
 
 On a touch screen (`pointer: coarse`) every shell control takes at least a
 44px tap: the phone strip's toggle, the sidebar and action bar edge toggles,
-the controls menu and its items, Cancel and the log's copy button.
+the controls menu and its items, Cancel, a made pick's clear button, the
+log's copy button and the action help "?", which then sits beside its action
+rather than over its corner.
 
 ## Animation Events
 
