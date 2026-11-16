@@ -70,7 +70,7 @@ export function useActionHolds(holds: () => Readonly<Record<string, string>> | n
     throw new Error(
       'useActionHolds() was called outside a board. Call it in the setup of the board ' +
         'GameShell or WorldShell renders, one renderAsSeat mounts, or one below a test harness that calls ' +
-        'provideTableActionWiring(wiring): the Action Panel it greys out is theirs.',
+        'provideTableActionWiring(wiring, boardEl): the Action Panel it greys out is theirs.',
     );
   }
   onScopeDispose(actionHolds.register(holds));

@@ -436,15 +436,19 @@ above).
      fetchPickChoices: (actionName, selectionName, player, args) =>
        session.send(player, { type: 'resolveChoices', actionName, selectionName, player, args }),
    });
-   // Gives the board below its board interaction and action holds.
-   provideTableActionWiring(wiring);
+   // Gives the board below its board interaction and action holds, and reports what the element
+   // holding the board draws. Bind `boardEl` as the `ref` of that element in your render.
+   const boardEl = ref<HTMLElement | null>(null);
+   provideTableActionWiring(wiring, boardEl);
    ```
 
    Feed the ActionPanel `wiring.actionMetadata` and `wiring.disabledActions`, and provide
    `wiring.controller` under `GAME_CONTEXT_KEYS.actionController` for it. Call
    `provideTableActionWiring` in the component that renders the board, even when that board sits
    inside a real GameShell: the nearest provide wins, so a board's `useActionHolds` then greys out
-   your panel and cancels your controller's held draft, not the shell's.
+   your panel and cancels your controller's held draft, not the shell's. The element you hand it
+   is how your panel learns what the board offers: without it a pick of more than 24 candidates
+   stays a list of buttons and never shows "Choose on the board" (#1678).
 
    Re-read `seatState` from the session after each move, the way a broadcast arrives. Read the
    game itself with `session.readGame()`, again after each move: it is a copy rebuilt from the

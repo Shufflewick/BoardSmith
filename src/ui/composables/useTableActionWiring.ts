@@ -20,10 +20,12 @@
  *
  * Call it inside a component's `setup` or an `effectScope`, like any composable
  * that registers watchers. Then call {@link provideTableActionWiring} in the
- * `setup` of the component that renders the board (#1462): it gives the board
- * the board interaction and the action holds, so a board's `useActionHolds`
- * reaches this wiring even inside a real GameShell, whose own provides are
- * farther away. The controller is not among them: it is part of the game
+ * `setup` of the component that renders the board (#1462), handing it the
+ * element that holds the board: it gives the board the board interaction and
+ * the action holds, so a board's `useActionHolds` reaches this wiring even
+ * inside a real GameShell, whose own provides are farther away, and it reports
+ * what that element draws, offers and takes whole to this wiring's board
+ * interaction, as the shell reports its own board (#1678). The controller is not among them: it is part of the game
  * context, which a shell provides whole.
  */
 import { computed, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
@@ -37,6 +39,7 @@ import type {
 } from './useActionControllerTypes.js';
 import { useActionController } from './useActionController.js';
 import { useBoardActionBridge, type RunnerIdentity } from './useBoardActionBridge.js';
+import { useDrawnBoardElements } from './useDrawnBoardElements.js';
 import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from './actionHolds.js';
 
 /**
@@ -87,6 +90,8 @@ export interface TableActionWiring {
   actionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
   /** Read off the seat state, with the board's holds added: action name to the reason it is disabled. Feed the Action Panel this. */
   disabledActions: ComputedRef<Record<string, string> | undefined>;
+  /** The board interaction this wiring was built with. */
+  boardInteraction: BoardInteraction;
   /** What the board injects from this wiring: the board interaction and the action holds. Publish with {@link provideTableActionWiring}. */
   provisions: readonly Provision[];
 }
@@ -166,10 +171,15 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
     [ACTION_HOLDS_KEY, actionHolds],
   ];
 
-  return { controller, actionMetadata, disabledActions, provisions };
+  return { controller, actionMetadata, disabledActions, boardInteraction, provisions };
 }
 
-/** Provide a wiring's {@link TableActionWiring.provisions} to the board below. Call it in `setup`. */
-export function provideTableActionWiring(wiring: TableActionWiring): void {
+/**
+ * Provide a wiring's {@link TableActionWiring.provisions} to the board below, and report what
+ * `board` (the element that holds the board) draws to the wiring's board interaction, so the
+ * Action Panel can hand a long pick to the board. Call it in `setup`.
+ */
+export function provideTableActionWiring(wiring: TableActionWiring, board: Ref<HTMLElement | null | undefined>): void {
   for (const [key, value] of wiring.provisions) provide(key, value);
+  useDrawnBoardElements(wiring.boardInteraction, board);
 }
