@@ -1,5 +1,5 @@
 {
-  "revision": 396,
+  "revision": 397,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3111,6 +3111,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith catalogue runs each game step in its own killed-on-exit process group, so no vitest workers outlive a run (#1657)"
+    },
+    {
+      "revision": 397,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The smoke walk takes an action it still has to take before it skips the step clock's wait or presses the board's untried controls, so an action a game offers only for a moment is taken (#1659)."
     }
   ]
 }
