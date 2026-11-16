@@ -1,5 +1,5 @@
 {
-  "revision": 394,
+  "revision": 395,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3095,6 +3095,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel asks which row a player meant when a verb is started on a thing its first pick lists more than once, instead of filling the first (#1654)"
+    },
+    {
+      "revision": 395,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The smoke walk goes on in the new game frame when the dev host replaces it in the middle of a step, instead of stopping (#1656)"
     }
   ]
 }
