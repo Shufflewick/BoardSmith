@@ -511,14 +511,20 @@ defineSlots<{
   opacity: 1;
 }
 
-/* The acting token's outline, throbbing so a glance finds whose turn it is.
+/* Its own stacking context, so the outline sits behind the token rather than behind the strip. */
+.strip-tokens .pt.strip-active > .tok {
+  isolation: isolate;
+}
+
+/* The acting token's outline: its own shape, 3px larger, behind it, throbbing so a glance finds whose turn it is.
    Same PERF constraint as .turn-indicator-dot: transform + opacity ONLY. */
 .strip-tokens .pt.strip-active > .tok::after {
   content: '';
   position: absolute;
   inset: -3px;
-  border-radius: 50%;
-  border: 2px solid var(--bsg-accent);
+  z-index: -1;
+  clip-path: var(--tok-shape);
+  background: var(--bsg-accent);
   pointer-events: none;
   animation: strip-throb 1.6s ease-in-out infinite;
 }

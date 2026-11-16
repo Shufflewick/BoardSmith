@@ -6,7 +6,7 @@
  * the phone strip also showed the "is playing" sentence, so the strip took two
  * rows on a 375px phone. On phones the content sits beside the badge, the
  * sentence is only for screen readers, and a looping outline on the acting
- * badge says whose turn it is, still under reduced motion. The desktop rail
+ * badge, in the token's own shape, says whose turn it is, still under reduced motion. The desktop rail
  * keeps the content under the badge. jsdom does no layout and runs no CSS
  * animation, so only a browser can say any of this.
  *
@@ -62,7 +62,7 @@ function readStrip(frame, strip) {
         iterations: ring.effect.getTiming().iterations,
         properties: [...new Set(ring.effect.getKeyframes().flatMap((k) => Object.keys(k)))].filter((p) => !['offset', 'computedOffset', 'easing', 'composite'].includes(p)),
       },
-      still: after && { content: after.content, opacity: after.opacity, borderStyle: after.borderTopStyle },
+      still: after && { content: after.content, opacity: after.opacity, clipPath: after.clipPath },
     };
   });
 }
@@ -100,6 +100,23 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files:
       });
     }
 
+    await check("the acting badge's outline takes its token's shape, whichever it is (#1646 review F7)", async () => {
+      const mismatches = await frame.locator('.mobile-strip .pt.strip-active > .tok').evaluate((tok) => {
+        const shapeClass = () => [...tok.classList].find((c) => c.startsWith('sh-'));
+        const own = shapeClass();
+        const out = [];
+        for (const shape of ['sh-circle', 'sh-square', 'sh-hexagon', 'sh-octagon', 'sh-diamond', 'sh-pentagon', 'sh-shield', 'sh-plus']) {
+          tok.classList.replace(shapeClass(), shape);
+          const outline = getComputedStyle(tok, '::after').clipPath;
+          const token = getComputedStyle(tok.querySelector('.shape')).clipPath;
+          if (outline !== token) out.push(`${shape}: outline ${outline}, token ${token}`);
+        }
+        tok.classList.replace(shapeClass(), own);
+        return out;
+      });
+      assert(mismatches.length === 0, mismatches.join('; '));
+    });
+
     await check('with more seats than fit at 320px the strip stays one row and scrolls, clear of the toggle', async () => {
       await page.setViewportSize({ width: 320, height: 800 });
       // The table sample seats two; copies of a seat stand in for a bigger table.
@@ -133,7 +150,7 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files:
     await check('under reduced motion the acting badge keeps a still outline', async () => {
       const read = await readStrip(frame, '.mobile-strip .seat-strip');
       assert(read.acting && !read.ring, `the outline still animates: ${JSON.stringify(read.ring)}`);
-      assert(read.still.content !== 'none' && read.still.opacity === '1' && read.still.borderStyle === 'solid', `no still outline: ${JSON.stringify(read.still)}`);
+      assert(read.still.content !== 'none' && read.still.opacity === '1' && read.still.clipPath !== 'none', `no still outline: ${JSON.stringify(read.still)}`);
     });
   } finally {
     await browser.close();
