@@ -166,6 +166,19 @@ async function moreShownUntilTheEnd(surface) {
     await bar.evaluate((el) => { el.scrollTop = 0; });
     await surface.locator(MORE).waitFor({ timeout: 15_000 });
   });
+  await check('568x320: content that grows with nothing in the bar changing, as an image loading does, brings the cue back', async () => {
+    await bar.evaluate((el) => { el.scrollTop = el.scrollHeight; });
+    await surface.locator(MORE).waitFor({ state: 'hidden', timeout: 15_000 });
+    await bar.evaluate((el) => {
+      const taller = el.ownerDocument.head.appendChild(el.ownerDocument.createElement('style'));
+      taller.textContent = '[data-bs-action] { height: 120px !important; max-height: none !important; }';
+    });
+    await surface.locator(MORE).waitFor({ timeout: 15_000 });
+  });
+  await check('568x320: the cue is gone while the bar is put down', async () => {
+    await surface.locator('[data-testid="bs-actionbar-toggle"]').click();
+    await surface.locator(MORE).waitFor({ state: 'hidden', timeout: 15_000 });
+  });
 }
 
 async function everyLevelInView(surface, size, levels) {
@@ -183,7 +196,7 @@ async function everyLevelInView(surface, size, levels) {
             return el.scrollWidth > el.clientWidth + 1 || el.scrollHeight > el.clientHeight + 1;
           }), selectors);
         assert(cut.length === 0, `labels cut short: ${cut.join(', ')}`);
-        assert(!(await surface.locator(MORE).isVisible()), 'the bar shows its "more" cue with nothing below its edge');
+        await surface.locator(MORE).waitFor({ state: 'hidden', timeout: 15_000 });
       } finally {
         if (group) await surface.locator('[data-bs-menu-back]').click();
       }

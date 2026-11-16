@@ -31,10 +31,10 @@ import { ref, computed } from 'vue';
 class PanelResizeObserver {
   static instances: PanelResizeObserver[] = [];
   callback: (entries: Array<Partial<ResizeObserverEntry>>) => void;
-  observed?: Element;
+  observed = new Set<Element>();
   disconnect = vi.fn();
   constructor(callback: (entries: Array<Partial<ResizeObserverEntry>>) => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
-  observe(el: Element) { this.observed = el; }
+  observe(el: Element) { this.observed.add(el); }
 }
 beforeEach(() => { PanelResizeObserver.instances = []; vi.stubGlobal('ResizeObserver', PanelResizeObserver); });
 afterEach(() => vi.unstubAllGlobals());
@@ -103,7 +103,7 @@ describe('the layout', () => {
     const container = wrapper.get('.game-shell__zoom-container').element as HTMLElement;
     const frame = wrapper.get('.game-shell__zoom-frame').element as HTMLElement;
     expect(container.parentElement).toBe(frame);
-    const observer = PanelResizeObserver.instances.find((o) => o.observed === container)!;
+    const observer = PanelResizeObserver.instances.find((o) => o.observed.has(container))!;
     // The board's layout size, which the transform leaves as it was; a cqw-sized board is rarely a whole pixel.
     observer.callback([{ contentRect: { width: 300.25, height: 200.5 } as DOMRectReadOnly }]);
     await nextTick();
@@ -124,7 +124,7 @@ describe('the layout', () => {
     const wrapper = mountShell();
     await nextTick();
     const bar = wrapper.get('[data-testid="bs-actionbar"]').element;
-    const observer = PanelResizeObserver.instances.find(o => o.observed === bar);
+    const observer = PanelResizeObserver.instances.find(o => o.observed.has(bar));
     expect(observer).toBeDefined();
     vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:260} as DOMRect);
     observer!.callback([]); await nextTick();

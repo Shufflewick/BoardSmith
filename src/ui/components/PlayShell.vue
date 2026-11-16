@@ -340,13 +340,18 @@ watch(actionBarEl, (bar, _previous, onCleanup) => {
     barHasMoreBelow.value = bar.scrollHeight - bar.scrollTop - bar.clientHeight > 1;
   };
   const observer = new ResizeObserver(measure);
-  // The border box: the bottom safe area is the bar's border, which the content box never sees change (#1611).
-  observer.observe(bar, { box: 'border-box' });
-  // A capped bar keeps its size while its content changes, so only the content says whether more is below.
-  const content = new MutationObserver(measure);
-  content.observe(bar, { childList: true, subtree: true, characterData: true, attributes: true });
+  // A capped bar keeps its size while its content grows (an image loading, a font swapping in), so every box in it is watched too.
+  const observeAll = () => {
+    observer.disconnect();
+    // The border box: the bottom safe area is the bar's border, which the content box never sees change (#1611).
+    observer.observe(bar, { box: 'border-box' });
+    for (const el of bar.querySelectorAll('*')) observer.observe(el);
+    measure();
+  };
+  const content = new MutationObserver(observeAll);
+  content.observe(bar, { childList: true, subtree: true });
   bar.addEventListener('scroll', measure, { passive: true });
-  measure();
+  observeAll();
   onCleanup(() => {
     observer.disconnect();
     content.disconnect();
