@@ -1,5 +1,5 @@
 {
-  "revision": 384,
+  "revision": 385,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3015,6 +3015,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A draw is declared by the game, never inferred from an empty winners list (#1625): Game gains isDraw() (overridable) and finish('draw'), and GameStateSnapshot and ActionCheckpoint gain draw: boolean. SnapshotSessionHost now publishes isDraw only when the snapshot's draw is true, so a finished game with no winners (a solo game lost, a cooperative game lost) shows 'Game Over' instead of 'Draw'. A snapshot from an engine before r384 has no draw flag and publishes isDraw: false; games that end in draws (chess stalemate, a double knockout) must call finish('draw') or override isDraw() and be rebuilt to show 'Draw' again. No published game needs rebuilding to keep running."
+    },
+    {
+      "revision": 385,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The smoke walk records every error toast a frame shows, so one that goes before the walk looks is still reported (#1626)."
     }
   ]
 }
