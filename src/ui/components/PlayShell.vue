@@ -332,6 +332,7 @@ const actionBarEl = ref<HTMLElement | null>(null);
 const barClearance = ref(0);
 /** The bar's content runs past its cap below what is scrolled into view, so its edge says there is more (#1650). */
 const barHasMoreBelow = ref(false);
+const showBarMore = computed(() => barHasMoreBelow.value && !actionBarCollapsed.value);
 // Only the overlays that stop at the bar, and focus scrolling, follow its height; board fitting and scroll layout never read it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
@@ -679,7 +680,7 @@ const mobileToggleLabel = computed(() => {
 
       <!-- More below the bar's edge (#1650): drawn over the bar's own bottom, never the board. Visual only, since every
            action is in the DOM for assistive tech, and taps pass through to the half-shown row. -->
-      <div v-if="barHasMoreBelow && !actionBarCollapsed" class="bar-more" data-testid="bs-actionbar-more" aria-hidden="true">
+      <div v-if="showBarMore" class="bar-more" data-testid="bs-actionbar-more" aria-hidden="true">
         <span class="bar-more__label">More
           <svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </span>
