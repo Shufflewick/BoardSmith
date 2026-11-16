@@ -1,5 +1,5 @@
 {
-  "revision": 395,
+  "revision": 396,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3103,6 +3103,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The smoke walk goes on in the new game frame when the dev host replaces it in the middle of a step, instead of stopping (#1656)"
+    },
+    {
+      "revision": 396,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith catalogue runs each game step in its own killed-on-exit process group, so no vitest workers outlive a run (#1657)"
     }
   ]
 }
