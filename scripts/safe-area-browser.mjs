@@ -17,7 +17,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/safe-area-browser.mjs`.
  */
-import { assert, check, runBrowserRegression, step, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, runBrowserRegression, settle, step, summarise, waitUntil } from './browser-harness.mjs';
 
 /** Help on both actions, so each draws its "?", and a second pick, so a made pick shows its clear button (#1636). */
 const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
@@ -87,18 +87,6 @@ const PHONES = [
 const SIDES = ['top', 'right', 'bottom', 'left'];
 
 const CONTROLS = 'button, a[href], input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"])';
-
-/**
- * Wait until no transition is running in the frame, so what is measured is where things come to rest.
- * A finished one stays listed until the next frame, and its settled promise would loop here without
- * ever letting that frame come (#1645), so only those still running are waited on.
- */
-function settle(frame) {
-  return frame.locator('body').evaluate(async (body) => {
-    const running = () => body.ownerDocument.getAnimations().filter((a) => a.transitionProperty && a.playState === 'running');
-    while (running().length > 0) await Promise.allSettled(running().map((a) => a.finished));
-  });
-}
 
 /**
  * What a finger finds, as lines naming each control.
