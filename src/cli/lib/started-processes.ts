@@ -8,6 +8,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
 import { collectOutput } from './child-output.js';
 import { freePort } from './free-port.js';
@@ -32,6 +33,7 @@ export const tail = (output: string, lines = 12) => output.trim().split('\n').sl
  */
 export class Started {
   readonly children: ChildProcess[] = [];
+  private readonly groups = new Set<ChildProcess>();
   private interruptedBy: NodeJS.Signals | undefined;
   private signalled: (signal: NodeJS.Signals) => void = () => {};
   /** Settles with the signal that interrupted the run, for a caller waiting on something else. */
@@ -50,16 +52,26 @@ export class Started {
   /**
    * Starts `args` under this Node, with `env` added to this process's environment (a name given
    * undefined is kept from the child), keeping its output. Refuses once the run was interrupted.
+   * With `ownGroup`, the child leads its own process group, which is signalled whole when it is
+   * stopped, so a signal to this run's group cannot end it before the processes it started, and
+   * any it leaves behind are killed once it has gone (#1648). Windows has no such groups.
    */
-  spawn(args: string[], cwd: string, env: Record<string, string | undefined> = {}): { child: ChildProcess; output: () => string } {
+  spawn(
+    args: string[],
+    cwd: string,
+    env: Record<string, string | undefined> = {},
+    { ownGroup = false }: { ownGroup?: boolean } = {},
+  ): { child: ChildProcess; output: () => string } {
     if (this.interruptedBy !== undefined) throw new Error(`The run was interrupted (${this.interruptedBy}).`);
     const environment: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0' };
     for (const [name, value] of Object.entries(env)) {
       if (value === undefined) delete environment[name];
       else environment[name] = value;
     }
-    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment });
+    const group = ownGroup && process.platform !== 'win32';
+    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment, detached: group });
     this.children.push(child);
+    if (group) this.groups.add(child);
     return { child, output: collectOutput(child) };
   }
 
@@ -70,7 +82,7 @@ export class Started {
 
   /** Stops every process still running: asked first, killed if it has not gone after a grace. */
   async stopAll(): Promise<void> {
-    await Promise.all(this.children.map(stop));
+    await Promise.all(this.children.map((child) => stop(child, this.groups.has(child))));
   }
 
   /** Stops everything, runs `cleanUp`, then lets the signals go, raising again one that came. */
@@ -88,14 +100,43 @@ export class Started {
 
 const running = (child: ChildProcess) => child.exitCode === null && child.signalCode === null;
 
-async function stop(child: ChildProcess): Promise<void> {
-  if (!running(child)) return;
-  const exited = once(child, 'exit');
-  // SIGINT is the signal both `boardsmith dev` and Playwright stop in order on.
-  child.kill('SIGINT');
-  const killer = setTimeout(() => child.kill('SIGKILL'), STOP_GRACE_MS);
-  await exited;
-  clearTimeout(killer);
+/** How often a stopped group is looked at until it is empty. */
+const GROUP_CHECK_MS = 50;
+
+/** Sends `signal` to `child`, or to its whole process group when it leads one; false once that group is empty. */
+function signalChild(child: ChildProcess, group: boolean, signal: NodeJS.Signals): boolean {
+  if (!group) return child.kill(signal);
+  try {
+    process.kill(-child.pid!, signal);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ESRCH') return false;
+    throw error;
+  }
+}
+
+/** Kills what is left of `child`'s group and resolves once it is empty, so nothing in it writes on (#1648 review F1). */
+async function killGroup(child: ChildProcess): Promise<void> {
+  // A hang guard, not a budget: SIGKILL ends a process at once unless the system is stuck.
+  for (let waited = 0; signalChild(child, true, 'SIGKILL'); waited += GROUP_CHECK_MS) {
+    if (waited >= STOP_GRACE_MS) {
+      throw new Error(`A process the run started (in group ${child.pid}) did not stop after SIGKILL. Stop it by its pid, then run the check again.`);
+    }
+    await sleep(GROUP_CHECK_MS);
+  }
+}
+
+async function stop(child: ChildProcess, group: boolean): Promise<void> {
+  if (running(child)) {
+    const exited = once(child, 'exit');
+    // SIGINT is the signal both `boardsmith dev` and Playwright stop in order on.
+    signalChild(child, group, 'SIGINT');
+    const killer = setTimeout(() => signalChild(child, group, 'SIGKILL'), STOP_GRACE_MS);
+    await exited;
+    clearTimeout(killer);
+  }
+  // A worker its leader left behind (a runner that crashed) would go on writing into what the run removes next.
+  if (group) await killGroup(child);
 }
 
 /**
