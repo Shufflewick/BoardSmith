@@ -3,7 +3,8 @@
  *
  * Single source of truth for all --bsg-* CSS custom properties.
  * Emits the full Slate dark/light token set and provides `applyTheme()`
- * as the sole host-overridable theming knob.
+ * as the sole host-overridable theming knob. A game's own theme.css, loaded
+ * after these tokens, overrides them (docs/ui-components.md "Theming").
  *
  * COLOR LITERALS ARE ALLOWED ONLY IN THIS FILE.
  * All other source files must reference var(--bsg-*) tokens.
@@ -271,7 +272,8 @@ export function applyTheme(
     const style = document.createElement('style');
     style.id = STYLE_ID;
     style.textContent = themeCSS;
-    document.head.appendChild(style);
+    // First in <head>, so a game's own theme.css, loaded before GameShell mounts, overrides Slate.
+    document.head.prepend(style);
   }
 
   // (b) Scheme forcing — 'light'/'dark' sets data-theme; 'auto' removes it
