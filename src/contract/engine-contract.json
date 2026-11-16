@@ -1,5 +1,5 @@
 {
-  "revision": 381,
+  "revision": 382,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2991,6 +2991,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The focus trap keeps focus in its dialog when WebKit removes the focused item without a focusout (#1618)."
+    },
+    {
+      "revision": 382,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "FLIP animations divide their screen-space offsets by the board zoom, so a moved piece starts where it was at any magnifier level (#1619)."
     }
   ]
 }
