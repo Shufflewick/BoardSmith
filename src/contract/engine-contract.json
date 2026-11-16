@@ -1,5 +1,5 @@
 {
-  "revision": 392,
+  "revision": 393,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3079,6 +3079,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel draws a lone top-level menu group as its contents, and wraps the empty-thing sentence on a phone (#1652)"
+    },
+    {
+      "revision": 393,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel on a selected thing draws a group named as the thing's own type as its contents (#1653)"
     }
   ]
 }

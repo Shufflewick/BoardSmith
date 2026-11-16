@@ -4,7 +4,8 @@
  * With nothing selected the panel draws the ordinary grouped menu, and an
  * action listed under its things (`subjectIndex`) is reached through them: the
  * things of a type on the board sit under the type, then their categories. A
- * selected thing has a menu of its own, which keeps the actions' groups: its
+ * selected thing has a menu of its own, which keeps the actions' groups (but one
+ * named as its type, which the heading already names): its
  * verbs, the verbs that take it in a later pick, the verbs about the things
  * that belong to it, the verbs of its related things, and those things.
  *
@@ -56,13 +57,17 @@ interface SelectionMenu {
 interface Building extends SelectionMenu {
   seen: Set<string>;
   metadataOf: (action: string) => EnrichedActionMetadata | undefined;
+  /** The selected thing's type, which its heading already names. */
+  type: string;
 }
 
 function offer(menu: Building, action: string, of: SubjectRef, reason: string | undefined, label?: string): void {
   const meta = menu.metadataOf(action);
   if (!meta || menu.seen.has(action)) return;
   menu.seen.add(action);
-  const item = { ...meta, ...(label ? { prompt: label } : {}), verbOf: of };
+  // A group named as the type the heading names would only add a press (#1653).
+  const group = meta.group?.[0] === menu.type ? { group: meta.group.slice(1) } : {};
+  const item = { ...meta, ...group, ...(label ? { prompt: label } : {}), verbOf: of };
   if (reason) menu.folded.push({ ...item, reason });
   else menu.items.push(item);
 }
@@ -83,7 +88,7 @@ export function selectionMenuItems(
   metadataOf: (action: string) => EnrichedActionMetadata | undefined,
   disabledReason: (action: string) => string | undefined,
 ): SelectionMenu {
-  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf };
+  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf, type: selection.type };
   offerVerbsOf(menu, selection);
   for (const later of subjects.laterVerbs.filter((verb) => verb.type === selection.type)) offer(menu, later.action, selection, disabledReason(later.action));
   const parts = subjects.things.filter((thing) => sameThing(thing.within, selection));

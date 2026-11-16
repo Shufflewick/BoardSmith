@@ -76,19 +76,58 @@ export class WorkshopGame extends Game<WorkshopGame, Player> {
   }
 }
 
+/** A verb that picks a die as `subject`, under `group`, and does nothing. */
+function dieVerb<G extends Game>(name: string, subject: typeof DICE, group: string[], disabled: (die: Die) => string | false = () => false) {
+  return Action.create<G>(name).prompt(name[0]!.toUpperCase() + name.slice(1)).group(...group)
+    .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject, disabled })
+    .execute(() => {});
+}
+
+/** The first seat takes `actions`, a few times over. */
+const firstSeatTakes = (actions: string[]) => actionStep({ actions, player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 });
+
 /** A game whose every verb is about a die, so its whole top level is the one type; the verbs share one group. */
 export class DiceTrayGame extends Game<DiceTrayGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     for (const name of ['red', 'blue']) this.create(Die, name);
+    this.registerActions(dieVerb('reroll', DICE, ['Dice work']), dieVerb('keep', DICE, ['Dice work']));
+    this.setFlow({ root: firstSeatTakes(['reroll', 'keep']) });
+  }
+}
+
+/** Dice whose own verbs sit in a group named as their type, beside a verb that takes a die later (#1653); the blue die cannot be kept. */
+export class DiceCupGame extends Game<DiceCupGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of ['red', 'blue']) this.create(Die, name);
     this.registerActions(
-      Action.create<DiceTrayGame>('reroll').prompt('Reroll').group('Dice work')
-        .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
-        .execute(() => {}),
-      Action.create<DiceTrayGame>('keep').prompt('Keep').group('Dice work')
+      dieVerb('reroll', DICE, ['Dice']),
+      dieVerb('keep', DICE, ['Dice', 'Hold'], (die) => (die.name === 'blue' ? 'The blue die is held.' : false)),
+      dieVerb('turn', DICE, ['Dice', 'Hold']),
+      dieVerb('flip', DICE, ['Dice', 'Hold']),
+      Action.create<DiceCupGame>('placeDie').prompt('Place a die')
+        .chooseFrom('slot', { choices: ['top', 'bottom'] })
         .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
         .execute(() => {}),
     );
-    this.setFlow({ root: actionStep({ actions: ['reroll', 'keep'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
+    this.setFlow({ root: firstSeatTakes(['reroll', 'keep', 'turn', 'flip', 'placeDie']) });
+  }
+}
+
+export const CUPS: typeof DICE = subjectType<Die>({
+  name: 'Cups',
+  onBoard: true,
+  label: (cup) => cup.name!,
+  within: (cup, ctx) => (cup.name === 'big' ? undefined : CUPS.ref(ctx.game.first(Die, 'big')!)),
+});
+
+/** Cups whose verbs sit in a group named as their type; the small cups sit within the big one (#1653). */
+export class NestedCupsGame extends Game<NestedCupsGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of ['big', 'small', 'tiny']) this.create(Die, name);
+    this.registerActions(dieVerb('lift', CUPS, ['Cups']), dieVerb('tip', CUPS, ['Cups']));
+    this.setFlow({ root: firstSeatTakes(['lift', 'tip']) });
   }
 }
