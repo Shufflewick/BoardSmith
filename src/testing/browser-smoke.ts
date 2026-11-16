@@ -2177,6 +2177,25 @@ async function answerAnOpenDialog(play: SeatPlay, frame: Frame, walk: SmokeWalk,
 async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   // Looked up at every step: the dev host puts up a new frame when the game restarts.
   const frame = await gameFrame(play.page);
+  // A world seat's step reads the lead's frame too (`leftToTheLead`, `companionStep`).
+  const read = plays.flatMap((other) => other.page.frames());
+  try {
+    return await stepInFrame(play, plays, frame, walk, memory, step);
+  } catch (error) {
+    // A closed page detaches its frames too, and is no frame put up again.
+    const replaced = read.some((f) => f.isDetached()) && plays.every((other) => !other.page.isClosed());
+    if (error instanceof PageFrozen || !replaced) throw error;
+    narrate(step, "the game's frame was put up again while the walk read it, so the walk goes on in the new one");
+    return true;
+  }
+}
+
+/**
+ * {@link stepIn} in `frame`, the game's frame at the start of the step. The dev host may put up a new
+ * frame in any seat's page at any moment, as it does when its socket drops on a loaded machine
+ * (#1656), and `stepIn` then goes on at the next step, in the new frames.
+ */
+async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   await settle(frame);
   acting.now = play.seat;
   await drainThePage(frame, walk, memory);

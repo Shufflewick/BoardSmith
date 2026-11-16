@@ -778,6 +778,49 @@ function startOver() {
 }
 
 /**
+ * A FRAME REPLACED BETWEEN TWO PRESSES OF ONE ACTION (#1656): the ace game whose `play` also picks a
+ * pile, and a board that puts a new game frame in place of its own the first time the walk waits for
+ * a paint while the pile pick is open, as the dev host remounts the frame when its socket drops on a
+ * loaded machine. So the frame goes after the press of the card has landed, while the walk reads what
+ * it did. Like {@link boardThatReplacesItsFrame}'s, the new frame is never handed the game.
+ */
+export function frameReplacedBetweenPresses(): Record<string, string> {
+  const ace = aceGame();
+  return {
+    ...ace,
+    'src/rules/actions.ts': ace['src/rules/actions.ts'].replace(
+      "\n      .condition({ 'a card in hand'",
+      "\n      .chooseFrom('pile', { prompt: 'Choose a pile', choices: () => ['left', 'right'] })\n      .condition({ 'a card in hand'",
+    ),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+const paint = window.requestAnimationFrame.bind(window);
+const host = window.parent as Window & { replacedBetweenPresses?: boolean };
+window.requestAnimationFrame = (callback) => {
+  // The walk waits for a paint with a promise's resolver, native code with no name; the page's own callbacks are not.
+  const theWalks = callback.name === '' && String(callback).includes('[native code]');
+  if (theWalks && !host.replacedBetweenPresses && document.querySelector('[data-bs-pick="pile"]') !== null) {
+    host.replacedBetweenPresses = true;
+    const frame = host.document.querySelector('iframe')!;
+    frame.replaceWith(frame.cloneNode() as HTMLIFrameElement);
+    return 0;
+  }
+  return paint(callback);
+};
+</script>
+
+<template>
+  <div class="board">A board</div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * THE FIELDS GAME (#465 to #467): each turn a player may `code` (a text field that takes digits only,
  * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
  * field, "How many logs?", 1 to 5, whose own rule refuses 1), `draw` or `rest`. `code` is the panel's first offer, so a walk
