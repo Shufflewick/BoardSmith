@@ -1,5 +1,5 @@
 {
-  "revision": 407,
+  "revision": 408,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3199,6 +3199,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "The bs-build-chunk skill now describes only its dispatched mode; a /bs-build-game run advances across chunks (#1676)"
+    },
+    {
+      "revision": 408,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The smoke walk counts the values the game refused in each seat apart, and forgets them when it puts an action off, so a retry starts from the first value (#1677)."
     }
   ]
 }
