@@ -1,8 +1,8 @@
 {
-  "revision": 402,
-  "surfaceHash": "95f20f8fed1973e1",
-  "payloadHash": "edb4aa0a4f069a29",
-  "formatHash": "ed115e27605f2ca7",
+  "revision": 403,
+  "surfaceHash": "508e1a2209279340",
+  "payloadHash": "519c7a8725fd10b5",
+  "formatHash": "e7644203601ae348",
   "history": [
     {
       "revision": 1,
@@ -3159,6 +3159,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The bot's search and the bot-trainer benchmark read a draw from isDraw(), and score a finish with no winners and no declared draw as a loss, so bots in solo and cooperative games avoid losing lines (#1665)."
+    },
+    {
+      "revision": 403,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "Every Space now serializes $type 'space' (subclasses keep their own), so AutoUI draws an empty space as a space with its game attributes; a piece on a board cell, in a hand or in a deck shows its full name and attributes in a tip on hover, tap or keyboard focus (#1667)."
     }
   ]
 }
