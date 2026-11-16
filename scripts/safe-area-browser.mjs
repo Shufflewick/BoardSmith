@@ -209,10 +209,14 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
           assert(SIDES.every((side) => read[side] === insets[side]), `the shell resolved ${JSON.stringify(read)}, not ${JSON.stringify(insets)}`);
         });
         await check(`what keeps clear of the action bar is told its height with the bottom inset at ${size}`, async () => {
-          const { bar, clearance } = await frame.locator('[data-testid="bs-actionbar"]').evaluate((el) => ({
-            bar: el.getBoundingClientRect().height,
-            clearance: parseFloat(el.ownerDocument.querySelector('.board-viewport').style.getPropertyValue('--bsg-bar-clearance')),
-          }));
+          // The clearance follows the bar through a ResizeObserver and a render, a frame or more after the bar resizes (#1670).
+          const { bar, clearance } = await waitUntil(
+            () => frame.locator('[data-testid="bs-actionbar"]').evaluate((el) => ({
+              bar: el.getBoundingClientRect().height,
+              clearance: parseFloat(el.ownerDocument.querySelector('.board-viewport').style.getPropertyValue('--bsg-bar-clearance')),
+            })),
+            ({ bar, clearance }) => Math.abs(bar - clearance) < 0.5,
+          );
           assert(Math.abs(bar - clearance) < 0.5, `--bsg-bar-clearance is ${clearance}px, but the bar is ${bar}px tall`);
         });
 
