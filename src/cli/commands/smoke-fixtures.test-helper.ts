@@ -915,8 +915,8 @@ const POINTER_COVERS = {
 
 /**
  * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
- * cells, more than the panel lists, so it hands the pick to the board, and the board is one surface
- * that stands for "the cell under the pointer". Moving the pointer over it re-aims it, so its
+ * cells, more than the panel lists, and the board is one surface that stands for "the cell under the
+ * pointer", marked with `pickSurfaceAttrs` so the panel hands the pick to it (#1644). Moving the pointer over it re-aims it, so its
  * `data-bs-candidate` names the cell under the pointer, refused (`aria-disabled`) on the middle row,
  * which belongs to nobody; a click or Enter claims the cell it is aimed at. It opens aimed at a cell
  * anyone may claim, and its centre is on the middle row. With `accepts` (#1476), the game refuses
@@ -946,7 +946,7 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
     ...fieldRules(options.accepts && refusals[options.accepts], shape.elements),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
-import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+import { candidateAttrs, pickSurfaceAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
 const cursor = ref({ row: ${shape.opensOnRow}, col: 2 });${cover.setup}
@@ -983,7 +983,7 @@ function hover() {
       role="button"
       tabindex="0"
       :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
-      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
+      v-bind="{ ...pickSurfaceAttrs(choosing ? board.currentPickName : null), ...(choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}) }"
       :aria-disabled="choosing && refused ? 'true' : undefined"
       @pointermove="aim"
       @click="claim"
