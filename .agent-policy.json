@@ -18,7 +18,7 @@
     },
     {
       "name": "catalogue",
-      "run": "node bin/boardsmith.js catalogue"
+      "run": "node bin/boardsmith.js catalogue --skip 'sotf=its tests do not load under vitest list, Shufflewick/sotf#113'"
     },
     {
       "name": "related-tests",
