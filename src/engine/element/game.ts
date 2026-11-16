@@ -4235,11 +4235,9 @@ export class Game<
   finish(result?: P[] | 'draw'): void {
     this.phase = 'finished';
     stateChanged(this._ctx);
-    if (result === 'draw') {
-      this.settings.draw = true;
-    } else if (result) {
-      this.settings.winners = result.map(p => p.seat);
-    }
+    // The last call is the outcome, so a draw and winners are never both stored.
+    this.settings.winners = result === 'draw' || !result ? [] : result.map(p => p.seat);
+    this.settings.declaredDraw = result === 'draw';
   }
 
   /**
@@ -4252,7 +4250,7 @@ export class Game<
    * draw names no winners.
    */
   isDraw(): boolean {
-    return this.settings.draw === true;
+    return this.settings.declaredDraw === true;
   }
 
   /**

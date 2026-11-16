@@ -65,6 +65,25 @@ describe('a draw is declared by the game (#1625)', () => {
     expect(runner.getSnapshot().draw).toBe(false);
   });
 
+  it('the last finish() decides the outcome: a draw, winners, or nobody', () => {
+    const game = new GameRunner({ GameClass: EndGame, gameType: 'end', gameOptions: { playerCount: 2, seed: 'd1625' } }).game;
+    game.finish([game.getPlayer(1)!]);
+    game.finish('draw');
+    expect([game.isDraw(), game.getWinners().length]).toEqual([true, 0]);
+    game.finish([game.getPlayer(2)!]);
+    expect([game.isDraw(), game.getWinners().map((p) => p.seat)]).toEqual([false, [2]]);
+    game.finish('draw');
+    game.finish();
+    expect([game.isDraw(), game.getWinners().length]).toEqual([false, 0]);
+  });
+
+  it("leaves a game's own persistentMap('draw') alone", () => {
+    class DrawPile extends EndGame {
+      drawCounts = this.persistentMap<string, number>('draw');
+    }
+    expect(() => new GameRunner({ GameClass: DrawPile, gameType: 'end', gameOptions: { playerCount: 2, seed: 'd1625' } })).not.toThrow();
+  });
+
   it('refuses a finished game that declares a draw and names winners', () => {
     class DrawWithWinner extends EndGame {
       override isDraw(): boolean {

@@ -8,7 +8,7 @@ export const ENGINE_SETTINGS_KEYS: ReadonlySet<string> = new Set([
   'colors',
   'colorSelectionEnabled',
   'winners',
-  'draw',
+  'declaredDraw',
   ACTION_TEMP_KEY,
 ]);
 
