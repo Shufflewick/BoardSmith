@@ -26,11 +26,11 @@ import { assert, check, openTableSample, runBrowserRegression, summarise, waitUn
  * by a few from run to run with how the frames fall, so their figures are twice
  * the most seen when recorded: a change that thrashes layout multiplies them.
  * `elements` counts the dev server's `<style>` tags too, one per component stylesheet:
- * 325 since PlayersPanel took the shared sr-only.css for its turn sentence (#1647, #1646).
+ * 347 since AutoUI names each free-standing piece and lists its attributes beside it (#1628).
  */
 const RECORDED = {
-  render: { layouts: 64, styles: 116, elements: 325 },
-  push: { layouts: 64, styles: 146, elements: 325 },
+  render: { layouts: 64, styles: 116, elements: 347 },
+  push: { layouts: 64, styles: 146, elements: 347 },
 };
 
 /** The layouts and style recalculations the page has done so far, and the game frame's elements now. */

@@ -4,10 +4,13 @@
  * These are pure functions: no Vue reactivity, no DOM access.
  * Shared by all per-element renderers (CardRenderer, PieceRenderer, etc.).
  */
-import type { InjectionKey } from 'vue';
+import type { InjectionKey, Ref } from 'vue';
 import type { ElementRef } from '../../composables/useBoardInteraction.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { isHiddenPlaceholder } from '../../../engine/element/hidden-placeholder.js';
+import { isGameAttributeName } from '../../../engine/element/engine-attributes.js';
+import type { PlayerRef } from '../../types.js';
+import { findElement } from '../../composables/useGameViewHelpers.js';
 
 // ---------------------------------------------------------------------------
 // GameElement: the element shape every auto-UI module reads (dependency-free)
@@ -24,6 +27,9 @@ export interface GameElement {
 
 /** The grid cell an element stands on, provided by ElementRenderer for a piece to drag on its behalf (#943). */
 export const STANDS_ON_KEY: InjectionKey<() => ElementRef | undefined> = Symbol('bs:standsOn');
+
+/** The whole game view, for naming the elements an attribute refers to (#1628). */
+export const GAME_VIEW_KEY: InjectionKey<Ref<GameElement | null | undefined>> = Symbol('bs:gameView');
 
 // ---------------------------------------------------------------------------
 // PieceVisual — discriminated union returned by resolvePieceVisual
@@ -71,6 +77,37 @@ export function resolvePieceVisual(element: GameElement): PieceVisual {
     color: player?.color ?? '#888888', // neutral per UI-SPEC; #888888 matches hex-piece-circle neutral
     label: element.name ?? element.className,
   };
+}
+
+/**
+ * The game's own attributes of `element` as label and text rows, engine
+ * structure left out, with references named from the view rooted at `root` (#1628).
+ */
+export function gameAttributeRows(element: GameElement, root: GameElement | null | undefined): [string, string][] {
+  const attrs = element.attributes ?? {};
+  return Object.entries(attrs)
+    // `notation` is the board coordinate key the renderers label with, not game state.
+    .filter(([key]) => key !== 'notation' && isGameAttributeName(key, attrs.$type))
+    .map(([key, value]) => [key, attributeText(value, root)]);
+}
+
+type AttributeRef = Partial<PlayerRef> & { __elementId?: number; __elementRef?: string };
+
+function attributeText(value: unknown, root: GameElement | null | undefined): string {
+  if (Array.isArray(value)) return value.map((item) => attributeText(item, root)).join(', ');
+  if (value === null || typeof value !== 'object') return String(value);
+  const ref = value as AttributeRef;
+  if (ref.__playerRef !== undefined) return ref.name ?? `Seat ${ref.seat}`;
+  if (ref.__elementId !== undefined || ref.__elementRef !== undefined) return referencedName(ref, root);
+  return Object.entries(value).map(([key, nested]) => `${key} ${attributeText(nested, root)}`).join(', ');
+}
+
+/** The name of the element `ref` points at, or 'unseen' when this view does not hold it. */
+function referencedName(ref: AttributeRef, root: GameElement | null | undefined): string {
+  const target = ref.__elementId !== undefined
+    ? findElement(root, { id: ref.__elementId })
+    : ref.__elementRef?.split('/').reduce<GameElement | undefined>((at, index) => at?.children?.[Number(index)], root ?? undefined);
+  return target ? (target.name ?? target.className) : 'unseen';
 }
 
 // ---------------------------------------------------------------------------

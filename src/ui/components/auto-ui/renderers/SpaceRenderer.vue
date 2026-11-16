@@ -141,6 +141,7 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
         v-for="(child, index) in children"
         :key="child.id"
         :element="child"
+        details
         :style="{ '--card-index': index, '--card-count': children.length }"
       />
     </div>
