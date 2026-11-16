@@ -1,5 +1,5 @@
 {
-  "revision": 408,
+  "revision": 409,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3207,6 +3207,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "The smoke walk counts the values the game refused in each seat apart, and forgets them when it puts an action off, so a retry starts from the first value (#1677)."
+    },
+    {
+      "revision": 409,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "provideTableActionWiring takes the element that holds a harness's board and reports what it draws, offers and takes whole to the wiring's board interaction, so a harness's Action Panel can hand a long pick to the board (#1678)."
     }
   ]
 }
