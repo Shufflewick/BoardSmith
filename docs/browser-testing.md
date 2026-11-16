@@ -377,8 +377,10 @@ names it says so and exits non-zero.
   turns the phone to 390x844 and to 844x390, by touch, in both browsers: the dev
   host sends the frame the part of each that reaches over it, the shell takes
   them, the action bar's measured height includes the bottom one, no control can be
-  tapped inside one with the action bar up or put down, the controls menu open
-  or the phone strip expanded, and every shell control takes a 44px tap (#1611).
+  tapped inside one with the action bar up or put down, the controls menu open,
+  a pick made in an open action or the phone strip expanded, and every shell
+  control takes a 44px tap (#1611), the actions' help "?" and a made pick's
+  clear button among them (#1636).
 - **`cpu-throttle-browser.mjs`** renders the table sample at 390x844 with the CPU
   slowed fourfold (`Emulation.setCPUThrottlingRate`, Chromium only), then plays
   a card, and holds the layouts, style recalculations and game-frame elements

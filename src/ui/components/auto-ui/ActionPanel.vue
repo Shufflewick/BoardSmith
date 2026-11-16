@@ -2747,6 +2747,13 @@ button {
   min-height: 24px;
   min-width: 24px;
 }
+/* A finger's target (#1636). */
+@media (pointer: coarse) {
+  .clear-selection-btn {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
 
 @media (hover: hover) {
   .clear-selection-btn:hover {

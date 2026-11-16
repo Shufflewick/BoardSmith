@@ -272,6 +272,16 @@ onUnmounted(() => {
   line-height: 1;
   z-index: 1;
 }
+/* A finger's target (#1636): beside its action rather than over its corner, where 44px would cover the action. */
+@media (pointer: coarse) {
+  .action-help-btn {
+    position: static;
+    display: inline-grid;
+    place-items: center;
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
 
 @media (hover: hover) {
   .action-help-btn:hover {
