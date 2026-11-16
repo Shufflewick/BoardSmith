@@ -50,6 +50,7 @@ import type { GameRootView } from '../types.js';
 import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { hostRefusal, readHostReply, usePlatformTransport } from '../composables/usePlatformTransport.js';
+import { ErrorCode } from '../../types/protocol.js';
 import { seatDisplay } from '../seat-display.js';
 import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
@@ -503,19 +504,23 @@ const platformTransport = usePlatformTransport({
   boundaryState: () => state.value?.flowState as BoundaryKeyState | null | undefined,
 });
 
-// The host sends heartbeats only while its socket is open, so a refusal that arrives while stale is the disconnect's own (#1649).
-const disconnectRefusals = new Set<string>();
+// The words of each NOT_CONNECTED refusal that came while the dot showed stale, each holding back one toast (#1649, #1646 review F3).
+const disconnectRefusals: string[] = [];
 
 async function platformRequest(op: string, payload: Record<string, unknown>): Promise<Record<string, unknown>> {
   const result = await platformTransport.request(op, payload);
   const reply = readHostReply(result);
-  if (!reply.accepted && reply.error && connectionHealth.value === 'stale') disconnectRefusals.add(reply.error);
+  if (!reply.accepted && reply.errorCode === ErrorCode.NOT_CONNECTED && reply.error && connectionHealth.value === 'stale') {
+    disconnectRefusals.push(reply.error);
+  }
   return result;
 }
 
 /** Toast an error, unless it is a refusal the stale connection dot already explains (#1649). */
 function toastError(text: string): void {
-  if (!disconnectRefusals.has(text)) toast.error(text);
+  const held = disconnectRefusals.indexOf(text);
+  if (held === -1) toast.error(text);
+  else disconnectRefusals.splice(held, 1);
 }
 
 /** Show the player a host refusal; the transport resolves one rather than rejecting. */
@@ -1145,7 +1150,7 @@ if (inHost) {
         data.type === 'heartbeat'
       ) {
         connectionHealth.value = 'connected';
-        disconnectRefusals.clear();
+        disconnectRefusals.length = 0;
         if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
         heartbeatTimer = setTimeout(() => {
           connectionHealth.value = 'stale';

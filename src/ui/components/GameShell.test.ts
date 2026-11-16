@@ -27,6 +27,7 @@ import {
 } from './GameShell.platform-mount.test-helper.js';
 import { watchLiveRegion } from '../../testing/live-region.js';
 import { SETTLE_MS } from './board-settle.js';
+import { ErrorCode } from '../../types/protocol.js';
 
 function postState(state: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', {
@@ -159,7 +160,7 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
       expect(wrapper.find('[data-testid="bs-connection"]').classes()).toContain('stale');
 
       const notSent = 'You are not connected to the table right now, so this was not sent.';
-      await refusePass(wrapper, posted, { error: notSent });
+      await refusePass(wrapper, posted, { error: notSent, errorCode: ErrorCode.NOT_CONNECTED });
       expect(shownToasts()).toEqual([]);
       expect(await assertive()).toEqual([notSent]);
     } finally {
@@ -173,6 +174,37 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
       const { wrapper } = await mountRefusingTable();
       window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
       vi.advanceTimersByTime(10_001);
+      await wrapper.get('[data-bs-action="move"]').trigger('click');
+      await flushPromises();
+      await wrapper.get('[data-testid="bad-move"]').trigger('click');
+      await flushPromises();
+      expect(shownToasts()).toEqual([['error', 'Invalid selection for "to"']]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still toasts a refusal the host gives for its own reasons while the connection shows as stale (#1646 review F3)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted } = await mountRefusingTable();
+      window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
+      vi.advanceTimersByTime(10_001);
+      await refusePass(wrapper, posted, { error: 'It is not your turn.' });
+      expect(shownToasts()).toEqual([['error', 'It is not your turn.']]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('holds back only the toast of the refusal itself, not a later failure in the same words (#1646 review F3)', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      const { wrapper, posted } = await mountRefusingTable();
+      window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'heartbeat' } }));
+      vi.advanceTimersByTime(10_001);
+      await refusePass(wrapper, posted, { error: 'Invalid selection for "to"', errorCode: ErrorCode.NOT_CONNECTED });
+      expect(shownToasts()).toEqual([]);
       await wrapper.get('[data-bs-action="move"]').trigger('click');
       await flushPromises();
       await wrapper.get('[data-testid="bad-move"]').trigger('click');

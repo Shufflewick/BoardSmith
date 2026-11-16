@@ -140,7 +140,7 @@ describe('GameShell shows a host refusal of undo and the debug ops (#859)', () =
 
       wrapper.findComponent(PlayShell).vm.$emit('undo');
       await flushPromises();
-      answerer(posted)('undo', { success: false, error: 'You are not connected to the table right now, so this was not sent.' });
+      answerer(posted)('undo', { success: false, error: 'You are not connected to the table right now, so this was not sent.', errorCode: ErrorCode.NOT_CONNECTED });
       await flushPromises();
       expect(shownToasts()).toEqual([]);
     } finally {
@@ -175,7 +175,7 @@ describe('GameShell shows the host\'s reason for refusing a hint or heatmap (#95
       vi.advanceTimersByTime(10_001);
       wrapper.findComponent(ControlsMenu).vm.$emit('teaching-action', 'hint');
       await flushPromises();
-      answerer(posted)('hint', { success: false, error: 'You are not connected to the table right now, so this was not sent.' });
+      answerer(posted)('hint', { success: false, error: 'You are not connected to the table right now, so this was not sent.', errorCode: ErrorCode.NOT_CONNECTED });
       await flushPromises();
       expect(shownToasts()).toEqual([]);
     } finally {
