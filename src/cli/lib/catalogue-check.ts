@@ -54,6 +54,7 @@ import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import { uncommittedContentHash } from './execution-context.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
+import { groupLeader, killGroup } from './started-processes.js';
 import { readIfExists, readIfExistsSync } from './read-if-exists.js';
 
 /** Where the catalogue is on a machine set up the usual way. */
@@ -308,20 +309,21 @@ async function savePasses(path: string, passed: string[]): Promise<void> {
 }
 
 /**
- * The processes this run started, so a time limit or a stop signal can end them. Each is started in
- * its own process group and ended with the whole group, so what it started in turn (vue-tsc, a
- * bundler) ends with it.
+ * The processes this run started, so a time limit or a stop signal can end them. Each runs under
+ * `group-leader.mjs` in its own process group, which is killed whole when it exits, when it is
+ * stopped, and when this run is killed outright, so nothing it started (vitest's workers, vue-tsc)
+ * outlives it (#1657).
  */
 class Children {
   private readonly live = new Set<ChildProcess>();
 
   /**
-   * Runs `command` in `cwd`, resolving with its exit code, everything it printed, and whether
-   * `timeLimitMs` ran out first and it was stopped.
+   * Runs the Node script `script` in `cwd`, resolving with its exit code, everything it printed,
+   * and whether `timeLimitMs` ran out first and it was stopped.
    */
-  run(command: string, args: string[], cwd: string, timeLimitMs = Infinity): Promise<{ code: number; output: string; timedOut: boolean }> {
+  run(script: string, args: string[], cwd: string, timeLimitMs = Infinity): Promise<{ code: number; output: string; timedOut: boolean }> {
     return new Promise((resolve) => {
-      const child = spawn(command, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+      const child = spawn(process.execPath, [groupLeader(), script, ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
       this.live.add(child);
       let output = '';
       let timedOut = false;
@@ -338,14 +340,20 @@ class Children {
       };
       child.stdout.on('data', (chunk) => (output += chunk));
       child.stderr.on('data', (chunk) => (output += chunk));
+      // On exit, not close: a process the script left running holds its pipes open, and would go on using the machine (#1657).
+      let reaped: Promise<string> = Promise.resolve('');
+      child.on('exit', () => (reaped = killGroup(child).then(() => '', (error: Error) => `${error.message}\n`)));
       child.on('error', (error) => settle(1, `${error.message}\n`));
-      child.on('close', (code) => settle(code ?? 1));
+      child.on('close', async (code) => {
+        const failed = await reaped;
+        settle(failed ? 1 : (code ?? 1), failed);
+      });
     });
   }
 
-  /** Ends every process still running, and everything each started. */
-  endAll(): void {
-    for (const child of this.live) this.end(child);
+  /** Ends every process still running, and everything each started, resolving once they are gone. */
+  async endAll(): Promise<void> {
+    await Promise.all([...this.live].map(killGroup));
   }
 
   private end(child: ChildProcess): void {
@@ -454,7 +462,7 @@ async function checkGame(slug: string, tree: string, dir: string, children: Chil
   };
   // Side by side: none of the three reads what another writes.
   const [validate, ...collected] = await Promise.all([
-    children.run(process.execPath, [join(tree, 'bin', 'boardsmith.js'), 'validate'], dir, timeLimitMs),
+    children.run(join(tree, 'bin', 'boardsmith.js'), ['validate'], dir, timeLimitMs),
     collect([], `${dir}.tests.json`),
     collect(['--mode', 'sims'], `${dir}.sims.json`),
   ]);

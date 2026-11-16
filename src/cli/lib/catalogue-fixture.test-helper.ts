@@ -18,7 +18,8 @@ import type { CatalogueRun } from './catalogue-check.js';
  * The stand-in for `boardsmith validate`. It passes only when, in the folder it runs in:
  * `node_modules/boardsmith` and `node_modules/.bin/boardsmith` are this tree, `node_modules/.bin/tool`
  * is still reachable, every catalogue dependency named in `deps.txt` is a committed copy that loads
- * this tree too, and neither it nor any of those has a `BROKEN` file.
+ * this tree too, and neither it nor any of those has a `BROKEN` file. With `HANG` it never ends, and
+ * with `ORPHAN` it passes leaving a child running.
  */
 const STUB_VALIDATE = `
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -43,6 +44,10 @@ if (existsSync('BROKEN')) fail('BROKEN: ' + readFileSync('BROKEN', 'utf-8'));
 if (existsSync('HANG')) {
   spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'hanging-grandchild')], { stdio: 'ignore' });
   setInterval(() => {}, 1000);
+} else if (existsSync('ORPHAN')) {
+  // Exits once it has started a child it leaves running on its pipes, as a vitest stopped before its workers does.
+  spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'orphaned-grandchild')], { stdio: 'inherit' }).unref();
+  console.log('valid');
 } else console.log('valid');
 `;
 
