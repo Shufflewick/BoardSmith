@@ -5,8 +5,9 @@
  * FOCUS BUT DOES NOTHING WHEN CHOSEN (#1465).
  *
  * When a focused button turns natively disabled or is removed, the browser
- * drops focus to `<body>` (firing focusout with no relatedTarget), where no key
- * reaches the menu while the rest of the page stays inert. The menu's own items
+ * drops focus to `<body>` (firing focusout with no relatedTarget, except for a
+ * removal in WebKit, #1618), where no key reaches the menu while the rest of
+ * the page stays inert. The menu's own items
  * are only ever aria-disabled, so the natively disabled case stands for a
  * game's own dialog built on the exported useFocusTrap. The trap moves focus to
  * the next item, so every key keeps working. jsdom keeps the focus on the
@@ -19,8 +20,7 @@
  */
 import { assert, check, openTableSample, runBrowserRegression, summarise } from './browser-harness.mjs';
 
-// Chromium only until #1618: WebKit fires no focusout when the focused item is removed.
-await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', table: true, engines: ['chromium'] }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', table: true, engines: ['chromium', 'webkit'] }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage();
@@ -97,14 +97,18 @@ await runBrowserRegression({ script: 'focus-trap-disabled-item-browser.mjs', tab
           let dropped = false;
           doc.addEventListener('focusout', (e) => { dropped ||= e.target === button && e.relatedTarget === null; });
           if (how === 'disabled') button.disabled = true;
-          else button.remove();
+          else {
+            button.remove();
+            // WebKit fires no focusout for a removal (#1618), so the drop is focus on the body before the trap's microtask runs.
+            dropped = doc.activeElement === doc.body;
+          }
           // The browser moves focus off a disabled element when it next renders.
           await new Promise((settle) => requestAnimationFrame(() => requestAnimationFrame(settle)));
           const active = doc.activeElement;
           return { dropped, inMenu: active !== button && active !== menuEl && menuEl.contains(active), on: active === doc.body ? 'the page body' : active?.getAttribute('aria-label') || active?.textContent?.trim() };
         }, how);
         await check(`the focused menu item drops its focus ${at}`, async () => {
-          assert(after.dropped, 'the browser fired no focusout with an empty relatedTarget, so this run does not reproduce #1453');
+          assert(after.dropped, how === 'disabled' ? 'the browser fired no focusout with an empty relatedTarget, so this run does not reproduce #1453' : 'focus was not on the page body right after the item was removed, so this run does not reproduce #1453');
         });
         await check(`focus moves to another item in the menu ${at}`, async () => {
           assert(after.inMenu, `focus is on "${after.on}", not on an enabled item in the controls menu`);

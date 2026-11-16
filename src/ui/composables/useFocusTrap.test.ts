@@ -98,6 +98,16 @@ describe('useFocusTrap', () => {
       expect(document.activeElement).toBe(button('b'));
     });
 
+    it('moves focus to the next item when the focused one is removed with no focusout, as in WebKit (#1618)', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button><button id="c">C</button>');
+      button('b').focus();
+
+      button('b').remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(button('c'));
+    });
+
     it('leaves focus alone when the window loses it, even on an element outside the Tab order', async () => {
       const { dialog, button } = await openOn('<button id="a">A</button><button id="b">B</button>');
       dialog.tabIndex = -1;
