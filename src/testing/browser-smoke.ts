@@ -1884,6 +1884,28 @@ function openWay(play: SeatPlay, way: Way, moves: number): NextPress {
   return way;
 }
 
+/** The ways into the menu `offers` shows, the one `play`'s browser opened longest ago first, less those it never opened. */
+const oldestFirst = (offers: Offers, play: SeatPlay): Way[] => [...play.opened.keys()].flatMap((press) => offers.ways.filter((way) => way.press === press));
+
+/**
+ * The way into the menu to open next: one this browser never opened, else, until it next goes back
+ * out of a level, the one opened longest ago before the last action taken, since what it holds may
+ * have changed.
+ */
+function wayIn(offers: Offers, play: SeatPlay, moves: number): Way | undefined {
+  const fresh = offers.ways.find((way) => !play.opened.has(way.press));
+  if (fresh !== undefined || play.wentBackAt === moves) return fresh;
+  return oldestFirst(offers, play).find((way) => play.opened.get(way.press)! < moves);
+}
+
+/** A panel that offers only ways into its menu: the one opened longest ago, whose actions are then taken, else the way back. */
+function lastResort(offers: Offers, play: SeatPlay, moves: number): NextPress {
+  const [oldest] = oldestFirst(offers, play);
+  if (oldest === undefined) return offers.inGroup ? { press: '[data-bs-menu-back]', what: 'way back' } : undefined;
+  play.lastResort = true;
+  return openWay(play, oldest, moves);
+}
+
 /**
  * An action whose input reads a value off the page now (`ready`, #471), else an action not taken,
  * failed or put off for want of an input (#470) yet, else a way into the menu (a group, or a thing
@@ -1900,11 +1922,8 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: R
   if (now !== undefined) return { take: now };
   const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   if (untaken !== undefined) return { take: untaken };
-  const fresh = offers.ways.find((way) => !play.opened.has(way.press));
-  if (fresh !== undefined) return openWay(play, fresh, memory.moves);
-  const oldestFirst = [...play.opened.keys()].flatMap((press) => offers.ways.filter((way) => way.press === press));
-  const stale = oldestFirst.find((way) => play.opened.get(way.press)! < memory.moves);
-  if (stale !== undefined && play.wentBackAt !== memory.moves) return openWay(play, stale, memory.moves);
+  const way = wayIn(offers, play, memory.moves);
+  if (way !== undefined) return openWay(play, way, memory.moves);
   if (offers.inGroup && !play.lastResort) {
     play.wentBackAt = memory.moves;
     return { press: '[data-bs-menu-back]', what: 'way back' };
@@ -1912,12 +1931,7 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: R
   const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
   const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name) && !puttingOff(name, memory));
   const least = [...(goesOn.length > 0 ? goesOn : offers.enabled)].sort(byTimes)[0];
-  if (least !== undefined) return { take: least };
-  if (oldestFirst[0] !== undefined) {
-    play.lastResort = true;
-    return openWay(play, oldestFirst[0], memory.moves);
-  }
-  return offers.inGroup ? { press: '[data-bs-menu-back]', what: 'way back' } : undefined;
+  return least === undefined ? lastResort(offers, play, memory.moves) : { take: least };
 }
 
 /** The shell's mark of a game whose ending is on screen, drawn by the shell's card or by the board itself (#1463). */
