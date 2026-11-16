@@ -1381,15 +1381,21 @@ the player is then shown fewer moves than they legally have, the bot plays the
 ones they were not shown, and nothing in the game can explain the difference.
 
 **What the panel does when a step is still too big.** Above 24 candidates, if
-every candidate carries a board ref, the panel stops listing them and offers one
+the board offers every candidate, the panel stops listing them and offers one
 control — "Choose on the board (N)" — that moves keyboard focus onto the board's
-first valid target. This is a change of *surface*, not of content: the board
-offers the identical enumeration, arrow keys move between candidates and Enter
-chooses, so the keyboard path is continuous. It is not a filter and not a hidden
-option; nothing is dropped. If even one candidate has no board ref the panel
-keeps every button, because deferring would leave that candidate reachable from
-neither surface. For the same reason the panel lists every candidate while the
-board shows its error message in place of the board.
+first valid target. A board may show only state, so a board ref is not enough:
+the board offers a candidate when it draws it marked with `candidateAttrs` beside
+`anchorAttrs`, which `useSelectable` and `useSelectableGrid` (and every AutoUI
+renderer) do for you, or the whole pick on one surface marked with
+`pickSurfaceAttrs` (see
+[Naming a Candidate a Player Can See](./custom-ui-guide.md#naming-a-candidate-a-player-can-see)).
+This is a change of *surface*, not of content: arrow keys move between
+candidates and Enter chooses, so the keyboard path is continuous. It is not a
+filter and not a hidden option; nothing is dropped. If even one candidate has no
+board ref, or the board does not offer it, the panel keeps every button, because
+deferring would leave that candidate reachable from neither surface. For the same
+reason the panel lists every candidate while the board shows its error message in
+place of the board.
 
 This holds for `chooseFrom` as well as element picks. For a `chooseFrom`, a
 candidate's board ref is the one `boardRefs` gives it with role `target` (or its

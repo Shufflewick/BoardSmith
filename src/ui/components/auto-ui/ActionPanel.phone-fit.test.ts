@@ -25,6 +25,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BREAKPOINTS } from '../../theme.js';
 import { stubActionController, mountPanel } from './action-panel-controller.test-helper.js';
+import { BOARD_INTERACTION_KEY, createBoardInteraction } from '../../composables/useBoardInteraction.js';
 
 // Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
 import.meta.glob('../PlayShell.vue');
@@ -62,6 +63,14 @@ function baseRule(selector: string): string {
 }
 
 function mountHandoffAfterChoice() {
+  const spaces = Array.from({ length: 50 }, (_, i) => ({
+    id: i,
+    display: `s${i}`,
+    refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }],
+  }));
+  // The board offers every space, so the pick is handed to it (#1644).
+  const board = createBoardInteraction();
+  board.setOfferedCandidates(spaces.map((space) => space.refs[0]!.ref));
   const controller = stubActionController({
     currentAction: ref('placePack'),
     actionSnapshot: ref({
@@ -76,15 +85,9 @@ function mountHandoffAfterChoice() {
     }),
     currentArgs: ref({ unit: 'Scuttlers' }),
     currentPick: ref({ name: 'space', type: 'element', prompt: 'Choose where the middle of the front row goes' }),
-    validElements: ref(
-      Array.from({ length: 50 }, (_, i) => ({
-        id: i,
-        display: `s${i}`,
-        refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }],
-      })),
-    ),
+    validElements: ref(spaces),
   });
-  return mountPanel(controller);
+  return mountPanel(controller, undefined, { provide: { [BOARD_INTERACTION_KEY]: board } });
 }
 
 describe('#444: the open Action Panel fits its two-row cap at phone width', () => {

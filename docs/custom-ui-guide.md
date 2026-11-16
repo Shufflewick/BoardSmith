@@ -635,6 +635,22 @@ pick and leaves with it. Without it your board renders the element's internal
 name and nothing outside the app can tell which of your nodes answers the open
 selection.
 
+The mark is also how your board takes over a large pick. Above 24 candidates the
+Action Panel hands the pick to the board ("Choose on the board (N)") only when
+the board offers EVERY candidate; a board that draws the elements without
+marking them is showing state, and the panel keeps listing them (#1644). A board
+offers a candidate by marking its node this way, or offers a whole pick on one
+surface (a cursor moved over a field, say) by spreading
+`pickSurfaceAttrs(pickName)` (`boardsmith/ui`) on that surface while it takes the
+pick, and `pickSurfaceAttrs(null)` otherwise:
+
+```vue
+<rect v-bind="pickSurfaceAttrs(choosingSpace ? board.currentPickName : null)" … />
+```
+
+A surface that claims a pick must reach every one of its candidates, by pointer
+and by keyboard: the panel lists none of them once it does.
+
 ### Keyboard Navigation for a Grid: `useSelectableGrid()`
 
 `useSelectableGrid(cells, position, getIdentity, boardInteraction, onActivate, elementType?, isCandidate?)`

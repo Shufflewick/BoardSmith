@@ -18,6 +18,7 @@ import { useMenuCommands } from '../composables/menuCommands.js';
 import { useHideChrome } from '../composables/hideChrome.js';
 import { useActionHolds } from '../composables/actionHolds.js';
 import { usePlayContext } from '../composables/useGameContext.js';
+import { anchorAttrs, candidateAttrs, useBoardInteraction } from '../composables/useBoardInteraction.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -699,14 +700,21 @@ describe('WorldShell — the shared chrome (#170)', () => {
 
   it('lists a large pick in the panel while the board shows its error, and hands it back when the board draws (#1153)', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Once it draws, it offers every room, as `useSelectable` does (#1644).
     const Fragile = defineComponent({
       props: { gameView: { type: null, required: true } },
-      setup: (props) => () => {
-        if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
-        return h('p', { class: 'fragile' }, 'drawn');
+      setup: (props) => {
+        const board = useBoardInteraction();
+        return () => {
+          if ((props.gameView as { said?: string })?.said === 'boom') throw new Error('no room here');
+          return h('p', { class: 'fragile' }, [
+            'drawn',
+            ...board.validElements.map(({ ref }) => h('button', { ...anchorAttrs(ref), ...candidateAttrs(board.candidateLabel(ref)) })),
+          ]);
+        };
       },
     });
-    // 50 rooms, each drawn on the board, so the panel would hand the pick to the board.
+    // 50 rooms, each offered on the board, so the panel would hand the pick to the board.
     const rooms = Array.from({ length: 50 }, (_, i) => ({
       value: `r${i}`,
       display: `Room ${i}`,

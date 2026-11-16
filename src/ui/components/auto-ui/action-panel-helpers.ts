@@ -5,7 +5,7 @@
 
 import type { ChoiceWithRefs, EnrichedValidElement } from '../../composables/useActionControllerTypes.js';
 import { choiceBoardTarget } from '../../composables/actionControllerHelpers.js';
-import { boardRefKey } from '../../composables/useBoardInteraction.js';
+import { boardRefKey, type ElementRef } from '../../composables/useBoardInteraction.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metadata.js';
 
 /**
@@ -72,18 +72,20 @@ export function splitAnchoredChoices(
  * "list" is really an unlabelled grid — Hex's fifty empty cells are the case
  * this exists for.
  *
- * When every candidate carries a board ref, the board is already drawing all of
- * them, and it is the better surface: the cells are laid out in the geometry the
- * choice actually has. So the panel renders the prompt and ONE control that
- * hands keyboard focus to the board, instead of fifty buttons.
+ * When the board offers every candidate, it is the better surface: the cells
+ * are laid out in the geometry the choice actually has. So the panel renders
+ * the prompt and ONE control that hands keyboard focus to the board, instead of
+ * fifty buttons.
  *
  * Two conditions are strict, and both are about not losing a choice:
  * - Only element / elements picks. A `choice` pick has its own rule,
  *   `shouldDeferChoicePickToBoard`, because its candidates are values that
  *   point at the board rather than board elements themselves.
- * - EVERY candidate must carry a ref. One candidate without one would be
- *   reachable from neither surface, which is the divergence bug this rule
- *   exists to forbid, not a rounding error.
+ * - The board must OFFER every candidate (`offered`, what the board marks with
+ *   `candidateAttrs`). A ref alone does not say so: every element candidate
+ *   carries one, and a board may show only state (#1644). One candidate the
+ *   board does not offer would be reachable from neither surface, which is the
+ *   divergence bug this rule exists to forbid, not a rounding error.
  *
  * This is not a hidden option or a filter: the board offers exactly the same
  * enumeration the panel would have, and the handoff carries focus with it
@@ -92,11 +94,12 @@ export function splitAnchoredChoices(
 export function shouldDeferElementPickToBoard(
   pickType: string | undefined,
   validElements: EnrichedValidElement[],
+  offered: (ref: ElementRef) => boolean,
   threshold: number = MAX_FLAT_CHOICE_CANDIDATES,
 ): boolean {
   if (pickType !== 'element' && pickType !== 'elements') return false;
   if (validElements.length <= threshold) return false;
-  return validElements.every((e) => (e.refs ?? []).length > 0);
+  return validElements.every((e) => (e.refs ?? []).some(({ ref }) => offered(ref)));
 }
 
 /**
@@ -114,13 +117,14 @@ export function shouldDeferElementPickToBoard(
  * the candidate up by. A name-only ref does not count, since a name need not
  * belong to one element. The conditions are about not losing a choice, as for
  * elements:
- * - EVERY candidate must have such a target, or the one without would be
- *   reachable from neither surface.
+ * - EVERY candidate must have such a target, and the board must offer it
+ *   (`offered`, #1644), or that candidate would be reachable from neither surface.
  * - No two candidates may share a target. The board finds the first candidate
  *   on an element, so the second could never be chosen there.
  */
 export function shouldDeferChoicePickToBoard(
   choices: ChoiceWithRefs[],
+  offered: (ref: ElementRef) => boolean,
   threshold: number = MAX_FLAT_CHOICE_CANDIDATES,
 ): boolean {
   if (choices.length <= threshold) return false;
@@ -128,7 +132,7 @@ export function shouldDeferChoicePickToBoard(
   for (const choice of choices) {
     const target = choiceBoardTarget(choice);
     const key = target && boardRefKey(target);
-    if (key === undefined || key.kind === 'name' || targets.has(key.key)) return false;
+    if (key === undefined || key.kind === 'name' || targets.has(key.key) || !offered(target!)) return false;
     targets.add(key.key);
   }
   return true;

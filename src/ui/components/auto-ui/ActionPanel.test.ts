@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { defineComponent, h, ref } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
@@ -33,6 +33,7 @@ import {
   createBoardInteraction,
   provideBoardInteraction,
   type BoardInteraction,
+  type ElementRef,
 } from '../../composables/useBoardInteraction.js';
 
 // ---------------------------------------------------------------------------
@@ -697,6 +698,16 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 });
 
+/** A board interaction whose board marks every one of `refs` as a candidate it offers, as `useSelectable` does (#1644). */
+function boardOffering(refs: ElementRef[]): BoardInteraction {
+  const bi = createBoardInteraction();
+  bi.setOfferedCandidates(refs);
+  return bi;
+}
+
+/** A board interaction whose board offers every element the choices name. */
+const boardOfferingChoices = (choices: ChoiceWithRefs[]) => boardOffering(choices.flatMap((c) => c.refs ?? []).map((r) => r.ref));
+
 /** Mount the panel inside a host that provides a real board interaction. */
 function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction, panelProps: Record<string, unknown> = {}) {
   const Host = defineComponent({
@@ -724,7 +735,10 @@ describe('ActionPanel large element picks (#172)', () => {
   }
 
   /** The 'placeStone' cell pick, with N board-anchored candidates. */
-  function mountCellPick(count: number, bi: BoardInteraction = createBoardInteraction()) {
+  /** A board that offers every cell. */
+  const offeringCells = (count: number) => boardOffering(anchoredElements(count).map((cell) => cell.refs[0]!.ref));
+
+  function mountCellPick(count: number, bi: BoardInteraction = offeringCells(count)) {
     const controller = stubActionController({
       currentAction: ref('placeStone'),
       currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
@@ -749,7 +763,7 @@ describe('ActionPanel large element picks (#172)', () => {
   });
 
   it('hands keyboard focus to the board when the control is activated', async () => {
-    const bi = createBoardInteraction();
+    const bi = offeringCells(50);
     const wrapper = mountCellPick(50, bi);
 
     expect(bi.boardFocusRequest).toBe(0);
@@ -773,10 +787,41 @@ describe('ActionPanel large element picks (#172)', () => {
       currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
       validElements: ref(elements),
     });
-    const wrapper = mountWithBoard(controller, createBoardInteraction());
+    const wrapper = mountWithBoard(controller, offeringCells(50));
 
     expect(wrapper.findAll('.element-btn')).toHaveLength(51);
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  // #1644: a board may show only state. Drawing the cells is not offering them.
+  it('lists every cell when the board draws them but offers none', () => {
+    const bi = createBoardInteraction();
+    bi.setDrawnElements(anchoredElements(30).map((cell) => cell.refs[0]!.ref));
+    const wrapper = mountCellPick(30, bi);
+
+    expect(wrapper.findAll('.element-btn')).toHaveLength(30);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  it('lists every cell when the board offers all but one of them', () => {
+    const wrapper = mountCellPick(30, offeringCells(29));
+
+    expect(wrapper.findAll('.element-btn')).toHaveLength(30);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  // #1644: a board that draws the pick as one surface (a cursor over a field) says so for the whole pick.
+  it('hands the pick to a board that takes it on one surface, and only that pick', async () => {
+    const bi = createBoardInteraction();
+    bi.setPickSurfaces(['cell']);
+    const wrapper = mountCellPick(30, bi);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+
+    bi.setPickSurfaces(['another']);
+    await nextTick();
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.element-btn')).toHaveLength(30);
+    wrapper.unmount();
   });
 });
 
@@ -798,7 +843,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   function mountSpacePick(
     choices: ChoiceWithRefs[],
     pick: Record<string, unknown> = {},
-    bi: BoardInteraction = createBoardInteraction(),
+    bi: BoardInteraction = boardOfferingChoices(choices),
     overrides: Record<string, unknown> = {},
   ) {
     const controller = stubActionController({
@@ -827,7 +872,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   });
 
   it('hands keyboard focus to the board when the control is activated', async () => {
-    const bi = createBoardInteraction();
+    const bi = boardOfferingChoices(spaces(50));
     const wrapper = mountSpacePick(spaces(50), {}, bi);
 
     await wrapper.find('.board-handoff-btn').trigger('click');
@@ -861,11 +906,21 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
   });
 
+  // #1644: a board that shows only state draws the spaces without offering one.
+  it('lists every space when the board draws them but offers none', () => {
+    const bi = createBoardInteraction();
+    bi.setDrawnElements(spaces(30).map((space) => space.refs![0]!.ref));
+    const wrapper = mountSpacePick(spaces(30), {}, bi);
+
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(30);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
   it('counts every candidate the pick offers, one an earlier step took included (#407)', () => {
     // The count is the length of the list the pick offers. A value an earlier
     // choice step of the same action took is still offered unless the game's own
     // list leaves it out, so the count the player is told includes it.
-    const wrapper = mountSpacePick(spaces(50), { name: 'second' }, createBoardInteraction(), {
+    const wrapper = mountSpacePick(spaces(50), { name: 'second' }, boardOfferingChoices(spaces(50)), {
       currentAction: ref('placeTwo'),
       currentArgs: ref({ first: 's0' }),
       actionSnapshot: ref({
@@ -893,7 +948,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   });
 
   it('keeps the count and Done for a multi-select pick handed to the board', () => {
-    const wrapper = mountSpacePick(spaces(50), { multiSelect: { min: 1, max: 3 } }, createBoardInteraction(), {
+    const wrapper = mountSpacePick(spaces(50), { multiSelect: { min: 1, max: 3 } }, boardOfferingChoices(spaces(50)), {
       multiSelectDraft: ref({ selectionName: 'space', values: ['s1'], copies: [0] }),
     });
 
@@ -904,7 +959,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   });
 
   it('keeps the entries built so far and Done for an ordered list handed to the board', () => {
-    const wrapper = mountSpacePick(spaces(50), { orderedList: { min: 1, max: 4 } }, createBoardInteraction(), {
+    const wrapper = mountSpacePick(spaces(50), { orderedList: { min: 1, max: 4 } }, boardOfferingChoices(spaces(50)), {
       multiSelectDraft: ref({ selectionName: 'space', values: ['s3', 's3'], copies: [0, 1] }),
     });
 
@@ -922,7 +977,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   it('lets a 2-of-N multi-select on board squares be completed from the panel', async () => {
     const toggleMultiSelect = vi.fn(async () => {});
     const fill = vi.fn(async () => ({ valid: true }));
-    const wrapper = mountSpacePick(spaces(3), { multiSelect: { min: 2, max: 2 } }, createBoardInteraction(), {
+    const wrapper = mountSpacePick(spaces(3), { multiSelect: { min: 2, max: 2 } }, boardOfferingChoices(spaces(3)), {
       multiSelectDraft: ref({ selectionName: 'space', values: ['s0'], copies: [0] }),
       isMultiSelectSelected: (_name: string, value: unknown) => value === 's0',
       toggleMultiSelect,
@@ -942,7 +997,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
   it('lets an ordered list on board squares be built from the panel', async () => {
     const appendListEntry = vi.fn(async () => {});
     const fill = vi.fn(async () => ({ valid: true }));
-    const wrapper = mountSpacePick(spaces(3), { orderedList: { min: 1, max: 3 } }, createBoardInteraction(), {
+    const wrapper = mountSpacePick(spaces(3), { orderedList: { min: 1, max: 3 } }, boardOfferingChoices(spaces(3)), {
       multiSelectDraft: ref({ selectionName: 'space', values: ['s2'], copies: [0] }),
       appendListEntry,
       fill,
@@ -1065,7 +1120,7 @@ describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
       currentChoices: ref(choices),
       ...overrides,
     });
-    return mountWithBoard(controller, createBoardInteraction(), panelProps);
+    return mountWithBoard(controller, boardOfferingChoices(choices), panelProps);
   }
 
   it('renders one board handoff control instead of 3,720 buttons', () => {

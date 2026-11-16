@@ -169,9 +169,11 @@ export const gameDefinition: GameDefinition = {
  * The measurement only means something if there is board under the bar to
  * begin with: a board that ends above the bar would show a growing usable area
  * with nothing in it. Its one button starts `tend` through the shared action
- * controller, so a question can start while the bar is down (#922).
+ * controller, so a question can start while the bar is down (#922). It offers
+ * every candidate of the open pick, so a large one is handed to it (#1644).
  */
 const BOARD = `import { defineComponent, h } from 'vue';
+import { anchorAttrs, candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 export default defineComponent({
   name: 'GardenBoard',
@@ -180,6 +182,7 @@ export default defineComponent({
   },
   setup(props) {
     const controller = props.actionController as { start(name: string, options?: Record<string, unknown>): Promise<unknown> };
+    const board = useBoardInteraction();
     return () =>
       h('div', {
         'data-fixture': 'garden',
@@ -191,6 +194,7 @@ export default defineComponent({
           style: 'display: block; margin: 40px;',
           onClick: () => void controller.start('tend', {}),
         }, 'Tend from the board'),
+        ...board.validElements.map(({ ref }) => h('button', { ...anchorAttrs(ref), ...candidateAttrs(board.candidateLabel(ref)) })),
       ]);
   },
 });

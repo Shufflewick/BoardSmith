@@ -49,6 +49,9 @@ import GridBoardRenderer from '../components/auto-ui/renderers/GridBoardRenderer
 import { mountBoardRenderer } from '../components/auto-ui/renderers/board-renderer-a11y.test-helper.js';
 import type { GameElement } from '../components/auto-ui/auto-ui-helpers.js';
 
+/** A board that offers every candidate it is asked about, so a check reads the panel's other conditions (#1644). */
+const offersAll = () => true;
+
 /** The game a test starts in. A test that replaces it says so. */
 const A_GAME: RunnerIdentity = { gameInstanceId: 'game-a', restoreEpoch: 0 };
 
@@ -249,7 +252,7 @@ describe('Board + controller interaction integration', () => {
     // is not handed to the board (see action-panel-helpers.test.ts) and the panel
     // stays a keyboard-reachable surface for exactly these choices.
     expect(controller.validElements.value).toEqual([]);
-    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value, offersAll)).toBe(false);
     expect(controller.currentChoices.value.map((c) => c.display)).toEqual(['a5', 'c5']);
   });
 
@@ -642,7 +645,7 @@ describe('Board + controller interaction integration', () => {
 
     expect(controller.currentPick.value?.name).toBe('space');
     // The panel's rule, applied to what the controller holds, says hand it over...
-    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value, offersAll)).toBe(true);
     // ...and the board offers every one of those candidates, disabled ones as disabled.
     for (let i = 0; i < 3720; i++) {
       expect(board.isSelectableElement({ notation: `s${i}` })).toBe(true);
@@ -679,7 +682,7 @@ describe('Board + controller interaction integration', () => {
     await flush();
 
     expect(controller.currentPick.value?.name).toBe('piece');
-    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value, offersAll)).toBe(true);
     for (let i = 0; i < 3720; i++) {
       expect(board.isSelectableElement({ id: 1000 + i })).toBe(true);
     }

@@ -30,6 +30,9 @@ import ActionPanel from './ActionPanel.vue';
 import { shouldDeferChoicePickToBoard } from './action-panel-helpers.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
+/** A board that offers every candidate it is asked about, so a check reads the panel's other conditions (#1644). */
+const offersAll = () => true;
+
 // ── Fixture: two-step move ────────────────────────────────────────────────
 // Step 1: element pick (piece)
 // Step 2: choice pick (destination) — choices arrive async, no refs so they
@@ -325,7 +328,7 @@ describe('ActionPanel interaction tests', () => {
     // ...and two destinations are well under the reading threshold, so the pick is
     // not handed to the board (see action-panel-helpers.test.ts) and the panel keeps
     // every option reachable by keyboard.
-    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value, offersAll)).toBe(false);
 
     // Mount to verify the panel is renderable (smoke-level check: no throw)
     const wrapper = mount(ActionPanel, {
