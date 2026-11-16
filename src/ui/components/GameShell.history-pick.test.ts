@@ -356,7 +356,7 @@ describe('GameShell shows a cancel the host refuses (#859)', () => {
     await flushPromises();
     const toast = useToast();
     expect(toast.toasts.value.map((t) => [t.type, t.message])).toEqual([['error', 'Nothing to cancel.']]);
-    for (const t of [...toast.toasts.value]) toast.remove(t.id);
+    for (const t of [...toast.toasts.value]) toast.dismiss(t.id);
     wrapper.unmount();
   });
 });

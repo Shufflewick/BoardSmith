@@ -101,7 +101,7 @@ describe('GameShell — a failed action is told once (UIX-01)', () => {
   afterEach(() => {
     mounted?.unmount();
     mounted = undefined;
-    for (const t of [...toast.toasts.value]) toast.remove(t.id);
+    for (const t of [...toast.toasts.value]) toast.dismiss(t.id);
     leaveIframe();
   });
 

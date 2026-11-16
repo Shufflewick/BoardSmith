@@ -80,7 +80,7 @@ const shownToasts = () => toast.toasts.value.map((t) => [t.type, t.message]);
 
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
-  for (const t of [...toast.toasts.value]) toast.remove(t.id);
+  for (const t of [...toast.toasts.value]) toast.dismiss(t.id);
   leaveIframe();
   document.body.innerHTML = '';
 });
