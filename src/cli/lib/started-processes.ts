@@ -20,6 +20,9 @@ const DEV_READY_MS = 180_000;
 /** How long a process asked to stop gets before it is killed. */
 const STOP_GRACE_MS = 15_000;
 
+/** Leads an `ownGroup` child's group, and kills it once this run is gone. From the package root, which the bundle shares. */
+const groupLeader = () => join(boardsmithPackageRoot(), 'src', 'cli', 'lib', 'group-leader.mjs');
+
 /** How many free ports to try when another process takes the one found before dev binds it. */
 const PORT_ATTEMPTS = 3;
 
@@ -41,7 +44,8 @@ export class Started {
   private readonly onSignal = (signal: NodeJS.Signals) => {
     this.interruptedBy ??= signal;
     this.signalled(signal);
-    void this.stopAll();
+    // `finish` stops them again and throws what failed here.
+    this.stopAll().catch(() => {});
   };
 
   constructor() {
@@ -54,7 +58,8 @@ export class Started {
    * undefined is kept from the child), keeping its output. Refuses once the run was interrupted.
    * With `ownGroup`, the child leads its own process group, which is signalled whole when it is
    * stopped, so a signal to this run's group cannot end it before the processes it started, and
-   * any it leaves behind are killed once it has gone (#1648). Windows has no such groups.
+   * any it leaves behind are killed once it has gone (#1648). The group goes too when this run
+   * ends without stopping it (`group-leader.mjs`). Windows has no such groups.
    */
   spawn(
     args: string[],
@@ -69,7 +74,9 @@ export class Started {
       else environment[name] = value;
     }
     const group = ownGroup && process.platform !== 'win32';
-    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment, detached: group });
+    const child = group
+      ? spawn(process.execPath, [groupLeader(), ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], env: environment, detached: true })
+      : spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment });
     this.children.push(child);
     if (group) this.groups.add(child);
     return { child, output: collectOutput(child) };
@@ -106,6 +113,7 @@ const GROUP_CHECK_MS = 50;
 /** Sends `signal` to `child`, or to its whole process group when it leads one; false once that group is empty. */
 function signalChild(child: ChildProcess, group: boolean, signal: NodeJS.Signals): boolean {
   if (!group) return child.kill(signal);
+  if (child.pid === undefined) return false;
   try {
     process.kill(-child.pid!, signal);
     return true;
