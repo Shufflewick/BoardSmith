@@ -1781,7 +1781,7 @@ onUnmounted(() => {
 }
 
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */
-@media (max-width: 639px) {
+@media (width < 640px) {
   .dev-chrome__bar-wide {
     display: none; /* hide inline secondary controls */
   }

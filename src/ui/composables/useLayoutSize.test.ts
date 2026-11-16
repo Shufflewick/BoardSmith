@@ -22,8 +22,9 @@ function measure(size: { width: number; height: number }) {
 }
 
 describe('useLayoutSize (#1610)', () => {
+  // A zoomed or high-DPR viewport has a fractional CSS width, which belongs to the tier below the edge (#1621).
   it('reads the size tier at each breakpoint edge', () => {
-    for (const [width, formFactor] of [[390, 'compact'], [639, 'compact'], [640, 'medium'], [1023, 'medium'], [1024, 'wide'], [1440, 'wide']] as const) {
+    for (const [width, formFactor] of [[390, 'compact'], [639, 'compact'], [639.5, 'compact'], [640, 'medium'], [1023, 'medium'], [1023.5, 'medium'], [1024, 'wide'], [1440, 'wide']] as const) {
       const { layout, scope } = measure({ width, height: 900 });
       expect(layout.formFactor.value, `at ${width}px`).toBe(formFactor);
       expect(layout.isCompact.value, `at ${width}px`).toBe(formFactor === 'compact');

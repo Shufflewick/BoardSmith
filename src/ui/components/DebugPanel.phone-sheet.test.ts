@@ -29,7 +29,7 @@ const STYLE = SOURCE.slice(SOURCE.indexOf('<style scoped>'));
 
 describe('#639: the Debug panel at phone width', () => {
   it('stretches the panel across the viewport so the sheet inside it is full width', () => {
-    const query = `@media (max-width: ${BREAKPOINTS.compact - 1}px) {`;
+    const query = `@media (width < ${BREAKPOINTS.compact}px) {`;
     const at = STYLE.indexOf(query);
     expect(at, `DebugPanel.vue has no ${query} block`).toBeGreaterThan(-1);
     const block = STYLE.slice(at, STYLE.indexOf('\n}\n', at));

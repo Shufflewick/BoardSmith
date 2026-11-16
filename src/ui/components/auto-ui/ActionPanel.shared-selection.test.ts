@@ -177,7 +177,7 @@ describe('the panel on a selected thing (#1641)', () => {
     controller.select({ type: 'Towers', key: 'ruin', label: 'the ruined tower' });
     await settle();
     const style = fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'ActionPanel.vue'), 'utf-8');
-    const at = style.indexOf('@media (max-width: 639px) and (orientation: portrait) {');
+    const at = style.indexOf('@media (width < 640px) and (orientation: portrait) {');
     expect(at, 'ActionPanel.vue has no upright-phone block').toBeGreaterThan(-1);
     const phone = style.slice(at, style.indexOf('\n}\n', at));
     const cutting = Array.from(phone.matchAll(/([^{}]+)\{([^}]*)\}/g))

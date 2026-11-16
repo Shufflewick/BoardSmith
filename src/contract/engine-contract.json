@@ -1,5 +1,5 @@
 {
-  "revision": 382,
+  "revision": 383,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2999,6 +2999,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "FLIP animations divide their screen-space offsets by the board zoom, so a moved piece starts where it was at any magnifier level (#1619)."
+    },
+    {
+      "revision": 383,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The layout tiers use half-open range media queries, so a fractional CSS width such as 639.5px lands in exactly one tier in both the chrome and the board's formFactor."
     }
   ]
 }
