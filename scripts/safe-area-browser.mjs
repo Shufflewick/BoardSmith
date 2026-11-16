@@ -17,7 +17,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/safe-area-browser.mjs`.
  */
-import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
+import { assert, check, runBrowserRegression, step, summarise, waitUntil } from './browser-harness.mjs';
 
 /** Help on both actions, so each draws its "?", and a second pick, so a made pick shows its clear button (#1636). */
 const ACTIONS = `import { Action, type ActionDefinition } from 'boardsmith';
@@ -88,10 +88,14 @@ const SIDES = ['top', 'right', 'bottom', 'left'];
 
 const CONTROLS = 'button, a[href], input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"])';
 
-/** Wait until no transition is running in the frame, so what is measured is where things come to rest. */
+/**
+ * Wait until no transition is running in the frame, so what is measured is where things come to rest.
+ * A finished one stays listed until the next frame, and its settled promise would loop here without
+ * ever letting that frame come (#1645), so only those still running are waited on.
+ */
 function settle(frame) {
   return frame.locator('body').evaluate(async (body) => {
-    const running = () => body.ownerDocument.getAnimations().filter((a) => a.transitionProperty);
+    const running = () => body.ownerDocument.getAnimations().filter((a) => a.transitionProperty && a.playState === 'running');
     while (running().length > 0) await Promise.allSettled(running().map((a) => a.finished));
   });
 }
@@ -151,8 +155,10 @@ function taps(frame, insets) {
 
 /** The two checks every state of the shell is held to. */
 async function checkTaps(frame, insets, state, size) {
-  await settle(frame);
-  const found = await taps(frame, insets);
+  const found = await step(`measuring the taps with ${state} at ${size}`, async () => {
+    await settle(frame);
+    return taps(frame, insets);
+  });
   await check(`no control sits inside an inset with ${state} at ${size}`, () => {
     assert(found.inInsets.length === 0, `inside ${JSON.stringify(insets)}: ${found.inInsets.join('; ')}`);
   });
@@ -180,9 +186,9 @@ function shellInsets(frame) {
 
 /** Open a state with `open`, hold the shell to both checks in it, and leave it with `close`. */
 async function inState(frame, insets, size, state, { open, close }) {
-  await open();
+  await step(`opening ${state} at ${size}`, open);
   await checkTaps(frame, insets, state, size);
-  await close();
+  await step(`closing ${state} at ${size}`, close);
 }
 
 await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/rules/actions.ts': ACTIONS, 'src/rules/flow.ts': FLOW } } }, async ({ launch, hostUrl }) => {
@@ -194,16 +200,21 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
       // One seat throughout: a later page reclaims the first page's client id, as `onEachPhone` does.
       // Held the other way up first, so turning it is what brings the insets.
       const turned = { width: viewport.height, height: viewport.width };
-      const context = await browser.newContext({ viewport: turned, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player });
+      const context = await step(`opening a phone the other way up from ${size}`, () => browser.newContext({ viewport: turned, hasTouch: true, isMobile: true, reducedMotion: 'reduce', storageState: player }));
       try {
-        const page = await context.newPage();
-        const frame = await openTable(page, hostUrl);
-        player ??= await context.storageState();
+        const { page, frame } = await step(`opening the table held the other way up from ${size}`, async () => {
+          const page = await context.newPage();
+          const frame = await openTable(page, hostUrl);
+          player ??= await context.storageState();
+          return { page, frame };
+        });
 
         // The page's own insets, where the dev host reads them, then the phone turned to them.
-        await page.addStyleTag({ content: `.bsg-safe-area-probe { padding: ${notch.top}px ${notch.right}px ${notch.bottom}px ${notch.left}px !important; }` });
-        await page.setViewportSize(viewport);
-        const insets = await overFrame(page, notch);
+        const insets = await step(`turning the phone to ${size}`, async () => {
+          await page.addStyleTag({ content: `.bsg-safe-area-probe { padding: ${notch.top}px ${notch.right}px ${notch.bottom}px ${notch.left}px !important; }` });
+          await page.setViewportSize(viewport);
+          return overFrame(page, notch);
+        });
         await check(`the dev host sends the frame its safe areas, and the shell takes them, at ${size}: ${JSON.stringify(insets)}`, async () => {
           assert(SIDES.some((side) => insets[side] > 0), `the page's insets ${JSON.stringify(notch)} reach nowhere over the frame, so nothing is tested`);
           const read = await waitUntil(() => shellInsets(frame), (read) => SIDES.every((side) => read[side] === insets[side]));
@@ -263,11 +274,11 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
           },
         });
       } finally {
-        await context.close();
+        await step(`closing the phone at ${size}`, () => context.close());
       }
     }
   } finally {
-    await browser.close();
+    await step('closing the browser', () => browser.close());
   }
   return summarise('for the safe areas and touch target sizes');
 });

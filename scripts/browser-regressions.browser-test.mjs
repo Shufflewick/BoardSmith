@@ -10,16 +10,15 @@
  * default suite: it needs Chromium, installed by `boardsmith install-browser`, and WebKit,
  * installed by `npx playwright install webkit` in this checkout.
  */
-import { describe, it, expect, onTestFinished } from 'vitest';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
+import { describe, it, expect } from 'vitest';
 import { dirname, join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
-import { browserScripts } from './browser-harness.mjs';
+import { browserScripts, runUntilHung } from './browser-harness.mjs';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
 
-/** A hang guard for one script, not a budget: the slowest takes about a minute. */
+/** A hang guard for one script, not a budget: the slowest takes about two minutes. */
 const HANG_GUARD_MS = 600_000;
 
 /** How long a hung script gets to stop what it started once asked, before it is killed. */
@@ -27,22 +26,9 @@ const STOP_GRACE_MS = 30_000;
 
 describe('the browser regressions', () => {
   it.each(browserScripts())('%s passes in the browsers it names', async (name) => {
-    const child = spawn(process.execPath, [join(SCRIPTS, name)], { cwd: join(SCRIPTS, '..') });
-    // A script still running when the case ends hung past the guard. SIGTERM, by its own pid, lets
-    // it stop what it started (a world host in-process, or a `boardsmith dev` child) and remove its
-    // fixture; SIGKILL only if it has not gone after a grace, which would orphan that child.
-    onTestFinished(async () => {
-      if (child.exitCode !== null || child.signalCode !== null) return;
-      const exited = once(child, 'exit');
-      child.kill('SIGTERM');
-      const killer = setTimeout(() => child.kill('SIGKILL'), STOP_GRACE_MS);
-      await exited;
-      clearTimeout(killer);
-    }, STOP_GRACE_MS + 5_000);
-    let output = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
-    const [code] = await once(child, 'exit');
-    expect(code, `node scripts/${name} failed:\n${output}`).toBe(0);
-  }, HANG_GUARD_MS);
+    // The guard is the script's, not the case's: a case vitest times out loses what the script printed (#1645).
+    const run = await runUntilHung([join(SCRIPTS, name)], { hung: () => delay(HANG_GUARD_MS, undefined, { ref: false }), stopGraceMs: STOP_GRACE_MS });
+    expect(run.hung, `node scripts/${name} was still running after ${HANG_GUARD_MS / 60_000} minutes, so it was stopped. What it printed:\n${run.output}`).toBe(false);
+    expect(run.code, `node scripts/${name} failed:\n${run.output}`).toBe(0);
+  }, HANG_GUARD_MS + STOP_GRACE_MS + 10_000);
 });

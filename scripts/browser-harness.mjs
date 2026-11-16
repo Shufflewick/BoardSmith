@@ -24,8 +24,10 @@
  *
  * @module
  */
+import { spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { existsSync, readdirSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPTS = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +77,32 @@ export const browserScripts = () =>
   readdirSync(SCRIPTS)
     .filter((name) => name.endsWith('-browser.mjs'))
     .sort();
+
+/**
+ * Run `node <args>` from the checkout, as the browser suite runs each script, and stop it if it
+ * is still running once `hung(child)` settles (the suite's hang guard): asked with SIGTERM, so it
+ * stops what it started and can say what it was waiting on, and killed if it has not gone after
+ * `stopGraceMs`. A hung run hands back everything it printed too, so it says how far it got (#1645).
+ *
+ * @returns `hung`, its exit `code` (null once stopped), and its stdout and stderr as one text
+ */
+export async function runUntilHung(args, { hung, stopGraceMs }) {
+  const child = spawn(process.execPath, args, { cwd: join(SCRIPTS, '..') });
+  let output = '';
+  for (const stream of [child.stdout, child.stderr]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (text) => (output += text));
+  }
+  // 'close', not 'exit': it waits for the output still in the pipes, the last words a stopped script prints.
+  const exited = once(child, 'close');
+  const ended = await Promise.race([exited, hung(child).then(() => null)]);
+  if (ended) return { hung: false, code: ended[0], output };
+  child.kill('SIGTERM');
+  const killer = setTimeout(() => child.kill('SIGKILL'), stopGraceMs);
+  await exited;
+  clearTimeout(killer);
+  return { hung: true, code: null, output };
+}
 
 /**
  * The world surface inside the dev chrome's iframe.
@@ -305,10 +333,40 @@ const results = [];
 /** The browser the checks being recorded run in, which the summary names. */
 let engineName = 'chromium';
 
+/** The step the run is waiting on, if any, and the last one to end, for `sayWhereOnStop`. */
+let waitingOn = null;
+let lastDone = 'nothing yet';
+
+/**
+ * Run `body` as the step named `name`, so a run stopped while it waits says so (#1645).
+ * A step inside a step is named for the inner one until it ends.
+ */
+export async function step(name, body) {
+  const outer = waitingOn;
+  waitingOn = name;
+  try {
+    return await body();
+  } finally {
+    waitingOn = outer;
+    lastDone = name;
+  }
+}
+
+/**
+ * On the SIGTERM the browser suite stops a hung script with, say which step it was waiting on.
+ * The fixture's own handler then stops what the run started; with none yet, the signal ends it.
+ */
+export function sayWhereOnStop() {
+  process.once('SIGTERM', () => {
+    console.log(waitingOn ? `\nStopped while waiting on: ${waitingOn}` : `\nStopped outside any step, after: ${lastDone}`);
+    if (process.listenerCount('SIGTERM') === 0) process.kill(process.pid, 'SIGTERM');
+  });
+}
+
 /** Run one named check, recording its outcome rather than throwing. */
 export async function check(name, body) {
   try {
-    await body();
+    await step(name, body);
     results.push({ name, error: null });
     console.log(`  ok    ${name}`);
   } catch (thrown) {
@@ -473,6 +531,7 @@ export async function runBrowserRegression(run, body) {
   if (run.table !== undefined && (table === null || typeof table !== 'object')) {
     throw new Error(`${run.script}: \`table\` is \`true\` or \`{ files: { <path in the project>: <text> } }\`, not ${JSON.stringify(run.table)}.`);
   }
+  sayWhereOnStop();
   const { withFixtureWorld, withFixtureTable } = await loadFixtures(run.script);
   let code = 0;
   for (const [engine, launch] of Object.entries(await launchersFor(run))) {
