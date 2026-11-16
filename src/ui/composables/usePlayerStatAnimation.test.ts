@@ -110,13 +110,10 @@ describe('flyToPlayerStat', () => {
     expect(flown[0].configs[0].startRect).toBe(start);
   });
 
-  it('resolves the destination lazily, so a moving panel still lands right', () => {
+  it('flies to the panel element, which the flight measures each frame and reads the zoom of (#1664)', () => {
     const target = statTarget(1, 'books');
-    vi.spyOn(target, 'getBoundingClientRect').mockReturnValue(rect(300, 200));
     flyToPlayerStat(flyMultiple, { cards: [card()], playerSeat: 1, statName: 'books' });
-    const endRect = flown[0].configs[0].endRect as () => DOMRect;
-    expect(endRect).toBeTypeOf('function');
-    expect(endRect().left).toBe(300);
+    expect(flown[0].configs[0].endRect).toBe(target);
   });
 
   it('carries the card face data through to the flying element', () => {

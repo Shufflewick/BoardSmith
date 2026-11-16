@@ -662,7 +662,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
       await fly({
         id: animationId,
         startRect,
-        endRect: () => destinationElement!.getBoundingClientRect(),
+        endRect: destHtmlElement,
         elementData,
         duration: config.duration ?? 400,
         elementSize: config.elementSize,

@@ -7,7 +7,7 @@
  * zoom change. `useBoardZoom()` provides it from GameShell's setup; outside a
  * shell (unit harnesses, non-shell hosts) the inject misses and the zoom is 1.
  */
-import { inject, provide, readonly, ref, type InjectionKey, type Ref } from 'vue';
+import { hasInjectionContext, inject, provide, readonly, ref, type InjectionKey, type Ref } from 'vue';
 
 const BOARD_ZOOM: InjectionKey<Readonly<Ref<number>>> = Symbol('boardsmith:board-zoom');
 
@@ -19,9 +19,20 @@ export function provideBoardZoom(zoom: Readonly<Ref<number>>): void {
   provide(BOARD_ZOOM, readonly(zoom));
 }
 
-/** Called by `useBoardSize()`: the shell's zoom, or 1 when there is no shell above. */
+/** Called by `useBoardSize()` and `useFlyingElements()`: the shell's zoom, or 1 when there is no shell above. */
 export function injectBoardZoom(): Readonly<Ref<number>> {
-  return inject(BOARD_ZOOM, UNZOOMED);
+  // Outside a component (a composable called from a plain script) Vue's inject returns undefined, not the default.
+  return hasInjectionContext() ? inject(BOARD_ZOOM, UNZOOMED) : UNZOOMED;
+}
+
+/**
+ * The scale the shell's magnifier applies to `el`, read from the element itself
+ * (#1619, #1664): the `--zoom-level` PlayShell's zoom container applies, 1 for
+ * an element outside it, such as the player strip or anything outside a shell.
+ */
+export function boardZoomAt(el: Element): number {
+  const zoomContainer = el.closest('.game-shell__zoom-container');
+  return zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
 }
 
 /**
