@@ -26,6 +26,16 @@ export function injectBoardZoom(): Readonly<Ref<number>> {
 }
 
 /**
+ * The scale the shell's magnifier applies to `el`, read from the element itself
+ * (#1619, #1664): the `--zoom-level` PlayShell's zoom container applies, 1 for
+ * an element outside it, such as the player strip or anything outside a shell.
+ */
+export function boardZoomAt(el: Element): number {
+  const zoomContainer = el.closest('.game-shell__zoom-container');
+  return zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
+}
+
+/**
  * The width `.boardregion` gives a board: its content box with its vertical
  * scrollbar showing, whether or not it shows now (#1343), so a scrollbar coming
  * or going never changes the pin. The computed

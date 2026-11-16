@@ -95,7 +95,7 @@ import { ref, shallowRef, shallowReactive, computed, watch, onUnmounted, onScope
 import { prefersReducedMotion } from './reducedMotion.js';
 import { easeOutCubic } from '../../utils/easing.js';
 import { tryUseBoardInteraction } from './useBoardInteraction.js';
-import { injectBoardZoom } from './boardRegionPin.js';
+import { boardZoomAt, injectBoardZoom } from './boardRegionPin.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isHiddenPlaceholder, isPlaceholderId } from '../../engine/element/hidden-placeholder.js';
@@ -172,6 +172,10 @@ export interface FlyConfig {
 
   /**
    * Starting position (DOMRect, element, or function returning either).
+   *
+   * The flying card scales to the board zoom at each end (#1664): an element
+   * gives its own, and a DOMRect is taken as measured on the board. Pass the
+   * element for an end outside the board, such as a player panel.
    *
    * Fail-loud: if this resolves to `null`/`undefined` on first resolution
    * (before the flying element is created), it is NOT a silent no-op —
@@ -415,17 +419,15 @@ const DEFAULT_HOLD_DURATION = 0;
 const DEFAULT_ELEMENT_SIZE = { width: 60, height: 84 };
 const DEFAULT_Z_INDEX = 1000;
 
-/**
- * Get DOMRect from various input types
- */
-function getRect(
+/** The element or rect a start/end target names now, or null. */
+function resolveTarget(
   target: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null)
-): DOMRect | null {
-  if (typeof target === 'function') {
-    const result = target();
-    if (!result) return null;
-    return result instanceof DOMRect ? result : result.getBoundingClientRect();
-  }
+): DOMRect | HTMLElement | null {
+  return typeof target === 'function' ? target() : target;
+}
+
+/** The screen rect of a resolved target. */
+function rectOf(target: DOMRect | HTMLElement): DOMRect {
   return target instanceof DOMRect ? target : target.getBoundingClientRect();
 }
 
@@ -499,8 +501,16 @@ export function useFlyingElements(
   const activeAnimations = new Map<string, { cancel: () => void }>();
   const isAnimating = ref(false);
   const boardInteraction = tryUseBoardInteraction();
-  // The ghost flies outside the board's magnifier, so it scales itself to match the cards it leaves and joins (#1664).
   const boardZoom = injectBoardZoom();
+
+  /**
+   * The magnifier's scale where a target is (#1664): the ghost flies outside the
+   * board's zoom, so it scales itself to the cards it leaves and joins. An element
+   * says where it is; a rect does not, and is one measured on the board.
+   */
+  function zoomOf(target: DOMRect | HTMLElement): number {
+    return target instanceof DOMRect ? boardZoom.value : boardZoomAt(target);
+  }
 
   /**
    * Internal options type for the core animation implementation
@@ -548,16 +558,18 @@ export function useFlyingElements(
     // from the per-frame mid-flight re-check inside animate() below, which
     // stays a silent complete for a target that legitimately disappears
     // DURING flight (RESEARCH Pitfall 3).
-    const startRect = getRect(startTarget);
-    if (!startRect) {
+    const start = resolveTarget(startTarget);
+    if (!start) {
       reportMissingFlyTarget('start', id);
       return;
     }
-    const initialEndRect = getRect(endTarget);
-    if (!initialEndRect) {
+    const initialEnd = resolveTarget(endTarget);
+    if (!initialEnd) {
       reportMissingFlyTarget('end', id);
       return;
     }
+    const startRect = rectOf(start);
+    const initialEndRect = rectOf(initialEnd);
 
     // Test mode: record one assertable {kind:'fly'} trace per flown element
     // and resolve immediately, without running the RAF chain. Checked BEFORE
@@ -578,6 +590,8 @@ export function useFlyingElements(
     if (prefersReducedMotion.value) {
       return;
     }
+
+    const startZoom = zoomOf(start);
 
     // Use explicit card size if provided, otherwise use default
     const cardWidth = cardSize?.width ?? defaultElementSize.width;
@@ -603,7 +617,7 @@ export function useFlyingElements(
         top: `${startY}px`,
         width: `${cardWidth}px`,
         height: `${cardHeight}px`,
-        transform: `rotateY(0deg) scale(${boardZoom.value})`,
+        transform: `rotateY(0deg) scale(${startZoom})`,
         transition: 'none',
         zIndex,
         pointerEvents: 'none',
@@ -641,8 +655,8 @@ export function useFlyingElements(
         const progress = easeOutCubic(rawProgress);
 
         // Get current end position (may have moved)
-        const endRect = getRect(endTarget);
-        if (!endRect) {
+        const end = resolveTarget(endTarget);
+        if (!end) {
           // Target disappeared, complete the animation
           flyingCards.value = flyingCards.value.filter((c) => c.id !== id);
           activeAnimations.delete(id);
@@ -650,6 +664,9 @@ export function useFlyingElements(
           resolve();
           return;
         }
+
+        const endRect = rectOf(end);
+        const scale = startZoom + (zoomOf(end) - startZoom) * progress;
 
         // Calculate current position (interpolate from start to current end)
         const endCenterX = endRect.left + endRect.width / 2;
@@ -664,7 +681,7 @@ export function useFlyingElements(
         // A new style object: Vue skips a style it has already applied by reference.
         flyingCard.style = {
           ...flyingCard.style,
-          transform: `translate(${currentCenterX - startCenterX}px, ${currentCenterY - startCenterY}px) rotateY(${flipRotation}deg) scale(${boardZoom.value})`,
+          transform: `translate(${currentCenterX - startCenterX}px, ${currentCenterY - startCenterY}px) rotateY(${flipRotation}deg) scale(${scale})`,
         };
         flyingCard.progress = progress;
 
@@ -830,7 +847,7 @@ export function useFlyingElements(
         await fly({
           id: `fly-appear-${++appearFlightCount}`,
           startRect: sourceRect,
-          endRect: () => targetRef.value?.getBoundingClientRect() ?? targetRect,
+          endRect: () => targetRef.value ?? targetRect,
           elementData,
           flip,
           duration,
@@ -973,7 +990,7 @@ export function useFlyingElements(
       return {
         id: `auto-fly-${key}-${Date.now()}`,
         startRect: fromRef.value.getBoundingClientRect(),
-        endRect: () => toRef.value?.getBoundingClientRect() ?? null,
+        endRect: () => toRef.value ?? null,
         elementData,
         flip,
         duration: autoWatchDuration,

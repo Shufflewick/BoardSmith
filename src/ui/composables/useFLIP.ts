@@ -57,6 +57,7 @@ import { ref, watch, computed, type Ref, onUnmounted, getCurrentInstance } from 
 import { prefersReducedMotion } from './reducedMotion.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
+import { boardZoomAt } from './boardRegionPin.js';
 
 /**
  * Configuration for a single FLIP container
@@ -202,17 +203,6 @@ interface ContainerHandler {
   duration: number;
   easing: string;
   positions: Map<string, DOMRect>;
-}
-
-/**
- * The scale the shell's magnifier applies to `container` (#1619): FLIP measures
- * moves in screen pixels and plays them back as a translate inside the board,
- * so it divides by this. It is the `--zoom-level` PlayShell's zoom container
- * applies, 1 outside a shell.
- */
-function boardZoomAt(container: Element): number {
-  const zoomContainer = container.closest('.game-shell__zoom-container');
-  return zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
 }
 
 /**

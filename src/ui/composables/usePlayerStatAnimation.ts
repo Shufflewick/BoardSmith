@@ -130,7 +130,7 @@ export function flyToPlayerStat(
     cards.map((card, i) => ({
       id: `fly-stat-${statName}-${playerSeat}-${Date.now()}-${i}`,
       startRect: card.rect,
-      endRect: () => targetEl.getBoundingClientRect(),
+      endRect: targetEl,
       elementData: {
         rank: card.rank || '',
         suit: card.suit || '',

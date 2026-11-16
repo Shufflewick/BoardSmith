@@ -3150,7 +3150,7 @@
       "surfaceHash": "95f20f8fed1973e1",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "A flying card scales itself by the board zoom, so it is the size of the cards it flies between at any magnifier level (#1664)."
+      "summary": "A flying card scales itself by the board zoom where it leaves and where it lands, so it matches the cards it flies between at any magnifier level, on or off the board (#1664)."
     }
   ]
 }

@@ -65,6 +65,7 @@ const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, cl
 const { prefersReducedMotion } = await import('./reducedMotion.js');
 const { provideBoardZoom } = await import('./boardRegionPin.js');
 type AutoWatchGameElement = import('./useFlyingElements.js').AutoWatchGameElement;
+type FlyConfig = import('./useFlyingElements.js').FlyConfig;
 
 function makeContainer(): HTMLElement {
   const container = document.createElement('div');
@@ -692,15 +693,15 @@ describe('useFlyingElements', () => {
   });
 
   describe('board magnifier (#1664)', () => {
-    it('scales the ghost by the board zoom, from its first frame to its last', () => {
+    /** Fly under a shell zoomed to 200%, and return the ghost's transform on its first frame, halfway, and once it has landed. */
+    function zoomedFlight(startRect: FlyConfig['startRect'], endRect: FlyConfig['endRect']): string[] {
       const rafQueue: FrameRequestCallback[] = [];
       vi.stubGlobal('requestAnimationFrame', (cb: FrameRequestCallback) => rafQueue.push(cb));
       vi.stubGlobal('cancelAnimationFrame', vi.fn());
-
       let flying!: ReturnType<typeof useFlyingElements>;
       const Board = defineComponent({
         setup() {
-          flying = useFlyingElements({ duration: 50, holdDuration: 0 });
+          flying = useFlyingElements({ duration: 50, holdDuration: 100 });
           return () => h('div');
         },
       });
@@ -710,17 +711,36 @@ describe('useFlyingElements', () => {
           return () => h(Board);
         },
       }));
-      void flying.fly({
-        id: 'zoomed-fly',
-        startRect: makeRect({ width: 120, height: 168 }),
-        endRect: makeRect({ left: 400, top: 400, width: 120, height: 168 }),
-        elementData: { faceUp: true },
-      });
+      void flying.fly({ id: 'zoomed-fly', startRect, endRect, elementData: { faceUp: true } });
+      const transform = () => flying.flyingElements.value[0]!.style.transform;
+      const first = transform();
+      const launched = performance.now();
+      rafQueue.shift()!(launched + 25);
+      const halfway = transform();
+      rafQueue.shift()!(launched + 10_000);
+      return [first, halfway, transform()];
+    }
 
-      const ghost = () => flying.flyingElements.value[0]!.style;
-      expect(ghost().transform).toContain('scale(2)');
-      rafQueue.shift()!(performance.now() + 25);
-      expect(ghost().transform).toContain('scale(2)');
+    it('scales a ghost flying across the board by the board zoom, from its first frame to its landing', () => {
+      const frames = zoomedFlight(makeRect({ width: 120, height: 168 }), makeRect({ left: 400, top: 400, width: 120, height: 168 }));
+      expect(frames.map((t) => t.match(/scale\((.*)\)/)![1])).toEqual(['2', '2', '2']);
+    });
+
+    it('shrinks a ghost flying off the board to an unzoomed panel, reading each element\'s own zoom', () => {
+      const zoomContainer = document.createElement('div');
+      zoomContainer.className = 'game-shell__zoom-container';
+      zoomContainer.style.setProperty('--zoom-level', '2');
+      const card = makeContainer();
+      zoomContainer.appendChild(card);
+      document.body.appendChild(zoomContainer);
+      const panel = makeContainer();
+      vi.spyOn(panel, 'getBoundingClientRect').mockReturnValue(makeRect({ left: 400, width: 60, height: 84 }));
+
+      const [first, halfway, landed] = zoomedFlight(card, panel).map((t) => Number(t.match(/scale\((.*)\)/)![1]));
+      expect(first).toBe(2);
+      expect(halfway).toBeGreaterThan(1);
+      expect(halfway).toBeLessThan(2);
+      expect(landed).toBe(1);
     });
   });
 
