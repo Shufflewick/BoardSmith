@@ -1,8 +1,9 @@
 /**
  * Proof-number search marks only certain results as proof (#720).
  *
- * A finished game with no winner is a draw, not a loss, so the bot must not
- * refuse it as one. And a finished game reached through a dice roll is one
+ * A declared draw is neither win nor loss, so the bot must not refuse it as
+ * one, and a finished game with no winners and no declared draw is a loss
+ * (#1625, #1665), so the bot must refuse it. And a finished game reached through a dice roll is one
  * outcome of many, so the first outcome the search sees must not stand as the
  * move's proof.
  */
@@ -22,7 +23,7 @@ import type { BotConfig, BotStrategy, DeterminizeSampler } from './types.js';
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => `proof-${i}`);
 
-/** Seat 1 opens with `draw` (the game ends with no winner) or `doom` (play goes on, scored low). */
+/** Seat 1 opens with `draw` (the game ends in a declared draw) or `doom` (play goes on, scored low). */
 class DrawGame extends Game<DrawGame, Player> {
   constructor(options: GameOptions) {
     super(options);
@@ -30,12 +31,38 @@ class DrawGame extends Game<DrawGame, Player> {
       Action.create<DrawGame>('open')
         .chooseFrom('option', { prompt: 'Open', choices: ['doom', 'draw'] })
         .execute((args) => {
-          if (args.option === 'draw') this.finish();
+          if (args.option === 'draw') this.finish('draw');
           return { success: true };
         }),
     );
     this.registerAction(
       Action.create<DrawGame>('pass')
+        .chooseFrom('option', { prompt: 'Pass', choices: ['a', 'b'] })
+        .execute(() => ({ success: true })),
+    );
+    this.setFlow({
+      root: sequence(
+        actionStep({ actions: ['open'] }),
+        loop({ maxIterations: 100, do: eachPlayer({ do: actionStep({ actions: ['pass'], turnScope: 'restart' }) }) }),
+      ),
+    });
+  }
+}
+
+/** Seat 1 opens with `lose` (the game ends with no winners and no draw, a loss for both) or `doom` (play goes on, scored low). */
+class NobodyWinsGame extends Game<NobodyWinsGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<NobodyWinsGame>('open')
+        .chooseFrom('option', { prompt: 'Open', choices: ['doom', 'lose'] })
+        .execute((args) => {
+          if (args.option === 'lose') this.finish();
+          return { success: true };
+        }),
+    );
+    this.registerAction(
+      Action.create<NobodyWinsGame>('pass')
         .chooseFrom('option', { prompt: 'Pass', choices: ['a', 'b'] })
         .execute(() => ({ success: true })),
     );
@@ -160,6 +187,20 @@ async function picks<G extends Game>(
 describe('proof-number search and uncertain results', () => {
   it('takes a draw over a position it scores lower', async () => {
     expect(await picks(DrawGame)).toEqual(SEEDS.map(() => 'draw'));
+  });
+
+  it('refuses a finish nobody wins as a loss, below a position it scores lower', async () => {
+    expect(await picks(NobodyWinsGame)).toEqual(SEEDS.map(() => 'doom'));
+  });
+
+  it('marks a finish nobody wins as disproven', async () => {
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await botFor(NobodyWinsGame, 'nobody', { debug: true }).play();
+      expect(log).toHaveBeenCalledWith('[MCTS] Move selection: 0 proven, 1 disproven, 1 unknown of 2 children');
+    } finally {
+      log.mockRestore();
+    }
   });
 
   it('weighs a dice roll by its odds, not by the first outcome it saw', async () => {

@@ -59,7 +59,7 @@ class PunishGame extends Game<PunishGame, Player> {
       Action.create<PunishGame>('pick')
         .chooseFrom('option', { choices: ['safe', 'risky'] })
         .execute((args) => {
-          if (args.option === 'safe') this.finish();
+          if (args.option === 'safe') this.finish('draw');
           return { success: true };
         }),
       Action.create<PunishGame>('reply')

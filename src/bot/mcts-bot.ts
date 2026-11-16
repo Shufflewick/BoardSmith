@@ -1505,10 +1505,10 @@ export class MCTSBot<G extends Game = Game> {
     const unsolved = { proofNumber: 1, disproofNumber: 1, isProven: false, isDisproven: false };
     if (!flowState.complete || !this.searchGame || this.determinize) return unsolved;
     if (this.searchGame.getRandomState() !== this.resumedRandomState) return unsolved;
+    if (this.searchGame.isDraw()) return unsolved;
     const winners = this.searchGame.getWinners().map(p => p.seat);
     if (winners.includes(this.playerIndex)) return { proofNumber: 0, disproofNumber: Infinity, isProven: true, isDisproven: false };
-    if (winners.length > 0) return { proofNumber: Infinity, disproofNumber: 0, isProven: false, isDisproven: true };
-    return unsolved;
+    return { proofNumber: Infinity, disproofNumber: 0, isProven: false, isDisproven: true };
   }
 
   /**
@@ -1603,17 +1603,9 @@ export class MCTSBot<G extends Game = Game> {
       return 0.5; // Draw/unknown
     }
 
-    // The winners the game declares (#503)
-    const winners = game.getWinners().map(p => p.seat);
-    if (winners.length === 0) {
-      return 0.5; // Draw
-    }
-
-    if (winners.includes(this.playerIndex)) {
-      return 1; // Win
-    }
-
-    return 0; // Loss
+    // The result the game declares (#503): a draw only when declared, and no winners is a loss (#1625)
+    if (game.isDraw()) return 0.5;
+    return game.getWinners().some(p => p.seat === this.playerIndex) ? 1 : 0;
   }
 
   /**
