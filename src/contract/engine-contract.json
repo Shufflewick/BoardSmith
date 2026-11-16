@@ -1,5 +1,5 @@
 {
-  "revision": 406,
+  "revision": 407,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3191,6 +3191,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "The dev host's world lock now holds until released even when its caller drops the handle (#1673)"
+    },
+    {
+      "revision": 407,
+      "date": "2026-11-16",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The bs-build-chunk skill now describes only its dispatched mode; a /bs-build-game run advances across chunks (#1676)"
     }
   ]
 }
