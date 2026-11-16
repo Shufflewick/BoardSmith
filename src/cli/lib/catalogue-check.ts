@@ -340,9 +340,14 @@ class Children {
       };
       child.stdout.on('data', (chunk) => (output += chunk));
       child.stderr.on('data', (chunk) => (output += chunk));
+      // On exit, not close: a process the script left running holds its pipes open, and would go on using the machine (#1657).
+      let reaped: Promise<string> = Promise.resolve('');
+      child.on('exit', () => (reaped = killGroup(child).then(() => '', (error: Error) => `${error.message}\n`)));
       child.on('error', (error) => settle(1, `${error.message}\n`));
-      // A process the script left running would go on using the machine after the run (#1657).
-      child.on('close', (code) => killGroup(child).then(() => settle(code ?? 1), (error: Error) => settle(1, `${error.message}\n`)));
+      child.on('close', async (code) => {
+        const failed = await reaped;
+        settle(failed ? 1 : (code ?? 1), failed);
+      });
     });
   }
 

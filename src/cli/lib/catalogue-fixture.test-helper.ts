@@ -45,8 +45,8 @@ if (existsSync('HANG')) {
   spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'hanging-grandchild')], { stdio: 'ignore' });
   setInterval(() => {}, 1000);
 } else if (existsSync('ORPHAN')) {
-  // Exits once it has started a child it leaves running, as a vitest stopped before its workers does.
-  spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'orphaned-grandchild')], { stdio: 'ignore' }).unref();
+  // Exits once it has started a child it leaves running on its pipes, as a vitest stopped before its workers does.
+  spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'orphaned-grandchild')], { stdio: 'inherit' }).unref();
   console.log('valid');
 } else console.log('valid');
 `;

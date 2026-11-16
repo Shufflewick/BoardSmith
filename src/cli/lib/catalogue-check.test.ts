@@ -462,14 +462,15 @@ describe('the processes a game\'s steps leave behind (#1657)', () => {
     for (const pid of runningIn(fx)) process.kill(Number(pid), 'SIGKILL');
   };
 
-  it('stops what a step left running when it exited on its own, as a stopped vitest leaves its workers', async () => {
+  it('stops what a step left running when it exited on its own, as a stopped vitest leaves its workers', { timeout: 60_000 }, async () => {
     const fx = fixture();
     await makeTree(fx.tree);
     await makeGame(fx, 'sotf', { files: { ORPHAN: 'leaves a child running' } });
     try {
-      const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+      // A hang guard: the child holds the step's pipes open, so a step waiting on them never ends.
+      const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, timeLimitMs: 20_000 });
 
-      expect(statusOf(run)).toEqual({ sotf: 'passed' });
+      expect(run.results).toEqual([expect.objectContaining({ slug: 'sotf', status: 'passed' })]);
       expect(runningIn(fx)).toEqual([]);
     } finally {
       stopAll(fx);
@@ -490,6 +491,11 @@ describe('the processes a game\'s steps leave behind (#1657)', () => {
       process.kill(-check.pid!, 'SIGKILL');
       await vi.waitFor(() => expect(runningIn(fx)).toEqual([]), { timeout: 15_000 });
     } finally {
+      try {
+        process.kill(-check.pid!, 'SIGKILL');
+      } catch {
+        // Already killed, as the test does.
+      }
       stopAll(fx);
     }
   });
