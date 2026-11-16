@@ -1,5 +1,5 @@
 {
-  "revision": 389,
+  "revision": 390,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3055,6 +3055,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel hands a pick of more than 24 candidates to the board only when the board offers every one (candidateAttrs per candidate, or the new pickSurfaceAttrs for a whole pick)"
+    },
+    {
+      "revision": 390,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The action bar shows a More mark on its bottom edge while actions sit below what it shows (#1650)"
     }
   ]
 }
