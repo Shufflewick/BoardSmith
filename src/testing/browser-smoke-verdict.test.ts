@@ -99,7 +99,7 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
     expect(smokeDealPlayers('opening', { min: 2, max: 4 })).toBe(2);
     expect(smokeDealPlayers({ seed: 'Kim', players: 3 }, { min: 2, max: 4 })).toBe(3);
     expect(() => smokeDealPlayers({ seed: 'Kim', players: 5 }, { min: 2, max: 4 })).toThrow(
-      `\`seed\` in ${SMOKE_SPEC_PATH} deals "Kim" at 5 players, and this game seats 2 to 4. Choose a count from 2 to 4.`,
+      'The deal of seed "Kim" at 5 players cannot be dealt: this game seats 2 to 4. Choose a count from 2 to 4.',
     );
   });
 

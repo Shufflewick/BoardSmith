@@ -27,7 +27,7 @@ const REASON_MIN_WORDS = 4;
 export const DEFAULT_SMOKE_SEED = 'smoke';
 
 /**
- * The environment variable `boardsmith smoke --seed` hands the walk its seeds in, as a JSON list,
+ * The environment variable `boardsmith smoke --seed` hands the walk its deals in, as a JSON list,
  * so a run can deal any game again without editing the spec.
  */
 export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
@@ -46,7 +46,7 @@ const dealName = (deal: SmokeDeal) => (typeof deal === 'string' ? `seed "${deal}
  * spec's `seed`, one deal or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
  * write instead, on an empty list, a blank seed, a player count that is not one, or a deal listed twice.
  */
-export function smokeSeeds(seed: SmokeDeal | readonly SmokeDeal[] | undefined, chosen?: readonly string[]): SmokeDeal[] {
+export function smokeSeeds(seed: SmokeDeal | readonly SmokeDeal[] | undefined, chosen?: readonly SmokeDeal[]): SmokeDeal[] {
   if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
   return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : Array.isArray(seed) ? [...seed] : [seed as SmokeDeal], `\`seed\` in ${SMOKE_SPEC_PATH}`);
 }
@@ -89,7 +89,7 @@ export function smokeDealPlayers(deal: SmokeDeal, seats: { min: number; max: num
   if (typeof deal === 'string') return seats.min;
   if (deal.players >= seats.min && deal.players <= seats.max) return deal.players;
   throw new Error(
-    `\`seed\` in ${SMOKE_SPEC_PATH} deals "${deal.seed}" at ${deal.players} players, and this game seats ${seats.min} to ${seats.max}. ` +
+    `The deal of seed "${deal.seed}" at ${deal.players} players cannot be dealt: this game seats ${seats.min} to ${seats.max}. ` +
       `Choose a count from ${seats.min} to ${seats.max}.`,
   );
 }

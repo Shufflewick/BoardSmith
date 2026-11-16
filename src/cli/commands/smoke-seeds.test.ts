@@ -5,7 +5,7 @@
  */
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
-import { runSmoke } from './smoke.js';
+import { chosenDeals, runSmoke } from './smoke.js';
 import { smokeProject } from './smoke-project.test-helper.js';
 import { quiet, smokeIn, smokeOf } from './smoke-walk.test-helper.js';
 import { ACE_SEEDS, aceGame, crowdGame, smokeSpec } from './smoke-fixtures.test-helper.js';
@@ -63,6 +63,17 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
   });
 
+  it('#1602: `boardsmith smoke --seed --players` walks a deal at a player count the spec does not name', async () => {
+    const dir = await smokeProject(false, {
+      ...crowdGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'huddle'], undefined, { seed: 'paired', steps: 12 }),
+    });
+    const { outcome } = await runSmoke({ projectDir: dir, log: quiet, seeds: chosenDeals(['crowded'], '3') });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "crowded" at 3 players, a seated player took "draw", "huddle"/);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does, and deals from the spec\'s seed whatever seeds the environment names', async () => {
     // A `boardsmith smoke --seed` run hands its walk the seeds in this variable; a check run inside
     // it (a game's own test suite running `boardsmith verify`, say) must not inherit them.
@@ -87,5 +98,21 @@ describe('boardsmith verify: the smoke check', () => {
         'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there (and run ' +
         '`boardsmith smoke` without `--seed`).',
     );
+  });
+});
+
+describe('chosenDeals: the deals `boardsmith smoke --seed` and `--players` name (#1602)', () => {
+  it('deals each seed --seed names at the count --players names, or at the game\'s fewest without one', () => {
+    expect(chosenDeals(undefined, undefined)).toBeUndefined();
+    expect(chosenDeals(['crowded', 'b'], undefined)).toEqual(['crowded', 'b']);
+    expect(chosenDeals(['crowded', 'b'], '3')).toEqual([{ seed: 'crowded', players: 3 }, { seed: 'b', players: 3 }]);
+  });
+
+  it('refuses --players without --seed, and a count that is not a positive whole number', () => {
+    expect(() => chosenDeals(undefined, '3')).toThrow(
+      '`boardsmith smoke --players` sets how many players sit at the deals `--seed` names, and no `--seed` was given. ' +
+        "Add `--seed <seeds...>`, or leave out `--players` to walk the spec's own deals.",
+    );
+    expect(() => chosenDeals(['crowded'], 'three')).toThrow('--players takes a positive whole number, got "three".');
   });
 });

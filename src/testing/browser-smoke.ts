@@ -195,7 +195,7 @@ const IDLE_STEPS = 5;
 export function defineSmokeTest(options: SmokeTestOptions): void {
   test('seat a player, take every offered action, press every board control', async ({ page, browser }) => {
     const chosen = process.env[SMOKE_SEEDS_ENV];
-    const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as string[]));
+    const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as SmokeDeal[]));
     const seats = smokeWorldSeats(options.seats);
     const walk = newWalk(options);
     test.setTimeout(smokeWalkLimit(seeds.length, walk.steps, seats));

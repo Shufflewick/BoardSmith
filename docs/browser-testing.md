@@ -697,7 +697,8 @@ The walk deals it from Table setup's Players field, acts for every seat of it,
 and deals each new game of that deal (`Kim/2`, ...) at the same count. A count
 the game does not seat fails the check, naming the counts it does. The summary
 names the count of a deal that names one (`dealt from seed "Kim" at 3 players`).
-`boardsmith smoke --seed` deals at `minPlayers`.
+`boardsmith smoke --seed Kim --players 3` walks that deal again; `--seed`
+without `--players` deals at `minPlayers`.
 
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.
