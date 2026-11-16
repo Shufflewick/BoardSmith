@@ -454,14 +454,18 @@ markers this page documents, so it keeps up with any game without knowing it:
   of the page, so once no game-over card or modal dialog is up, the walk opens
   it with its toggle (`[data-testid="bs-actionbar-toggle"]`) before it reads
   the panel (#1482).
-- Each step it presses a board control it has not pressed, answers the open
-  action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
-  `[data-bs-action]` button, preferring one whose `inputs` read a value off the
-  page now (#471), then one not taken yet, and opening `[data-bs-action-group]`
-  menus to reach the actions inside them. A board
-  control comes first because a player can press the board while a pick is
-  open, and because a game that opens each turn's action by itself never has a
-  moment with nothing open once the walk acts for every seat.
+- Each step it answers or takes an action it has not taken yet, presses a board
+  control it has not pressed, answers the open action (the panel marks it
+  `data-bs-open-action="<name>"`), or takes the next `[data-bs-action]` button,
+  preferring one whose `inputs` read a value off the page now (#471), then one
+  not taken yet, and opening `[data-bs-action-group]` menus to reach the actions
+  inside them. An action not taken yet comes first because the game may offer it
+  only for a moment, as a vote while a battle plays back is, and a board that
+  keeps putting up new controls would otherwise spend that moment (#1659). A
+  board control comes before an open action taken already because a player can
+  press the board while a pick is open, and because a game that opens each
+  turn's action by itself never has a moment with nothing open once the walk
+  acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
   panel), then the panel's choice, add, done and skip buttons. A follow-up

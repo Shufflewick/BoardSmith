@@ -1857,6 +1857,22 @@ function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
   return walk.listed.filter((name) => !walk.taken.has(name) && !memory.failed.has(name));
 }
 
+/** Whether the walk still has `name` to take: not taken, failed, nor put off for want of an input (#470). */
+function untaken(name: string, walk: SmokeWalk, memory: WalkMemory): boolean {
+  return !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name);
+}
+
+/**
+ * Whether `play`'s browser has an action the walk still has to take (`untaken`): the one it has open,
+ * else one its panel offers, less, for a world seat after the first, what the first seat's panel
+ * offered, which is left to that seat (`companionStep`).
+ */
+function actionLeftFor(play: SeatPlay, plays: readonly SeatPlay[], offers: Offers, walk: SmokeWalk, memory: WalkMemory): boolean {
+  if (offers.open !== null) return untaken(offers.open, walk, memory);
+  const [lead] = plays;
+  return offers.enabled.some((name) => untaken(name, walk, memory) && (play === lead || !lead.offered.includes(name)));
+}
+
 /** Whether `name` was put off for want of an input (#470) and no action has been taken since. */
 function puttingOff(name: string, memory: WalkMemory): boolean {
   return memory.putOff.get(name) === memory.moves;
@@ -1920,8 +1936,8 @@ function lastResort(offers: Offers, play: SeatPlay, moves: number): NextPress {
 function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory, ready: ReadonlySet<string>, play: SeatPlay): NextPress {
   const now = offers.enabled.find((name) => ready.has(name));
   if (now !== undefined) return { take: now };
-  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
-  if (untaken !== undefined) return { take: untaken };
+  const fresh = offers.enabled.find((name) => untaken(name, walk, memory));
+  if (fresh !== undefined) return { take: fresh };
   const way = wayIn(offers, play, memory.moves);
   if (way !== undefined) return openWay(play, way, memory.moves);
   if (offers.inGroup && !play.lastResort) {
@@ -2093,9 +2109,8 @@ async function companionStep(
   // Inside a group or thing the lead's panel shows only that level, not all it offers.
   if (leading.open === null && !leading.inGroup) lead.offered = leading.enabled;
   const mine = offers.enabled.filter((name) => !lead.offered.includes(name));
-  const untaken = mine.some((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   // A group or thing this browser has not opened may hold what only it is offered, and one open is left first.
-  const ownBusiness = untaken || offers.inGroup || offers.ways.some((way) => !play.opened.has(way.press));
+  const ownBusiness = mine.some((name) => untaken(name, walk, memory)) || offers.inGroup || offers.ways.some((way) => !play.opened.has(way.press));
   const { took } = lead;
   if (!ownBusiness && took !== undefined && took.step !== play.followed && offers.enabled.includes(took.name)) {
     play.followed = took.step;
@@ -2167,12 +2182,14 @@ async function answerAnOpenDialog(play: SeatPlay, frame: Frame, walk: SmokeWalk,
 
 /**
  * One step in `play`'s browser: deal a new game after one that ended, press a control of an open
- * modal dialog (#461), press an untried board control, answer the open action, or press what the
- * panel offers; {@link IDLE} when it offers nothing. Game over is looked for first, and the game-over
- * card's own controls are never the board's (#462), so the walk cannot dismiss the end of a game it
- * has not seen. A board control comes before the open action because a player can press the board
- * while a pick is open, and because the walk acts for every seat at a table, where a game that opens
- * each turn's action by itself never has a moment with nothing open.
+ * modal dialog (#461), answer or take an action the walk still has to take (`actionLeftFor`), press
+ * an untried board control, answer the open action, or press what the panel offers; {@link IDLE}
+ * when it offers nothing. An action still to take comes before the board, since the game may offer
+ * it only for a moment, as a vote during a playback is (#1659). Game over is looked for first, and
+ * the game-over card's own controls are never the board's (#462), so the walk cannot dismiss the end
+ * of a game it has not seen. A board control comes before an open action taken before because a
+ * player can press the board while a pick is open, and because the walk acts for every seat at a
+ * table, where a game that opens each turn's action by itself never has a moment with nothing open.
  */
 async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   // Looked up at every step: the dev host puts up a new frame when the game restarts.
@@ -2207,6 +2224,7 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
   if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
+  if (actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);

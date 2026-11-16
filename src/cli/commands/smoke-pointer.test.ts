@@ -42,7 +42,7 @@ describe('boardsmith verify: the smoke check', () => {
       const { outcome, steps } = await smokeOf(false, boardWithAControlAtItsFoot());
 
       expect(outcome.passed).toBe(true);
-      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the far bell"');
+      expect(steps).toContain('smoke step 2: pressing the board\'s "Ring the far bell"');
     });
 
     it.each(['covered', 'coveredWholeAfterPointing'] as const)('fails a card something covers whole, saying so (%s)', async (kind) => {
@@ -61,7 +61,7 @@ describe('boardsmith verify: the smoke check', () => {
       expect(outcome.summary).toBe(
         'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
       );
-      if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      if (kind === 'toast') expect(steps).toContain('smoke step 4: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
 
@@ -98,7 +98,7 @@ button { width: 320px; height: 120px; }
     });
 
     expect(outcome.passed, outcome.summary).toBe(true);
-    expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+    expect(steps).toContain('smoke step 2: pressing the board\'s "Ring the bell"');
   });
 
   it('#1591 F1: reports coverage when accepted points become covered and other points are refused', async () => {
@@ -117,7 +117,7 @@ button { width: 320px; height: 120px; }
 
       expect(outcome.summary).not.toContain('Pressing the board');
       expect(outcome.passed).toBe(true);
-      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      expect(steps).toContain('smoke step 2: pressing the board\'s "Ring the bell"');
     });
 
     it('fails a press that something other than a toast in the page around the game takes, saying so', async () => {

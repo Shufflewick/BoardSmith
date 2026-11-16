@@ -15,7 +15,7 @@ describe('boardsmith verify: the smoke check holds the board to the Action Panel
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toContain(
       'The board showed "Cards / 7" selected while the Action Panel had nothing selected, after the walk pressed the board\'s "Card 7" ' +
-        'at step 1 of the game dealt from seed "blank".',
+        'at step 4 of the game dealt from seed "blank".',
     );
   });
 

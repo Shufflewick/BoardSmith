@@ -1661,6 +1661,34 @@ function pressIt(event: MouseEvent, name: string) {
   };
 }
 
+/**
+ * A BOARD THAT KEEPS OFFERING CONTROLS (#1659), as Windup Warfare's playback does while its 2x vote
+ * is enabled: each press of "Watch N" puts up an untried "Watch N+1", up to 30, so a walk that
+ * presses every untried board control before the panel's actions takes neither "draw" nor "play"
+ * within a walk of fewer steps.
+ */
+export function boardThatKeepsOfferingControls(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const watched = ref(1);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="watched <= 30" :key="watched" type="button" @click="watched++">Watch {{ watched }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
 /** What {@link boardThatMovesUnderThePress}'s page logs each time it moves its buttons under a press (#647). */
 export const MOVED_UNDER_THE_PRESS = 'the fixture moved its buttons under the press on';
 

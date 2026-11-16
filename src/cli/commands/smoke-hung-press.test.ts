@@ -14,7 +14,7 @@ describe('boardsmith verify: the smoke check', () => {
   it('#618: fails a board that hangs the page for good after a press, at the step that met the hang, on the page clock rather than the whole-run limit', async () => {
     const { outcome, steps } = await smokeOf(false, boardThatHangsWhenPressed());
 
-    expect(steps).toContain('smoke step 1: pressing the board\'s "Spin"');
+    expect(steps).toContain('smoke step 2: pressing the board\'s "Spin"');
     expect(outcome.passed).toBe(false);
     // The walk's own frozen check ended the step that hung; the 600s limit on the whole run did not.
     expect(outcome.summary, outcome.summary).toMatch(/The walk could not go on at step \d+ of the game dealt from seed "smoke": the page stopped answering for 60s/);
