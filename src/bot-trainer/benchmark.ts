@@ -64,9 +64,9 @@ export interface BenchmarkResult {
   winRate: number;
   /** Number of wins */
   wins: number;
-  /** Number of losses */
+  /** Number of losses, including a finish with no winners and no declared draw */
   losses: number;
-  /** Number of draws — games the GAME itself decided as a tie. */
+  /** Number of draws: a draw the game declares (`isDraw()`), or a win both seats share. */
   draws: number;
   /**
    * Games that reached no outcome: a bot that threw, a game that crashed, a
