@@ -636,7 +636,8 @@ This is a change of surface, not of content, and three things keep it honest:
 - If even ONE candidate lacks a board ref, or the board does not offer it, the
   panel keeps every button, because deferring would leave that candidate
   reachable from neither surface. A board may show only state, so the board
-  says what it offers: `useDrawnBoardElements` (installed by the shell) reports
+  says what it offers: `useDrawnBoardElements` (installed by the shell, and by
+  a test harness's `provideTableActionWiring`) reports
   every element the board draws marked with `candidateAttrs` beside
   `anchorAttrs`, as `useSelectable`, `useSelectableGrid` and the AutoUI
   renderers do, and every pick a surface takes whole with `pickSurfaceAttrs`
@@ -1190,6 +1191,8 @@ export function wireSeat(
   // How this seat's moves reach the game, e.g. a test session's.
   sendAction: TableActionWiringOptions['sendAction'],
   fetchPickChoices: TableActionWiringOptions['fetchPickChoices'],
+  // Bound as the `ref` of the element that holds the board.
+  boardEl: Ref<HTMLElement | null>,
 ) {
   const wiring = useTableActionWiring({
     seatState,
@@ -1203,14 +1206,16 @@ export function wireSeat(
     fetchPickChoices,
   });
   // The board below injects its board interaction and action holds from this wiring.
-  provideTableActionWiring(wiring);
+  provideTableActionWiring(wiring, boardEl);
   return wiring;
 }
 ```
 
-`provideTableActionWiring(wiring)` provides, to the components below, the two
+`provideTableActionWiring(wiring, boardEl)` provides, to the components below, the two
 things a board injects from the wiring: the board interaction and the register
-`useActionHolds` adds to. Call it in the `setup` of the component that renders
+`useActionHolds` adds to. It also reports what `boardEl` draws, offers and takes
+whole to that board interaction, as the shell reports its own board, so the
+harness's panel can hand a long pick to the board (#1678). Call it in the `setup` of the component that renders
 your board, and feed the Action Panel `wiring.disabledActions`, which already
 carries the board's holds. So a board's holds reach the harness's panel, and
 its controller cancels a held draft. The controller is not among them: it is

@@ -1,5 +1,16 @@
 # Migration Guide
 
+## `provideTableActionWiring` takes the element that holds the board (#1678)
+
+`provideTableActionWiring(wiring)` is now `provideTableActionWiring(wiring, boardEl)`,
+where `boardEl` is a `ref` bound to the element that holds your harness's board.
+It reports what that element draws, offers (`candidateAttrs`) and takes whole
+(`pickSurfaceAttrs`) to the wiring's board interaction, as the shell reports its
+own board. Before, nothing reported to a harness's interaction, so its Action
+Panel never handed a pick of more than 24 candidates to the board. Wrap the
+board in an element, bind `ref: boardEl` on it, and pass that ref.
+`useTableActionWiring` also returns the `boardInteraction` it was built with.
+
 ## `useDragDrop` and the AutoUI drag by pointer events, and `drag()`/`drop()` carry the tap path (#1605)
 
 Native HTML5 drag is gone: it never starts from a touch. `drag(ref).props` is
