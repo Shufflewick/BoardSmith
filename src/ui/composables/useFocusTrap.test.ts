@@ -108,6 +108,50 @@ describe('useFocusTrap', () => {
       expect(document.activeElement).toBe(button('c'));
     });
 
+    it('moves focus to the next item when the removed one sat in a wrapper after another wrapped item', async () => {
+      const { button } = await openOn('<div><button id="a">A</button></div><div id="wrap-b"><button id="b">B</button></div><div><button id="c">C</button></div>');
+      button('b').focus();
+
+      button('b').parentElement!.remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(button('c'));
+    });
+
+    it('moves focus to the next item when the focused one and the one before it go in the same change', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button><button id="c">C</button><button id="d">D</button>');
+      button('c').focus();
+
+      button('c').remove();
+      button('b').remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(button('d'));
+    });
+
+    it('moves focus to the item before when the last one is removed', async () => {
+      const { button } = await openOn('<button id="a">A</button><button id="b">B</button>');
+      button('b').focus();
+
+      button('b').remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(button('a'));
+    });
+
+    it('moves focus to another item when the item focused before open() is removed', async () => {
+      const dialog = appendDialog('<button id="a">A</button><button id="b">B</button>');
+      const a = dialog.querySelector<HTMLButtonElement>('#a')!;
+      a.focus();
+      trap(ref(dialog), { onClose: vi.fn() }).open();
+      await nextTick();
+
+      a.remove();
+      await Promise.resolve();
+
+      expect(document.activeElement).toBe(dialog.querySelector('#b'));
+    });
+
     it('leaves focus alone when the window loses it, even on an element outside the Tab order', async () => {
       const { dialog, button } = await openOn('<button id="a">A</button><button id="b">B</button>');
       dialog.tabIndex = -1;

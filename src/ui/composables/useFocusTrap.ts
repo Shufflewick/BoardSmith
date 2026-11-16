@@ -121,36 +121,40 @@ export function useFocusTrap(
   const escapeToClose = options?.escapeToClose ?? true;
   let previouslyFocused: HTMLElement | null = null;
 
-  let focusedItem: HTMLElement | null = null;
-  const trackFocus = (e: FocusEvent) => {
-    if (dialogRef.value?.contains(e.target as Node)) focusedItem = e.target as HTMLElement;
-  };
-
   // A browser drops focus from a disabled or removed item to <body>, out of reach of the dialog's keydown (#1453, #1457).
-  function refocusAfter(anchor: Node) {
-    const dialog = dialogRef.value;
-    if (!dialog || topTrap() !== dialogRef || document.activeElement !== document.body) return;
-    const focusable = getFocusable(dialog);
-    const next = focusable.find((el) => anchor.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
-    (next ?? focusable.at(-1) ?? dialog).focus();
-  }
-
   function refocusDisabledItem(e: FocusEvent) {
+    const dialog = dialogRef.value;
     const lost = e.target as HTMLElement;
-    if (e.relatedTarget || !dialogRef.value?.contains(lost)) return;
-    // A removed item is still attached when its focusout fires, so look once the change is done; removals are refocusRemovedItem's.
+    if (e.relatedTarget || !dialog?.contains(lost)) return;
+    // A removed item is still attached when its focusout fires, so look once the change is done; refocusRemovedItem takes removals.
     queueMicrotask(() => {
+      if (topTrap() !== dialogRef || document.activeElement !== document.body) return;
       if (!lost.isConnected || (!lost.matches(':disabled') && canTakeFocus(lost))) return;
-      refocusAfter(lost);
+      const focusable = getFocusable(dialog);
+      const next = focusable.find((el) => lost.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      (next ?? focusable.at(-1) ?? dialog).focus();
     });
   }
 
+  // A removed item has no place left in the document, so its slot among the items is kept to find the next one.
+  let focusedItem: HTMLElement | null = null;
+  let focusedSlot = 0;
+  function track(el: EventTarget | null) {
+    const dialog = dialogRef.value;
+    if (!dialog || !(el instanceof HTMLElement) || !dialog.contains(el)) return;
+    focusedItem = el;
+    focusedSlot = Math.max(0, getFocusable(dialog).indexOf(el));
+  }
+  const trackFocus = (e: FocusEvent) => track(e.target);
+
   // WebKit fires no focusout when it removes the focused item, so a removal is seen in the DOM itself (#1618).
-  const refocusRemovedItem = new MutationObserver((records) => {
-    const item = focusedItem;
-    if (!item || item.isConnected) return;
-    const removal = records.find((r) => Array.from(r.removedNodes).some((node) => node.contains(item)));
-    if (removal) refocusAfter(removal.previousSibling ?? removal.target);
+  const refocusRemovedItem = new MutationObserver(() => {
+    const dialog = dialogRef.value;
+    if (!dialog || !focusedItem) return;
+    if (focusedItem.isConnected) return track(focusedItem);
+    if (topTrap() !== dialogRef || document.activeElement !== document.body) return;
+    const focusable = getFocusable(dialog);
+    (focusable[Math.min(focusedSlot, focusable.length - 1)] ?? dialog).focus();
   });
 
   // --------------------------------------------------------------------------
@@ -164,11 +168,12 @@ export function useFocusTrap(
     syncInert();
     document.addEventListener('focusout', refocusDisabledItem);
     document.addEventListener('focusin', trackFocus);
-    if (dialogRef.value) refocusRemovedItem.observe(dialogRef.value, { childList: true, subtree: true });
     nextTick(() => {
       if (!dialogRef.value) return;
+      if (openTraps.includes(dialogRef)) refocusRemovedItem.observe(dialogRef.value, { childList: true, subtree: true });
       const focusable = getFocusable(dialogRef.value);
       focusable[0]?.focus();
+      track(document.activeElement);
     });
   }
 
