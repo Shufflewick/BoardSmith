@@ -170,20 +170,25 @@ const pendingRestart = ref(false);
 const dealtFrom = ref<string | null>(null);
 /** The seed typed into Table setup to deal the next game from. */
 const dealSeedInput = ref('');
+/** How many players Table setup deals the next game at (#1602): the seats the table has until one is typed. */
+const dealPlayersInput = ref(cfg.playerCount);
+watch(() => seats.value.length, (count) => {
+  dealPlayersInput.value = count;
+});
 
-/** Starts a new game dealt from the seed typed in Table setup; the host refuses a blank one. */
+/** Starts a new game dealt from the seed and at the player count typed in Table setup; the host refuses a blank seed or a count the game does not seat. */
 function dealFromSeed(): void {
-  restartGame(dealSeedInput.value);
+  restartGame({ seed: dealSeedInput.value, playerCount: dealPlayersInput.value });
 }
 
 /**
- * Asks the host for a new game, dealt from `seed` when one is given. No seed is shown until the new
- * game's state arrives, so a page waiting for a seed never reads the game before it.
+ * Asks the host for a new game, dealt as `deal` says when one is given. No seed is shown until the
+ * new game's state arrives, so a page waiting for a seed never reads the game before it.
  */
-function restartGame(seed?: string): void {
+function restartGame(deal?: { seed: string; playerCount: number }): void {
   pendingRestart.value = true;
   dealtFrom.value = null;
-  wsSend(seed === undefined ? { type: 'restart' } : { type: 'restart', seed });
+  wsSend({ type: 'restart', ...deal });
 }
 
 /**
@@ -1033,7 +1038,7 @@ onUnmounted(() => {
           <dl class="table-setup__dl">
             <div class="table-setup__row">
               <dt>Players</dt>
-              <dd>{{ cfg.playerCount }}</dd>
+              <dd data-testid="table-players">{{ seats.length }}</dd>
             </div>
             <div class="table-setup__row">
               <dt>bot seats</dt>
@@ -1123,6 +1128,17 @@ onUnmounted(() => {
             <label>
               Deal from seed
               <input ref="dealSeedField" v-model="dealSeedInput" type="text" data-testid="deal-seed" />
+            </label>
+            <label>
+              Players
+              <input
+                v-model.number="dealPlayersInput"
+                type="number"
+                :min="cfg.minPlayers"
+                :max="cfg.maxPlayers"
+                step="1"
+                data-testid="deal-players"
+              />
             </label>
             <button type="submit" class="btn" data-testid="deal">Deal</button>
           </form>
@@ -1745,6 +1761,7 @@ onUnmounted(() => {
   color: var(--bsg-ink-3);
 }
 
+.table-setup__deal input[type='number'],
 .table-setup__seat-option input[type='number'] {
   width: 5em;
 }

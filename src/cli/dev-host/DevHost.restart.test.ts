@@ -90,9 +90,9 @@ const SEAT_LOBBY = {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function mountAndActivate(): Promise<VueWrapper> {
+async function mountAndActivate(config: DevHostConfig = TEST_CONFIG): Promise<VueWrapper> {
   const wrapper = mount(DevHost, {
-    props: { config: TEST_CONFIG },
+    props: { config },
     attachTo: document.body,
   });
   await wrapper.vm.$nextTick();
@@ -274,12 +274,32 @@ describe('DevHost: dealing from a seed (#460)', () => {
     await wrapper.find('[data-testid="deal-form"]').trigger('submit');
 
     const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
-    expect(frames).toEqual([{ type: 'restart', seed: 'scoring-deal' }]);
+    expect(frames).toEqual([{ type: 'restart', seed: 'scoring-deal', playerCount: 2 }]);
     // The game on screen is still the old one until the new one's state arrives.
     expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('');
     ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], seed: 'scoring-deal' });
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('scoring-deal');
+  });
+
+  it('#1602: deals at the player count typed there, which starts at the seats the table has and keeps to the game\'s range', async () => {
+    const wrapper = await mountAndActivate({ ...TEST_CONFIG, maxPlayers: 4 });
+    await openTableSetup(wrapper);
+    const ws = mockWsInstance!;
+    const players = wrapper.find('[data-testid="deal-players"]');
+    expect((players.element as HTMLInputElement).value).toBe('2');
+    expect(players.attributes()).toMatchObject({ type: 'number', min: '2', max: '4' });
+    ws.send.mockClear();
+
+    await wrapper.find('[data-testid="deal-seed"]').setValue('crowded');
+    await players.setValue('3');
+    await wrapper.find('[data-testid="deal-form"]').trigger('submit');
+
+    expect(ws.send.mock.calls.map((c) => JSON.parse(c[0] as string))).toEqual([{ type: 'restart', seed: 'crowded', playerCount: 3 }]);
+    // The table now has three seats, which is what Table setup shows and deals at next.
+    ws.simulateMessage({ ...SEAT_LOBBY, seats: [...SEAT_LOBBY.seats, { seat: 3, held: false, mine: false, name: '', connected: false }] });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="table-players"]').text()).toBe('3');
   });
 });
 

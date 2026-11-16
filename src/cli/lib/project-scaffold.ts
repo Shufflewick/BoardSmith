@@ -620,6 +620,9 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 //   seed: ['smoke', '17'],
 //
+// Each deal sits the game's minPlayers unless it names how many: an action only a fuller table
+// offers is reached by a deal such as \`{ seed: 'Kim', players: 3 }\` in that list.
+//
 // A world is dealt by \`boardsmith dev\` from its own seed, so a world's spec names none.
 //
 // In a world the walk plays one seat. An action that needs another player there (one that names

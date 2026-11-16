@@ -1,6 +1,6 @@
 {
   "revision": 374,
-  "surfaceHash": "fdc7cc4945f0b03c",
+  "surfaceHash": "42b365841767d5b0",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
   "history": [
@@ -2931,10 +2931,10 @@
     {
       "revision": 374,
       "date": "2026-11-16",
-      "surfaceHash": "fdc7cc4945f0b03c",
+      "surfaceHash": "42b365841767d5b0",
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
-      "summary": "Brings the r345-fixes hotfixes (#1647 phone player strip, #1648 smoke walk process group, #1649 toast collapse) to main, adds ErrorCode.NOT_CONNECTED, which a host sets on a refusal it did not send because it is not connected (the shell then holds back that toast while its connection dot shows stale), and draws the acting seat's outline in its token's shape (#1646)"
+      "summary": "The smoke walk can deal a table at a chosen player count: a spec seed entry may be { seed, players }, boardsmith smoke takes --players, and the dev host's Table setup deals at the count typed in its new Players field (#1602)."
     }
   ]
 }

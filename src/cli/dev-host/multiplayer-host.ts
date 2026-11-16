@@ -187,8 +187,11 @@ export type ClientInbound =
   | { type: 'hello' }
   | { type: 'join'; seat: number; name?: string; color?: string }
   | { type: 'leave' }
-  /** Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed. */
-  | { type: 'restart'; seed?: string }
+  /**
+   * Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed, at
+   * `playerCount` seats when it names one (#1602), else at the seats the table has.
+   */
+  | { type: 'restart'; seed?: string; playerCount?: number }
   /**
    * `loadId` is the page load whose socket sent it, stamped by the connection
    * handler (#1041), never taken from the page's own message.
@@ -746,7 +749,7 @@ export class MultiplayerHost {
       case 'leave':
         return this.handleLeave(clientId);
       case 'restart':
-        return this.handleRestart(clientId, msg.seed);
+        return this.handleRestart(clientId, msg.seed, msg.playerCount);
       case 'server_request':
         return this.handleServerRequest(clientId, msg);
       case 'follow':
@@ -770,7 +773,7 @@ export class MultiplayerHost {
     }
   }
 
-  private async handleRestart(clientId: string, seed: string | undefined): Promise<void> {
+  private async handleRestart(clientId: string, seed: string | undefined, playerCount: unknown): Promise<void> {
     if (this.starting) {
       this.send(clientId, { type: 'error', message: STARTING });
       return;
@@ -780,15 +783,23 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
-    const refused = seed === undefined ? undefined : this.dealRefusal(seed);
+    const refused = (seed === undefined ? undefined : this.dealRefusal(seed)) ?? (playerCount === undefined ? undefined : this.playerCountRefusal(playerCount));
     if (refused !== undefined) {
       this.send(clientId, { type: 'error', message: refused });
       return;
     }
+    if (playerCount !== undefined) this.resizeSeats(playerCount as number);
     // Rebuild the session with the same seats, dealt from the seed named or a
     // fresh one. Follow-mode carries over (#460): the one driver of every seat
     // drives the new game too, and no bot moves in it before the driver can.
     await this.startGame(seed);
+  }
+
+  /** Why a game cannot be dealt at `count` players, or undefined when it can: the count is the page's, so anything may arrive. */
+  private playerCountRefusal(count: unknown): string | undefined {
+    const { minPlayers, maxPlayers } = this.opts;
+    if (Number.isInteger(count) && (count as number) >= minPlayers && (count as number) <= maxPlayers) return undefined;
+    return `This game seats ${minPlayers} to ${maxPlayers} players, so it cannot be dealt at ${JSON.stringify(count)}. Choose a count from ${minPlayers} to ${maxPlayers}.`;
   }
 
   /** Why a game cannot be dealt from `seed`, or undefined when it can. */
@@ -881,26 +892,13 @@ export class MultiplayerHost {
     // `playerCount` and every playerCount-sized array
     // (`playerOptions`/`playerIsBot`/`playerConfigs`) always agree.
     if (requestedPlayerCount !== undefined) {
-      const newPlayerCount = requestedPlayerCount;
-      if (typeof newPlayerCount !== 'number' || !Number.isInteger(newPlayerCount) || newPlayerCount < 1) {
-        this.send(clientId, {
-          type: 'error',
-          message: `Preset/configure playerCount must be a positive integer, got ${JSON.stringify(requestedPlayerCount)}.`,
-        });
+      // F-18/DEVHOST-01: an out-of-range preset (a 6-player preset on a 2-4 game) is refused here, not in the engine.
+      const refusal = this.playerCountRefusal(requestedPlayerCount);
+      if (refusal !== undefined) {
+        this.send(clientId, { type: 'error', message: refusal });
         return;
       }
-      // F-18/DEVHOST-01: validate against the game's declared player range so an
-      // out-of-range preset (e.g. a 6-player preset on a 2–4 game) is rejected
-      // here with an actionable message rather than blowing up in the engine.
-      const max = this.opts.maxPlayers;
-      if (newPlayerCount < this.opts.minPlayers || newPlayerCount > max) {
-        this.send(clientId, {
-          type: 'error',
-          message: `Preset/configure playerCount ${newPlayerCount} is out of range for this game (must be ${this.opts.minPlayers}–${max}).`,
-        });
-        return;
-      }
-      this.resizeSeats(newPlayerCount);
+      this.resizeSeats(requestedPlayerCount as number);
     }
     if (seatSetup) this.applySeatSetup(seatSetup);
 

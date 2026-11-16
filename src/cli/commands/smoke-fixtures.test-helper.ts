@@ -4,6 +4,7 @@
  * `DevGamePlayer`).
  */
 import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
+import type { SmokeDeal } from '../../testing/browser-smoke-verdict.js';
 
 /**
  * A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. With
@@ -13,7 +14,7 @@ import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
 export function smokeSpec(
   actions: readonly string[],
   unreachable?: Record<string, string>,
-  more: { seed?: string | readonly string[]; steps?: number; echo?: string } = {},
+  more: { seed?: SmokeDeal | readonly SmokeDeal[]; steps?: number; echo?: string } = {},
 ): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
   const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
@@ -157,6 +158,56 @@ describe('the ace game', () => {
     expect(game.players.map((player) => player.hand.all().length)).toEqual([5, 5]);
   });
 });
+`,
+  };
+}
+
+/**
+ * THE CROWD GAME (#1602): the ace game whose `huddle` is offered only at a table of three or more,
+ * and `pair` only at a table of two, so a walk takes both only when its deals sit both counts.
+ */
+export function crowdGame(): Record<string, string> {
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('huddle')
+      .prompt('Huddle with the others')
+      .condition({ 'three or more at the table': () => game.players.length >= 3 })
+      .execute(() => ({ success: true })),
+    Action.create('pair')
+      .prompt('Pair up with the other player')
+      .condition({ 'two at the table': () => game.players.length === 2 })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'huddle', 'pair'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
 `,
   };
 }
