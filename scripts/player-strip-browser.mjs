@@ -67,7 +67,7 @@ function readStrip(frame, strip) {
   });
 }
 
-await runBrowserRegression({ script: 'player-strip-browser.mjs', table: { files: { 'src/ui/App.vue': APP } } }, async ({ launch, hostUrl }) => {
+await runBrowserRegression({ script: 'player-strip-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/ui/App.vue': APP } } }, async ({ launch, hostUrl }) => {
   const browser = await launch();
   try {
     const page = await browser.newPage({ viewport: { width: PHONES[0], height: 800 } });
