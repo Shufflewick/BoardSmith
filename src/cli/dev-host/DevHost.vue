@@ -1780,6 +1780,16 @@ onUnmounted(() => {
   margin-left: 8px;
 }
 
+/* A finger's target, as the shell's controls have (#1611, #1668): WCAG 2.5.5 and Apple's 44pt. */
+@media (pointer: coarse) {
+  .dev-host button,
+  .dev-host select,
+  .dev-host input {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}
+
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */
 @media (width < 640px) {
   .dev-chrome__bar-wide {
