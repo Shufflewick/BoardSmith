@@ -419,7 +419,7 @@ function applySkips(
     if (!games.some((g) => g.slug === slug)) {
       throw new Error(
         `--skip names ${slug}, which is not a game this catalogue checks (${games.map((g) => g.slug).join(', ')}). `
-          + 'Remove that skip from the command, or from .agent-policy.json if it is there.',
+          + 'Remove that skip from the command.',
       );
     }
   }
