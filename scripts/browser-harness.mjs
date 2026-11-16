@@ -80,22 +80,22 @@ export const browserScripts = () =>
 
 /**
  * Run `node <args>` from the checkout, as the browser suite runs each script, and stop it if it
- * is still running after `hangGuardMs`: asked with SIGTERM, so it stops what it started and can
- * say what it was waiting on, and killed if it has not gone after `stopGraceMs`. A hung run hands
- * back everything it printed too, so it says how far it got (#1645).
+ * is still running once `hung(child)` settles (the suite's hang guard): asked with SIGTERM, so it
+ * stops what it started and can say what it was waiting on, and killed if it has not gone after
+ * `stopGraceMs`. A hung run hands back everything it printed too, so it says how far it got (#1645).
  *
  * @returns `hung`, its exit `code` (null once stopped), and its stdout and stderr as one text
  */
-export async function runUntilHung(args, { hangGuardMs, stopGraceMs }) {
+export async function runUntilHung(args, { hung, stopGraceMs }) {
   const child = spawn(process.execPath, args, { cwd: join(SCRIPTS, '..') });
   let output = '';
-  child.stdout.on('data', (chunk) => (output += chunk));
-  child.stderr.on('data', (chunk) => (output += chunk));
+  for (const stream of [child.stdout, child.stderr]) {
+    stream.setEncoding('utf8');
+    stream.on('data', (text) => (output += text));
+  }
   // 'close', not 'exit': it waits for the output still in the pipes, the last words a stopped script prints.
   const exited = once(child, 'close');
-  let guard;
-  const ended = await Promise.race([exited, new Promise((resolve) => (guard = setTimeout(resolve, hangGuardMs, null)))]);
-  clearTimeout(guard);
+  const ended = await Promise.race([exited, hung(child).then(() => null)]);
   if (ended) return { hung: false, code: ended[0], output };
   child.kill('SIGTERM');
   const killer = setTimeout(() => child.kill('SIGKILL'), stopGraceMs);
@@ -333,8 +333,9 @@ const results = [];
 /** The browser the checks being recorded run in, which the summary names. */
 let engineName = 'chromium';
 
-/** What the run is waiting on, for `sayWhereOnStop`. */
-let waitingOn = 'starting up';
+/** The step the run is waiting on, if any, and the last one to end, for `sayWhereOnStop`. */
+let waitingOn = null;
+let lastDone = 'nothing yet';
 
 /**
  * Run `body` as the step named `name`, so a run stopped while it waits says so (#1645).
@@ -347,6 +348,7 @@ export async function step(name, body) {
     return await body();
   } finally {
     waitingOn = outer;
+    lastDone = name;
   }
 }
 
@@ -356,7 +358,7 @@ export async function step(name, body) {
  */
 export function sayWhereOnStop() {
   process.once('SIGTERM', () => {
-    console.log(`\nStopped while waiting on: ${waitingOn}`);
+    console.log(waitingOn ? `\nStopped while waiting on: ${waitingOn}` : `\nStopped outside any step, after: ${lastDone}`);
     if (process.listenerCount('SIGTERM') === 0) process.kill(process.pid, 'SIGTERM');
   });
 }

@@ -12,6 +12,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { dirname, join } from 'node:path';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { browserScripts, runUntilHung } from './browser-harness.mjs';
 
@@ -26,7 +27,7 @@ const STOP_GRACE_MS = 30_000;
 describe('the browser regressions', () => {
   it.each(browserScripts())('%s passes in the browsers it names', async (name) => {
     // The guard is the script's, not the case's: a case vitest times out loses what the script printed (#1645).
-    const run = await runUntilHung([join(SCRIPTS, name)], { hangGuardMs: HANG_GUARD_MS, stopGraceMs: STOP_GRACE_MS });
+    const run = await runUntilHung([join(SCRIPTS, name)], { hung: () => delay(HANG_GUARD_MS, undefined, { ref: false }), stopGraceMs: STOP_GRACE_MS });
     expect(run.hung, `node scripts/${name} was still running after ${HANG_GUARD_MS / 60_000} minutes, so it was stopped. What it printed:\n${run.output}`).toBe(false);
     expect(run.code, `node scripts/${name} failed:\n${run.output}`).toBe(0);
   }, HANG_GUARD_MS + STOP_GRACE_MS + 10_000);

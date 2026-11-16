@@ -403,26 +403,39 @@ describe('#1604: a known failure passes only while it fails for its reason', () 
 });
 
 describe('#1645: a browser regression that hangs is stopped, and says how far it got', () => {
+  /** Calls the run hung once it has printed `marker`, so a case waits on the script, not on a clock. */
+  const hungOnceItPrints = (marker) => (child) =>
+    new Promise((resolve) => child.stdout.on('data', (chunk) => String(chunk).includes(marker) && resolve()));
+  const harness = JSON.stringify(join(SCRIPTS, 'browser-harness.mjs'));
+  /** A script on the harness that passes a check, then never finishes `then`. */
+  const stuck = (then) =>
+    `const { check, sayWhereOnStop, step } = await import(${harness}); sayWhereOnStop(); await check('the first check', () => {}); setInterval(() => {}, 1000); ${then}`;
+
   it('stops a script still running at the guard and hands back what it printed, its last words included', async () => {
-    const hanging = "console.log('  ok    the first check'); process.on('SIGTERM', () => { console.log('stopped while waiting on the second'); process.exit(1); }); setInterval(() => {}, 1000);";
-    const run = await runUntilHung(['-e', hanging], { hangGuardMs: 500, stopGraceMs: 30_000 });
+    const hanging = "process.on('SIGTERM', () => { console.log('stopped while waiting on the second'); process.exit(1); }); console.log('  ok    the first check'); setInterval(() => {}, 1000);";
+    const run = await runUntilHung(['-e', hanging], { hung: hungOnceItPrints('the first check'), stopGraceMs: 30_000 });
     expect(run.hung).toBe(true);
     expect(run.output).toContain('  ok    the first check');
     expect(run.output).toContain('stopped while waiting on the second');
   });
 
+  // A grace longer than these cases: a script SIGTERM did not end would time the case out.
   it('says which step a stopped script was waiting on, and ends it when nothing else stops it', async () => {
-    const harness = JSON.stringify(join(SCRIPTS, 'browser-harness.mjs'));
-    const waiting = `const { check, sayWhereOnStop, step } = await import(${harness}); sayWhereOnStop(); await check('the first check', () => {}); setInterval(() => {}, 1000); await step('opening the controls menu', () => new Promise(() => {}));`;
-    const run = await runUntilHung(['--input-type=module', '-e', waiting], { hangGuardMs: 2_000, stopGraceMs: 600_000 });
+    const waiting = stuck("console.log('waiting'); await step('opening the controls menu', () => new Promise(() => {}));");
+    const run = await runUntilHung(['--input-type=module', '-e', waiting], { hung: hungOnceItPrints('waiting'), stopGraceMs: 600_000 });
     expect(run.hung).toBe(true);
     expect(run.output).toContain('ok    the first check');
     expect(run.output).toContain('Stopped while waiting on: opening the controls menu');
-    // A grace longer than this case: a script SIGTERM did not end would time the case out.
   }, 120_000);
 
-  it('hands back the exit code and output of a script that ends on its own', async () => {
-    const run = await runUntilHung(['-e', "console.error('1/2 checks passed'); process.exit(3);"], { hangGuardMs: 600_000, stopGraceMs: 30_000 });
-    expect(run).toEqual({ hung: false, code: 3, output: '1/2 checks passed\n' });
+  it('says which step a script stopped outside any step had finished last', async () => {
+    const waiting = stuck("console.log('waiting'); await new Promise(() => {});");
+    const run = await runUntilHung(['--input-type=module', '-e', waiting], { hung: hungOnceItPrints('waiting'), stopGraceMs: 600_000 });
+    expect(run.output).toContain('Stopped outside any step, after: the first check');
+  }, 120_000);
+
+  it('hands back the exit code and output of a script that ends on its own, whole characters included', async () => {
+    const run = await runUntilHung(['-e', "console.error('1/2 checks passed \u2014 one left'); process.exit(3);"], { hung: () => new Promise(() => {}), stopGraceMs: 30_000 });
+    expect(run).toEqual({ hung: false, code: 3, output: '1/2 checks passed \u2014 one left\n' });
   });
 });
