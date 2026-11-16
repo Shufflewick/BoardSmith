@@ -16,7 +16,8 @@
 // CSS @media / @container conditions cannot read CSS custom properties, so these
 // live as a TS constant for JS-side consumers (matchMedia, ResizeObserver math).
 // Keep the .vue @media literals aligned to these tiers:
-//   compact ≤639px · medium 640–1023px · wide ≥1024px (board centers at wide).
+//   (width < 640px) · (640px <= width < 1024px) · (width >= 1024px), half-open so a
+//   fractional width lands in exactly one tier; src/ui/breakpoints.test.ts holds them to it.
 // ---------------------------------------------------------------------------
 export const BREAKPOINTS = {
   /** Phone ceiling — below this is the compact tier. */

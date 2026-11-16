@@ -235,7 +235,7 @@ describe('the Action Panel\'s own height cap', () => {
     expect(declaration('.actionbar:has([data-bs-menu-level])', 'max-height')).toBe('var(--bsg-panel-menu-max)');
     expect(declaration('.game-shell__game', '--bsg-panel-menu-max')).toBe('var(--bsg-panel-max)');
     // The phone tier: a level's labels wrap whole, so it grows to what it needs, bounded by the screen.
-    const phone = source.slice(source.indexOf('@media (max-width: 639px) {'));
+    const phone = source.slice(source.indexOf('@media (width < 640px) {'));
     expect(phone.match(/--bsg-panel-menu-max:\s*([^;]+);/)![1]).toBe('max(var(--bsg-panel-max), 50dvh)');
     for (const env of ENVIRONMENTS) {
       const tokens = tokensFor('landscape-short');

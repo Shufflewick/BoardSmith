@@ -3285,7 +3285,7 @@ button {
    board handoff on a second row. Stacked context, wrapping prompt and compact
    handoff make the pick one row. The prompt wraps and is never cut short: it
    carries rules text. Same query as the shell's short-landscape tier. */
-@media (max-width: 639px), (orientation: landscape) and (max-height: 600px) {
+@media (width < 640px), (orientation: landscape) and (max-height: 600px) {
   .config-context {
     display: flex;
     flex-direction: column;
@@ -3368,7 +3368,7 @@ button {
   display: none;
 }
 
-@media (max-width: 639px) and (orientation: portrait) {
+@media (width < 640px) and (orientation: portrait) {
   .menu-level-break {
     display: block;
     flex-basis: 100%;

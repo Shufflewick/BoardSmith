@@ -33,8 +33,8 @@ export function useLayoutSize(): LayoutSize {
   // jsdom ships no matchMedia; every browser does.
   if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return layout;
 
-  const compact = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);
-  const medium = window.matchMedia(`(max-width: ${BREAKPOINTS.medium - 1}px)`);
+  const compact = window.matchMedia(`(width < ${BREAKPOINTS.compact}px)`);
+  const medium = window.matchMedia(`(width < ${BREAKPOINTS.medium}px)`);
   const portrait = window.matchMedia('(orientation: portrait)');
   const read = (): void => {
     formFactor.value = compact.matches ? 'compact' : medium.matches ? 'medium' : 'wide';

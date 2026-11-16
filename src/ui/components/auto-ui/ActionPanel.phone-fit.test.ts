@@ -43,7 +43,7 @@ const SHORT_LANDSCAPE = '(orientation: landscape) and (max-height: 600px)';
  * landscape screens (#486), one block so the two cannot drift apart.
  */
 function phoneBlock(): string {
-  const query = `@media (max-width: ${BREAKPOINTS.compact - 1}px), ${SHORT_LANDSCAPE} {`;
+  const query = `@media (width < ${BREAKPOINTS.compact}px), ${SHORT_LANDSCAPE} {`;
   const at = STYLE.indexOf(query);
   expect(at, `ActionPanel.vue has no ${query} block`).toBeGreaterThan(-1);
   return STYLE.slice(at, STYLE.indexOf('\n}\n', at));

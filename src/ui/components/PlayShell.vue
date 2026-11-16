@@ -1181,7 +1181,7 @@ const mobileToggleLabel = computed(() => {
    @media queries drive shell chrome; @container for renderer reflow (plan 100-02).
    one-line player-icon strip across the top; tapping its chevron opens the full
    players + log as an overlay over the board (never the action bar), with a scrim. */
-@media (max-width: 639px) {
+@media (width < 640px) {
   .stage {
     flex-direction: column;
   }
@@ -1315,9 +1315,9 @@ const mobileToggleLabel = computed(() => {
   }
 }
 
-/* Medium (640px–1023px): standard sidebar + board. Lower bound aligns with the
-   compact ceiling (639px), so no width falls between tiers. */
-@media (min-width: 640px) and (max-width: 1023px) {
+/* Medium (640px up to 1024px): standard sidebar + board. Half-open ranges, so a
+   fractional width such as 639.5px still falls in exactly one tier (#1621). */
+@media (640px <= width < 1024px) {
   .boardregion {
     min-height: 380px;
   }
@@ -1326,7 +1326,7 @@ const mobileToggleLabel = computed(() => {
 /* Large (≥1024px): wider board min-height. The board is NOT centered or width-capped
    — many games have more content than fits the viewport, so the board sits top-left
    and the region scrolls (both axes) when the board is larger than the viewport. */
-@media (min-width: 1024px) {
+@media (width >= 1024px) {
   .boardregion {
     min-height: 480px;
   }

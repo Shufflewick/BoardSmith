@@ -688,7 +688,7 @@ function handleRestartClick() {
 /* Phone bottom-sheet — slides up from the bottom on narrow viewports. The
    panel has no width of its own (the drawer is absolute), so it is stretched
    across the viewport for the sheet to fill (#639). */
-@media (max-width: 639px) {
+@media (width < 640px) {
   .debug-panel {
     left: 0;
   }
