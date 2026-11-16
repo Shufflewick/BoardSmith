@@ -65,7 +65,7 @@ class FixedWinnerGame extends Game<FixedWinnerGame, Player> {
 
 /** Ends the game after the last seat acts, awarding the configured outcome. */
 class DecisiveGame extends Game<DecisiveGame, Player> {
-  static outcome: 'seat1' | 'seat2' | 'draw' | 'noWinner' = 'seat1';
+  static outcome: 'seat1' | 'seat2' | 'sharedWin' | 'declaredDraw' | 'noWinner' = 'seat1';
   acted = 0;
 
   constructor(options: GameOptions) {
@@ -81,7 +81,8 @@ class DecisiveGame extends Game<DecisiveGame, Player> {
             const outcome = (game.constructor as typeof DecisiveGame).outcome;
             if (outcome === 'seat1') game.finish([game.players[0]]);
             else if (outcome === 'seat2') game.finish([game.players[1]]);
-            else if (outcome === 'draw') game.finish(game.players);
+            else if (outcome === 'sharedWin') game.finish(game.players);
+            else if (outcome === 'declaredDraw') game.finish('draw');
             else game.finish([]);
           }
           return { success: true };
@@ -248,17 +249,22 @@ describe('benchmarkBot', () => {
   });
 
   it('counts a shared win as a draw, not a win', async () => {
-    const result = await benchmark(2, 'draw');
+    const result = await benchmark(2, 'sharedWin');
     expect(result.draws).toBe(2);
     expect(result.wins).toBe(0);
     expect(result.losses).toBe(0);
     expect(result.winRate).toBe(0);
   });
 
-  it('counts a winnerless finish as a draw', async () => {
+  it('counts a declared draw as a draw', async () => {
+    const result = await benchmark(2, 'declaredDraw');
+    expect({ wins: result.wins, losses: result.losses, draws: result.draws }).toEqual({ wins: 0, losses: 0, draws: 2 });
+  });
+
+  // #1665: a finish with no winners and no declared draw is a loss for everyone (#1625).
+  it('counts a finish nobody wins as a loss, not a draw', async () => {
     const result = await benchmark(2, 'noWinner');
-    expect(result.draws).toBe(2);
-    expect(result.winRate).toBe(0);
+    expect({ wins: result.wins, losses: result.losses, draws: result.draws }).toEqual({ wins: 0, losses: 2, draws: 0 });
   });
 
   it('is reproducible for the same seed', async () => {
@@ -286,11 +292,10 @@ describe('benchmarkBot', () => {
     });
   });
 
-  it('counts a completed game with no winner as a draw — that IS a draw', async () => {
+  it('counts a completed game with no winner as played, not incomplete', async () => {
     // FixedWinnerGame's eachPlayer flow completes once both seats have acted,
-    // and finish() names no winner. The game decided a tie, so a draw is the
-    // honest reading. What must NOT be a draw is a game that never got there
-    // (#37) — see the incomplete-outcome tests below.
+    // and names no winner: a loss for everyone (#1625), but a finished game.
+    // A game that never got there is incomplete (#37), see the tests below.
     const result = await benchmarkBot(FixedWinnerGame, 'fixed', undefined, noWeights, {
       gameCount: 2,
       mctsIterations: 1,
@@ -298,7 +303,7 @@ describe('benchmarkBot', () => {
       seed: 'never-ends',
     });
     expect(result.gamesPlayed).toBe(2);
-    expect(result.draws).toBe(2);
+    expect(result.losses).toBe(2);
     expect(result.incomplete).toBe(0);
   });
 
@@ -310,7 +315,7 @@ describe('benchmarkBot', () => {
       maxActions: 20,
       seed: 'clock',
     });
-    expect(result.draws).toBe(2);
+    expect(result.losses).toBe(2);
     expect(result.incomplete).toBe(0);
   });
 

@@ -93,8 +93,12 @@ class PayoffMatrixGame extends Game<PayoffMatrixGame, Player> {
     const bot = this.board.all(Mark).find((m) => m.owner === 1)?.pick;
     const opp = this.board.all(Mark).find((m) => m.owner === 2)?.pick;
     if (bot === 'gamble' && opp !== 'z') return [this.getPlayer(1)!];
-    if (bot === 'safe') return []; // draw
+    if (bot === 'safe') return []; // a draw, declared by isDraw()
     return [this.getPlayer(2)!]; // 'dud', or 'gamble' refuted by 'z'
+  }
+
+  override isDraw(): boolean {
+    return this.isFinished() && this.board.all(Mark).find((m) => m.owner === 1)?.pick === 'safe';
   }
 }
 

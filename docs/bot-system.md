@@ -147,8 +147,9 @@ range 0.1 to 0.9: the lowest possible sum (every negative-weight objective fully
 achieved, every positive one not) maps to 0.1, and the highest possible sum maps
 to 0.9. The score is 0.5 when there are no objectives, or when every weight is 0.
 
-A playout that reaches the end of the game scores 1 for a win, 0 for a loss and
-0.5 when the game declares no winner.
+A playout that reaches the end of the game scores 1 for a win, 0.5 when the
+game declares a draw (`isDraw()`), and 0 otherwise: a finish with no winners and
+no declared draw is a loss for everyone (#1665).
 
 ## Choosing the moves the bot searches
 

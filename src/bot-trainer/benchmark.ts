@@ -328,13 +328,13 @@ async function runBenchmarkGame<G extends Game>(
       return incomplete(`A game hit the ${maxActions}-action cap without finishing.`);
     }
 
-    // The seats the game declares as winners (#503): seats are 1-indexed
-    const winners = runner.game.getWinners().map(p => p.seat);
-
-    // A game the GAME decided as a tie. This is the only thing that is a draw.
-    if (winners.length === 0) {
+    // A draw the game declares; no winners without one is a loss for everyone (#1625).
+    if (runner.game.isDraw()) {
       return { outcome: 'draw' };
     }
+
+    // The seats the game declares as winners (#503): seats are 1-indexed
+    const winners = runner.game.getWinners().map(p => p.seat);
 
     const trainedPosition = trainedPlayerIndex + 1;
     const randomPosition = randomPlayerIndex + 1;
