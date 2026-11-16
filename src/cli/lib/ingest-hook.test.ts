@@ -41,6 +41,61 @@ async function installOutcome(p: string): Promise<string> {
   return outcome.result === 'skipped' ? outcome.hook.state : outcome.result;
 }
 
+const git = (p: string, args: string) => execSync(`git -c user.email=t@t -c user.name=t ${args}`, { cwd: p, encoding: 'utf-8' });
+const indexWith = (body: string) =>
+  `# Index\n\n## Open Rules Gaps\n\n<!-- boardsmith:gaps:begin -->\n${body}\n<!-- boardsmith:gaps:end -->\n`;
+const staged = (p: string) => git(p, 'diff --cached --name-only').split('\n').filter(Boolean);
+const unstaged = (p: string) => git(p, 'diff --name-only').split('\n').filter(Boolean);
+
+/** A project whose `npx --no-install boardsmith` is this checkout, with slices already committed. */
+async function projectWithSlices(): Promise<{ p: string; rulebook: string }> {
+  const p = tempTree('bs-ingest-staging-');
+  execSync('git init', { cwd: p, stdio: 'ignore' });
+  await installIngestHook(p);
+  await fs.writeFile(join(p, 'package.json'), '{"name":"proj","private":true}\n');
+  await fs.mkdir(join(p, 'node_modules', '.bin'), { recursive: true });
+  await fs.symlink(BOARDSMITH_BIN, join(p, 'node_modules', '.bin', 'boardsmith'));
+  await fs.writeFile(join(p, '.gitignore'), 'node_modules\n');
+  const rulebook = join(p, DESIGN_DIR, 'rulebook');
+  await fs.mkdir(rulebook, { recursive: true });
+  await fs.writeFile(join(rulebook, 'INDEX.md'), indexWith('_None._'));
+  await fs.writeFile(join(rulebook, '01-setup.md'), 'Setup.\n');
+  await fs.writeFile(join(rulebook, '02 combat.md'), 'Combat.\n');
+  await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\n');
+  await fs.mkdir(join(p, 'src'));
+  git(p, 'add -A');
+  git(p, 'commit --no-verify -m base');
+  return { p, rulebook };
+}
+
+// Each commit runs the hook, which starts this checkout's CLI: slow one-time setup, made here
+// where no test timeout applies (#1626). The staging tests read what the commits left.
+const touchedAndUntouched = await projectWithSlices();
+{
+  const { p, rulebook } = touchedAndUntouched;
+  // The designer's own unfinished work in a slice ingest-gaps has no reason to rewrite.
+  await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\nWork in progress.\n');
+  // A gap marker (rewrites INDEX.md) and a presentation-only Derived line (relabels the slice),
+  // in a slice whose name has a space; neither is staged by the designer.
+  await fs.writeFile(
+    join(rulebook, '02 combat.md'),
+    'Combat.\nNamed-but-undefined (p.4): flanking\nDerived (p.4): the heading is set in a serif face\n',
+  );
+  git(p, 'add -- "' + join(DESIGN_DIR, 'rulebook', '02 combat.md') + '"');
+  await fs.writeFile(join(p, 'src', 'game.ts'), 'export {};\n');
+  git(p, 'add src/game.ts');
+  git(p, 'commit -m src');
+}
+
+const nothingToChange = await projectWithSlices();
+{
+  const { p, rulebook } = nothingToChange;
+  await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\nWork in progress.\n');
+  await fs.writeFile(join(p, 'src', 'game.ts'), 'export {};\n');
+  git(p, 'add src/game.ts');
+  git(p, 'commit -m src');
+}
+
 describe('installIngestHook', () => {
   it('installs an executable pre-commit hook', async () => {
     const p = await gitProject();
@@ -357,49 +412,8 @@ describe('the hook script itself', () => {
   });
 
   describe('staging (#851)', () => {
-    const git = (p: string, args: string) => execSync(`git -c user.email=t@t -c user.name=t ${args}`, { cwd: p, encoding: 'utf-8' });
-    const indexWith = (body: string) =>
-      `# Index\n\n## Open Rules Gaps\n\n<!-- boardsmith:gaps:begin -->\n${body}\n<!-- boardsmith:gaps:end -->\n`;
-
-    /** A project whose `npx --no-install boardsmith` is this checkout, with slices already committed. */
-    async function projectWithSlices(): Promise<{ p: string; rulebook: string }> {
-      const p = await gitProject();
-      await installIngestHook(p);
-      await fs.writeFile(join(p, 'package.json'), '{"name":"proj","private":true}\n');
-      await fs.mkdir(join(p, 'node_modules', '.bin'), { recursive: true });
-      await fs.symlink(BOARDSMITH_BIN, join(p, 'node_modules', '.bin', 'boardsmith'));
-      await fs.writeFile(join(p, '.gitignore'), 'node_modules\n');
-      const rulebook = join(p, DESIGN_DIR, 'rulebook');
-      await fs.mkdir(rulebook, { recursive: true });
-      await fs.writeFile(join(rulebook, 'INDEX.md'), indexWith('_None._'));
-      await fs.writeFile(join(rulebook, '01-setup.md'), 'Setup.\n');
-      await fs.writeFile(join(rulebook, '02 combat.md'), 'Combat.\n');
-      await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\n');
-      await fs.mkdir(join(p, 'src'));
-      git(p, 'add -A');
-      git(p, 'commit --no-verify -m base');
-      return { p, rulebook };
-    }
-
-    const staged = (p: string) => git(p, 'diff --cached --name-only').split('\n').filter(Boolean);
-    const unstaged = (p: string) => git(p, 'diff --name-only').split('\n').filter(Boolean);
-
-    it('stages only the files ingest-gaps changed, never a slice it did not touch', async () => {
-      const { p, rulebook } = await projectWithSlices();
-      // The designer's own unfinished work in a slice ingest-gaps has no reason to rewrite.
-      await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\nWork in progress.\n');
-      // A gap marker (rewrites INDEX.md) and a presentation-only Derived line (relabels the slice),
-      // in a slice whose name has a space; neither is staged by the designer.
-      await fs.writeFile(
-        join(rulebook, '02 combat.md'),
-        'Combat.\nNamed-but-undefined (p.4): flanking\nDerived (p.4): the heading is set in a serif face\n',
-      );
-      git(p, 'add -- "' + join(DESIGN_DIR, 'rulebook', '02 combat.md') + '"');
-      await fs.writeFile(join(p, 'src', 'game.ts'), 'export {};\n');
-      git(p, 'add src/game.ts');
-
-      git(p, 'commit -m src');
-
+    it('stages only the files ingest-gaps changed, never a slice it did not touch', () => {
+      const { p } = touchedAndUntouched;
       const committed = git(p, 'show --name-only --format= HEAD').split('\n').filter(Boolean);
       expect(committed.sort()).toEqual(
         [`${DESIGN_DIR}/rulebook/02 combat.md`, `${DESIGN_DIR}/rulebook/INDEX.md`, 'src/game.ts'].sort(),
@@ -410,14 +424,8 @@ describe('the hook script itself', () => {
       expect(staged(p)).toEqual([]);
     });
 
-    it('stages nothing when ingest-gaps changed nothing', async () => {
-      const { p, rulebook } = await projectWithSlices();
-      await fs.writeFile(join(rulebook, '03-scoring.md'), 'Scoring.\nWork in progress.\n');
-      await fs.writeFile(join(p, 'src', 'game.ts'), 'export {};\n');
-      git(p, 'add src/game.ts');
-
-      git(p, 'commit -m src');
-
+    it('stages nothing when ingest-gaps changed nothing', () => {
+      const { p } = nothingToChange;
       expect(git(p, 'show --name-only --format= HEAD').split('\n').filter(Boolean)).toEqual(['src/game.ts']);
       expect(unstaged(p)).toEqual([`${DESIGN_DIR}/rulebook/03-scoring.md`]);
     });

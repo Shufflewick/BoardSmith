@@ -64,6 +64,15 @@ describe('boardsmith verify: the smoke check', () => {
       if (kind === 'toast') expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
+
+    it('#1626: reports an error toast that went before the walk looked again', async () => {
+      const { outcome, steps } = await smokeOf(false, { ...candidateBoard('toastGoneByThePress'), ...spec });
+
+      expect(outcome.summary).toBe(
+        'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
+      );
+      expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
+    });
   });
 
   it('#1591: tries another point when a board control is covered after the pointer reaches its centre', async () => {

@@ -202,7 +202,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const memories: WalkMemory[] = [];
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
-    await recordResolvedActions(page);
+    await recordWhatThePageShows(page);
     await page.addInitScript(tracePointerWork);
     startClock(page);
     try {
@@ -324,12 +324,29 @@ function watchForErrors(page: Page, walk: SmokeWalk): void {
   });
 }
 
-/** Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainThePage}. */
-async function recordResolvedActions(page: Page): Promise<void> {
+/**
+ * Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainThePage}, and the
+ * text of every error toast it shows, for {@link noteErrorToasts}: a toast can go before the walk
+ * next looks, most of all on a busy machine (#1626).
+ */
+async function recordWhatThePageShows(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const resolved: unknown[] = [];
     Object.defineProperty(window, '__boardsmithSmokeResolved', { value: resolved });
     window.addEventListener('boardsmith:action-resolved', (event) => resolved.push((event as CustomEvent).detail));
+    const errors = new Set<string>();
+    Object.defineProperty(window, '__boardsmithSmokeErrorToasts', { value: errors });
+    const read = () => {
+      for (const toast of document.querySelectorAll<HTMLElement>('.toast.error')) errors.add(toast.innerText);
+    };
+    const changes = new MutationObserver(read);
+    const watch = () => {
+      changes.observe(document, { childList: true, subtree: true, characterData: true, attributeFilter: ['class'] });
+      read();
+    };
+    watch();
+    // A frame's first document is about:blank, and the game's page then takes over its window without this script running again.
+    window.addEventListener('readystatechange', watch, true);
   });
 }
 
@@ -380,9 +397,16 @@ function stepWhere(memory: WalkMemory): string {
   return `at step ${memory.step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
 }
 
-/** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
+/** Reports each error toast the game showed a player since the last call, once, except one repeating a refused number (#466). */
 async function noteErrorToasts(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
-  for (const text of await inPageTime(frame.page(), 'reading the error toasts', () => frame.locator('.toast.error').allInnerTexts())) {
+  const shown = () =>
+    frame.evaluate(() => {
+      const errors = (window as unknown as { __boardsmithSmokeErrorToasts: Set<string> }).__boardsmithSmokeErrorToasts;
+      const texts = [...errors];
+      errors.clear();
+      return texts;
+    });
+  for (const text of await inPageTime(frame.page(), 'reading the error toasts', shown)) {
     if (![...memory.refusals].some((refusal) => text.includes(refusal))) noteIn(frame.page(), walk, `The game showed an error: ${text.trim()}`);
   }
 }
@@ -609,7 +633,7 @@ async function seatTheWorld(
       seated = await opened.newPage();
       browserNames.set(seated, `In seat ${seat}'s browser: `);
       watchForErrors(seated, walk);
-      await recordResolvedActions(seated);
+      await recordWhatThePageShows(seated);
       await seated.addInitScript(tracePointerWork);
       startClock(seated);
       await seated.goto('/', { waitUntil: 'commit' });
