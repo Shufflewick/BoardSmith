@@ -262,6 +262,7 @@ describe('grouping changes nothing about a leaf', () => {
       [
         { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], help: 'Throws ore away.' },
         { name: 'dumpWater', prompt: 'Dump water', group: ['Dump'] },
+        { name: 'construct', prompt: 'Construct' },
       ],
       { isActionHelpVisible: true },
     );

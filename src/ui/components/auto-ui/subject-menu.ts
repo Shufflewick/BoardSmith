@@ -92,20 +92,5 @@ export function selectionMenuItems(
   const related = (selection.related ?? []).flatMap((ref) => subjects.things.filter((thing) => sameThing(thing, ref)));
   for (const thing of related) offerVerbsOf(menu, thing, (prompt) => `${prompt}: ${thing.label}`);
   menu.items.push(...parts.filter((part) => part.onBoard && usableVerbs(part).length > 0).map((part) => thingItem(part, Infinity)));
-  return withoutSharedGroup(menu);
-}
-
-/**
- * A menu whose buttons all sit in one group draws that group's contents, not a button to open it
- * (#1652). One button alone is left to `drawnAs`, which keeps a lone destructive action in its group.
- */
-function withoutSharedGroup({ items, folded }: SelectionMenu): SelectionMenu {
-  const shared = items.length < 2 ? [] : items.map((item) => item.group ?? []).reduce((prefix, group) => {
-    const differs = prefix.findIndex((label, i) => group[i] !== label);
-    return differs < 0 ? prefix : prefix.slice(0, differs);
-  });
-  if (shared.length === 0) return { items, folded };
-  const strip = <T extends EnrichedActionMetadata>(item: T): T =>
-    (shared.every((label, i) => item.group?.[i] === label) ? { ...item, group: item.group!.slice(shared.length) } : item);
-  return { items: items.map(strip), folded: folded.map(strip) };
+  return { items: menu.items, folded: menu.folded };
 }

@@ -41,12 +41,12 @@ import {
   actionCount,
   buildActionMenu,
   drawnAs,
+  drawnLevelAt,
   levelHolding,
   levelShowing,
   menuLevelAt,
   resolveMenuPath,
   type ActionMenuGroup,
-  type ActionMenuNode,
 } from './action-menu.js';
 import { ordinaryMenuItems, selectionMenuItems, type FoldedVerb, type PanelMenuItem } from './subject-menu.js';
 import { sameThing, thingMark } from '../../composables/sharedSelection.js';
@@ -334,18 +334,13 @@ const thingMenu = computed(() => shownThing.value
   ? selectionMenuItems(shownThing.value, subjects.value, metadataOf, disabledReasonOf)
   : { items: [], folded: [] });
 
-/** A top level that is one subject type and nothing else is drawn as that type's things: no press to open it. */
-function thingsAtTop(menu: readonly ActionMenuNode<PanelMenuItem>[]): readonly ActionMenuNode<PanelMenuItem>[] {
-  const only = menu.length === 1 ? menu[0]! : undefined;
-  return only?.kind === 'group' && only.children.every((child) => child.kind === 'item' && child.item.thing) ? only.children : menu;
-}
-const ordinaryMenu = computed(() => thingsAtTop(buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value.filter((a) => !disabledReasonOf(a.name)), subjects.value, true))));
+const ordinaryMenu = computed(() => buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value.filter((a) => !disabledReasonOf(a.name)), subjects.value, true)));
 const selectionMenu = computed(() => buildActionMenu(thingMenu.value.items));
 const actionMenu = computed(() => (shownThing.value ? selectionMenu.value : ordinaryMenu.value));
 /** Every offered action, disabled ones included: a level whose actions are only held is kept to come back to. */
 const offeredMenu = computed(() => (shownThing.value
   ? selectionMenu.value
-  : thingsAtTop(buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value, subjects.value, false)))));
+  : buildActionMenu(ordinaryMenuItems(actionsWithMetadata.value, subjects.value, false))));
 /** Which menu is drawn: a move between two is the player's own, never a level going away. */
 const shownMenuKey = computed(() => (shownThing.value ? `thing\u0000${shownThing.value.type}\u0000${shownThing.value.key}` : 'menu'));
 
@@ -367,10 +362,10 @@ const shownMenuKey = computed(() => (shownThing.value ? `thing\u0000${shownThing
  */
 const openPath = actionController.actionMenuPath;
 
-const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
-
 /** A lone destructive action keeps its group, so it is never one press from a level it was not in (#1639). */
 const promotable = (action: PanelMenuItem) => !action.destructive;
+
+const menuLevel = computed(() => drawnLevelAt(actionMenu.value, openPath.value, promotable));
 /** The buttons of the level now drawn, a group holding one thing drawn as that thing (#1639). */
 const menuNodes = computed(() => menuLevel.value.nodes.map((node) => drawnAs(node, promotable)));
 /** Where Back goes: the nearest level up that is drawn, past a lone group drawn as its child. */
@@ -393,15 +388,16 @@ function backLabelFor(path: readonly string[], top: string): string {
 const backLabel = computed(() => {
   const thing = shownThing.value;
   if (thing && !menuLevel.value.group) return `Back to ${thing.within ? thingLabel(thing.within) : thing.type}`;
-  return `Back to ${backPath.value.at(-1) ?? (thing?.label ?? 'all actions')}`;
+  return `Back to ${drawnLevelAt(actionMenu.value, backPath.value, promotable).group?.label ?? (thing?.label ?? 'all actions')}`;
 });
 
 const thingLabel = (ref: SubjectRef) => subjects.value.things.find((thing) => sameThing(thing, ref))?.label ?? ref.key;
 
 /** The disabled actions folded at the level now drawn, each folded at one level only, with why. */
 const foldedActions = computed<FoldedVerb[]>(() => {
-  const here = menuLevel.value.group?.path ?? [];
-  const atHere = (group: readonly string[] | undefined) => levelShowing(actionMenu.value, group ?? [], here, promotable).join('\u0000') === here.join('\u0000');
+  const standing = menuLevel.value.group?.path ?? [];
+  const here = levelShowing(actionMenu.value, standing, standing, promotable).join('\u0000');
+  const atHere = (group: readonly string[] | undefined) => levelShowing(actionMenu.value, group ?? [], standing, promotable).join('\u0000') === here;
   if (shownThing.value) return thingMenu.value.folded.filter((verb) => atHere(verb.group));
   return actionsWithMetadata.value.flatMap((a) => {
     const reason = disabledReasonOf(a.name);
