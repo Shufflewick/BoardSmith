@@ -22,7 +22,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { defineComponent, h, ref } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { splitAnchoredChoices } from './action-panel-helpers.js';
@@ -811,13 +811,17 @@ describe('ActionPanel large element picks (#172)', () => {
   });
 
   // #1644: a board that draws the pick as one surface (a cursor over a field) says so for the whole pick.
-  it('hands the pick to a board that takes it on one surface, and only that pick', () => {
+  it('hands the pick to a board that takes it on one surface, and only that pick', async () => {
     const bi = createBoardInteraction();
     bi.setPickSurfaces(['cell']);
-    expect(mountCellPick(30, bi).find('.board-handoff-btn').exists()).toBe(true);
+    const wrapper = mountCellPick(30, bi);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
 
     bi.setPickSurfaces(['another']);
-    expect(mountCellPick(30, bi).find('.board-handoff-btn').exists()).toBe(false);
+    await nextTick();
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.element-btn')).toHaveLength(30);
+    wrapper.unmount();
   });
 });
 
