@@ -218,6 +218,24 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
     expect(existsSync(join(projectPath, '.git'))).toBe(true);
   });
 
+  // The bs skills land every piece of work on `main` with `agent-policy merge` (#1675), so the
+  // scaffold commit is on `main` whatever git's default branch is, and carries the merge's config.
+  it('commits the scaffold on main with the agent-policy config the merges read (#1675)', async () => {
+    parentDir = tempTree('bs-init-main-');
+    process.chdir(parentDir);
+    const prev = { ...process.env };
+    Object.assign(process.env, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'init.defaultBranch', GIT_CONFIG_VALUE_0: 'master' });
+    try {
+      await initCommand('git-main-test-game', { withoutRulebook: true });
+    } finally {
+      process.env = prev;
+    }
+    const projectPath = join(parentDir, 'git-main-test-game');
+    const git = (args: string) => execSync(`git ${args}`, { cwd: projectPath, encoding: 'utf-8' }).trim();
+    expect(git('symbolic-ref --short HEAD')).toBe('main');
+    expect(JSON.parse(git('show HEAD:.agent-policy.json'))).toEqual({ preset: 'boardsmith-game' });
+  });
+
   it('is non-fatal to scaffolding when the commit fails (no git identity)', async () => {
     // Genuinely force the commit-failure path (WR-01). The previous version
     // just ran initCommand in a fresh dir — on any machine/CI with a global
@@ -768,7 +786,11 @@ describe('initCommand --into-existing — scaffold into the repository you are i
     const scaffolded = snapshot(repo, true);
     expect(scaffolded.get('notes.md')).toBe(Buffer.from('# Design notes\n').toString('base64'));
     scaffolded.delete('notes.md');
-    expect(scaffolded).toEqual(snapshot(fresh, true));
+    // Like `git init`, the merge config is a new repository's; an existing one keeps its own.
+    const freshTree = snapshot(fresh, true);
+    expect(freshTree.has('.agent-policy.json')).toBe(true);
+    freshTree.delete('.agent-policy.json');
+    expect(scaffolded).toEqual(freshTree);
 
     const hook = (root: string) => readFileSync(join(root, '.git', 'hooks', 'pre-commit'), 'utf-8');
     expect(hook(repo)).toBe(hook(fresh));

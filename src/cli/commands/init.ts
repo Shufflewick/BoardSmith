@@ -279,6 +279,8 @@ ${worldScaffoldStatus()
 async function initVersionControl(projectPath: string): Promise<void> {
   try {
     await gitOutput(projectPath, ['init']);
+    // `main` whatever git's default is, which `agent-policy merge` lands on; `--initial-branch` needs git 2.28.
+    await gitOutput(projectPath, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
     await gitOutput(projectPath, ['add', '-A']);
   } catch {
     console.log(
@@ -418,7 +420,12 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
   // `--into-existing` refuse a conflict with nothing changed, rather than discovering it
   // halfway through someone's repository.
   const config = scaffold.config(name);
-  const files = [...generateScaffoldFiles(config, projectPath), ...scaffold.sources(config)];
+  const files = [
+    ...generateScaffoldFiles(config, projectPath),
+    ...scaffold.sources(config),
+    // The merge the bs skills land every piece of work with (#1675); an existing repository keeps its own.
+    ...(options.intoExisting ? [] : [{ path: '.agent-policy.json', content: '{ "preset": "boardsmith-game" }\n' }]),
+  ];
   const archive = options.rulebook
     ? {
         rulebook: options.rulebook,

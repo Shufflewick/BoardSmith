@@ -415,6 +415,58 @@ even in a file the branch renamed, does not.
   chunk, so a full result, such as a `npx boardsmith verify --base HEAD` run, satisfies no chunk's
   sign-off.
 
+## Branches and Landing
+
+A game's `main` moves only through the repository's merge, `agent-policy merge`, which checks the
+merged tree with what the game's `.agent-policy.json` names (`boardsmith init` writes it, with the
+scaffold commit on `main`). No step commits on `main`, and each piece of work lands before the next
+piece of work starts, so nothing is built on work that has not landed.
+
+**One plain branch per piece of work**, made from `main` in the main checkout before the piece's
+first commit. The designer's session makes it, as soon as it knows the piece is next and before the
+piece's first record or dispatch: `git switch -c <branch> main`. Everything the piece commits,
+every record about it included, goes on that branch.
+
+| Piece of work | Branch | The record that lands it |
+|---------------|--------|--------------------------|
+| Kickoff: the rulebook through the approved sketch (`ingest-rules.md`) | `ingest-rules` | `record sketch` (Step 7) |
+| The design session (`ingest/design-session.md`) | `design-session` | `record design sign-off` |
+| A chunk built in the main checkout, bot and final acceptance included | `chunk-<slug>` | the record of its `closed` return (`build-game.md` Step 4) |
+| A parallel batch, named after its first chunk: `chunk-merge` merges each chunk's worktree branch into it | `batch-<slug>` | the record after its last chunk merged and any cross-chunk audit ruled |
+| A sketch reshape (`insert-chunk.md`), named after the reshaped chunk | `insert-chunk-<slug>` | the reshape agent's own commit |
+| A re-verification (`verify-game.md`), the repairs it dispatches included | `verify-game` | the lock release (Step 9) |
+
+**Landing.** The piece's last record writes everything that falls at that point (its outcomes,
+`RUN.md`, the lock), so the agent that writes its last record lands it, from the main checkout:
+
+1. Commit; `git status --porcelain` prints nothing.
+2. `agent-policy verify`.
+3. `agent-policy merge --summary "<what the piece adds to the game> (<branch>)"`. It lands the
+   branch on `main`, pushes `main`, and deletes the branch.
+
+It returns the merge commit, or the refusal word for word. The session never merges a branch by
+hand and never patches a refusal; it routes it:
+
+- **A failed check** is a failed dispatch of the piece (`routing.md`): the piece goes back to the
+  agent that built it, the `judgement` role's for a chunk, with the refusal, to fix on its branch;
+  then the landing runs again.
+- **A risk** (`--approve <code>`, such as a first `.agent-policy.json`): put the risks to the
+  designer, and once they agree, the session runs the printed command itself.
+- **A missing prerequisite** (no `origin` remote, `main` behind it, `agent-policy` not installed):
+  stop and give the designer the refusal's own remedy.
+
+**A piece that waits on the designer.** A serial chunk parked at a question while the run builds
+other chunks (`build-game.md` Step 4) lands as it stands, by the record that parks it, so the next
+branch carries its question and `RUN.md`'s `Open Gate:`. Its commits so far are its `investigate`,
+`redteam` and `ask`, which change only `design/`, since only those steps park a chunk. When its
+answer comes, it resumes on a new `chunk-<slug>` branch from `main`, made once the piece checked out
+then has landed, and the record of the answer is that branch's first record. A chunk of a parallel
+batch parked the same way leaves the batch: the batch lands once its other chunks have merged, and
+the parked chunk stays in its worktree until its answer comes, then lands through `chunk-merge` as
+a batch of one, on a new `batch-<slug>` branch named after it. A run that stops (`orchestrate/run-state.md` "Stop Conditions")
+leaves its piece's branch checked out, and the next run resumes on it: on entry, any branch other
+than `main` is the piece in progress.
+
 ## Repair Loop Bound
 
 - Maximum **3 audit rounds** per chunk.

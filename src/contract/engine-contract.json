@@ -1,5 +1,5 @@
 {
-  "revision": 398,
+  "revision": 399,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3127,6 +3127,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The bs skills now have the designer's session write no file: every write it made is a record dispatch to an agent (#1674)"
+    },
+    {
+      "revision": 399,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The bs skills land each piece of a game's work on main through agent-policy merge, one branch per piece, and boardsmith init commits the scaffold on main with the game's .agent-policy.json"
     }
   ]
 }

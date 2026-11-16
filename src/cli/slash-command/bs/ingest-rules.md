@@ -144,6 +144,15 @@ repository, with `--into-existing`). Once the scaffold is verified, `cd <name>` 
 `--into-existing`) and treat the project directory as the working directory for every
 remaining step — nothing this skill produces is ever written to the parent directory.
 
+Everything after the scaffold is one piece of work on the `ingest-rules` branch
+(`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Branches and Landing"). A fresh `init`
+commits the scaffold on `main`, so make the branch right after it: `git switch -c ingest-rules
+main`. With `--into-existing`, make it before `init`, so the scaffold commit goes on it too; that
+needs the repository's main branch to be `main`, with a commit on it, and if it is not, say so and
+ask the designer how to go on before running anything. The landing pushes `main` to `origin`, which
+a fresh repository does not have: ask the designer where the game's repository lives, then
+`git remote add origin <url>` and `git push -u origin main` before the branch is made.
+
 ## Step 2: Route to Transcription or Interview Fallback
 
 **If a rulebook path was supplied at invocation, skip this question** — `{rulebookPath}` is
@@ -327,9 +336,13 @@ No File"). The agent does the following, commits, and returns the paths and the 
   factual component inventory and visual evidence, not gated sketch state) — do not re-copy or
   re-write them here.
 
-- When it returns, run `npx boardsmith ledger-check`. It checks `design/run-log/ingest-rules.md`,
-  the record of every dispatch this skill made; a refusal goes back to the record agent with what
-  it names, and is fixed before continuing.
+- Run `npx boardsmith ledger-check`, which checks `design/run-log/ingest-rules.md`, the record of
+  every dispatch this skill made, and fix what it names. Then it lands the `ingest-rules` branch
+  on `main` (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Branches and Landing") and
+  returns the merge commit too.
+
+When it returns, run `npx boardsmith ledger-check` again; a refusal goes to a record with what it
+names, on the next piece of work's branch, and is fixed before anything else.
 
 Never restate template or state-machine content inline in this file or in the written project
 files beyond what each template already documents — fill the placeholders, don't reinvent the

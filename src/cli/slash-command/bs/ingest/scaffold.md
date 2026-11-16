@@ -75,8 +75,12 @@ npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing
 ```
 
 It writes the same files, rulebook archive and `pre-commit` hook a fresh `init` does, into the
-current folder, and it leaves out `git init` and the scaffold commit because the repository and
-its history already exist. Commit the scaffold yourself once it is verified. Never scaffold
+current folder, and it leaves out `git init`, the scaffold commit on `main` and the
+`.agent-policy.json` a fresh `init` writes, because the repository, its history and its merge
+already exist. Commit the scaffold on the `ingest-rules` branch (`ingest-rules.md` Step 1) once it
+is verified. A repository with no `.agent-policy.json` needs one before that branch can land
+(`state-machine.md` "Branches and Landing"): ask the designer, and only with their yes have a record add `{ "preset":
+"boardsmith-game" }` on the branch. Never scaffold
 elsewhere and copy the tree in: that drops the `pre-commit` hook, and nothing reports it missing.
 It refuses, with nothing changed, in two cases:
 

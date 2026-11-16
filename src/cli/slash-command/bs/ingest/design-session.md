@@ -129,7 +129,8 @@ following, in this order, and returns the commit:
 4. Commit the gallery as it stands, as the archived reference.
 5. Set `SKETCH.md`'s `## Design Session` pointer to `signed-off`.
 
-Commit all of it in one commit naming the sign-off.
+Commit all of it in one commit naming the sign-off. Then it lands the `design-session` branch
+on `main` (`state-machine.md` "Branches and Landing"), and returns the merge commit too.
 
 ## Downstream
 
