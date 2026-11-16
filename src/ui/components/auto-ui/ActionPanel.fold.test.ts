@@ -151,7 +151,7 @@ describe('the fold row is reachable by keyboard and screen reader', () => {
       [{ name: 'pass', prompt: 'Pass', group: ['Turn'] }, { name: 'endTurn', prompt: 'End turn', group: ['Turn'] }, { name: 'look', prompt: 'Look' }],
       { disabledActions: { look: 'It is too dark.' } },
     );
-    await wrapper.find('[data-bs-action="pass"]').element.focus();
+    (wrapper.get('[data-bs-action="pass"]').element as HTMLElement).focus();
     await wrapper.setProps({ disabledActions: { look: 'It is too dark.', pass: 'Wait for the battle.', endTurn: 'Wait for the battle.' } });
     await nextTick();
     await nextTick();
