@@ -27,6 +27,7 @@ import {
   actionCount,
   levelShowing,
   levelButtons,
+  drawnLevelAt,
   type ActionMenuGroup,
   type ActionMenuNode,
   type MenuItem,
@@ -244,6 +245,40 @@ describe('levelShowing', () => {
 
   it('answers a collapsed group when the player is standing in it', () => {
     expect(levelShowing(menu, ['Dump'], ['Dump'], promotable)).toEqual(['Dump']);
+  });
+});
+
+describe('a lone group at the top is drawn as its contents (#1652)', () => {
+  type Item = Named & { destructive?: boolean };
+  const promotable = (item: Item) => !item.destructive;
+  const shown = (items: Item[], path: string[]) => {
+    const level = drawnLevelAt(buildActionMenu(items), path, promotable);
+    return { group: level.group?.path ?? null, buttons: labels(level.nodes.map((node) => drawnAs(node, promotable))) };
+  };
+  const work = [action('reroll', { group: ['Dice work'] }), action('keep', { group: ['Dice work'] }), action('blessing', { group: ['Dice work', 'Rites'] }), action('curse', { group: ['Dice work', 'Rites'] })];
+
+  it('draws the top, and the lone group itself, as that group\'s contents', () => {
+    expect(shown(work, [])).toEqual({ group: null, buttons: ['reroll', 'keep', '[Rites]'] });
+    expect(shown(work, ['Dice work'])).toEqual({ group: null, buttons: ['reroll', 'keep', '[Rites]'] });
+  });
+
+  it('collapses a chain of lone groups to the first that holds more than one button', () => {
+    expect(shown([action('a', { group: ['Outer', 'Inner'] }), action('b', { group: ['Outer', 'Inner'] })], [])).toEqual({ group: null, buttons: ['a', 'b'] });
+  });
+
+  it('keeps a group around a lone destructive action', () => {
+    expect(shown([{ ...action('scuttle', { group: ['Fleet'] }), destructive: true }], [])).toEqual({ group: null, buttons: ['[Fleet]'] });
+  });
+
+  it('keeps a player in a level inside it when a sibling of the lone group comes and goes', () => {
+    const rites = { group: ['Dice work', 'Rites'], buttons: ['blessing', 'curse'] };
+    expect(shown(work, ['Dice work', 'Rites'])).toEqual(rites);
+    expect(shown([...work, action('toss', { group: ['Other'] })], ['Dice work', 'Rites'])).toEqual(rites);
+  });
+
+  it('answers the top\'s path as where a level directly under the top is seen', () => {
+    expect(levelShowing(buildActionMenu(work), ['Dice work'], [], promotable)).toEqual(['Dice work']);
+    expect(levelShowing(buildActionMenu(work), [], [], promotable)).toEqual(['Dice work']);
   });
 });
 

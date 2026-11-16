@@ -76,16 +76,16 @@ export class WorkshopGame extends Game<WorkshopGame, Player> {
   }
 }
 
-/** A game whose every verb is about a die, so its whole top level is the one type. */
+/** A game whose every verb is about a die, so its whole top level is the one type; the verbs share one group. */
 export class DiceTrayGame extends Game<DiceTrayGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     for (const name of ['red', 'blue']) this.create(Die, name);
     this.registerActions(
-      Action.create<DiceTrayGame>('reroll').prompt('Reroll')
+      Action.create<DiceTrayGame>('reroll').prompt('Reroll').group('Dice work')
         .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
         .execute(() => {}),
-      Action.create<DiceTrayGame>('keep').prompt('Keep')
+      Action.create<DiceTrayGame>('keep').prompt('Keep').group('Dice work')
         .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
         .execute(() => {}),
     );

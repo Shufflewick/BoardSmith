@@ -253,6 +253,28 @@ export function drawnAs<A extends MenuItem>(
   return canPromote(only.item) ? only : node;
 }
 
+/**
+ * The path the top level is drawn from: a lone group at the root is drawn as its contents (#1652),
+ * collapsed as `drawnAs` collapses it, unless `drawnAs` would draw it as one button.
+ */
+function topPath<A extends MenuItem>(nodes: readonly ActionMenuNode<A>[], canPromote: (item: A) => boolean): readonly string[] {
+  const only = nodes.length === 1 ? drawnAs(nodes[0]!, canPromote) : undefined;
+  return only?.kind === 'group' && only.children.length > 1 ? only.path : [];
+}
+
+const leadsTo = (path: readonly string[], to: readonly string[]) => path.length <= to.length && path.every((label, i) => to[i] === label);
+
+/** The level drawn for a path: `menuLevelAt`, except that the top level and every group on the way to its path draw the top. */
+export function drawnLevelAt<A extends MenuItem>(
+  nodes: readonly ActionMenuNode<A>[],
+  path: readonly string[],
+  canPromote: (item: A) => boolean,
+): ActionMenuLevel<A> {
+  const top = topPath(nodes, canPromote);
+  const level = menuLevelAt(nodes, path);
+  return leadsTo(level.group?.path ?? [], top) ? { group: null, nodes: menuLevelAt(nodes, top).nodes } : level;
+}
+
 /** How many actions are behind a group, at any depth. */
 export function actionCount<A extends MenuItem>(group: ActionMenuGroup<A>): number {
   return group.children.reduce((sum, child) => sum + (child.kind === 'group' ? actionCount(child) : 1), 0);
@@ -260,7 +282,7 @@ export function actionCount<A extends MenuItem>(group: ActionMenuGroup<A>): numb
 
 /**
  * The level a path's buttons are seen at: the deepest prefix of it, resolved, that is drawn as a
- * level of its own (`drawnAs`) or is the level the player is `standing` in.
+ * level of its own (`drawnAs`) or is the level the player is `standing` in, else the top's path.
  */
 export function levelShowing<A extends MenuItem>(
   nodes: readonly ActionMenuNode<A>[],
@@ -268,14 +290,15 @@ export function levelShowing<A extends MenuItem>(
   standing: readonly string[],
   canPromote: (item: A) => boolean,
 ): readonly string[] {
+  const top = topPath(nodes, canPromote);
   const resolved = resolveMenuPath(nodes, path);
-  for (let depth = resolved.length; depth > 0; depth -= 1) {
+  for (let depth = resolved.length; depth > top.length; depth -= 1) {
     const prefix = resolved.slice(0, depth);
     if (prefix.join('\u0000') === standing.join('\u0000')) return prefix;
     const group = groupAt(nodes, prefix)!;
     if (drawnAs(group, canPromote) === group) return prefix;
   }
-  return [];
+  return top;
 }
 
 /** Every level a player can reach, with the items it draws as buttons that are not groups. */
