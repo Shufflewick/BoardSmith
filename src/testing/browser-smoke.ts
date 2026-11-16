@@ -1865,12 +1865,14 @@ function untaken(name: string, walk: SmokeWalk, memory: WalkMemory): boolean {
 /**
  * Whether `play`'s browser has an action the walk still has to take (`untaken`): the one it has
  * open, else one its panel offers (`freshAction`), less, for a world seat after the first, what the
- * first seat's panel offers (`readTheLead`), which is left to that seat (`companionStep`).
+ * first seat's panel offers, read now (`readTheLead`), which is left to that seat (`companionStep`).
  */
-function actionLeftFor(play: SeatPlay, plays: readonly SeatPlay[], offers: Offers, walk: SmokeWalk, memory: WalkMemory): boolean {
+async function actionLeftFor(play: SeatPlay, plays: readonly SeatPlay[], offers: Offers, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
   if (offers.open !== null) return untaken(offers.open, walk, memory);
   const [lead] = plays;
-  return freshAction(play === lead ? offers.enabled : offers.enabled.filter((name) => !lead.offered.includes(name)), walk, memory) !== undefined;
+  if (play === lead) return freshAction(offers.enabled, walk, memory) !== undefined;
+  await readTheLead(lead, walk);
+  return freshAction(offers.enabled.filter((name) => !lead.offered.includes(name)), walk, memory) !== undefined;
 }
 
 /**
@@ -2234,9 +2236,7 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   await openACollapsedBar(frame);
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
-  const [lead] = plays;
-  if (play !== lead && offers.open === null) await readTheLead(lead, walk);
-  if (actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
+  if (await actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
   if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
