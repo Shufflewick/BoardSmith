@@ -10,7 +10,7 @@
  * choice values using regex. This makes the system work with any notation
  * format, not just chess-style notation.
  */
-import { computed, reactive, provide, inject, shallowRef, type InjectionKey } from 'vue';
+import { computed, reactive, provide, inject, shallowRef, type InjectionKey, type ShallowRef } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 // THE ELEMENT REFERENCE SHAPE IS OWNED BY ../../types/protocol.js (#263).
@@ -277,6 +277,26 @@ export interface BoardInteractionActions {
 
   /** Whether the board draws the element `ref` names, as last reported by {@link BoardInteractionActions.setDrawnElements}. */
   isDrawn: (ref: ElementRef) => boolean;
+
+  /**
+   * Report every element the board offers as a candidate of the open pick: those it
+   * marks with {@link candidateAttrs} as well as {@link anchorAttrs} (#1644). A board
+   * may show only state, so drawing an element is not offering it.
+   */
+  setOfferedCandidates: (elements: ElementRef[]) => void;
+
+  /** Whether the board offers the element `ref` names, as last reported by {@link BoardInteractionActions.setOfferedCandidates}. */
+  isOffered: (ref: ElementRef) => boolean;
+
+  /**
+   * Report every pick a surface of the board takes whole, by the names its
+   * {@link pickSurfaceAttrs} carry: a board that offers a pick's candidates on one
+   * surface (a cursor over a field) rather than one node each (#1644).
+   */
+  setPickSurfaces: (pickNames: string[]) => void;
+
+  /** Whether a surface of the board takes the pick `pickName` whole, as last reported by {@link BoardInteractionActions.setPickSurfaces}. */
+  isPickSurface: (pickName: string) => boolean;
 }
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
@@ -315,8 +335,21 @@ export function createBoardInteraction(): BoardInteraction {
     boardFocusRequest: 0,
   });
 
-  // What the board draws, by every key an anchored element matches (#1589).
+  // What the board draws, and offers as candidates, by every key an anchored element matches (#1589, #1644).
   const drawnKeys = shallowRef<ReadonlySet<string>>(new Set());
+  const offeredKeys = shallowRef<ReadonlySet<string>>(new Set());
+  const pickSurfaces = shallowRef<ReadonlySet<string>>(new Set());
+
+  function report(keys: ShallowRef<ReadonlySet<string>>, reported: string[]): void {
+    const next = new Set(reported);
+    // The board reports on every DOM change; an unchanged set must not rerun what reads it.
+    if (next.size !== keys.value.size || [...next].some((key) => !keys.value.has(key))) keys.value = next;
+  }
+
+  function holds(keys: ShallowRef<ReadonlySet<string>>, ref: ElementRef): boolean {
+    const key = boardRefKey(ref);
+    return key !== undefined && keys.value.has(key.key);
+  }
 
   // Callback for when element is dropped on valid target
   let onDropCallback: ((elementId: number) => void) | null = null;
@@ -541,14 +574,27 @@ export function createBoardInteraction(): BoardInteraction {
     },
 
     setDrawnElements(elements) {
-      const keys = new Set(elements.flatMap(elementKeys));
-      // The board reports on every DOM change; an unchanged set must not rerun what reads it.
-      if (keys.size !== drawnKeys.value.size || [...keys].some((key) => !drawnKeys.value.has(key))) drawnKeys.value = keys;
+      report(drawnKeys, elements.flatMap(elementKeys));
     },
 
     isDrawn(ref) {
-      const key = boardRefKey(ref);
-      return key !== undefined && drawnKeys.value.has(key.key);
+      return holds(drawnKeys, ref);
+    },
+
+    setOfferedCandidates(elements) {
+      report(offeredKeys, elements.flatMap(elementKeys));
+    },
+
+    isOffered(ref) {
+      return holds(offeredKeys, ref);
+    },
+
+    setPickSurfaces(pickNames) {
+      report(pickSurfaces, pickNames);
+    },
+
+    isPickSurface(pickName) {
+      return pickSurfaces.value.has(pickName);
     },
 
     consumeLastDroppedElementId() {
@@ -630,6 +676,35 @@ export function anchoredRefsIn(container: ParentNode): ElementRef[] {
   return Array.from(container.querySelectorAll(ANCHOR_SELECTOR), anchoredRef);
 }
 
+/** The attribute {@link candidateAttrs} marks a candidate with. */
+export const CANDIDATE_ATTRIBUTE = 'data-bs-candidate';
+
+/** The identity of every node under `container` that {@link candidateAttrs} marks: what the board offers (#1644). */
+export function offeredRefsIn(container: ParentNode): ElementRef[] {
+  return Array.from(container.querySelectorAll(`[${CANDIDATE_ATTRIBUTE}]`), anchoredRef);
+}
+
+/** The attribute {@link pickSurfaceAttrs} names a pick in. */
+export const PICK_SURFACE_ATTRIBUTE = 'data-bs-pick-surface';
+
+/**
+ * Mark the node that offers every candidate of the pick `pickName` on its own, as
+ * one surface (a cursor over a field) rather than one node per candidate (#1644).
+ *
+ * The Action Panel hands a pick too large to list to the board only when the
+ * board offers every candidate: each marked with {@link candidateAttrs}, or the
+ * whole pick marked with this. Pass the pick's name while the surface takes it
+ * (`board.currentPickName`) and `null` otherwise.
+ */
+export function pickSurfaceAttrs(pickName: string | null): Record<string, string> {
+  return pickName === null ? {} : { [PICK_SURFACE_ATTRIBUTE]: pickName };
+}
+
+/** Every pick name a node under `container` carries in {@link pickSurfaceAttrs}. */
+export function pickSurfacesIn(container: ParentNode): string[] {
+  return Array.from(container.querySelectorAll(`[${PICK_SURFACE_ATTRIBUTE}]`), (node) => node.getAttribute(PICK_SURFACE_ATTRIBUTE)!);
+}
+
 /**
  * Map a candidate label to its stable `data-bs-candidate` attribute.
  *
@@ -651,7 +726,7 @@ export function anchoredRefsIn(container: ParentNode): ElementRef[] {
  *   or null when the element is not a candidate right now.
  */
 export function candidateAttrs(label: string | null): Record<string, string> {
-  return label === null ? {} : { 'data-bs-candidate': label };
+  return label === null ? {} : { [CANDIDATE_ATTRIBUTE]: label };
 }
 
 /**

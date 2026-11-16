@@ -15,6 +15,7 @@ import GameShell from './GameShell.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
+import { anchorAttrs, candidateAttrs, useBoardInteraction } from '../composables/useBoardInteraction.js';
 
 function fromHost(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
@@ -40,13 +41,18 @@ function frame(broken: boolean, prompt: string): Record<string, unknown> {
   };
 }
 
+/** A board that, when it draws, offers every candidate of the open pick, as `useSelectable` does (#1644). */
 const ThrowingBoard = defineComponent({
   name: 'ThrowingBoard',
   props: { gameView: { type: Object, default: null } },
   setup(props) {
+    const board = useBoardInteraction();
     return () => {
       if (props.gameView?.broken) throw new Error('hand is undefined');
-      return h('div', { class: 'good-board' }, 'board');
+      return h('div', { class: 'good-board' }, [
+        'board',
+        ...board.validElements.map(({ ref }) => h('button', { ...anchorAttrs(ref), ...candidateAttrs(board.candidateLabel(ref)) })),
+      ]);
     };
   },
 });
@@ -211,16 +217,16 @@ describe('GameShell board error boundary and a pick handed to the board (#1153)'
     await flushPromises();
   }
 
-  async function mountCellPick() {
+  async function mountCellPick(board: BoardComponent = ThrowingBoard) {
     vi.spyOn(console, 'error').mockImplementation(() => {});
     vi.spyOn(console, 'warn').mockImplementation(() => {});
     const posted = enterIframe() as Posted[];
     const answered = new Set<string>();
-    const wrapper = mountPlatformShell({ board: ThrowingBoard });
+    const wrapper = mountPlatformShell({ board });
     mounted.push(wrapper);
     await nextTick();
     fromHost({ type: 'init', seat: 1 });
-    fromHost(cellPickFrame(true));
+    fromHost(cellPickFrame(board === ThrowingBoard));
     await flushPromises();
     await answerFetches(posted, answered);
     const panel = () => wrapper.find('#bs-actionbar .action-panel-root');
@@ -256,5 +262,21 @@ describe('GameShell board error boundary and a pick handed to the board (#1153)'
     expect(wrapper.find('.good-board').exists()).toBe(true);
     expect(panel().findAll('.element-btn')).toHaveLength(0);
     expect(panel().find('.board-handoff-btn').text()).toBe('Choose on the board (50)');
+  });
+
+  // #1644: a custom board may show only state. It draws every cell and offers none.
+  it('lists the candidates in the panel when the board draws them but offers none', async () => {
+    const StateBoard = defineComponent({
+      name: 'StateBoard',
+      setup() {
+        const board = useBoardInteraction();
+        return () => h('div', { class: 'state-board' }, board.validElements.map(({ ref }) => h('span', anchorAttrs(ref))));
+      },
+    });
+    const { wrapper, panel } = await mountCellPick(StateBoard);
+    expect(wrapper.findAll('.state-board [data-bs-el-id]')).toHaveLength(50);
+
+    expect(panel().find('.board-handoff-btn').exists(), 'the board offers none of the cells').toBe(false);
+    expect(panel().findAll('.element-btn')).toHaveLength(50);
   });
 });

@@ -620,7 +620,7 @@ board) or `dependsOn` (narrow it with an earlier step).
 `engine/element/action-metadata.ts`, beside the code that builds a pick's
 candidates — three things read it: this panel, `boardsmith validate`, and
 `worldBudgets`, whose own per-selection cap must sit strictly above it), a pick whose
-candidates ALL carry a board ref is handed to the board: the panel keeps the
+candidates the board ALL offers is handed to the board: the panel keeps the
 prompt and renders one control, "Choose on the board (N)", instead of N buttons.
 That is an `element`/`elements` pick, or a `chooseFrom` whose every candidate
 names its own board element by `id` or `notation` (see `docs/actions-and-flow.md`).
@@ -632,8 +632,14 @@ This is a change of surface, not of content, and three things keep it honest:
 - The board offers the identical enumeration. Nothing is dropped, nothing is
   hidden, and the count is stated on the control so a screen-reader user knows
   the size of the choice before walking into it.
-- If even ONE candidate lacks a board ref the panel keeps every button, because
-  deferring would leave that candidate reachable from neither surface.
+- If even ONE candidate lacks a board ref, or the board does not offer it, the
+  panel keeps every button, because deferring would leave that candidate
+  reachable from neither surface. A board may show only state, so the board
+  says what it offers: `useDrawnBoardElements` (installed by the shell) reports
+  every element the board draws marked with `candidateAttrs` beside
+  `anchorAttrs`, as `useSelectable`, `useSelectableGrid` and the AutoUI
+  renderers do, and every pick a surface takes whole with `pickSurfaceAttrs`
+  (#1644).
 - While the board shows its error message in place of the board (it threw while
   drawing), there is no board to choose on, so the panel lists every candidate;
   it hands the pick back once the board draws again (#1153).

@@ -95,6 +95,8 @@ export {
   // gets both free from useSelectable) so its candidates are as answerable as
   // AutoUI's.
   candidateAttrs,
+  // #1644: marks a surface that offers a whole pick, so the panel hands a large one to the board.
+  pickSurfaceAttrs,
   type BoardInteraction,
   type BoardInteractionState,
   type BoardInteractionActions,

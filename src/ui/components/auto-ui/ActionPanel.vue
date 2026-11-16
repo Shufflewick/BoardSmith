@@ -1068,11 +1068,13 @@ const isDependentChoicePick = computed(() =>
 const anchoredChoices = computed(() => _splitChoices.value.anchored);
 
 /**
- * #172 / #313 / #341: a candidate set too large for the panel to read, every
- * one of which the board is already drawing -- an element pick, or a `chooseFrom`
- * whose candidates each name their own board element by id or notation. The panel keeps the prompt and offers ONE control
- * that hands keyboard focus to the board, instead of a wall of buttons nobody
- * can scan.
+ * #172 / #313 / #341 / #1644: a candidate set too large for the panel to read,
+ * every one of which the board offers -- an element pick, or a `chooseFrom` whose
+ * candidates each name their own board element by id or notation, and the board
+ * marks each as a candidate (`candidateAttrs`) or the whole pick as one surface
+ * (`pickSurfaceAttrs`). The panel keeps the prompt and
+ * offers ONE control that hands keyboard focus to the board, instead of a wall
+ * of buttons nobody can scan.
  *
  * This is a change of SURFACE, not of content: the board offers the identical
  * enumeration, and requestBoardFocus() carries focus across so the keyboard path
@@ -1081,12 +1083,15 @@ const anchoredChoices = computed(() => _splitChoices.value.anchored);
  * candidate must be reachable on the board before the panel will yield.
  */
 const deferPickToBoard = computed(() => {
-  if (props.boardFailed) return false;
+  if (props.boardFailed || !boardInteraction) return false;
   // A game that grouped its choices asked the panel to list them by category (#1439).
   if (pickCategories.value) return false;
-  const type = currentPick.value?.type;
-  if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
-  return shouldDeferElementPickToBoard(type, offeredElements.value);
+  const pick = currentPick.value;
+  if (!pick) return false;
+  // A surface that takes the whole pick offers every candidate on it (pickSurfaceAttrs).
+  const offered = boardInteraction.isPickSurface(pick.name) ? () => true : boardInteraction.isOffered;
+  if (pick.type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value, offered);
+  return shouldDeferElementPickToBoard(pick.type, offeredElements.value, offered);
 });
 
 // ── Categories inside a pick (#1439) ─────────────────────────────────────────

@@ -7,6 +7,7 @@ import {
   numberRangeHint,
 } from './action-panel-helpers.js';
 import type { ChoiceWithRefs, EnrichedValidElement } from '../../composables/useActionControllerTypes.js';
+import type { ElementRef } from '../../composables/useBoardInteraction.js';
 
 describe('splitAnchoredChoices', () => {
   const notationChoice: ChoiceWithRefs = {
@@ -79,30 +80,39 @@ describe('splitAnchoredChoices', () => {
 describe('shouldDeferElementPickToBoard', () => {
   const anchored = (n: number): EnrichedValidElement[] =>
     Array.from({ length: n }, (_, i) => ({ id: i, display: `c${i}`, refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }] }));
+  /** A board that marks every element it is asked about as a candidate it offers. */
+  const offersAll = () => true;
 
   it('defers an element pick larger than the threshold when every candidate is on the board', () => {
-    expect(shouldDeferElementPickToBoard('element', anchored(25), 24)).toBe(true);
+    expect(shouldDeferElementPickToBoard('element', anchored(25), offersAll, 24)).toBe(true);
   });
 
   it('keeps a pick at the threshold in the panel', () => {
-    expect(shouldDeferElementPickToBoard('element', anchored(24), 24)).toBe(false);
+    expect(shouldDeferElementPickToBoard('element', anchored(24), offersAll, 24)).toBe(false);
   });
 
   it('applies to multi-element picks too', () => {
-    expect(shouldDeferElementPickToBoard('elements', anchored(40), 24)).toBe(true);
+    expect(shouldDeferElementPickToBoard('elements', anchored(40), offersAll, 24)).toBe(true);
   });
 
   it('leaves a choice pick to its own rule — its candidates are values, not elements', () => {
-    expect(shouldDeferElementPickToBoard('choice', anchored(40), 24)).toBe(false);
+    expect(shouldDeferElementPickToBoard('choice', anchored(40), offersAll, 24)).toBe(false);
   });
 
   it('never defers when a candidate carries no board ref — that one would vanish', () => {
     const mixed = [...anchored(40), { id: 999, display: 'off-board' }];
-    expect(shouldDeferElementPickToBoard('element', mixed, 24)).toBe(false);
+    expect(shouldDeferElementPickToBoard('element', mixed, offersAll, 24)).toBe(false);
   });
 
   it('never defers an empty candidate list', () => {
-    expect(shouldDeferElementPickToBoard('element', [], 0)).toBe(false);
+    expect(shouldDeferElementPickToBoard('element', [], offersAll, 0)).toBe(false);
+  });
+
+  // #1644: a board may show only state, so a ref says nothing about whether the board offers the candidate.
+  it('never defers when the board does not offer every candidate', () => {
+    const offersAllButOne = (ref: ElementRef) => ref.id !== 7;
+    expect(shouldDeferElementPickToBoard('element', anchored(30), offersAllButOne, 24)).toBe(false);
+    expect(shouldDeferElementPickToBoard('element', anchored(30), () => false, 24)).toBe(false);
   });
 });
 
@@ -118,17 +128,19 @@ describe('shouldDeferChoicePickToBoard', () => {
       display: `Space ${i}`,
       refs: [{ ref: { notation: `s${i}` }, role: 'target' as const }],
     }));
+  /** A board that marks every element it is asked about as a candidate it offers. */
+  const offersAll = () => true;
 
   it('defers a choice pick larger than the threshold when every candidate is a board space', () => {
-    expect(shouldDeferChoicePickToBoard(onTheBoard(25), 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(onTheBoard(25), offersAll, 24)).toBe(true);
   });
 
   it('defers at the real threshold, for a pick the size of Windup Warfare\'s placePack', () => {
-    expect(shouldDeferChoicePickToBoard(onTheBoard(3720))).toBe(true);
+    expect(shouldDeferChoicePickToBoard(onTheBoard(3720), offersAll)).toBe(true);
   });
 
   it('keeps a pick at the threshold in the panel', () => {
-    expect(shouldDeferChoicePickToBoard(onTheBoard(24), 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(onTheBoard(24), offersAll, 24)).toBe(false);
   });
 
   it('reads the space a move lands on, not the one it starts from', () => {
@@ -142,12 +154,12 @@ describe('shouldDeferChoicePickToBoard', () => {
         { ref: { notation: `t${i}` }, role: 'target' as const },
       ],
     }));
-    expect(shouldDeferChoicePickToBoard(moves, 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(moves, offersAll, 24)).toBe(true);
   });
 
   it('never defers when a candidate carries no board ref — that one would vanish', () => {
     const mixed = [...onTheBoard(40), { value: 'pass', display: 'Pass' }];
-    expect(shouldDeferChoicePickToBoard(mixed, 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(mixed, offersAll, 24)).toBe(false);
   });
 
   // #341: the board picks an element by its id exactly as it picks a space by
@@ -161,12 +173,12 @@ describe('shouldDeferChoicePickToBoard', () => {
     }));
 
   it('defers a large pick whose every candidate names its own element by id', () => {
-    expect(shouldDeferChoicePickToBoard(onTheirPieces(25), 24)).toBe(true);
-    expect(shouldDeferChoicePickToBoard(onTheirPieces(3720))).toBe(true);
+    expect(shouldDeferChoicePickToBoard(onTheirPieces(25), offersAll, 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(onTheirPieces(3720), offersAll)).toBe(true);
   });
 
   it('defers a large pick that mixes id and notation targets, each unique', () => {
-    expect(shouldDeferChoicePickToBoard([...onTheirPieces(20), ...onTheBoard(20)], 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard([...onTheirPieces(20), ...onTheBoard(20)], offersAll, 24)).toBe(true);
   });
 
   it('never defers when two candidates name one element by id — the board can reach only one of them', () => {
@@ -174,7 +186,7 @@ describe('shouldDeferChoicePickToBoard', () => {
       ...onTheirPieces(40),
       { value: 'other', display: 'Piece 0 again', refs: [{ ref: { id: 100 }, role: 'target' as const }] },
     ];
-    expect(shouldDeferChoicePickToBoard(shared, 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(shared, offersAll, 24)).toBe(false);
   });
 
   it('reads a ref carrying both an id and a notation by its id, as the board does', () => {
@@ -185,7 +197,7 @@ describe('shouldDeferChoicePickToBoard', () => {
       display: `Piece ${i}`,
       refs: [{ ref: { id: 100 + i, notation: 'a1' }, role: 'target' as const }],
     }));
-    expect(shouldDeferChoicePickToBoard(stacked, 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(stacked, offersAll, 24)).toBe(true);
   });
 
   it('never defers name-only refs — a name does not single out one element', () => {
@@ -194,7 +206,7 @@ describe('shouldDeferChoicePickToBoard', () => {
       display: `Named ${i}`,
       refs: [{ ref: { name: `n${i}` }, role: 'target' as const }],
     }));
-    expect(shouldDeferChoicePickToBoard(named, 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(named, offersAll, 24)).toBe(false);
   });
 
   it('never defers when two candidates land on one space — the board can reach only one of them', () => {
@@ -202,11 +214,18 @@ describe('shouldDeferChoicePickToBoard', () => {
       ...onTheBoard(40),
       { value: 'other', display: 'Something else on s0', refs: [{ ref: { notation: 's0' }, role: 'target' as const }] },
     ];
-    expect(shouldDeferChoicePickToBoard(shared, 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(shared, offersAll, 24)).toBe(false);
   });
 
   it('never defers an empty candidate list', () => {
-    expect(shouldDeferChoicePickToBoard([], 0)).toBe(false);
+    expect(shouldDeferChoicePickToBoard([], offersAll, 0)).toBe(false);
+  });
+
+  // #1644: the board must offer each candidate's target, not merely be named by it.
+  it('never defers when the board does not offer every candidate', () => {
+    const offersAllButOne = (ref: ElementRef) => ref.notation !== 's7';
+    expect(shouldDeferChoicePickToBoard(onTheBoard(30), offersAllButOne, 24)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(onTheBoard(30), () => false, 24)).toBe(false);
   });
 });
 
