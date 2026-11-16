@@ -96,6 +96,23 @@ describe('createFLIPSnapshot', () => {
     ]);
   });
 
+  it('divides a screen-pixel move by the zoom the shell magnifies the board with (#1619)', async () => {
+    const zoomContainer = document.createElement('div');
+    zoomContainer.className = 'game-shell__zoom-container';
+    zoomContainer.style.setProperty('--zoom-level', '2');
+    const element = container(['a']);
+    zoomContainer.appendChild(element);
+    document.body.appendChild(zoomContainer);
+    const positions = stubPositions({ a: [0, 0] }, { a: [100, 50] });
+    const snapshot = createFLIPSnapshot(ref(element));
+    positions.moveToAfter();
+    await snapshot.animate();
+    expect(animateCalls[0].keyframes).toEqual([
+      { transform: 'translate(-50px, -25px)' },
+      { transform: 'translate(0, 0)' },
+    ]);
+  });
+
   it('skips an element that did not move', async () => {
     const element = container(['a']);
     stubPositions({ a: [10, 10] }, { a: [10, 10] });

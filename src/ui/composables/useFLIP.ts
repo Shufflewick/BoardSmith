@@ -184,15 +184,14 @@ interface ContainerHandler {
 }
 
 /**
- * The translate that puts an element back by a move measured in screen pixels.
- * The rects are in screen pixels and the translate is inside the board, which
- * the shell's magnifier scales (#1619), so the move is divided by that scale:
- * the `--zoom-level` PlayShell's zoom container applies, 1 outside a shell.
+ * The scale the shell's magnifier applies to `container` (#1619): FLIP measures
+ * moves in screen pixels and plays them back as a translate inside the board,
+ * so it divides by this. It is the `--zoom-level` PlayShell's zoom container
+ * applies, 1 outside a shell.
  */
-function invertedTranslate(deltaX: number, deltaY: number, container: Element): string {
+function boardZoomAt(container: Element): number {
   const zoomContainer = container.closest('.game-shell__zoom-container');
-  const zoom = zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
-  return `translate(${deltaX / zoom}px, ${deltaY / zoom}px)`;
+  return zoomContainer ? parseFloat(getComputedStyle(zoomContainer).getPropertyValue('--zoom-level')) : 1;
 }
 
 /**
@@ -330,6 +329,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
       }
 
       const elements = container.querySelectorAll(handler.selector);
+      const zoom = boardZoomAt(container);
 
       elements.forEach((el) => {
         const id = getElementId(el);
@@ -355,7 +355,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         // Create FLIP animation
         const animation = (el as HTMLElement).animate(
           [
-            { transform: invertedTranslate(deltaX, deltaY, container) },
+            { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
             { transform: 'translate(0, 0)' },
           ],
           {
@@ -481,6 +481,7 @@ export function createFLIPSnapshot(
 
       const animations: Animation[] = [];
       const elements = containerRef.value.querySelectorAll(selector);
+      const zoom = boardZoomAt(containerRef.value);
 
       elements.forEach((el) => {
         const id = getElementId(el);
@@ -500,7 +501,7 @@ export function createFLIPSnapshot(
         animations.push(
           (el as HTMLElement).animate(
             [
-              { transform: invertedTranslate(deltaX, deltaY, containerRef.value) },
+              { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
               { transform: 'translate(0, 0)' },
             ],
             { duration, easing, fill: 'backwards' }
