@@ -172,3 +172,17 @@ it('a tap elsewhere ends a preview, so the next tap on the same choice previews 
   expect(sendAction).not.toHaveBeenCalled();
   wrapper.unmount();
 });
+
+it('an armed choice disarms when its pick closes, so reopening it needs a fresh preview', async () => {
+  const { wrapper, sendAction, button } = await mountPanel();
+  await tap(button('Kings'));
+  await wrapper.find('.cancel-btn').trigger('click');
+  await flush();
+  await wrapper.find('[data-bs-action="ask"]').trigger('click');
+  await flush();
+  expect(button('Kings').hasAttribute('data-bs-armed')).toBe(false);
+
+  await tap(button('Kings'));
+  expect(sendAction).not.toHaveBeenCalled();
+  wrapper.unmount();
+});

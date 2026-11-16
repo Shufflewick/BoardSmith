@@ -420,6 +420,7 @@ await runBrowserRegression(
               highlighted: !!piece?.classList.contains('is-board-highlighted'),
               look: look && `${look.outlineStyle} ${look.outlineWidth} ${look.outlineColor} ${look.backgroundColor}`,
               armed: body.querySelector('.element-btn[data-bs-armed]')?.textContent.trim() ?? null,
+              box: [...body.querySelectorAll('.element-btn')].map((b) => { const r = b.getBoundingClientRect(); return `${r.x},${r.y},${r.width}x${r.height}`; }).join(' '),
               prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
             };
           }, pawn);
@@ -429,7 +430,8 @@ await runBrowserRegression(
           assert(previewed.highlighted && previewed.prompt === 'Select your pawn', `the first tap did not just highlight ${pawn}: ${JSON.stringify(previewed)}`);
           // #1635: a preview nobody can see reads as an ignored tap.
           assert(previewed.look !== selectable.look, `the highlighted ${pawn} looks the same as when it was only selectable: ${previewed.look}`);
-          assert(previewed.armed?.startsWith(pawn), `the tapped button does not show it is armed: ${JSON.stringify(previewed)}`);
+          assert(previewed.armed === pawn, `the tapped button does not show it is armed: ${JSON.stringify(previewed)}`);
+          assert(previewed.box === selectable.box, `arming moved or resized the buttons under the finger: ${selectable.box} became ${previewed.box}`);
           await button.tap();
           const chosen = await waitUntil(state, (now) => now.prompt === 'Select an empty square');
           assert(chosen.prompt === 'Select an empty square', `the second tap did not choose ${pawn}: ${JSON.stringify(chosen)}`);

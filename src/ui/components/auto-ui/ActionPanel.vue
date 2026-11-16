@@ -1097,6 +1097,7 @@ const deferPickToBoard = computed(() => {
 const choicePath = ref<readonly string[]>([]);
 watch([currentAction, () => currentPick.value?.name], () => {
   choicePath.value = [];
+  armedKey.value = null;
 });
 
 /** The single `chooseFrom` pick's level and the `chooseElement` pick's, drawn by their own branches. */
@@ -2797,17 +2798,11 @@ button {
   cursor: not-allowed;
 }
 
-/* A first tap previewed this choice on the board; the next tap commits it (#1635). */
+/* A first tap previewed this choice on the board; the next tap commits it (#1635). Outline, not border, so the button keeps its size under the finger. */
 .choice-btn[data-bs-armed] {
-  flex-direction: column;
-  border: 2px solid var(--bsg-accent-2);
+  outline: 3px solid var(--bsg-accent-2);
+  outline-offset: -3px;
   background: var(--bsg-droptarget-hover);
-}
-
-.choice-btn[data-bs-armed]::after {
-  content: 'Tap again to confirm';
-  font-size: 0.75em;
-  font-weight: normal;
 }
 
 @media (hover: hover) {
