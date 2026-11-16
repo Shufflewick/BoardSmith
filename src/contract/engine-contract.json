@@ -1,5 +1,5 @@
 {
-  "revision": 399,
+  "revision": 400,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3135,6 +3135,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The bs skills land each piece of a game's work on main through agent-policy merge, one branch per piece, and boardsmith init commits the scaffold on main with the game's .agent-policy.json"
+    },
+    {
+      "revision": 400,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A smoke spec's inputs may give a list of values for a text or number field, which the walk tries in order, the next each time the game refuses the action (#1663)."
     }
   ]
 }
