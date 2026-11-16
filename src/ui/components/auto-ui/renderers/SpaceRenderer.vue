@@ -174,9 +174,9 @@ const hasFan = computed(() => props.element.attributes?.$fan === true);
 }
 
 .space-container.is-board-highlighted {
-  background: var(--bsg-selectable);
-  outline: 1px solid var(--bsg-accent);
+  outline: 3px solid var(--bsg-accent-2);
   outline-offset: 2px;
+  background: var(--bsg-droptarget-hover);
 }
 
 .space-container.is-board-selected {

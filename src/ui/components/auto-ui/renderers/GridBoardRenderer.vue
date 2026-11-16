@@ -351,7 +351,9 @@ function cellAriaLabel(cell: GameElement): string {
 }
 
 .grid-cell.is-board-highlighted {
-  background: var(--bsg-selectable);
+  outline: 3px solid var(--bsg-accent-2);
+  outline-offset: -3px;
+  background: var(--bsg-droptarget-hover);
 }
 
 .grid-cell.is-board-selected {

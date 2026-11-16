@@ -413,13 +413,23 @@ await runBrowserRegression(
         await check(`${size}: a first tap on a pawn's button in the action bar highlights the pawn, and a second tap chooses it`, async () => {
           const { pawn } = await aMove(frame);
           const button = frame.locator('.element-btn', { hasText: pawn });
-          const state = () => frame.locator('body').evaluate((body, pawn) => ({
-            highlighted: !!body.querySelector(`.piece[data-bs-el-name="${pawn}"].is-board-highlighted`),
-            prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
-          }), pawn);
+          const state = () => frame.locator('body').evaluate((body, pawn) => {
+            const piece = body.querySelector(`.piece[data-bs-el-name="${pawn}"]`);
+            const look = piece && getComputedStyle(piece);
+            return {
+              highlighted: !!piece?.classList.contains('is-board-highlighted'),
+              look: look && `${look.outlineStyle} ${look.outlineWidth} ${look.outlineColor} ${look.backgroundColor}`,
+              armed: body.querySelector('.element-btn[data-bs-armed]')?.textContent.trim() ?? null,
+              prompt: body.querySelector('.selection-prompt')?.textContent.trim(),
+            };
+          }, pawn);
+          const selectable = await state();
           await button.tap();
           const previewed = await waitUntil(state, (now) => now.highlighted);
           assert(previewed.highlighted && previewed.prompt === 'Select your pawn', `the first tap did not just highlight ${pawn}: ${JSON.stringify(previewed)}`);
+          // #1635: a preview nobody can see reads as an ignored tap.
+          assert(previewed.look !== selectable.look, `the highlighted ${pawn} looks the same as when it was only selectable: ${previewed.look}`);
+          assert(previewed.armed?.startsWith(pawn), `the tapped button does not show it is armed: ${JSON.stringify(previewed)}`);
           await button.tap();
           const chosen = await waitUntil(state, (now) => now.prompt === 'Select an empty square');
           assert(chosen.prompt === 'Select an empty square', `the second tap did not choose ${pawn}: ${JSON.stringify(chosen)}`);

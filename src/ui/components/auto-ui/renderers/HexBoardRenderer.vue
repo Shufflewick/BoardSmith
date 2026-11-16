@@ -450,9 +450,10 @@ function hexCellAriaLabel(cell: GameElement): string {
 }
 
 .hex-polygon.is-board-highlighted {
-  fill: var(--bsg-selectable);
-  stroke: var(--bsg-accent);
-  stroke-width: 2;
+  fill: var(--bsg-droptarget-hover);
+  stroke: var(--bsg-accent-2);
+  stroke-width: 3;
+  stroke-dasharray: none;
 }
 
 .hex-polygon.is-board-selected {

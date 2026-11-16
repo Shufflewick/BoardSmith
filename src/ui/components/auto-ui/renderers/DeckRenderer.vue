@@ -168,9 +168,9 @@ const { attrs: selectableAttrs, onActivate, onKeydown } =
 
 /* Board interaction highlights */
 .deck-container.is-board-highlighted {
-  outline: 2px dashed var(--bsg-accent);
+  outline: 3px solid var(--bsg-accent-2);
   outline-offset: 2px;
-  background: var(--bsg-selectable);
+  background: var(--bsg-droptarget-hover);
 }
 
 .deck-container.is-board-selected {

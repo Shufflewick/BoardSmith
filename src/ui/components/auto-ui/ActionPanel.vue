@@ -1562,14 +1562,15 @@ function handleChoiceHover(choice: ChoiceWithRefs): boolean {
 // so hover alone never shows a touch player what a choice points at before it
 // is taken. Keyboard focus previews; a first tap previews and a second commits.
 let lastPointerType = '';
-let previewedByTap: Node | null = null;
+// The key of the button a first tap armed, drawn as `data-bs-armed` so the player sees a second tap commits (#1635).
+const armedKey = ref<string | null>(null);
 let previewedByFocus = false;
 let placingFocus = false;
 
 // Document-wide, so a tap anywhere else ends a tap preview.
 function onDocumentPointerdown(event: PointerEvent): void {
   lastPointerType = event.pointerType;
-  if (!previewedByTap?.contains(event.target as Node)) previewedByTap = null;
+  if (!(event.target as Element).closest?.('[data-bs-armed]')) armedKey.value = null;
 }
 
 /** Focus the panel moves itself, which is not the player reaching a choice. */
@@ -1583,11 +1584,10 @@ function placeFocus(el: HTMLElement | null | undefined): void {
 }
 
 /** True when this click is a first tap on a button with board pieces to show, which shows them instead of committing. */
-function previewsInsteadOfCommitting(event: MouseEvent, preview: () => boolean): boolean {
-  const button = event.currentTarget as Node;
-  const firstTap = event.detail > 0 && lastPointerType === 'touch' && previewedByTap !== button;
-  previewedByTap = firstTap && preview() ? button : null;
-  return previewedByTap !== null;
+function previewsInsteadOfCommitting(event: MouseEvent, key: string, preview: () => boolean): boolean {
+  const firstTap = event.detail > 0 && lastPointerType === 'touch' && armedKey.value !== key;
+  armedKey.value = firstTap && preview() ? key : null;
+  return armedKey.value !== null;
 }
 
 // Only focus the player moved by keyboard: the panel puts focus back into itself after every redraw (#261).
@@ -1991,7 +1991,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 v-else
                 class="choice-btn element-btn"
                 v-disabled-reason="node.item.disabled"
-                @click="previewsInsteadOfCommitting($event, () => handleElementHover(node.item)) || selectElement(node.item.id)"
+                :data-bs-armed="armedKey === String(node.item.id) || undefined"
+                @click="previewsInsteadOfCommitting($event, String(node.item.id), () => handleElementHover(node.item)) || selectElement(node.item.id)"
                 @mouseenter="handleElementHover(node.item)"
                 @mouseleave="handleElementLeave"
                 @focus="previewOnFocus(() => handleElementHover(node.item))"
@@ -2214,7 +2215,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                 class="choice-btn"
                 :class="{ 'filtered-choice-btn': isDependentChoicePick }"
                 v-disabled-reason="node.item.disabled"
-                @click="previewsInsteadOfCommitting($event, () => handleChoiceHover(node.item)) || (isDependentChoicePick ? executeChoice(currentPick.name, node.item) : setSelectionValue(currentPick.name, node.item.value, node.item.display))"
+                :data-bs-armed="armedKey === choiceValueKey(node.item.value) || undefined"
+                @click="previewsInsteadOfCommitting($event, choiceValueKey(node.item.value), () => handleChoiceHover(node.item)) || (isDependentChoicePick ? executeChoice(currentPick.name, node.item) : setSelectionValue(currentPick.name, node.item.value, node.item.display))"
                 @mouseenter="handleChoiceHover(node.item)"
                 @mouseleave="handleChoiceLeave"
                 @focus="previewOnFocus(() => handleChoiceHover(node.item))"
@@ -2403,7 +2405,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             class="choice-btn anchored-choice-btn"
             v-disabled-reason="choice.disabled"
             :aria-label="choiceSpokenName(choice)"
-            @click="previewsInsteadOfCommitting($event, () => handleChoiceHover(choice)) || executeChoice(currentPick.name, choice)"
+            :data-bs-armed="armedKey === choiceValueKey(choice.value) || undefined"
+            @click="previewsInsteadOfCommitting($event, choiceValueKey(choice.value), () => handleChoiceHover(choice)) || executeChoice(currentPick.name, choice)"
             @mouseenter="handleChoiceHover(choice)"
             @mouseleave="handleChoiceLeave"
             @focus="previewOnFocus(() => handleChoiceHover(choice))"
@@ -2792,6 +2795,19 @@ button {
   color: var(--bsg-disabled-ink);
   border-color: var(--bsg-line);
   cursor: not-allowed;
+}
+
+/* A first tap previewed this choice on the board; the next tap commits it (#1635). */
+.choice-btn[data-bs-armed] {
+  flex-direction: column;
+  border: 2px solid var(--bsg-accent-2);
+  background: var(--bsg-droptarget-hover);
+}
+
+.choice-btn[data-bs-armed]::after {
+  content: 'Tap again to confirm';
+  font-size: 0.75em;
+  font-weight: normal;
 }
 
 @media (hover: hover) {
