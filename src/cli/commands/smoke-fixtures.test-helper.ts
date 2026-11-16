@@ -944,23 +944,22 @@ const POINTER_AIMED_SHAPES = {
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
-const POINTER_COVERS = {
-  none: { setup: '', aim: '', template: '', style: '' },
-  accepted: {
+const TOP_LEFT_QUARTER = "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')";
+
+const NO_COVER = { setup: '', aim: '', template: '', style: '' };
+const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }';
+
+/** The cover each `accepts` lays over the top-left quarter, where the game accepts the cells: from the second accepted aim on, or from the start. */
+const POINTER_COVERS: Partial<Record<string, typeof NO_COVER>> = {
+  underACover: {
     setup: '\nconst coverShown = ref(false);\n// Discovery aims once before the press; the tray opens when the player aims again.\nlet acceptedAims = 0;',
     aim: `
   if (choosing.value && !refused.value && ++acceptedAims >= 2) coverShown.value = true;`,
     template: `
     <div v-if="coverShown" class="cover"></div>`,
-    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
+    style: COVER_STYLE,
   },
-  always: {
-    setup: '',
-    aim: '',
-    template: `
-    <div class="cover"></div>`,
-    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
-  },
+  alwaysCovered: { ...NO_COVER, template: '\n    <div class="cover"></div>', style: COVER_STYLE },
 };
 
 /**
@@ -987,11 +986,11 @@ export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | '
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
-    underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
-    underACover: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
-    alwaysCovered: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
+    underAToast: TOP_LEFT_QUARTER,
+    underACover: TOP_LEFT_QUARTER,
+    alwaysCovered: TOP_LEFT_QUARTER,
   };
-  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : options.accepts === 'alwaysCovered' ? 'always' : 'none'];
+  const cover = POINTER_COVERS[options.accepts ?? ''] ?? NO_COVER;
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];
