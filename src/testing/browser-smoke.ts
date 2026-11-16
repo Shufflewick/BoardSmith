@@ -1421,7 +1421,7 @@ async function choiceGiven(answering: Answering): Promise<{ readonly pick: strin
   if ((await inPageTime(page, 'looking for a pick of choices', () => list.count())) === 0) return NOT_GIVEN;
   const pick = (await withinPageTime(page, PRESS_MS, 'reading which pick the choices answer', (timeout) => list.first().getAttribute('data-bs-pick', { timeout }))) ?? '';
   walk.fieldsMet.get(name)?.set(pick, 'choice');
-  const given = await inputFor(walk.inputs, name, pick, 'choice', inputView(frame, otherSeats, memory.seed));
+  const given = await inputFor(walk.inputs, name, pick, 'choice', inputView(frame, otherSeats, memory.seed), 0);
   if (given === undefined) return NOT_GIVEN;
   if ('value' in given) return { pick, value: given.value };
   answering.stop = 'wanting' in given ? { wanting: pick } : given;
@@ -1537,7 +1537,7 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
   );
   const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
   walk.fieldsMet.get(name)?.set(pick, kind);
-  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed));
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), memory.refused.get(name) ?? 0);
   if (given !== undefined) {
     if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;

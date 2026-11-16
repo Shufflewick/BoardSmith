@@ -31,6 +31,7 @@ import {
   type ResolvedMemory,
   type SmokeInputView,
   type SmokeWalk,
+  type TypedValue,
 } from './browser-smoke-verdict.js';
 
 function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
@@ -572,21 +573,21 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   });
 
   it('gives no value for a field the spec names none for, so the walk types its own', async () => {
-    expect(await inputFor({}, 'attack', 'target', 'text', page())).toBeUndefined();
-    expect(await inputFor({ attack: { weapon: 'axe' } }, 'attack', 'target', 'text', page())).toBeUndefined();
-    expect(await inputFor({ attack: { target: 'p2' } }, 'heal', 'target', 'text', page())).toBeUndefined();
+    expect(await inputFor({}, 'attack', 'target', 'text', page(), 0)).toBeUndefined();
+    expect(await inputFor({ attack: { weapon: 'axe' } }, 'attack', 'target', 'text', page(), 0)).toBeUndefined();
+    expect(await inputFor({ attack: { target: 'p2' } }, 'heal', 'target', 'text', page(), 0)).toBeUndefined();
     // Only the spec's own keys: an action named like an object's built-in member gets nothing from it.
-    expect(await inputFor({}, 'constructor', 'name', 'text', page())).toBeUndefined();
+    expect(await inputFor({}, 'constructor', 'name', 'text', page(), 0)).toBeUndefined();
   });
 
   it('gives the text or number the spec names for the field, as text to type', async () => {
-    expect(await inputFor({ attack: { target: 'p2' } }, 'attack', 'target', 'text', page())).toEqual({ value: 'p2' });
-    expect(await inputFor({ bid: { amount: 40 } }, 'bid', 'amount', 'number', page())).toEqual({ value: '40' });
+    expect(await inputFor({ attack: { target: 'p2' } }, 'attack', 'target', 'text', page(), 0)).toEqual({ value: 'p2' });
+    expect(await inputFor({ bid: { amount: 40 } }, 'bid', 'amount', 'number', page(), 0)).toEqual({ value: '40' });
   });
 
   it('gives what a function of the page returns, reading what a player reads there', async () => {
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p2', 'p3'] }))).toEqual({ value: 'p2' });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p2', 'p3'] }), 0)).toEqual({ value: 'p2' });
   });
 
   it('#471: gives a function the other seats the walk plays, so it can name a player standing with this one', async () => {
@@ -595,35 +596,61 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
         target: async ({ texts, otherSeats }: SmokeInputView) => (await texts('.nearby li')).find((name) => otherSeats.some((seat) => name === `p${seat}`)),
       },
     };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9', 'p4'] }, [4]))).toEqual({ value: 'p4' });
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9'] }, [4]))).toEqual({ wanting: true });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9', 'p4'] }, [4]), 0)).toEqual({ value: 'p4' });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9'] }, [4]), 0)).toEqual({ wanting: true });
   });
 
   it('says the page gives no value yet when the function returns nothing, or blank text', async () => {
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page())).toEqual({ wanting: true });
-    expect(await inputFor({ attack: { target: () => '   ' } }, 'attack', 'target', 'text', page())).toEqual({ wanting: true });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page(), 0)).toEqual({ wanting: true });
+    expect(await inputFor({ attack: { target: () => '   ' } }, 'attack', 'target', 'text', page(), 0)).toEqual({ wanting: true });
+  });
+
+  it('#1663: gives the value of a list that the walk has not yet had refused, the next one each time the game refuses one', async () => {
+    const inputs = { movePacks: { columns: [-1, 1, -2] } };
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 0)).toEqual({ value: '-1' });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 2)).toEqual({ value: '-2' });
+    // Refusals of a longer list in another field of the action leave this one at its last value.
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 5)).toEqual({ value: '-2' });
+    expect(await inputFor({ dig: { spot: ['north', ' '] } }, 'dig', 'spot', 'text', page(), 1)).toEqual({
+      problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
+    });
+    // A value that is no number fails the list before the walk types any of it.
+    expect(await inputFor({ pledge: { coins: [3, 'seven'] } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({
+      problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "seven" for a number field. Give a number, such as 7.`,
+    });
+    expect(await inputFor({ dig: { spot: [] } }, 'dig', 'spot', 'text', page(), 0)).toEqual({
+      problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives an empty list. Give the values to try, in order, such as [-1, 1, -2, 2].`,
+    });
+  });
+
+  it('#1663: refuses a list for a pick of choices, which takes one label', async () => {
+    expect(await inputFor({ hire: { sheriff: ['Hale', 'Ortiz'] } }, 'hire', 'sheriff', 'choice', page(), 0)).toEqual({
+      problem:
+        `\`inputs.hire.sheriff\` in ${SMOKE_SPEC_PATH} gives a list for a pick of choices. Give the one label to press, ` +
+        'or choose by `seed` with a function.',
+    });
   });
 
   it('refuses a value for a number field that is not a number, naming the input', async () => {
-    expect(await inputFor({ pledge: { coins: 'seven' } }, 'pledge', 'coins', 'number', page())).toEqual({
+    expect(await inputFor({ pledge: { coins: 'seven' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({
       problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "seven" for a number field. Give a number, such as 7.`,
     });
-    expect(await inputFor({ pledge: { coins: () => '7x' } }, 'pledge', 'coins', 'number', page())).toEqual({
+    expect(await inputFor({ pledge: { coins: () => '7x' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({
       problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "7x" for a number field. Give a number, such as 7.`,
     });
-    expect(await inputFor({ pledge: { coins: ' 7 ' } }, 'pledge', 'coins', 'number', page())).toEqual({ value: '7' });
+    expect(await inputFor({ pledge: { coins: ' 7 ' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({ value: '7' });
   });
 
   it('#618: lets the page having stopped answering while a function read it end the walk, not count as the input failing', async () => {
     const frozen: SmokeInputView = { texts: () => Promise.reject(new PageFrozen()), otherSeats: [], seed: null };
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
-    await expect(inputFor(inputs, 'attack', 'target', 'text', frozen)).rejects.toBeInstanceOf(PageFrozen);
+    await expect(inputFor(inputs, 'attack', 'target', 'text', frozen, 0)).rejects.toBeInstanceOf(PageFrozen);
   });
 
   it('says which input failed, and how, when its function throws', async () => {
     const inputs = { attack: { target: () => { throw new Error('no such list'); } } };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page())).toEqual({
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page(), 0)).toEqual({
       problem: `\`inputs.attack.target\` in ${SMOKE_SPEC_PATH} failed while the walk answered "attack": no such list`,
     });
   });
@@ -696,7 +723,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
 
     it('says how many numbers the game refused, when it refused every one the walk tried', () => {
       expect(actionFailed('kindle', 'Too few logs.', [{ field: 'logs', value: '3', from: 'walk', kind: 'number' }], 2)).toBe(
-        'The panel offered "kindle", and taking it failed: Too few logs. The game refused each of the 3 numbers the walk ' +
+        'The panel offered "kindle", and taking it failed: Too few logs. The game refused each of the 3 values the walk ' +
           `entered. The walk typed "3" in its field "logs". If the game needs a particular value there, such as a name the ` +
           `board shows, give it in \`inputs\` in ${SMOKE_SPEC_PATH}.`,
       );
@@ -756,7 +783,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     typedANumber(m, 'kindle', 'logs', '3');
     recordResolved([failed('kindle', 'A fire needs four logs.')], w, m);
     expect(w.errors).toEqual([
-      'The panel offered "kindle", and taking it failed: A fire needs four logs. The game refused each of the 3 numbers the walk ' +
+      'The panel offered "kindle", and taking it failed: A fire needs four logs. The game refused each of the 3 values the walk ' +
         `entered. The walk typed "3" in its field "logs". If the game needs a particular value there, such as a name the board ` +
         `shows, give it in \`inputs\` in ${SMOKE_SPEC_PATH}.`,
     ]);
@@ -791,7 +818,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   });
 
   it('#470: reports a failed action with what the walk typed in it, and counts each taken action as the game moving on', () => {
-    const w = walk({ wanting: new Map([['greet', 'whom'], ['wave', 'whom']]) });
+    const w = walk({ wanting: new Map([['greet', 'whom'], ['wave', 'whom']]), inputs: { greet: { whom: 'Nobody' } } });
     const m = memory();
     const nobody = { field: 'whom', value: 'Nobody', from: 'inputs', kind: 'text' } as const;
     m.typed.set('greet', [nobody]);
@@ -804,7 +831,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   });
 
   it('#470: reports a number from `inputs` the game refuses at once, never trying the next one up: it is the spec\'s answer', () => {
-    const w = walk({});
+    const w = walk({ inputs: { pledge: { coins: 3 } } });
     const m = memory();
     typedANumber(m, 'pledge', 'coins', '3', 'inputs');
     recordResolved([failed('pledge', 'The pot takes seven coins.')], w, m);
@@ -816,8 +843,50 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect([...m.failed]).toEqual(['pledge']);
   });
 
+  it('#1663: takes the game refusing a value from a list in `inputs` as a cue to type the next, and reports the action once it refused every one', () => {
+    const w = walk({ inputs: { movePacks: { columns: [-1, 1, -2], rows: 0 } } });
+    const m = memory();
+    const typedColumns = (value: string) =>
+      m.typed.set('movePacks', [
+        { field: 'columns', value, from: 'inputs', kind: 'number' },
+        { field: 'rows', value: '0', from: 'inputs', kind: 'number' },
+      ]);
+    for (const value of ['-1', '1']) {
+      typedColumns(value);
+      recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m);
+    }
+    expect(w.errors).toEqual([]);
+    expect(m.refused.get('movePacks')).toBe(2);
+    typedColumns('-2');
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m);
+    expect(w.errors).toEqual([
+      'The panel offered "movePacks", and taking it failed: A pack would leave its deployment area. The game refused each ' +
+        `of the 3 values the walk entered. The walk typed "-2" in its field "columns", as \`inputs.movePacks.columns\` in ` +
+        `${SMOKE_SPEC_PATH} gives it. The walk typed "0" in its field "rows", as \`inputs.movePacks.rows\` in ${SMOKE_SPEC_PATH} gives it.`,
+    ]);
+  });
+
+  it('#1663: tries an action as many times as its longest list, or the walk\'s own three numbers when that is more', () => {
+    const tries = (inputs: SmokeWalk['inputs'], typed: TypedValue[]) => {
+      const w = walk({ inputs });
+      const m = memory();
+      let attempts = 0;
+      while (w.errors.length === 0) {
+        m.typed.set('aim', typed);
+        recordResolved([failed('aim', 'Off the board.')], w, m);
+        attempts++;
+      }
+      return attempts;
+    };
+    const fromList = (field: string, value: string): TypedValue => ({ field, value, from: 'inputs', kind: 'number' });
+    const walkNumber: TypedValue = { field: 'range', value: '1', from: 'walk', kind: 'number' };
+    expect(tries({ aim: { x: [1, 2], y: [1, 2, 3, 4] } }, [fromList('x', '1'), fromList('y', '1')])).toBe(4);
+    expect(tries({ aim: { x: [1, 2] } }, [fromList('x', '1'), walkNumber])).toBe(3);
+    expect(tries({ aim: { x: [1, 2, 3, 4, 5] } }, [fromList('x', '1'), walkNumber])).toBe(5);
+  });
+
   it('#470: tells the numbers apart by field: a refusal is the walk\'s to answer with the next number up only when it chose a number', () => {
-    const w = walk({});
+    const w = walk({ inputs: { bid: { amount: 40 } } });
     const m = memory();
     m.typed.set('bid', [
       { field: 'note', value: 'smoke test', from: 'walk', kind: 'text' },
