@@ -41,10 +41,11 @@ const ENGINE_ELEMENT_CLASSES = ['GameElement', 'Piece', 'Card', 'Die', 'Space', 
 
 /** The element classes a game declares across `contents`, following `extends` chains back to an engine class. */
 function gameElementClasses(contents: Iterable<string>): string[] {
-  const parents = new Map<string, string>();
+  // Pairs, not a map: two files may declare the same name, and either declaring it an element counts.
+  const parents: Array<[string, string]> = [];
   for (const content of contents) {
-    for (const [, name, parent] of content.matchAll(/class\s+(\w+)(?:\s*<[^{]*?>)?\s+extends\s+(\w+)/g)) {
-      parents.set(name, parent);
+    for (const [, name, parent] of content.matchAll(/class\s+(\w+)(?:\s*<[^{]*?>)?\s+extends\s+(?:\w+\.)*(\w+)/g)) {
+      parents.push([name, parent]);
     }
   }
   const known = new Set(ENGINE_ELEMENT_CLASSES);
@@ -100,8 +101,9 @@ const lintRules = (elementClasses: string[]) => ({
 
   // indexOf on element arrays. The trailing `\b(?!\w*[Ii]d\b)` keeps
   // `ids.indexOf(cardId)` out of it — comparing ids IS the recommended form.
+  // A game's class word must end the name (`homeSector`), so `locationName` is not taken for a Location.
   'element-indexof': {
-    pattern: new RegExp(String.raw`\.indexOf\s*\(\s*(?:${['card', 'piece', 'element', ...elementClasses].join('|')})\w*\b(?<![Ii]d)\s*\)`, 'gi'),
+    pattern: new RegExp(String.raw`\.indexOf\s*\(\s*(?:(?:[Cc]ard|[Pp]iece|[Ee]lement)\w*\b(?<![Ii]d)${elementClasses.map((name) => String.raw`|(?:\w*${name}|${name[0].toLowerCase()}${name.slice(1)})\b`).join('')})\s*\)`, 'g'),
     severity: 'warning' as const,
     message: 'indexOf() on elements may fail - use .findIndex(e => e.id === target.id)',
     suggestion: 'Replace with .findIndex(e => e.id === target.id)',
@@ -203,17 +205,10 @@ export function lintFile(filePath: string, content: string, elementClasses: stri
 /**
  * Check for missing element class registrations
  */
-function checkElementRegistration(filePath: string, content: string): LintIssue[] {
+function checkElementRegistration(filePath: string, content: string, elementClasses: string[]): LintIssue[] {
   const issues: LintIssue[] = [];
 
-  // Find all custom element classes (extends GameElement, Card, Piece, etc.)
-  const elementClassPattern = new RegExp(String.raw`class\s+(\w+)\s+extends\s+(?:${ENGINE_ELEMENT_CLASSES.join('|')})`, 'g');
-  const customClasses: string[] = [];
-
-  let match;
-  while ((match = elementClassPattern.exec(content)) !== null) {
-    customClasses.push(match[1]);
-  }
+  const customClasses = elementClasses.filter((name) => new RegExp(String.raw`class\s+${name}\b`).test(content));
 
   if (customClasses.length === 0) return issues;
 
@@ -319,7 +314,7 @@ async function runPitfallLint(cwd: string): Promise<number> {
     result.issues.push(...fileIssues);
 
     // Run element registration check
-    const regIssues = checkElementRegistration(filePath, content);
+    const regIssues = checkElementRegistration(filePath, content, elementClasses);
     result.issues.push(...regIssues);
 
     // Run unused action check

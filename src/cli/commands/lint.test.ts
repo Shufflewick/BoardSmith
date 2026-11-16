@@ -440,4 +440,44 @@ describe('element-indexof and player-element-ref know the game\'s own element cl
     });
     expect(text).not.toContain('(element-indexof)');
   });
+
+  it('flags a name ending in the class, not one that only starts with it', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': 'export class Location extends Space {}\n',
+      'src/rules/moves.ts': 'const i = names.indexOf(locationName);\nconst j = places.indexOf(startLocation);\n',
+    });
+    expect(text.match(/\(element-indexof\)/g)).toHaveLength(1);
+    expect(text).toMatch(/moves\.ts\n\s+2:/);
+  });
+
+  it('follows a parent named through a namespace import', async () => {
+    const text = await pitfallsFor({
+      'src/rules/elements.ts': 'export class Sector extends bs.Space {}\n',
+      'src/rules/moves.ts': 'const i = sectors.indexOf(sector);\n',
+    });
+    expect(text).toContain('(element-indexof)');
+  });
+
+  it('counts a class as an element when any file declares it as one, whatever order the files are read in', async () => {
+    for (const [first, second] of [['a', 'b'], ['b', 'a']]) {
+      const text = await pitfallsFor({
+        [`src/${first}.ts`]: 'export class Marker extends Piece {}\n',
+        [`src/${second}.ts`]: 'export class Marker extends Base {}\nconst i = markers.indexOf(marker);\n',
+      });
+      expect(text).toContain('(element-indexof)');
+    }
+  });
+
+  it('suggests registering every element class the game declares, and only those', async () => {
+    const text = await pitfallsFor({
+      'src/rules/sector.ts': 'export class Sector extends Space {}\n',
+      'src/rules/game.ts': [
+        'export class HomeSector<G extends MyGame = MyGame> extends Sector {}',
+        'export class MoveHandler extends HandlerBase {}',
+        'export class MyGame extends Game {',
+        '}',
+      ].join('\n'),
+    });
+    expect(text).toContain('Add: this.registerElements([HomeSector])');
+  });
 });
