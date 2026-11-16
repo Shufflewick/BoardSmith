@@ -92,3 +92,25 @@ export class DiceTrayGame extends Game<DiceTrayGame, Player> {
     this.setFlow({ root: actionStep({ actions: ['reroll', 'keep'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
   }
 }
+
+/** Dice whose own verbs sit in a group named as their type, beside a verb that takes a die later (#1653); the blue die cannot be kept. */
+export class DiceCupGame extends Game<DiceCupGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    for (const name of ['red', 'blue']) this.create(Die, name);
+    const verb = (name: string, ...group: string[]) => Action.create<DiceCupGame>(name).prompt(name[0]!.toUpperCase() + name.slice(1)).group(...group)
+      .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE, disabled: (die) => (name === 'keep' && die.name === 'blue' ? 'The blue die is held.' : false) })
+      .execute(() => {});
+    this.registerActions(
+      verb('reroll', 'Dice'),
+      verb('keep', 'Dice', 'Hold'),
+      verb('turn', 'Dice', 'Hold'),
+      verb('flip', 'Dice', 'Hold'),
+      Action.create<DiceCupGame>('placeDie').prompt('Place a die')
+        .chooseFrom('slot', { choices: ['top', 'bottom'] })
+        .chooseElement('die', { elements: (ctx) => [...ctx.game.all(Die)], subject: DICE })
+        .execute(() => {}),
+    );
+    this.setFlow({ root: actionStep({ actions: ['reroll', 'keep', 'turn', 'flip', 'placeDie'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 5 }) });
+  }
+}

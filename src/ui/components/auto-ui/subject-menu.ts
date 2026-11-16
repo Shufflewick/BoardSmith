@@ -4,7 +4,8 @@
  * With nothing selected the panel draws the ordinary grouped menu, and an
  * action listed under its things (`subjectIndex`) is reached through them: the
  * things of a type on the board sit under the type, then their categories. A
- * selected thing has a menu of its own, which keeps the actions' groups: its
+ * selected thing has a menu of its own, which keeps the actions' groups (but one
+ * named as its type, which the heading already names): its
  * verbs, the verbs that take it in a later pick, the verbs about the things
  * that belong to it, the verbs of its related things, and those things.
  *
@@ -92,5 +93,7 @@ export function selectionMenuItems(
   const related = (selection.related ?? []).flatMap((ref) => subjects.things.filter((thing) => sameThing(thing, ref)));
   for (const thing of related) offerVerbsOf(menu, thing, (prompt) => `${prompt}: ${thing.label}`);
   menu.items.push(...parts.filter((part) => part.onBoard && usableVerbs(part).length > 0).map((part) => thingItem(part, Infinity)));
-  return { items: menu.items, folded: menu.folded };
+  // The heading already names the type, so a group named as it would only add a press (#1653).
+  const unnested = <T extends PanelMenuItem>(item: T): T => (item.group?.[0] === selection.type ? { ...item, group: item.group.slice(1) } : item);
+  return { items: menu.items.map(unnested), folded: menu.folded.map(unnested) };
 }
