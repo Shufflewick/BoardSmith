@@ -1542,31 +1542,50 @@ describe('SKILLAUTO-04 — run-while-away', () => {
   });
 });
 
-describe('SKILLAUTO-05 — auto-advance', () => {
-  it('build/close.md frames the printed resume command as a cold-resume\\/crash fallback, not the default end-of-close signal', () => {
-    const close = read('build/close.md');
-    expect(close).toMatch(/crash fallback/i);
-    expect(close).toMatch(/never the default end-of-close signal/i);
-  });
+describe('SKILLAUTO-05 — the run advances across chunks, a dispatched chunk returns (#1676)', () => {
+  const flatRead = (file: string) => read(file).replace(/\s+/g, ' ');
 
-  it('build-chunk.md frames the printed re-invocation as the crash\\/context-fallback resume, not the default stop', () => {
-    const buildChunk = read('build-chunk.md');
-    expect(buildChunk).toMatch(/crash\/`\/clear` resume/i);
-  });
-
-  it('state-machine.md and build/close.md state the session auto-advances into the next chunk and the next logical step (generate-bot → final-acceptance)', () => {
-    const stateMachine = read('state-machine.md');
-    const close = read('build/close.md');
-    expect(stateMachine).toMatch(/auto-advance/i);
+  it('state-machine.md says the /bs-build-game run carries across chunk boundaries, including generate-bot → final-acceptance', () => {
+    const stateMachine = flatRead('state-machine.md');
     expect(stateMachine).toMatch(/generate-bot\s*(→|->)\s*final-acceptance/i);
-    expect(close).toMatch(/auto-advance/i);
+    expect(stateMachine).toMatch(/the `\/bs-build-game` run's loop dispatches the next chunk into its own fresh subagent/);
+    expect(stateMachine).not.toMatch(/ordinary session and auto-advances/);
+    expect(stateMachine).not.toMatch(/re-enters `build-chunk\.md` Step 2/);
   });
 
-  it('the residual default-stop-and-handoff framing at the chunk boundary is gone from build\\/close.md and build-chunk.md', () => {
-    const close = read('build/close.md');
-    const buildChunk = read('build-chunk.md');
-    expect(close).not.toMatch(/is NOT the end of the session by default/i);
-    expect(buildChunk).not.toMatch(/telling the user to re-invoke `\/bs-build-chunk` —\s*\n\s*only when a stop condition fires/i);
+  it('build/close.md returns after the done gate and leaves the next chunk to the run', () => {
+    const close = flatRead('build/close.md');
+    expect(close).toMatch(/the run's loop, not this step, dispatches the next chunk/);
+    expect(close).not.toMatch(/Then auto-advance/);
+    expect(close).not.toMatch(/the same session \*\*auto-advances\*\*/);
+    expect(close).not.toMatch(/Run `\/bs-build-chunk` to start it/);
+  });
+
+  it('build-chunk.md keeps no prose for a session the designer types into beyond its handoff', () => {
+    const buildChunk = flatRead('build-chunk.md');
+    expect(buildChunk).not.toContain('## Step 1: Conversational-Intent Probe');
+    expect(buildChunk).not.toMatch(/two callers/i);
+    expect(buildChunk).not.toMatch(/in both modes/i);
+    expect(buildChunk).not.toMatch(/auto-advances into the next chunk/i);
+    expect(buildChunk).not.toMatch(/Cross-chunk continuation/);
+    expect(buildChunk).not.toMatch(/tell the user|warn the user|to the user/i);
+  });
+
+  it('build-chunk.md resumes and classifies the lock against the chunk the brief names, never the first unverified one', () => {
+    const buildChunk = flatRead('build-chunk.md');
+    expect(buildChunk).toMatch(/The resume target is the chunk the brief names, never another/);
+    expect(buildChunk).toMatch(/\*\*the chunk this session is about to resume\*\*: the chunk the brief names/);
+    expect(buildChunk).not.toMatch(/the resume target is the first chunk whose status/);
+  });
+
+  it('build/playtest.md sends a light-path chunk on to its bookkeeping, never straight to the return', () => {
+    const playtest = flatRead('build/playtest.md');
+    expect(playtest).toMatch(/`close` \(on the light path, to "Light-Path Bookkeeping" below\)/);
+  });
+
+  it('build-chunk.md says a crash or /clear is resumed by re-invoking /bs-build-game, which re-dispatches at the first incomplete step', () => {
+    const buildChunk = flatRead('build-chunk.md');
+    expect(buildChunk).toMatch(/A `\/clear` or a crash is resumed by re-invoking `\/bs-build-game`/);
   });
 });
 

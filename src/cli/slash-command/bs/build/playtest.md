@@ -77,7 +77,7 @@ file and sim run>"`. When that evidence names a script or a capture, cite it by 
 in git (`state-machine.md` "Project Layout"). That command writes the sign-off, derives `Status: verified` in CHUNK.md, and
 mirrors SKETCH.md's pointer (CHUNK.md first, then SKETCH.md second, per "Write Order"). It refuses an
 automated sign-off for a chunk that does need a designer playtest. Then flow straight through to
-`close`/the next chunk per
+`close` (on the light path, to "Light-Path Bookkeeping" below) per
 `state-machine.md` "Session Handoff Seams" — no session stop here. A genuine rules question
 discovered during this chunk's work is the one exception: it parks the chunk regardless of
 milestone/UI status until the designer answers (see `build/ask.md` "Parking the Chunk on a Rules
