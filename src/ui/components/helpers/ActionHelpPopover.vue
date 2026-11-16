@@ -255,8 +255,9 @@ onUnmounted(() => {
 /* ── "?" affordance trigger button ───────────────────────────────────────── */
 /* Self-contained styles so the button is correctly sized and positioned when
    ActionHelpPopover is used in both ActionPanel (AutoUI) and custom UI slots
-   (IN-02 parity fix). The button uses position:absolute so it must be placed
-   inside a position:relative container (e.g. .action-btn-group in ActionPanel). */
+   (IN-02 parity fix). With a mouse the button uses position:absolute so it must be
+   placed inside a position:relative container (e.g. .action-btn-group in ActionPanel);
+   under pointer: coarse it is a 44px box in the flow beside what it helps with. */
 .action-help-btn {
   position: absolute;
   top: 0;
