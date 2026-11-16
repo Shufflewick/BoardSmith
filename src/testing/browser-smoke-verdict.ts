@@ -472,14 +472,13 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
 }
 
 /**
- * Records that the walk put `action` off in the seat whose `attempts` they are, because the spec's
- * `inputs` give no value for its `field` yet (#470): it waits on that input, and the values the game
- * refused in it are forgotten, since the walk takes it again only once the game has moved on, where
- * the first may be legal (#1677).
+ * Records that the walk put `action` off because the spec's `inputs` give no value for its `field`
+ * yet (#470): it waits on that input, and every seat's values refused in it are forgotten, since no
+ * seat takes it again until the game has moved on, where the first may be legal (#1677).
  */
-export function recordPutOff(walk: SmokeWalk, attempts: SeatAttempts, action: string, field: string): void {
+export function recordPutOff(walk: SmokeWalk, seats: Iterable<SeatAttempts>, action: string, field: string): void {
   walk.wanting.set(action, field);
-  attempts.refused.delete(action);
+  for (const attempts of seats) attempts.refused.delete(action);
 }
 
 /**

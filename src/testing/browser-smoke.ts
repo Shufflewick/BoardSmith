@@ -1595,7 +1595,7 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
  */
 async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, field: string, step: number): Promise<void> {
   narrate(step, `\`inputs\` gives no value for "${field}" of "${name}" yet; cancelling it until the game moves on`);
-  recordPutOff(walk, attemptsIn(memory, frame.page()), name, field);
+  recordPutOff(walk, memory.attempts.values(), name, field);
   memory.putOff.set(name, memory.moves);
   await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk, memory);
 }

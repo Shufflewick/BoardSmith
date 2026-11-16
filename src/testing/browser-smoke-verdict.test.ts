@@ -885,15 +885,17 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     expect(seat4.refused.get('movePacks')).toBe(1);
   });
 
-  it('#1677: forgets the values refused in an action put off, so once the game moves on it starts from the first again', () => {
+  it("#1677: forgets every seat's values refused in an action put off, so once the game moves on each starts from the first again", () => {
     const w = walk({ inputs: { movePacks: { columns: [-1, 1], rows: () => undefined } } });
     const m = memory();
+    const seat4: SeatAttempts = { refused: new Map([['movePacks', 1], ['draw', 1]]), typed: new Map() };
     m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', kind: 'number' }]);
     recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
     expect(m.refused.get('movePacks')).toBe(1);
-    recordPutOff(w, m, 'movePacks', 'rows');
+    recordPutOff(w, [m, seat4], 'movePacks', 'rows');
     expect(w.wanting.get('movePacks')).toBe('rows');
     expect(m.refused.get('movePacks')).toBeUndefined();
+    expect([...seat4.refused]).toEqual([['draw', 1]]);
   });
 
   it('#1663: tries an action as many times as its longest list, or the walk\'s own three numbers when that is more', () => {
