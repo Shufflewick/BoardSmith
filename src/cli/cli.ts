@@ -226,6 +226,7 @@ export function createProgram(): Command {
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--seed <seeds...>', "Deal from these seeds instead of the spec's, to walk a deal again (a table only)")
+    .option('--players <count>', "How many players sit at each --seed deal (default: the game's minPlayers)")
     .action(smokeCommand);
 
   program

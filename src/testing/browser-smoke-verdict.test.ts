@@ -19,6 +19,7 @@ import {
   startAnswering,
   walkStopped,
   smokeActions,
+  smokeDealPlayers,
   smokeFailure,
   smokeProblems,
   smokeRecord,
@@ -82,6 +83,36 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
     }
     expect(() => smokeSeeds(['7', 'opening', '7'])).toThrow(
       `\`seed\` in ${SMOKE_SPEC_PATH} lists "7" twice, which walks the same deal twice. List each seed once.`,
+    );
+  });
+
+  it('#1602: deals a seed at the player count a deal names, and the same seed at two counts as two deals', () => {
+    expect(smokeSeeds(['opening', { seed: 'Kim', players: 3 }, { seed: 'Kim', players: 4 }])).toEqual([
+      'opening',
+      { seed: 'Kim', players: 3 },
+      { seed: 'Kim', players: 4 },
+    ]);
+    expect(smokeSeeds({ seed: 'Kim', players: 3 })).toEqual([{ seed: 'Kim', players: 3 }]);
+  });
+
+  it('#1602: deals at the game\'s fewest players when a deal names none, and refuses a count the game does not seat', () => {
+    expect(smokeDealPlayers('opening', { min: 2, max: 4 })).toBe(2);
+    expect(smokeDealPlayers({ seed: 'Kim', players: 3 }, { min: 2, max: 4 })).toBe(3);
+    expect(() => smokeDealPlayers({ seed: 'Kim', players: 5 }, { min: 2, max: 4 })).toThrow(
+      'The deal of seed "Kim" at 5 players cannot be dealt: this game seats 2 to 4. Choose a count from 2 to 4.',
+    );
+  });
+
+  it('#1602: refuses a deal whose player count is not a whole number from 1, or that is listed twice', () => {
+    for (const players of [0, 2.5, -1]) {
+      expect(() => smokeSeeds([{ seed: 'Kim', players }])).toThrow(
+        `\`seed\` in ${SMOKE_SPEC_PATH} deals "Kim" at ${players} players, which is not a number of players. ` +
+          'Name how many players sit at the deal, such as 3.',
+      );
+    }
+    expect(() => smokeSeeds([{ seed: ' ', players: 3 }])).toThrow(`\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed.`);
+    expect(() => smokeSeeds([{ seed: 'Kim', players: 3 }, { seed: 'Kim', players: 3 }])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} lists "Kim" at 3 players twice, which walks the same deal twice. List each deal once.`,
     );
   });
 });
@@ -359,6 +390,14 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
         'listed actions still to take).',
     );
     expect(smokeSummary({ ...record, games: 2 })).not.toMatch(/over 2 games/);
+  });
+
+  it('#1602: names the player count of a deal that names one', () => {
+    const record = smokeRecord(walk({ seeds: ['opening', { seed: 'Kim', players: 3 }], listed: ['draw'], taken: new Set(['draw']) }), { controls: 0, games: 2 });
+    expect(smokeSummary(record)).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "opening", then from seed "Kim" at 3 players, a seated/);
+    expect(smokeFailure(walk({ seeds: [{ seed: 'Kim', players: 3 }] }), ['one'])).toBe(
+      'The smoke walk, dealt from seed "Kim" at 3 players, found a problem:\n  - one',
+    );
   });
 
   it('#471: names the seats a world walk played, when it played more than one', () => {

@@ -35,7 +35,8 @@ import { Started, startDev, tail } from '../lib/started-processes.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
-import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
+import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeDeal, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
+import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
@@ -304,7 +305,7 @@ async function runWalk(
   work: string,
   baseURL: string,
   log: (line: string) => void,
-  seeds: readonly string[] | undefined,
+  seeds: readonly SmokeDeal[] | undefined,
 ): Promise<VerifyCheckOutcome> {
   const configPath = join(work, 'playwright.config.mjs');
   await fs.writeFile(configPath, playwrightConfig(work, baseURL));
@@ -352,7 +353,7 @@ interface SmokeRun {
  * stops everything it started before it returns (see the file comment). With `seeds`, the walk deals
  * from them instead of the spec's (#460).
  */
-export async function runSmoke(options: { projectDir: string; log: (line: string) => void; seeds?: readonly string[] }): Promise<SmokeRun> {
+export async function runSmoke(options: { projectDir: string; log: (line: string) => void; seeds?: readonly SmokeDeal[] }): Promise<SmokeRun> {
   const { projectDir, log } = options;
   const cannot = specMissing(projectDir) ?? browserProblem(await playwrightChromium());
   if (cannot) return { outcome: cannot, pids: [] };
@@ -375,17 +376,35 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
 }
 
 /**
- * `boardsmith smoke [--project <dir>] [--seed <seeds...>]`: the smoke check alone, on the working
- * tree as it stands, dealt from the seeds `--seed` names instead of the spec's when it names any.
+ * The deals `--seed` names, each at the count `--players` names when it names one (#1602), so a
+ * failing deal at any player count can be walked again; undefined when `--seed` names none.
  */
-export async function smokeCommand(options: { project?: string; seed?: string[] }): Promise<void> {
+export function chosenDeals(seeds: readonly string[] | undefined, players: string | undefined): SmokeDeal[] | undefined {
+  if (players === undefined) return seeds === undefined ? undefined : [...seeds];
+  if (seeds === undefined) {
+    throw new Error(
+      '`boardsmith smoke --players` sets how many players sit at the deals `--seed` names, and no `--seed` was given. ' +
+        "Add `--seed <seeds...>`, or leave out `--players` to walk the spec's own deals.",
+    );
+  }
+  const count = parsePositiveWholeNumber('--players', players);
+  return seeds.map((seed) => ({ seed, players: count }));
+}
+
+/**
+ * `boardsmith smoke [--project <dir>] [--seed <seeds...> [--players <count>]]`: the smoke check
+ * alone, on the working tree as it stands, dealt as `--seed` and `--players` say instead of as the
+ * spec says when `--seed` names any.
+ */
+export async function smokeCommand(options: { project?: string; seed?: string[]; players?: string }): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   const configPath = join(projectDir, 'boardsmith.json');
   if (!existsSync(configPath)) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
   requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
-  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds: options.seed });
+  const seeds = chosenDeals(options.seed, options.players);
+  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds });
   if (outcome.passed) {
     console.log(styleText('green', outcome.summary));
     return;

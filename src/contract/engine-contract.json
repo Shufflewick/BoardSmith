@@ -1,5 +1,5 @@
 {
-  "revision": 373,
+  "revision": 374,
   "surfaceHash": "42b365841767d5b0",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2927,6 +2927,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Removed ActionBuilder.suppressFromActionPanel() and its actionMetadata field: every action is in the Action Panel; the dev-only boardsmith:action-started event and smoke's start-not-in-panel check went with it (#1643)."
+    },
+    {
+      "revision": 374,
+      "date": "2026-11-16",
+      "surfaceHash": "42b365841767d5b0",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The smoke walk can deal a table at a chosen player count: a spec seed entry may be { seed, players }, boardsmith smoke takes --players, and the dev host's Table setup deals at the count typed in its new Players field (#1602)."
     }
   ]
 }
