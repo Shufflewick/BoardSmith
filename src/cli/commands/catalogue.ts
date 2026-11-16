@@ -5,7 +5,7 @@
  * (`~/BoardSmithGames`, or `--catalogue <folder>`) on the game's committed `main`, or its branch
  * named as the checkout's branch (#1322), against the
  * checkout it is run in; `src/cli/lib/catalogue-check.ts` says how, without touching the games'
- * shared checkouts. `.agent-policy.json` runs it in every verify and merge.
+ * shared checkouts. It is run by hand; verify and merge do not run it (#1662).
  */
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
