@@ -2510,3 +2510,61 @@ function choose() {
     'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
   };
 }
+
+/**
+ * THE PASTURE GAME (#1651): `tend` and `harvest` each pick a pasture, bound to the `onBoard` subject
+ * type Pastures, so the panel lists both under each pasture (#1640) and never as a start button. A
+ * walk reaches them only by selecting a pasture. `harvest` is greyed until three actions have been
+ * taken, by when a walk has selected both pastures, so it is taken only by selecting one again.
+ * `bare` leaves out `draw`, so the panel offers nothing but the pastures.
+ */
+export function pastureGame({ bare }: { bare: boolean }): Record<string, string> {
+  const actions = bare ? ['tend', 'harvest'] : ['draw', 'tend', 'harvest'];
+  return {
+    ...aceGame(),
+    'src/rules/actions.ts': `import { Action, subjectType, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+const PASTURES = subjectType<string>({ name: 'Pastures', onBoard: true, key: (pasture) => pasture, label: (pasture) => pasture });
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  // Each action draws a card, so the deck counts the actions taken: the game is restored whole, never replayed.
+  const draw = (player: unknown) => {
+    game.deck.first(Card)?.putInto((player as DevGamePlayer).hand);
+    return { success: true };
+  };
+  return [
+    Action.create('draw').prompt('Draw a card').execute((_args, ctx) => draw(ctx.player)),
+    Action.create('tend')
+      .prompt('Tend')
+      .chooseFrom('pasture', { prompt: 'Which pasture?', choices: ['north', 'south'], subject: PASTURES })
+      .execute((_args, ctx) => draw(ctx.player)),
+    Action.create('harvest')
+      .prompt('Harvest')
+      .chooseFrom('pasture', { prompt: 'Which pasture?', choices: ['north', 'south'], subject: PASTURES })
+      .condition({ 'three actions taken': () => game.deck.count(Card) <= 52 - 10 - 3 })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ${JSON.stringify(actions)}, skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+    'tests/browser/smoke.spec.ts': smokeSpec(actions, undefined, { seed: ACE_SEEDS.WITHOUT, steps: 30 }),
+  };
+}

@@ -1,5 +1,5 @@
 {
-  "revision": 390,
+  "revision": 391,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3063,6 +3063,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The action bar shows a More mark on its bottom edge while actions sit below what it shows (#1650)"
+    },
+    {
+      "revision": 391,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "boardsmith smoke selects each thing the action panel lists and takes the verbs listed under it, and looks into a group or thing again once an action was taken since (#1651)"
     }
   ]
 }
