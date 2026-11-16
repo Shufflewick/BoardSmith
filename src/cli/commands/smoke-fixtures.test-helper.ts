@@ -954,6 +954,13 @@ const POINTER_COVERS = {
     <div v-if="coverShown" class="cover"></div>`,
     style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
   },
+  always: {
+    setup: '',
+    aim: '',
+    template: `
+    <div class="cover"></div>`,
+    style: '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }',
+  },
 };
 
 /**
@@ -968,20 +975,23 @@ const POINTER_COVERS = {
  * points land on refused cells and only a finer search finds one the game accepts; with 'topRow'
  * every cell off the top row, whose cells lie nearer the edge than any point the walk aims at;
  * with 'underAToast' (#1478) only the top-left quarter, which a toast covers from the moment the
- * pointer first moves over the board until it has been still for two seconds. With a `shape`, it
+ * pointer first moves over the board until it has been still for two seconds; with 'alwaysCovered'
+ * (#1671) only the top-left quarter, which a cover lies over from the start, as Windup Warfare's
+ * own Action Panel lay over its deployment area. With a `shape`, it
  * opens aimed at a refused cell: 'clipped' (#1521) makes the field twice as tall as the board, which
  * clips it (`overflow: clip`) to its middle half, so the walk cannot point at either of its corners;
  * 'twoRows' (#1521 review) has `claim` offer only rows 4 and 5, so the field names no cell (it has
  * no `data-bs-candidate`) over the other rows.
  */
-export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' | 'underACover'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
+export function pointerAimedGame(options: { accepts?: 'evenCells' | 'topRow' | 'underAToast' | 'underACover' | 'alwaysCovered'; shape?: 'clipped' | 'twoRows' } = {}): Record<string, string> {
   const refusals = {
     evenCells: "(cell) => ((cell as Cell).row % 2 === 1 || (cell as Cell).col % 2 === 1 ? 'Only cells on even rows and columns may be claimed.' : false)",
     topRow: "(cell) => ((cell as Cell).row === 0 ? false : 'Only the top row may be claimed.')",
     underAToast: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
     underACover: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
+    alwaysCovered: "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')",
   };
-  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : 'none'];
+  const cover = POINTER_COVERS[options.accepts === 'underACover' ? 'accepted' : options.accepts === 'alwaysCovered' ? 'always' : 'none'];
   const toast = options.accepts === 'underAToast';
   const toCell = options.accepts === undefined ? 'Math.floor' : 'Math.round';
   const shape = POINTER_AIMED_SHAPES[options.shape ?? 'plain'];

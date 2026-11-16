@@ -111,6 +111,20 @@ button { width: 320px; height: 120px; }
     expect(outcome.summary).toContain('did not work: another element covers it, so a pointer cannot reach it.');
   });
 
+  it('#1671: says how many points of a pointer-aimed board were covered when it reports the rest refused', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...pointerAimedGame({ accepts: 'alwaysCovered' }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    const report = /at each of the (\d+) points the walk aimed at on it, it stands for a choice the game refuses, and something on top of it, or out of sight, kept the walk from the other (\d+)\./;
+    expect(outcome.summary).toMatch(report);
+    const [, refused, covered] = outcome.summary.match(report)!;
+    expect(Number(refused) + Number(covered)).toBe(289);
+    expect(Number(covered)).toBeGreaterThan(0);
+  });
+
   describe("#478: a board control the page around the game covers", () => {
     it('waits for a toast in the page around the game to go, and presses again', async () => {
       const { outcome, steps } = await smokeOf(false, boardUnderTheHostsCover('toast'));
