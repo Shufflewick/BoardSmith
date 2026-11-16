@@ -193,16 +193,25 @@ describe('INGEST-05 — sketch derivation heuristic', () => {
   });
 });
 
-describe('INGEST-06 — UI strategy step', () => {
-  it('references SKETCH.template.md\'s "## UI Strategy" section by name', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('## UI Strategy');
+describe('INGEST-06 — checkpoints, no UI strategy (#1660)', () => {
+  it('places the checkpoints in the proposed sketch, and offers no UI strategy choice', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toContain('## Step 5: Place the Checkpoints');
+    expect(ingestRules).toMatch(/There is no UI strategy to choose\. Every game builds its custom board from the first chunk/);
+    expect(ingestRules).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|## UI Strategy/);
   });
 
-  it('names both strategy values: custom-from-chunk-1 and autoui-with-cutover', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('custom-from-chunk-1');
-    expect(ingestRules).toContain('autoui-with-cutover');
+  it('writes the design session as pending, and hands the build to a run that opens with it', () => {
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/the `## Design Session` status `pending`/);
+    expect(ingestRules).toMatch(/opens with the design session \(`\/bs-build-game` Step 1b\)/);
+  });
+
+  it('no skill text keeps the AutoUI-then-cutover strategy, beyond converting an old sketch', () => {
+    const upgrade = /## Upgrading State Written Before the Design Session[\s\S]*?(?=\n## )/;
+    for (const path of SKILL_FILES) {
+      expect(skillMarkdown(path).replace(upgrade, ''), path).not.toMatch(/autoui-with-cutover|custom-from-chunk-1|Restyle\/Cutover/);
+    }
   });
 });
 
@@ -253,6 +262,20 @@ describe('SKILLAUTO-01 — milestone-chunk mandates', () => {
   it('sketch-derivation.md cites SKETCH.template.md\'s Milestone field by name', () => {
     const sketchDerivation = read('ingest/sketch-derivation.md');
     expect(sketchDerivation).toContain('Milestone');
+  });
+
+  it('sketch-derivation.md places mid-build checkpoints after the first member of each major family, about one per quarter (#1660)', () => {
+    const sketchDerivation = flat(read('ingest/sketch-derivation.md'));
+    expect(sketchDerivation).toContain('### Mid-Build Checkpoints');
+    expect(sketchDerivation).toMatch(/on the chunk that lands the \*\*first member of each major mechanic family\*\*/);
+    expect(sketchDerivation).toMatch(/at most `max\(1, floor\(N \/ 4\)\)`/);
+    expect(sketchDerivation).toContain('`Milestone: mid-build`');
+  });
+
+  it('sketch-derivation.md mandates the animation chunk after scoring and before the bot and final acceptance (#1660)', () => {
+    const sketchDerivation = flat(read('ingest/sketch-derivation.md'));
+    expect(sketchDerivation).toMatch(/An \*\*animation chunk\*\* — placed after the game-end\/scoring chunk and before the bot-opponent chunk/);
+    expect(sketchDerivation).toContain('`Milestone: animation`');
   });
 
   it('sketch-derivation.md assigns `none` as the milestone value for non-milestone chunks', () => {
@@ -1052,36 +1075,10 @@ describe('cross-file consistency — every referenced path resolves on disk', ()
 });
 
 /**
- * Context floor + ceiling at the ingest→build seam (SKILLAUTO-06).
- *
- * Regression: an ingest session wound down at 24% context ("this is a clean resume point,
- * run /clear then /bs-build-chunk") because `ingest-rules.md` carried no context rule at
- * all — the ≥50% floor lived only in `state-machine.md` and `build-chunk.md`, neither of
- * which the ingest orchestrator is required to consult before ending its turn.
+ * The ingest→build seam is a continuation seam: ingest rolls straight into the build in the same
+ * session, and there is no context stop at it (#1660).
  */
-describe('context floor + ceiling — ingest-rules.md (SKILLAUTO-06)', () => {
-  it('states both numbers: the >=50% wind-down floor and the ~60% ceiling', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toMatch(/50%/);
-    expect(ingestRules).toMatch(/60%/);
-  });
-
-  it('forbids winding down below the floor on a self-assessed hunch', () => {
-    const ingestRules = flat(read('ingest-rules.md'));
-    expect(ingestRules).toMatch(/Below 50% used, this session never winds down/i);
-    expect(ingestRules).toMatch(/never suggests a `\/clear`/i);
-  });
-
-  it('gives an authoritative harness warning precedence over the floor', () => {
-    const ingestRules = flat(read('ingest-rules.md'));
-    expect(ingestRules).toMatch(/harness.*signals below the floor, obey it immediately/i);
-  });
-
-  it('cites state-machine.md rather than restating the full rule', () => {
-    const ingestRules = read('ingest-rules.md');
-    expect(ingestRules).toContain('Context floor +\nceiling');
-  });
-
+describe('the ingest→build seam — ingest-rules.md', () => {
   it('treats the ingest→build seam as a continuation seam, not a session terminus', () => {
     const ingestRules = flat(read('ingest-rules.md'));
     expect(ingestRules).toMatch(/continuation seam, not a session terminus/i);
@@ -1092,9 +1089,10 @@ describe('context floor + ceiling — ingest-rules.md (SKILLAUTO-06)', () => {
     expect(ingestRules).toMatch(/Do not end the turn telling the designer to `\/clear`/i);
   });
 
-  it('state-machine.md names the ingest→build seam and scopes the floor to every bs- session', () => {
+  it('state-machine.md names the ingest→build seam, and ingest stops there only for a real stop condition', () => {
     const stateMachine = flat(read('state-machine.md'));
     expect(stateMachine).toMatch(/ingest→build seam is a continuation seam/i);
-    expect(stateMachine).toMatch(/govern \*\*every\*\* `bs-` session/i);
+    const ingestRules = flat(read('ingest-rules.md'));
+    expect(ingestRules).toMatch(/the designer said stop, or an automated step is stuck\. There is no context stop/);
   });
 });

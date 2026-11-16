@@ -15,7 +15,7 @@ import { describe, it, expect } from 'vitest';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { skillMarkdown } from '../skill-markdown.test-helper.js';
+import { SKILL_FILES, skillMarkdown } from '../skill-markdown.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +53,7 @@ const RETURN_FIELDS = [
 ];
 
 /** The `outcome` enum every dispatch return carries exactly one of. */
-const OUTCOME_VALUES = ['closed', 'gate', 'filing', 'context-ceiling', 'stuck'];
+const OUTCOME_VALUES = ['closed', 'gate', 'filing', 'stuck'];
 
 describe('WF-01 — the skill and its reference tree exist and are wired', () => {
   it('build-game.md exists with the bs-build-game frontmatter name', () => {
@@ -375,21 +375,21 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
     expect(runState).toMatch(/the lock's timestamp is/i);
   });
 
-  it('the run stops for exactly the four named reasons, and no vaguer hunch', () => {
+  it('the run stops for exactly the three named reasons, and never because of context', () => {
     const runState = read('orchestrate/run-state.md');
-    for (const reason of ['designer-stopped', 'gate-open', 'stuck', 'context-ceiling']) {
+    expect(flat(runState)).toMatch(/stops for exactly three reasons/);
+    for (const reason of ['designer-stopped', 'gate-open', 'stuck']) {
       expect(runState, `stop reasons must include ${reason}`).toContain(reason);
     }
+    expect(runState).toContain('## No Context Stop');
     const skill = flat(read('build-game.md'));
-    expect(skill).toMatch(/never for a vaguer "this is getting long\.?"/i);
+    expect(skill).toMatch(/never because the run is long or context "feels" full/i);
   });
 
-  it('the context floor/ceiling applies per subagent, so a ceiling return is a re-dispatch', () => {
-    const runState = flat(read('orchestrate/run-state.md'));
-    expect(runState).toMatch(/fresh context window/i);
-    expect(runState).toMatch(/treats as an ordinary re-dispatch, not a stop/i);
-    const stateMachine = flat(read('state-machine.md'));
-    expect(stateMachine).toMatch(/context floor and ceiling apply per subagent, not per run/i);
+  it('no skill text sets a context stop (#1660)', () => {
+    const contextStop = /context[- ](floor|ceiling)|floor\s*\+\s*ceiling|context-low|low-water mark|[56]0% (used|floor|ceiling)|SKILLAUTO-06/i;
+    const offenders = SKILL_FILES.filter((path) => contextStop.test(flat(skillMarkdown(path))));
+    expect(offenders).toEqual([]);
   });
 
   it('build-game.md prints /bs-build-game as the one resume command', () => {
@@ -482,8 +482,8 @@ describe('WF-09 — state-machine.md owns the orchestrated-run rules once', () =
  * playtest step routes Status through the command that enforces it, never a hand-written line.
  */
 const GATE_POLICY =
-  'Only the designer answers an ask gate or signs off a playtest. An unattended run parks the ' +
-  'chunk at that gate and moves on only to work that does not need the answer.';
+  'Only the designer answers a rules question or signs off a playtest. An unattended run parks the ' +
+  'chunk at that question and keeps building the chunks that do not need the answer.';
 
 describe('#291: one gate policy for orchestrated runs', () => {
   for (const file of ['build-game.md', 'build/ask.md', 'build/playtest.md']) {
@@ -513,6 +513,33 @@ describe('#291: one gate policy for orchestrated runs', () => {
   it('build-game.md re-checks a closed chunk with chunk-check before continuing', () => {
     const buildGame = flat(read('build-game.md'));
     expect(buildGame).toMatch(/`closed`[^]*?boardsmith chunk-check <slug>/);
+  });
+
+  it('a rules question parks its chunk and the run keeps building what does not depend on it (#1660)', () => {
+    const buildGame = flat(read('build-game.md'));
+    expect(buildGame).toMatch(/Derive the target chunk\*\* with `npx boardsmith next-chunk`/);
+    expect(buildGame).toMatch(/\*\*`gate` with `kind: rules-adjudication`\*\* — park the chunk/);
+    expect(buildGame).toMatch(/The run stops on it only when `next-chunk` finds nothing else to build/);
+    const runState = flat(read('orchestrate/run-state.md'));
+    expect(runState).toMatch(/A parked rules question stops it only when `boardsmith next-chunk` exits non-zero/);
+  });
+
+  it('every entry point converts state written before the design session, and a resume derives its target with next-chunk (#1660 review F2, F5)', () => {
+    const upgrade = flat(read('state-machine.md')).split('## Upgrading State Written Before the Design Session')[1].split('## Consistency Check')[0];
+    expect(upgrade).toMatch(/`SKETCH\.md` with `## UI Strategy`/);
+    expect(upgrade).toMatch(/`DESIGN\.md` with `## Chosen Direction` and `## Theme Block`/);
+    for (const file of ['build-game.md', 'build-chunk.md']) {
+      expect(flat(read(file)), file).toContain('"Upgrading State Written Before the Design Session"');
+    }
+    expect(flat(read('orchestrate/run-state.md'))).toMatch(/derive the true build position with `npx boardsmith next-chunk`/);
+    expect(flat(read('ingest/sketch-derivation.md'))).toMatch(/its `Depends on:` names every chunk listed before it/);
+  });
+
+  it('build-game.md runs the design session before the first dispatch, and adds a missing animation chunk (#1660)', () => {
+    const buildGame = flat(read('build-game.md'));
+    expect(buildGame).toContain('## Step 1b: The Design Session');
+    expect(buildGame).toMatch(/If `DESIGN\.md` does not exist, the game's look has not been signed off, and no chunk may be built yet/);
+    expect(buildGame).toMatch(/\*\*The animation chunk\.\*\*.*comes after scoring and before the bot and final acceptance/);
   });
 
   it('ask.md does not let an unrecorded precedent stand in for an answer', () => {

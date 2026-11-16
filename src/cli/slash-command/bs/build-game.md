@@ -21,7 +21,7 @@ exactly what this skill dispatches); this skill is the whole-game one.
 Building a game is a long sequence of chunks, and the thing that used to end a session was context,
 not progress: a chunk or two of real work filled the window, the designer was told to `/clear`, and
 the next session started over — re-reading state, and too often re-asking questions they had already
-answered. This skill removes that ceiling from the designer's session by moving the work off it.
+answered. This skill moves that work off the designer's session.
 Each chunk is built by a **fresh subagent** that burns its own context window and returns a short
 report (`orchestrate/chunk-dispatch.md`). The orchestrator keeps only the conversation: the
 questions, the playtests, the decisions, and the run's own journal. So a whole game can be built in
@@ -75,16 +75,20 @@ hands back. Everything else comes from a structured return
 
 This is the rule the whole shape rests on. The moment the orchestrator starts reading slices or code
 "to check the subagent's work," its context fills at the same rate a single session's did and the run
-regains the ceiling it exists to remove. If the work needs checking, that is what the pipeline's own
+loses the lean thread it exists to keep. If the work needs checking, that is what the pipeline's own
 adversarial audit steps are for — dispatch, don't re-read.
 
 ## Who Answers a Gate
 
-Only the designer answers an ask gate or signs off a playtest. An unattended run parks the chunk at
-that gate and moves on only to work that does not need the answer. Because chunks are built in
-order, that usually means the run stops on the unanswered-gate stop condition
-(`orchestrate/run-state.md` "Stop Conditions") with the question pending in `QUESTIONS.md` and
-`RUN.md`'s `Open Gate:` set. The orchestrator relays gates; it never answers one, never takes a
+Only the designer answers a rules question or signs off a playtest. An unattended run parks the
+chunk at that question and keeps building the chunks that do not need the answer. The parked
+chunk's question stays pending in `QUESTIONS.md` and the chunk is named in `RUN.md`'s
+`Open Gate:`; the run stops on the unanswered-gate stop condition (`orchestrate/run-state.md`
+"Stop Conditions") only when every remaining chunk waits on the designer, or at a planned blocking
+checkpoint: the design sign-off, a checkpoint playtest, a repair round-3 triage, or a step that
+failed twice at the top role (`state-machine.md` "Session Handoff Seams"). The `ask` step itself
+never stops the run: it records its interpretation and defaults in `DECISIONS.md`, and the designer
+reviews them in one batch at the next blocking playtest. The orchestrator relays gates; it never answers one, never takes a
 ruling or an archive override as "reversible" and so safe to settle alone, and never writes a
 sign-off. A designer decision about one chunk is never a precedent for another: an answer covers the
 question it answered, and a playtest waiver covers only the chunks it names, until it expires
@@ -109,7 +113,9 @@ npx boardsmith ingest-check
 artifacts under `design/` with `git mv` and deletes nothing) and continue; never proceed against a
 project that failed it. `ingest-check` repairs `rulebook/` synthesis when needed: on a non-zero exit
 re-read `rulebook/INDEX.md`, re-run it, and only then continue. A slice it reports as not naming its
-document is not repaired; handle it as `/bs-build-chunk` Step 0 says before continuing. Then run the consistency check in
+document is not repaired; handle it as `/bs-build-chunk` Step 0 says before continuing. Then convert any state written before the design session
+(`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Upgrading State Written Before the Design
+Session") and run the consistency check in
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Consistency Check", using literal `ls <file>`
 checks, and resolve the session lock per that file's "Session Lock" — all three outcomes (same-chunk
 resume refreshes silently, a different live lock warns and stops, a stale lock is reported for the
@@ -138,15 +144,31 @@ If this project predates the filings ledger — no `FILINGS.md`, but a hand-roll
 chunk never files into two places (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`
 "Adopting a Pre-Existing Bug Ledger").
 
+A project whose state predates the design session was converted at Step 0
+(`state-machine.md` "Upgrading State Written Before the Design Session"). A sketch with no
+animation chunk gets one the way Step 6 adds a missing bot chunk.
+
 Then tell the designer where the run stands and what it will do next, in one or two sentences. On a
 resume, lead with the open gate if there is one — that is the thing they are holding.
+
+## Step 1b: The Design Session
+
+If `DESIGN.md` does not exist, the game's look has not been signed off, and no chunk may be built
+yet. Run the design session now, in this thread with the designer, per
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`: five directions as throwaway mocks
+in one gallery, the designer mixes, matches and iterates, the chosen design passes the contrast
+and colorblind checks, and the designer signs it off. The mocks and the checks are dispatched; the
+conversation and the sign-off happen here. If the designer is not here to sign off, the session
+stays open: write `RUN.md`'s `Open Gate:` as `design-session — sign off the game's design`, and
+stop with `Stop Reason: gate-open`. When `DESIGN.md` exists, go on.
 
 ## Step 2: Confirm the Run
 
 Before the first dispatch, say what the run will do and get a yes: how many chunks remain, that you
-will build them in order (independent chunks side by side when the checks allow it), and that you will stop whenever you need a question answered or the
-game played. Name the ones that will need them if the sketch already says so (the milestone chunks —
-`state-machine.md`'s human-gate list). This is one short exchange, not a menu of options, and it
+will build them in order (independent chunks side by side when the checks allow it), and that you will stop only at the planned checkpoints, where the
+designer plays the game and reviews the decisions taken since the last one, or when every chunk
+left needs a rules question answered. Name the checkpoints the sketch places (the chunks whose
+`Milestone:` is not `none` — `state-machine.md`'s human-gate list). This is one short exchange, not a menu of options, and it
 happens once per run — a resumed run that already has a yes does not re-ask; it reports and
 continues.
 
@@ -157,16 +179,20 @@ If the designer wants a single chunk instead of a run, that is `/bs-build-chunk`
 Loop until there is nothing left to build or a stop condition fires
 (`orchestrate/run-state.md` "Stop Conditions"). Each pass:
 
-1. **Derive the target chunk** from `SKETCH.md` exactly as `/bs-build-chunk` Step 2 does: the first
-   entry whose derived status is neither `verified` nor `verified (user-waived)`. Never take it from
-   `RUN.md` — the journal is not an authority (`orchestrate/run-state.md` "The One Authority Rule").
+1. **Derive the target chunk** with `npx boardsmith next-chunk`: the first chunk in `SKETCH.md`
+   that is not verified, is not parked in `RUN.md`'s `Open Gate:`, and has everything it depends on
+   verified. With nothing parked that is the first entry whose derived status is neither
+   `verified` nor `verified (user-waived)`, exactly as `/bs-build-chunk` Step 2 routes. A non-zero
+   exit means every remaining chunk waits on the designer: stop on `gate-open` (Step 5) and put the
+   open gates to them. Chunk status comes from `SKETCH.md`, never from `RUN.md`'s journal
+   (`orchestrate/run-state.md` "The One Authority Rule"); `Open Gate:` only says which chunks wait.
 2. **Pick the pipeline** for it:
    - the sketch's bot-opponent chunk → `bs-build-bot` (see Step 6);
    - anything else, including the mandated final-acceptance chunk → `bs-build-chunk`, which routes
      ceremony and final-acceptance itself (`build-chunk.md` Steps 2-3). This skill never routes
      steps within a chunk.
-3. **Look for chunks that can be built beside it.** Take the target plus the next not-yet-verified
-   chunks in list order that have citations and a `- Depends on:` line, and run
+3. **Look for chunks that can be built beside it.** Take the target plus the next chunks
+   `next-chunk` lists as buildable, in its order, that have citations and a `- Depends on:` line, and run
    `npx boardsmith parallel-check <target> <next> [...]`, dropping the last chunk until it passes
    or only the target is left. A pass means the batch is independent in the sketch's dependency
    graph and shares no rulebook section; build it as `orchestrate/chunk-dispatch.md` "Parallel
@@ -216,10 +242,18 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
   subagent's `designerSummary`, record any `assetsRequested` and `filings`, and continue the loop.
   No re-invocation prompt, no handoff: continuing is the default.
-- **`gate`** — conduct the gate yourself, here, in the main thread. Relay the `payload` **verbatim**
-  — an `ask` gate's four parts, a `playtest` gate's numbered script, a triage's options — because
-  that text was composed by the step that owns its format
-  (`build/ask.md` "The Fixed 4-Part Presentation Format", `build/playtest.md`). Write each question
+- **`gate` with `kind: rules-adjudication`** — park the chunk: write its pending question to
+  `QUESTIONS.md` if the subagent has not, add `<slug> — <the question, in the designer's terms>` to
+  `RUN.md`'s `Open Gate:`, and continue the loop with the next chunk `next-chunk` names. If the
+  designer is here, put the question to them now, in the same message as whatever else the run is
+  doing, and when they answer, write the ruling, clear the chunk from `Open Gate:` and re-dispatch
+  it with the answer in its digest. The run stops on it only when `next-chunk` finds nothing else
+  to build.
+- **`gate`, any other kind** — conduct the gate yourself, here, in the main thread. Relay the
+  `payload` **verbatim** — a `playtest` gate's decision review and numbered script, a triage's
+  options — because that text was composed by the step that owns its format
+  (`build/playtest.md`). Put any parked chunks' questions in the same message, so the designer
+  answers everything at once. Write each question
   to `QUESTIONS.md` before the designer answers and their answer after, then the `RULINGS.md` or
   `DECISIONS.md` entry it earns, then clear `RUN.md`'s `Open Gate:`
   (`orchestrate/questions.md` "The Two Non-Negotiables"). The answer is the designer's, given in this
@@ -235,22 +269,27 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   then post to `Shufflewick/BoardSmith` with `gh`, or show the designer the issue to post when `gh`
   cannot. If the filing blocked the chunk, ask whether to skip to the next independent chunk or stop;
   if it was worked around, continue.
-- **`context-ceiling`** — re-dispatch the same chunk. This is the ordinary case, not a problem, and
-  the designer does not need to hear about it.
 - **`stuck`** — stop the run. Tell the designer what the game cannot do yet and what would unblock
   it, in their terms, and write `Stop Reason: stuck`. Never retry a stuck chunk a third time, and
   never route around it by marking it verified.
 
 ## Step 5: Stopping
 
-Stop for exactly the four reasons `orchestrate/run-state.md` "Stop Conditions" lists — the designer
-said stop, a gate is unanswered, a dispatch is stuck, or this thread crossed its own context ceiling
-— and never for a vaguer "this is getting long." Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
+Stop for exactly the three reasons `orchestrate/run-state.md` "Stop Conditions" lists — the designer
+said stop, a gate is unanswered, or a dispatch is stuck — and never because the run is long or
+context "feels" full (`orchestrate/run-state.md` "No Context Stop"). Write `RUN.md`'s `Run Status:`/`Stop Reason:` last,
 after everything else has landed, and print the one command that resumes it: `/bs-build-game`.
 
 ## Step 6: The bot Opponent, Then Final Acceptance
 
 The run is not finished when the last rules chunk closes.
+
+**The animation chunk.** The sketch's animation chunk (`Milestone: animation`,
+`ingest/sketch-derivation.md` Section 3) comes after scoring and before the bot and final
+acceptance, and runs through `bs-build-chunk` like any other; its playtest is where the designer
+compares motion variants live (`build/playtest.md` "The Animation Playtest"). If the sketch has no
+animation chunk, insert one ahead of the bot chunk (or final acceptance) the same way as a missing
+bot chunk below, without asking: it is a mandated chunk.
 
 **The bot opponent.** When the sketch's bot-opponent chunk comes up, dispatch it against
 `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` instead of the chunk pipeline (same brief, same return
@@ -277,7 +316,7 @@ This skill delegates its heavyweight prose to:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — the per-chunk subagent contract:
   dispatch mechanics, the seven-field brief, the return shape
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/run-state.md` — `RUN.md`, the resume algorithm, the
-  stop conditions, the orchestrator's own context budget
+  stop conditions, why there is no context stop
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md` — the answer cache: ask once, record
   always, and the answered-questions digest every dispatch carries
 - `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md` — BoardSmith bug/feature reporting via

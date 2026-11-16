@@ -190,7 +190,9 @@ function countChecklistItems(chunkText: string): number {
 }
 
 const UI_VALUES = ['none', 'touches', 'major'];
-const MILESTONE_VALUES = ['none', 'core-loop', 'scoring', 'final-acceptance'];
+/** SKETCH.md's `- Milestone:` values. Every one but `none` is a designer playtest when the chunk has UI. */
+const MILESTONE_VALUES = ['none', 'core-loop', 'mid-build', 'scoring', 'animation', 'final-acceptance'] as const;
+export type Milestone = (typeof MILESTONE_VALUES)[number];
 
 function readUi(chunkText: string, slug: string): string {
   const body = stripHtmlComments(extractSection(chunkText, '## ui:') ?? '');
@@ -226,10 +228,10 @@ function readMilestone(sketch: string, slug: string): string {
   const range = sketchEntryRange(sketch, slug);
   const entry = range ? sketch.slice(range.start, range.end) : '';
   const milestone = /^- Milestone:\s*(\S+)\s*$/m.exec(entry)?.[1] ?? '';
-  if (MILESTONE_VALUES.includes(milestone)) return milestone;
+  if ((MILESTONE_VALUES as readonly string[]).includes(milestone)) return milestone;
   throw new Error(
-    `${SKETCH_MD} has no "### ${slug}" entry with a "- Milestone:" line reading none, core-loop, ` +
-      `scoring, or final-acceptance, so it is not known whether ${slug} needs a designer ` +
+    `${SKETCH_MD} has no "### ${slug}" entry with a "- Milestone:" line reading ` +
+      `${MILESTONE_VALUES.join(', ')}, so it is not known whether ${slug} needs a designer ` +
       `playtest. Fix that entry, then retry.`,
   );
 }
@@ -427,8 +429,8 @@ const WAIVERS_HEADER = `# Waivers
 <!-- MACHINE-OWNED. Written by \`boardsmith chunk-waiver\` and by nothing else. Each waiver is
      the designer's own decision to skip playtesting the chunks it names, until it expires. It
      covers exactly those chunks: \`boardsmith chunk-signoff --waiver\` refuses it for any other
-     chunk, and a decision about one chunk is never a precedent for the next. An ask gate cannot
-     be waived at all. -->
+     chunk, and a decision about one chunk is never a precedent for the next. A rules question
+     cannot be waived at all. -->
 `;
 
 function parseWaivers(text: string): Waiver[] {

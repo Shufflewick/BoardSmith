@@ -13,7 +13,7 @@ Dispatching each chunk into a **fresh context** moves that cost off the designer
 subagent burns its window, returns a small structured report, and dies. The orchestrator's own
 context grows by a few hundred tokens per chunk, so a whole game can be built in one sitting.
 
-This is the same sub-agent-offload lever `state-machine.md` "Context floor + ceiling" already names,
+This is the same sub-agent-offload lever `state-machine.md` "Session Handoff Seams" already names,
 applied one level up: there, steps offload to subagents inside a chunk; here, chunks offload to
 subagents inside a run.
 
@@ -144,9 +144,11 @@ report and log line the dispatch produces can be traced to its chunk. Then inclu
 5. **The no-designer rule** — the subagent has no channel to the designer and must never behave as
    if it does: **it never asks a question, never waits for approval, and never assumes approval.**
    When it reaches a human gate it stops there and returns the gate payload for the orchestrator to
-   put to the designer. It also never writes what a gate authorizes — no `Status: approved`, no
-   ruling, no verified checklist — until a later dispatch arrives carrying the designer's actual
-   answer (`build/ask.md` "Gate-Before-Write" holds unchanged; only who relays the answer changes).
+   put to the designer. It also never writes what a gate authorizes — no ruling, no verified
+   checklist — until a later dispatch arrives carrying the designer's actual answer (only who
+   relays the answer changes). The `ask` step is not such a gate: it records its interpretation
+   and defaults in `DECISIONS.md` and continues, and parks only on a rules question
+   (`build/ask.md`).
 6. **The filing rule** — a BoardSmith bug or a genuine library gap is recorded in `FILINGS.md` and
    returned in the report (`orchestrate/filings.md`); it is never patched into
    `node_modules/boardsmith` (`build/build.md` "Boundaries" rule 2), and it never silently becomes
@@ -174,15 +176,14 @@ already owns:
   - `gate` — work stopped at a human gate. Requires `gate`.
   - `filing` — work stopped because a library gap or bug blocks the chunk outright. Requires
     `filings`, and the chunk is left at its last persisted step.
-  - `context-ceiling` — the subagent hit its own context ceiling, persisted, and committed. Not an
-    error; the orchestrator re-dispatches the same chunk.
   - `stuck` — an automated step cannot be made to pass and `repair` could not fix it. Requires
     `stuckDetail`.
 - `stepsCompleted` — the pipeline step names it checked off this dispatch. For the run log only.
-- `gate` — present when `outcome: gate`. Carries `kind` (`ask` | `playtest` | `rules-adjudication` |
+- `gate` — present when `outcome: gate`. Carries `kind` (`rules-adjudication` | `playtest` |
   `repair-triage` | `tail-delta`), and `payload`: **the gate's full text exactly as the pipeline
-  composed it for the designer** — an `ask` gate's four parts, a `playtest` gate's numbered test
-  script, a triage's options. The orchestrator relays this payload; it does not rewrite it, and it
+  composed it for the designer** — a rules question's choices, a `playtest` gate's decision review
+  and numbered test script, a triage's options. A `rules-adjudication` gate parks only its chunk
+  (`build-game.md` Step 4); the others stop the run. The orchestrator relays this payload; it does not rewrite it, and it
   never composes a substitute from the chunk's files.
 - `questions` — every question this dispatch needs answered: each with `question` (designer
   language), `scope` (`this-chunk` | `cross-cutting` | `later-chunk`), and `options`. Written to

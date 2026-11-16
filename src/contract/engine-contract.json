@@ -1,5 +1,5 @@
 {
-  "revision": 377,
+  "revision": 378,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2959,6 +2959,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "Scaffolded a11y example tests pass every board prop, so a fresh boardsmith init type-checks; axe-core added as a BoardSmith devDependency."
+    },
+    {
+      "revision": 378,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The bs build flow runs without context stops: a design session with a five-direction gallery settles the look before chunk 1, the ask step no longer stops a run, a rules question parks only its chunk (boardsmith next-chunk), sketches place mid-build and animation checkpoints that chunk-signoff refuses to sign automatically, and the Slate tokens load first so a game's theme.css overrides them."
     }
   ]
 }

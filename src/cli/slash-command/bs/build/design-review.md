@@ -43,8 +43,9 @@ screenshots and judge the UI independently. The fast checks are done. This is wh
 
 {verifyResult}
 
-Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", "## Do / Don't" sections)
-and this chunk's own built UI code at {codeFilePaths}.
+Read fresh: DESIGN.md (its "## Chosen Design", "## Theme File", "## Component Recipes" and
+"## Do / Don't" sections), the theme file `src/ui/theme.css`, the signed-off mocks in
+`design/gallery/` it names, and this chunk's own built UI code at {codeFilePaths}.
 
 Serve → capture → kill: follow this file's "Dev-Host Lifecycle" sequence exactly — start the dev
 host with `npx boardsmith dev --no-open`, wait for `Ready! Press Ctrl+C to stop.` (never
@@ -151,16 +152,18 @@ combinations from there.
 
 Two review passes, both performed fresh (never from `## Interpretation`):
 
-1. **Token/craft review** — read `DESIGN.md`'s `## Theme Block`, `## Component Recipes`, and
-   `## Do / Don't` sections and check the 6 screenshots against them: no color literal outside
-   the Theme Block, component recipes followed, Do/Don't items honored.
+1. **Token/craft review** — read `DESIGN.md`'s `## Chosen Design`, `## Theme File`,
+   `## Component Recipes`, and `## Do / Don't` sections and check the 6 screenshots against them
+   and against the chosen mocks in `design/gallery/`: no color literal outside the theme file,
+   component recipes followed, the screen matches the signed-off design, the Action Panel is
+   beside the board, Do/Don't items honored.
 2. **Cohesion diff** — diff the 6 fresh shots against the previous chunk's stored shots in its
    own `chunks/<slug>/shots/` directory (a different `<slug>`, the most recently verified UI
    chunk) for visual drift: does this chunk's UI still look like it belongs to the same game as
    the last one, or has something silently drifted (spacing, type scale, accent color) without a
    corresponding `DESIGN.md` edit? A drift with no `DESIGN.md` edit backing it is itself a
    finding — `DESIGN.md`'s own header note states any re-styling edit to that file is itself a
-   chunk (the Restyle/Cutover Rule), so silent drift with no such edit is a defect, not a style
+   chunk (the Restyle Rule), so silent drift with no such edit is a defect, not a style
    choice.
 
    **First-UI-chunk branch — no prior shots to diff against.** If no previously-verified UI

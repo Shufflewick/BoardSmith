@@ -34,8 +34,8 @@ import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
  * that role, on the same line of work, goes one role up (mechanical, then bounded, then
  * judgement), and a second failure at the top goes to the designer, after whose answer a dispatch
  * records it in "Designer answer". Verify failures and review rounds count together. A dispatch
- * that does the failed work again without naming the failure is refused, at any role. A gate, a
- * context ceiling and a crash (a dispatch left `pending`) are not failures: the next dispatch of
+ * that does the failed work again without naming the failure is refused, at any role. A gate and a
+ * crash (a dispatch left `pending`) are not failures: the next dispatch of
  * the same work at the same role resumes it and is the same attempt, so a resumed retry is still
  * the one retry. The `judgement` and `second-opinion` readings of one slice are separate lines of
  * work: neither is a retry of the other.
@@ -83,7 +83,7 @@ const FINISHED = ['done', 'closed'];
  * starting fresh. `pending` is a dispatch that never returned (a crash), or a `build` whose check,
  * `test`'s verify, has not run yet.
  */
-const RESUMED = ['pending', 'gate', 'context-ceiling'];
+const RESUMED = ['pending', 'gate'];
 
 /**
  * The line of work a dispatch belongs to, the key a retry is found by. The `second-opinion`
@@ -298,7 +298,7 @@ class RunLogChecker {
     if (failure.answeredBy !== undefined) {
       return (
         `${d.name} retries ${failure.name}, but ${failure.name} was already answered by ${failure.answeredBy}. A failure is ` +
-        `retried once; a dispatch that carries ${failure.answeredBy}'s work on after a gate, a context ceiling or a crash ` +
+        `retried once; a dispatch that carries ${failure.answeredBy}'s work on after a gate or a crash ` +
         'writes "Retry of: none".'
       );
     }
@@ -328,7 +328,7 @@ class RunLogChecker {
     return undefined;
   }
 
-  /** A dispatch after a gate, context ceiling or crash of the same work, at the same role, is the attempt it resumes. */
+  /** A dispatch after a gate or a crash of the same work, at the same role, is the attempt it resumes. */
   private resume(d: Dispatch): void {
     const previous = this.latestAtRole.get(`${d.work} at ${d.role}`);
     if (previous === undefined || !RESUMED.includes(previous.outcome ?? '')) return;

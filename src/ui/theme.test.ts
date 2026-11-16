@@ -186,6 +186,20 @@ describe('applyTheme — base injection idempotence', () => {
     expect(elements).toHaveLength(1);
   });
 
+  it("puts the Slate tokens before a game's own stylesheet, so the game's theme.css overrides them (#1660)", () => {
+    const game = document.createElement('style');
+    game.textContent = ':root { --bsg-accent: #123456; }';
+    document.head.appendChild(game);
+    try {
+      applyTheme();
+      const tokens = document.getElementById('bsg-tokens')!;
+      // Equal-specificity rules cascade by document order, so the later game sheet wins.
+      expect(tokens.compareDocumentPosition(game) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    } finally {
+      game.remove();
+    }
+  });
+
   it('injected style contains the dark default token', () => {
     applyTheme();
     const style = document.getElementById('bsg-tokens') as HTMLStyleElement | null;

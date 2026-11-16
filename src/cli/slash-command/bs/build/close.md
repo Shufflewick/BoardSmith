@@ -244,8 +244,7 @@ chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated
 final-acceptance chunk that follows it — the generate-bot → final-acceptance progression is one
 continuous run, not two separately re-invoked sessions). The printed command exists **only** as
 the cold-resume/crash fallback for the case where a stop condition *does* fire at this boundary —
-the user said stop, context has crossed the 60% low-water mark, or an automated step is
-stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
+the user said stop, or an automated step is stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
 user see the next chunk (and say "stop") before its first gate, but silence means auto-advance, not
 a wait for re-invocation.
 
@@ -260,7 +259,8 @@ Once the delta is approved and the next chunk is proposed, this chunk's lifecycl
 its `Status` is `verified` (or `verified (user-waived)`), its `## Verified Commit Hash` is set,
 and SKETCH.md reflects the (possibly updated) tail. By default **the same session auto-advances**
 into a fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md`
-"Session Handoff Seams" → "Cross-chunk continuation"), stopping at its `ask` gate — or, if the
+"Session Handoff Seams" → "Cross-chunk continuation"), stopping only at a checkpoint or a rules
+question — or, if the
 sketch's `## Mandated Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md`
 instead — carrying the same auto-advance through a `bs-build-bot` chunk into the
 final-acceptance chunk that follows it. Only when a stop condition fires at the chunk boundary does

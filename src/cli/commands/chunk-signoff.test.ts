@@ -114,6 +114,16 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
     ).rejects.toThrow(/designer/i);
   });
 
+  it.each(['mid-build', 'animation'] as const)(
+    'refuses an automated sign-off for a %s checkpoint chunk with visible UI (#1660)',
+    async (milestone) => {
+      const project = await makeProject([{ slug: 'deal', ui: 'touches', milestone }]);
+      await expect(
+        signOff('deal', { project, automated: 'sim pass, tests/deal.test.ts', now: NOW }),
+      ).rejects.toThrow(/needs a designer playtest \(it is a milestone chunk with visible UI\)/);
+    },
+  );
+
   it('accepts an automated sign-off, with its evidence, for a chunk no designer playtests', async () => {
     const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
     await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });

@@ -46,9 +46,11 @@ has. In this exact order:
    its Outcome is still `pending`). During a parallel batch there can be several; also run
    `git worktree list` to see which chunk checkouts are still open
    (`orchestrate/chunk-dispatch.md` "Parallel Dispatch").
-2. **Read `SKETCH.md`'s `## Ordered Chunk List`** and derive the true build position exactly as
-   `build-chunk.md` Step 2 does: the first chunk whose derived status is neither `verified` nor
-   `verified (user-waived)`. This — not the journal — is what gets built next.
+2. **Read `SKETCH.md`'s `## Ordered Chunk List`** and derive the true build position with
+   `npx boardsmith next-chunk`: the first chunk that is not verified, not parked in `Open Gate:`,
+   and has everything it depends on verified (`build-game.md` Step 3). Chunk status comes from
+   `SKETCH.md`, never from the journal; a parked chunk is built again only once its question is
+   answered (step 5).
 3. **Reconcile.** If a chunk's run log disagrees with its `CHUNK.md` (its last entry still says
    `pending` for a chunk that has since closed, or says `closed` for one that is still `built`),
    the journal is behind: a dispatch returned but its Outcome was never written, or the run died
@@ -86,9 +88,11 @@ entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specif
   `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
   from another entry or type one; `boardsmith ledger-check` compares both times against the
   commits that recorded them and fails a time that could not have been read from the clock.
-- When a gate opens: set `Open Gate:` to that gate (during a parallel batch, add it to the list,
-  separated by `; `); when it is answered and recorded, set it back
-  to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
+- When a gate opens: set `Open Gate:` to that gate, or add it to the list, separated by `; `,
+  when another is already open (a parked rules question, or a parallel batch). Each entry starts
+  with the chunk's slug (`<slug> — <what>`), since `boardsmith next-chunk` reads the slugs to know
+  which chunks wait. When a gate is answered and recorded, remove it; with none left, set the line
+  back to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
   and never cleared before.
 - When the run stops: set `Run Status:` and `Stop Reason:` as the LAST writes of the run, after
   everything else has landed — the same status-last discipline `state-machine.md` "Write Order"
@@ -98,32 +102,26 @@ entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specif
 
 ## Stop Conditions
 
-An orchestrated run stops for exactly four reasons, and says which one in the designer's terms:
+An orchestrated run stops for exactly three reasons, and says which one in the designer's terms:
 
 1. **The designer said stop.** Immediately, at the next dispatch boundary — never mid-dispatch, so
    the chunk in flight persists its own step first. `Stop Reason: designer-stopped`.
-2. **A gate the designer has not answered.** The run put a question or a playtest to them and is
-   waiting. `Stop Reason: gate-open`, with `Open Gate:` naming it. This is the ordinary,
-   healthy stop.
+2. **A gate the designer has not answered, and nothing else to build.** A planned blocking
+   checkpoint (the design sign-off, a checkpoint playtest) or a rare escalation (a repair round-3
+   triage, a step failed twice at the top role) stops the run at once. A parked rules question
+   stops it only when `boardsmith next-chunk` exits non-zero: every remaining chunk waits on the
+   designer. `Stop Reason: gate-open`, with `Open Gate:` naming every open gate. This is the
+   ordinary, healthy stop.
 3. **A stuck dispatch.** A subagent returned `stuck` — a gate that keeps failing, a typecheck that
    will not go green, a subagent that died on a terminal error. `Stop Reason: stuck`, and the
    chunk's run log entry names what was stuck. Never retry a stuck dispatch a third time; surface it.
-4. **The orchestrator's own context ceiling.** `Stop Reason: context-ceiling`. See below.
 
-## Context: the Orchestrator's Own Budget
+## No Context Stop
 
-`state-machine.md`'s "Context floor + ceiling" (the ≥50% wind-down floor and the ~60% ceiling)
-governs a session that is doing the work. Under `/bs-build-game` the work happens in dispatched
-subagents, each of which gets a **fresh context window** and applies that floor/ceiling to itself:
-a subagent that crosses its own ceiling mid-chunk persists its step, commits, and returns
-`outcome: context-ceiling` — which the orchestrator treats as an ordinary re-dispatch, not a stop.
-That is the whole point of the orchestrated shape: the context limit stops being the thing that
-ends the designer's session.
-
-The orchestrator's own thread stays nearly flat by construction — it reads state files and
-structured returns, never rulebook slices, docs, or generated code (`build-game.md`
-"Context-Economics Hard Rule"). If it nonetheless crosses ~60% used, or the harness surfaces a
-context-low warning, it finishes the dispatch it is on, writes `RUN.md`, and stops with
-`Stop Reason: context-ceiling`, telling the designer the one command to run after `/clear`. Because
-resume is reconstructed entirely from `RUN.md` + `SKETCH.md` + `QUESTIONS.md`, that restart costs
-the designer nothing but the keystrokes — no re-answered questions, no re-built chunks.
+A run never stops because of context. Each chunk is built by a subagent with a **fresh context
+window**, the harness compacts the orchestrator's own context as it goes, and the orchestrator
+reads only state files and structured returns, never rulebook slices, docs, or generated code
+(`build-game.md` "Context-Economics Hard Rule"). A `/clear` or a crash is still possible, and costs
+nothing but the keystrokes: resume is reconstructed entirely from `RUN.md` + `SKETCH.md` +
+`QUESTIONS.md` and each chunk's per-step saves in `CHUNK.md`, so no question is re-answered and no
+chunk is re-built.

@@ -189,8 +189,8 @@ summary fields. For each confirmed section:
    in `ingest-rules.md` writes to `rulebook/00-visual-survey.md` — the survey is built
    exclusively from these returned observations, exactly parallel to how `rulebook/INDEX.md`
    is built from `citedTerms[]`; the orchestrator never looks at the rulebook's visuals
-   itself. The file is the durable handoff to the first UI chunk's design `ask`, which runs
-   in a later, fresh-context session.
+   itself. The file is the durable handoff to the design session
+   (`ingest/design-session.md`), which may run in a later, fresh-context session.
 
 ## Variant / Optional / Advanced Rules
 

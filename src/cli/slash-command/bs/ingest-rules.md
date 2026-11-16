@@ -60,20 +60,6 @@ re-reading a slice file the orchestrator just had a subagent write. This applies
 below; `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md` restates it because that is the step where the temptation to
 "double-check by reading the slice" is strongest.
 
-## Context Floor + Ceiling (SKILLAUTO-06)
-
-This session obeys the same two numbers every other `bs-` skill does — see
-`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams" → "Context floor +
-ceiling" for the full rule; do not restate it beyond this summary. **≥50% floor, ~60% ceiling.**
-Below 50% used, this session never winds down, never wraps up, and never suggests a `/clear` —
-"the sketch is done, this feels like a clean resume point" is exactly the premature bail the floor
-forbids. Stopping at 24% or 40% because the work ahead "feels big" is a bug, not prudence. The one
-authoritative override is a real harness context-low warning: if the harness itself signals below
-the floor, obey it immediately, persist, and stop.
-
-Read the harness's actual context-usage percentage against these numbers. Never stop on a vague
-"this is getting long" hunch that ignores the real figure.
-
 ## Where Everything This Skill Writes Goes
 
 Every artifact this skill produces — `BRIEF.md`, `SKETCH.md`, `ASSETS.md`, `DECISIONS.md`,
@@ -250,11 +236,11 @@ create the file.
    interview path, whatever visual description the designer volunteers stands in for
    `visualEvidence[]`. **Written to `rulebook/00-visual-survey.md`** in this step, alongside
    INDEX.md and ASSETS.md — it is factual evidence, not gated sketch state, so pre-approval
-   writing is consistent with Step 7's carve-out. Its consumer is the first UI chunk's `ask`
-   step — a later, fresh-context session — so an in-context-only survey would be data loss:
-   the evidence the design ask depends on would be gone the moment this session ends. The
-   actual design direction is decided there, at the first UI chunk's `ask` step, against
-   `DESIGN.md`.
+   writing is consistent with Step 7's carve-out. Its consumer is the design session
+   (`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`), which runs after the sketch is
+   approved, possibly in a later session — so an in-context-only survey would be data loss: the
+   evidence the design session starts from would be gone the moment this session ends. The
+   actual design is decided there, with the designer, and recorded in `DESIGN.md`.
 7. **Player counts** — min/max player counts and any per-count setup differences, recorded at
    sketch level.
 
@@ -276,25 +262,26 @@ The result of this step is an in-conversation **proposal** only — do **not** w
 yet. The sketch is proposed, not imposed: the file is written exactly once, at Step 7, after
 the Step 6 approval gate. A rejection at Step 6 must leave no sketch state on disk to undo.
 
-## Step 5: UI Strategy (INGEST-06)
+## Step 5: Place the Checkpoints
 
-Made **with the user**, at ingest. The decision lands in the proposed sketch's `## UI Strategy`
-section — the skeleton for which comes from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md`, where that section
-already exists (fill it, do not invent a new field, and never edit the shipped template itself)
-— and is written to the game project's `SKETCH.md` at Step 7 with the rest of the approved
-sketch. Two values:
+The proposed sketch carries the run's planned human checkpoints, so the designer approves where
+the run will stop for them along with the chunks themselves: the core loop, the mid-build
+checkpoints, scoring, the animation chunk and final acceptance, each placed and flagged per
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md` Section 3 (its "Mid-Build
+Checkpoints" place one after the first member of each major mechanic family lands, at most about
+one per quarter of the chunk list). The design session that settles the game's look comes before
+all of them: the proposed sketch's `## Design Session` section reads `pending`.
 
-- **`custom-from-chunk-1`** (default) — the playtest artifact is always the real product surface.
-- **`autoui-with-cutover`** — an AutoUI scaffold with a scheduled custom-UI cutover chunk named
-  now. Any later cutover explicitly flips **all** previously verified chunks back to `built` and
-  re-opens their test scripts (see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Restyle/Cutover Rule") — there is no
-  silent "we'll make it custom later."
+There is no UI strategy to choose. Every game builds its custom board from the first chunk, from
+the design the designer signed off, with the Action Panel always beside it.
 
 ## Step 6: Approval Gate
 
 Present the proposed sketch: estimated chunk count and rough per-chunk wall time
 (expectation-setting), with only the next 2-3 chunks detailed — the tail stays sketch-level per
-the lazy-tail rule. The user edits, this skill revises, the user approves. **Negotiation
+the lazy-tail rule. Name each planned checkpoint (Step 5) and why it falls where it does, and say
+that the design session comes first and that the run stops only at those checkpoints and for
+rules questions it cannot settle around. The user edits, this skill revises, the user approves. **Negotiation
 posture:** the user's ordering wins unless a hard dependency is violated, in which case name the
 dependency concretely and propose the minimal prerequisite. Do not proceed to writing final
 files until the user has explicitly approved.
@@ -305,8 +292,8 @@ This is the **single point** where sketch state is written — no earlier step w
 or any `CHUNK.md`. Only after Step 6's explicit approval:
 
 - Copy `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` into the game project as `SKETCH.md` and fill it with the
-  approved content from Steps 4-6 (ordered chunk list, UI Strategy, Variants (deferred), player
-  counts). Copy-and-fill is one operation — never copy a blank skeleton over a file that
+  approved content from Steps 4-6 (ordered chunk list with its checkpoints, the `## Design
+  Session` status `pending`, Variants (deferred), player counts). Copy-and-fill is one operation — never copy a blank skeleton over a file that
   already carries content.
 - Create `chunks/<slug>/CHUNK.md` from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` for the detailed next 2-3
   chunks only (tail entries get no directory and no stub — see `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md`).
@@ -319,9 +306,8 @@ or any `CHUNK.md`. Only after Step 6's explicit approval:
   (any ask/playtest gate, and build/close respectively), and seeding them now means those later
   steps append to an existing ledger instead of deciding whether to create one.
 - Do **NOT** create `DESIGN.md`. Per `${CLAUDE_SKILL_DIR}/../bs-shared/templates/DESIGN.template.md`'s own header, it is written
-  at the FIRST UI chunk's `ask` step, not at ingest — there is no visual identity to decide
-  until a UI chunk needs one, and the file's very existence is the signal `/bs-build-chunk`
-  uses to know the identity decision was made. Creating it blank here breaks that trigger.
+  by the design session when the designer signs off, and the file's very existence is the signal
+  that no chunk may be built before it. Creating it blank here breaks that signal.
 - `ASSETS.md` and `rulebook/00-visual-survey.md` were already written at Step 3 (they record
   factual component inventory and visual evidence, not gated sketch state) — do not re-copy or
   re-write them here.
@@ -338,7 +324,8 @@ structure.
 **The ingest→build seam is a continuation seam, not a session terminus** — the same rule
 `state-machine.md` gives the chunk→chunk seam ("Cross-chunk continuation") applies here. Once the
 files are written, confirm in a sentence that everything is saved, then **auto-advance straight into
-the build in the same session**, stopping at the first chunk's first human gate (its `ask` approval).
+the build in the same session**, which opens with the design session
+(`/bs-build-game` Step 1b) and stops at its sign-off, the run's first human gate.
 Do not end the turn telling the designer to `/clear` and re-invoke.
 
 Continue by **reading `${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and following it from its
@@ -348,10 +335,9 @@ Read the sibling instructions and execute them in this same turn, exactly as `/b
 off to this file — never re-dispatch it as a separate skill invocation. If the designer has said they
 want one chunk only, read `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` instead.
 
-Stop at this seam ONLY if one of the state-machine's three stop conditions actually holds: the
-designer said stop, an automated step is stuck, or context is at/above the ~60% ceiling (or the
-harness surfaced a real context-low warning) — **and never below the ≥50% floor** on a
-self-assessed hunch, per "Context Floor + Ceiling" above. If a stop condition does hold, print the
+Stop at this seam ONLY if one of the state-machine's stop conditions actually holds: the
+designer said stop, or an automated step is stuck. There is no context stop (`state-machine.md`
+"Session Handoff Seams" → "There is no context stop"). If a stop condition does hold, print the
 exact next command (`/bs-build-game`, or `/bs-build-chunk` for a single chunk) as the cold-resume
 path and say what it will pick up.
 

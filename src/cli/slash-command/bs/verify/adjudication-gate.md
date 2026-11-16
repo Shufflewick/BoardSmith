@@ -51,7 +51,7 @@ question to the designer six times over — training them to click through it ra
 
 ## 4. Wait
 
-Copy `build/ask.md`'s "Gate-Before-Write" discipline in this file's own words: do **not** write
+Keep the gate-before-write discipline `build/ask.md` applies to a ruling: do **not** write
 anything durable — not a `RULINGS.md` entry, not a rules-staleness marker, not an impact-map
 record — until the designer has answered. Presenting is not answering; only an explicit answer
 authorizes the write.

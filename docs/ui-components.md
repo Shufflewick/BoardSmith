@@ -1873,8 +1873,33 @@ export async function sortWithAnimation(containerRef: Ref<HTMLElement | null>, s
 
 ## Theming
 
-`applyTheme()` is the only theming knob. It injects the Slate token stylesheet (once, idempotently)
-and writes your overrides as inline custom properties on `<html>`.
+A game themes itself in one of two ways: a `src/ui/theme.css` of `--bsg-*` custom properties, or
+`applyTheme()`. `applyTheme()` injects the Slate token stylesheet (once, idempotently) as the
+first stylesheet in `<head>`, and writes any overrides you pass it as inline custom properties on
+`<html>`.
+
+### A game's `theme.css`
+
+A stylesheet the game imports (`import './theme.css'` in `src/ui/index.ts`) comes after the Slate
+tokens in `<head>`, so at equal specificity it wins. Give each scheme its own values by using the
+same four selectors Slate does, and both themes stay yours whatever the OS or the host forces:
+
+```css
+/* Dark, the default */
+:root { --bsg-accent: #e0b04a; --bsg-bg: #17130f; }
+/* Light when the OS asks for it and the host has not pinned a scheme */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) { --bsg-accent: #8a5a00; --bsg-bg: #fbf6ec; }
+}
+html[data-theme="light"] { --bsg-accent: #8a5a00; --bsg-bg: #fbf6ec; }
+html[data-theme="dark"] { --bsg-accent: #e0b04a; --bsg-bg: #17130f; }
+```
+
+The game's own design tokens (a suit colour, a card back) live in the same file under a game
+prefix such as `--game-*`. The bs skills' design session writes this file from the design the
+designer signed off. A host's `init.theme` still overrides it, through `applyTheme()`.
+
+### `applyTheme()`
 
 <!-- typecheck: game src/ui/theme.ts -->
 ```typescript

@@ -31,6 +31,7 @@ import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
 import { ledgerCheckCommand } from './commands/ledger-check.js';
 import { parallelCheckCommand } from './commands/parallel-check.js';
+import { nextChunkCommand } from './commands/next-chunk.js';
 import { chunkMergeCommand } from './commands/chunk-merge.js';
 import {
   verifyRunInitCommand,
@@ -534,6 +535,15 @@ export function createProgram(): Command {
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(parallelCheckCommand);
+
+  // #1660: a chunk parked on a designer's answer does not stop a run while a chunk that does not
+  // build on it remains; `next-chunk` names the chunks that may be built now.
+  program
+    .command('next-chunk')
+    .description('Name the chunks a run may build now: not verified, not waiting on the designer in RUN.md, and with everything they depend on verified')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(nextChunkCommand);
 
   program
     .command('chunk-merge <slug>')

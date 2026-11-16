@@ -107,8 +107,8 @@ This is what `boardsmith verify --chunk` found for the commit under review:
 
 {verifyResult}
 
-Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", and "## Do / Don't"
-sections) and the finished game's UI code.
+Read fresh: DESIGN.md (its "## Chosen Design", "## Theme File", "## Component Recipes", and
+"## Do / Don't" sections), the theme file `src/ui/theme.css`, and the finished game's UI code.
 
 Serve → capture → kill: start the dev host with `npx boardsmith dev --no-open`, wait for the
 exact string `Ready! Press Ctrl+C to stop.` (never `networkidle` — the dev host holds an open
@@ -164,11 +164,11 @@ capture → kill across 3 breakpoints × 2 themes + end-to-end keyboard drag-dro
 checks (VoiceOver + colorblind), and a fix-or-refute repair loop. The final-acceptance chunk
 therefore carries an **extra** handoff seam that ordinary chunks do not, between `final-acceptance`
 and `playtest`. Under the current stopping policy (`state-machine.md` "Session Handoff Seams") that
-seam is a **resume checkpoint, not a mandatory stop**: if context holds, the same session flows from
+seam is a **resume checkpoint, not a mandatory stop**: the same session flows from
 `final-acceptance` straight into the `{playtest, revise, close}` gate and stops at the human
 `playtest` gate that follows, exactly like any other chunk. The seam earns its "extra" status
-because `final-acceptance` is the heaviest step and thus the likeliest place a harness context-low
-warning fires; its sub-parts persist individually (below) so that if the session does yield here, a
+because `final-acceptance` is the heaviest step and thus the likeliest place a crash or a `/clear`
+lands; its sub-parts persist individually (below) so that if the session does end here, a
 resume re-enters mid-pass rather than re-dispatching the whole step.
 
 **Persist sub-parts as they land**, so a mid-pass crash resumes mid-pass rather than re-running the

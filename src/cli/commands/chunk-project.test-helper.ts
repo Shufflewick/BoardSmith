@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { SIGNOFF_HEADING } from './chunk-signoff.js';
+import { type Milestone, SIGNOFF_HEADING } from './chunk-signoff.js';
 import { skillMarkdown } from '../slash-command/skill-markdown.test-helper.js';
 
 /**
@@ -13,7 +13,7 @@ export interface ChunkSpec {
   slug: string;
   status?: string;
   ui?: 'none' | 'touches' | 'major';
-  milestone?: 'none' | 'core-loop' | 'scoring' | 'final-acceptance';
+  milestone?: Milestone;
   checklist?: string[];
   /** Build Manifest rows: project-relative path to file contents, written to disk too. */
   manifest?: Record<string, string>;
