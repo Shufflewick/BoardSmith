@@ -173,6 +173,27 @@ function reportMissingAnchor(el: Element): void {
 }
 
 /**
+ * Each element `handler` captured that is still in `container`, with where it
+ * was and where it is now. An element captured but not re-found is a transient
+ * render state, not a missing-anchor error, so it is skipped silently.
+ */
+function forEachCaptured(
+  handler: ContainerHandler,
+  container: HTMLElement,
+  visit: (el: Element, id: string, oldRect: DOMRect, newRect: DOMRect) => void,
+): void {
+  container.querySelectorAll(handler.selector).forEach((el) => {
+    const id = getElementId(el);
+    if (!id) {
+      reportMissingAnchor(el);
+      return;
+    }
+    const oldRect = handler.positions.get(id);
+    if (oldRect) visit(el, id, oldRect, el.getBoundingClientRect());
+  });
+}
+
+/**
  * Internal handler for a single container's FLIP animations
  */
 interface ContainerHandler {
@@ -281,18 +302,7 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         const container = handler.containerRef?.value;
         if (container && handler.positions.size > 0) {
           const containerLabel = getElementId(container) ?? handler.selector;
-          const elements = container.querySelectorAll(handler.selector);
-          elements.forEach((el) => {
-            const id = getElementId(el);
-            if (!id) {
-              reportMissingAnchor(el);
-              return;
-            }
-
-            const oldRect = handler.positions.get(id);
-            if (!oldRect) return; // not previously captured => not a moved element
-
-            const newRect = el.getBoundingClientRect();
+          forEachCaptured(handler, container, (_el, id, oldRect, newRect) => {
             recordTrace({
               kind: 'flip',
               element: id,
@@ -328,22 +338,8 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         continue;
       }
 
-      const elements = container.querySelectorAll(handler.selector);
       const zoom = boardZoomAt(container);
-
-      elements.forEach((el) => {
-        const id = getElementId(el);
-        if (!id) {
-          reportMissingAnchor(el);
-          return;
-        }
-
-        // Per-frame re-check: an element captured but not re-found here is a
-        // transient render state, not a missing-anchor error — stays a silent skip.
-        const oldRect = handler.positions.get(id);
-        if (!oldRect) return;
-
-        const newRect = el.getBoundingClientRect();
+      forEachCaptured(handler, container, (el, _id, oldRect, newRect) => {
         const deltaX = oldRect.left - newRect.left;
         const deltaY = oldRect.top - newRect.top;
 
@@ -480,8 +476,8 @@ export function createFLIPSnapshot(
       }
 
       const animations: Animation[] = [];
-      const elements = containerRef.value.querySelectorAll(selector);
       const zoom = boardZoomAt(containerRef.value);
+      const elements = containerRef.value.querySelectorAll(selector);
 
       elements.forEach((el) => {
         const id = getElementId(el);

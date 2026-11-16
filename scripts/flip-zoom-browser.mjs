@@ -11,7 +11,7 @@
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/flip-zoom-browser.mjs`.
  */
-import { assert, check, onTablePage, runBrowserRegression, summarise } from './browser-harness.mjs';
+import { assert, check, onDesktopTable, runBrowserRegression, summarise } from './browser-harness.mjs';
 
 // The animations are long and linear, so the first frame sampled is still at their start.
 const MOVE_BOARD = `<template>
@@ -55,6 +55,13 @@ import Move from './components/Move.vue';
 export default defineGameUIs({ Move: defaultUI(Move) });
 `;
 
+/** Set the board magnifier from the controls menu, then close the menu. */
+async function zoomTo(frame, level) {
+  await frame.getByRole('button', { name: 'Game controls' }).click();
+  await frame.getByRole('slider', { name: 'Zoom' }).fill(level);
+  await frame.getByRole('slider', { name: 'Zoom' }).press('Escape');
+}
+
 /** The piece's screen left, then its screen left on the next animation frame after `click`. */
 const leftAcrossMove = (frame, id, button) =>
   frame.locator('body').evaluate(
@@ -74,29 +81,21 @@ const leftAcrossMove = (frame, id, button) =>
 await runBrowserRegression(
   { script: 'flip-zoom-browser.mjs', engines: ['chromium', 'webkit'], table: { files: { 'src/ui/uis.ts': UIS, 'src/ui/components/Move.vue': MOVE_BOARD } } },
   async ({ launch, hostUrl }) => {
-    const browser = await launch();
-    try {
-      await onTablePage(browser, hostUrl, { width: 1440, height: 900 }, async (_page, frame) => {
-        await frame.getByRole('button', { name: 'Game controls' }).click();
-        await frame.getByRole('slider', { name: 'Zoom' }).fill('2');
-        await frame.getByRole('slider', { name: 'Zoom' }).press('Escape');
-        await frame.locator('.move-a').waitFor();
+    await onDesktopTable(launch, hostUrl, async (_page, frame) => {
+      await zoomTo(frame, '2');
 
-        const flip = await leftAcrossMove(frame, 'a', '.move-a');
-        await check('at 200% zoom, a piece useFLIP animates starts where it was', async () => {
-          assert(Math.abs(flip.first - flip.before) <= 1,
-            `the piece was at ${flip.before}px and its animation started at ${flip.first}px`);
-        });
-
-        const snapshot = await leftAcrossMove(frame, 'b', '.move-b');
-        await check('at 200% zoom, a piece createFLIPSnapshot animates starts where it was', async () => {
-          assert(Math.abs(snapshot.first - snapshot.before) <= 1,
-            `the piece was at ${snapshot.before}px and its animation started at ${snapshot.first}px`);
-        });
+      const flip = await leftAcrossMove(frame, 'a', '.move-a');
+      await check('at 200% zoom, a piece useFLIP animates starts where it was', async () => {
+        assert(Math.abs(flip.first - flip.before) <= 1,
+          `the piece was at ${flip.before}px and its animation started at ${flip.first}px`);
       });
-    } finally {
-      await browser.close();
-    }
+
+      const snapshot = await leftAcrossMove(frame, 'b', '.move-b');
+      await check('at 200% zoom, a piece createFLIPSnapshot animates starts where it was', async () => {
+        assert(Math.abs(snapshot.first - snapshot.before) <= 1,
+          `the piece was at ${snapshot.before}px and its animation started at ${snapshot.first}px`);
+      });
+    });
     return summarise('for a FLIP under the board zoom');
   },
 );
