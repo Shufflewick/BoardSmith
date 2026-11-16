@@ -1,5 +1,5 @@
 {
-  "revision": 393,
+  "revision": 394,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3087,6 +3087,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "The Action Panel on a selected thing draws a group named as the thing's own type as its contents (#1653)"
+    },
+    {
+      "revision": 394,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "The Action Panel asks which row a player meant when a verb is started on a thing its first pick lists more than once, instead of filling the first (#1654)"
     }
   ]
 }
