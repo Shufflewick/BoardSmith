@@ -1,5 +1,5 @@
 {
-  "revision": 400,
+  "revision": 401,
   "surfaceHash": "95f20f8fed1973e1",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -3143,6 +3143,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "A smoke spec's inputs may give a list of values for a text or number field, which the walk tries in order, the next each time the game refuses the action (#1663)."
+    },
+    {
+      "revision": 401,
+      "date": "2026-11-16",
+      "surfaceHash": "95f20f8fed1973e1",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "A flying card scales itself by the board zoom, so it is the size of the cards it flies between at any magnifier level (#1664)."
     }
   ]
 }
