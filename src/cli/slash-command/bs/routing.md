@@ -53,9 +53,12 @@ summaries, and the step that says what to write and in what order (the skill fil
 resolved to an absolute path, for the agent to read). The agent writes, reads the clock itself for
 every time it writes, records its own dispatch in the run log as its first entry (no one can
 record it before launch), in the log of the work package it writes for (a chunk's slug,
-`ingest-rules` or `verify-game`), commits, and returns the paths and the commit. Writes that fall at one
+`ingest-rules` or `verify-game`), commits, and returns the paths and the commit. It commits on the
+checked-out branch, the one for the piece of work it records, and a piece's last record lands that
+branch on `main` (`state-machine.md` "Branches and Landing"). Writes that fall at one
 point go in one record: a return's outcomes, the answers a gate earned and the next dispatch's
-entry with the lock refresh are one dispatch, not three. A record that comes back wrong is a
+entry with the lock refresh are one dispatch, not three, except that what belongs to the next
+piece of work goes in that piece's first record, on its own branch, once the last one has landed. A record that comes back wrong is a
 failed dispatch, sent back with what is wrong (below); the session never patches it.
 
 ## Which Agent a Role Is Dispatched As

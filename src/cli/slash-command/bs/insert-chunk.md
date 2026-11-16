@@ -26,7 +26,10 @@ designer agreed the reshape, so the agent skips them, runs operations (a) to (e)
 writes; if it finds anything that needs the designer (a dependency violation, a mandated chunk the
 reshape would break, a live lock that appeared since), it writes nothing and returns that. This
 session relays what it returns and prints the Close step's next command. Dispatched (by
-`/bs-build-game`, or by this hand-off), the agent does everything below itself.
+`/bs-build-game`, or by this hand-off), the agent does everything below itself. A reshape is one
+piece of work, on the `insert-chunk-<slug>` branch the dispatching session makes from `main`
+before the dispatch, and the agent lands it at Close (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`
+"Branches and Landing").
 
 ## How to Talk to the Designer
 
@@ -179,7 +182,8 @@ write has landed — this is what keeps every intermediate state valid for a col
 
 ## Close
 
-After all operations land, print the exact next command: most reshapes end with
+After all operations land, commit them and land the `insert-chunk-<slug>` branch on `main`
+(`state-machine.md` "Branches and Landing"). Then print the exact next command: most reshapes end with
 `/bs-build-chunk` (to continue building), but if more reshaping is queued in the same
 conversation, the next command is another `/bs-insert-chunk`.
 

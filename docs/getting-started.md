@@ -41,6 +41,7 @@ This creates a new game project with the following structure:
 
 ```
 my-game/
+├── .agent-policy.json       # The merge's checks (`agent-policy merge`); the scaffold commit is on main
 ├── boardsmith.json          # Game configuration
 ├── package.json             # Dependencies
 ├── tsconfig.json            # TypeScript config

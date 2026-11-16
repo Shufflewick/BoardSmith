@@ -81,7 +81,9 @@ five; the last two are dispatches it is never asked about:
 
 1. **Check.** Run `boardsmith parallel-check <slug> <slug> [...]` from the main checkout. A non-zero
    exit ends the attempt: dispatch the first of them alone and continue in order.
-2. **One worktree per chunk.** From the main checkout, for each chunk:
+2. **One worktree per chunk.** The main checkout is on the batch's own `batch-<slug>` branch, named
+   after its first chunk and made from `main` (`state-machine.md` "Branches and Landing"), so the
+   lock record, every `chunk-merge` and the cross-chunk audit commit there. From the main checkout, for each chunk:
    `git worktree add .boardsmith/worktrees/<slug> -b chunk/<slug>`. A record sets `SKETCH.md`'s
    session lock to the batch (`state-machine.md` "Session Lock", the comma-separated form) and
    commits it BEFORE the worktrees are created, so every branch starts from it.
@@ -121,8 +123,9 @@ five; the last two are dispatches it is never asked about:
 6. **Clean up.** After a chunk merges, `git worktree remove .boardsmith/worktrees/<slug>` and
    `git branch -d chunk/<slug>`. Removing the worktree loses nothing review-gate needs:
    `chunk-merge` has already copied the chunk's verify results (`.boardsmith/verify/`) into the
-   main checkout, where the cross-chunk lens's review-gate finds each review round's result. When the last chunk of the batch has merged, the next record sets the
-   session lock back to the next chunk the run dispatches.
+   main checkout, where the cross-chunk lens's review-gate finds each review round's result. When the last chunk of the batch has merged and any cross-chunk audit
+   has ruled, the next record sets the session lock back to the next chunk the run dispatches and
+   lands the `batch-<slug>` branch on `main`.
 
 ## The Brief (every field required)
 

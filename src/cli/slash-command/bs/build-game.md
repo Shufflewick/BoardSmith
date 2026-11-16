@@ -91,7 +91,10 @@ makes that write, as `routing.md` says: bookkeeping (a run log, `RUN.md`, `QUEST
 `FILINGS.md`, the lock) as the `mechanical` role's agent, and a record carrying the rules or a
 decision (`RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, the sketch beyond its lock) as the
 `judgement` role's agent. Writes that fall at one point go in one record, which runs in the
-checkout they belong in: a chunk's own worktree for its run log and its gate answers.
+checkout they belong in: a chunk's own worktree for its run log and its gate answers. In the main
+checkout it commits on the branch of the piece of work it belongs to, or of the piece the run does
+next, which this session makes first (`state-machine.md` "Branches and Landing"); `RUN.md`'s
+creation at Step 1 is the first record of the design session or of the first chunk.
 
 ## Who Answers a Gate
 
@@ -172,7 +175,9 @@ If `DESIGN.md` does not exist, the game's look has not been signed off, and no c
 yet. Run the design session now, in this thread with the designer, per
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`: five directions as throwaway mocks
 in one gallery, the designer mixes, matches and iterates, the chosen design passes the contrast
-and colorblind checks, and the designer signs it off. The mocks and the checks are dispatched; the
+and colorblind checks, and the designer signs it off. It is one piece of work, on the
+`design-session` branch, and its sign-off record lands it (`state-machine.md` "Branches and
+Landing"). The mocks and the checks are dispatched; the
 conversation and the sign-off happen here. If the designer is not here to sign off, the session
 stays open: write `RUN.md`'s `Open Gate:` as `design-session — sign off the game's design`, and
 stop with `Stop Reason: gate-open`. When `DESIGN.md` exists, go on.
@@ -217,7 +222,10 @@ Loop until there is nothing left to build or a stop condition fires
    graph and shares no rulebook section; build it as `orchestrate/chunk-dispatch.md` "Parallel
    Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
    built alone in the main checkout. The check decides, never a judgement call made here.
-4. **Record, then dispatch.** One `record dispatch` (`Work: record dispatch`), as the
+4. **Branch, record, then dispatch.** A chunk built in the main checkout is one piece of work, on
+   its own `chunk-<slug>` branch, and a parallel batch is one on its `batch-<slug>` branch: unless
+   that branch is already checked out, make it from `main` first (`state-machine.md` "Branches and
+   Landing"). One `record dispatch` (`Work: record dispatch`), as the
    `mechanical` role's agent, refreshes the lock and appends the `### Dispatch N` entry to each
    chunk's own `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
    (`orchestrate/run-state.md` "Writing It"), together with anything the last return left to
@@ -265,12 +273,17 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
-  subagent's `designerSummary`, record any `assetsRequested` and `filings`, and continue the loop.
+  subagent's `designerSummary`, and dispatch the record that fills its run log entry and records
+  any `assetsRequested` and `filings`. For a chunk built in the main checkout, that record lands
+  the chunk on `main` (`state-machine.md` "Branches and Landing"); a chunk of a batch lands with
+  its batch. Then continue the loop.
   No re-invocation prompt, no handoff: continuing is the default.
 - **`gate` with `kind: rules-adjudication`** — park the chunk: a `record gate` dispatch, as the
   `mechanical` role's agent, writes its pending question to `QUESTIONS.md` if the subagent has
-  not and adds `<slug> — <the question, in the designer's terms>` to `RUN.md`'s `Open Gate:`; then
-  continue the loop with the next chunk `next-chunk` names. If the designer is here, put the
+  not and adds `<slug> — <the question, in the designer's terms>` to `RUN.md`'s `Open Gate:`, and
+  for a chunk built in the main checkout lands it as it stands (`state-machine.md` "Branches and
+  Landing", "A piece that waits on the designer"); then continue the loop with the next chunk
+  `next-chunk` names. If the designer is here, put the
   question to them now, in the same message as whatever else the run is doing, and when they
   answer, a `record gate` dispatch as the `judgement` role's agent writes their answer and the
   ruling and clears the chunk from `Open Gate:`; then re-dispatch it with the answer in its

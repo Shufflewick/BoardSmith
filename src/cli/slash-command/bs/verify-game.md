@@ -169,6 +169,10 @@ resume path. Any other live, non-stale lock warns the user instead of silently p
 older than 24 hours is reported as stale and the user confirms clearing it before this session
 has a record take it. A clean close (Step 9, below) releases the line to exactly `none`.
 
+The whole pass, the repairs it dispatches included, is one piece of work on its own branch. Make
+it from `main` before the first record (`git switch -c verify-game main`), unless a
+resumed pass already has it checked out (`state-machine.md` "Branches and Landing").
+
 ## Step 1: Source Resolution (VERIFY-01)
 
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/source-resolution.md` for the full gated
@@ -408,7 +412,8 @@ pair classified, the pass closes:
   every dispatch this pass made; a refusal goes to a record with what it names, before the commit.
 - Commit per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Git Protocol").
 - Release the session lock: a record rewrites `Session Lock:` in `SKETCH.md` to exactly `none`,
-  the same clean-close release the chunk-build lock already uses, and commits it.
+  the same clean-close release the chunk-build lock already uses, commits it, and lands the
+  pass's branch on `main` (`state-machine.md` "Branches and Landing").
 
 **In source-free mode**, this Close is reached from `verify/source-free-mode.md`'s own Close
 section rather than from Steps 2-6 completing, the recorded scope is `code-conformance-only` with
