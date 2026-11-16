@@ -111,12 +111,11 @@ const pieceFallbackColor = computed(() => {
   return 'var(--bsg-ink-3)';
 });
 
-// ── Details tip: where the row has no room, hover, tap or keyboard focus of the
-// piece or the cell it stands on shows its name and attributes (#1667) ──
+// ── Details tip: where the row has no room, hover, tap or keyboard focus shows
+// its name and attributes; a board cell's focus is GridBoardRenderer's (#1667) ──
 const pieceEl = ref<HTMLElement | null>(null);
 const tipOpen = ref(false);
 const tipId = `bs-piece-tip-${useId()}`;
-let focusTarget: HTMLElement | null = null;
 
 function openTip() {
   if (props.detailsBeside || tipOpen.value) return;
@@ -148,20 +147,9 @@ function onBlur() {
   if (isKeyboardModality()) closeTip();
 }
 
-onMounted(() => {
-  if (props.detailsBeside) return;
-  trackInputModality(pieceEl.value!.ownerDocument);
-  // On a board the cell holds keyboard focus, not the piece on it.
-  focusTarget = pieceEl.value!.closest<HTMLElement>('[role="gridcell"]') ?? pieceEl.value;
-  focusTarget!.addEventListener('focus', onFocus);
-  focusTarget!.addEventListener('blur', onBlur);
-});
+onMounted(() => trackInputModality(pieceEl.value!.ownerDocument));
 
-onBeforeUnmount(() => {
-  focusTarget?.removeEventListener('focus', onFocus);
-  focusTarget?.removeEventListener('blur', onBlur);
-  closeTip();
-});
+onBeforeUnmount(closeTip);
 
 // Reset the reveal when the resolved src changes so a piece reused for a
 // different asset re-guards (mirrors CardRenderer's src-watch).
@@ -199,8 +187,10 @@ watch(effectivePieceImage, () => {
     @pointerdown="handlePointerdown"
     @pointerenter="onPointerHover($event, openTip)"
     @pointerleave="onPointerHover($event, closeTip)"
+    @focus="onFocus"
+    @blur="onBlur"
   >
-    <PieceDetailsTip v-if="tipOpen" :id="tipId" :element="element" :anchor="pieceEl!" />
+    <PieceDetailsTip v-if="tipOpen" :id="tipId" :elements="[element]" :anchor="pieceEl!" @close="closeTip" />
     <!-- Overlay render override: full component replacement (D-04) -->
     <component
       v-if="presentationEntry?.render"
