@@ -174,9 +174,9 @@ describe('WF-03 — build-chunk.md honours orchestrated mode', () => {
     expect(flat(read('check-status.md'))).toMatch(/engine revision `unknown` is a block written before it recorded the engine/);
   });
 
-  it('close.md returns instead of auto-advancing under an orchestrated run', () => {
+  it('close.md returns `outcome: closed` and leaves the next chunk to the run', () => {
     const close = flat(read('build/close.md'));
-    expect(close).toMatch(/In orchestrated mode, close returns instead of auto-advancing/i);
+    expect(close).toMatch(/the dispatched subagent reports `outcome: closed`/);
   });
 });
 

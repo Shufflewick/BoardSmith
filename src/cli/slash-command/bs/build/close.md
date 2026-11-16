@@ -209,60 +209,37 @@ Per `reporting.md`, this line names the chunk by what the designer can now do in
 its slug and status — "taking a turn — done and tested" reads to them; `chunk '<slug>' complete —
 verified` reads to the pipeline and is exactly what this line must not be.
 
-This line does not itself stop the session or wait for acknowledgment — it is purely a progress
-marker inside the same auto-advance narration this file's "Then auto-advance" section already
-produces; the auto-advance framing below governs whether the session continues, this line does
-not change that.
+This line does not itself stop the session or wait for acknowledgment: it is a progress marker,
+carried in the return's `designerSummary` (`orchestrate/chunk-dispatch.md` "The Return Shape").
 
 ## Propose the Next Chunk
 
 Once the delta is approved and written, propose the next chunk in the (possibly newly-updated)
 Ordered Chunk List. Say what it will add to the game and whether the designer will see it on
 screen (that is what the `ui:` tag means to them — a `touches`/`major` chunk is one they'll be
-asked to look at; a `none` chunk isn't). Per `reporting.md`, do not print the tag's spelling. Print
-the exact next command for a non-programmer handoff — e.g. "Next up: bidding on properties you
-declined. You'll see this one on screen. Run `/bs-build-chunk` to start it."
+asked to look at; a `none` chunk isn't). Per `reporting.md`, do not print the tag's spelling. The
+proposal goes in the return's `designerSummary` — e.g. "Next up: bidding on properties you
+declined. You'll see this one on screen."
 
 **`close` does NOT create the next chunk's `chunks/<slug>/CHUNK.md`.** Proposing the next chunk
-names it and prints the command; it never derives that chunk's CHUNK.md. CHUNK.md creation is
+names it; it never derives that chunk's CHUNK.md. CHUNK.md creation is
 always lazy — `build-chunk.md` Step 2's "Sketch-level tail-entry target" path details an
-undetailed tail entry when routing first reaches it, on the next `/bs-build-chunk` run. This is
+undetailed tail entry when routing first reaches it, on the run's next dispatch of that chunk. This is
 the reconciled close-gate duty (146-REVIEW WR-02): `build-chunk.md` Step 2 owns detailing; `close`
 owns only tail *description* re-derivation (the `## Sketch-Tail Delta Gate` above) and the
 next-chunk proposal.
 
-**Then auto-advance — the printed command is a crash fallback, never the default (cross-chunk
-continuation, SKILLAUTO-04/05).** Proposing the next chunk and printing its command is never the
-default end-of-close signal — the residual print-and-hand-off stop is retired. Per
-`state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation", once the delta gate is
-resolved and `## The Done Gate` has passed, the same session **auto-advances**: it rolls straight
-into the next chunk, re-entering `build-chunk.md` Step 2, routing to the next chunk's `investigate` (Step 2 lazily details its tail
-entry first), and running `investigate → redteam` continuously, stopping at that chunk's `ask`
-gate (or, for a light-path next chunk, its `playtest` gate; or, for the mandated final-acceptance
-chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated step is
-`bs-build-bot`, auto-advance carries the same way into that chunk and on into the
-final-acceptance chunk that follows it — the generate-bot → final-acceptance progression is one
-continuous run, not two separately re-invoked sessions). The printed command exists **only** as
-the cold-resume/crash fallback for the case where a stop condition *does* fire at this boundary —
-the user said stop, or an automated step is stuck/unrecoverable. It is never the default end-of-close signal: presenting the proposal lets the
-user see the next chunk (and say "stop") before its first gate, but silence means auto-advance, not
-a wait for re-invocation.
-
-**In orchestrated mode, close returns instead of auto-advancing** (`build-chunk.md` "Orchestrated
-Mode"): the chunk's own lifecycle is complete, so the dispatched subagent reports `outcome: closed`,
-only once `## The Done Gate` has passed and with nothing written after it, and the run's loop — not
-this step — dispatches the next chunk into its own fresh context. If the tail delta above needs approval, that is a gate returned for the designer, not a question asked here.
+**Then return.** The chunk's own lifecycle is complete, so the dispatched subagent reports
+`outcome: closed`, only once `## The Done Gate` has passed and with nothing written after it, and
+the run's loop, not this step, dispatches the next chunk into its own fresh context
+(`state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation"). If the tail delta above
+needs approval, that is a gate returned for the designer, not a question asked here.
 
 ## Downstream Shape (cite, never restate)
 
 Once the delta is approved and the next chunk is proposed, this chunk's lifecycle is complete —
 its `Status` is `verified` (or `verified (user-waived)`), its `## Verified Commit Hash` is set,
-and SKETCH.md reflects the (possibly updated) tail. By default **the same session auto-advances**
-into a fresh `{investigate, redteam, ask}` group for the proposed chunk (`state-machine.md`
-"Session Handoff Seams" → "Cross-chunk continuation"), stopping only at a checkpoint or a rules
-question — or, if the
-sketch's `## Mandated Chunks` final-acceptance chunk is next, dispatches `build/final-acceptance.md`
-instead — carrying the same auto-advance through a `bs-build-bot` chunk into the
-final-acceptance chunk that follows it. Only when a stop condition fires at the chunk boundary does
-the printed command's cold-resume/crash fallback come into play, picked up by a fresh
-`/bs-build-chunk` invocation. This file does not restate either downstream shape.
+and SKETCH.md reflects the (possibly updated) tail. What comes next is the run's: its loop
+dispatches the proposed chunk, or `build/final-acceptance.md`'s chunk when that is next
+(`state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation"). This file does not
+restate it.

@@ -28,24 +28,31 @@ the body; never narrate bookkeeping. An ordinary step completion is one to three
 
 Every step in this file writes files, and the designer's session writes none
 (`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` "The Designer's Session Writes No File"). So when
-the designer typed `/bs-build-chunk`, this session builds nothing itself. It answers a status
-question or routes a reorder as Step 1 says; otherwise it reads
-`${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and follows it from its Step 0 in this same turn,
-whose loop dispatches this file for each chunk into a fresh subagent of the `judgement` role, in
-orchestrated mode, and conducts the gates here. If the designer asked for one chunk only, that run
-is one chunk (`/bs-build-game` Step 2). Everything below this section is what that subagent follows.
+the designer typed `/bs-build-chunk`, this session builds nothing itself:
+
+- **"what's left?" or another status question** — read
+  `${CLAUDE_SKILL_DIR}/../bs-check-status/SKILL.md` and follow it, which reads state and writes
+  nothing.
+- **"do the Chance cards next" or another reorder** — read
+  `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` and follow it, which re-validates dependency
+  order and dispatches its writes; never reorder `SKETCH.md` ad hoc.
+- **Anything else** — read `${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and follow it from its
+  Step 0 in this same turn. Its loop dispatches this file for each chunk into a fresh subagent of
+  the `judgement` role, in orchestrated mode, and conducts the gates here. If the designer asked
+  for one chunk only, that run is one chunk (`/bs-build-game` Step 2).
+
+Everything below this section is what that subagent follows.
 
 ## Orchestrated Mode (dispatched by `/bs-build-game`)
 
-This skill has two callers: a designer typing `/bs-build-chunk`, and `/bs-build-game` dispatching it
-into a fresh subagent for one chunk of a whole-game run
+`/bs-build-game` dispatches this file into a fresh subagent for one chunk of a run
 (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md`). **Orchestrated mode is declared
-in the brief, never inferred** — a brief that says "You are running in orchestrated mode" for a named
-chunk puts these four rules in force for this session (`state-machine.md` "Orchestrated Runs"):
+in the brief, never inferred**: a brief that says "You are running in orchestrated mode" for a named
+chunk puts these four rules in force (`state-machine.md` "Orchestrated Runs"). A session whose brief
+does not say so is the designer's, and follows only "Typed by the Designer" above.
 
-1. **Build exactly the named chunk, then return.** Do not auto-advance into the next chunk — the
-   cross-chunk continuation described below is the ordinary-session behavior, and the run's own loop
-   replaces it here.
+1. **Build exactly the named chunk, then return.** Do not auto-advance into the next chunk: the
+   run's own loop dispatches it.
 2. **There is no designer on the other end of this context.** Never ask a question, never wait for
    approval, never assume approval. At a human gate (a rules question at `ask`, including a
    refuted-twice escalation; a checkpoint `playtest`; a repair round-3 triage; a step that failed
@@ -61,9 +68,8 @@ chunk puts these four rules in force for this session (`state-machine.md` "Orche
    `orchestrate/chunk-dispatch.md` "The Return Shape" pins, consumed by name. A designer-facing
    summary belongs in its `designerSummary` field, not around the report.
 
-Everything else in this file applies unchanged in both modes. Where a rule below says "tell the
-user" or "stop for the user's decision," orchestrated mode satisfies it by returning the gate rather
-than by asking — the gate still stops the work, and the human still decides.
+Where a step file this one dispatches says to ask or tell the designer, return that as the gate
+instead: the gate still stops the work, and the designer still decides.
 
 ## Model Routing
 
@@ -91,7 +97,7 @@ Every fact this router needs about a chunk's rules or code content comes from th
 return-shape a dispatched subagent hands back — never by re-reading a slice or source file a
 subagent just wrote. State files are different: `CHUNK.md` is a state file, and reading state
 files is exactly the orchestrator's job (alongside dispatching subagents, recording results, and
-talking to the user). In particular, the orchestrator reads the chunk-state sections the
+composing the return). In particular, the orchestrator reads the chunk-state sections the
 group-1 steps consume — `## Interpretation` and `## Visibility Declaration` after the
 investigate subagent writes them, plus `## Redteam Rounds` at the ask step (the persisted
 verdicts and round dispositions the gate consumes, especially on a cold resume) — bounded to
@@ -205,27 +211,11 @@ into one branch:
    This is NOT stale and does not warn. Refresh the lock's timestamp (a fresh `date -u
    +%Y-%m-%dT%H:%M:%SZ` read) silently and continue.
 2. **Different, live lock** — the lock is less than 24 hours old and names different work than
-   this session is about to touch. This is a live concurrent session: warn the user instead of
-   silently clobbering it, and stop for their decision before proceeding.
-3. **Stale lock** — the lock's timestamp is more than 24 hours old, naming any chunk. Report it
-   as stale to the user; the user confirms clearing it before this session takes the lock.
-
-## Step 1: Conversational-Intent Probe (BUILD-01)
-
-Before any step dispatch, intercept intents that are not "build the next thing":
-
-- **"what's left?" / status questions** — answer self-contained from state files: read
-  `SKETCH.md`'s ordered chunk list and, for the in-progress chunk, its `CHUNK.md` Status line
-  and Step Checklist (all state files the orchestrator may read), then summarize what is
-  verified, what is in progress (and at which step), and what remains. Never answer from memory
-  or a partial read — read the state files first. This inline summary remains a valid quick
-  answer, but for the fuller status view (waived-chunk batch-playtest proposals, asset debts,
-  ideas backlog size, and the rest of the seven-item report), route the user to `/bs-check-status`.
-- **"do the Chance cards next" / reordering intents** — route the user to `/bs-insert-chunk`,
-  which re-validates dependency order, diffs citations against closed chunks, marks any
-  invalidated pending `CHUNK.md` stale, and bumps the sketch version — never improvise a reorder
-  by editing `SKETCH.md`'s ordered chunk list ad hoc here.
-- **Neither matches** — continue to Step 2, the normal resume path.
+   this session is about to touch. This is a live concurrent session: never clobber it. Return
+   `outcome: stuck` with `stuckDetail` naming the lock, for the designer to decide.
+3. **Stale lock** — the lock's timestamp is more than 24 hours old, naming any chunk. Return
+   `outcome: stuck` with `stuckDetail` reporting it as stale; the designer confirms clearing it
+   before a session takes the lock.
 
 ## Step 2: Resume Routing (BUILD-01)
 
@@ -380,10 +370,9 @@ tail entry when routing next reaches it.
 ## Step Group 1 Dispatch — `{investigate, redteam, ask}`
 
 This is the first of the four step groups (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Session Handoff Seams").
-A session no longer hands off after each group — it runs continuously across the group boundaries
-and stops only at a human-input gate or a stuck automated step. Group 1's own stopping point
-is the `ask` approval gate below; if the user approves, this same session continues into group 2
-(`spec → build → test`) rather than handing off.
+A session runs continuously across the group boundaries and stops only at a human-input gate or
+a stuck automated step. `ask` does not wait for approval (below), so unless a rules question parks
+the chunk, this same session continues into group 2 (`spec → build → test`).
 
 **Every step persists before the next starts:** when a step completes, the orchestrator checks
 off that step's item on CHUNK.md's Step Checklist (a state-file write) before dispatching the
@@ -412,7 +401,7 @@ of the investigator's framing. Consume the refuters' return by field name — `c
 `missingInteractions` (itself keyed by `ruleDescription`, `citation`). Escalation logic
 (refuted-once re-investigate bound, refuted-twice user escalation) is `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`'s and
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Redteam Escalation"'s to own — this router only routes the aggregated
-outcome to the next step or to the user.
+outcome to the next step or returns it as a gate.
 
 **ask:** Delegate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` — recording the 4-part
 interpretation (interpretation, ambiguities, deferred list, zero implementation vocabulary) and
@@ -433,7 +422,7 @@ no handoff, no "run `/bs-build-chunk` again" prompt. The group-2 dispatches belo
 (research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
 read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), so the main thread stays lean.
 If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
-human-input gate — the session stops there for the user's ruling before reaching `ask`.
+human-input gate: return it as a `rules-adjudication` gate before reaching `ask`.
 
 ## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
@@ -488,12 +477,13 @@ Handoff Seam Before `playtest`" for that per-sub-part persistence). An ordinary 
 **playtest:** Delegate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md`, which routes on its own Milestone/UI
 Gate (SKILLAUTO-01): only a **milestone chunk with visible UI** (SKETCH.md's `Milestone:` flag is
 `core-loop`/`scoring`/`final-acceptance` AND `ui:` is `touches`/`major`) gets the human-verification
-gate — no subagent, the orchestrator narrates the numbered click-by-click test script directly to
-the human and records their item-by-item confirmation. A non-milestone or UI-less chunk skips the
+gate — returned as a `playtest` gate carrying the numbered click-by-click test script, which
+`/bs-build-game` puts to the designer, and a later dispatch records their item-by-item confirmation
+(`build/playtest.md`). A non-milestone or UI-less chunk skips the
 human stop entirely: `playtest.md` writes `Status: verified` off of `build/test.md`'s automated
-test/sim pass and this group flows straight through to `close` with no session pause. If the human
-confirms the whole milestone script clean, this group proceeds to `close`. If the human reports any
-issue, this group proceeds to `revise` instead. A genuine rules-adjudication / open-question
+test/sim pass and this group flows straight through to `close` with no session pause. If the
+designer's answer confirms the whole milestone script clean, this group proceeds to `close`. If it
+reports any issue, this group proceeds to `revise` instead. A genuine rules-adjudication / open-question
 escalation surfaced during this chunk's work always stops the session regardless of milestone/UI
 status (`state-machine.md`'s human-gate list).
 
@@ -507,25 +497,19 @@ disposition.
 **close:** Once `playtest` confirms the chunk clean (with or without an intervening `revise`
 loop), delegate the bookkeeping and sketch-tail delta gate to `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` — recording the
 verified commit hash, rolling up decisions, and presenting the sketch tail's delta (never a silent
-rewrite) for the user's explicit approval before writing SKETCH.md's `## Ordered Chunk List`. A
+rewrite), returned as a `tail-delta` gate for the designer's explicit approval before SKETCH.md's
+`## Ordered Chunk List` is written. A
 light-path chunk (`build, test, playtest`, no `close` step of its own) runs this same bookkeeping
 sequence from inside its own `playtest` step instead — see `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md`'s `## Bookkeeping
 Sequence` and the light-path note above.
 
 End of group 4 (and of this chunk's lifecycle): `close`'s sketch-tail delta gate is the group's
-human-input stopping point — it pauses for the user's explicit approval of the tail delta (when
-there is one to approve). Confirm everything written so far (Verified Checklist, `## Revision
-Rounds` entries if any, `## Verified Commit Hash`, `DECISIONS.md` rollup, the approved sketch-tail
-delta, `Status: verified`/`verified (user-waived)`, SKETCH.md's updated derived-status pointer —
-CHUNK.md first, SKETCH.md second) is saved in the game folder — a non-programmer-legible
-checkpoint. From here, by default, **the same session auto-advances into the next chunk** — it
-re-enters Step 2, routes to the next chunk's `investigate`, and runs continuously through that
-chunk, stopping only at a checkpoint or a rules question, per `state-machine.md` "Session Handoff Seams" →
-"Cross-chunk continuation" (SKILLAUTO-04/05) — carrying the same auto-advance into the next logical
-step across chunk types, including the generate-bot → final-acceptance progression. The printed
-`/bs-build-chunk` re-invocation is the crash/`/clear` resume, never the default stop: it
-only comes into play when a stop condition fires at this boundary — the user said stop, or an
-automated step is stuck/unrecoverable.
+human-input stopping point when there is a delta to approve, returned as a gate. Confirm everything
+written so far (Verified Checklist, `## Revision Rounds` entries if any, `## Verified Commit Hash`,
+`DECISIONS.md` rollup, the approved sketch-tail delta, `Status: verified`/`verified (user-waived)`,
+SKETCH.md's updated derived-status pointer — CHUNK.md first, SKETCH.md second) is saved in the game
+folder, then return `outcome: closed` once `close`'s Done Gate has passed. The run's loop, not this
+session, dispatches the next chunk.
 
 ## Session Handoff Seams
 
@@ -536,27 +520,17 @@ See `state-machine.md` "Autonomy Scope: How, Never What" for the full statement.
 
 Cite `state-machine.md` "Session Handoff Seams" for the four group boundaries and the stopping
 policy — do not restate them here. In short: the boundaries are cold-resume/persistence
-checkpoints, not mandatory stops; a single session runs continuously across them — and across chunk
-boundaries (after `close` it auto-advances straight into the next chunk's `investigate` and stops at
-that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") —
-and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
-`playtest` gate, a repair round-3 triage, a step that failed twice at `judgement`, or `close`'s delta
-gate), or when an automated step hits an unrecoverable/stuck state. This is the run-while-away
-model (SKILLAUTO-04): the session keeps going and auto-advances into the next chunk and the next
-logical step without the human re-invoking (SKILLAUTO-05). There is no context stop: the session
-never winds down because its context "feels" full (`state-machine.md` "Session Handoff Seams" →
-"There is no context stop"). A `/clear` or a crash is resumed by re-invoking `/bs-build-chunk`,
-which picks up at the first incomplete step. What keeps the main thread lean is **sub-agent
+checkpoints, not mandatory stops; this session runs continuously across them and stops only at a
+human-input gate (a redteam refuted-twice escalation or another rules question, the `playtest`
+gate, a repair round-3 triage, a step that failed twice at `judgement`, or `close`'s delta gate),
+when an automated step hits an unrecoverable/stuck state, or when the chunk closes. There is no
+context stop: the session never winds down because its context "feels" full (`state-machine.md`
+"Session Handoff Seams" → "There is no context stop"). A `/clear` or a crash is resumed by
+re-invoking `/bs-build-game`, whose next dispatch of this chunk picks up at the first incomplete
+step. What keeps the main thread lean is **sub-agent
 offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
 sub-agents rather than performed inline (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), per this file's own "Context-Economics Hard Rule" above
 ("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself").
-
-Example one-line progress narration (style guide, not a script — one or two per group):
-
-- Investigate: "Reading the trading rules and the rulebook's jail section together."
-- Redteam: "Double-checking that reading against three independent reviewers."
-- Ask: "Ready to walk you through what I found — here's the interpretation and a couple of
-  questions."
 
 ## Git Protocol
 

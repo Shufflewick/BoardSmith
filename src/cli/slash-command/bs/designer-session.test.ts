@@ -76,7 +76,7 @@ describe("the designer's session writes no file (#1674)", () => {
   });
 
   it('a skill the designer types that would write in their session hands the work to an agent instead', () => {
-    says(section(read('build-chunk.md'), 'Typed by the Designer'), 'builds nothing itself', 'bs-build-game/SKILL.md', '`judgement` role');
+    says(section(read('build-chunk.md'), 'Typed by the Designer'), 'builds nothing itself', 'bs-build-game/SKILL.md', '`judgement` role', 'bs-check-status/SKILL.md', 'bs-insert-chunk/SKILL.md');
     says(section(read('build-bot.md'), 'Typed by the Designer'), 'dispatches the writing', '`judgement` role');
     const reshape = read('insert-chunk.md');
     expect(flat(reshape)).not.toMatch(/it never dispatches subagents to do this work/);

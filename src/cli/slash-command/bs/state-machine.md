@@ -516,8 +516,8 @@ the skill's **cold-resume/persistence checkpoints** — a seam marks where a ses
 guaranteed durable enough to stop and resume cleanly, NOT a point where the session must hand off.
 Each step still persists its own state to `CHUNK.md` before the next starts, and a commit still
 lands at every step completion (see "Write Order" and "Git Protocol"). What has changed is the
-stopping policy: **a single session now runs continuously across these group boundaries — and
-across chunk boundaries.** It stops only when (a) it reaches a human-input gate — it needs the user
+stopping policy: **a single session now runs continuously across these group boundaries, and the
+run carries on across chunk boundaries.** It stops only when (a) it reaches a human-input gate — it needs the user
 to answer a question or to test/playtest something — or (b) an automated step hits an unrecoverable or stuck state it
 cannot resolve on its own (a gate that keeps failing and `repair` cannot fix, a subagent that dies
 on a terminal error, a typecheck that will not go green) — which it surfaces to the user rather than
@@ -527,8 +527,8 @@ gate ONLY if this chunk is one of the sketch's checkpoint chunks with visible UI
 bullet below, SKILLAUTO-01) — a non-milestone or UI-less chunk runs its internal `playtest`
 verification (test/self-sim) and flows straight through into `revise`/`close` with no human stop.
 After a human playtest stop (and any `revise` loop) it runs `close`, stops at close's sketch-tail
-delta gate **only if that gate needs approval**, and then — see "Cross-chunk continuation" below —
-rolls straight into the next chunk rather than ending the session.
+delta gate **only if that gate needs approval**, and then returns, and the run goes straight on to
+the next chunk (see "Cross-chunk continuation" below).
 
 **The planned blocking checkpoints — the human-input gates that DO stop the session:**
 
@@ -556,8 +556,8 @@ never waits for approval (`build/ask.md`). A **rules question** — the rules th
 build approach, genuinely undetermined, or a redteam refuted-twice escalation (a claim refuted
 twice is by definition an ambiguity, see "Redteam Escalation") — parks only the
 chunk that needs the answer: it is put to the designer and recorded in `RULINGS.md` when they
-answer, and the work continues on every chunk that does not depend on it. A session with the
-designer in it asks at once. A `/bs-build-game` run records the chunk in `RUN.md`'s `Open Gate:`
+answer, and the work continues on every chunk that does not depend on it. The `/bs-build-game`
+run records the chunk in `RUN.md`'s `Open Gate:`
 and stops only when every remaining chunk waits on the designer (`boardsmith next-chunk`,
 `build-game.md` Step 3).
 
@@ -593,30 +593,22 @@ design cannot proceed without parks that chunk at its `ask` (`build/ask.md` "Par
 Rules Question"); it is never queued past the chunk that needs it answered.
 
 **Cross-chunk continuation (the chunk→chunk seam) — run-while-away + auto-advance (SKILLAUTO-04/
-05).** The boundary between one chunk's `close` and the next chunk's `investigate` is itself a seam
-the session flows across, exactly like the four intra-chunk group boundaries — it is NOT a session
-terminus. When `close` finishes (its bookkeeping written, its sketch-tail delta gate resolved —
-approved if there was a delta, silently skipped if there was none), the session does NOT stop and
-tell the user to re-invoke. Instead, if neither stop condition (a)/(b) above applies
-and the user has not said stop, it **auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded
-only by the planned checkpoints (SKILLAUTO-01's checkpoint chunks), a genuine rules question that
-leaves nothing else to build, and the stuck-state condition above — this is the run-while-away
-model the human being away does not pause. It re-enters `build-chunk.md` Step 2 (Resume Routing),
-routes to the next chunk's first incomplete step (its `investigate`, lazily detailing the tail
-entry first per Step 2's "Sketch-level tail-entry target"), and runs `investigate → redteam → ask`
-and on through the chunk without a stop, unless the chunk is a checkpoint or a rules question parks
-it. (A light-path next chunk has no `ask`; it runs straight to its `playtest`. The mandated final-acceptance chunk dispatches `build/final-acceptance.md` per
-"Final-acceptance chunk exception" below.) Auto-advance is not limited to ordinary chunk-to-chunk
-continuation: it carries into the next LOGICAL step across chunk types, including the **generate-bot
-→ final-acceptance** progression — once a sketch's `bs-build-bot` chunk closes, the same session
-auto-advances into the final-acceptance chunk that follows it exactly as it would any other next
-chunk, rather than stopping to let the human re-invoke between them. This is what makes the router a
-**loop over chunks** bounded by human gates and stuck-state — not a one-shot that halts
-after every `close`. `close` still presents the next-chunk proposal before continuing, so the user
-always sees what is coming (and can say "stop") before that chunk's first gate; the printed
-`/bs-build-chunk` command is retained ONLY as a cold-resume/crash fallback for the case where a stop
-condition *does* fire at this boundary — it is never the default end-of-close signal, and silence
-from the user means auto-advance, not a wait for re-invocation.
+05).** The boundary between one chunk's `close` and the next chunk's `investigate` is a seam the
+run flows across, exactly like the four intra-chunk group boundaries — it is NOT a run terminus.
+When `close` finishes (its bookkeeping written, its sketch-tail delta gate resolved — approved if
+there was a delta, silently skipped if there was none), the dispatched session returns
+`outcome: closed`, and the `/bs-build-game` run's loop dispatches the next chunk into its own fresh
+subagent of the `judgement` role (`build-game.md` Step 3) rather than stopping to tell the designer to re-invoke. If
+neither stop condition (a)/(b) above applies and the designer has not said stop, the run
+**auto-advances**: the pipeline keeps making progress on reasonable defaults, bounded only by the
+planned checkpoints (SKILLAUTO-01's checkpoint chunks), a genuine rules question that leaves
+nothing else to build, and the stuck-state condition above — this is the run-while-away model the
+designer being away does not pause. Auto-advance is not limited to ordinary chunk-to-chunk
+continuation: it carries into the next LOGICAL step across chunk types, including the
+**generate-bot → final-acceptance** progression — once a sketch's `bs-build-bot` chunk closes, the
+run dispatches the final-acceptance chunk that follows it exactly as it would any other next chunk.
+A `/clear` or a crash is resumed by re-invoking `/bs-build-game`, which picks up at the first
+incomplete step (`orchestrate/run-state.md`).
 
 **The ingest→build seam is a continuation seam too.** `/bs-ingest-rules` Step 7 writing `SKETCH.md`
 and the first `CHUNK.md` files is the same kind of boundary as `close`→next chunk: durable, and NOT
@@ -647,15 +639,13 @@ behind them.
 
 Everything above describes one session running the pipeline. `/bs-build-game` adds one level above
 that: a **run** that builds many chunks by dispatching each into its own fresh subagent
-(`orchestrate/chunk-dispatch.md`). Nothing in this file's machinery changes underneath it — the
-status enum, write order, cold-resume parse contract, session lock, git protocol, and human gates
-are identical whether a chunk is built by a designer typing `/bs-build-chunk` or by a dispatched
-subagent. Three rules govern the seam between the two:
+(`orchestrate/chunk-dispatch.md`). Every chunk is built this way: a designer typing
+`/bs-build-chunk` is handed to the run (`build-chunk.md` "Typed by the Designer"). Three rules
+govern the seam between the run and a dispatched chunk:
 
 1. **Orchestrated mode is declared, never inferred.** A subagent is told, in its brief, that it is
-   running in orchestrated mode for exactly one named chunk. A session that was not told this is an
-   ordinary session and auto-advances across chunk boundaries as "Cross-chunk continuation" above
-   describes; a session that WAS told it builds that one chunk and returns instead.
+   running in orchestrated mode for exactly one named chunk, builds that one chunk, and returns. A
+   session that was not told this is the designer's, and builds nothing itself.
 2. **A dispatched subagent has no designer.** It never asks a question, never waits for approval,
    and never assumes approval — it stops at a human gate (a rules question, a checkpoint playtest,
    a triage) and returns the gate's own text for the orchestrator to put to the designer.
