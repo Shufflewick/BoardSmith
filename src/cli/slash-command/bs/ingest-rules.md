@@ -147,7 +147,11 @@ remaining step — nothing this skill produces is ever written to the parent dir
 Everything after the scaffold is one piece of work on the `ingest-rules` branch
 (`${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Branches and Landing"). A fresh `init`
 commits the scaffold on `main`, so make the branch right after it: `git switch -c ingest-rules
-main`. With `--into-existing`, make it before `init`, so the scaffold commit goes on it too.
+main`. With `--into-existing`, make it before `init`, so the scaffold commit goes on it too; that
+needs the repository's main branch to be `main`, with a commit on it, and if it is not, say so and
+ask the designer how to go on before running anything. The landing pushes `main` to `origin`, which
+a fresh repository does not have: ask the designer where the game's repository lives, then
+`git remote add origin <url>` and `git push -u origin main` before the branch is made.
 
 ## Step 2: Route to Transcription or Interview Fallback
 

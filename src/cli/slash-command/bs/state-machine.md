@@ -458,8 +458,12 @@ hand and never patches a refusal; it routes it:
 **A piece that waits on the designer.** A serial chunk parked at a question while the run builds
 other chunks (`build-game.md` Step 4) lands as it stands, by the record that parks it, so the next
 branch carries its question and `RUN.md`'s `Open Gate:`. Its commits so far are its `investigate`,
-`redteam` and `ask`, which change only `design/`. When its answer comes, it resumes on a new
-`chunk-<slug>` branch from `main`. A run that stops (`orchestrate/run-state.md` "Stop Conditions")
+`redteam` and `ask`, which change only `design/`, since only those steps park a chunk. When its
+answer comes, it resumes on a new `chunk-<slug>` branch from `main`, made once the piece checked out
+then has landed, and the record of the answer is that branch's first record. A chunk of a parallel
+batch parked the same way leaves the batch: the batch lands once its other chunks have merged, and
+the parked chunk stays in its worktree until its answer comes, then lands through `chunk-merge` as
+a batch of one, on a new `batch-<slug>` branch named after it. A run that stops (`orchestrate/run-state.md` "Stop Conditions")
 leaves its piece's branch checked out, and the next run resumes on it: on entry, any branch other
 than `main` is the piece in progress.
 

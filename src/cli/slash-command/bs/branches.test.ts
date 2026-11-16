@@ -59,6 +59,19 @@ describe('every piece of work lands on main through the merge (#1675)', () => {
     says(rule, 'parked', 'lands as it stands');
   });
 
+  it('a chunk of a batch parked at a question leaves the batch, so the batch still lands', () => {
+    says(rule, 'leaves the batch', 'a batch of one');
+  });
+
+  it('build-game makes the next piece\'s branch before its entry checks record or commit anything', () => {
+    says(section(read('build-game.md'), 'Step 0: Entry'), 'if `main` is checked out, make the branch', '`git branch -m`', RULE);
+    says(section(read('build-game.md'), 'Step 6: The bot Opponent'), '`insert-chunk-<slug>` branch', RULE);
+  });
+
+  it('kickoff checks the merge can land: a `main` branch, and an `origin` to push it to', () => {
+    says(section(read('ingest-rules.md'), 'Step 1: Scaffold + Verify'), "the repository's main branch to be `main`", '`git remote add origin <url>`');
+  });
+
   it('routing.md tells a record which branch it commits on', () => {
     says(section(read('routing.md'), "The Designer's Session Writes No File"), RULE);
   });

@@ -120,7 +120,14 @@ is a gate like any other: put it to the designer, and never run it under the run
 
 ## Step 0: Entry — Layout, Ingest Synthesis, Consistency, Lock
 
-Identical to `/bs-build-chunk` Step 0, which owns these checks — run them, do not re-derive them:
+Before anything in this step or the next records or commits, if `main` is checked out, make the
+branch of the piece of work the run does next (`state-machine.md` "Branches and Landing"):
+`design-session` when `DESIGN.md` does not exist, otherwise `chunk-<slug>` for the chunk
+`npx boardsmith next-chunk` names, or, when it names none, the first chunk `RUN.md`'s
+`Open Gate:` names. Step 3 renames it `batch-<slug>` (`git branch -m`) when that chunk is built in
+a batch.
+
+Then the checks, identical to `/bs-build-chunk` Step 0, which owns them — run them, do not re-derive them:
 
 ```bash
 npx boardsmith doctor
@@ -339,7 +346,8 @@ shape). It belongs late — after game-end/scoring is verified, since an opponen
 states to evaluate against. If the sketch has **no** bot-opponent chunk, ask the designer once,
 before final acceptance, whether they want a computer opponent; if yes, dispatch the `judgement`
 role's agent (`npx boardsmith agent judgement`) against
-`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`, with the bot chunk's slug as the work package
+`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`, on the `insert-chunk-<slug>` branch made from
+`main` first (`state-machine.md` "Branches and Landing"), with the bot chunk's slug as the work package
 and a `### Dispatch N` entry (`Work: insert-chunk`) in that chunk's run log, to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
 hand), then continue the loop. If no, record the decision in `DECISIONS.md` and move on.

@@ -278,7 +278,9 @@ ${worldScaffoldStatus()
  */
 async function initVersionControl(projectPath: string): Promise<void> {
   try {
-    await gitOutput(projectPath, ['init', '--initial-branch=main']);
+    await gitOutput(projectPath, ['init']);
+    // `main` whatever git's default is, which `agent-policy merge` lands on; `--initial-branch` needs git 2.28.
+    await gitOutput(projectPath, ['symbolic-ref', 'HEAD', 'refs/heads/main']);
     await gitOutput(projectPath, ['add', '-A']);
   } catch {
     console.log(
