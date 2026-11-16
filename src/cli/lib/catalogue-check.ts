@@ -4,7 +4,8 @@
  * On 2026-10-09 a BoardSmith merge made a slot prop optional and cribbage stopped type-checking.
  * BoardSmith's own verify passed; the break surfaced only in ShufflewickPub's games suite, which
  * reads the catalogue against whatever `~/BoardSmith` holds at that moment (ShufflewickPub #619).
- * This check asks the question where the cause is, in BoardSmith's own verify.
+ * This check asks the question where the cause is, against a BoardSmith tree. It is run by hand;
+ * verify and merge do not run it (#1662).
  *
  * For each game in the catalogue (`~/BoardSmithGames`, a plain folder of separate game
  * repositories) whose committed `main` (or paired branch, below) links `boardsmith` to a checkout,
