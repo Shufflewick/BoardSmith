@@ -11,9 +11,8 @@
  * `@vue/test-utils` + jsdom stack BoardSmith already ships, so a future revert of the
  * CR-01 fix — dropping `attachTo` — turns this red rather than passing green.
  *
- * axe-core itself is intentionally NOT a BoardSmith dependency (it belongs only in the
- * generated project's devDependencies), so this proves the precondition axe requires
- * rather than importing axe here.
+ * The generated example itself runs real axe in the scaffold tests that use
+ * `smokeProject` (#1658); this file pins only the precondition axe requires.
  */
 import { defineComponent, h } from 'vue';
 import { mount } from '@vue/test-utils';

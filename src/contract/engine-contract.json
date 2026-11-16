@@ -1,5 +1,5 @@
 {
-  "revision": 376,
+  "revision": 377,
   "surfaceHash": "fdc7cc4945f0b03c",
   "payloadHash": "edb4aa0a4f069a29",
   "formatHash": "ed115e27605f2ca7",
@@ -2951,6 +2951,14 @@
       "payloadHash": "edb4aa0a4f069a29",
       "formatHash": "ed115e27605f2ca7",
       "summary": "boardsmith lint's element-indexof and player-element-ref checks recognise the element classes a game declares (#1617)"
+    },
+    {
+      "revision": 377,
+      "date": "2026-11-16",
+      "surfaceHash": "fdc7cc4945f0b03c",
+      "payloadHash": "edb4aa0a4f069a29",
+      "formatHash": "ed115e27605f2ca7",
+      "summary": "Scaffolded a11y example tests pass every board prop, so a fresh boardsmith init type-checks; axe-core added as a BoardSmith devDependency."
     }
   ]
 }

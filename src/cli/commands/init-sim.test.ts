@@ -10,7 +10,7 @@
  * (`smokeProject`), and the CLI is spawned against them, so what passes here is what a designer
  * gets. They are set up at the top of the file, where no test timeout applies (#363).
  */
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -97,8 +97,6 @@ for (const file of ['src/rules/actions.ts', 'src/rules/flow.ts']) {
   writeFileSync(path, readFileSync(path, 'utf-8').replaceAll("'draw'", "'take'"));
 }
 const addUi = await spawnCli(['add-ui'], grown);
-// The a11y example runs axe-core, which this checkout does not install (see smokeProject).
-rmSync(join(grown, 'tests/a11y.example.test.ts'), { force: true });
 const grownTypecheck = await spawnCli(['typecheck'], grown);
 const grownBuild = await spawnCli(['build'], grown);
 
@@ -186,7 +184,7 @@ describe('boardsmith add-ui (#556)', () => {
   it('writes the UI files into a simulator project', () => {
     expect(addUi.stderr).toBe('');
     expect(addUi.code).toBe(0);
-    for (const file of UI_FILES.filter((path) => path !== 'tests/a11y.example.test.ts')) {
+    for (const file of UI_FILES) {
       expect(existsSync(join(grown, file)), file).toBe(true);
     }
   });
