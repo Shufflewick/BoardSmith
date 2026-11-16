@@ -2267,7 +2267,7 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     const after = dispatch.split('## After the Return')[1];
     expect(after.indexOf(CHUNK_CHECK)).toBeGreaterThanOrEqual(0);
     expect(after.indexOf(CHUNK_CHECK)).toBeLessThan(after.indexOf('`Outcome`/`Detail`'));
-    expect(after).toMatch(/before it writes anything/);
+    expect(after).toMatch(/before anything is written/);
   });
 
   it('build-game.md runs `boardsmith verify --check --chunk <slug>` on a `closed` return before it writes the run log, and treats a refusal as not closed', () => {

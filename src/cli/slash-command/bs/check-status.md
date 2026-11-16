@@ -36,6 +36,8 @@ about their game.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 This skill dispatches no agent. Each chunk's run log (`design/run-log/<slug>.md`) records its
 dispatches by role and agent type and its review rounds with the verify result each started from,

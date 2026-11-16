@@ -54,6 +54,8 @@ of work you did not do (`reporting.md` "Don't Defend the Work").
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 Each chunk is dispatched as the `judgement` role's agent (`orchestrate/chunk-dispatch.md`). No
 review step starts until the chunk's fast checks (its tests and typecheck, `state-machine.md` "Git
@@ -77,6 +79,19 @@ This is the rule the whole shape rests on. The moment the orchestrator starts re
 "to check the subagent's work," its context fills at the same rate a single session's did and the run
 loses the lean thread it exists to keep. If the work needs checking, that is what the pipeline's own
 adversarial audit steps are for — dispatch, don't re-read.
+
+## Every Write Is a Record
+
+This session is the designer's, and writes no file (`routing.md` "The Designer's Session Writes No
+File"). Wherever this file, or a reference it follows here, says the run writes, creates, fills,
+sets, appends, records or clears something (`orchestrate/`, `ingest/design-session.md`, the
+playtest gate's records in `build/playtest.md`, the cross-chunk lens's records in
+`build/audit.md`, and `state-machine.md`'s conversions, repairs and lock), a `record` dispatch
+makes that write, as `routing.md` says: bookkeeping (a run log, `RUN.md`, `QUESTIONS.md`,
+`FILINGS.md`, the lock) as the `mechanical` role's agent, and a record carrying the rules or a
+decision (`RULINGS.md`, `DECISIONS.md`, `DESIGN.md`, the sketch beyond its lock) as the
+`judgement` role's agent. Writes that fall at one point go in one record, which runs in the
+checkout they belong in: a chunk's own worktree for its run log and its gate answers.
 
 ## Who Answers a Gate
 
@@ -172,7 +187,9 @@ left needs a rules question answered. Name the checkpoints the sketch places (th
 happens once per run — a resumed run that already has a yes does not re-ask; it reports and
 continues.
 
-If the designer wants a single chunk instead of a run, that is `/bs-build-chunk` — say so and stop.
+If the designer wants a single chunk instead of a run, the run is that one chunk: skip the
+confirmation, build the chunk Step 3 derives, and stop when it closes (`Stop Reason:
+designer-stopped`). It is still dispatched, never built here: this session writes no file.
 
 ## Step 3: The Chunk Loop
 
@@ -198,17 +215,20 @@ Loop until there is nothing left to build or a stop condition fires
    graph and shares no rulebook section; build it as `orchestrate/chunk-dispatch.md` "Parallel
    Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
    built alone in the main checkout. The check decides, never a judgement call made here.
-4. **Refresh the lock**, append the `### Dispatch N` entry to each chunk's own
-   `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
-   (`orchestrate/run-state.md` "Writing It"), and dispatch one fresh subagent per chunk, as the
-   agent `npx boardsmith agent judgement` names, per
+4. **Record, then dispatch.** One `record dispatch` (`Work: record dispatch`), as the
+   `mechanical` role's agent, refreshes the lock and appends the `### Dispatch N` entry to each
+   chunk's own `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
+   (`orchestrate/run-state.md` "Writing It"), together with anything the last return left to
+   record. Once it returns, dispatch one fresh subagent per chunk, as the agent
+   `npx boardsmith agent judgement` names, per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
 5. **Consume each return by field name.** For a `closed` return, run Step 4's
    `npx boardsmith verify --check --chunk <slug>` first, before writing anything: a chunk built in the main
    checkout shares its tree with the run log, so filling the log first would leave the tree dirty
-   and the check would refuse every closed chunk. Then fill that entry's `Outcome`/`Detail` (a
-   refused check is recorded as not closed) and route on `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
+   and the check would refuse every closed chunk. Then route on `outcome` per Step 4; the next
+   record (the gate's, or the next `record dispatch`) fills that entry's `Outcome`/`Detail` (a
+   refused check is recorded as not closed). A chunk built in its own worktree reaches the main checkout only through
    `npx boardsmith chunk-merge <slug>`, one merge at a time, once it has closed; when that merge
    records cross-chunk references, the audit's cross-chunk lens runs before anything else. When
    this chunk and one merged while it was built both edited a source file, the merge itself
@@ -242,25 +262,28 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
   subagent's `designerSummary`, record any `assetsRequested` and `filings`, and continue the loop.
   No re-invocation prompt, no handoff: continuing is the default.
-- **`gate` with `kind: rules-adjudication`** — park the chunk: write its pending question to
-  `QUESTIONS.md` if the subagent has not, add `<slug> — <the question, in the designer's terms>` to
-  `RUN.md`'s `Open Gate:`, and continue the loop with the next chunk `next-chunk` names. If the
-  designer is here, put the question to them now, in the same message as whatever else the run is
-  doing, and when they answer, write the ruling, clear the chunk from `Open Gate:` and re-dispatch
-  it with the answer in its digest. The run stops on it only when `next-chunk` finds nothing else
+- **`gate` with `kind: rules-adjudication`** — park the chunk: a `record gate` dispatch, as the
+  `mechanical` role's agent, writes its pending question to `QUESTIONS.md` if the subagent has
+  not and adds `<slug> — <the question, in the designer's terms>` to `RUN.md`'s `Open Gate:`; then
+  continue the loop with the next chunk `next-chunk` names. If the designer is here, put the
+  question to them now, in the same message as whatever else the run is doing, and when they
+  answer, a `record gate` dispatch as the `judgement` role's agent writes their answer and the
+  ruling and clears the chunk from `Open Gate:`; then re-dispatch it with the answer in its
+  digest. The run stops on it only when `next-chunk` finds nothing else
   to build.
 - **`gate`, any other kind** — conduct the gate yourself, here, in the main thread. Relay the
   `payload` **verbatim** — a `playtest` gate's decision review and numbered script, a triage's
   options — because that text was composed by the step that owns its format
   (`build/playtest.md`). Put any parked chunks' questions in the same message, so the designer
-  answers everything at once. Write each question
-  to `QUESTIONS.md` before the designer answers and their answer after, then the `RULINGS.md` or
-  `DECISIONS.md` entry it earns, then clear `RUN.md`'s `Open Gate:`
+  answers everything at once. A `record gate` dispatch, as the `mechanical` role's agent, writes
+  each question to `QUESTIONS.md` before the designer sees it; once they answer, a `record gate`
+  dispatch as the `judgement` role's agent writes their answer, then the `RULINGS.md` or
+  `DECISIONS.md` entry it earns, then clears `RUN.md`'s `Open Gate:`
   (`orchestrate/questions.md` "The Two Non-Negotiables"). The answer is the designer's, given in this
   conversation; if the designer is not here to give it, the gate stays open (see "Who Answers a
   Gate"). A `playtest` gate's sign-off is recorded with `boardsmith chunk-signoff`, and a waiver
-  with `boardsmith chunk-waiver`, only from what the designer said. First commit what the gate
-  wrote and run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol") in the
+  with `boardsmith chunk-waiver`, only from what the designer said. First, with the record
+  committed, run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol") in the
   chunk's checkout: `chunk-signoff` refuses a commit with no passing `verify --chunk <slug>`
   result. Then **re-dispatch the same chunk** with
   the answers in its digest — the work never happens in this thread

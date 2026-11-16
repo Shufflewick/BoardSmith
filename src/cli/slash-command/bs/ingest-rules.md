@@ -8,7 +8,7 @@ description: Ingest a board game rulebook (or run a structured interview if none
 Cite `state-machine.md` and `templates/*.template.md` rather than restating their rules — if
 you are extending this skill, link to the relevant section instead of copying rule text. This
 file is a lean router: it detects state, dispatches to the right reference file for each step's
-heavyweight prose, and synthesizes the durable artifacts from what subagents return. It does not
+heavyweight prose, and has the durable artifacts written from what subagents return. It does not
 explain the status enum, the consistency check, the session lock, or template structure inline —
 see `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` for all of that.
 
@@ -27,10 +27,13 @@ bookkeeping. An ordinary step completion is one to three sentences.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 Its dispatches use the work package `ingest-rules`: reading and transcribing the rulebook is
 `judgement` work, and a bulk edit across the slices is `mechanical`. Each one is recorded before
-it is launched as a `### Dispatch N` entry in `design/run-log/ingest-rules.md`, created from
+it is launched, by the `record` dispatch that precedes it (one record for a whole fan-out), as a
+`### Dispatch N` entry in `design/run-log/ingest-rules.md`, created from
 `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN-LOG.template.md`, and `boardsmith ledger-check`
 checks that log exactly as it checks a chunk's.
 
@@ -100,7 +103,7 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    already-confirmed slices. STOP and ask the user whether to **resume from the existing
    slices** (skip Steps 1-2, re-run Step 3 onward from the slices' accumulated INDEX/ASSETS
    content — re-dispatching narrow subagents only for anything missing) or **discard and
-   restart** (delete `design/rulebook/`, `design/ASSETS.md`, and any `design/chunks/`, then treat the project
+   restart** (a record, as the `mechanical` role's agent, deletes `design/rulebook/`, `design/ASSETS.md`, and any `design/chunks/`, then treat the project
    directory per Step 1's verification-only path — `init` already ran). Never proceed
    silently on either path.
 3. **Existing bs- project** (`design/SKETCH.md` present — i.e. the session was invoked *inside* a
@@ -117,12 +120,12 @@ checks in the current directory, never `**/glob` patterns that search subfolders
    directory (`src/cli/commands/init.ts`); at most re-run only the compile/serve verification
    portion of `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md` (no `init`) to prove the old codebase still compiles. Skip
    Step 2's questioning, but NOT its output shape: convert the old project's captured content
-   into the standard `rulebook/` shape first — write the old interview/PROJECT.md content as
+   into the standard `rulebook/` shape first. Dispatch the `judgement` role's agent,
+   `Work: record migrated slices`, to write the old interview/PROJECT.md content as
    `rulebook/NN-topic.md` slices (grouped by topic, per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md`
    "Output Re-Target"), with citation format
-   `designer statement, migrated from /design-game project`. Collect `citedTerms[]` /
-   `componentMentions[]` from those slices as you write them, exactly as the interview path
-   does. Then proceed to Step 3 (Synthesis), which runs unchanged — preserving the
+   `designer statement, migrated from /design-game project`, and to return the `citedTerms[]` /
+   `componentMentions[]` of those slices, exactly as the interview path does. Then proceed to Step 3 (Synthesis), which runs unchanged — preserving the
    input-path identity `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md` declares (every downstream step,
    including `/bs-build-chunk`'s citation reads, consumes the same `rulebook/NN-topic.md` +
    `rulebook/INDEX.md` shape regardless of input path). Migration is never a fourth shape.
@@ -155,9 +158,10 @@ Otherwise ask whether the designer has a written rulebook (PDF/images/text).
 
 Both paths produce `rulebook/NN-topic.md` slice files — written by the transcription subagents
 themselves in the rulebook path (their full text never enters this orchestrator's context), and
-by this session from the designer's short answers in the interview path — and return
-`citedTerms[]` / `componentMentions[]` for Step 3's synthesis; no slice is ever read back in
-full by this orchestrator.
+in the interview path by a `record interview slices` dispatch of the `judgement` role's agent,
+handed the designer's confirmed answers verbatim (`ingest/interview-fallback.md` "Output
+Re-Target") — and return `citedTerms[]` / `componentMentions[]` for Step 3's synthesis; no slice
+is ever read back in full by this orchestrator.
 
 ## Step 3: Synthesis
 
@@ -177,17 +181,24 @@ full by this orchestrator.
 > That failure does not feel like forgetting. It feels like already knowing what this step says.
 > The re-read is what makes the difference, so do it before the first action, not after.
 
-Once transcription or interview output has landed, this orchestrator-only step assembles the
-following artifacts **from subagent-returned summaries only** — never from re-reading slices.
+Once transcription or interview output has landed, this step assembles the following artifacts
+**from subagent-returned summaries only** — never from re-reading slices. This session writes none
+of them (`routing.md` "The Designer's Session Writes No File"): it dispatches the `judgement`
+role's agent once, `Work: record synthesis`, handed the absolute path of this file and this step,
+and every accumulated return verbatim (`slicePath`, `citedTerms[]`, `componentMentions[]`,
+`visualEvidence[]`, `variants[]`, any returned edition, or on the interview path the designer's
+own words). The agent writes the items below from that brief alone, commits, and returns the
+paths it wrote, the commit, and the `variants[]` listing Step 7 needs.
 
 `rulebook/INDEX.md` already exists: Step 1 created it, with the four provenance header lines
 (`Edition:`, `Source:`, `Source hash:`, `Transcribed:`) and empty `## Open Rules Gaps`,
-`## Slices`, and `## Term → Slice` sections. Your job here is to fill those sections, not to
-create the file.
+`## Slices`, and `## Term → Slice` sections. The record agent's job is to fill those sections,
+not to create the file.
 
 1. **Synthesis runs itself — you do not need to invoke it.** `init` installed a `pre-commit`
-   hook that runs `npx boardsmith ingest-gaps` on the first commit after slices exist. Run it
-   manually only if you are not going to commit before the approval gate:
+   hook that runs `npx boardsmith ingest-gaps` on the first commit after slices exist, which the
+   record agent's commit is. Run it manually only if no commit will come before the approval
+   gate:
 
    ```
    npx boardsmith ingest-gaps
@@ -196,8 +207,8 @@ create the file.
    It does two things. First it relabels any `Derived (p.N):` line whose text is pure
    presentation description (typography, palette, layout, wordmark) onto the `Visual (p.N):`
    prefix — only the prefix changes, no text is rewritten and nothing is deleted. Lines needing
-   real judgment are reported rather than guessed at; read that report and fix any it names by
-   hand. Then it fills `## Open Rules Gaps`:
+   real judgment are reported rather than guessed at; the record agent fixes any line that report
+   names, in the same dispatch. Then it fills `## Open Rules Gaps`:
 
    It sweeps the slice files for every `Named-but-undefined (p.N): <rule>` line and writes them
    into the section verbatim, without deduplicating — a rule named in two slices and defined in
@@ -205,7 +216,7 @@ create the file.
    `_None._` token. Nothing about this section requires judgment, and a live session left it
    empty while the slices carried four markers, so it is code now.
 
-2. **Fill the two tables by hand** — these do need judgment:
+2. **Fill the two tables** — these do need judgment, which is why the record is `judgement` work:
 
    - `## Slices` — one row per slice: path, pages, one-line coverage.
    - `## Term → Slice` — one row per accumulated `citedTerms[]` pair, sorted.
@@ -232,7 +243,7 @@ create the file.
    candidates, typography feel, iconography, notes on board/card art, and descriptions of setup
    diagrams and embedded component images. Built exclusively from the accumulated
    `visualEvidence[]` lists the transcription subagents return (parallel to how INDEX.md is
-   built from `citedTerms[]`) — the orchestrator never opens the PDF/images itself. On the
+   built from `citedTerms[]`) — neither this session nor the record agent opens the PDF/images. On the
    interview path, whatever visual description the designer volunteers stands in for
    `visualEvidence[]`. **Written to `rulebook/00-visual-survey.md`** in this step, alongside
    INDEX.md and ASSETS.md — it is factual evidence, not gated sketch state, so pre-approval
@@ -289,7 +300,11 @@ files until the user has explicitly approved.
 ## Step 7: Write Files
 
 This is the **single point** where sketch state is written — no earlier step writes `SKETCH.md`
-or any `CHUNK.md`. Only after Step 6's explicit approval:
+or any `CHUNK.md`. Only after Step 6's explicit approval, dispatch the `judgement` role's agent
+once, `Work: record sketch`, handed the absolute path of this file and this step, the approved
+sketch exactly as the designer approved it (Steps 4-6, with their edits), and Step 3's returned
+`variants[]` listing. This session writes none of it (`routing.md` "The Designer's Session Writes
+No File"). The agent does the following, commits, and returns the paths and the commit:
 
 - Copy `${CLAUDE_SKILL_DIR}/../bs-shared/templates/SKETCH.template.md` into the game project as `SKETCH.md` and fill it with the
   approved content from Steps 4-6 (ordered chunk list with its checkpoints, the `## Design
@@ -312,8 +327,9 @@ or any `CHUNK.md`. Only after Step 6's explicit approval:
   factual component inventory and visual evidence, not gated sketch state) — do not re-copy or
   re-write them here.
 
-- Run `npx boardsmith ledger-check`. It checks `design/run-log/ingest-rules.md`, the record of
-  every dispatch this skill made; fix what it names before continuing.
+- When it returns, run `npx boardsmith ledger-check`. It checks `design/run-log/ingest-rules.md`,
+  the record of every dispatch this skill made; a refusal goes back to the record agent with what
+  it names, and is fixed before continuing.
 
 Never restate template or state-machine content inline in this file or in the written project
 files beyond what each template already documents — fill the placeholders, don't reinvent the
@@ -333,7 +349,7 @@ Step 0** — the whole-game run, which builds the sketch's chunks in fresh conte
 so does not hand the designer a `/clear` every chunk or two (`state-machine.md` "Orchestrated Runs").
 Read the sibling instructions and execute them in this same turn, exactly as `/bs-create-game` hands
 off to this file — never re-dispatch it as a separate skill invocation. If the designer has said they
-want one chunk only, read `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` instead.
+want one chunk only, the run is one chunk (`/bs-build-game` Step 2).
 
 Stop at this seam ONLY if one of the state-machine's stop conditions actually holds: the
 designer said stop, or an automated step is stuck. There is no context stop (`state-machine.md`

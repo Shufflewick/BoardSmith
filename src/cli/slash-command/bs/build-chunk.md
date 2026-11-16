@@ -24,6 +24,17 @@ or say plainly that there's nothing; describe what changed in the game they can 
 pipeline; keep internal ids, step names, file paths, ledger counts, and verdict spellings out of
 the body; never narrate bookkeeping. An ordinary step completion is one to three sentences.
 
+## Typed by the Designer
+
+Every step in this file writes files, and the designer's session writes none
+(`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` "The Designer's Session Writes No File"). So when
+the designer typed `/bs-build-chunk`, this session builds nothing itself. It answers a status
+question or routes a reorder as Step 1 says; otherwise it reads
+`${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and follows it from its Step 0 in this same turn,
+whose loop dispatches this file for each chunk into a fresh subagent of the `judgement` role, in
+orchestrated mode, and conducts the gates here. If the designer asked for one chunk only, that run
+is one chunk (`/bs-build-game` Step 2). Everything below this section is what that subagent follows.
+
 ## Orchestrated Mode (dispatched by `/bs-build-game`)
 
 This skill has two callers: a designer typing `/bs-build-chunk`, and `/bs-build-game` dispatching it
@@ -58,6 +69,8 @@ than by asking — the gate still stops the work, and the human still decides.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 No review step starts until the chunk's fast checks (its tests and typecheck, `state-machine.md`
 "Git Protocol") have passed for the commit under review: the red team, every audit round and the
@@ -217,11 +230,10 @@ Before any step dispatch, intercept intents that are not "build the next thing":
 ## Step 2: Resume Routing (BUILD-01)
 
 **No chunk is built before the design sign-off.** If `DESIGN.md` does not exist (`ls
-DESIGN.md` in `design/`), run the design session first, in this session with the designer, per
-`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`, and route only once they have signed
-off. In orchestrated mode there is no designer to run it with: return `outcome: stuck` with
-`stuckDetail` saying the design session has not been signed off (`/bs-build-game` Step 1b runs it
-before any dispatch, so this means the run skipped it).
+DESIGN.md` in `design/`), the design session
+(`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/design-session.md`) has not run, and it runs only in the
+designer's session (`/bs-build-game` Step 1b, before any dispatch). Return `outcome: stuck` with
+`stuckDetail` saying the design session has not been signed off, so the run skipped it.
 
 Read `SKETCH.md` → find the first chunk whose status is neither `verified` nor
 `verified (user-waived)` (a waived chunk is closed — the user explicitly waived its playtest;

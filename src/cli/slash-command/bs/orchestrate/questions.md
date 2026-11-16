@@ -56,9 +56,12 @@ The dispatched subagent has no channel to the designer
 - The **subagent** writes the question entries it poses (`Answer: pending`) and returns them in its
   report's `questions` field.
 - The **orchestrator** puts them to the designer, in `reporting.md`'s voice — the question and its
-  named options, nothing else — fills each entry's answer fields, writes the `RULINGS.md` or
-  `DECISIONS.md` entry the answer earns, clears `RUN.md`'s `Open Gate:`, and only then re-dispatches
-  the chunk with the answers in the digest.
+  named options, nothing else. It writes nothing itself (`build-game.md` "Every Write Is a
+  Record"): a question it poses is written by a `record gate` dispatch before the designer sees it,
+  and once they answer, a `record gate` dispatch of the `judgement` role's agent fills each
+  entry's answer fields, writes the `RULINGS.md` or `DECISIONS.md` entry the answer earns, and
+  clears `RUN.md`'s `Open Gate:`. Only then does the orchestrator re-dispatch the chunk with the
+  answers in the digest.
 
 Batching holds unchanged: a question that does not block the chunk it came from is queued and
 surfaced at the next gate rather than interrupting the run

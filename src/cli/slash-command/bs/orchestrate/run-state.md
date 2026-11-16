@@ -72,8 +72,11 @@ Only after all six does the run dispatch anything.
 
 ## Writing It
 
-Every write is append-only except the two sanctioned in-place fills the template documents (an
-entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specifically:
+The orchestrator makes none of these writes itself: each is made by the record dispatch that
+falls at that point (`build-game.md` "Every Write Is a Record"), which reads the clock itself for
+every time it writes. Every write is append-only except the two sanctioned in-place fills the
+template documents (an entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines).
+Specifically:
 
 - **Before** each dispatch: append a `### Dispatch N` entry to that chunk's own `design/run-log/<slug>.md`, with `Outcome: pending`,
   `Finished at: pending`, a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock read as `Dispatched at`,
@@ -84,8 +87,8 @@ entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specif
   Log"). This is what makes a mid-chunk crash visible on resume as a
   dispatch that never returned. The chunk's own steps and review rounds are logged in the same
   file by the dispatched subagent.
-- **After** each dispatch returns: run `date -u +%Y-%m-%dT%H:%M:%SZ` again and fill that entry's
-  `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
+- **After** each dispatch returns: the next record runs `date -u +%Y-%m-%dT%H:%M:%SZ` again and
+  fills that entry's `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
   from another entry or type one; `boardsmith ledger-check` compares both times against the
   commits that recorded them and fails a time that could not have been read from the clock.
 - When a gate opens: set `Open Gate:` to that gate, or add it to the list, separated by `; `,

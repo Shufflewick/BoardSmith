@@ -1,9 +1,8 @@
 # Transcription Subagent Contract
 
-**You are whoever is writing rulebook slice files** — either a dispatched transcription subagent,
-or the orchestrator itself transcribing a short (1-3 page) rulebook inline, which
-`ingest/transcription.md` explicitly permits. Either way this file is your complete instruction
-set, and it binds you the same. Follow it exactly.
+**You are a dispatched transcription subagent writing rulebook slice files** — for one page range
+of a long rulebook, or the whole of a short (1-3 page) one. This file is your complete instruction
+set. Follow it exactly.
 
 This contract lives in its own file on purpose. It used to be an inline block that the
 orchestrator retyped into each subagent prompt, and the retyping silently dropped parts of it —
@@ -17,11 +16,8 @@ place of the file.
 
 ## FIRST: validate your dispatch prompt
 
-**Skip this section if you are the orchestrator transcribing inline** — you read this file
-directly, so there is no dispatch to validate.
-
-**If you were dispatched as a subagent: before transcribing anything, check that the prompt you
-were dispatched with contains the exact token `BS-DISPATCH-V3`.**
+**Before transcribing anything, check that the prompt you were dispatched with contains the exact
+token `BS-DISPATCH-V3`.**
 
 If it does not, STOP immediately. Write no slice files. Return exactly this and nothing else:
 
@@ -148,7 +144,7 @@ slice; what identifies them is `Visual (p.N):` on the line itself.
 
 This inline `Visual (p.N):` prefix is complementary to, not a replacement for,
 `rulebook/00-visual-survey.md` — the survey remains the durable whole-rulebook handoff to the
-first `ui:` chunk, written by the orchestrator from `visualEvidence[]` at Step 3.
+first `ui:` chunk, written by Step 3's synthesis record from `visualEvidence[]`.
 `Visual (p.N):` instead marks a diagram/art note sitting mid-rule inside a rule slice.
 
 ### Named-but-undefined markers

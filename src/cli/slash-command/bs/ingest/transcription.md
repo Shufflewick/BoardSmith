@@ -20,33 +20,29 @@ narrower follow-up subagent of the `judgement` role, the role of the transcripti
 
 ## Who transcribes — read this before choosing
 
-Two paths produce slices, and **both are governed by
-`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`.** Whoever writes a slice
-file reads that contract first, in full, as an actual file read. There is no path where slices
-get written from a recollection of what a transcription prompt looks like.
+**Slices are always written by a dispatched subagent, governed by
+`${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`.** That subagent reads the
+contract first, in full, as an actual file read. There is no path where slices get written from a
+recollection of what a transcription prompt looks like, and no path where this session writes one:
+it is the designer's session, and writes no file (`routing.md` "The Designer's Session Writes No
+File").
 
 - **Rulebook of 4+ pages → fan-out.** Dispatch one subagent of the `judgement` role per page
-  range, as below. Context
-  economics require it: the orchestrator cannot hold a long rulebook and still run the rest of
-  the skill.
-- **Rulebook of 1-3 pages → the orchestrator may transcribe inline**, without dispatching. At
-  that size, fan-out buys nothing and every observed session skipped it anyway. **If you take
-  this path, read `transcription-subagent.md` in full first and follow it exactly** — the same
-  three line kinds (`QUOTE` / `Derived (p.N):` / `Visual (p.N):`), the same decision test, the
-  same `Named-but-undefined` markers, the same structured summary per section. You are doing the
-  subagent's job; you are held to the subagent's contract.
+  range, as below. Context economics require it: the orchestrator cannot hold a long rulebook and
+  still run the rest of the skill.
+- **Rulebook of 1-3 pages → one dispatch.** Dispatch one subagent of the `judgement` role for
+  the whole document, its range being every page, with the same pointer block below. At that size
+  fan-out buys nothing, but the dispatch still does: it carries the token, so the contract, not a
+  memory of it, reaches the transcriber.
 
-This branch is written down because pretending otherwise was measurably worse. Every rulebook in
-this ecosystem is 2 pages. Sessions were dispatching a subagent nominally, then reading the PDF
-and writing all slices in the orchestrator anyway — and, because they never read the contract,
+This branch is written down because the other choice was measurably worse. Every rulebook in this
+ecosystem is 2 pages. Sessions were dispatching a subagent nominally, then reading the PDF and
+writing all slices in the orchestrator anyway — and, because they never read the contract,
 transcribing to a superseded version of it recalled from memory: two line kinds, no
-`Visual (p.N):` at all. The rule that "the orchestrator never reads the rulebook" was being
-violated on every real run, so the contract that rode on it never reached anything. A rule the
-system reliably breaks protects nothing; a rule matched to what actually happens does.
+`Visual (p.N):` at all. A short rulebook is one dispatch, and this session never opens the
+rulebook to transcribe it.
 
-The Context-Economics Hard Rule above still holds without exception for **slice re-reads** and
-for rulebooks large enough to fan out. Reading a 2-page source once, inline, to transcribe it is
-not the failure that rule guards against — accumulating slice text across a long session is.
+The Context-Economics Hard Rule above holds without exception: no slice re-reads, at any size.
 
 ## Fan-Out Dispatch (4+ pages)
 
@@ -99,8 +95,7 @@ range — a fresh-context subagent has no inherited knowledge of where the sourc
 `{sourceRecord}` with that same document as `rulebook/INDEX.md` records it: the `Source:` header
 value for the rulebook, or the `## Additional Sources` row for any other document
 (`rulebook/source/<file>`; a `\|` in that row stands for a `|` in the file name). The subagent writes it as each slice's `Source:` line, which is how
-every later step knows which document a slice's `p.N` citations belong to. If you transcribe a
-short document inline instead, you write that line yourself, per the contract.
+every later step knows which document a slice's `p.N` citations belong to.
 
 This indirection is load-bearing; do not "simplify" it back into an inline block. When the
 contract was inline, composing each dispatch prompt silently dropped parts of it — most
@@ -119,9 +114,8 @@ described in the contract.
 ```
 
 
-If it comes back null, the orchestrator asks the user. The
-orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition,
-2019 printing`) so every later citation is anchored to the exact text that was transcribed. On
+If it comes back null, the orchestrator asks the user. Step 3's synthesis record writes it as a
+header line in `rulebook/INDEX.md` (e.g. `Edition: 2nd edition, 2019 printing`) so every later citation is anchored to the exact text that was transcribed. On
 the interview path the line reads `Edition: unpublished — designer statement`.
 
 **Slice numbering is page-anchored** (`NN` = the section's zero-padded starting page number,

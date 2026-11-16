@@ -45,6 +45,8 @@ those; never copy them here.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 This skill dispatches nothing itself; the kickoff it hands to does, under the work package
 `ingest-rules`.

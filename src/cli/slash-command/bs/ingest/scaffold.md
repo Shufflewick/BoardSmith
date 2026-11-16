@@ -148,7 +148,7 @@ than guessing.
 relabelling presentation-only `Derived (p.N):` lines as `Visual (p.N):`. It is a no-op until
 slices exist, idempotent afterwards, stages its own corrections, and never blocks a commit. You do
 not need to invoke it; it runs on the first commit after transcription. If it reports a line it
-could not classify, read that report and fix it by hand.
+could not classify, the record agent whose commit ran it fixes that line (`ingest-rules.md` Step 3).
 
 Mentioned here so its effects are not a surprise, not as a step to perform.
 
@@ -157,8 +157,9 @@ Mentioned here so its effects are not a surprise, not as a step to perform.
 `toDisplayName` (`src/cli/commands/init.ts`), which is lossy for any name with punctuation
 or nonstandard casing — "The Duke's Gambit" kebab-cases to `the-duke-s-gambit` and
 round-trips to "The Duke S Gambit". Compare `boardsmith.json`'s `displayName` to the Display
-Name as the designer wrote it; if they differ, edit `boardsmith.json` to the designer's
-original. This correction applies ONLY to `displayName` — it is user-facing verbatim text.
+Name as the designer wrote it; if they differ, have a record (`routing.md` "The Designer's
+Session Writes No File") set it, as the `mechanical` role's agent, to the designer's original,
+quoted in its brief. This correction applies ONLY to `displayName` — it is user-facing verbatim text.
 Do not touch the Class name: "do not re-derive" (above) still governs it.
 
 ## Verification Sequence
@@ -179,11 +180,10 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    scaffold it reports TS2307 for every single-file component and can never come back clean.
    `vue-tsc` is installed by `init` and is the same checker `boardsmith validate` runs.
 
-   If errors occur:
-   1. Read the error message carefully.
-   2. Fix the specific issue.
-   3. Run `boardsmith typecheck` again.
-   4. Repeat until clean.
+   If errors occur, this session does not fix them (`routing.md` "The Designer's Session Writes No
+   File"): dispatch the `judgement` role's agent, `Work: scaffold fix`, handed the typecheck output
+   verbatim, to fix the specific issue and commit, then run `boardsmith typecheck` again here. A
+   second failure follows `routing.md` "When a Step Fails".
 
    Do not proceed to step 2 until this is clean.
 

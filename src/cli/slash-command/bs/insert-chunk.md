@@ -7,12 +7,23 @@ description: Add, reorder, split, or remove a chunk in a BoardSmith game's sketc
 
 Cite `state-machine.md` and `templates/*.template.md` rather than restating their rules — if you
 are extending this skill, link to the relevant section instead of copying rule text. This file is
-a lean EDITOR of `SKETCH.md`/`CHUNK.md` state: it reads those state files directly and, per this
-skill's own discretion, performs the citation-overlap diff below INLINE — it never dispatches
-subagents to do this work. This skill FLAGS overlaps; it does not trigger revise rounds,
-re-investigate a chunk, or dispatch a redteam round itself — those remain `/bs-build-chunk`'s job.
+a lean EDITOR of `SKETCH.md`/`CHUNK.md` state: it reads those state files directly and performs
+the citation-overlap diff below INLINE, in the context that edits, never in a further subagent.
+This skill FLAGS overlaps; it does not trigger revise rounds, re-investigate a chunk, or dispatch
+a redteam round itself — those remain `/bs-build-chunk`'s job.
 
 Run any time the designer wants to add, reorder, split, or remove a chunk from the sketch.
+
+## Typed by the Designer
+
+The designer's session writes no file (`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` "The
+Designer's Session Writes No File"). So when the designer typed `/bs-insert-chunk`, this session
+runs Steps 0a and 0, works the reshape out with the designer through operations (a) and (b), which
+only read, and once they agree dispatches the `judgement` role's agent, with the reshaped chunk's
+slug as the work package, handed the resolved absolute path of this file and the agreed reshape
+in the designer's words. That agent runs every step of this file and makes the writes; this
+session relays what it returns and prints the Close step's next command. Dispatched (by
+`/bs-build-game`, or by this hand-off), the agent does everything below itself.
 
 ## How to Talk to the Designer
 
@@ -27,6 +38,8 @@ you may need to play that part again"), never as a raw diff.
 
 Which role does each piece of work, when review may start, and what happens when a step fails:
 `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+In the designer's session nothing is written by hand: `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`
+"The Designer's Session Writes No File".
 
 A sketch reshape touches the plan the designer approved, so under `/bs-build-game` it is
 dispatched as the `judgement` role's agent, with the work package the reshaped chunk's slug.

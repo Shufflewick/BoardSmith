@@ -603,16 +603,14 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
   });
 });
 
-describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () => {
+describe('v4.9 INGEST-02 — a short rulebook is one dispatch, never transcribed inline (#1674)', () => {
   // Observed via stream-json capture: for a 2-page rulebook the orchestrator dispatches a
   // subagent nominally, then reads the PDF itself and writes every slice in the main stream,
   // transcribing from a recalled (superseded) contract with no Visual (p.N): at all.
-  // Every rulebook in the ecosystem -- seven, one-two-punch, doom-machine -- is 2 pages, so
-  // this was happening on every real run and the fan-out contract reached nothing.
+  // Every rulebook in the ecosystem -- seven, one-two-punch, doom-machine -- is 2 pages.
   //
-  // Rather than insist on a path the model reliably abandons at that size, the inline path is
-  // now explicit AND bound by the same contract. A rule the system reliably breaks protects
-  // nothing.
+  // An inline path bound by the contract once answered that. The designer's session now writes
+  // no file at all (#1674), so a short rulebook is one dispatch carrying the token instead.
 
   it('transcription.md defines who transcribes before describing fan-out', () => {
     const transcription = read('ingest/transcription.md');
@@ -622,23 +620,22 @@ describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () =>
     expect(fanIdx).toBeGreaterThan(whoIdx);
   });
 
-  it('both paths are bound by the same contract file', () => {
+  it('every slice is written by a dispatched subagent bound by the contract file', () => {
     const transcription = flat(read('ingest/transcription.md'));
-    expect(transcription).toMatch(/both are governed by/);
-    expect(transcription).toMatch(/Whoever writes a slice file reads that contract first/);
+    expect(transcription).toMatch(/Slices are always written by a dispatched subagent/);
+    expect(transcription).toMatch(/no path where this session writes one/);
   });
 
-  it('the inline path is permitted only for short rulebooks and still requires the contract', () => {
+  it('a 1-3 page rulebook is one dispatch for the whole document, not an inline transcription', () => {
     const transcription = flat(read('ingest/transcription.md'));
-    expect(transcription).toMatch(/1-3 pages/);
-    expect(transcription).toMatch(/read `transcription-subagent.md` in full first/);
-    expect(transcription).toMatch(/held to the subagent's contract/);
+    expect(transcription).toMatch(/Rulebook of 1-3 pages → one dispatch/);
+    expect(transcription).not.toMatch(/may transcribe inline/);
   });
 
-  it('the contract addresses the inline transcriber, not only a dispatched subagent', () => {
+  it('the contract addresses only a dispatched subagent, which always validates its token', () => {
     const contract = flat(read('ingest/transcription-subagent.md'));
-    expect(contract).toMatch(/or the orchestrator itself transcribing a short/);
-    expect(contract).toMatch(/Skip this section if you are the orchestrator transcribing inline/);
+    expect(contract).toMatch(/You are a dispatched transcription subagent/);
+    expect(contract).not.toMatch(/orchestrator transcribing inline/);
   });
 });
 
@@ -806,7 +803,7 @@ describe('v4.9 INGEST-01 — optional rulebook path + archive scheduled in Step 
   it('Step 3 fills the existing scaffold rather than creating INDEX.md', () => {
     const ingestRules = flat(read('ingest-rules.md'));
     expect(ingestRules).toMatch(/`rulebook\/INDEX.md` already exists: Step 1 created it/);
-    expect(ingestRules).toMatch(/Your job here is to fill those sections, not to create the file/);
+    expect(ingestRules).toMatch(/The record agent's job is to fill those sections, not to create the file/);
   });
 
   it('create-game forwards a supplied rulebook path', () => {
