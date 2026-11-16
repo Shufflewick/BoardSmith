@@ -1521,10 +1521,13 @@ onUnmounted(() => watcher.disconnect());
  * opens by itself does. They come back by themselves, so the action can be taken at a later step.
  * With `everyOther`, it does so the first, third and fifth time the walk marks the "draw" button, so
  * "draw" is taken between each of those times, and each mark adds a board control ("Noted N"),
- * which keeps the walk going until it has marked "draw" five times (#1483 review).
+ * which keeps the walk going until it has marked "draw" five times (#1483 review). With `always`, it
+ * does so every time the walk marks "draw", and the board has a "Ring the bell" control (#1659).
  */
-export function panelThatGoesAwayAsItIsPressed(options: { everyOther?: boolean } = {}): Record<string, string> {
-  const marked = options.everyOther ? `[data-bs-action="draw"]` : `[data-bs-action]`;
+export function panelThatGoesAwayAsItIsPressed(options: { everyOther?: boolean; always?: boolean } = {}): Record<string, string> {
+  const marked = options.everyOther || options.always ? `[data-bs-action="draw"]` : `[data-bs-action]`;
+  const early = options.always ? 'false' : 'everyOther ? marks % 2 === 0 || marks > 5 : marks > 1';
+  const bell = options.always ? '\n    <button type="button">Ring the bell</button>' : '';
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue';
@@ -1537,7 +1540,7 @@ const watcher = new MutationObserver((changes) => {
   if (!changes.some((change) => change.oldValue === null && (change.target as Element).matches('${marked}[${PRESS_MARK}]'))) return;
   marks++;
   if (everyOther) noted.value++;
-  if (everyOther ? marks % 2 === 0 || marks > 5 : marks > 1) return;
+  if (${early}) return;
   const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
   for (const button of buttons) button.style.display = 'none';
   setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 7000);
@@ -1549,7 +1552,7 @@ onUnmounted(() => watcher.disconnect());
 <template>
   <div class="board">
     A board
-    <button v-for="n in noted" :key="n" type="button">Noted {{ n }}</button>
+    <button v-for="n in noted" :key="n" type="button">Noted {{ n }}</button>${bell}
   </div>
 </template>
 
@@ -2008,8 +2011,9 @@ export const ALONE_REASON = 'There is nobody else in this glade to greet.';
  * group of one is drawn as its action, #1639).
  * With `busy`, the page is kept busy for 1.5s by every click it takes, longer than the walk gives one
  * look at a panel button, as a loaded machine keeps it (#562).
+ * With `watching`, the board keeps offering controls, as {@link boardThatKeepsOfferingControls} does (#1659).
  */
-export function gladeWorld(options: { stumbles?: boolean; manners?: boolean; busy?: boolean } = {}): Record<string, string> {
+export function gladeWorld(options: { stumbles?: boolean; manners?: boolean; busy?: boolean; watching?: boolean } = {}): Record<string, string> {
   const stumble = options.stumbles ? "\n    if (ctx.player.seat === 4) throw new Error('seat four tripped on a root');" : '';
   const bow = options.manners
     ? `
@@ -2170,7 +2174,7 @@ ${bow}
 export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll${options.manners ? ', bow, nod' : ''}];
 `,
     'src/ui/components/WorldBoard.vue': `<script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 
 const props = defineProps<{ gameView: unknown }>();
 
@@ -2195,6 +2199,7 @@ ${
         ? "document.addEventListener('click', () => { const until = Date.now() + 1500; while (Date.now() < until) { /* busy */ } }, true);\n"
         : ''
     }const seen = computed(() => seenIn(props.gameView as ViewNode));
+const watched = ref(1);
 </script>
 
 <template>
@@ -2202,7 +2207,7 @@ ${
     <h2>Who else is here</h2>
     <ul class="here">
       <li v-for="seat in seen" :key="seat">seat {{ seat }}</li>
-    </ul>
+    </ul>${options.watching ? '\n    <button v-if="watched <= 30" :key="watched" type="button" @click="watched++">Watch {{ watched }}</button>' : ''}
   </main>
 </template>
 `,
@@ -2359,9 +2364,18 @@ export const PLAYBACK_REASON = 'Buying waits until the battle playback ends.';
  * THE PLAYBACK GAME (#1547): Windup Warfare's step clock. Each seat's turn is a step open for an
  * hour, and `levelUp` is greyed by `game.stepOpenFor` for its first ten minutes, while `ready` ends
  * the turn at once. A walk that never waits for the step clock takes `ready` every turn and never
- * sees `levelUp` enabled.
+ * sees `levelUp` enabled. With `cheer`, a `cheer` action is enabled only for those first ten
+ * minutes, as Windup Warfare's 2x vote is only while the battle plays back (#1659).
  */
-export function playbackGame(): Record<string, string> {
+export function playbackGame(options: { cheer?: boolean } = {}): Record<string, string> {
+  const cheer = options.cheer
+    ? `
+    Action.create('cheer')
+      .prompt('Cheer')
+      .disabled(() => game.stepOpenFor(600_000) && 'The battle has finished playing back.')
+      .execute(() => ({ success: true })),`
+    : '';
+  const cheerStep = options.cheer ? ", 'cheer'" : '';
   return {
     'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
 import { createGameFlow } from './flow.js';
@@ -2392,7 +2406,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .execute(() => {
         game.levelUps += 1;
         return { success: true };
-      }),
+      }),${cheer}
     Action.create('ready')
       .prompt('Ready')
       .execute(() => ({ success: true })),
@@ -2406,7 +2420,7 @@ export function createGameFlow(_game: DevGameGame): FlowDefinition {
   return {
     root: loop({
       maxIterations: 100,
-      do: eachPlayer({ do: actionStep({ name: 'turn', actions: ['levelUp', 'ready'], timeLimitMs: 3_600_000 }) }),
+      do: eachPlayer({ do: actionStep({ name: 'turn', actions: ['levelUp'${cheerStep}, 'ready'], timeLimitMs: 3_600_000 }) }),
     }),
   };
 }

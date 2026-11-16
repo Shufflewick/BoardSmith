@@ -143,6 +143,17 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
   });
 
+  it('#1659 review: a panel button that goes away by itself each time it is pressed leaves the board its turn', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...panelThatGoesAwayAsItIsPressed({ always: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 6 }),
+    });
+
+    expect(steps).toContain('smoke step 1: the panel\'s "draw" went away by itself before the press landed, so the walk presses it when it shows again');
+    expect(steps.some((line) => line.endsWith('pressing the board\'s "Ring the bell"'))).toBe(true);
+  });
+
   it('#1483 review: a panel button the game takes away by itself now and then, with the action taken in between, is not reported', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...aceGame(),

@@ -656,8 +656,9 @@ markers this page documents, so it keeps up with any game without knowing it:
   opens on the host's clock, and the walk acts far quicker than a player waits.
   So when the panel greys an action the walk still has to take and the dev bar
   shows **Skip wait** (the host will offer the actions again before the step
-  closes), the walk presses it before taking anything else, and the host moves
-  its time on to that instant (#1547). The host does not say which greyed
+  closes), the walk presses it once it has taken what the panel offers that it
+  still has to take, since the skip may end that offer, and the host moves its
+  time on to that instant (#1547, #1659). The host does not say which greyed
   action its clock holds, so the walk waits whatever greys the one it needs, as
   a player would; each skip moves to a later instant before the deadline. Whether
   the walk takes such an action does not depend on how fast the machine runs it.
