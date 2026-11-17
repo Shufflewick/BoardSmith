@@ -5,6 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { createColorOption, dealSeatColors, type ColorOptionDefinition } from './colors.js';
 import { DEFAULT_COLOR_PALETTE } from '../engine/index.js';
+import uiComponentsDocs from '../../docs/ui-components.md';
 
 describe('createColorOption', () => {
   it('builds a colour-typed player option', () => {
@@ -66,5 +67,20 @@ describe('dealSeatColors (#1569)', () => {
 
   it('leaves a seat uncoloured once the palette has no colour left for it', () => {
     expect(dealSeatColors(['#e74c3c', '#3498db', '#27ae60', undefined], palette)).toEqual([...palette, undefined]);
+  });
+});
+
+describe('docs/ui-components.md\'s Custom Color Palette section (#1683)', () => {
+  const section = uiComponentsDocs.slice(
+    uiComponentsDocs.indexOf('### Custom Color Palette'),
+    uiComponentsDocs.indexOf('## Helper Components'),
+  );
+
+  it('declares a custom palette in boardsmith.json, the one list the lobby offers', () => {
+    expect(section).toContain('"colorPalette": [');
+  });
+
+  it('never teaches a code-side colour list, which dev refuses and the lobby never offers', () => {
+    expect(section).not.toMatch(/\bcolors:|gameDefinition = \{/);
   });
 });

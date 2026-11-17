@@ -829,21 +829,7 @@ const playerColor = gameView.players[playerSeat - 1].color;
 
 ### Custom Color Palette
 
-To use a custom color palette, specify it in your game definition:
-
-```typescript
-export const gameDefinition = {
-  // Custom colors (optional - defaults to engine's DEFAULT_COLOR_PALETTE)
-  colors: ['#ff0000', '#0000ff', '#00ff00', '#ffff00'],
-
-  // Disable color selection in lobby (optional, default: true)
-  colorSelectionEnabled: false,
-};
-```
-
-### Color Selection
-
-To let players choose colors when they set up a game, define `colorPalette` in `boardsmith.json`:
+To give players your own colours to choose from, define `colorPalette` in `boardsmith.json`:
 
 ```json
 {
