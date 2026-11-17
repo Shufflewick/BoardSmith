@@ -1,5 +1,5 @@
 {
-  "revision": 413,
+  "revision": 414,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "7281891f11533f8d",
   "formatHash": "e7644203601ae348",
@@ -3247,6 +3247,14 @@
       "payloadHash": "7281891f11533f8d",
       "formatHash": "e7644203601ae348",
       "summary": "A smoke spec's input function may return a list of values, which the walk tries in turn like a plain list, starting a different list from its first value (#1682)."
+    },
+    {
+      "revision": 414,
+      "date": "2026-11-17",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "7281891f11533f8d",
+      "formatHash": "e7644203601ae348",
+      "summary": "docs/ui-components.md's Custom Color Palette shows boardsmith.json's colorPalette instead of a code-side colours list (#1683)"
     }
   ]
 }
