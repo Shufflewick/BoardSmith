@@ -66,6 +66,7 @@ import {
 } from '../lib/project-paths.js';
 import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, commitName, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
+import { QUOTE_LINE, SOURCE_LINE } from '../lib/cited-evidence.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
@@ -115,8 +116,6 @@ interface ClaimQuoteCheckResult {
 
 const QUESTION_START = /^Q(\d+)\.[ \t]+\S/;
 const SUBHEADING = /^#{3,}\s/;
-const QUOTE_LINE = /^\s*>\s?(.*)$/;
-const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
 const SEARCHED_LINE = /^\s*Searched:\s*(.+?)\s*$/;
 
 const FORMAT_HINT =

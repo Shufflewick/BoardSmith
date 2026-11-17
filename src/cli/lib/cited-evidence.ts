@@ -17,7 +17,9 @@
  * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, anything inside an HTML
  * comment, which is where the templates keep their examples, and a module specifier quoted in
  * import, export or require syntax (`import { beat } from './heartbeat.js'`), which is code being
- * described rather than a file being cited (#398).
+ * described rather than a file being cited (#398). A quoted source passage, the `> ` lines a
+ * claim-quote-check claim copies from its source, directly followed by their `Source:` line, is
+ * the source's text rather than a citation, so only its `Source:` line is read (#1687).
  */
 
 import { blankComments } from './ledger-entries.js';
@@ -37,6 +39,10 @@ interface CitedPath {
   /** Written `path@<commit>`: the file as it was in that commit of the chunk's history (#426). */
   commit?: string;
 }
+
+/** A line of a quoted source passage, and the `Source:` line that ends one (claim-quotes.ts). */
+export const QUOTE_LINE = /^\s*>\s?(.*)$/;
+export const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
 
 const EVIDENCE_EXTENSION = /\.(?:mjs|cjs|js|mts|cts|ts|sh|py|png|jpe?g|gif|webp|svg|webm|mp4)$/i;
 const TOKEN = /[^\s`'"()[\],;]+/g;
@@ -61,13 +67,18 @@ function asCitation(raw: string): Omit<CitedPath, 'line'> | undefined {
 /** Every cited script or capture in `text`, in file order. */
 export function citedEvidencePaths(text: string): CitedPath[] {
   const cited: CitedPath[] = [];
-  blankComments(text)
-    .split('\n')
-    .forEach((lineText, index) => {
-      for (const [token] of lineText.replace(MODULE_SPECIFIER, ' ').matchAll(TOKEN)) {
-        const citation = asCitation(token);
-        if (citation) cited.push({ ...citation, line: index + 1 });
-      }
-    });
+  const lines = blankComments(text).split('\n');
+  // Walking up, a quote line belongs to a quoted passage when the run it is in ends at a `Source:` line.
+  let inPassage = false;
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (!QUOTE_LINE.test(lines[index])) inPassage = SOURCE_LINE.test(lines[index]);
+    else if (inPassage) lines[index] = '';
+  }
+  lines.forEach((lineText, index) => {
+    for (const [token] of lineText.replace(MODULE_SPECIFIER, ' ').matchAll(TOKEN)) {
+      const citation = asCitation(token);
+      if (citation) cited.push({ ...citation, line: index + 1 });
+    }
+  });
   return cited;
 }
