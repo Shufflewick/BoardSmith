@@ -1,7 +1,7 @@
 {
-  "revision": 415,
+  "revision": 416,
   "surfaceHash": "caaffcbb71cd9067",
-  "payloadHash": "7281891f11533f8d",
+  "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
     {
@@ -3263,6 +3263,14 @@
       "payloadHash": "7281891f11533f8d",
       "formatHash": "e7644203601ae348",
       "summary": "A smoke deal can name the game options it is dealt with: a spec seed entry may be { seed, gameOptions }, boardsmith smoke takes --game-option, and the dev host's Table setup deals with a field per game option, carried on its restart message (#1684)."
+    },
+    {
+      "revision": 416,
+      "date": "2026-11-17",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "GameOptions, game.settings, PlayerGameState and LobbyInfo no longer carry colorSelectionEnabled, which no lobby or client read"
     }
   ]
 }
