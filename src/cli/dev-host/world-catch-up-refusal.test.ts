@@ -24,6 +24,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { ResidentWorld } from '../../world/host/index.js';
 import { frozenClock } from './frozen-clock.test-helper.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const MINUTE = 60_000;
 const OPENED = 1_700_000_000_000;
@@ -74,7 +75,8 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       maxPlayers: 1,
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, LOG) }),
       view: () => [LOG],
-      actions: [tick, arm],
+      actions: [tick, arm, leaveNothing],
+      vacate: 'leave',
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }

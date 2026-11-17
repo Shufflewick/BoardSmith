@@ -40,6 +40,7 @@ import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-ho
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { vaultBundle } from '../../testing/test-world.test-helper.js';
 import { worldElementIds } from '../../engine/element/element-ids.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 /** Run SQL against a world store behind its back, for a state the store
  *  itself never writes. */
@@ -212,7 +213,7 @@ const stack = worldAction<Village>('stack')
     hearth.logs += 1;
   });
 
-const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn, stack];
+const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn, stack, leaveNothing];
 
 /** The #383 verbs are their own bundle: adding them to the village would change
  *  what every other case here sees this world answer to. */
@@ -224,6 +225,7 @@ const ACTIVITY_ACTIONS: readonly ActionDefinition[] = [
   armSow,
   sow,
   reap,
+  leaveNothing,
 ];
 
 function worldBlock(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
@@ -232,6 +234,7 @@ function worldBlock(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
     genesis: (game) => ({ [HEARTH]: game.create(Hearth, 'hearth') as GameElement }),
     view: () => [HEARTH],
     actions: VILLAGE_ACTIONS,
+    vacate: 'leave',
     ...overrides,
   } as WorldDefinition;
 }
@@ -1402,7 +1405,7 @@ describe('#167: scheduled events fire on their due time', () => {
     const { host, sent } = await attached({
       dir,
       clock,
-      definition: bundle({ world: worldBlock({ actions: [chop, bank, smoulder] }) }),
+      definition: bundle({ world: worldBlock({ actions: [chop, bank, smoulder, leaveNothing] }) }),
     });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'bank', args: {} });
 
@@ -1590,7 +1593,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
     const { host, sent } = await attached({ dir });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'yodel', args: {} });
     expect(last(sent, 'c1', 'world_response')?.message).toBe(
-      'This world has no action named "yodel". It answers to: chop, bank, burn, stack.',
+      'This world has no action named "yodel". It answers to: chop, bank, burn, stack, leave.',
     );
     await host.close();
   });

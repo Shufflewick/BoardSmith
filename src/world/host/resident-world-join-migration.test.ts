@@ -12,6 +12,7 @@ import { worldAction, worldBudgets, worldMigration, type WorldDefinition } from 
 import { ResidentWorld, type WorldStore } from './index.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
+import { leaveNothing } from '../departure.test-helper.js';
 
 class Owner extends Space<Ledger> {
   records: string[] = [];
@@ -35,7 +36,8 @@ function bundle(world: Partial<WorldDefinition> = {}): ConstructorParameters<typ
     gameType: 'ledger',
     world: {
       maxPlayers: 1,
-      actions: [read],
+      actions: [read, leaveNothing],
+      vacate: 'leave',
       genesis: (game: Game): Record<string, GameElement> => {
         const source = game.create(Owner, 'source') as Owner;
         source.records = ['a', 'b'];

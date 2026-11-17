@@ -389,6 +389,9 @@ const sift = worldAction<CardinalityWorld>('sift')
 /** Ten verbs offered at once, none in a group: one level of ten buttons (#1639). */
 const chores = CHORES.map((name) => worldAction<CardinalityWorld>(name).needs(inCommons).execute(() => {}));
 
+/** What becomes of a departed seat's holdings (ShufflewickPub #813): nothing, here. */
+const leave = worldAction<CardinalityWorld>('leave').needs(() => []).execute(() => {});
+
 const WORLD_ACTIONS = {
   shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, scrawl, trespass, flood, grow, balk, sift, chores,
 };
@@ -403,7 +406,8 @@ export function cardinalityWorld(
 ) {
   const world: WorldDefinition = {
     maxPlayers: 3,
-    actions: actions.flatMap((name) => WORLD_ACTIONS[name]),
+    actions: [...actions.flatMap((name) => WORLD_ACTIONS[name]), leave],
+    vacate: 'leave',
     view: () => [COMMONS],
     genesis: (game: Game) => ({ [COMMONS]: game.create(Commons, COMMONS) }),
     ...(onArrive === undefined ? {} : { presence: { onArrive } }),

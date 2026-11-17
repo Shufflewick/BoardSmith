@@ -92,7 +92,8 @@ export const gameDefinition = {
     maxPlayers: 4,
     genesis: (game: Camp) => ({ fire: game.create(Fire, 'fire') }),
     view: () => ['fire'],
-    actions: [stoke, warm, crash],
+    actions: [stoke, warm, crash, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

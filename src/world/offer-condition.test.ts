@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import { Game, Space } from "../engine/index.js";
 import { worldAction, worldClockAction, createWorld } from "./index.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 class Store extends Space {
   ready = true;
 }
@@ -35,7 +36,8 @@ describe("offer declarations and stamped conditions", () => {
         gameClass: TestGame,
         world: {
           maxPlayers: 1,
-          actions: [ready, tick],
+          actions: [ready, tick, leaveNothing],
+          vacate: "leave",
           view: () => ["store"],
           genesis: (game) => ({ store: game.create(Store, "store") }),
         },

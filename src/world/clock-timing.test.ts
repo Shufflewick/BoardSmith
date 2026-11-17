@@ -25,6 +25,7 @@ import { walkDeclaration } from "./declaration.js";
 import { checkpointBytes } from "./stored-world.test-helper.js";
 import type { StoredPartition } from "./contract.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Yard extends Space<Depot> {
   /** The next crate a spawn fills, so a catch-up resumes where the last one
@@ -102,7 +103,8 @@ const definition = {
   gameType: "depot",
   world: {
     maxPlayers: 2,
-    actions: [spawn, stock],
+    actions: [spawn, stock, leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) => {
       const roots: Record<string, GameElement> = { yard: game.create(Yard, "yard") };
       for (let index = 0; index < CRATES; index++) {

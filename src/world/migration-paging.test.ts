@@ -24,6 +24,7 @@ import type { WorldMigrated } from "./runner.js";
 import { worldAction } from "./action.js";
 import { storedWorld, worldOptions } from "./stored-world.test-helper.js";
 import type { DeclaredSeatActivityStamp, StoredPartition } from "./contract.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -61,7 +62,8 @@ function bundle(migration: Record<string, unknown> | undefined, stateVersion: nu
     world: {
       maxPlayers: 1,
       stateVersion,
-      actions: [read, poke],
+      actions: [read, poke, leaveNothing],
+      vacate: "leave",
       genesis: (game: Game) =>
         Object.fromEntries(ROOMS.map((name) => [name, game.create(Room, name)])) as Record<
           string,
@@ -296,7 +298,8 @@ function ledger(migration: Record<string, unknown> | undefined, stateVersion: nu
     world: {
       maxPlayers: 1,
       stateVersion,
-      actions: [touch],
+      actions: [touch, leaveNothing],
+      vacate: "leave",
       genesis: (game: Game) =>
         Object.fromEntries(
           ROOMS.map((name) => {
@@ -639,7 +642,8 @@ function estate(migration: Record<string, unknown> | undefined, stateVersion: nu
     world: {
       maxPlayers: 1,
       stateVersion,
-      actions: [settle],
+      actions: [settle, leaveNothing],
+      vacate: "leave",
       genesis: (game: Game) =>
         Object.fromEntries(
           Object.entries(HOLDINGS).map(([name, items]) => {

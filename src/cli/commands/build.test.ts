@@ -6,6 +6,7 @@ import { createColorOption, type GameDefinition } from '../../session/index.js';
 import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob('/src/cli/commands/{dev,evolve-bot-weights,simulate,validate}.ts');
@@ -32,7 +33,7 @@ function makeWorldDefinition(maxPlayers = 40): GameDefinition {
   return {
     gameClass: class FixtureWorld extends Game<FixtureWorld, Player> {},
     gameType: 'fixture-world',
-    world: { maxPlayers, actions: [], view: () => [] },
+    world: { maxPlayers, actions: [leaveNothing], view: () => [], vacate: 'leave' },
   };
 }
 

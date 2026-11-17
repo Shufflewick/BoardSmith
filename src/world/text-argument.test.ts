@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, Player, Space, type GameOptions } from '../engine/index.js';
 import { worldAction, type WorldDefinition } from './index.js';
 import { createTestWorld } from '../testing/test-world.js';
+import { leaveNothing } from './departure.test-helper.js';
 
 class NoticeBoard extends Space<Commons> {
   notice = '';
@@ -55,7 +56,8 @@ const handle = worldAction<Commons>('handle')
 function commons() {
   const world: WorldDefinition = {
     maxPlayers: 1,
-    actions: [post, letter, handle],
+    actions: [post, letter, handle, leaveNothing],
+    vacate: 'leave',
     view: () => [BOARD],
     genesis: (game: Game) => ({ [BOARD]: game.create(NoticeBoard, 'board') }),
   } as WorldDefinition;

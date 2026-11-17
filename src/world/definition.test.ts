@@ -84,8 +84,8 @@ const poke = worldAction<TinyWorld>("poke")
  * it has is `world.maxPlayers`, which is also what the manifest's is derived
  * from, so the two can never disagree (#171 / ShufflewickPub #354).
  */
-function bundle(overrides: { world?: WorldDefinition } = {}) {
-  const world: WorldDefinition = {
+function bundle(overrides: { world?: FixtureWorld } = {}) {
+  const world: FixtureWorld = overrides.world ?? {
     maxPlayers: 2,
     genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
     view: () => ["yard:1"],
@@ -94,15 +94,22 @@ function bundle(overrides: { world?: WorldDefinition } = {}) {
   return {
     gameClass: TinyWorld,
     gameType: "tiny-world",
-    world,
-    ...overrides,
+    world: world.vacate === undefined ? { ...world, actions: [...world.actions, leave], vacate: "leave" } : world,
   } as Parameters<typeof createWorld>[0]["definition"];
 }
+
+/** A case's own world, given `leave` as its departure hook unless it names one (ShufflewickPub #813). */
+type FixtureWorld = Omit<WorldDefinition, "vacate"> & { readonly vacate?: string };
+
+/** What becomes of a departed seat's yard in these worlds: nothing. */
+const leave = worldAction<TinyWorld>("leave")
+  .needs(() => [])
+  .execute(() => {});
 
 describe("readWorldDefinition — what a bundle must export", () => {
   it("returns the block a real world bundle exports", () => {
     const world = readWorldDefinition(bundle());
-    expect(world.actions.map((action) => action.name)).toEqual(["poke"]);
+    expect(world.actions.map((action) => action.name)).toEqual(["poke", "leave"]);
     expect(typeof world.view).toBe("function");
   });
 
@@ -158,12 +165,16 @@ describe("readWorldDefinition — what a bundle must export", () => {
     expect(readWorldDefinition(vacating).vacate).toBe("poke");
   });
 
-  it("leaves an undeclared vacate undeclared, so a host frees no chair", () => {
-    // ABSENCE IS THE ANSWER, not a gap to be filled in later. A world that
-    // never says how a departed player's ground comes back is a world whose
-    // chairs are held for life, and that is a shape a host must be able to
-    // read off the declaration rather than guess.
-    expect(readWorldDefinition(bundle()).vacate).toBeUndefined();
+  it("REFUSES a world that names no departure hook, saying what to declare (ShufflewickPub #813)", () => {
+    // A world that never says what becomes of a departed seat's holdings would
+    // hold that chair for life, and every churned player would burn one.
+    const holdsForLife = { world: { maxPlayers: 2, actions: [poke], view: () => [] } as unknown as WorldDefinition };
+    expect(() => readWorldDefinition(holdsForLife)).toThrow(
+      expect.objectContaining({
+        code: "bundle-not-a-world",
+        message: expect.stringMatching(/declares no `vacate`.*vacate: "<verb>"/s),
+      }),
+    );
   });
 
   it("REFUSES a vacate no verb answers to, rather than holding chairs in silence", () => {
@@ -208,9 +219,7 @@ describe("readWorldDefinition — what a bundle must export", () => {
       },
     });
     expect(createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: vacating, seed: "s", seats: new Map() }).vacate).toBe("poke");
-    expect(
-      createWorld({ elementIdKey: TEST_WORLD_ELEMENT_ID_KEY, definition: bundle(), seed: "s", seats: new Map() }).vacate,
-    ).toBeNull();
+
   });
 
   // ── ShufflewickPub #473: the two verbs a referral is attributed through ──

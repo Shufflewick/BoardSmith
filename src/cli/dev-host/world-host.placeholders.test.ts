@@ -20,6 +20,7 @@ import { createOrderBook } from '../../ui/world/orderBook.js';
 import { WORLD_HOST_SOURCE } from '../../ui/world/worldProtocol.js';
 import { LocalWorldHost } from './world-host.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 class Plaza extends Space<DeckWorld> {}
 class Deck extends Space<DeckWorld> {}
@@ -47,7 +48,8 @@ function deckBundle() {
     displayName: 'Deck World',
     world: {
       maxPlayers: 2,
-      actions: [wave],
+      actions: [wave, leaveNothing],
+      vacate: 'leave',
       view: () => [PLAZA],
       genesis: (game: Game) => {
         const plaza = game.create(Plaza, PLAZA);

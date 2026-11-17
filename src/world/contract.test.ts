@@ -72,10 +72,6 @@ class ReferenceWorldEngine implements WorldEngine {
     this.seats.set(player, seat);
   }
 
-  unseat(player: string): void {
-    this.seats.delete(player);
-  }
-
   async applyCommand(
     player: string,
     command: WorldCommand,
@@ -88,6 +84,13 @@ class ReferenceWorldEngine implements WorldEngine {
       throw new Error(`"${player}" is not in this world.`);
     }
     this.seen.set(player, (this.seen.get(player) ?? 0) + 1);
+    // THIS WORLD'S DEPARTURE VERB (ShufflewickPub #813): the chair comes free
+    // in the dispatch that succeeded, and the result says which.
+    if (command.name === "leave") {
+      const seat = this.seats.get(player)!;
+      this.seats.delete(player);
+      return { events: [], dirty: [], schedules: [], vacated: { seat, player } };
+    }
     const dirty =
       command.name === "touchAll" ? [...PARTITIONS] : [PARTITIONS[0]];
     this.useClock += 1;

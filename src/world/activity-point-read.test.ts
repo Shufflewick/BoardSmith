@@ -63,6 +63,7 @@ import type {
   StoredPartition,
 } from "./contract.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Room extends Space<Demo> {
   /** Which seat the next occurrence of a sweep is about. */
@@ -192,7 +193,8 @@ const definition = {
   gameType: "demo",
   world: {
     maxPlayers: 4,
-    actions: [audit, destroy, elect, report, peek],
+    actions: [audit, destroy, elect, report, peek, leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) => {
       const hall = game.create(Room, "hall");
       // The audit's sweep is mid-flight on seat 2 -- an established empire that
@@ -474,7 +476,7 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
         elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
         definition: {
           ...definition,
-          world: { ...definition.world, actions: [forged] },
+          world: { ...definition.world, actions: [forged, leaveNothing] },
         } as WorldRunnerOptions["definition"],
         seed: "forged",
         seats: SEATS,
@@ -492,7 +494,7 @@ describe("#423 — the read is the world's own authority, and a seat cannot forg
       elementIdKey: TEST_WORLD_ELEMENT_ID_KEY,
       definition: {
         ...definition,
-        world: { ...definition.world, actions: [bad] },
+        world: { ...definition.world, actions: [bad, leaveNothing] },
       } as WorldRunnerOptions["definition"],
       seed: "bad",
       seats: SEATS,

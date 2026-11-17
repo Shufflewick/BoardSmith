@@ -169,15 +169,13 @@ const FORMAT_FIXTURE_GOLDEN = formatFixtureGolden as unknown as FormatFixture;
  */
 export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number], true | string> = {
   hydrate: true,
+  // ShufflewickPub #399, #813. Driven by `computeWorldDeclaration`, which
+  // dispatches the world's `vacate` verb for one of two seats and hashes the
+  // `vacated` answer and what the engine then says about each -- so a departure
+  // that stopped freeing or reporting its chair moves the payload. The dirty
+  // set, rollback and the checkpoint bytes of a write stay unfingerprinted.
+  applyCommand: true,
   offerPartitions: true,
-  // ShufflewickPub #399. Driven by `computeWorldDeclaration`, which seats two
-  // players, retires one and hashes what the engine then answers about each --
-  // so a rule dropped from `unseat` shows up as a moved payload rather than as
-  // a claim nobody checked. It has to be DRIVEN rather than excused: what it
-  // decides is who a world's next arrival may be, and a host that cannot retire
-  // a seat has to throw its isolate away instead, which is a cost this engine
-  // used to impose without recording that it did.
-  unseat: true,
   offersFor: true,
   residency: true,
   viewFor: true,
@@ -259,8 +257,6 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'neither runs genesis nor creates a root -- so the number never moves here. What it '
     + 'reports is one integer, and the shape of it is covered by the surface fingerprint.',
 
-  applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
-    + 'rollback and the checkpoint bytes are unfingerprinted.',
   commandNeeds: 'The declaration walk a DISPATCH drives -- partitions, and the chairs a '
     + 'world-owned phase declares (ShufflewickPub #423) -- and the fixture drives none. '
     + "The offer's own walk, the same two-round shape, is covered; an offer belongs to a seat "
@@ -271,8 +267,8 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
   onEvent: 'The clock\'s road: scheduling, recurrence, keyed cancellation and event routing '
     + 'by scope. Nothing here schedules and nothing here is due.',
   seat: 'Seats are handed to the constructor, so nobody sits DOWN mid-fixture. Standing up is '
-    + 'driven -- see `unseat` -- because a retirement has no constructor form: it is the one '
-    + 'roster change a host makes to a world that is already built.',
+    + 'driven -- a departure through the world\'s `vacate` verb, see `applyCommand` -- because '
+    + 'it has no constructor form: it is the one roster change a world that is already built makes.',
   serializePartitions: 'What a checkpoint WRITES. Nothing in THIS fixture writes, so a '
     + 'dirtied partition\'s stored form moves neither of the two hashes this table is about. It '
     + 'is not unfingerprinted, though: `formatHash` drives it over a committed corpus, which is '
@@ -1336,8 +1332,7 @@ function assertCoversWorldOffer(facts: {
  * `createWorld`'s answer beside the runner: how many chairs this world has, and
  * which of its verbs gives a departed seat's ground back. Both are facts a host
  * must have BEFORE it can decide anything -- the first to refuse a seating
- * before it writes one, the second to know whether a chair can ever come back
- * at all and what to run when one is leaving.
+ * before it writes one, the second to know what to run when one is leaving.
  *
  * And the `referral` block `readWorldDefinition` hands back (ShufflewickPub
  * #473), which is the third such fact and the one the engine deliberately does
@@ -1377,10 +1372,8 @@ async function computeWorldDeclaration(): Promise<unknown> {
   }
 
   const abandon = worldAction<any>('abandon')
-    .needs(({ player }: any) => [`holding:${player.seat}`])
-    .execute((_args: any, ctx: any) => {
-      ctx.world.partition(`holding:${ctx.player.seat}`);
-    });
+    .needs(() => [])
+    .execute(() => {});
 
   // THE VERB A REFERRAL REWARD IS DELIVERED AS (ShufflewickPub #473), which is
   // seatless because a grant is the clock acting on the host's say-so.
@@ -1420,27 +1413,31 @@ async function computeWorldDeclaration(): Promise<unknown> {
     seats: new Map([['stays', 1], ['leaves', 2]]),
   });
 
-  // AND THE OTHER HALF OF A WORLD'S ROSTER (#399): the chair a departure gives
-  // back. Two seats, one retired, and what the engine answers about each
-  // afterwards -- which is the only observable a retirement HAS, because it
-  // moves nothing in the world and forgets a mapping.
-  built.runner.unseat("leaves");
-  const seatedAfterUnseat = {
-    stays: await declarationRefusal(built, "stays"),
-    leaves: await declarationRefusal(built, "leaves"),
-    // IDEMPOTENT, so a host retrying a departure it may already have applied is
-    // the ordinary case rather than a refusal.
-    leavesAgain: (() => {
-      built.runner.unseat("leaves");
-      return "no refusal";
-    })(),
+  // AND THE OTHER HALF OF A WORLD'S ROSTER (#399, #813): the chair a
+  // departure gives back. Two seats, one departed through the world's own
+  // `vacate` verb, and what the engine answers about each afterwards.
+  const departed = await built.runner.apply({
+    player: 'leaves',
+    command: { name: 'abandon', args: {} },
+    timing: null,
+    arrivedAt: 0,
+    allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+    presence: [],
+    activity: { seat: 2, at: null, since: 0 },
+    declaredActivity: [],
+    declaredNotices: [],
+  });
+  const seatedAfterDeparture = {
+    vacated: departed.vacated,
+    stays: await declarationRefusal(built, 'stays'),
+    leaves: await declarationRefusal(built, 'leaves'),
   };
 
   return {
     seatCount: built.seatCount,
     vacate: built.vacate,
     referral: readWorldDefinition({ world: world as any }).referral,
-    seatedAfterUnseat,
+    seatedAfterDeparture,
   };
 }
 

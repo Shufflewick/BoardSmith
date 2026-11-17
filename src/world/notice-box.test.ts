@@ -43,6 +43,7 @@ import { assertStorablePartitionName } from "./partition-store.js";
 import type { StoredPartition, WorldCommandResult } from "./contract.js";
 import type { WorldRunnerHandle } from "./runner.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Room extends Space<Clan> {
   /** Lines this seat has moved out of its notice box into its own state. */
@@ -157,8 +158,9 @@ function definitionWith(notices: { perSeat: number } | null) {
       // verbs that only send.
       actions:
         notices === null
-          ? [alert, raw, flood]
-          : [alert, mail, blindMail, read, peek, grab, arrive, raw, flood],
+          ? [alert, raw, flood, leaveNothing]
+          : [alert, mail, blindMail, read, peek, grab, arrive, raw, flood, leaveNothing],
+      vacate: "leave",
       genesis: (game: Game) =>
         ({
           hall: game.create(Room, "hall"),

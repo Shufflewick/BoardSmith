@@ -8,6 +8,7 @@ import { Card, Game, Space, type GameOptions } from '../engine/index.js';
 import type { ElementJSON } from '../engine/element/types.js';
 import { createTestWorld } from '../testing/test-world.js';
 import { worldAction, type WorldDefinition } from './index.js';
+import { leaveNothing } from './departure.test-helper.js';
 
 class Pouch extends Space<PouchWorld> {}
 class Commons extends Space<PouchWorld> {}
@@ -41,7 +42,8 @@ const peek = worldAction<PouchWorld>('peek').chooseElement('card', {
 
 const world: WorldDefinition = {
   maxPlayers: 2,
-  actions: [filch, grab, peek],
+  actions: [filch, grab, peek, leaveNothing],
+  vacate: 'leave',
   view: () => ['commons'],
   genesis: (game: Game) => {
     const commons = game.create(Commons, 'commons');

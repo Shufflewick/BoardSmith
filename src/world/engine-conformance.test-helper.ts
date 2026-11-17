@@ -22,8 +22,8 @@ const arrival = (now: number) => ({ kind: "arrival", now }) as const;
 
 
 /** Build a fresh engine holding at least the two named players and two
- *  partitions. The suite supplies nothing: how a world is constructed is the
- *  engine's business. */
+ *  partitions, with `leave` as its departure verb (`world.vacate`). The suite
+ *  supplies nothing: how a world is constructed is the engine's business. */
 type WorldEngineFactory = () => Promise<WorldEngine> | WorldEngine;
 
 /** A stamped arrival instant. Every command carries one -- the PLATFORM's own,
@@ -442,12 +442,14 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(() => engine.seat("player-d", 5)).toThrow();
   });
 
-  it("refuses a seat another player holds until they are unseated (#796)", async () => {
-    // Two holders of one chair would both command its holdings.
+  it("refuses a seat another player holds until they depart (#796, ShufflewickPub #813)", async () => {
+    // Two holders of one chair would both command its holdings, and the only
+    // way a chair comes free is its holder's own departure verb succeeding.
     const engine = await makeEngine();
     engine.seat("player-d", 4);
     expect(() => engine.seat("player-e", 4)).toThrow();
-    engine.unseat("player-d");
+    const departed = await engine.applyCommand("player-d", { name: "leave", args: {} }, STAMP);
+    expect(departed.vacated).toEqual({ seat: 4, player: "player-d" });
     expect(() => engine.seat("player-e", 4)).not.toThrow();
   });
 

@@ -29,6 +29,7 @@ import {
   type Vault,
 } from './test-world.test-helper.js';
 import { worldAction, worldBudgets, worldClockAction, type WorldDefinition } from '../world/index.js';
+import { leaveNothing } from '../world/departure.test-helper.js';
 
 const bundle = (world?: WorldDefinition) => ({ ...vaultBundle(), ...(world ? { world } : {}) });
 
@@ -116,7 +117,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       .needs(({ args }) => [(args.plot as string).split('@')[0]!])
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [build, leaveNothing] } as WorldDefinition),
     });
     await expect(world.take(1, 'build')).rejects.toMatchObject({
       code: 'missing-pick',
@@ -135,7 +136,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [build, leaveNothing] } as WorldDefinition),
     });
     await expect(world.resolvePick(1, 'build', 'size', {})).rejects.toMatchObject({
       code: 'missing-pick',
@@ -153,7 +154,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [build, leaveNothing] } as WorldDefinition),
     });
     const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
     expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
@@ -175,7 +176,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [build, leaveNothing] } as WorldDefinition),
     });
     const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
     expect(offer.selections.map((pick) => [pick.name, pick.choices?.length])).toEqual([
@@ -203,7 +204,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [build] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [build, leaveNothing] } as WorldDefinition),
     });
     const offer = (await world.offersFor(1)).find((candidate) => candidate.name === 'build')!;
     expect(offer.selections.slice(1)).toEqual([
@@ -236,7 +237,7 @@ describe('TestWorld: a resident world a test can construct', () => {
       .disabled(() => 'The vault door is shut.')
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [locked] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [locked, leaveNothing] } as WorldDefinition),
     });
 
     const view = await world.getPlayerView(1);
@@ -377,7 +378,7 @@ describe('TestWorld: arrivals and re-asked picks, as a host drives them', () => 
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: bundle({ ...vaultWorldBlock(), actions: [pair] } as WorldDefinition),
+      definition: bundle({ ...vaultWorldBlock(), actions: [pair, leaveNothing] } as WorldDefinition),
     });
 
     const pick = await world.resolvePick(1, 'pair', 'second', { first: 'b' });

@@ -2181,7 +2181,10 @@ const stroll = worldAction<DevGameGame>('stroll')
   });
 
 ${bow}
-export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll${options.manners ? ', bow, nod' : ''}];
+/** What becomes of a departed wanderer: nothing here; the host runs it, so no page offers it. */
+const leave = worldAction<DevGameGame>('leave').needs(() => []).execute(() => {});
+
+export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll, leave${options.manners ? ', bow, nod' : ''}];
 `,
     'src/ui/components/WorldBoard.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';

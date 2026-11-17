@@ -19,6 +19,7 @@
  */
 import { Game, Player, Space, type GameOptions } from '../engine/index.js';
 import { worldAction, type WorldDefinition } from '../world/index.js';
+import { leaveNothing } from '../world/departure.test-helper.js';
 
 /** One seat's private room. Nobody else's `world.view` names it. */
 export class Vault extends Space<VaultWorld> {
@@ -117,7 +118,8 @@ const inspect = worldAction<VaultWorld>('inspect')
 export function vaultWorldBlock(): WorldDefinition {
   return {
     maxPlayers: SEATS,
-    actions: [stash, post, inspect],
+    actions: [stash, post, inspect, leaveNothing],
+    vacate: 'leave',
     // THE WHOLE OF WHAT A SEAT MAY SEE. The commons, and its own vault.
     view: (seat: number) => [COMMONS, vaultPartition(seat)],
     genesis: (game: Game) => {

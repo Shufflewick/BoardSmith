@@ -24,6 +24,7 @@ import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import { worldAction } from "./action.js";
 import { WorldRefusal } from "./refusals.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -51,7 +52,8 @@ const definition = {
   gameType: "shop",
   world: {
     maxPlayers: 1,
-    actions: [buy],
+    actions: [buy, leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) => ({ vault: game.create(Vault, "vault") }) as Record<string, GameElement>,
     view: () => ["vault"],
   },

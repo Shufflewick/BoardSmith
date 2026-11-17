@@ -36,6 +36,7 @@ import { readOnlyScope } from "./readonly.js";
 import {
   Holding,
   VillageFixture,
+  applyThroughWalk,
   holdingPartition,
   newVillageEngine,
 } from "./village.test-helper.js";
@@ -186,6 +187,11 @@ class CountingStore implements WorldPartitionSource {
 // fallback `worldClockAction` exists to make unrepresentable.
 
 /** Names ONE partition. The whole model is that this costs one room. */
+/** This world's departure verb (`world.vacate`), which gives nothing back. */
+const leave = worldAction<WorldFixtureGame>("leave")
+  .needs(() => [])
+  .execute(() => {});
+
 const touch = worldAction<WorldFixtureGame>("touch")
   .needs(() => [ROOM_ONE])
   .execute((_args, ctx) => {
@@ -561,6 +567,7 @@ const ACTIONS: readonly ActionDefinition[] = [
   refuseInCrashWords,
   returnCrashWords,
   clockRefuseInWords,
+  leave,
 ];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
@@ -572,6 +579,7 @@ function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
     ]),
     store,
     actions: ACTIONS,
+    vacate: "leave",
     // WHAT A LOOK IS ABOUT (#95). Both rooms, so the conformance suite's views
     // are of a world that is actually there rather than of a bare root.
     view: () => [ROOM_ONE, ROOM_TWO],
@@ -606,6 +614,7 @@ function genesisEngine(): BoardSmithWorldEngine {
     ]),
     store: new CountingStore(new Map()),
     actions: ACTIONS,
+    vacate: "leave",
     view: () => [ROOM_ONE, ROOM_TWO],
   });
   engine.registerResident(ROOM_ONE, roomOne);
@@ -2634,20 +2643,28 @@ describe("#381 — a resident-root lookup is asked of the root table, not of the
   });
 });
 
-// ShufflewickPub #399: A CHAIR CAN BE GIVEN BACK.
+// ShufflewickPub #399, #813: A CHAIR CAN BE GIVEN BACK, AND ONLY BY DEPARTING.
 //
 // The roster used to be add-only, which made a departed player's chair
 // unreclaimable from here: a host that wanted one back had to throw the whole
-// isolate away and rebuild it from a roster that omitted them. On a platform
-// that caps a world's LIFETIME isolates that is not an implementation, it is a
-// world that stops working after a handful of departures -- so the roster
-// shrinks now, and these are the two halves of what shrinking has to mean.
-describe("retiring a seat's holder (ShufflewickPub #399)", () => {
+// isolate away and rebuild it from a roster that omitted them. Now the world's
+// own `vacate` verb is the departure: when it succeeds the engine frees the
+// chair in the same dispatch, so nothing can free one the hook has not run for.
+describe("a seat's holder departing (ShufflewickPub #399, #813)", () => {
   const tend = worldAction<VillageFixture>("tend")
     .needs(({ player }) => [holdingPartition(player.seat)])
     .execute((_args, ctx) => {
       (ctx.world.partition(holdingPartition(ctx.player.seat)) as Holding).standing += 1;
     });
+
+  /** The hook, giving nothing back: the holding stays as it stands. */
+  const leave = worldAction<VillageFixture>("leave")
+    .needs(({ player }) => [holdingPartition(player.seat)])
+    .execute(() => {});
+
+  const village = () => newVillageEngine([tend, leave], worldBudgets(), undefined, "leave");
+  const depart = (engine: BoardSmithWorldEngine, player: string) =>
+    applyThroughWalk(engine, player, { name: "leave", args: {} });
 
   /**
    * SEAT 2, REISSUED, AND THE NEW HOLDER REACHES ITS GROUND.
@@ -2656,41 +2673,40 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
    * live roster could not reissue it at all), and what the newcomer's command
    * declares is seat 2's own holding rather than a chair-shaped blank.
    */
-  function reissueSeatTwo(engine: BoardSmithWorldEngine): void {
+  async function reissueSeatTwo(engine: BoardSmithWorldEngine): Promise<void> {
     engine.seat("newcomer", 2);
 
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([
+    expect((await applyThroughWalk(engine, "newcomer", { name: "tend", args: {} })).dirty).toEqual([
       holdingPartition(2),
     ]);
   }
 
-  it("forgets the mapping, so a command for a retired holder is unknown-player", async () => {
+  /** Why `commandNeeds` refused this player, or undefined. */
+  function needsRefusal(engine: BoardSmithWorldEngine, player: string): unknown {
+    // Thrown where the seat is resolved, which is before the declaration walk
+    // begins, so it arrives synchronously rather than as a rejected promise.
+    try {
+      engine.commandNeeds(player, { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] });
+    } catch (error) {
+      return error;
+    }
+    return undefined;
+  }
+
+  it("reports the vacancy and forgets the holder, so their next command is unknown-player", async () => {
     // NOT "runs against whoever holds the chair now", which is the failure this
     // exists to prevent: the seat number is about to be handed on, and a
     // command still resolving through the old holder would reach the new one's
     // ground.
-    const { engine } = newVillageEngine([tend]);
-    engine.unseat("p2");
+    const { engine } = village();
+    expect((await depart(engine, "p2")).vacated).toEqual({ seat: 2, player: "p2" });
 
-    // Thrown where the seat is resolved, which is before the declaration walk
-    // begins, so it arrives synchronously rather than as a rejected promise.
-    let refused: unknown;
-    try {
-      engine.commandNeeds("p2", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] });
-    } catch (error) {
-      refused = error;
-    }
-    expect(refused).toMatchObject({ code: "unknown-player" });
+    expect(needsRefusal(engine, "p2")).toMatchObject({ code: "unknown-player" });
   });
 
   it("does not list the seated players to an unseated caller (#797)", async () => {
-    const { engine } = newVillageEngine([tend]);
-    let refused: { code?: string; message?: string } | undefined;
-    try {
-      engine.commandNeeds("intruder", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] });
-    } catch (error) {
-      refused = error as { code?: string; message?: string };
-    }
+    const { engine } = village();
+    const refused = needsRefusal(engine, "intruder") as { code?: string; message?: string } | undefined;
     expect(refused).toMatchObject({ code: "unknown-player" });
     expect(refused?.message).toContain('"intruder" is not in this world');
     expect(refused?.message).not.toMatch(/\bp1\b|\bp2\b/);
@@ -2700,30 +2716,36 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // THE WHOLE POINT. `seat` refuses to MOVE a seated player, so seat 2 could
     // not be reissued while p2 still held it -- and the only way out was a
     // rebuilt engine.
-    const { engine } = newVillageEngine([tend]);
-    engine.unseat("p2");
+    const { engine } = village();
+    await depart(engine, "p2");
 
-    reissueSeatTwo(engine);
+    await reissueSeatTwo(engine);
   });
 
-  it("lets a retired holder come back to a DIFFERENT chair", async () => {
+  it("frees nothing for any other verb, so ordinary play never hands a chair on", async () => {
+    const { engine } = village();
+    expect((await applyThroughWalk(engine, "p2", { name: "tend", args: {} })).vacated).toBeUndefined();
+    expect(() => engine.seat("newcomer", 2)).toThrow(/"p2" holds seat 2/);
+  });
+
+  it("lets a departed holder come back to a DIFFERENT chair", async () => {
     // The case a stale mapping breaks and nothing else would catch: `seat`
     // answers `seat-conflict` for a player it still knows, so a returning
     // leaver given a fresh chair would have been refused at the door by an
     // engine that had merely been told to forget them badly.
-    const { engine } = newVillageEngine([tend]);
+    const { engine } = village();
 
     // WHILE THEY ARE STILL SEATED this is a refusal, and rightly: moving a
     // seated player would hand them somebody else's holdings.
     expect(() => engine.seat("p2", 3)).toThrow(/already plays seat/);
 
-    engine.unseat("p2");
-    engine.unseat("p3");
+    await depart(engine, "p2");
+    await depart(engine, "p3");
     expect(() => engine.seat("p2", 3)).not.toThrow();
   });
 
-  it("refuses a chair somebody else holds, and hands it on once they leave (#796)", () => {
-    const { engine } = newVillageEngine([tend]);
+  it("refuses a chair somebody else holds, and hands it on once they leave (#796)", async () => {
+    const { engine } = village();
 
     let refused: unknown;
     try {
@@ -2734,32 +2756,31 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     expect(refused).toMatchObject({ code: "seat-conflict", message: expect.stringMatching(/"p2" holds seat 2/) });
     expect(() => engine.seat("p2", 2)).not.toThrow();
 
-    engine.unseat("p2");
-    reissueSeatTwo(engine);
+    await depart(engine, "p2");
+    await reissueSeatTwo(engine);
   });
 
-  it("is idempotent, so a host retrying a departure is not the failure", () => {
-    const { engine } = newVillageEngine([tend]);
-    engine.unseat("p2");
-    expect(() => engine.unseat("p2")).not.toThrow();
-    expect(() => engine.unseat("never-sat-here")).not.toThrow();
+  it("refuses a second departure by the same player, so a retry cannot free the next holder's chair", async () => {
+    const { engine } = village();
+    await depart(engine, "p2");
+    engine.seat("newcomer", 2);
+
+    await expect(depart(engine, "p2")).rejects.toMatchObject({ code: "unknown-player" });
+    expect(() => engine.seat("someone-else", 2)).toThrow(/"newcomer" holds seat 2/);
   });
 
-  it("moves NOTHING in the world: the ground behind the chair stands", async () => {
-    // A seat is a chair and a chair is not a castle. Returning the ground is
-    // the GAME's, through the verb it declares as `world.vacate`, and this
-    // engine deliberately cannot tell whether that has happened -- which is
-    // exactly why the ordering is the host's to keep.
-    const { engine, store } = newVillageEngine([tend]);
+  it("leaves the ground as the hook left it: a reference to the seat is the chair's", async () => {
+    // A seat is a chair and a chair is not a castle. What becomes of the ground
+    // is the GAME's, in its `vacate` verb; this one gives nothing back, so the
+    // holding still names seat 2 and the next holder of seat 2 holds it.
+    const { engine, store } = village();
     const before = await store.read(holdingPartition(2));
     expect(before).toBeDefined();
 
-    engine.unseat("p2");
+    await depart(engine, "p2");
 
     expect(await store.read(holdingPartition(2))).toEqual(before);
-    // And the chair's next holder reaches that same standing ground, which is
-    // the danger stated as an assertion: retiring a seat is not a cleanup.
-    reissueSeatTwo(engine);
+    await reissueSeatTwo(engine);
   });
 });
 
