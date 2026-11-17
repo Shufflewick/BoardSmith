@@ -18,6 +18,7 @@ import { assert, check, onFreshPage, runBrowserRegression, summarise, surfaceOf 
 const RULES = `import { Game, Player, Space } from 'boardsmith';
 import type { GameElement, GameOptions } from 'boardsmith';
 import type { GameDefinition } from 'boardsmith/session';
+import { worldAction } from 'boardsmith/world';
 
 class Hall extends Space<Waiting> {}
 
@@ -38,7 +39,8 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ [HALL]: (game as Waiting).create(Hall, 'hall') as GameElement }),
     view: () => [HALL],
-    actions: [],
+    actions: [worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

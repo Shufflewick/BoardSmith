@@ -158,7 +158,8 @@ export const gameDefinition: GameDefinition = {
       return { [GROUND]: ground as GameElement };
     },
     view: () => [GROUND],
-    actions: [tend, plant, muster],
+    actions: [tend, plant, muster, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

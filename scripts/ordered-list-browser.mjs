@@ -158,7 +158,8 @@ export const gameDefinition: GameDefinition = {
       return { [YARD]: ledger as GameElement };
     },
     view: () => [YARD],
-    actions: [repair],
+    actions: [repair, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

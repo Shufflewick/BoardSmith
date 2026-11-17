@@ -152,7 +152,8 @@ export const gameDefinition: GameDefinition = {
       return { [EMPIRE]: empire as GameElement };
     },
     view: () => [EMPIRE],
-    actions: [boost],
+    actions: [boost, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;
