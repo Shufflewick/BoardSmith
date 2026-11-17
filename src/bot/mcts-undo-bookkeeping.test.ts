@@ -115,7 +115,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect(seat1AfterPick.completed).toBe(true);
 
     // BACKPROPAGATE, then the next step's selection restores the root state.
-    bot.backpropagate(child, 0.5, [], []);
+    bot.backpropagate(child, () => 0.5, [], []);
     bot.selectWithPath(root);
 
     // Second simulated branch at the SAME root: seat 1 picks 'y' (the next
@@ -200,7 +200,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
     expect((bot.searchGame as any).settings.winners).toEqual([1]);
 
     // BACKPROPAGATE, then the next step's selection restores the root state.
-    bot.backpropagate(child, 1, [], []);
+    bot.backpropagate(child, () => 1, [], []);
     bot.selectWithPath(root);
 
     // Root cause proof: `game.finish()` sets `phase`/`settings.winners` as

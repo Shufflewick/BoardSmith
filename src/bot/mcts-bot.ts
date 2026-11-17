@@ -42,6 +42,8 @@ const SAVED_COPY_BUDGET_BYTES = 32 * 1024 * 1024;
 
 /** A move made on a search step, and the seat that made it, for the RAVE table. */
 type TreeMove = { move: BotMove; player: number };
+/** A playout's score for each seat, from that seat's own side, in [0, 1] (#1679). */
+type SeatScores = (seat: number) => number;
 
 /**
  * What became of a move the search made in the world it is in (#421).
@@ -534,8 +536,8 @@ export class MCTSBot<G extends Game = Game> {
 
     // Debug logging for proof number analysis
     if (this.config.debug) {
-      const proven = root.children.filter(c => c.isProven).length;
-      const disproven = root.children.filter(c => c.isDisproven).length;
+      const proven = root.children.filter(c => this.isProven(c)).length;
+      const disproven = root.children.filter(c => this.isDisproven(c)).length;
       const unknown = root.children.length - proven - disproven;
       console.log(`[MCTS] Move selection: ${proven} proven, ${disproven} disproven, ${unknown} unknown of ${root.children.length} children`);
     }
@@ -543,7 +545,7 @@ export class MCTSBot<G extends Game = Game> {
     // When PNS is enabled, use proof status in final move selection
     if (this.config.usePNS !== false) {
       // Look for proven win (guaranteed victory) - require visits >= 5 to trust proof status
-      const provenWin = root.children.find(c => c.isProven && c.visits >= 5);
+      const provenWin = root.children.find(c => this.isProven(c) && c.visits >= 5);
       if (provenWin) {
         if (this.config.debug) {
           console.log(`[MCTS] Selecting proven win!`);
@@ -552,7 +554,7 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       // Check if all children are disproven (all moves lead to loss)
-      const allDisproven = root.children.every(c => c.isDisproven && c.visits >= 5);
+      const allDisproven = root.children.every(c => this.isDisproven(c) && c.visits >= 5);
       if (allDisproven) {
         // Select most-visited to delay loss (might find opponent mistake)
         const best = root.children.reduce((a, b) => a.visits > b.visits ? a : b);
@@ -560,7 +562,7 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       // Filter out disproven children (known losses) for final selection
-      const validChildren = root.children.filter(c => !c.isDisproven || c.visits < 5);
+      const validChildren = root.children.filter(c => !this.isDisproven(c) || c.visits < 5);
       if (validChildren.length > 0) {
         const best = validChildren.reduce((a, b) => a.visits > b.visits ? a : b);
         return { move: best.parentMove!, root };
@@ -750,8 +752,8 @@ export class MCTSBot<G extends Game = Game> {
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
    * As visits accumulate, beta decreases so the child's own mean dominates.
    *
-   * When PNS is enabled, solved children are set aside first: a proven loss is
-   * never chosen on the bot's turn, and a proven win never on the opponent's.
+   * When PNS is enabled, solved children are set aside first: the seat to move
+   * never chooses a solved ending it does not win (#1679).
    * Proof numbers play no other part in selection (#316). Until something below
    * a child is solved they only count its expanded leaves, and blending a rank
    * of those into the score let that count outweigh the evaluation.
@@ -760,7 +762,6 @@ export class MCTSBot<G extends Game = Game> {
     const C = this.cachedUctC; // Exploration constant (cached per move)
     const k = this.config.raveK ?? 500; // RAVE decay constant
     const usePNS = this.config.usePNS !== false;
-    const isBotTurn = node.currentPlayer === this.playerIndex;
 
     // Filter out proven/disproven children with sufficient visits (solver enhancement)
     let eligibleChildren = candidates;
@@ -768,11 +769,7 @@ export class MCTSBot<G extends Game = Game> {
       eligibleChildren = candidates.filter(child => {
         // Allow selection if visits < 5 to confirm solver result
         if (child.visits < 5) return true;
-        // Don't select isProven children when it's opponent's turn (opponent won't help us)
-        if (!isBotTurn && child.isProven) return false;
-        // Don't select isDisproven children when it's our turn (avoid known losses)
-        if (isBotTurn && child.isDisproven) return false;
-        return true;
+        return child.solvedWinners === null || child.solvedWinners.includes(node.currentPlayer);
       });
       // Fallback if all children filtered out
       if (eligibleChildren.length === 0) {
@@ -902,15 +899,15 @@ export class MCTSBot<G extends Game = Game> {
    * PLAYOUT with incremental state: Simulate from searchGame's current position.
    * The searchGame is already positioned at the node's state.
    * Plays random moves (or uses playoutPolicy if available) until the game ends or playoutDepth is reached.
-   * Returns a score in [0,1] and the moves played during playout with player info (for RAVE),
+   * Returns each seat's score and the moves played during playout with player info (for RAVE),
    * or null when a refused move changed the world before it was refused (#421), which leaves
    * a position that is no position the game can reach.
    */
-  private playoutIncremental(): { score: number; playoutMoves: Array<{ move: BotMove; player: number }> } | null {
+  private playoutIncremental(): { score: SeatScores; playoutMoves: Array<{ move: BotMove; player: number }> } | null {
     const playoutMoves: Array<{ move: BotMove; player: number }> = [];
 
     if (!this.searchGame) {
-      return { score: 0.5, playoutMoves };
+      return { score: () => 0.5, playoutMoves };
     }
 
     // The world's own flow state: the node the playout starts from may have
@@ -965,13 +962,13 @@ export class MCTSBot<G extends Game = Game> {
    * touches `searchGame`: the next step restores that whole (see runSearch).
    *
    * @param node - The leaf node to start backpropagation from
-   * @param result - The playout score (0=loss, 0.5=draw, 1=win for bot)
+   * @param result - The playout's score for each seat, from that seat's side
    * @param playoutMoves - Moves played during playout with player info (for RAVE)
    * @param treeMoves - Moves from tree path with player info (for RAVE)
    */
   private backpropagate(
     node: MCTSNode | null,
-    result: number,
+    result: SeatScores,
     playoutMoves: TreeMove[] = [],
     treeMoves: TreeMove[] = []
   ): void {
@@ -983,9 +980,7 @@ export class MCTSBot<G extends Game = Game> {
         const key = this.raveKey(move, player);
 
         // RAVE value is from perspective of the player who made the move
-        // If bot made the move: good result is good for RAVE
-        // If opponent made the move: good result for bot is bad for that move
-        const moveValue = player === this.playerIndex ? result : (1 - result);
+        const moveValue = result(player);
 
         const entry = this.raveTable.get(key);
         if (entry) {
@@ -1003,15 +998,10 @@ export class MCTSBot<G extends Game = Game> {
     while (node !== null) {
       node.visits++;
       // Value is from perspective of player who just moved to reach this node
-      // If it's our player's turn at parent, result is good for us
-      // If it's opponent's turn at parent, result is bad for them (good for us)
-      const isOurPerspective = node.parent === null ||
-        node.parent.currentPlayer === this.playerIndex;
-      node.value += isOurPerspective ? result : (1 - result);
+      node.value += result(node.parent?.currentPlayer ?? this.playerIndex);
 
-      // Update proof numbers from children (if PNS enabled)
       if (this.config.usePNS !== false) {
-        this.updateProofNumbers(node);
+        this.updateSolved(node);
       }
 
       node = node.parent;
@@ -1490,86 +1480,57 @@ export class MCTSBot<G extends Game = Game> {
       // at the root, `seatToMove` below it (not `flowState.currentPlayer`, which a simultaneous
       // step never advances, #321), and the bot's seat for a node with no moves.
       currentPlayer,
-      ...this.terminalProof(flowState),
+      solvedWinners: this.terminalWinners(flowState),
       availability: 0,
       refusedMoveKeys: new Set(),
     };
   }
 
   /**
-   * A new node's proof numbers: solved only for a finished game whose result
-   * is certain (#720). A draw is neither win nor loss, and a result reached
+   * A new node's solved winners: set only for a finished game whose result is
+   * certain (#720). A draw is neither win nor loss, and a result reached
    * through a sampled world or a random draw this step is one outcome of many.
    */
-  private terminalProof(flowState: FlowState): Pick<MCTSNode, 'proofNumber' | 'disproofNumber' | 'isProven' | 'isDisproven'> {
-    const unsolved = { proofNumber: 1, disproofNumber: 1, isProven: false, isDisproven: false };
-    if (!flowState.complete || !this.searchGame || this.determinize) return unsolved;
-    if (this.searchGame.getRandomState() !== this.resumedRandomState) return unsolved;
-    if (this.searchGame.isDraw()) return unsolved;
-    const winners = this.searchGame.getWinners().map(p => p.seat);
-    if (winners.includes(this.playerIndex)) return { proofNumber: 0, disproofNumber: Infinity, isProven: true, isDisproven: false };
-    return { proofNumber: Infinity, disproofNumber: 0, isProven: false, isDisproven: true };
+  private terminalWinners(flowState: FlowState): readonly number[] | null {
+    if (!flowState.complete || !this.searchGame || this.determinize) return null;
+    if (this.searchGame.getRandomState() !== this.resumedRandomState) return null;
+    if (this.searchGame.isDraw()) return null;
+    return this.searchGame.getWinners().map(p => p.seat);
+  }
+
+  /** True when `node` is solved as a win for the bot's seat. */
+  private isProven(node: MCTSNode): boolean {
+    return node.solvedWinners?.includes(this.playerIndex) === true;
+  }
+
+  /** True when `node` is solved as a loss for the bot's seat. */
+  private isDisproven(node: MCTSNode): boolean {
+    return node.solvedWinners !== null && !node.solvedWinners.includes(this.playerIndex);
   }
 
   /**
-   * Update proof numbers for a node based on its children.
-   * Uses perspective-aware propagation:
-   * - OR nodes (bot's turn): pn = min(children), dpn = sum(children)
-   * - AND nodes (opponent's turn): pn = sum(children), dpn = min(children)
+   * Solve `node` from its children (#1679). The seat to move takes a solved
+   * ending it wins when it has one; with none, it is held to no ending unless
+   * every move is tried and solved. The node is solved only when every ending
+   * it may take agrees on the bot's result, and its winners are the seats that
+   * win in all of them.
    */
-  private updateProofNumbers(node: MCTSNode): void {
-    if (node.children.length === 0) {
-      // Leaf node - keep initialized values
-      return;
-    }
-
-    const isBotTurn = node.currentPlayer === this.playerIndex;
-
-    if (isBotTurn) {
-      // OR node: bot picks best move, so pn = min(child pn), dpn = sum(child dpn)
-      let minPn = Infinity;
-      let sumDpn = 0;
-
-      for (const child of node.children) {
-        minPn = Math.min(minPn, child.proofNumber);
-        // Handle Infinity: sum of any Infinity is Infinity
-        if (child.disproofNumber === Infinity) {
-          sumDpn = Infinity;
-        } else if (sumDpn !== Infinity) {
-          sumDpn += child.disproofNumber;
-        }
-      }
-
-      node.proofNumber = minPn;
-      node.disproofNumber = sumDpn;
-    } else {
-      // AND node: opponent picks best for them, so pn = sum(child pn), dpn = min(child dpn)
-      let sumPn = 0;
-      let minDpn = Infinity;
-
-      for (const child of node.children) {
-        minDpn = Math.min(minDpn, child.disproofNumber);
-        // Handle Infinity: sum of any Infinity is Infinity
-        if (child.proofNumber === Infinity) {
-          sumPn = Infinity;
-        } else if (sumPn !== Infinity) {
-          sumPn += child.proofNumber;
-        }
-      }
-
-      node.proofNumber = sumPn;
-      node.disproofNumber = minDpn;
-    }
-
-    // Update solved status
-    node.isProven = node.proofNumber === 0;
-    node.isDisproven = node.disproofNumber === 0;
+  private updateSolved(node: MCTSNode): void {
+    if (node.children.length === 0) return;
+    const solved = node.children.filter(c => c.solvedWinners !== null);
+    const wins = solved.filter(c => c.solvedWinners!.includes(node.currentPlayer));
+    const allSolved = node.untriedMoves.length === 0 && solved.length === node.children.length;
+    const taken = wins.length > 0 ? wins : allSolved ? solved : [];
+    const agree = taken.length > 0 && (taken.every(c => this.isProven(c)) || !taken.some(c => this.isProven(c)));
+    node.solvedWinners = agree
+      ? taken[0].solvedWinners!.filter(seat => taken.every(c => c.solvedWinners!.includes(seat)))
+      : null;
   }
 
   /**
    * Evaluate terminal position directly from game instance (faster, no snapshot needed)
    */
-  private evaluateTerminalFromGame(game: Game, flowState: FlowState): number {
+  private evaluateTerminalFromGame(game: Game, flowState: FlowState): SeatScores {
     if (!flowState.complete) {
       // Game didn't complete - use objectives if available
       if (this.objectives) {
@@ -1592,20 +1553,22 @@ export class MCTSBot<G extends Game = Game> {
         // Normalize to [0.1, 0.9] range based on possible score range
         // This preserves discrimination between different objective achievements
         const scoreRange = maxPossibleScore - minPossibleScore;
-        if (scoreRange === 0) return 0.5;
+        if (scoreRange === 0) return () => 0.5;
 
         // Map totalScore from [minPossibleScore, maxPossibleScore] to [0.1, 0.9]
         const normalized = (totalScore - minPossibleScore) / scoreRange;
         const result = 0.1 + normalized * 0.8;
 
-        return result;
+        // Objectives score the bot's seat alone, so another seat's is taken as the opposite
+        return seat => seat === this.playerIndex ? result : 1 - result;
       }
-      return 0.5; // Draw/unknown
+      return () => 0.5; // Draw/unknown
     }
 
-    // The result the game declares (#503): a draw only when declared, and no winners is a loss (#1625)
-    if (game.isDraw()) return 0.5;
-    return game.getWinners().some(p => p.seat === this.playerIndex) ? 1 : 0;
+    // The result the game declares (#503): a draw only when declared, and no winners is a loss for every seat (#1625, #1679)
+    if (game.isDraw()) return () => 0.5;
+    const winners = game.getWinners().map(p => p.seat);
+    return seat => winners.includes(seat) ? 1 : 0;
   }
 
   /**
