@@ -1,5 +1,5 @@
 {
-  "revision": 409,
+  "revision": 410,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3215,6 +3215,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "provideTableActionWiring takes the element that holds a harness's board and reports what it draws, offers and takes whole to the wiring's board interaction, so a harness's Action Panel can hand a long pick to the board (#1678)."
+    },
+    {
+      "revision": 410,
+      "date": "2026-11-17",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The bot search scores each seat from its own result and solves a line as lost only when the seat choosing it wins there (#1679)"
     }
   ]
 }
