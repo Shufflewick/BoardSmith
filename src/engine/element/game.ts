@@ -215,8 +215,6 @@ export type GameOptions = {
    * Defaults to {@link DEFAULT_COLOR_LABELS} for any hex not covered here.
    */
   colorLabels?: Record<string, string>;
-  /** Whether players can change colors in lobby (default: true) */
-  colorSelectionEnabled?: boolean;
   /**
    * Tutorial definition (static config, never serialized).
    *
@@ -298,7 +296,6 @@ export const ENGINE_OWNED_GAME_OPTION_KEYS = [
   'elementIdKey',
   'colors',
   'colorLabels',
-  'colorSelectionEnabled',
   'tutorial',
   'randomness',
   'worldMode',
@@ -1465,7 +1462,6 @@ export class Game<
 
     // Store color configuration for session layer access
     this.settings.colors = colorPalette;
-    this.settings.colorSelectionEnabled = options.colorSelectionEnabled ?? true;
 
     // Initialize action executor
     this._actionExecutor = new ActionExecutor(this);

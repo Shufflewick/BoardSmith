@@ -55,9 +55,6 @@ export interface PlayerState {
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
 
-  /** Whether color selection is enabled for this game */
-  colorSelectionEnabled?: boolean;
-
   /** Formatted game messages visible to this player */
   messages?: Array<{ text: string }>;
   /**

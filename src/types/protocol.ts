@@ -166,8 +166,6 @@ export interface LobbyInfo {
   minPlayers?: number;
   /** Max players for this game type */
   maxPlayers?: number;
-  /** Whether players can select colors in the lobby */
-  colorSelectionEnabled?: boolean;
   /** Available color palette (hex strings) */
   colors?: string[];
 }

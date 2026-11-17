@@ -578,19 +578,9 @@ const playerColor = gameView.players[playerSeat - 1].color;
 
 The engine assigns colors from `DEFAULT_COLOR_PALETTE` based on seat order. It holds 16
 entries — the maximum seat count any BoardSmith host supports — so a game never has to
-supply its own palette just to reach a higher player count. To customize:
-
-```typescript
-export const gameDefinition = {
-  // Custom color palette (optional)
-  colors: ['#ff0000', '#0000ff', '#00ff00'],
-
-  // Disable color selection in lobby (optional, default: true)
-  colorSelectionEnabled: false,
-};
-```
-
-When `colorSelectionEnabled` is true (the default), players can choose their color in the lobby and the UI automatically shows a color picker.
+supply its own palette just to reach a higher player count. To give players your own
+colours, declare `colorPalette` in `boardsmith.json`; [Color Palette](#color-palette) below
+says why a colour list declared in code is not enough.
 
 ## Game State Serialization
 
