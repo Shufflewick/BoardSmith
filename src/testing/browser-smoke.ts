@@ -85,6 +85,7 @@ import {
   SMOKE_SPEC_PATH,
   smokeActions,
   smokeDealPlayers,
+  smokeDealSteps,
   smokeFailure,
   smokeProblems,
   smokeRecord,
@@ -130,7 +131,9 @@ export interface SmokeTestOptions {
    * The walk acts for every seat of each deal. A deal can name the game options it is dealt with,
    * `{ seed: 'tar', gameOptions: { firstTower: 'Tar Works' } }` (#1684), for an action only those
    * options offer, such as one waiting on a random setup draw the option fixes; it is dealt with
-   * the options `boardsmith dev` starts with for any it leaves out.
+   * the options `boardsmith dev` starts with for any it leaves out. A deal can name how many steps
+   * the walk takes on it instead of {@link steps}, `{ seed: 'tar', steps: 60 }` (#1686), so a deal
+   * added for one action that comes early does not walk as long as the main deal.
    */
   readonly seed?: SmokeDeal | readonly SmokeDeal[];
   /**
@@ -145,7 +148,7 @@ export interface SmokeTestOptions {
    * game ends, acts for every seat at a table, and plays the {@link seats} a world's spec names.
    */
   readonly unreachable?: Readonly<Record<string, string>>;
-  /** How many actions the walk takes at most on each deal. The default is {@link DEFAULT_SMOKE_STEPS}. */
+  /** How many actions the walk takes at most on each deal that names no `steps` of its own. The default is {@link DEFAULT_SMOKE_STEPS}. */
   readonly steps?: number;
   /**
    * The values the walk types in an action's text or number fields, by action and then by pick
@@ -207,7 +210,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
     const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as SmokeDeal[]));
     const seats = smokeWorldSeats(options.seats);
     const walk = newWalk(options);
-    test.setTimeout(smokeWalkLimit(seeds.length, walk.steps, seats));
+    test.setTimeout(smokeWalkLimit(seeds.map((deal) => smokeDealSteps(deal, walk.steps)), seats));
     const memories: WalkMemory[] = [];
     const browsers: BrowserContext[] = [];
     watchForErrors(page, walk);
@@ -225,7 +228,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
         if (options.seed !== undefined || chosen !== undefined) note(walk, WORLD_TAKES_NO_SEED);
         const plays = await seatTheWorld(page, browser, seats, walk, browsers);
         memories.push(newMemory(null, null));
-        await walkTheGame(plays, walk, memories[0]);
+        await walkTheGame(plays, walk, memories[0], walk.steps);
       }
     } catch (error) {
       // Reported after the errors the page showed first, which usually say why the walk stopped.
@@ -250,7 +253,7 @@ async function closeTheWalk(page: Page, browsers: readonly BrowserContext[]): Pr
   }
 }
 
-/** Walks a table's game dealt as each of `seeds` says in turn (#460, #1602, #1684), remembering each deal's walk in `memories`. */
+/** Walks a table's game dealt as each of `seeds` says in turn (#460, #1602, #1684, #1686), remembering each deal's walk in `memories`. */
 async function walkEveryDeal(page: Page, seeds: readonly SmokeDeal[], walk: SmokeWalk, memories: WalkMemory[]): Promise<void> {
   const form = await dealForm(page);
   for (const deal of seeds) {
@@ -262,7 +265,7 @@ async function walkEveryDeal(page: Page, seeds: readonly SmokeDeal[], walk: Smok
     };
     await dealFrom(page, dealSeed(deal), table);
     memories.push(newMemory(dealSeed(deal), table));
-    await walkTheGame([newPlay(page, null)], walk, memories[memories.length - 1]);
+    await walkTheGame([newPlay(page, null)], walk, memories[memories.length - 1], smokeDealSteps(deal, walk.steps));
   }
 }
 
@@ -2414,14 +2417,14 @@ async function walkOneStep(plays: readonly SeatPlay[], walk: SmokeWalk, memory: 
 }
 
 /**
- * Walks the game a step at a time (`walkOneStep`) until the steps run out, the walk is over, or
+ * Walks the game a step at a time (`walkOneStep`) until its `steps` run out, the walk is over, or
  * every listed action and every offer has been taken and a few more steps turned up nothing new.
  * A step that cannot go on (a page that stops answering, #464) is reported with the step it was,
  * and ends the walk of this deal.
  */
-async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+async function walkTheGame(plays: readonly SeatPlay[], walk: SmokeWalk, memory: WalkMemory, steps: number): Promise<void> {
   let idle = 0;
-  for (let step = 1; step <= walk.steps && idle < IDLE_STEPS; step++) {
+  for (let step = 1; step <= steps && idle < IDLE_STEPS; step++) {
     memory.step = step;
     try {
       const seenBefore = walk.offered.size + memory.pressed.size;

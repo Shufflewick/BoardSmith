@@ -377,38 +377,57 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
   }
 }
 
+/** What `boardsmith smoke` takes on its command line. */
+interface SmokeFlags {
+  project?: string;
+  seed?: string[];
+  players?: string;
+  gameOption?: string[];
+  steps?: string;
+}
+
+/** Each flag that sets something of the deals `--seed` names, with what it sets. */
+const DEAL_FLAGS = [
+  ['players', '--players', 'how many players sit at'],
+  ['gameOption', '--game-option', 'the game options of'],
+  ['steps', '--steps', 'how many steps the walk takes on'],
+] as const;
+
 /**
- * The deals `--seed` names, each at the count `--players` names (#1602) and with the game options
- * `--game-option` names (#1684) when they name them, so a failing deal can be walked again;
- * undefined when `--seed` names none.
+ * The deals `--seed` names, each at the count `--players` names (#1602), with the game options
+ * `--game-option` names (#1684) and walked for the steps `--steps` names (#1686) when they name them,
+ * so a failing deal can be walked again; undefined when `--seed` names none.
  */
-export function chosenDeals(seeds: readonly string[] | undefined, players: string | undefined, gameOptions?: string[]): SmokeDeal[] | undefined {
-  if (players === undefined && gameOptions === undefined) return seeds === undefined ? undefined : [...seeds];
-  if (seeds === undefined) {
-    const [flag, sets] = players !== undefined ? ['--players', 'how many players sit at'] : ['--game-option', 'the game options of'];
+export function chosenDeals(flags: Omit<SmokeFlags, 'project'>): SmokeDeal[] | undefined {
+  const named = DEAL_FLAGS.find(([key]) => flags[key] !== undefined);
+  if (flags.seed === undefined) {
+    if (named === undefined) return undefined;
+    const [, flag, sets] = named;
     throw new Error(
       `\`boardsmith smoke ${flag}\` sets ${sets} the deals \`--seed\` names, and no \`--seed\` was given. ` +
         `Add \`--seed <seeds...>\`, or leave out \`${flag}\` to walk the spec's own deals.`,
     );
   }
-  const count = players === undefined ? {} : { players: parsePositiveWholeNumber('--players', players) };
-  const options = gameOptions === undefined ? {} : { gameOptions: parseGameOptionFlags(gameOptions) };
-  return seeds.map((seed) => ({ seed, ...count, ...options }));
+  if (named === undefined) return [...flags.seed];
+  const count = flags.players === undefined ? {} : { players: parsePositiveWholeNumber('--players', flags.players) };
+  const options = flags.gameOption === undefined ? {} : { gameOptions: parseGameOptionFlags(flags.gameOption) };
+  const steps = flags.steps === undefined ? {} : { steps: parsePositiveWholeNumber('--steps', flags.steps) };
+  return flags.seed.map((seed) => ({ seed, ...count, ...options, ...steps }));
 }
 
 /**
- * `boardsmith smoke [--project <dir>] [--seed <seeds...> [--players <count>] [--game-option <kv...>]]`:
- * the smoke check alone, on the working tree as it stands, dealt as `--seed`, `--players` and
- * `--game-option` say instead of as the spec says when `--seed` names any.
+ * `boardsmith smoke [--project <dir>] [--seed <seeds...> [--players <count>] [--game-option <kv...>] [--steps <count>]]`:
+ * the smoke check alone, on the working tree as it stands, dealt and walked as `--seed`, `--players`,
+ * `--game-option` and `--steps` say instead of as the spec says when `--seed` names any.
  */
-export async function smokeCommand(options: { project?: string; seed?: string[]; players?: string; gameOption?: string[] }): Promise<void> {
+export async function smokeCommand(options: SmokeFlags): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   const configPath = join(projectDir, 'boardsmith.json');
   if (!existsSync(configPath)) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
   requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
-  const seeds = chosenDeals(options.seed, options.players, options.gameOption);
+  const seeds = chosenDeals(options);
   const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds });
   if (outcome.passed) {
     console.log(styleText('green', outcome.summary));
