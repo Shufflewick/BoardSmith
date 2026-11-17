@@ -2771,10 +2771,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // rules must not turn one into control flow. sotf swallowed
       // `undeclared-partition` on every border draw and the command succeeded.
       if (ledger.refused !== null) throw ledger.refused;
-      // THE SEAT'S OWN DEPARTURE (ShufflewickPub #813), reported as the clock's is.
-      if (seat !== null && command.name === this.vacate) {
-        ledger.vacated = { seat, player: charge.owner };
-      }
+      this.claimDeparture(command.name, seat, charge.owner, ledger);
 
       // Each seat's view runs at most once per command, however many events it emitted.
       const views = new Map<number, JudgedView>();
@@ -2799,7 +2796,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         ...outcomeOf(ledger, this.noticesPerSeat),
       };
       // LAST, once nothing below can refuse: a refused dispatch frees nothing.
-      if (ledger.vacated !== null) this.release(ledger.vacated);
+      this.release(ledger.vacated);
       return outcome;
     } catch (error) {
       // A REFUSED ACTION LEAVES THE WORLD UNCHANGED, or the word is worthless
@@ -3660,10 +3657,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.seats.set(player, seat);
   }
 
+  /** THE SEAT'S OWN DEPARTURE (ShufflewickPub #813), reported as the clock's is. */
+  private claimDeparture(action: string, seat: number | null, owner: string, ledger: DispatchLedger): void {
+    if (seat !== null && action === this.vacate) ledger.vacated = { seat, player: owner };
+  }
+
   /**
    * FREE A DEPARTED SEAT, CLEAN (ShufflewickPub #399, #813).
    *
-   * Called only from the end of a dispatch that succeeded as a departure: the
+   * Called at the end of every dispatch that succeeded, and frees a chair only
+   * when that dispatch was a departure (`vacated` is set): the
    * seat's own `world.vacate` verb, or the clock's `vacateByClock` verb naming
    * it. The game's hook has already decided what became of the holdings; this
    * resets the seat's Player element, in place so every reference to it still
@@ -3677,7 +3680,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * A host whose checkpoint then refuses discards this engine, as it does for
    * any command it cannot make durable, so a release never outlives its write.
    */
-  private release(vacated: { readonly seat: number; readonly player: string }): void {
+  private release(vacated: { readonly seat: number; readonly player: string } | null): void {
+    if (vacated === null) return;
     resetPlayer(this.playerFor(vacated.seat), this.freshPlayers.get(vacated.seat)!, this.game);
     this.seats.delete(vacated.player);
   }
