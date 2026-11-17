@@ -66,7 +66,6 @@ import {
 } from '../lib/project-paths.js';
 import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, commitName, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
-import { QUOTE_LINE, SOURCE_LINE } from '../lib/cited-evidence.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
@@ -81,6 +80,8 @@ interface ParsedClaim {
   /** The claim's own lines, from its number to the next item. */
   lines: string[];
   quotes: QuotedPassage[];
+  /** 1-based lines of the chunk file its quotes are written on. */
+  quoteLines: number[];
   problems: string[];
 }
 
@@ -116,6 +117,8 @@ interface ClaimQuoteCheckResult {
 
 const QUESTION_START = /^Q(\d+)\.[ \t]+\S/;
 const SUBHEADING = /^#{3,}\s/;
+const QUOTE_LINE = /^\s*>\s?(.*)$/;
+const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
 const SEARCHED_LINE = /^\s*Searched:\s*(.+?)\s*$/;
 
 const FORMAT_HINT =
@@ -128,7 +131,7 @@ type Item = { kind: 'claim'; claim: ParsedClaim } | { kind: 'question'; question
 interface ParseState {
   result: ParsedInterpretation;
   current: Item | undefined;
-  pendingQuote: string[];
+  pendingQuote: { text: string; line: number }[];
 }
 
 function label(item: Item): string {
@@ -159,7 +162,7 @@ function startItem(state: ParseState, line: InterpretationLine): boolean {
   closePendingQuote(state);
   state.current = undefined;
   if (boundary.kind === 'claim') {
-    const claim: ParsedClaim = { number: boundary.number, lines: [line.text], quotes: [], problems: [] };
+    const claim: ParsedClaim = { number: boundary.number, lines: [line.text], quotes: [], quoteLines: [], problems: [] };
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
   } else if (boundary.kind === 'question') {
@@ -207,7 +210,9 @@ export function interpretationTextInForce(chunkText: string): string | undefined
 
 function takeSource(state: ParseState, item: Item, source: string): void {
   if (item.kind === 'claim' && state.pendingQuote.length > 0) {
-    item.claim.quotes.push({ quote: normalize(state.pendingQuote.join('\n')), source });
+    const quote = normalize(state.pendingQuote.map((l) => l.text).join('\n'));
+    item.claim.quotes.push({ quote, source });
+    item.claim.quoteLines.push(...state.pendingQuote.map((l) => l.line));
   } else {
     problemsOf(item).push(`${label(item)}: a \`Source:\` line has no quoted passage above it. ${FORMAT_HINT}`);
   }
@@ -215,11 +220,12 @@ function takeSource(state: ParseState, item: Item, source: string): void {
 }
 
 /** Handles a line inside the current claim or open question. */
-function continueItem(state: ParseState, item: Item, line: string): void {
+function continueItem(state: ParseState, item: Item, interpretationLine: InterpretationLine): void {
+  const line = interpretationLine.text;
   if (item.kind === 'claim') item.claim.lines.push(line);
   const quoteMatch = QUOTE_LINE.exec(line);
   if (quoteMatch) {
-    state.pendingQuote.push(quoteMatch[1]);
+    state.pendingQuote.push({ text: quoteMatch[1], line: interpretationLine.line });
     return;
   }
   const sourceMatch = SOURCE_LINE.exec(line);
@@ -243,7 +249,7 @@ export function parseInterpretationQuotes(chunkText: string): ParsedInterpretati
   const state: ParseState = { result: { claims: [], questions: [] }, current: undefined, pendingQuote: [] };
   for (const line of lines) {
     if (startItem(state, line)) continue;
-    if (state.current) continueItem(state, state.current, line.text);
+    if (state.current) continueItem(state, state.current, line);
   }
   closePendingQuote(state);
   return state.result;
@@ -704,4 +710,23 @@ export async function claimQuoteCheckCommand(
     }
     process.exitCode = 1;
   }
+}
+
+/**
+ * The chunk text with the quote lines of every claim in force blanked, line numbers kept. Those
+ * lines are the source's own text, which this check holds to its source, so `ledger-check` does not
+ * read a path in them as cited evidence (#1687); a `Source:` line, or a quote this check does not
+ * read, is still a citation.
+ */
+export function withoutQuotedPassages(chunkText: string): string {
+  const superseded = new Set(parseSupersededClaims(chunkText));
+  const quoted = new Set(
+    (parseInterpretationQuotes(chunkText)?.claims ?? [])
+      .filter((c) => !superseded.has(c.number))
+      .flatMap((c) => c.quoteLines),
+  );
+  return chunkText
+    .split('\n')
+    .map((text, index) => (quoted.has(index + 1) ? '' : text))
+    .join('\n');
 }

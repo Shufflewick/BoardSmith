@@ -102,21 +102,4 @@ describe('citedEvidencePaths — what counts as a cited script or capture', () =
     ]);
   });
 
-  it('skips a path inside a quoted source passage, but still finds one in its Source: line (#1687)', () => {
-    const text = [
-      '1. **Ambrico City is a city sector.**',
-      '   > p.1, Sectors: `Ambrico City,City,2,1,0,1,sectors/town---c.webp`',
-      '   > and `sectors/town---d.webp`',
-      '   Source: rulebook/01-sectors-sector-list.md §"Rows"',
-      '2. **The probe ran.**',
-      '   > const art = "sectors/art.png";',
-      '   Source: ../src/rules/sectors.ts:3-4',
-    ].join('\n');
-    expect(citedEvidencePaths(text)).toEqual([{ path: '../src/rules/sectors.ts', line: 7, lines: [3, 4] }]);
-  });
-
-  it('still finds a citation in a blockquote that is not a quoted source passage (#1687)', () => {
-    const text = ['> measured with `.boardsmith/scratch/probe.mjs`', '', 'Source: rulebook/a.md §"A"'].join('\n');
-    expect(paths(text)).toEqual(['.boardsmith/scratch/probe.mjs']);
-  });
 });
