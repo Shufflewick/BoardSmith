@@ -106,7 +106,7 @@ function dealProblem(deal: SmokeDeal): string | undefined {
 /** What is wrong with the step count a deal of `seed` names, if anything. */
 function stepsProblem(seed: string, steps: number | undefined): string | undefined {
   if (steps === undefined || (Number.isInteger(steps) && steps >= 1)) return undefined;
-  return `walks "${seed}" for ${steps} steps, which is not a number of steps. Name how many steps the walk takes on the deal, such as 60.`;
+  return `walks "${seed}" for ${JSON.stringify(steps)} steps, which is not a number of steps. Name how many steps the walk takes on the deal, such as 60.`;
 }
 
 /** What is wrong with the player count a deal of `seed` names, if anything. */
@@ -686,16 +686,38 @@ function whatToDo(walk: SmokeWalk, opening: string, gettingThere: string, brings
     !atATable(walk) && walk.seats.length < 2
       ? ' If it needs another player there too, list the seats the walk plays in `seats` there, choosing seats the world brings together.'
       : '';
+  const ownSteps = walk.seeds.some((deal) => typeof deal !== 'string' && deal.steps !== undefined) ? ', or the `steps` of a deal that names its own' : '';
   return (
-    `${opening} If a fresh game takes longer to ${gettingThere}, raise \`steps\` in ${SMOKE_SPEC_PATH}.${chooseASeed}${secondSeat} ` +
+    `${opening} If a fresh game takes longer to ${gettingThere}, raise \`steps\` in ${SMOKE_SPEC_PATH}${ownSteps}.${chooseASeed}${secondSeat} ` +
     `If no walk from a fresh game can reach it ${atATable(walk) ? 'whatever the deal ' : ''}(it needs a long game, or a position ` +
     'play does not get to), name it in `unreachable` there with the reason.'
   );
 }
 
-/** "in 12 steps from a fresh game dealt from seed "a"", or with no seed for a world. */
+/**
+ * The step count every deal of `walk` was walked for, with its deals named without it; or, when
+ * deals walked different counts (#1686), no shared count and each deal named with its own.
+ */
+function stepsWalked(walk: SmokeWalk): { shared: number | undefined; deals: SmokeDeal[] } {
+  const counts = new Set(walk.seeds.map((deal) => smokeDealSteps(deal, walk.steps)));
+  if (counts.size > 1) {
+    const deals = walk.seeds.map((deal) => ({ ...(typeof deal === 'string' ? { seed: deal } : deal), steps: smokeDealSteps(deal, walk.steps) }));
+    return { shared: undefined, deals };
+  }
+  const deals = walk.seeds.map((deal) => (typeof deal === 'string' ? deal : { ...deal, steps: undefined }));
+  return { shared: [...counts][0] ?? walk.steps, deals };
+}
+
+/** "in 12 steps from a fresh game dealt from seed "a"", with no seed for a world, or each deal's own steps where they differ. */
 function freshGames(walk: SmokeWalk): string {
-  return `in ${walk.steps} steps from a fresh game${atATable(walk) ? ` ${dealtFrom(walk.seeds, 'nor')}` : ''}`;
+  const { shared, deals } = stepsWalked(walk);
+  return `${shared === undefined ? '' : `in ${shared} steps `}from a fresh game${atATable(walk) ? ` ${dealtFrom(deals, 'nor')}` : ''}`;
+}
+
+/** "in 12 steps", or each deal with its own steps where they differ (#1686). */
+function walkedFor(walk: SmokeWalk): string {
+  const { shared, deals } = stepsWalked(walk);
+  return shared === undefined ? `on any deal it walked, ${dealtFrom(deals)}` : `in ${shared} steps`;
 }
 
 /** Why the walk never saw a listed action offered, and what to do about it. */
@@ -823,12 +845,12 @@ function whyNotTaken(walk: SmokeWalk, name: string): string {
   const field = walk.wanting.get(name);
   if (field !== undefined) {
     return (
-      `The panel offered "${name}", but the walk never took it in ${walk.steps} steps: when it last opened it, ` +
+      `The panel offered "${name}", but the walk never took it ${walkedFor(walk)}: when it last opened it, ` +
       `${inputName(name, field)} in ${SMOKE_SPEC_PATH} gave no text for its field "${field}", so the walk cancelled it. ` +
       'Make it return the text a player would type there whenever the game offers the action.'
     );
   }
-  return `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`;
+  return `The panel offered "${name}", but the walk never took it ${walkedFor(walk)}. The errors above, if any, say why.`;
 }
 
 /** Everything that fails the walk, errors first. An empty list is a pass. */

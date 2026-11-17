@@ -327,6 +327,24 @@ describe('smokeProblems', () => {
     ]);
   });
 
+  it('#1686: names the steps each deal walked when deals walk different counts, and the shared count once when they walk the same', () => {
+    const mixed = walk({ listed: ['draw', 'score'], offered: new Set(['draw']), enabled: new Set(['draw']), seeds: ['smoke', { seed: 'tar', steps: 3 }], steps: 12 });
+    expect(smokeProblems(mixed)).toEqual([
+      'The panel offered "draw", but the walk never took it on any deal it walked, dealt from seed "smoke" for 12 steps, ' +
+        'then from seed "tar" for 3 steps. The errors above, if any, say why.',
+      expect.stringMatching(
+        new RegExp(
+          '^The walk never saw "score" offered from a fresh game dealt from seed "smoke" for 12 steps, nor from seed "tar" for 3 steps\\. ' +
+            `If a fresh game takes longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH.replace(/[./]/g, '\\$&')}, or the \`steps\` of a deal that names its own\\. `,
+        ),
+      ),
+    ]);
+    const chosen = walk({ listed: ['score'], seeds: [{ seed: 'a', steps: 5 }, { seed: 'b', steps: 5 }], steps: 900 });
+    expect(smokeProblems(chosen)).toEqual([
+      expect.stringMatching(/^The walk never saw "score" offered in 5 steps from a fresh game dealt from seed "a", nor from seed "b"\. /),
+    ]);
+  });
+
   it('#460: names every deal a listed action was missed on', () => {
     expect(smokeProblems(walk({ listed: ['score'], seeds: ['opening', '7'], steps: 12 }))).toEqual([
       expect.stringMatching(/^The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "opening", nor from seed "7"\. /),
