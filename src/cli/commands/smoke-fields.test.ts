@@ -216,11 +216,14 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
-  it("#1663: types the next value of a list in the spec's `inputs` each time the game refuses one, and passes once it takes one", async () => {
+  it.each([
+    { given: 'gives', coins: '[3, 7]' },
+    { given: 'a function returns (#1682)', coins: '() => [3, 7]' },
+  ])("#1663: types the next value of a list the spec's `inputs` $given each time the game refuses one, and passes once it takes one", async ({ coins }) => {
     const { outcome, steps } = await walkGreetings(`{
     greet: { whom: theOther },
     wave: { whom: theOther },
-    pledge: { coins: [3, 7] },
+    pledge: { coins: ${coins} },
   }`);
 
     expect(outcome.passed).toBe(true);
