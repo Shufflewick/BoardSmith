@@ -44,6 +44,7 @@ import { ResidentWorld } from '../../world/host/index.js';
 import { frozenClock } from './frozen-clock.test-helper.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const SECOND = 1000;
 /** How far after the arming command the first scheduled event is due. */
@@ -164,7 +165,8 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       ordering: 'chronological',
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, 'log') }),
       view: () => [LOG],
-      actions: [mark, arm],
+      actions: [mark, arm, leaveNothing],
+      vacate: 'leave',
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }

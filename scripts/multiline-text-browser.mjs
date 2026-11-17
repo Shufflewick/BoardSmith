@@ -180,7 +180,8 @@ export const gameDefinition: GameDefinition = {
       return { [COLONY]: board as GameElement };
     },
     view: () => [COLONY],
-    actions: [setDescription, setCreed, setNickname, recycle, nameShip],
+    actions: [setDescription, setCreed, setNickname, recycle, nameShip, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

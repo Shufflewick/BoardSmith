@@ -651,26 +651,27 @@ export interface WorldCommandResult {
    */
   readonly ending?: "completed";
   /**
-   * THE CHAIR THIS DISPATCH FINALIZED THE VACANCY OF, absent otherwise
-   * (ShufflewickPub #475).
+   * THE CHAIR THIS DISPATCH FREED, absent otherwise (ShufflewickPub #475,
+   * #813): the world's `vacate` verb succeeding for its sender, or the clock's
+   * `vacateByClock` verb naming a seat. The engine has already reset the
+   * seat's Player element and forgotten its holder when this is reported.
    *
    * `ending`'s shape, for the other fact a host cannot observe from outside: a
-   * world-owned teardown reaching its end. The seat and the roster key are BOTH
+   * departure reaching its end. The seat and the roster key are BOTH
    * here because they answer different layers -- the world holds a seat number,
    * and enrolment counts a chair by the name it knows the holder as -- and
-   * neither is the bundle's to choose: the seat is one the host itself answered
-   * a declared point read about, and the player is resolved from this engine's
-   * own roster. A game never names a player id anywhere on this road.
+   * neither is the bundle's to choose: the seat is the sender's own, or on the
+   * clock's road one the host itself answered a declared point read about, and
+   * the player is resolved from this engine's own roster. A game never names a player id anywhere on this road.
    *
    * ABSENT IS THE NORMAL CASE, and it is also what a RETRY answers once the
    * chair is already back: a host whose own stamp says the chair is empty is
    * told nothing was released, so a completion driven twice frees one chair.
    *
-   * WHAT A HOST DOES WITH IT is the host's, exactly as `vacate`'s answer is:
-   * the chair is released downstream of the ground coming back, so this rides
-   * the same checkpoint the teardown's last write does -- a refused checkpoint
-   * leaves the seat held and the ground gone, which is the one pairing that
-   * must not come apart.
+   * WHAT A HOST DOES WITH IT is the host's: the chair is released downstream
+   * of the ground coming back, so this rides the same checkpoint the
+   * departure's last write does, and a host whose checkpoint refuses discards
+   * the engine with the release in it.
    */
   readonly vacated?: { readonly seat: number; readonly player: string };
   /**
@@ -978,35 +979,14 @@ export interface WorldEngine {
    * Re-seating a player in the seat they already hold is FREE, because that is
    * what a reconnect looks like from here. Moving a seated player to a
    * different seat is a refusal: a seat is where a player's holdings are.
-   * So is taking a seat another player holds, until that player is unseated.
+   * So is taking a seat another player holds, until that player departs: a
+   * dispatch of the world's `vacate` verb, or the clock's `vacateByClock`
+   * verb naming the seat, frees and clears the chair when it succeeds and
+   * reports it as `vacated` (ShufflewickPub #813). There is no other way to
+   * free one, so a chair cannot be handed on before the game's hook has run.
    */
   seat(player: string, seat: number): void;
 
-  /**
-   * RETIRE A SEAT'S HOLDER, so the chair can be given to somebody else
-   * (ShufflewickPub #399).
-   *
-   * `seat`'s inverse, and the reason it has to exist: this engine's roster was
-   * ADD-ONLY, so a host that wanted a departed player's chair back had no way
-   * to say so and had to throw the whole isolate away and rebuild it. On
-   * ShufflewickPub that meant one of a world's EIGHT lifetime isolates per
-   * departing player, which turns ordinary churn into a world that stops
-   * working -- so "rebuild it" is not an implementation of this and never was.
-   *
-   * WHAT IT DOES NOT DO IS TOUCH THE WORLD'S CONTENTS. The seat's holdings,
-   * its Player element and every reference to it are exactly as they were: a
-   * seat is a chair and a chair is not a castle. Returning the ground behind it
-   * is the GAME's, through the verb it declares as `world.vacate`, and a host
-   * that called this without running that verb first would hand a newcomer a
-   * seat whose ground somebody else still holds. The engine cannot check that
-   * and does not try; it is the host's ordering to keep, and
-   * `WorldDefinition.vacate` is where the rule is written down.
-   *
-   * IDEMPOTENT. Retiring a seat nobody holds does nothing, because a host
-   * retrying a departure it may already have applied is the ordinary case and
-   * a refusal there would make the retry the failure.
-   */
-  unseat(player: string): void;
 
   /**
    * Which partitions are resident, and when each was last NAMED by a command.
@@ -1535,7 +1515,6 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   onEvent: null,
   residency: null,
   seat: null,
-  unseat: null,
   serializePartitions: null,
   surveyPartition: null,
   viewFor: null,

@@ -16,6 +16,7 @@ import type { StoredPartition } from "./contract.js";
 import type { WorldResidency } from "./engine.js";
 import type { WorldRunnerHandle, WorldViewRefusal } from "./runner.js";
 import { storedWorld, worldOptions } from "./stored-world.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Room extends Space<Hall> {}
 
@@ -37,7 +38,8 @@ const definition = {
   gameType: "hall",
   world: {
     maxPlayers: 2,
-    actions: [],
+    actions: [leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) =>
       ({
         lobby: game.create(Room, "lobby"),

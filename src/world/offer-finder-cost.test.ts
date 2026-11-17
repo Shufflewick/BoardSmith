@@ -15,6 +15,7 @@ import { describe, expect, it } from "vitest";
 import { Game, Piece, Space } from "../engine/index.js";
 import { createWorld, worldAction } from "./index.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Plot extends Space {}
 class Marker extends Piece {}
@@ -55,7 +56,8 @@ describe("offer declarations over a large resident world (#283)", () => {
         gameClass: DigWorld,
         world: {
           maxPlayers: SEATS,
-          actions: [dig],
+          actions: [dig, leaveNothing],
+          vacate: "leave",
           view: () => ["map"],
           genesis: (game) => {
             const map = game.create(Plot, "map");

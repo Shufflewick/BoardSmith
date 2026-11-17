@@ -29,6 +29,7 @@ import { worldAction } from '../world/index.js';
 import { TargetBoard } from './dom-leak.test-helper.js';
 import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat, shellProvidedKeys, worldShellContext } from './dom-leak.js';
 import { expectSameKeysAsTheShell, KeyProbe, keysProbedIn, namesOf, refusal } from './provided-keys.test-helper.js';
+import { leaveNothing } from '../world/departure.test-helper.js';
 
 await preloadSeatRenderer();
 
@@ -192,7 +193,7 @@ describe('startAction opens an action on a world seat (#413)', () => {
       .chooseFrom('plot', { choices: ({ args }) => plots[(args.note as string | undefined) ?? 'none']! })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [build] } },
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [build, leaveNothing] } },
     });
     worlds.push(world);
     const wrapper = await render(

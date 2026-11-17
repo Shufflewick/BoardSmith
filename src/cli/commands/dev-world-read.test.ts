@@ -54,7 +54,9 @@ export const gameDefinition: GameDefinition = {
       }),
       worldClockAction<CampGame>('late').needs(() => ['fire']).execute(() => {}),
       worldClockAction<CampGame>('early').needs(() => ['fire']).execute(() => {}),
+      worldAction<CampGame>('leave').needs(() => []).execute(() => {}),
     ],
+    vacate: 'leave',
   },
 };
 `;

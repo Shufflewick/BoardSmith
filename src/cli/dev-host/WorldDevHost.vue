@@ -37,7 +37,8 @@ const cfg = props.config;
 
 // ── Persistent client identity, so a reload reclaims the same seat ───────────
 // A world seat matters more than a table one: it is where a player's holdings
-// are, and seats are never handed on. `dev-client-id.ts` carries the reasoning.
+// are, and a seat is handed on only once its player departs. `dev-client-id.ts`
+// carries the reasoning.
 const clientId = loadDevClientId(WORLD_CLIENT_KEY, 'w');
 // This page load, named in every hello: the frame numbers its requests from 0
 // on each load, so the host answers only the load that asked (#1099).

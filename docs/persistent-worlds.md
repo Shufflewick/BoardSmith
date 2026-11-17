@@ -167,14 +167,15 @@ export const gameDefinition: GameDefinition = {
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
-`actions` and `view` are required; `stateVersion`, `genesis`, `presence`,
-`referral`, `vacate` and `vacateByClock` are optional — the last two are how a
-chair comes back, see [giving a chair back](#giving-a-chair-back).
+`actions`, `view` and `vacate` are required; `stateVersion`, `genesis`,
+`presence`, `referral` and `vacateByClock` are optional. `vacate` and
+`vacateByClock` are how a chair comes back, see [giving a chair
+back](#giving-a-chair-back).
 
 **No `minPlayers`/`maxPlayers` on the definition.** Those are a *table's*
 roster, and a world has none: it does not start, so there is no minimum to
-reach, and a seat is assigned once and never handed on because a departed
-player's holdings are still standing in the world. A world game that declared
+reach, and a seat is handed on only once its player has departed and the
+game's `vacate` verb has said what becomes of their holdings. A world game that declared
 them shipped a vestigial table half beside its world, and the game page led
 with it. `boardsmith build` refuses one now, and it omits `playerCount` from
 the manifest entirely — which is how the manifest says "this game has no
@@ -1259,8 +1260,9 @@ tree back many times inside one real dispatch and a schedule escapes the tree.
 `WorldCommandResult` carries the routed events, the **dirty set** (the partitions
 whose serialized form changed, which is the engine's answer and not the host's
 guess), any schedule requests, `ending: "completed"` if the action called
-`ctx.world.complete()`, and `vacated: { seat, player }` if it called
-`ctx.world.vacate(seat)` — see [giving a chair back](#giving-a-chair-back) — and
+`ctx.world.complete()`, and `vacated: { seat, player }` if it was the world's
+`vacate` verb or called `ctx.world.vacate(seat)` — see [giving a chair
+back](#giving-a-chair-back) — and
 `notices: { perSeat, writes }` if it sent or took a notice — see
 [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). An
 empty dirty set with a full event list is legal and normal: an action that only
@@ -1915,8 +1917,8 @@ A host that runs `onJoin` meets this contract:
 
 `boardsmith dev` has no invitations. It runs `onJoin` when it assigns a seat,
 with `inviterSeat: null`, before that seat's first view and before `onArrive`,
-so a game's join path runs locally too. A seat the world's clock vacated is
-assigned again, and joins again, when a page next takes it.
+so a game's join path runs locally too. A seat that was vacated is assigned
+again, and joins again, when a page next takes it.
 
 The library types the declaration and hands it back exactly as you wrote it.
 **Nothing in the engine reads it, and nothing in the engine checks the
@@ -2152,19 +2154,28 @@ durable cursor**, sweeping one empire per occurrence:
 
 ## Giving a chair back
 
-A seat is assigned once and is **not** handed on while the ground behind it is
-still held. A dead player is still in the world even when they are not playing:
-their planets are still occupied, their fields still theirs. Reclaiming the chair
-early advertises room and has nothing to give the newcomer who accepts, which is
-worse than refusing them at the door. So the deliverable is the **ground**, and
-the chair comes back as a consequence.
+A seat comes back when its player **leaves or is ejected**. An idle player keeps
+theirs. A dead player is still in the world even when they are not playing:
+their planets are still occupied, their fields still theirs. So a chair is never
+handed on until your game has said what becomes of the ground behind it, and
+every world must say so: `readWorldDefinition` refuses a world that names no
+`vacate` verb.
 
-Only your game knows what a departed empire becomes — returned to the map,
-archived, inherited by a neighbour, left standing as a ruin — so the library
-types the verb and never owns the policy. A world that declares neither field
-below holds every chair it has given for as long as it lasts, which is an
-**answer** rather than a gap and is still right for a season that fills once and
-never churns.
+Only your game knows what a departed empire becomes — wiped, handed to a
+neutral seat, left standing as a ruin — so the library types the verb and never
+owns the policy. What the **engine** owns is the seat itself: once your verb has
+run, the engine resets the seat's Player element to what this world built it
+as (your game-defined fields, its colour, its status) and frees the chair, in
+the same dispatch, so the next player starts with nothing of the last one's on
+it whatever your verb did or did not do.
+
+A reference to the seat inside a partition (an element's `player`) points at
+the **chair**, not the person, so it is the next holder's unless your verb
+clears it. That is how a seat's own land is handed on fresh: reset the land,
+leave its `player` alone. A ruin that must not belong to the next player is one
+your verb takes the `player` off. The engine cannot check this for you: a
+partition your verb did not declare is not loaded, and only your rules know
+which references are the departed player's and which are the chair's.
 
 There are two roads, because there are two ways a chair empties.
 
@@ -2174,16 +2185,23 @@ There are two roads, because there are two ways a chair empties.
 world: { maxPlayers: 200, actions, view, vacate: 'leave' }
 ```
 
-The name of a **seated** verb the host dispatches when a player leaves or is
-ejected. `createWorld` holds it to three rules and refuses the bundle otherwise:
-it must answer to one of this world's own verbs, it must be seated (built with
-`worldAction()`, reading the seat from `ctx.player.seat`), and it must ask no
-questions — it runs for somebody who has already gone, so there is nobody left
-to answer one.
+The name of a **seated** verb the host dispatches, as the player, when they
+leave or are ejected. `createWorld` holds it to four rules and refuses the
+bundle otherwise: it must be declared, it must answer to one of this world's
+own verbs, it must be seated (built with `worldAction()`, reading the seat from
+`ctx.player.seat`), and it must ask no questions — it runs for somebody who has
+already gone, so there is nobody left to answer one.
 
-Seated is the right shape here and not a limitation: a vacating is about the
-**sender's own** ground, and the worst a player does by sending it is give up
-their own chair, which is leaving and is already theirs to do at any moment.
+**Dispatching it is the departure.** When it succeeds, the result carries
+`vacated: { seat, player }` and the chair is already free and clean in the
+engine; there is no other way to free one, so a host can neither hand a chair
+on before your verb has run nor skip the reset. When it refuses, nothing
+changes: the seat stays held, the player can still play, and the host is told
+your verb's reason.
+
+**It is never on the action panel.** The host runs it, so it is not offered to
+the seat as a button; leaving is the platform's own control, which can ask for
+confirmation and send the player somewhere afterwards.
 
 ### `world.vacateByClock`: the departure nobody sends
 
@@ -2205,6 +2223,9 @@ action, and a seatless action has no `ctx.player` to vacate.
 must declare at least one chair with `.about()`. The third is not bookkeeping:
 the only chair it may ever name is one its own declaration asked the host about,
 so a verb with no activity round is a door that cannot open.
+
+When the call succeeds, the engine resets and frees that chair exactly as it
+does after `world.vacate`, and the result says `vacated`.
 
 ```ts
 const reap = worldClockAction<Colony>('reap')
@@ -2261,23 +2282,25 @@ order rather than one it cannot.
 ### What the host does with the answer
 
 `createWorld` reports both names — `vacate` and `vacateByClock` — beside
-`seatCount`, because a host has to know before it dispatches anything whether a
-chair can ever come back at all. What it does with them is its own policy: which
-departures reach the seated verb, what it counts as a departure, and when it
-writes the release down. A platform releases the seat **downstream** of the
-ground coming back, on the same checkpoint that made the teardown durable — a
-refused checkpoint must leave the player holding both their chair and their
-holdings rather than neither.
+`seatCount`, because a host has to know what to dispatch before a player leaves.
+Which departures reach the seated verb (a leave, an ejection, never mere
+idleness) is the host's policy. Whichever road freed a chair, the engine has
+already reset and released it when the result says `vacated`; what the host
+owns is writing the release down, on the same checkpoint that made the
+departure durable. A host whose checkpoint refuses discards the engine, as it
+does for any command it cannot make durable, so the player keeps both their
+chair and their holdings rather than neither.
 
 **BoardSmith's own hosts do exactly that, and the game does not help** (#278).
 `ResidentWorld` spreads `vacated` into the checkpoint as its `vacate` extra, so
-the roster row is deleted in the same transaction as the partitions the teardown
-wrote and the settlement of the occurrence that wrote them. The seat's activity
-watermark goes with the row, because it measures how long the person in that
-chair has been away and the next occupant is a newcomer. Only after that write
-lands does the resident roster lose the player, so a checkpoint that refuses
-leaves the chair held and the estate standing. A game never writes a host table
-and never claims a release from the engine result alone.
+the roster row is deleted in the same transaction as the partitions the
+departure wrote (and, on the clock's road, the settlement of the occurrence
+that wrote them). The seat's activity watermark goes with the row, because it
+measures how long the person in that chair has been away and the next occupant
+is a newcomer. A checkpoint that refuses discards the resident world, which is
+rebuilt from the store, so the chair is held and the estate standing again. A
+game never writes a host table and never claims a release from the engine
+result alone.
 
 In `boardsmith dev`, a page watching through that seat is told the world took
 its chair and is left seatless; picking a seat again joins as a newcomer, which
@@ -3024,7 +3047,7 @@ your game.
 | `unknown-command` | A client named an action this world does not have. |
 | `unknown-player` | A command named somebody this world does not seat. |
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does -- or a scheduled event came due naming a seated action, which has no player to act for. Since `schedule-seated-action`, a seated action is refused at the `schedule()` line, so this second case answers only an event queued before that check, in a world that already holds one. |
-| `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
+| `world-full` | A seating would exceed the bundle's own `maxPlayers`. A seat is handed on only once its holder has departed. |
 | `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. When what it is behind on is a scheduled event that refused, the message names that event (by its `.prompt()` if the clock action declares one, otherwise by its action name) and says the world is waiting on it, since a refused event is retried but may never go through. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |

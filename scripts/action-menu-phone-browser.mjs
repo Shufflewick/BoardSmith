@@ -80,7 +80,9 @@ export const gameDefinition: GameDefinition = {
       verb('sleep', 'Sleep until dawn', 'Camp'),
       verb('scout', 'Scout the next ford', 'Camp'),
       ...['Buy salt', 'Sell hides', 'Barter', 'Haggle', 'Give a gift'].map((prompt, i) => verb('trade' + i, prompt, 'Trade')),
+      worldAction('leave').needs(() => []).execute(() => {}),
     ],
+    vacate: 'leave',
   },
 };
 `;

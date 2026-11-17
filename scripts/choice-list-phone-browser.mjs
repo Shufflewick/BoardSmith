@@ -99,7 +99,8 @@ export const gameDefinition: GameDefinition = {
       return { [FIELD]: battery as GameElement };
     },
     view: () => [FIELD],
-    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery)), accuseOnBoard('accuseRival', ({ game }) => game.all(Rival))],
+    actions: [allocate, mortar, accuse('accuse', () => ['Ana', 'Bo']), accuse('accuseNobody', () => []), accuseInOrder, accuseOnBoard('accuseNoElement', () => []), accuseOnBoard('accuseElement', ({ game }) => game.all(Battery)), accuseOnBoard('accuseRival', ({ game }) => game.all(Rival)), worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

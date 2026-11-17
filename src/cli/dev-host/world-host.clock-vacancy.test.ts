@@ -52,6 +52,7 @@ import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-st
 import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const DAY = 86_400_000;
 
@@ -162,7 +163,8 @@ function bundle(
         return roots;
       },
       view: (seat: number) => [estate(seat)],
-      actions: HOMESTEAD_ACTIONS,
+      actions: [...HOMESTEAD_ACTIONS, leaveNothing],
+      vacate: 'leave',
       vacateByClock: 'reap',
       presence,
       referral,

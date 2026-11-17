@@ -13,6 +13,7 @@ import { createWorld } from "./index.js";
 import type { ActionDefinition } from "../engine/action/types.js";
 import type { WorldActionOffer } from "./contract.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 /** The one partition every fixture world resides in. */
 class FixtureSpace extends Space {}
@@ -41,7 +42,8 @@ export async function offersFor(
       gameClass: FixtureWorld,
       world: {
         maxPlayers: 1,
-        actions,
+        actions: [...actions, leaveNothing],
+        vacate: "leave",
         view: () => [PARTITION],
         genesis: (game) => ({ [PARTITION]: game.create(FixtureSpace, PARTITION) }),
       },

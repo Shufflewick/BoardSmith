@@ -53,7 +53,8 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ [ROOM]: (game as Tavern).create(Room, 'room') as GameElement }),
     view: () => [ROOM],
-    actions: [chatter],
+    actions: [chatter, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

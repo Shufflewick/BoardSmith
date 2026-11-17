@@ -80,7 +80,7 @@ function opened(
   return { seat, held: world.partition(estate(seat)) as Ledger };
 }
 
-/** A seat's own departure, which is the road #399 already built. Untouched. */
+/** A seat's own departure, which is the road #399 already built. */
 const leave = worldAction<Colony>("leave")
   .needs(({ player }) => [estate(player.seat)])
   .execute((_args, { world, player }) => {
@@ -174,7 +174,9 @@ function colony(
     gameType: "colony",
     world: {
       maxPlayers: 4,
-      actions,
+      // EVERY WORLD NAMES A SEAT'S OWN DEPARTURE (ShufflewickPub #813).
+      actions: actions.includes(leave) ? actions : [...actions, leave],
+      vacate: "leave",
       genesis: (game: Game) => {
         const roots: Record<string, GameElement> = {};
         for (const seat of [1, 2, 3]) {

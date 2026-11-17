@@ -178,11 +178,13 @@ export class CountingStore implements WorldPartitionSource {
   forget(): void {}
 }
 
-/** A cold world running the given verbs, with every seat taken. */
+/** A cold world running the given verbs, with every seat taken. `vacate` names
+ *  the verb that is a seat's departure, for the suites about one. */
 export function newVillageEngine(
   actions: readonly ActionDefinition[],
   budgets: WorldBudgets = worldBudgets(),
   settlers: number = SETTLERS,
+  vacate?: string,
 ): { engine: BoardSmithWorldEngine; store: CountingStore; game: VillageFixture } {
   const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
   const store = new CountingStore(villageGenesis(settlers));
@@ -196,6 +198,7 @@ export function newVillageEngine(
     // The commons, and the seat's own holding.
     view: (seat) => [COMMONS, holdingPartition(seat)],
     budgets,
+    ...(vacate === undefined ? {} : { vacate }),
   });
   return { engine, store, game };
 }

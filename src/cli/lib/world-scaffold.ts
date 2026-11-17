@@ -317,8 +317,26 @@ const ripen = worldClockAction<${pascal}Game>('ripen')
     ctx.world.emit(plotPartition(seat), { ripened: seat, grown });
   });
 
+/**
+ * WHAT BECOMES OF A SEAT'S PLOT WHEN ITS PLAYER LEAVES.
+ *
+ * Every world names one of these as \`world.vacate\`. The host runs it as the
+ * player who is leaving, so it is never on the action panel and asks no
+ * questions; it gives their ground back, and the engine then clears the seat
+ * for whoever sits there next. This one leaves the plot to the seat, freshly
+ * turned, for the next player to tend.
+ */
+const leave = worldAction<${pascal}Game>('leave')
+  .prompt('Leave this world')
+  .needs(({ player }) => [plotPartition(player.seat)])
+  .execute((_args, ctx) => {
+    for (const row of ctx.game.plotOf(ctx.player.seat).all(Row)) {
+      row.growth = 0;
+    }
+  });
+
 /** Everything this world answers to, a player's verbs and the clock's alike. */
-export const worldActions: WorldDefinition['actions'] = [tend, ripen];
+export const worldActions: WorldDefinition['actions'] = [tend, ripen, leave];
 `;
 }
 
@@ -340,13 +358,14 @@ export * from './world.js';
  *
  * NO \`minPlayers\`/\`maxPlayers\`: those are a TABLE's roster, and a world has
  * none. A world does not start, so there is no minimum to reach, and its seats
- * are \`world.maxPlayers\` -- assigned once and never handed on.
+ * are \`world.maxPlayers\`. A seat is handed on once its player leaves through
+ * \`world.vacate\`.
  */
 export const gameDefinition: GameDefinition = {
   gameClass: ${pascal}Game,
   gameType: '${config.name}',
   displayName: '${config.displayName}',
-  world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView },
+  world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView, vacate: 'leave' },
 };
 `;
 }
@@ -593,6 +612,19 @@ describe('the world', () => {
       await world.take(1, 'tend', { row: row.id });
       const grown = (await world.unredactedElements()).filter((element) => element.attributes?.growth === 1);
       expect(grown.map((element) => element.name)).toEqual([PLOT_ROWS[0]]);
+    } finally {
+      await world.close();
+    }
+  });
+
+  it('turns the plot over when its player leaves, for whoever sits there next', async () => {
+    const world = await createTestWorld({ definition: gameDefinition });
+    try {
+      const [offer] = await world.offersFor(1);
+      await world.take(1, 'tend', { row: offer!.selections[0]!.validElements![0]!.id });
+      await world.take(1, 'leave');
+      const grown = (await world.unredactedElements()).filter((element) => Number(element.attributes?.growth) > 0);
+      expect(grown).toEqual([]);
     } finally {
       await world.close();
     }

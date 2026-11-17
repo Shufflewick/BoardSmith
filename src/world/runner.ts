@@ -1501,10 +1501,6 @@ export function createWorldRunner(
       return { partition, nextElementId: engine.nextElementId() };
     },
 
-    unseat(player: string): void {
-      engine.unseat(player);
-    },
-
     seat(player: string, seat: number): void {
       engine.seat(player, seat);
     },
@@ -1662,7 +1658,7 @@ export function createWorldRunner(
  * -- so every operation that touches the game refuses with the SAME refusal,
  * on every host, until the host is fixed and the world is built again.
  *
- * Roster and residency bookkeeping (`seat`, `unseat`, `residency`, `evict`)
+ * Roster and residency bookkeeping (`seat`, `residency`, `evict`)
  * and the migration plan reads (`migrationShape`, `migrationSources`) touch no
  * stored element and stay answerable, so a host can still say what it holds
  * while it reports the defect.
@@ -1868,21 +1864,6 @@ export interface WorldRunnerHandle {
    * without evicting everything resident in it.
    */
   seat(player: string, seat: number): void;
-  /**
-   * Retire a seat's holder, so the chair can be given to somebody else
-   * (ShufflewickPub #399).
-   *
-   * `seat`'s inverse, and the other half of "a world's roster changes for as
-   * long as the world lasts": before this the roster only grew, so a host that
-   * wanted a departed player's chair back had to throw the whole isolate away
-   * and rebuild it -- which on a platform that caps a world's lifetime isolates
-   * turns ordinary churn into a world that stops working.
-   *
-   * It forgets a MAPPING and moves nothing in the world. What becomes of the
-   * ground behind the chair is the game's, through `WorldDefinition.vacate`,
-   * and the order of the two is the host's to keep.
-   */
-  unseat(player: string): void;
   /**
    * Which partitions are resident and how recently each was named (#43).
    *

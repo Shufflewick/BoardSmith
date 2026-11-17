@@ -31,6 +31,7 @@ import { WorldRefusal, ownerOf } from "./refusals.js";
 import type { StoredPartition } from "./contract.js";
 import { worldElementIds } from "../engine/element/element-ids.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -70,7 +71,8 @@ const definition = {
   gameType: "demo",
   world: {
     maxPlayers: 1,
-    actions: [readA, readBoth],
+    actions: [readA, readBoth, leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) =>
       Object.fromEntries(ROOMS.map((name) => [name, game.create(Room, name)])) as Record<
         string,
@@ -319,7 +321,7 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
 
   const grownDefinition = {
     ...definition,
-    world: { ...definition.world, actions: [readA, readBoth, fill] },
+    world: { ...definition.world, actions: [readA, readBoth, fill, leaveNothing] },
   } as WorldRunnerOptions["definition"];
 
   const grown = (overrides: Partial<WorldRunnerOptions> = {}): WorldRunnerOptions => ({

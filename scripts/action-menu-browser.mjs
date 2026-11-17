@@ -207,7 +207,9 @@ export const gameDefinition: GameDefinition = {
       readLog,
       renamePlanet,
       describeEmpire,
+      worldAction('leave').needs(() => []).execute(() => {}),
     ],
+    vacate: 'leave',
   },
 };
 `;

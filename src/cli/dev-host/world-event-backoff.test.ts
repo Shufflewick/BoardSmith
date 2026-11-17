@@ -13,6 +13,7 @@ import { worldBudgets, worldClockAction, type WorldDefinition } from '../../worl
 import { ResidentWorld, type WorldHostClock } from '../../world/host/index.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const OPENED = 1_700_000_000_000;
 // The platform's retry floor (ShufflewickPub WORLD_RETRY_WAKE_FLOOR_MS).
@@ -58,7 +59,8 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       maxPlayers: 1,
       genesis: (game: Game): Record<string, GameElement> => ({ [LOG]: game.create(Log, LOG) }),
       view: () => [LOG],
-      actions: [boom, arm, tick],
+      actions: [boom, arm, tick, leaveNothing],
+      vacate: 'leave',
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }

@@ -19,6 +19,7 @@ import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
 import { frozenClock } from './frozen-clock.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const MINUTE = 60_000;
 const OPENED = 1_700_000_000_000;
@@ -67,7 +68,8 @@ const definition = {
       [VAULT]: game.create(Ledger, 'vault'),
     }),
     view: () => [LEDGER],
-    actions: [post, beat, arm],
+    actions: [post, beat, arm, leaveNothing],
+    vacate: 'leave',
   } as WorldDefinition,
 } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 

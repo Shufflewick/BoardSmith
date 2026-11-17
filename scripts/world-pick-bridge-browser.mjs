@@ -147,7 +147,8 @@ export const gameDefinition: GameDefinition = {
       return { [FLEET]: dock as GameElement };
     },
     view: () => [FLEET],
-    actions: [deploy],
+    actions: [deploy, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

@@ -98,7 +98,8 @@ import type { WorldStore } from "./store.js";
  * written under on Monday is the name it must be looked up under after a
  * restart on Tuesday.
  *
- * A seat is where a player's holdings are and is never handed on, so a host
+ * A seat is where a player's holdings are and is handed on only when they
+ * depart, so a host
  * that minted a random id per run would strand every seat it ever opened -- a
  * world with three logs in it and nobody who can reach them.
  */
@@ -186,7 +187,8 @@ interface ResidentWorldOptions {
    *  this; it is for the changes nobody asked for. */
   readonly onChanged?: () => Promise<void> | void;
   /**
-   * THE WORLD'S CLOCK FINALIZED A CHAIR'S VACANCY (#278).
+   * A CHAIR WAS FREED (#278, ShufflewickPub #813): its holder's own `vacate`
+   * verb ran, or the world's clock finalized its vacancy.
    *
    * Called once per release, AFTER the checkpoint that made it durable, so
    * nothing a host does here is about a release that might still roll back.
@@ -503,27 +505,6 @@ export class ResidentWorld {
   ): { activity?: { seat: number; at: number } } {
     const seat = this.#seatOf(player);
     return seat === undefined ? {} : { activity: { seat, at: arrivedAt } };
-  }
-
-  /**
-   * THE RESIDENT ROSTER FOLLOWS THE DURABLE ONE (#278).
-   *
-   * Called only past the checkpoint, and in that order for the reason the
-   * revision moves there: the store is the truth, and a chair released in
-   * memory before the write landed would be one this host could not get back.
-   * After it lands the two agree -- and they agree again after a discard,
-   * because `#build` reads the roster out of the store.
-   *
-   * The host is told LAST, once the release is both durable and resident, so
-   * nothing a page is told outlives a rollback.
-   */
-  #released(
-    runner: WorldRunnerHandle,
-    vacated: { readonly seat: number; readonly player: string } | undefined,
-  ): void {
-    if (vacated === undefined) return;
-    runner.unseat(vacated.player);
-    this.#onVacated(vacated);
   }
 
   /** Let go of the coldest clean partitions past the budget (#747). Only right after a checkpoint. */
@@ -1021,6 +1002,7 @@ export class ResidentWorld {
     // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
     // plan the command's schedules against the same allowance. The checkpoint
     // below is this host's own, per command.
+    let applied = false;
     const { result, answers: walked, plan } = await dispatchStep(
       { player, command, timing, arrivedAt },
       {
@@ -1037,8 +1019,8 @@ export class ResidentWorld {
         readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
         readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
         allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
-        apply: ({ allowance, answers }) =>
-          runner.apply({
+        apply: async ({ allowance, answers }) => {
+          const applying = await runner.apply({
             player,
             command,
             timing,
@@ -1054,7 +1036,10 @@ export class ResidentWorld {
             // seat was last here, not that it is here now.
             activity: this.#activityFor(request.about ?? player),
             ...answers,
-          }),
+          });
+          applied = true;
+          return applying;
+        },
         planning: (owner) => {
           // Read on the first keyed request only: most dispatches schedule nothing keyed.
           let keyed: ReadonlyMap<string, string> | undefined;
@@ -1066,7 +1051,13 @@ export class ResidentWorld {
         },
       },
       this.#budgets,
-    );
+    ).catch((error: unknown) => {
+      // A COMMAND THAT RAN AND COULD NOT BE PLANNED DID NOT HAPPEN EITHER: the
+      // engine already changed, and may have freed a chair (ShufflewickPub #813).
+      if (!applied) throw error;
+      this.#discardResident();
+      throw rolledBack(error, command.name);
+    });
 
     // THE HANDLER'S OWN REQUEST WINS (#583): `queueWrite` drops the re-arm of
     // an occurrence whose plan displaced its own event.
@@ -1119,7 +1110,9 @@ export class ResidentWorld {
       // before: a checkpoint that refuses is a command that did not happen, and
       // the discard below leaves the world at the revision it was already at.
       this.#revision += 1;
-      this.#released(runner, result.vacated);
+      // THE HOST IS TOLD ONCE THE RELEASE IS DURABLE (#278). The engine freed
+      // the chair in the dispatch; a refused write discards it with the rest.
+      if (result.vacated !== undefined) this.#onVacated(result.vacated);
       this.#evictCold(runner);
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.

@@ -130,8 +130,8 @@ export const WORLD_REFUSALS = {
       "does not exist -- refused before anything is written, and CALLER-owned " +
       "because it says nothing about the world's health: the one request is what " +
       "gets refused. A host that admits players before seating them must count " +
-      "the same LIFETIME seats this door counts -- a seat is assigned once and " +
-      "never handed on -- or a joiner it admitted arrives at a chair that does " +
+      "the same seats this door counts -- a seat is handed on only once its " +
+      "holder has departed -- or a joiner it admitted arrives at a chair that does " +
       "not exist. What is left after that is a host's stored player count " +
       "disagreeing with the compiled rules, whose remedy is a republish; " +
       "`definition.ts:assertSeatWithinWorld` carries the sentence that says so " +

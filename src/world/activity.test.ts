@@ -38,6 +38,7 @@ import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { SeatActivity, SeatActivityStamp, StoredPartition } from "./contract.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Room extends Space<Demo> {}
 
@@ -69,7 +70,8 @@ const definition = {
   gameType: "demo",
   world: {
     maxPlayers: 2,
-    actions: [act, reap],
+    actions: [act, reap, leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) => ({ hall: game.create(Room, "hall") }) as Record<string, GameElement>,
     view: () => ["hall"],
   },

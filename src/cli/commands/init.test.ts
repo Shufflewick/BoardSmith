@@ -468,7 +468,9 @@ describe('initCommand --world — a persistent world project (#168)', () => {
   it('registers the world block on gameDefinition, typed by GameDefinition', async () => {
     await scaffoldWorld();
     const index = read('src/rules/index.ts');
-    expect(index).toContain('world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView }');
+    expect(index).toContain(
+      "world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView, vacate: 'leave' }",
+    );
     expect(index).toContain('GameDefinition');
   });
 

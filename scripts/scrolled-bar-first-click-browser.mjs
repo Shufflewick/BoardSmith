@@ -51,11 +51,12 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 1,
     genesis: (game) => ({ [SECTOR]: (game as Expanse).create(Sector, 'sector') as GameElement }),
     view: () => [SECTOR],
-    actions: verbs.map((name, i) => {
+    vacate: 'leave',
+    actions: [...verbs.map((name, i) => {
       const action = worldAction<Expanse>(name).prompt(\`Survey sector \${i + 1}\`).order(i).needs(() => [SECTOR]);
       return (i === last ? action.chooseFrom('depth', { prompt: 'How deep?', choices: ['Shallow', 'Deep'] }) : action)
         .execute((_args, ctx) => ctx.world.emit(SECTOR, { surveyed: name }, \`Sector \${i + 1} was surveyed.\`));
-    }),
+    }), worldAction('leave').needs(() => []).execute(() => {})],
   },
 };
 `;

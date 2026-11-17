@@ -77,6 +77,7 @@ import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata, evaluatePrompt } from "../engine/element/action-metadata.js";
 import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
+import { decodeValue, encodeValue, readDynamicAttribute, savedAttributeKeys } from "../engine/element/game-element.js";
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -395,6 +396,15 @@ export interface BoardSmithWorldEngineOptions {
    */
   readonly actions: readonly ActionDefinition[];
   /**
+   * THE SEATED VERB THAT IS A SEAT'S OWN DEPARTURE (ShufflewickPub #813).
+   *
+   * The bundle's `world.vacate`, which `readWorldDefinition` requires and
+   * `createWorld` always passes. When a dispatch of it succeeds, the engine
+   * clears the seat and frees the chair in that same dispatch. An engine built
+   * without one has no seated road to a free chair.
+   */
+  readonly vacate?: string;
+  /**
    * WHICH VERB MAY FINALIZE A VACANCY FROM THE CLOCK (ShufflewickPub #475), or
    * nothing for a world that declares no such road.
    *
@@ -584,9 +594,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private readonly actions = new Map<string, ActionDefinition>();
   /** What a seat's view is about, from the bundle (#95). */
   private readonly view: WorldViewDeclaration;
+  /** The seated verb that is a seat's own departure (ShufflewickPub #813). */
+  private readonly vacate: string | undefined;
   /** The one verb that may free a chair from the clock (ShufflewickPub #475),
    *  or undefined for a world that declares none. */
   private readonly vacateByClock: string | undefined;
+  /** Each seat's Player as this world built it, by seat: what a freed chair is
+   *  reset to, so its next holder starts with nothing of the last one's
+   *  (ShufflewickPub #813). */
+  private readonly freshPlayers: ReadonlyMap<number, Readonly<Record<string, unknown>>>;
   /** How many notices one seat's box keeps (ShufflewickPub #521), or
    *  undefined for a world that declares no notice box. */
   private readonly noticesPerSeat: number | undefined;
@@ -648,7 +664,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     }
     this.store = options.store;
     this.view = options.view;
+    this.vacate = options.vacate;
     this.vacateByClock = options.vacateByClock;
+    // TAKEN BEFORE ANY COMMAND RUNS. A Player is in no partition, so nothing
+    // checkpoints it and what the game's constructor built is all it durably is.
+    this.freshPlayers = new Map(this.game.players.map((player) => [player.seat, savedAttributes(player)]));
     this.noticesPerSeat = options.noticesPerSeat;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
@@ -1173,6 +1193,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * WHETHER A SEAT IS OFFERED THIS VERB. Not the clock's own (#120), and not
+   * the departure (ShufflewickPub #813): the host runs `world.vacate` for a
+   * player who leaves or is ejected, so it is never a button in the game.
+   */
+  private offerable(definition: ActionDefinition): boolean {
+    return definition.world?.seatless !== true && definition.name !== this.vacate;
+  }
+
+  /**
    * WHAT THIS SEAT CAN DO HERE, ENUMERATED (#169).
    *
    * The flat command table's `commandOffers()` answered from the bundle's own
@@ -1224,7 +1253,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // exactly two sites that read `seatless`. Filtering alone would leave the
       // rule enforceable only by the client, which is not a place a rule can
       // live; `actionFor` is the other half.
-      if (definition.world?.seatless === true) continue;
+      if (!this.offerable(definition)) continue;
       const offer = await this.offerOf(definition, seat, acting, stamp, project);
       if (offer !== null) offers.push(offer);
     }
@@ -1257,7 +1286,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const project = readOnlyScope();
     const missing: string[] = [];
     for (const definition of this.actions.values()) {
-      if (definition.world?.seatless === true) continue;
+      if (!this.offerable(definition)) continue;
       missing.push(...this.offerPartitionsOf(definition, seat, now, project));
     }
     return declaredOnce(missing);
@@ -2742,10 +2771,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // rules must not turn one into control flow. sotf swallowed
       // `undeclared-partition` on every border draw and the command succeeded.
       if (ledger.refused !== null) throw ledger.refused;
+      this.claimDeparture(command.name, seat, charge.owner, ledger);
 
       // Each seat's view runs at most once per command, however many events it emitted.
       const views = new Map<number, JudgedView>();
-      return {
+      const outcome: WorldCommandResult = {
         // ROUTED HERE AND NOWHERE ELSE (#58). The action said where; this is
         // the engine saying who, once per event, while the world it is a fact
         // about is still in front of us.
@@ -2765,6 +2795,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
         schedules: ledger.schedules,
         ...outcomeOf(ledger, this.noticesPerSeat),
       };
+      // LAST, once nothing below can refuse: a refused dispatch frees nothing.
+      this.release(ledger.vacated);
+      return outcome;
     } catch (error) {
       // A REFUSED ACTION LEAVES THE WORLD UNCHANGED, or the word is worthless
       // (#68). The host EXPECTS rules to refuse -- it quarantines them -- and
@@ -3597,8 +3630,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * is what a reconnect looks like from here and must be free; moving a seated
    * player to another seat is not a reconnect, and silently accepting it would
    * hand one person another person's holdings. A player who has genuinely left
-   * is retired with `unseat` first, and may then be seated anywhere. A seat
-   * another player holds is refused the same way, until that holder is unseated.
+   * departs through `world.vacate` (or the clock's `vacateByClock`) first, and
+   * may then be seated anywhere. A seat another player holds is refused the
+   * same way, until that holder departs.
    */
   seat(player: string, seat: number): void {
     const held = this.seats.get(player);
@@ -3617,34 +3651,39 @@ export class BoardSmithWorldEngine implements WorldEngine {
       throw worldRefusal(
         "seat-conflict",
         `"${player}" cannot take seat ${seat}: "${holder}" holds seat ${seat} in this world. ` +
-          `Two holders would both command its holdings; unseat "${holder}" first.`,
+          `Two holders would both command its holdings, so "${holder}" must leave it first.`,
       );
     }
     this.seats.set(player, seat);
   }
 
+  /** THE SEAT'S OWN DEPARTURE (ShufflewickPub #813), reported as the clock's is. */
+  private claimDeparture(action: string, seat: number | null, owner: string, ledger: DispatchLedger): void {
+    if (seat !== null && action === this.vacate) ledger.vacated = { seat, player: owner };
+  }
+
   /**
-   * RETIRE A SEAT'S HOLDER (ShufflewickPub #399).
+   * FREE A DEPARTED SEAT, CLEAN (ShufflewickPub #399, #813).
    *
-   * The map loses the entry and NOTHING ELSE CHANGES: the Player element, its
-   * colour, the holdings behind it and every `{__playerRef, seat}` pointing at
-   * it stand exactly as they were. That is what makes the chair reusable and
-   * also what makes it dangerous -- a seat handed on before the game has given
-   * that ground back would hand a newcomer somebody else's castle -- so the
-   * ORDERING is the host's to keep and `WorldDefinition.vacate` is where it is
-   * written down.
+   * Called at the end of every dispatch that succeeded, and frees a chair only
+   * when that dispatch was a departure (`vacated` is set): the
+   * seat's own `world.vacate` verb, or the clock's `vacateByClock` verb naming
+   * it. The game's hook has already decided what became of the holdings; this
+   * resets the seat's Player element, in place so every reference to it still
+   * resolves, to what this world built it as, and forgets the holder.
    *
-   * Forgetting the mapping is the whole of the job here, and both halves
-   * matter: `seatFor` must stop resolving this player, so a command arriving
-   * for somebody this world no longer seats is `unknown-player` rather than a
-   * command run against whoever holds the chair now; and `audienceOf` must stop
-   * enumerating their seat, so a world-scoped event is addressed to the seats
-   * this world actually has.
+   * Forgetting the holder matters twice: `seatFor` must stop resolving them, so
+   * a command still arriving for them is `unknown-player` rather than one run
+   * against whoever holds the chair next; and `audienceOf` must stop
+   * enumerating their seat.
    *
-   * IDEMPOTENT, for a retried departure's sake.
+   * A host whose checkpoint then refuses discards this engine, as it does for
+   * any command it cannot make durable, so a release never outlives its write.
    */
-  unseat(player: string): void {
-    this.seats.delete(player);
+  private release(vacated: { readonly seat: number; readonly player: string } | null): void {
+    if (vacated === null) return;
+    resetPlayer(this.playerFor(vacated.seat), this.freshPlayers.get(vacated.seat)!, this.game);
+    this.seats.delete(vacated.player);
   }
 
   /**
@@ -3674,6 +3713,35 @@ export class BoardSmithWorldEngine implements WorldEngine {
       );
     }
     return seat;
+  }
+}
+
+/** A Player's saved attributes, encoded, so a later write cannot reach them. */
+function savedAttributes(player: Player): Record<string, unknown> {
+  const className = player.constructor.name;
+  return Object.fromEntries(
+    savedAttributeKeys(player).map((key) => [
+      key,
+      encodeValue(readDynamicAttribute(player, key), player._ctx, className, key),
+    ]),
+  );
+}
+
+/**
+ * PUT A PLAYER BACK THE WAY THIS WORLD BUILT IT (ShufflewickPub #813).
+ *
+ * In place, so the element every reference resolves to stays the same one:
+ * each saved attribute is restored from `fresh`, and every saved attribute a
+ * rule added since is removed. What is not saved (engine state, a derived
+ * getter, a `PersistentMap` view, the class's `unserializableAttributes`) is
+ * left alone.
+ */
+function resetPlayer(player: Player, fresh: Readonly<Record<string, unknown>>, game: Game): void {
+  for (const key of savedAttributeKeys(player)) {
+    if (!Object.hasOwn(fresh, key)) Reflect.deleteProperty(player, key);
+  }
+  for (const [key, value] of Object.entries(fresh)) {
+    Object.assign(player, { [key]: decodeValue(value, game) });
   }
 }
 

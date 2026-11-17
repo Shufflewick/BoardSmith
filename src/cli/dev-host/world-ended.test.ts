@@ -33,6 +33,7 @@ import { openWorldStore, worldStorePath } from './world-store.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 const MINUTE = 60_000;
 const OPENED = 1_700_000_000_000;
@@ -123,7 +124,8 @@ function bundle(world: Partial<WorldDefinition> = {}): ConstructorParameters<typ
       maxPlayers: 1,
       genesis: (game: Game): Record<string, GameElement> => ({ [LEDGER]: game.create(Ledger, 'ledger') }),
       view: () => [LEDGER],
-      actions: [note, close, beat, expire, arm, arrive],
+      actions: [note, close, beat, expire, arm, arrive, leaveNothing],
+      vacate: 'leave',
       ...world,
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];

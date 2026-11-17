@@ -40,6 +40,7 @@ import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-st
 import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { leaveNothing } from '../../world/departure.test-helper.js';
 
 // ── A hamlet whose actions read a partition the view never names ────────────
 
@@ -83,7 +84,8 @@ function hamletBlock(): WorldDefinition {
       ),
     }),
     view: () => [HEARTH],
-    actions: HAMLET_ACTIONS,
+    actions: [...HAMLET_ACTIONS, leaveNothing],
+    vacate: 'leave',
   } as WorldDefinition;
 }
 

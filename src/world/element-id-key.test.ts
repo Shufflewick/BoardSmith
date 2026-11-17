@@ -22,6 +22,7 @@ import { worldAction } from "./action.js";
 import { WorldRefusal, ownerOf } from "./refusals.js";
 import type { StoredPartition } from "./contract.js";
 import { worldElementIds } from "../engine/element/element-ids.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 class Room extends Space<Keyed> {}
 
@@ -41,7 +42,8 @@ const definition = {
   gameType: "keyed",
   world: {
     maxPlayers: 2,
-    actions: [worldAction<Keyed>("look").needs(() => ["a"]).execute(() => {})],
+    actions: [worldAction<Keyed>("look").needs(() => ["a"]).execute(() => {}), leaveNothing],
+    vacate: "leave",
     genesis: (game: Game) =>
       Object.fromEntries(ROOMS.map((name) => [name, game.create(Room, name)])) as Record<string, GameElement>,
     // Any name a host asks for becomes a room: the on-demand road every host

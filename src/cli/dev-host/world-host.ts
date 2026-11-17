@@ -470,7 +470,7 @@ export class LocalWorldHost {
   }
 
   /**
-   * THE WORLD'S CLOCK TOOK A CHAIR, AND THE PAGE IN IT IS TOLD (#278).
+   * A CHAIR WAS FREED, AND THE PAGE IN IT IS TOLD (#278, ShufflewickPub #813).
    *
    * A dev client watching through that seat is looking at holdings the world
    * has just given back, and its next action would be answered `unknown-player`
@@ -499,10 +499,9 @@ export class LocalWorldHost {
       this.#send(clientId, {
         type: 'world_notice',
         message:
-          `This world's clock finalized the vacancy of seat ${vacancy.seat}, so this page no ` +
-          'longer holds it. The estate behind it was given back first -- that is what the ' +
-          '`world.vacateByClock` verb proved before it released the chair. Pick a seat again ' +
-          'to join as a newcomer.',
+          `The world freed seat ${vacancy.seat}, so this page no longer holds it. The world's own ` +
+          'rules gave the estate behind it back first, and the seat starts fresh for whoever ' +
+          'takes it next. Pick a seat again to join as a newcomer.',
       });
     }
   }

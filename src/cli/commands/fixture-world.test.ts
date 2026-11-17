@@ -62,7 +62,11 @@ export const gameDefinition: GameDefinition = {
     maxPlayers: 2,
     genesis: (game) => ({ yard: (game as YardGame).create(Yard, 'yard') as GameElement }),
     view: () => ['yard'],
-    actions: [worldAction<YardGame>('look').needs(() => ['yard']).execute(() => {})],
+    actions: [
+      worldAction<YardGame>('look').needs(() => ['yard']).execute(() => {}),
+      worldAction<YardGame>('leave').needs(() => []).execute(() => {}),
+    ],
+    vacate: 'leave',
   },
 };
 `;

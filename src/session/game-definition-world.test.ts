@@ -72,7 +72,12 @@ const definition: GameDefinition = {
           choices: ['hall', 'cellar'],
         })
         .execute(() => {}),
+      // WHAT BECOMES OF A DEPARTED SEAT'S HOLDINGS (ShufflewickPub #813): required.
+      worldAction<WorldGame>('leave')
+        .needs(() => [])
+        .execute(() => {}),
     ],
+    vacate: 'leave',
     genesis: () => ({}) as Record<string, GameElement>,
     view: () => [] as readonly string[],
   },

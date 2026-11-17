@@ -106,7 +106,8 @@ export const gameDefinition: GameDefinition = {
       return { [HEARTH]: fire as GameElement };
     },
     view: () => [HEARTH],
-    actions: [kindle],
+    actions: [kindle, worldAction('leave').needs(() => []).execute(() => {})],
+    vacate: 'leave',
   },
 };
 `;

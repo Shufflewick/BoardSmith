@@ -27,6 +27,7 @@ import { storedWorld, worldOptions } from "./stored-world.test-helper.js";
 import { worldAction } from "./action.js";
 import { worldMigration } from "./migration.js";
 import type { WorldMigrateContext } from "./runner.js";
+import { leaveNothing } from "./departure.test-helper.js";
 
 /**
  * THE HOST CEILING THIS ISSUE IS ABOUT.
@@ -77,7 +78,8 @@ function bundle(migration: unknown, stateVersion: number) {
     world: {
       maxPlayers: 1,
       stateVersion,
-      actions: [read],
+      actions: [read, leaveNothing],
+      vacate: "leave",
       genesis: (game: Game) => {
         const roots: Record<string, GameElement> = {};
         for (const owner of OWNERS) {

@@ -53,8 +53,8 @@ export interface WorldDefinition {
    *
    * THE ONE SEAT COUNT A WORLD HAS, AT ANY ONE MOMENT. A world does not start,
    * so there is no minimum to reach. A seat is handed on only after this
-   * world's own `vacate` verb has given the departed player's ground back, and
-   * a world that declares none holds every chair for life. So this is not
+   * world's own `vacate` verb has given the departed player's ground back and
+   * the engine has cleared the seat. So this is not
    * a table's roster and it does not live where a table's roster lives: a world
    * game that declared `gameDefinition.minPlayers/maxPlayers` shipped a
    * vestigial table half beside its world, and a person opened one and started
@@ -234,33 +234,37 @@ export interface WorldDefinition {
    */
   readonly presence?: WorldPresenceDeclaration;
   /**
-   * WHICH VERB HANDS A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399).
+   * WHICH VERB HANDS A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399, #813).
    *
-   * The name of one of this world's own SEATED actions. A host runs it for the
-   * seat that is leaving, and only the game can write it: what a departed
-   * empire's planets, fields or fleets become is a rules decision, and a host
-   * that guessed would be inventing game design in the wrong place.
+   * REQUIRED. The name of one of this world's own SEATED actions. A host
+   * dispatches it as the player who is leaving or was ejected (an idle player
+   * keeps their seat), and only the game can write it: what a departed
+   * empire's planets, fields or fleets become (wiped, handed to a neutral
+   * seat, left as ruins) is a rules decision, and a host that guessed would be
+   * inventing game design in the wrong place.
    *
-   * DECLARING IT IS WHAT MAKES A SEAT REUSABLE. A world that leaves this out
-   * holds every chair it has ever given for as long as the world lasts, which
-   * is what every world did before this existed and is still a legitimate
-   * design -- a short season fills once and never churns. What is NOT
-   * legitimate is a host handing a newcomer a chair whose ground is still
-   * occupied, so absence here means the chair is never handed on.
+   * DISPATCHING IT IS THE DEPARTURE. When it succeeds, the engine resets the
+   * seat's Player element to what this world built it as, frees the chair and
+   * reports `vacated` on the result, all in that one dispatch, so a host can
+   * neither free a chair the hook has not run for nor hand a newcomer what the
+   * last player left on the Player. When it refuses, the seat stays held and
+   * the host is told why. A reference to the seat inside a partition (an
+   * element's `player`) points at the CHAIR, so it is the next holder's unless
+   * this verb clears it.
    *
    * VALIDATED HERE, unlike `presence`'s hooks, and the difference is what each
    * question needs. Whether a hook's grace is within bounds is the HOST's
    * answer and no library can give it. Whether this names one of this world's
    * own seated, question-free verbs is answerable from the declaration alone,
    * is the same for every host, and is a bundle that is broken in the ENGINE's
-   * terms if it is wrong -- so `readWorldDefinition` refuses it, on the world's
-   * first wake, rather than leaving every host to discover it as chairs that
-   * silently never come back. What a host does with the ANSWER -- which
-   * departures reach the verb, what becomes of the chair, who is told -- is
-   * still that host's policy, and `createWorld` reports it as `seatCount` is
-   * reported, because a host needs it before it can decide anything.
+   * terms if it is wrong -- so `readWorldDefinition` refuses it, and a world
+   * that names none, on the world's first wake, rather than leaving every host
+   * to discover it as chairs that silently never come back. Which departures
+   * reach the verb and who is told is still that host's policy, and
+   * `createWorld` reports the name as `seatCount` is reported, because a host
+   * needs it before it can decide anything.
    */
-  readonly vacate?: string;
+  readonly vacate: string;
   /**
    * WHICH OF THE CLOCK'S OWN VERBS MAY FINALIZE A VACANCY, or nothing
    * (ShufflewickPub #475).
@@ -286,9 +290,10 @@ export interface WorldDefinition {
    * `worldClockAction()`, since the clock is who runs it), and it must declare
    * at least one chair with `.about()`.
    *
-   * ABSENT IS AN ANSWER, exactly as `vacate`'s absence is: a world that never
-   * says how the clock finishes a teardown has no clock road to a chair, and
-   * `ctx.world.vacate()` is refused by name everywhere in it.
+   * ABSENT IS AN ANSWER: a world that never says how the clock finishes a
+   * teardown has no clock road to a chair, and `ctx.world.vacate()` is refused
+   * by name everywhere in it. When the call succeeds, the engine clears and
+   * frees the chair exactly as it does after `vacate`.
    */
   readonly vacateByClock?: string;
   /**
@@ -372,8 +377,9 @@ export interface WorldReferralDeclaration {
  * founding is worth a reward, and which verbs a host may issue, is that host's
  * policy and not the engine's -- see the field.
  *
- * `vacate` IS validated here, because what makes it usable is answerable from
- * the declaration alone and is the same for every host -- see the field.
+ * `vacate` IS validated here, and required, because what makes it usable is
+ * answerable from the declaration alone and is the same for every host -- see
+ * the field.
  */
 export function readWorldDefinition(definition: {
   world?: WorldDefinition;
@@ -442,15 +448,16 @@ export function readWorldDefinition(definition: {
 }
 
 /**
- * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK, or null (ShufflewickPub #399).
+ * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399, #813).
  *
  * The bundle's `world.vacate`, checked and handed back as a name a host may
- * dispatch. Null for a world that declares none, which is an ANSWER and not a
- * gap: that world holds every chair it has given for as long as it lasts, which
- * is what every world did before this existed and is still right for a season
- * that fills once and never churns.
+ * dispatch.
  *
- * THREE RULES, and each has a failure with no symptom behind it.
+ * FOUR RULES, and each has a failure with no symptom behind it.
+ *
+ * A WORLD THAT NAMES NONE is refused, because it would hold every chair it has
+ * ever given for as long as it lasts, and a world whose players come and go
+ * fills up for good.
  *
  * A NAME NO VERB ANSWERS TO is refused, because a typo would otherwise mean the
  * host ran nothing on every departure and every chair stayed held, with nothing
@@ -468,13 +475,23 @@ export function readWorldDefinition(definition: {
  * gone, so there is nobody left to answer one and a host could only dispatch it
  * with no arguments and watch it refuse.
  */
-export function worldVacateAction(world: WorldDefinition): string | null {
-  return world.vacate ?? null;
+export function worldVacateAction(world: WorldDefinition): string {
+  return world.vacate;
 }
 
-/** `worldVacateAction`'s three rules, raised as refusals at read time. */
+/** `worldVacateAction`'s four rules, raised as refusals at read time. */
 function assertWorldVacate(world: WorldDefinition): void {
-  if (world.vacate === undefined) return;
+  if (world.vacate === undefined) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `gameDefinition.world` declares no `vacate`, so nothing says what becomes " +
+        "of a departed player's holdings and their seat could never be handed on. Add " +
+        '`vacate: "<verb>"` to `world`, naming one of this world\'s seated `worldAction()` verbs ' +
+        "that asks no questions. A host runs it for a player who leaves or is ejected; inside it, " +
+        "your rules decide what happens to that seat's holdings (wipe them, hand them on, leave " +
+        "ruins), and the engine then clears the seat for the next player.",
+    );
+  }
 
   const action = typeof world.vacate === "string"
     ? world.actions.find((one) => one.name === world.vacate)
@@ -648,9 +665,9 @@ export function assertSeatWithinWorld(player: string, seat: number, seatCount: n
     `Cannot seat "${player}" at seat ${seat}: this world's game declares maxPlayers: ` +
       `${seatCount}, so it holds seats 1 through ${seatCount} and no layer may mint another. ` +
       "These are all the seats this world will ever have at once: a departed player's chair " +
-      "comes back only once this world's own `vacate` verb has given their ground back, and a " +
-      "world that declares none holds every chair for life. A host that admits players before " +
-      "seating them counts the same chairs, so a joiner should have been refused at that door: " +
+      "comes back once this world's own `vacate` verb has given their ground back. A host that " +
+      "admits players before seating them counts the same chairs, so a joiner should have been " +
+      "refused at that door: " +
       "what puts the two out of step is a stored player count declaring more players than the " +
       "compiled rules build. Rebuild so the declared player count matches " +
       "gameDefinition.world.maxPlayers, or raise gameDefinition.world.maxPlayers and rebuild.",
@@ -920,17 +937,19 @@ export interface WorldRunner {
    *  needs it to refuse a seating before it writes one. */
   readonly seatCount: number;
   /**
-   * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK, or null (ShufflewickPub
-   * #399).
+   * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399,
+   * #813).
    *
    * Reported for `seatCount`'s reason: it is a fact about the bundle that a
-   * host has to know BEFORE it can decide anything -- whether a chair can ever
-   * come back at all, and what to run when one is leaving. Answered by the
-   * engine rather than read off the declaration by each host, so that the three
-   * rules that make it usable are checked once, in `worldVacateAction`, and no
-   * host can hold a name this world would refuse to dispatch.
+   * host has to know BEFORE it can decide anything -- what to dispatch when a
+   * player is leaving. Dispatching it is the departure: on success the result
+   * carries `vacated` and the chair is already free and clean in the engine.
+   * Answered by the engine rather than read off the declaration by each host,
+   * so that the rules that make it usable are checked once, in
+   * `worldVacateAction`, and no host can hold a name this world would refuse
+   * to dispatch.
    */
-  readonly vacate: string | null;
+  readonly vacate: string;
   /**
    * WHICH CLOCK VERB MAY FINALIZE A VACANCY, or null (ShufflewickPub #475).
    *
@@ -1054,6 +1073,9 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     store,
     actions: world.actions,
     view: world.view,
+    // THE SEAT'S OWN DEPARTURE (ShufflewickPub #813): the engine frees and
+    // clears the chair when this verb succeeds.
+    vacate: world.vacate,
     // WHICH VERB MAY FREE A CHAIR FROM THE CLOCK (ShufflewickPub #475), or
     // nothing. The engine is the only thing that can hold the rule, because the
     // rule is about a call made from inside a running dispatch.

@@ -11,6 +11,7 @@ import { worldAction, worldBudgets, worldClockAction, type WorldDefinition } fro
 import { ResidentWorld, worldSeatPlayer, type WorldHostClock } from './index.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
+import { leaveNothing } from '../departure.test-helper.js';
 
 // Production's answer, where a raw throw's text never reaches a player.
 const devThrow = vi.hoisted(() => ({ enabled: true }));
@@ -88,7 +89,8 @@ function bundle(ordering: 'arrival' | 'chronological' = 'arrival') {
         if (viewThrows) throw viewThrows;
         return [LOG];
       },
-      actions: [boom, fizz, armFizz, tick, arm, stamp, poke],
+      actions: [boom, fizz, armFizz, tick, arm, stamp, poke, leaveNothing],
+      vacate: 'leave',
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }

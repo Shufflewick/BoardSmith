@@ -14,6 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, Player, Space, type GameOptions } from '../engine/index.js';
 import { worldAction, type WorldDefinition } from './index.js';
 import { createTestWorld } from '../testing/test-world.js';
+import { leaveNothing } from './departure.test-helper.js';
 
 class Room extends Space<PeekWorld> {
   visits = '';
@@ -61,7 +62,8 @@ const shout = worldAction<PeekWorld>('shout')
 function peekBundle() {
   const world: WorldDefinition = {
     maxPlayers: 2,
-    actions: [peek, shout],
+    actions: [peek, shout, leaveNothing],
+    vacate: 'leave',
     view: (seat: number) => [roomOf(seat)],
     genesis: (game: Game) => ({
       [roomOf(1)]: game.create(Room, 'room-1'),

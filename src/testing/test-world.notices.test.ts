@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest';
 import { Game, Space, type GameElement, type GameOptions } from '../engine/index.js';
 import { worldAction, worldClockAction, type WorldRunnerOptions } from '../world/index.js';
 import { createTestWorld } from './test-world.js';
+import { leaveNothing } from '../world/departure.test-helper.js';
 
 class Den extends Space<Pack> {
   log: string[] = [];
@@ -60,7 +61,8 @@ const definition = {
   world: {
     maxPlayers: 3,
     notices: { perSeat: 2 },
-    actions: [howl, letter, arrive],
+    actions: [howl, letter, arrive, leaveNothing],
+    vacate: 'leave',
     presence: { onArrive: 'arrive' },
     genesis: (game: Game) =>
       Object.fromEntries(

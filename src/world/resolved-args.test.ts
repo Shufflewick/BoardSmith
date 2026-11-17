@@ -23,6 +23,7 @@ import {
   VaultWorld,
 } from '../testing/test-world.test-helper.js';
 import { worldAction, type WorldDefinition } from './index.js';
+import { leaveNothing } from './departure.test-helper.js';
 
 /** What one callback was handed for `room`: its type, and its name if it has one. */
 interface Seen {
@@ -94,7 +95,7 @@ function surveyingWorld(seen: Map<string, Seen[]>): WorldDefinition {
     .execute(({ room }) => {
       record('execute', room);
     });
-  return { ...vaultWorldBlock(), actions: [survey] } as WorldDefinition;
+  return { ...vaultWorldBlock(), actions: [survey, leaveNothing] } as WorldDefinition;
 }
 
 /** `kind` ran at least once, and every time it was handed seat 1's vault. */
@@ -183,7 +184,7 @@ describe('world-action callbacks receive element selections as elements (#418)',
       })
       .execute(() => {});
     const world = await createTestWorld({
-      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [scribble] } as WorldDefinition },
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [scribble, leaveNothing] } as WorldDefinition },
     });
     const room = (await world.resolvePick(1, 'scribble', 'room', {})).validElements![0]!.id;
 
@@ -228,7 +229,7 @@ describe('world-action callbacks receive element selections as elements (#418)',
       .quote(() => null)
       .execute(() => {});
     const world = await createTestWorld({
-      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [peek] } as WorldDefinition },
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [peek, leaveNothing] } as WorldDefinition },
     });
     const room = (await world.resolvePick(1, 'peek', 'room', {})).validElements![0]!.id;
     // Still resident and inside the declared partition, but no longer offered.
@@ -250,7 +251,7 @@ describe('world-action callbacks receive element selections as elements (#418)',
       .quote(({ rooms }) => [`${rooms?.length ?? 0} rooms`])
       .execute(() => {});
     const world = await createTestWorld({
-      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [gather] } as WorldDefinition },
+      definition: { ...vaultBundle(), world: { ...vaultWorldBlock(), actions: [gather, leaveNothing] } as WorldDefinition },
     });
     const room = (await world.resolvePick(1, 'gather', 'rooms', {})).validElements![0]!.id;
 
@@ -293,7 +294,8 @@ describe('a read whose draft answers an element pick nested below its partition 
         gameClass: PouchWorld,
         world: {
           maxPlayers: 2,
-          actions: [peek],
+          actions: [peek, leaveNothing],
+          vacate: 'leave',
           // Both resident, so a card in `stash` is found, yet `peek` declares only `commons`.
           view: () => ['commons', 'stash'],
           genesis: (game: Game) => {
