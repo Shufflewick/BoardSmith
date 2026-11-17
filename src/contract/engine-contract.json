@@ -3270,7 +3270,7 @@
       "surfaceHash": "caaffcbb71cd9067",
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
-      "summary": "GameOptions, game.settings, PlayerGameState and LobbyInfo no longer carry colorSelectionEnabled, which no lobby or client read"
+      "summary": "GameOptions, game.settings, PlayerGameState and LobbyInfo no longer carry colorSelectionEnabled, which no lobby or client read (#1685)."
     }
   ]
 }
