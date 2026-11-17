@@ -731,6 +731,25 @@ deal that names them (`dealt from seed "tar-works" with game options
 firstTower="Tar Works"` walks that deal again, with `--players` too if it names
 a count.
 
+The walk takes the spec's `steps` on every deal unless the deal names its own.
+A deal added for one action that comes early in the game (the tower's action
+above, a few steps in) needs far fewer steps than the main deal, so it names
+them, and the walk of every deal does not take as long as the longest:
+
+```ts
+defineSmokeTest({
+  actions: ['buyBlueprint', 'aimTarSlick'],
+  steps: 900,
+  seed: ['smoke', { seed: 'tar-works', gameOptions: { firstTower: 'Tar Works' }, steps: 60 }],
+});
+```
+
+A count that is not a whole number from 1 fails the check. The same deal at two
+step counts is the same deal listed twice, since the shorter walk is the start
+of the longer. The summary names the steps of a deal that names them (`dealt
+from seed "tar-works" with game options {"firstTower":"Tar Works"} for 60
+steps`), and `--steps 60` with `--seed` walks a deal again at that count.
+
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.
 

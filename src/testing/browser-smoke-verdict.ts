@@ -34,13 +34,18 @@ export const DEFAULT_SMOKE_SEED = 'smoke';
 export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
 
 /**
- * A game a table's walk deals (#1602, #1684): a seed, dealt at the game's `minPlayers` with the
- * options `boardsmith dev` starts with, or a seed with how many players sit at it, the game options
- * it is dealt with, or both.
+ * A game a table's walk deals (#1602, #1684, #1686): a seed, dealt at the game's `minPlayers` with
+ * the options `boardsmith dev` starts with and walked for the spec's `steps`, or a seed with how many
+ * players sit at it, the game options it is dealt with, how many steps it is walked, or any of them.
  */
 export type SmokeDeal =
   | string
-  | { readonly seed: string; readonly players?: number; readonly gameOptions?: Readonly<Record<string, unknown>> };
+  | {
+      readonly seed: string;
+      readonly players?: number;
+      readonly gameOptions?: Readonly<Record<string, unknown>>;
+      readonly steps?: number;
+    };
 
 /** ""a"", or ""a" at 3 players with game options {"tower":"tar"}" for a deal that names them. */
 function dealDescription(deal: SmokeDeal): string {
@@ -50,14 +55,21 @@ function dealDescription(deal: SmokeDeal): string {
   return `"${deal.seed}"${players}${options}`;
 }
 
-/** "seed "a"", or "seed "a" at 3 players" and so on for a deal that names more (see {@link dealDescription}). */
-const dealName = (deal: SmokeDeal) => `seed ${dealDescription(deal)}`;
+/** {@link dealDescription}, with " for 60 steps" for a deal that names its steps. */
+function dealWalked(deal: SmokeDeal): string {
+  const steps = typeof deal === 'string' || deal.steps === undefined ? '' : ` for ${deal.steps} steps`;
+  return `${dealDescription(deal)}${steps}`;
+}
+
+/** "seed "a"", or "seed "a" at 3 players" and so on for a deal that names more (see {@link dealWalked}). */
+const dealName = (deal: SmokeDeal) => `seed ${dealWalked(deal)}`;
 
 /**
  * The deals a walk deals, in order: the seeds `boardsmith smoke --seed` names (`chosen`), else the
  * spec's `seed`, one deal or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
- * write instead, on an empty list, a blank seed, a player count that is not one, game options that
- * name none, or a deal listed twice.
+ * write instead, on an empty list, a blank seed, a player count or step count that is not one, game
+ * options that name none, or a deal listed twice (at any step counts, since a shorter walk of a deal
+ * is the start of a longer one).
  */
 export function smokeSeeds(seed: SmokeDeal | readonly SmokeDeal[] | undefined, chosen?: readonly SmokeDeal[]): SmokeDeal[] {
   if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
@@ -76,7 +88,7 @@ function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
     const problem = dealProblem(deal);
     if (problem !== undefined) throw new Error(`${from} ${problem}`);
   }
-  const names = deals.map(dealName);
+  const names = deals.map(dealDescription);
   const twice = deals.find((_, i) => names.indexOf(names[i]) !== i);
   if (twice !== undefined) {
     throw new Error(`${from} lists ${dealDescription(twice)} twice, which walks the same deal twice. List each ${typeof twice === 'string' ? 'seed' : 'deal'} once.`);
@@ -87,7 +99,14 @@ function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
 /** What is wrong with `deal`, as the rest of a sentence about where it came from: a blank seed, a count that is not one, or options that name none. */
 function dealProblem(deal: SmokeDeal): string | undefined {
   if (dealSeed(deal).trim() === '') return 'has a blank seed. A seed is any text that is not blank, such as "7" or "opening".';
-  return typeof deal === 'string' ? undefined : (countProblem(deal.seed, deal.players) ?? optionsProblem(deal.seed, deal.gameOptions));
+  if (typeof deal === 'string') return undefined;
+  return countProblem(deal.seed, deal.players) ?? optionsProblem(deal.seed, deal.gameOptions) ?? stepsProblem(deal.seed, deal.steps);
+}
+
+/** What is wrong with the step count a deal of `seed` names, if anything. */
+function stepsProblem(seed: string, steps: number | undefined): string | undefined {
+  if (steps === undefined || (Number.isInteger(steps) && steps >= 1)) return undefined;
+  return `walks "${seed}" for ${JSON.stringify(steps)} steps, which is not a number of steps. Name how many steps the walk takes on the deal, such as 60.`;
 }
 
 /** What is wrong with the player count a deal of `seed` names, if anything. */
@@ -107,6 +126,9 @@ function optionsProblem(seed: string, options: unknown): string | undefined {
 
 /** The seed `deal` is dealt from. */
 export const dealSeed = (deal: SmokeDeal) => (typeof deal === 'string' ? deal : deal.seed);
+
+/** How many steps the walk takes on `deal` (#1686): the steps it names, else the spec's `specSteps`. */
+export const smokeDealSteps = (deal: SmokeDeal, specSteps: number) => (typeof deal === 'string' ? specSteps : (deal.steps ?? specSteps));
 
 /**
  * How many players sit at `deal`, at a game that `seats` from `min` to `max` (#1602): the count it
@@ -220,13 +242,14 @@ const WALK_STEP_MS = 10_000;
 const LONGEST_TIMER_MS = 2_147_483_647;
 
 /**
- * The longest a walk of `deals` deals of at most `steps` steps each, played by the world `seats` the
- * spec names (one seat at a table, which names none), may run before Playwright ends it (#1601). A hang
- * guard sized to the walk the spec asks for; the walk's own checks catch a stuck game sooner.
+ * The longest a walk of deals of at most `steps` steps each (one count per deal, #1686), played by the
+ * world `seats` the spec names (one seat at a table, which names none), may run before Playwright ends
+ * it (#1601). A hang guard sized to the walk the spec asks for; the walk's own checks catch a stuck
+ * game sooner.
  */
-export function smokeWalkLimit(deals: number, steps: number, seats: readonly number[] | undefined): number {
-  const played = deals * (seats?.length ?? 1);
-  return Math.min(LONGEST_TIMER_MS, WALK_BASE_MS + played * (WALK_DEAL_MS + steps * WALK_STEP_MS));
+export function smokeWalkLimit(steps: readonly number[], seats: readonly number[] | undefined): number {
+  const perDeal = steps.reduce((sum, count) => sum + WALK_DEAL_MS + count * WALK_STEP_MS, 0);
+  return Math.min(LONGEST_TIMER_MS, WALK_BASE_MS + (seats?.length ?? 1) * perDeal);
 }
 
 /** The spec's `steps`, once it is a positive whole number: with none, the walk takes no step and passes any game that loads (#924). */
@@ -465,7 +488,7 @@ export interface SmokeWalk {
   readonly enabled: Set<string>;
   /** Every action taken and resolved without failing. */
   readonly taken: Set<string>;
-  /** The most actions the walk would take on each deal. */
+  /** The most actions the walk would take on a deal that names no steps of its own (#1686). */
   readonly steps: number;
   /** Every error the page showed, in the order it showed them. */
   readonly errors: string[];
@@ -663,16 +686,38 @@ function whatToDo(walk: SmokeWalk, opening: string, gettingThere: string, brings
     !atATable(walk) && walk.seats.length < 2
       ? ' If it needs another player there too, list the seats the walk plays in `seats` there, choosing seats the world brings together.'
       : '';
+  const ownSteps = walk.seeds.some((deal) => typeof deal !== 'string' && deal.steps !== undefined) ? ', or the `steps` of a deal that names its own' : '';
   return (
-    `${opening} If a fresh game takes longer to ${gettingThere}, raise \`steps\` in ${SMOKE_SPEC_PATH}.${chooseASeed}${secondSeat} ` +
+    `${opening} If a fresh game takes longer to ${gettingThere}, raise \`steps\` in ${SMOKE_SPEC_PATH}${ownSteps}.${chooseASeed}${secondSeat} ` +
     `If no walk from a fresh game can reach it ${atATable(walk) ? 'whatever the deal ' : ''}(it needs a long game, or a position ` +
     'play does not get to), name it in `unreachable` there with the reason.'
   );
 }
 
-/** "in 12 steps from a fresh game dealt from seed "a"", or with no seed for a world. */
+/**
+ * The step count every deal of `walk` was walked for, with its deals named without it; or, when
+ * deals walked different counts (#1686), no shared count and each deal named with its own.
+ */
+function stepsWalked(walk: SmokeWalk): { shared: number | undefined; deals: SmokeDeal[] } {
+  const counts = new Set(walk.seeds.map((deal) => smokeDealSteps(deal, walk.steps)));
+  if (counts.size > 1) {
+    const deals = walk.seeds.map((deal) => ({ ...(typeof deal === 'string' ? { seed: deal } : deal), steps: smokeDealSteps(deal, walk.steps) }));
+    return { shared: undefined, deals };
+  }
+  const deals = walk.seeds.map((deal) => (typeof deal === 'string' ? deal : { ...deal, steps: undefined }));
+  return { shared: [...counts][0] ?? walk.steps, deals };
+}
+
+/** "in 12 steps from a fresh game dealt from seed "a"", with no seed for a world, or each deal's own steps where they differ. */
 function freshGames(walk: SmokeWalk): string {
-  return `in ${walk.steps} steps from a fresh game${atATable(walk) ? ` ${dealtFrom(walk.seeds, 'nor')}` : ''}`;
+  const { shared, deals } = stepsWalked(walk);
+  return `${shared === undefined ? '' : `in ${shared} steps `}from a fresh game${atATable(walk) ? ` ${dealtFrom(deals, 'nor')}` : ''}`;
+}
+
+/** "in 12 steps", or each deal with its own steps where they differ (#1686). */
+function walkedFor(walk: SmokeWalk): string {
+  const { shared, deals } = stepsWalked(walk);
+  return shared === undefined ? `on any deal it walked, ${dealtFrom(deals)}` : `in ${shared} steps`;
 }
 
 /** Why the walk never saw a listed action offered, and what to do about it. */
@@ -800,12 +845,12 @@ function whyNotTaken(walk: SmokeWalk, name: string): string {
   const field = walk.wanting.get(name);
   if (field !== undefined) {
     return (
-      `The panel offered "${name}", but the walk never took it in ${walk.steps} steps: when it last opened it, ` +
+      `The panel offered "${name}", but the walk never took it ${walkedFor(walk)}: when it last opened it, ` +
       `${inputName(name, field)} in ${SMOKE_SPEC_PATH} gave no text for its field "${field}", so the walk cancelled it. ` +
       'Make it return the text a player would type there whenever the game offers the action.'
     );
   }
-  return `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`;
+  return `The panel offered "${name}", but the walk never took it ${walkedFor(walk)}. The errors above, if any, say why.`;
 }
 
 /** Everything that fails the walk, errors first. An empty list is a pass. */

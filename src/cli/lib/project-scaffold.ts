@@ -633,6 +633,7 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 // offers is reached by a deal such as \`{ seed: 'Kim', players: 3 }\` in that list.
 // An action only some game options offer (one that waits on a random setup draw, say) is
 // reached by a deal naming them: \`{ seed: 'tar', gameOptions: { firstTower: 'Tar Works' } }\`.
+// A deal can walk fewer steps than \`steps\` when its action comes early: \`{ seed: 'tar', steps: 60 }\`.
 //
 // A world is dealt by \`boardsmith dev\` from its own seed, so a world's spec names none.
 //

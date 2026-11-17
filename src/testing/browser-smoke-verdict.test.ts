@@ -21,6 +21,7 @@ import {
   walkStopped,
   smokeActions,
   smokeDealPlayers,
+  smokeDealSteps,
   dealOptionStates,
   smokeFailure,
   smokeProblems,
@@ -144,6 +145,35 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
   });
 });
 
+describe('smokeSeeds: a deal that names its own steps (#1686)', () => {
+  it('walks a deal for the steps it names, and the spec\'s steps for one naming none', () => {
+    const deals = ['smoke', { seed: 'tar-works', gameOptions: { firstTower: 'Tar Works' }, steps: 60 }];
+    expect(smokeSeeds(deals)).toEqual(deals);
+    expect(smokeDealSteps(deals[1], 900)).toBe(60);
+    expect(smokeDealSteps(deals[0], 900)).toBe(900);
+    expect(smokeDealSteps({ seed: 'Kim', players: 3 }, 900)).toBe(900);
+  });
+
+  it('refuses steps that are not a whole number from 1, and the same deal listed at two step counts', () => {
+    for (const steps of [0, 2.5, -1]) {
+      expect(() => smokeSeeds([{ seed: 'tarry', steps }])).toThrow(
+        `\`seed\` in ${SMOKE_SPEC_PATH} walks "tarry" for ${steps} steps, which is not a number of steps. ` +
+          'Name how many steps the walk takes on the deal, such as 60.',
+      );
+    }
+    expect(() => smokeSeeds([{ seed: 'tarry', steps: 60 }, 'tarry'])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} lists "tarry" twice, which walks the same deal twice. List each seed once.`,
+    );
+  });
+
+  it('names the steps of a deal that names them where the walk says what it was dealt', () => {
+    const seeds = ['smoke', { seed: 'tar-works', gameOptions: { firstTower: 'Tar Works' }, steps: 60 }];
+    expect(smokeFailure(walk({ seeds }), ['x'])).toContain(
+      'dealt from seed "smoke", then from seed "tar-works" with game options {"firstTower":"Tar Works"} for 60 steps,',
+    );
+  });
+});
+
 describe('dealOptionStates: what Table setup\'s option fields are set to for a deal (#1684)', () => {
   const fields = [
     { id: 'tower', kind: 'select', state: 0, choices: ['string:none', 'string:tar', 'number:3'] },
@@ -217,23 +247,28 @@ describe('smokeSteps: how many actions a walk takes at most (#924)', () => {
 
 describe('smokeWalkLimit: the hang guard on a whole walk (#1601)', () => {
   it('never gives a walk less than the 600 s every walk had before it grew with the walk', () => {
-    expect(smokeWalkLimit(1, 1, undefined)).toBeGreaterThanOrEqual(600_000);
+    expect(smokeWalkLimit([1], undefined)).toBeGreaterThanOrEqual(600_000);
   });
 
   it('grows with every deal, every step and every world seat (a table plays one), so a spec that asks for more walking gets the time for it', () => {
-    const one = smokeWalkLimit(1, 60, undefined);
-    expect(smokeWalkLimit(11, 60, undefined) - one).toBe(10 * (smokeWalkLimit(2, 60, undefined) - one));
-    expect(smokeWalkLimit(1, 120, undefined)).toBeGreaterThan(one);
-    expect(smokeWalkLimit(1, 60, [1, 2])).toBeGreaterThan(one);
-    expect(smokeWalkLimit(1, 60, [1, 2, 3, 4]) - one).toBe(3 * (smokeWalkLimit(1, 60, [1, 2]) - one));
+    const one = smokeWalkLimit([60], undefined);
+    expect(smokeWalkLimit(Array(11).fill(60), undefined) - one).toBe(10 * (smokeWalkLimit([60, 60], undefined) - one));
+    expect(smokeWalkLimit([120], undefined)).toBeGreaterThan(one);
+    expect(smokeWalkLimit([60], [1, 2])).toBeGreaterThan(one);
+    expect(smokeWalkLimit([60], [1, 2, 3, 4]) - one).toBe(3 * (smokeWalkLimit([60], [1, 2]) - one));
+  });
+
+  it('#1686: grows with each deal\'s own steps, so deals that name few add little', () => {
+    const main = smokeWalkLimit([900], undefined);
+    expect(smokeWalkLimit([900, 60], undefined) - main).toBe(smokeWalkLimit([60, 60], undefined) - smokeWalkLimit([60], undefined));
   });
 
   it("gives a heavy game's 11 deals of 300 steps twice the 2,200 s they take at its 440 s for 11 deals of 60", () => {
-    expect(smokeWalkLimit(11, 300, undefined)).toBeGreaterThan(2 * 2_200_000);
+    expect(smokeWalkLimit(Array(11).fill(300), undefined)).toBeGreaterThan(2 * 2_200_000);
   });
 
   it('stops at the longest delay a timer can wait, past which Node fires it at once', () => {
-    expect(smokeWalkLimit(22, 10_000, [1, 2, 3, 4])).toBe(2_147_483_647);
+    expect(smokeWalkLimit(Array(22).fill(10_000), [1, 2, 3, 4])).toBe(2_147_483_647);
   });
 });
 
@@ -289,6 +324,24 @@ describe('smokeProblems', () => {
         `player is dealt, say), choose a seed whose deal offers it, and list it in \`seed\` there. If no walk from a fresh game ` +
         `can reach it whatever the deal (it needs a long game, or a position play does not get to), name it in ` +
         `\`unreachable\` there with the reason. If the game no longer has it, remove it from \`actions\`.`,
+    ]);
+  });
+
+  it('#1686: names the steps each deal walked when deals walk different counts, and the shared count once when they walk the same', () => {
+    const mixed = walk({ listed: ['draw', 'score'], offered: new Set(['draw']), enabled: new Set(['draw']), seeds: ['smoke', { seed: 'tar', steps: 3 }], steps: 12 });
+    expect(smokeProblems(mixed)).toEqual([
+      'The panel offered "draw", but the walk never took it on any deal it walked, dealt from seed "smoke" for 12 steps, ' +
+        'then from seed "tar" for 3 steps. The errors above, if any, say why.',
+      expect.stringMatching(
+        new RegExp(
+          '^The walk never saw "score" offered from a fresh game dealt from seed "smoke" for 12 steps, nor from seed "tar" for 3 steps\\. ' +
+            `If a fresh game takes longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH.replace(/[./]/g, '\\$&')}, or the \`steps\` of a deal that names its own\\. `,
+        ),
+      ),
+    ]);
+    const chosen = walk({ listed: ['score'], seeds: [{ seed: 'a', steps: 5 }, { seed: 'b', steps: 5 }], steps: 900 });
+    expect(smokeProblems(chosen)).toEqual([
+      expect.stringMatching(/^The walk never saw "score" offered in 5 steps from a fresh game dealt from seed "a", nor from seed "b"\. /),
     ]);
   });
 
