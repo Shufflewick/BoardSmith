@@ -196,13 +196,13 @@ export interface SmokeInputView {
  * yet; the walk then cancels the action and takes it again once it gives one, or once the game has
  * moved on. The walk may ask it before opening the action as well as when typing (#471), so it only
  * reads the page. A list of values for a text or number field is tried in order, the next one each
- * time the game refuses the action, for a value whose legality depends on the whole position (#1663).
+ * time the game refuses the action, for a value whose legality depends on the whole position (#1663),
+ * and a function may return one, to read the position and still have values tried in turn (#1682).
  */
-export type SmokeInput =
-  | string
-  | number
-  | readonly (string | number)[]
-  | ((view: SmokeInputView) => string | number | undefined | Promise<string | number | undefined>);
+export type SmokeInput = SmokeValue | ((view: SmokeInputView) => SmokeValue | undefined | Promise<SmokeValue | undefined>);
+
+/** A value a spec's input gives: the text or number to type, or a list of them to try in turn (#1663). */
+type SmokeValue = string | number | readonly (string | number)[];
 
 /** The spec's `inputs`: for each action, by the name its rules give it, the value for each of its fields, by pick name. */
 export type SmokeInputs = Readonly<Record<string, Readonly<Record<string, SmokeInput>>>>;
@@ -210,16 +210,17 @@ export type SmokeInputs = Readonly<Record<string, Readonly<Record<string, SmokeI
 /** The kinds of field a spec's `inputs` answer: the panel's text editor, its number editor, and a pick of choices. */
 type FieldKind = 'text' | 'number' | 'choice';
 
-/** What the walk typed in one field of an action, and whether the spec's `inputs` gave it or the walk chose it. */
-export interface TypedValue {
-  readonly field: string;
-  readonly value: string;
-  readonly from: 'inputs' | 'walk';
-  readonly kind: FieldKind;
-}
+/**
+ * What the walk typed in one field of an action, and whether the spec's `inputs` gave it, with how
+ * many values that input gave to try in turn (#1663, #1682), or the walk chose it.
+ */
+export type TypedValue = { readonly field: string; readonly value: string; readonly kind: FieldKind } & (
+  | { readonly from: 'inputs'; readonly values: number }
+  | { readonly from: 'walk' }
+);
 
-/** How a spec's `inputs` answer one field: a value to type, none yet, or a problem with the spec's function. */
-type InputAnswer = { readonly value: string } | { readonly wanting: true } | { readonly problem: string };
+/** How a spec's `inputs` answer one field: a value to type, of how many it gives to try in turn, none yet, or a problem with the spec's function. */
+type InputAnswer = { readonly value: string; readonly values: number } | { readonly wanting: true } | { readonly problem: string };
 
 /** How a message names one input in the spec: `inputs.attack.target`. */
 const inputName = (action: string, field: string) => `\`inputs.${action}.${field}\``;
@@ -227,8 +228,8 @@ const inputName = (action: string, field: string) => `\`inputs.${action}.${field
 /**
  * What the spec's `inputs` give for `field` of `action`, a field of `kind`, reading `view` when the
  * input is a function: undefined when the spec gives nothing for that field, so the walk types its
- * own value. Of a list, the value after the `refused` ones the game refused (#1663). A value for a
- * number field that is not a number is a problem with the spec.
+ * own value. Of a list, given or returned by the function (#1682), the value after the `refused` ones
+ * the game refused (#1663). A value for a number field that is not a number is a problem with the spec.
  */
 export async function inputFor(
   inputs: SmokeInputs,
@@ -240,15 +241,17 @@ export async function inputFor(
 ): Promise<InputAnswer | undefined> {
   if (!Object.hasOwn(inputs, action) || !Object.hasOwn(inputs[action], field)) return undefined;
   const input = inputs[action][field];
-  if (Array.isArray(input)) return listAnswer(input, refused, kind, action, field);
+  let given: SmokeValue | undefined;
   try {
-    return answerOf(String((typeof input === 'function' ? await input(view) : input) ?? ''), kind, action, field);
+    given = typeof input === 'function' ? await input(view) : input;
   } catch (error) {
     // The page stopped answering while the function read it (#618): that ends the walk, as any such read does.
     if (error instanceof PageFrozen) throw error;
     const said = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} failed while the walk answered "${action}": ${said}` };
   }
+  if (Array.isArray(given)) return listAnswer(given, refused, kind, action, field);
+  return answerOf(String(given ?? ''), kind, action, field, 1);
 }
 
 /** Which value of the list `values` answers a field of `kind` once the game refused `refused` of them: a longer list in another field of the action may outlast it, leaving it at its last. */
@@ -264,18 +267,18 @@ function listAnswer(values: readonly (string | number)[], refused: number, kind:
       problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
     };
   }
-  const answers = values.map((value) => answerOf(String(value), kind, action, field));
+  const answers = values.map((value) => answerOf(String(value), kind, action, field, values.length));
   return answers.find((answer) => 'problem' in answer) ?? answers[Math.min(refused, values.length - 1)];
 }
 
-/** How the text an input gave answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
-function answerOf(text: string, kind: FieldKind, action: string, field: string): InputAnswer {
+/** How the text an input gave, of `values` it gives to try, answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
+function answerOf(text: string, kind: FieldKind, action: string, field: string, values: number): InputAnswer {
   if (text.trim() === '') return { wanting: true };
-  if (kind !== 'number') return { value: text };
+  if (kind !== 'number') return { value: text, values };
   if (!Number.isFinite(Number(text))) {
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${text}" for a number field. Give a number, such as 7.` };
   }
-  return { value: text.trim() };
+  return { value: text.trim(), values };
 }
 
 /** Why the walk cannot press the choice `value` that `field` of `action` gives: the pick offers no choice labelled so, only `offered`. */
@@ -464,7 +467,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
-    } else if (!refusedAValue(action, error, typed, memory, attempts, walk.inputs)) {
+    } else if (!refusedAValue(action, error, typed, memory, attempts)) {
       memory.failed.add(action);
       note(walk, `${where}${actionFailed(action, error, typed, attempts.refused.get(action) ?? 0)}`);
     }
@@ -484,7 +487,7 @@ export function recordPutOff(walk: SmokeWalk, seats: Iterable<SeatAttempts>, act
 /**
  * Whether `action` failed because the game's own rules refused a value it has another to try for:
  * a number the walk chose and typed in one of its fields (`typed`), with tries left, or a value from
- * a list in the spec's `inputs` with values left (#1663); a single value from `inputs` is the spec's
+ * a list in the spec's `inputs` with values left (#1663, #1682); a single value from `inputs` is the spec's
  * answer, never moved up (#470). Then the walk takes it again with the next value, and the
  * refusal, and the error toast that repeats it, are the game working, not a problem (#466). A failure
  * the engine words as an error in the game's rules (`rulesErrorSentence`) is a crash, never a
@@ -496,15 +499,11 @@ function refusedAValue(
   typed: readonly TypedValue[],
   memory: ResolvedMemory,
   attempts: SeatAttempts,
-  inputs: SmokeInputs,
 ): boolean {
   const refused = attempts.refused.get(action) ?? 0;
   const tries = Math.max(
     typed.some(({ from, kind }) => from === 'walk' && kind === 'number') ? NUMBER_TRIES : 1,
-    ...typed.map(({ field, from }) => {
-      const input = from === 'inputs' ? inputs[action][field] : undefined;
-      return Array.isArray(input) ? input.length : 1;
-    }),
+    ...typed.map((t) => (t.from === 'inputs' ? t.values : 1)),
   );
   if (refused >= tries - 1) return false;
   if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;

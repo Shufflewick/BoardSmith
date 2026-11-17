@@ -893,6 +893,19 @@ defineSmokeTest({
 });
 ```
 
+A function may return a list too (#1682), to read the position and still have
+the walk try values in turn. One that gives a list only in the first round, and
+nothing after it, so the walk puts the action off there instead of failing it:
+
+```ts
+inputs: {
+  movePacks: {
+    columns: async ({ texts }) => ((await texts('[data-round]')).includes('Round 1') ? [-1, 1] : undefined),
+    rows: 0,
+  },
+},
+```
+
 The walk fails on everything it would fail on without them:
 
 - The game refusing a value from `inputs` fails the walk, as any failed action

@@ -1547,7 +1547,7 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
   const refused = attemptsIn(memory, page).refused.get(name) ?? 0;
   const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), refused);
   if (given !== undefined) {
-    if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
+    if ('value' in given) return { field: pick, value: given.value, from: 'inputs', values: given.values, kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
     return undefined;
   }
