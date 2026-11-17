@@ -101,4 +101,5 @@ describe('citedEvidencePaths — what counts as a cited script or capture', () =
       { path: '../src/rules/damage.ts', lines: [2, 3], commit: '611dc8e', line: 1 },
     ]);
   });
+
 });

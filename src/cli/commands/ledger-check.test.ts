@@ -793,6 +793,22 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
   });
 
+  it('passes a claim quoting a card-list row that names an image, in both checks (#1687)', async () => {
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': [
+        '# Chunk: world-shell', '', 'Status: verified', '', '## Interpretation', '',
+        '1. **Ambrico City is a city.**',
+        '   > p.1, Sectors: `Ambrico City,City,2,1,0,1,sectors/town---c.webp`',
+        '   Source: rulebook/01-sectors.md §"Rows"',
+        '', '## Sign-off', 'ok', '',
+      ].join('\n'),
+      'design/rulebook/01-sectors.md': '## Rows\n\np.1, Sectors: `Ambrico City,City,2,1,0,1,sectors/town---c.webp`\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect((await checkClaimQuotes(dir, 'world-shell')).refusals).toEqual([]);
+    expect(evidence((await ledgerCheck(dir, 'boardsmith ledger-check')).findings)).toEqual([]);
+  });
+
   it('refuses a claim\'s Source path that leaves the project in both checks (#409)', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': [

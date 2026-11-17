@@ -63,6 +63,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
+import { withoutQuotedPassages } from './claim-quotes.js';
 import { type ChunkCommit, type PinnedCommit, chunkPins, commitName } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
@@ -984,7 +985,7 @@ async function verifiedChunks(projectDir: string): Promise<EvidenceSource[]> {
   const sources: EvidenceSource[] = [];
   for (const slug of await chunkSlugs(projectDir)) {
     const text = await readLedger(projectDir, relChunkMdPath(slug));
-    if (text !== undefined && VERIFIED_STATUS.test(text)) sources.push({ file: relChunkMdPath(slug), text });
+    if (text !== undefined && VERIFIED_STATUS.test(text)) sources.push({ file: relChunkMdPath(slug), text: withoutQuotedPassages(text) });
   }
   return sources;
 }

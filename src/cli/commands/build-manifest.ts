@@ -350,6 +350,8 @@ const PLACEHOLDER_ITEM = /^\d+\.[ \t]+(?:\*\*)?<!--/;
 export interface InterpretationLine {
   /** The line with its HTML comments removed. */
   text: string;
+  /** 1-based line of the chunk file this line is on. */
+  line: number;
   /** The number of the claim this line starts, if it starts one. */
   claim?: number;
   /** This line starts the template's unfilled placeholder item. */
@@ -381,14 +383,16 @@ function uncomment(line: string, inComment: boolean): { text: string; inComment:
 export function interpretationLines(chunkText: string): InterpretationLine[] | undefined {
   const body = extractSection(chunkText, '## Interpretation');
   if (body === undefined) return undefined;
+  const headingLine = chunkText.slice(0, findHeadingIndex(chunkText, '## Interpretation')).split('\n').length;
   let inComment = false;
-  return body.split('\n').map((raw) => {
+  return body.split('\n').map((raw, index) => {
     const startsInComment = inComment;
     const uncommented = uncomment(raw, inComment);
     inComment = uncommented.inComment;
     const claim = startsInComment ? null : CLAIM_ITEM.exec(raw);
     return {
       text: uncommented.text,
+      line: headingLine + 1 + index,
       claim: claim ? Number(claim[1]) : undefined,
       placeholder: !startsInComment && PLACEHOLDER_ITEM.test(raw),
     };

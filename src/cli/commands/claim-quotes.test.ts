@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { checkClaimQuotes, claimQuoteCheckCommand, parseInterpretationQuotes } from './claim-quotes.js';
+import { checkClaimQuotes, claimQuoteCheckCommand, parseInterpretationQuotes, withoutQuotedPassages } from './claim-quotes.js';
 import { parseInterpretationClaims } from './build-manifest.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -566,5 +566,41 @@ describe('claim-quote-check: an unreadable CHUNK.md (#1110)', () => {
     await fs.mkdir(dirname(chunk), { recursive: true });
     await fs.symlink(chunk, chunk);
     await expect(claimQuoteCheckCommand('punch', { project: dir })).rejects.toThrow(`Could not read ${chunk} (ELOOP)`);
+  });
+});
+
+describe('withoutQuotedPassages — the source text a claim quotes is not a citation (#1687)', () => {
+  it('blanks only the quote lines of the claims in force it checks, keeping every line in place', () => {
+    const text = [
+      '# Chunk: sectors', // 1
+      '',
+      '## Interpretation',
+      '',
+      '1. **Ambrico City is a city.**', // 5
+      '   > p.1: `Ambrico City,City,sectors/town---c.webp`',
+      '   Source: rulebook/01-sectors.md §"Rows"',
+      '2. **Retired.** [superseded by claim 3 — do not review]',
+      '   > old `sectors/old.webp`',
+      '   Source: rulebook/01-sectors.md §"Rows"', // 10
+      '3. **Supersedes claim 2 in full.**',
+      '   > p.1: `sectors/new.webp`',
+      '   Source: rulebook/01-sectors.md §"Rows"',
+      '### Notes',
+      '> ran `../scripts/check.sh`', // 15
+      'Source: rulebook/x.md §"X"',
+      '',
+      '## Notes',
+      '> measured with `.boardsmith/scratch/probe.mjs`',
+      'Source: rulebook/a.md §"A"', // 20
+    ];
+    const blanked = [...text];
+    blanked[5] = '';
+    blanked[11] = '';
+    expect(withoutQuotedPassages(text.join('\n'))).toBe(blanked.join('\n'));
+  });
+
+  it('leaves a chunk with no Interpretation as it is', () => {
+    const text = '# Chunk: x\n\n> see `a/b.png`\nSource: rulebook/a.md §"A"\n';
+    expect(withoutQuotedPassages(text)).toBe(text);
   });
 });
