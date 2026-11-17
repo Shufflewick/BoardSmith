@@ -21,6 +21,7 @@ import {
   walkStopped,
   smokeActions,
   smokeDealPlayers,
+  dealOptionStates,
   smokeFailure,
   smokeProblems,
   smokeRecord,
@@ -117,6 +118,63 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
     expect(() => smokeSeeds([{ seed: ' ', players: 3 }])).toThrow(`\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed.`);
     expect(() => smokeSeeds([{ seed: 'Kim', players: 3 }, { seed: 'Kim', players: 3 }])).toThrow(
       `\`seed\` in ${SMOKE_SPEC_PATH} lists "Kim" at 3 players twice, which walks the same deal twice. List each deal once.`,
+    );
+  });
+
+  it('#1684: deals a seed with the game options a deal names, and the same seed with other options as another deal', () => {
+    const deals = [
+      { seed: 'tarry', gameOptions: { tower: 'tar' } },
+      { seed: 'tarry', gameOptions: { tower: 'fire' } },
+      { seed: 'tarry', players: 3, gameOptions: { tower: 'tar', lit: true } },
+    ];
+    expect(smokeSeeds(deals)).toEqual(deals);
+    expect(smokeDealPlayers({ seed: 'tarry', gameOptions: { tower: 'tar' } }, { min: 2, max: 4 })).toBe(2);
+  });
+
+  it('#1684: refuses game options that are not a set of options by name, or a deal listed twice', () => {
+    for (const gameOptions of [['tar'], 'tar', null]) {
+      expect(() => smokeSeeds([{ seed: 'tarry', gameOptions } as never])).toThrow(
+        `\`seed\` in ${SMOKE_SPEC_PATH} deals "tarry" with game options ${JSON.stringify(gameOptions)}, which do not name any option. ` +
+          "Name each option by its id in boardsmith.json, such as { gameOptions: { tower: 'Tar Works' } }.",
+      );
+    }
+    expect(() => smokeSeeds([{ seed: 'tarry', gameOptions: { tower: 'tar' } }, { seed: 'tarry', gameOptions: { tower: 'tar' } }])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} lists "tarry" with game options {"tower":"tar"} twice, which walks the same deal twice. List each deal once.`,
+    );
+  });
+});
+
+describe('dealOptionStates: what Table setup\'s option fields are set to for a deal (#1684)', () => {
+  const fields = [
+    { id: 'tower', kind: 'select', state: 0, choices: ['string:none', 'string:tar', 'number:3'] },
+    { id: 'lit', kind: 'checkbox', state: false, choices: [] },
+    { id: 'rounds', kind: 'text', state: '3', choices: [] },
+  ] as const;
+
+  it('sets each option the deal names, and every other to what it was before the walk dealt anything', () => {
+    expect(dealOptionStates(fields, { seed: 'tarry', gameOptions: { tower: 'tar', rounds: 7 } })).toEqual([
+      { id: 'tower', kind: 'select', state: 1 },
+      { id: 'lit', kind: 'checkbox', state: false },
+      { id: 'rounds', kind: 'text', state: '7' },
+    ]);
+    expect(dealOptionStates(fields, 'plain').map((field) => field.state)).toEqual([0, false, '3']);
+  });
+
+  it('reads the text `boardsmith smoke --game-option` gives as the value it spells', () => {
+    expect(dealOptionStates(fields, { seed: 'tarry', gameOptions: { tower: '3', lit: 'true' } }).map((field) => field.state)).toEqual([2, true, '3']);
+  });
+
+  it('refuses an option the game does not declare, a value that is not one of its choices, and a checkbox that is not true or false', () => {
+    expect(() => dealOptionStates(fields, { seed: 'tarry', gameOptions: { towr: 'tar' } })).toThrow(
+      'The deal of seed "tarry" with game options {"towr":"tar"} names game option "towr", which this game does not declare. ' +
+        'It declares "tower", "lit", "rounds".',
+    );
+    expect(() => dealOptionStates([], { seed: 'tarry', gameOptions: { towr: 'tar' } })).toThrow('which this game does not declare. It declares none.');
+    expect(() => dealOptionStates(fields, { seed: 'tarry', gameOptions: { tower: 'fire' } })).toThrow(
+      'The deal of seed "tarry" with game options {"tower":"fire"} sets game option "tower" to "fire", which is not one of its choices: none, tar, 3.',
+    );
+    expect(() => dealOptionStates(fields, { seed: 'tarry', gameOptions: { lit: 'yes' } })).toThrow(
+      'The deal of seed "tarry" with game options {"lit":"yes"} sets game option "lit" to "yes", which is not true or false.',
     );
   });
 });
@@ -401,6 +459,16 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
     expect(smokeSummary(record)).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "opening", then from seed "Kim" at 3 players, a seated/);
     expect(smokeFailure(walk({ seeds: [{ seed: 'Kim', players: 3 }] }), ['one'])).toBe(
       'The smoke walk, dealt from seed "Kim" at 3 players, found a problem:\n  - one',
+    );
+  });
+
+  it('#1684: names the game options of a deal that names them', () => {
+    const record = smokeRecord(
+      walk({ seeds: ['opening', { seed: 'Kim', players: 3, gameOptions: { tower: 'tar', lit: true } }], listed: ['draw'], taken: new Set(['draw']) }),
+      { controls: 0, games: 2 },
+    );
+    expect(smokeSummary(record)).toMatch(
+      /^Served by `boardsmith dev` from a fresh start and dealt from seed "opening", then from seed "Kim" at 3 players with game options \{"tower":"tar","lit":true\}, a seated/,
     );
   });
 

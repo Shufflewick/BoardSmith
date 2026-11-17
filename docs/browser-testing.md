@@ -708,6 +708,29 @@ names the count of a deal that names one (`dealt from seed "Kim" at 3 players`).
 `boardsmith smoke --seed Kim --players 3` walks that deal again; `--seed`
 without `--players` deals at `minPlayers`.
 
+A deal can also name the game options it is dealt with, by their ids in
+`boardsmith.json`. An action offered only after a random draw (a tower that
+arrives mid-game, say) is reached by a game option that fixes the draw, rather
+than by a seed that happens to draw it:
+
+```ts
+defineSmokeTest({
+  actions: ['buyBlueprint', 'aimTarSlick'],
+  seed: ['smoke', { seed: 'tar-works', gameOptions: { firstTower: 'Tar Works' } }],
+});
+```
+
+The walk sets each option in Table setup's deal form before it presses Deal,
+and deals each new game of that deal with the same options. A deal that names
+none, or leaves an option out, is dealt with the options `boardsmith dev`
+starts with. An option the game does not declare, a value that is not one of a
+choice option's choices, or one Table setup's field refuses (a number above its
+`max`, say) fails the check, saying why. The summary names the options of a
+deal that names them (`dealt from seed "tar-works" with game options
+{"firstTower":"Tar Works"}`). `boardsmith smoke --seed tar-works --game-option
+firstTower="Tar Works"` walks that deal again, with `--players` too if it names
+a count.
+
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.
 

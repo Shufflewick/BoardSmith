@@ -70,6 +70,7 @@ import {
 import {
   answered,
   choiceNotOffered,
+  dealOptionStates,
   dealSeed,
   DEFAULT_SMOKE_SEED,
   inputFor,
@@ -93,6 +94,8 @@ import {
   smokeWorldSeats,
   startAnswering,
   walkStopped,
+  type DealOptionField,
+  type DealOptionState,
   type ResolvedAction,
   type ResolvedMemory,
   type SeatAttempts,
@@ -124,7 +127,10 @@ export interface SmokeTestOptions {
    *
    * A deal is dealt at the game's `minPlayers`, as `boardsmith dev` starts, unless it names how many
    * players sit at it: `{ seed: 'Kim', players: 3 }` (#1602), for an action only a fuller table offers.
-   * The walk acts for every seat of each deal.
+   * The walk acts for every seat of each deal. A deal can name the game options it is dealt with,
+   * `{ seed: 'tar', gameOptions: { firstTower: 'Tar Works' } }` (#1684), for an action only those
+   * options offer, such as one waiting on a random setup draw the option fixes; it is dealt with
+   * the options `boardsmith dev` starts with for any it leaves out.
    */
   readonly seed?: SmokeDeal | readonly SmokeDeal[];
   /**
@@ -244,13 +250,18 @@ async function closeTheWalk(page: Page, browsers: readonly BrowserContext[]): Pr
   }
 }
 
-/** Walks a table's game dealt as each of `seeds` says in turn (#460, #1602), remembering each deal's walk in `memories`. */
+/** Walks a table's game dealt as each of `seeds` says in turn (#460, #1602, #1684), remembering each deal's walk in `memories`. */
 async function walkEveryDeal(page: Page, seeds: readonly SmokeDeal[], walk: SmokeWalk, memories: WalkMemory[]): Promise<void> {
+  const form = await dealForm(page);
   for (const deal of seeds) {
     walk.seeds.push(deal);
-    const players = smokeDealPlayers(deal, await seatRange(page));
-    await dealFrom(page, dealSeed(deal), players);
-    memories.push(newMemory(dealSeed(deal), players));
+    const table: TableDeal = {
+      players: smokeDealPlayers(deal, form),
+      options: dealOptionStates(form.options, deal),
+      named: typeof deal === 'string' ? undefined : deal.gameOptions,
+    };
+    await dealFrom(page, dealSeed(deal), table);
+    memories.push(newMemory(dealSeed(deal), table));
     await walkTheGame([newPlay(page, null)], walk, memories[memories.length - 1]);
   }
 }
@@ -543,29 +554,74 @@ async function canDeal(page: Page): Promise<boolean> {
   return (await inPageTime(page, 'looking for "Table setup"', () => tableSetup(page).count())) > 0;
 }
 
-/** The fewest and most players the game seats, as Table setup's Players field bounds them. */
-async function seatRange(page: Page): Promise<{ min: number; max: number }> {
-  const field = page.getByTestId('deal-players');
-  await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
-  const range = await inPageTime(page, 'reading how many players the game seats', () =>
-    field.evaluate((input: HTMLInputElement) => ({ min: Number(input.min), max: Number(input.max) })),
-  );
-  await actWithinPageTime(page, PRESS_MS, 'closing "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
-  return range;
+/** How a table's deal is dealt: at how many players, with each game option field set as {@link dealOptionStates} says, and the options it names. */
+interface TableDeal {
+  readonly players: number;
+  readonly options: readonly DealOptionState[];
+  readonly named: Readonly<Record<string, unknown>> | undefined;
 }
 
 /**
- * Deals a new game from `seed` at `players` players in the dev host's Table setup (#460, #1602), and
- * waits until the game frame has been handed that game. Follow-mode carries over the new game, so no
- * bot moves in it: the same seed and the same walk make the same game.
+ * Table setup's deal form before the walk deals anything: the fewest and most players its Players
+ * field takes, and each game option field as it stands (#1684), which a deal naming none is dealt with.
  */
-async function dealFrom(page: Page, seed: string, players: number): Promise<void> {
-  console.log(`smoke: dealing a game from seed "${seed}" at ${players} players`);
+async function dealForm(page: Page): Promise<{ min: number; max: number; options: DealOptionField[] }> {
+  await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
+  const range = await inPageTime(page, 'reading how many players the game seats', () =>
+    page.getByTestId('deal-players').evaluate((input: HTMLInputElement) => ({ min: Number(input.min), max: Number(input.max) })),
+  );
+  const options = await inPageTime(page, 'reading the game options to deal with', () =>
+    page.locator('[data-testid^="deal-option-"]').evaluateAll(readOptionFields),
+  );
+  await actWithinPageTime(page, PRESS_MS, 'closing "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
+  return { ...range, options };
+}
+
+/** Each game option field as it stands, run in the page, so it calls nothing of the walk's. */
+function readOptionFields(fields: Element[]): DealOptionField[] {
+  return fields.map((field) => {
+    const id = (field as HTMLElement).dataset.testid!.slice('deal-option-'.length);
+    if (field instanceof HTMLSelectElement) {
+      return { id, kind: 'select', state: field.selectedIndex, choices: [...field.options].map((option) => option.dataset.value ?? '') };
+    }
+    const input = field as HTMLInputElement;
+    return input.type === 'checkbox' ? { id, kind: 'checkbox', state: input.checked, choices: [] } : { id, kind: 'text', state: input.value, choices: [] };
+  });
+}
+
+/** Sets one game option field in Table setup as `option` says. */
+async function setOption(page: Page, option: DealOptionState): Promise<void> {
+  const field = page.getByTestId(`deal-option-${option.id}`);
+  await actWithinPageTime(page, PRESS_MS, `setting game option "${option.id}"`, async (timeout) => {
+    if (option.kind === 'select') await field.selectOption({ index: option.state as number }, { timeout });
+    else if (option.kind === 'checkbox') await field.setChecked(option.state as boolean, { timeout });
+    else await field.fill(option.state as string, { timeout });
+  });
+}
+
+/**
+ * Deals a new game from `seed` as `table` says in the dev host's Table setup (#460, #1602, #1684),
+ * and waits until the game frame has been handed that game. Follow-mode carries over the new game,
+ * so no bot moves in it: the same seed and the same walk make the same game. Throws with the
+ * reason Table setup gives when its form refuses a field set, such as a number above its most.
+ */
+async function dealFrom(page: Page, seed: string, table: TableDeal): Promise<void> {
+  const options = table.named === undefined ? '' : ` with game options ${JSON.stringify(table.named)}`;
+  console.log(`smoke: dealing a game from seed "${seed}" at ${table.players} players${options}`);
   await actWithinPageTime(page, PRESS_MS, 'opening "Table setup"', (timeout) => tableSetup(page).click({ timeout }));
   await actWithinPageTime(page, PRESS_MS, 'entering the seed to deal from', (timeout) => page.getByTestId('deal-seed').fill(seed, { timeout }));
   await actWithinPageTime(page, PRESS_MS, 'entering how many players to deal for', (timeout) =>
-    page.getByTestId('deal-players').fill(String(players), { timeout }),
+    page.getByTestId('deal-players').fill(String(table.players), { timeout }),
   );
+  for (const option of table.options) await setOption(page, option);
+  const invalid = await inPageTime(page, 'checking the deal can be pressed', () =>
+    page.getByTestId('deal-form').evaluate((form: HTMLFormElement) => {
+      const field = [...form.elements].find((element) => !(element as HTMLInputElement).checkValidity()) as HTMLInputElement | undefined;
+      return field === undefined ? null : `its "${field.closest('label')?.textContent?.trim()}" field says "${field.validationMessage}"`;
+    }),
+  );
+  // The page would not send a deal its form refuses, so pressing Deal would only wait for a game that never comes.
+  if (invalid !== null) throw new Error(`Table setup cannot deal a game from seed "${seed}"${options}: ${invalid}.`);
   await actWithinPageTime(page, PRESS_MS, 'pressing "Deal"', (timeout) => page.getByTestId('deal').click({ timeout }));
   await withinPageTime(page, TURN_WAIT_MS, 'waiting for the game to be dealt', (timeout) =>
     page.waitForFunction((dealt) => document.querySelector('[data-testid="game-seed"]')?.textContent === dealt, seed, { timeout }),
@@ -2005,8 +2061,8 @@ interface WalkMemory extends ResolvedMemory {
   games: number;
   /** The seed the spec dealt this walk from; null in a world, which `boardsmith dev` deals itself. */
   readonly seed: string | null;
-  /** How many players sit at this walk's deal, its every new game included (#1602); null in a world. */
-  readonly players: number | null;
+  /** How this walk's deal is dealt, its every new game included (#1602, #1684); null in a world. */
+  readonly table: TableDeal | null;
   /** The seed the game being played was dealt from: `seed`, then `seed/2`, `seed/3`... for each new game. */
   dealt: string | null;
   /** Which of the walk's browsers (`SeatPlay`) the next step is tried in first: each takes a step in turn (#471). */
@@ -2040,10 +2096,10 @@ function attemptsIn(memory: WalkMemory, page: Page): SeatAttempts {
   return attempts;
 }
 
-function newMemory(seed: string | null, players: number | null): WalkMemory {
+function newMemory(seed: string | null, table: TableDeal | null): WalkMemory {
   return {
     seed,
-    players,
+    table,
     dealt: seed,
     pressed: new Set(),
     controls: 0,
@@ -2179,14 +2235,14 @@ async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, ste
     narrate(step, 'the game is over');
     return false;
   }
-  if (memory.seed === null || memory.players === null) {
+  if (memory.seed === null || memory.table === null) {
     narrate(step, 'the game is over, and a world has no new game');
     return false;
   }
   narrate(step, `the game is over with ${left.map((name) => `"${name}"`).join(', ')} still to take; dealing a new game`);
   memory.games++;
   memory.dealt = `${memory.seed}/${memory.games}`;
-  await dealFrom(page, memory.dealt, memory.players);
+  await dealFrom(page, memory.dealt, memory.table);
   return true;
 }
 

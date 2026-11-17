@@ -322,3 +322,27 @@ describe('MultiplayerHost — every lobby message says which game options are ap
     expect(lobbyOf(lastOfType('B', 'lobby'))?.gameOptions).toMatchObject({ rounds: 2, difficulty: 'easy' });
   });
 });
+
+describe('MultiplayerHost — a deal from a seed names the game options it is dealt with (#1684)', () => {
+  it('deals from the seed with the options it names, and a deal naming none keeps them', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'restart', seed: 'tarry', gameOptions: { difficulty: 'hard', rounds: '7' } });
+    expect(getStartOptions()).toMatchObject({ seed: 'tarry', difficulty: 'hard', rounds: 7 });
+    expect((lastOfType('A', 'lobby') as { gameOptions: Record<string, unknown> }).gameOptions).toMatchObject({ difficulty: 'hard', rounds: 7 });
+
+    await host.handleMessage('A', { type: 'restart', seed: 'plain' });
+    expect(getStartOptions()).toMatchObject({ seed: 'plain', difficulty: 'hard', rounds: 7 });
+  });
+
+  it('refuses options the game does not admit, saying why, and leaves the game as it was', async () => {
+    const { host, getStartOptions, lastOfType } = makeHost();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'restart', seed: 'tarry', playerCount: 3, gameOptions: { rounds: 11 } });
+
+    expect(getStartOptions()).toMatchObject({ seed: 'go', rounds: 3, playerCount: 2 });
+    expect((lastOfType('A', 'error') as { message: string }).message).toBe('Game option "rounds" must be between 1 and 10, got 11.');
+  });
+});

@@ -213,6 +213,74 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
 }
 
 /**
+ * THE TOWER GAME (#1684): the ace game with a `tower` select, a `lit` checkbox and a `rounds` number
+ * among its game options, whose `aimTar` is offered only when the Tar Works is lit, and `stoke` only with no tower,
+ * as a game is dealt with neither option set; so a walk takes both only when one deal names the
+ * options and another, after it, is dealt without them.
+ */
+export function towerGame(): Record<string, string> {
+  const ace = aceGame();
+  return {
+    ...ace,
+    'boardsmith.json': JSON.stringify({
+      name: 'dev-game',
+      backend: 'table',
+      displayName: 'Dev Game',
+      gameOptions: [
+        { id: 'tower', type: 'select', label: 'Tower', default: 'none', choices: [{ value: 'none', label: 'No tower' }, { value: 'tar', label: 'Tar Works' }] },
+        { id: 'lit', type: 'boolean', label: 'Lit', default: false },
+        { id: 'rounds', type: 'number', label: 'Rounds', default: 3, min: 1, max: 5 },
+      ],
+    }),
+    'src/rules/game.ts': ace['src/rules/game.ts'].replace(
+      '    super(options);\n',
+      '    super(options);\n    const chosen = options as GameOptions & { tower?: string; lit?: boolean };\n' +
+        '    this.settings.tower = chosen.tower;\n    this.settings.lit = chosen.lit;\n',
+    ),
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('aimTar')
+      .prompt('Aim the lit Tar Works')
+      .condition({ 'the Tar Works is lit': () => game.settings.tower === 'tar' && game.settings.lit === true })
+      .execute(() => ({ success: true })),
+    Action.create('stoke')
+      .prompt('Stoke the empty yard')
+      .condition({ 'no tower stands': () => game.settings.tower === 'none' && game.settings.lit === false })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'aimTar', 'stoke'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+  };
+}
+`,
+  };
+}
+
+/**
  * THE LEDGER GAME (#1582): the ace game whose seats `draw` or `stack` a list of letters in order,
  * an ordered list of two to 60 entries, so its Done is ready from the second entry and its Add
  * buttons stay pressable past the walk's 50-press cap.
