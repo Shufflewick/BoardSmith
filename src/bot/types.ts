@@ -149,14 +149,12 @@ export interface MCTSNode {
    * seat with a move to make.
    */
   currentPlayer: number;
-  /** Leaves needed to prove this subtree is a win (lower = easier to prove win) */
-  proofNumber: number;
-  /** Leaves needed to disprove this subtree (lower = easier to prove loss) */
-  disproofNumber: number;
-  /** True if this subtree is solved as a win */
-  isProven: boolean;
-  /** True if this subtree is solved as a loss/draw */
-  isDisproven: boolean;
+  /**
+   * The seats certain to win from this node when its result is solved, or
+   * null while it is open (#720, #1679). Empty for a solved finish nobody wins.
+   * Solved for the bot's seat is a proven win; solved without it, a proven loss.
+   */
+  solvedWinners: readonly number[] | null;
   /**
    * How many times this node's move was LEGAL at a selection step (#73).
    *
