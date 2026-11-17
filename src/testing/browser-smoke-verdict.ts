@@ -253,8 +253,12 @@ export async function inputFor(
     const said = error instanceof Error ? error.message.split('\n')[0] : String(error);
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} failed while the walk answered "${action}": ${said}` };
   }
-  if (Array.isArray(given)) return listAnswer(given, refused, kind, action, field);
-  const answer = answerOf(String(given ?? ''), kind, action, field);
+  return Array.isArray(given) ? listAnswer(given, refused, kind, action, field) : oneAnswer(String(given ?? ''), kind, action, field);
+}
+
+/** How the text of the one value an input gave answers a field of `kind`: the only value to try. */
+function oneAnswer(text: string, kind: FieldKind, action: string, field: string): InputAnswer {
+  const answer = answerOf(text, kind, action, field);
   return 'value' in answer ? { ...answer, values: [answer.value] } : answer;
 }
 
