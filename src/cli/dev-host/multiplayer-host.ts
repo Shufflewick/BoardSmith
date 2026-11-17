@@ -784,19 +784,26 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
-    const { seed, playerCount } = deal;
-    const refused = (seed === undefined ? undefined : this.dealRefusal(seed)) ?? (playerCount === undefined ? undefined : this.playerCountRefusal(playerCount));
-    const options = refused === undefined ? this.dealOptions(deal.gameOptions) : refused;
+    const options = this.dealtWith(deal);
     if (typeof options === 'string') {
       this.send(clientId, { type: 'error', message: options });
       return;
     }
-    if (playerCount !== undefined) this.resizeSeats(playerCount as number);
+    if (deal.playerCount !== undefined) this.resizeSeats(deal.playerCount);
     this.appliedGameOptions = options;
     // Rebuild the session with the same seats, dealt from the seed named or a
     // fresh one. Follow-mode carries over (#460): the one driver of every seat
     // drives the new game too, and no bot moves in it before the driver can.
-    await this.startGame(seed);
+    await this.startGame(deal.seed);
+  }
+
+  /** The game options `deal` is dealt with, or why it cannot be dealt: a seed, count or option the game refuses. */
+  private dealtWith({ seed, playerCount, gameOptions }: Extract<ClientInbound, { type: 'restart' }>): GameOptionSelection | string {
+    return (
+      (seed === undefined ? undefined : this.dealRefusal(seed)) ??
+      (playerCount === undefined ? undefined : this.playerCountRefusal(playerCount)) ??
+      this.dealOptions(gameOptions)
+    );
   }
 
   /** The options a deal naming `options` is dealt with, over the applied ones, or why the game does not admit them: they are the page's, so anything may arrive. */

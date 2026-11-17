@@ -87,18 +87,22 @@ function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
 /** What is wrong with `deal`, as the rest of a sentence about where it came from: a blank seed, a count that is not one, or options that name none. */
 function dealProblem(deal: SmokeDeal): string | undefined {
   if (dealSeed(deal).trim() === '') return 'has a blank seed. A seed is any text that is not blank, such as "7" or "opening".';
-  if (typeof deal === 'string') return undefined;
-  if (deal.players !== undefined && !(Number.isInteger(deal.players) && deal.players >= 1)) {
-    return `deals "${deal.seed}" at ${deal.players} players, which is not a number of players. Name how many players sit at the deal, such as 3.`;
-  }
-  const options: unknown = deal.gameOptions;
-  if (options !== undefined && (typeof options !== 'object' || options === null || Array.isArray(options))) {
-    return (
-      `deals "${deal.seed}" with game options ${JSON.stringify(options)}, which do not name any option. ` +
-      "Name each option by its id in boardsmith.json, such as { gameOptions: { tower: 'Tar Works' } }."
-    );
-  }
-  return undefined;
+  return typeof deal === 'string' ? undefined : (countProblem(deal.seed, deal.players) ?? optionsProblem(deal.seed, deal.gameOptions));
+}
+
+/** What is wrong with the player count a deal of `seed` names, if anything. */
+function countProblem(seed: string, players: number | undefined): string | undefined {
+  if (players === undefined || (Number.isInteger(players) && players >= 1)) return undefined;
+  return `deals "${seed}" at ${players} players, which is not a number of players. Name how many players sit at the deal, such as 3.`;
+}
+
+/** What is wrong with the game options a deal of `seed` names, if anything: they must name options by id. */
+function optionsProblem(seed: string, options: unknown): string | undefined {
+  if (options === undefined || (typeof options === 'object' && options !== null && !Array.isArray(options))) return undefined;
+  return (
+    `deals "${seed}" with game options ${JSON.stringify(options)}, which do not name any option. ` +
+    "Name each option by its id in boardsmith.json, such as { gameOptions: { tower: 'Tar Works' } }."
+  );
 }
 
 /** The seed `deal` is dealt from. */
