@@ -1779,8 +1779,14 @@ onUnmounted(() => {
   }
 
   .lobby__option,
-  .table-setup__seat-option {
+  .table-setup__seat-option,
+  .table-setup__deal label {
     min-height: 44px;
+  }
+
+  .table-setup__deal label {
+    display: inline-flex;
+    align-items: center;
   }
 }
 
