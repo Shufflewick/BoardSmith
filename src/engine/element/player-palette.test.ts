@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, DEFAULT_COLOR_PALETTE } from '../index.js';
+import { Game, Player, DEFAULT_COLOR_PALETTE, ENGINE_OWNED_GAME_OPTION_KEYS } from '../index.js';
 
 /**
  * Default player-color palette coverage.
@@ -70,5 +70,11 @@ describe('default color palette', () => {
   it('overrunning the default palette names the default and how to extend it', () => {
     expect(() => new PaletteGame({ playerCount: 17 })).toThrow(/default palette covers 16/);
     expect(() => new PaletteGame({ playerCount: 17 })).toThrow(/gameOptions\.colors/);
+  });
+
+  it('keeps no colour-selection switch, since no lobby or client reads one (#1685)', async () => {
+    const game = await new PaletteGame({ playerCount: 2 }).ready();
+    expect(game.settings).not.toHaveProperty('colorSelectionEnabled');
+    expect(ENGINE_OWNED_GAME_OPTION_KEYS).not.toContain('colorSelectionEnabled');
   });
 });

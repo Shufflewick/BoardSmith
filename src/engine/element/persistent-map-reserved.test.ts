@@ -10,7 +10,7 @@ class MapsGame extends Game<MapsGame, Player> {
 }
 
 describe('persistentMap names the engine owns (#753)', () => {
-  it.each(['winners', 'colors', 'playerCount', 'playerNames', 'colorSelectionEnabled', '_actionTemp'])(
+  it.each(['winners', 'colors', 'playerCount', 'playerNames', '_actionTemp'])(
     'refuses %s, naming it and asking for another name',
     async (name) => {
       const game = await new MapsGame({ playerCount: 2, playerNames: ['A', 'B'] }).ready();

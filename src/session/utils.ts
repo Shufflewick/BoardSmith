@@ -866,12 +866,6 @@ export function buildPlayerState(
     if (followUp) state.followUp = followUp;
   }
 
-  // Include colorSelectionEnabled from game settings so clients know to show color swatches
-  // (In lobby mode this comes from LobbyInfo, but in non-lobby mode like --bot, this is the only source)
-  if (runner.game.settings.colorSelectionEnabled) {
-    state.colorSelectionEnabled = true;
-  }
-
   // Include the animation events this seat may see, if any are pending. Read
   // from `truthView`, which `toJSONForPlayer` has already cut to each
   // `animateTo` event's audience: the game's own buffer holds every seat's
