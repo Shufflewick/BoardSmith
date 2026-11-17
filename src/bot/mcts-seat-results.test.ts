@@ -111,3 +111,30 @@ describe.each(CONFIGS)('each seat is scored by its own result, %s', (_name, conf
     expect(await openings({ punish: [2], ignore: [1] }, 2, config)).toEqual(SEEDS.map(() => 'doom'));
   });
 });
+
+describe('solving a node from its children', () => {
+  it('leaves a node open while a move it has not tried could still win', () => {
+    const GameClass = replyGame({ spite: [], yield: [2] });
+    const game = new GameClass({ playerCount: 2, seed: 'untried' });
+    game.startFlow();
+    game.continueFlow('open', { option: 'trust' }, 1);
+    const bot: any = new MCTSBot(game, GameClass, 'reply', 2, { async: false, timeout: Infinity, seed: 'untried' });
+    bot.rootSnapshot = bot.captureSnapshot();
+    bot.searchGame = bot.restoreGame(bot.rootSnapshot);
+    bot.resumeSearchGame();
+    const root = bot.createNode(
+      bot.searchGame.getFlowState(),
+      null,
+      null,
+      [{ action: 'reply', args: { option: 'spite' } }, { action: 'reply', args: { option: 'yield' } }],
+      2,
+    );
+
+    const spite = bot.expandIncremental(root, true);
+    expect(spite.solvedWinners).toEqual([]);
+    bot.backpropagate(spite, () => 0, [], []);
+
+    expect(root.untriedMoves).toHaveLength(1);
+    expect(root.solvedWinners).toBeNull();
+  });
+});

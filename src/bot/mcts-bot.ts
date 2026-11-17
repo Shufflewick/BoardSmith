@@ -1511,17 +1511,18 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Solve `node` from its children (#1679). The seat to move takes a solved
    * ending it wins when it has one; with none, it is held to no ending unless
-   * every child is solved. The node is solved only when every ending it may
-   * take agrees on the bot's result, and its winners are the seats that win
-   * in all of them.
+   * every move is tried and solved. The node is solved only when every ending
+   * it may take agrees on the bot's result, and its winners are the seats that
+   * win in all of them.
    */
   private updateSolved(node: MCTSNode): void {
     if (node.children.length === 0) return;
     const solved = node.children.filter(c => c.solvedWinners !== null);
     const wins = solved.filter(c => c.solvedWinners!.includes(node.currentPlayer));
-    const taken = wins.length > 0 ? wins : solved.length === node.children.length ? solved : [];
-    const botWins = new Set(taken.map(c => this.isProven(c)));
-    node.solvedWinners = botWins.size === 1
+    const allSolved = node.untriedMoves.length === 0 && solved.length === node.children.length;
+    const taken = wins.length > 0 ? wins : allSolved ? solved : [];
+    const agree = taken.length > 0 && (taken.every(c => this.isProven(c)) || !taken.some(c => this.isProven(c)));
+    node.solvedWinners = agree
       ? taken[0].solvedWinners!.filter(seat => taken.every(c => c.solvedWinners!.includes(seat)))
       : null;
   }
