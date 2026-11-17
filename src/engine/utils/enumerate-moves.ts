@@ -136,6 +136,13 @@ export function enumerateLegalMoves(
   return result;
 }
 
+/** How a caller that samples moves anyway takes an action's moves above the budget (see {@link enumerateActionMoves}). */
+interface MoveSample {
+  count: number;
+  random: SeededRandom;
+  onSampled?: () => void;
+}
+
 /**
  * Every legal set of args for ONE action, with every gate the game can write
  * already applied.
@@ -157,8 +164,8 @@ export function enumerateLegalMoves(
  * @param options.sampleAboveBudget - For a caller that samples the moves
  *   anyway (the MCTS bot): an action with more moves than enumeration lists
  *   (see {@link ActionWalk}) gives `count` of them drawn with `random` instead
- *   of throwing {@link MoveListTooLargeError}. An action within the budget
- *   still gives every move.
+ *   of throwing {@link MoveListTooLargeError}, and calls `onSampled`, if
+ *   given, to say so. An action within the budget still gives every move.
  */
 export function enumerateActionMoves(
   game: Game,
@@ -167,7 +174,7 @@ export function enumerateActionMoves(
   options: {
     maxPerAction?: number;
     followUp?: FollowUpAction;
-    sampleAboveBudget?: { count: number; random: SeededRandom };
+    sampleAboveBudget?: MoveSample;
   } = {},
 ): Record<string, unknown>[] {
   const executor = game.getActionExecutor();
@@ -230,7 +237,7 @@ function enumerateGatedSelections(
   player: Player,
   bound: Record<string, unknown>,
   followUp: FollowUpAction | undefined,
-  sample: { count: number; random: SeededRandom } | undefined,
+  sample: MoveSample | undefined,
 ): Record<string, unknown>[] {
   const executor = game.getActionExecutor();
   // Every pre-filled key is an answered pick, a `null` (skipped) one included:
@@ -283,7 +290,7 @@ function sampleSelections(
   actionDef: ActionDefinition,
   player: Player,
   start: Record<string, unknown>,
-  sample: { count: number; random: SeededRandom },
+  sample: MoveSample,
   accepts: (args: Record<string, unknown>) => boolean,
 ): Record<string, unknown>[] {
   const walk: ActionWalk = { left: Infinity, random: sample.random, judged: { offers: new Map(), ids: new Map() } };
@@ -292,6 +299,7 @@ function sampleSelections(
     moves.push(...enumerateSelections(game, actionDef, player, start, walk).filter(accepts));
   }
   warnSampled(actionDef, moves.length);
+  sample.onSampled?.();
   return moves;
 }
 
@@ -383,7 +391,7 @@ function enumerateThroughSelectionSteps(
   actionDef: ActionDefinition,
   player: Player,
   bound: Record<string, unknown>,
-  sample: { count: number; random: SeededRandom } | undefined,
+  sample: MoveSample | undefined,
 ): Record<string, unknown>[] {
   const scratch = scratchCopy(game);
   try {
@@ -443,7 +451,7 @@ function sampleThroughSelectionSteps(
   actionDef: ActionDefinition,
   player: Player,
   bound: Record<string, unknown>,
-  sample: { count: number; random: SeededRandom },
+  sample: MoveSample,
 ): Record<string, unknown>[] {
   const walk: ActionWalk = { left: MAX_MULTISELECT_COMBINATIONS, random: sample.random };
   const moves: Record<string, unknown>[] = [];
@@ -456,6 +464,7 @@ function sampleThroughSelectionSteps(
     if (!(error instanceof MoveListTooLargeError)) throw error;
   }
   warnSampled(actionDef, moves.length);
+  sample.onSampled?.();
   return moves;
 }
 

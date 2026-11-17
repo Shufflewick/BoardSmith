@@ -268,10 +268,21 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
 
     it('still gets every move of an action within the budget', () => {
       const game = started('grid');
+      const onSampled = vi.fn();
       const moves = enumerateActionMoves(game, game.getAction('grid')!, game.getPlayer(1)!, {
-        sampleAboveBudget: { count: 20, random: new SeededRandom('grid') },
+        sampleAboveBudget: { count: 20, random: new SeededRandom('grid'), onSampled },
       });
       expect(moves).toHaveLength(9900);
+      expect(onSampled).not.toHaveBeenCalled();
+    });
+
+    it('tells the caller when the moves are a sample (#1680)', () => {
+      const game = started('species');
+      const onSampled = vi.fn();
+      enumerateActionMoves(game, game.getAction('species')!, game.getPlayer(1)!, {
+        sampleAboveBudget: { count: 20, random: new SeededRandom('one'), onSampled },
+      });
+      expect(onSampled).toHaveBeenCalledOnce();
     });
   });
 
@@ -279,8 +290,9 @@ describe('enumeration budget across an action\'s selections (#691)', () => {
     const play = async () => {
       const game = started('species');
       const bot = new MCTSBot(game, BudgetGame, 'budget', 1, { iterations: 5, playoutDepth: 1, seed: 'species-bot' });
-      const rootMoves: unknown[] = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false });
-      expect(rootMoves).toHaveLength(20);
+      const rootMoves = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false });
+      expect(rootMoves.moves).toHaveLength(20);
+      expect(rootMoves.sampled).toBe(true);
       return bot.play();
     };
     const move = await play();
@@ -353,6 +365,15 @@ describe('the two older caps go through the same budget (#692)', () => {
     expect(sampleOf(started('chain12'), 'chain12', 'two')).not.toEqual(moves);
     const fresh = started('chain12');
     expect(fresh.performAction('chain12', fresh.getPlayer(1)!, moves[0]).success).toBe(true);
+  });
+
+  it('tells the caller when the moves of a repeating selection are a sample (#1680)', () => {
+    const game = started('chain12');
+    const onSampled = vi.fn();
+    enumerateActionMoves(game, game.getAction('chain12')!, game.getPlayer(1)!, {
+      sampleAboveBudget: { count: 20, random: new SeededRandom('one'), onSampled },
+    });
+    expect(onSampled).toHaveBeenCalledOnce();
   });
 
   it('the MCTS bot plays a sampled repeating move, the same for the same seed', async () => {

@@ -105,6 +105,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
         { action: 'pick', args: { choice: 'z' } },
       ],
       bot.playerIndex,
+      false,
     );
 
     // First simulated branch: seat 1 picks 'x'. This completes seat 1 in the
@@ -191,6 +192,7 @@ describe('MCTS undo restores flow-bookkeeping (v4.8-MCTS-UNDO)', () => {
         { action: 'play', args: { option: 'c' } },
       ],
       bot.playerIndex,
+      false,
     );
 
     // First simulated branch: seat 1 plays 'a', finishing the game.

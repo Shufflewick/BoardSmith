@@ -128,6 +128,7 @@ describe('solving a node from its children', () => {
       null,
       [{ action: 'reply', args: { option: 'spite' } }, { action: 'reply', args: { option: 'yield' } }],
       2,
+      false,
     );
 
     const spite = bot.expandIncremental(root, true);
@@ -136,5 +137,60 @@ describe('solving a node from its children', () => {
 
     expect(root.untriedMoves).toHaveLength(1);
     expect(root.solvedWinners).toBeNull();
+  });
+});
+
+describe('solving a node whose moves are a sample (#1680)', () => {
+  // 50 replies, more than the 20 the search lists below the root: seat 2 wins
+  // only with `win`, so a sample without it must not prove the node lost for seat 2.
+  const replies = Object.fromEntries([
+    ...Array.from({ length: 49 }, (_, i) => [`lose${i}`, [1]]),
+    ['win', [2]],
+  ]);
+
+  it('never solves a sampled node as lost for its mover', async () => {
+    const GameClass = replyGame(replies);
+    let withoutWin = 0;
+    for (const seed of SEEDS) {
+      const game = new GameClass({ playerCount: 2, seed });
+      game.startFlow();
+      const bot: any = new MCTSBot(game, GameClass, 'reply', 1, { async: false, timeout: Infinity, iterations: 400, seed }, lowStrategy);
+      const { root } = await bot.runSearch();
+      const trust = root.children.find((child: any) => child.parentMove.args.option === 'trust');
+      const tried = trust.children.map((child: any) => child.parentMove.args.option);
+      if (tried.length === 20 && !tried.includes('win')) withoutWin++;
+      expect(trust.solvedWinners === null || trust.solvedWinners.includes(2), `seed ${seed}`).toBe(true);
+    }
+    // The fixture has teeth: some seeds try every sampled reply and none of them is `win`.
+    expect(withoutWin).toBeGreaterThan(0);
+  });
+
+  it("marks a node sampled when a later world's listing of its moves is a sample", () => {
+    const GameClass = replyGame(replies);
+    const game = new GameClass({ playerCount: 2, seed: 'refresh' });
+    game.startFlow();
+    game.continueFlow('open', { option: 'trust' }, 1);
+    const bot: any = new MCTSBot(game, GameClass, 'reply', 2, { async: false, timeout: Infinity, seed: 'refresh' });
+    bot.rootSnapshot = bot.captureSnapshot();
+    bot.searchGame = bot.restoreGame(bot.rootSnapshot);
+    const node = bot.createNode(bot.searchGame.getFlowState(), null, null, [], 2, false);
+
+    bot.refreshNodeForWorld(node);
+
+    expect(node.allMoves).toHaveLength(20);
+    expect(node.sampled).toBe(true);
+  });
+
+  it('never solves a sampled root as lost for the bot', async () => {
+    const GameClass = replyGame(replies);
+    for (const seed of SEEDS) {
+      const game = new GameClass({ playerCount: 2, seed });
+      game.startFlow();
+      game.continueFlow('open', { option: 'trust' }, 1);
+      const bot: any = new MCTSBot(game, GameClass, 'reply', 2, { async: false, timeout: Infinity, iterations: 100, seed }, lowStrategy);
+      const { root } = await bot.runSearch();
+      expect(root.children.length).toBe(20);
+      expect(root.solvedWinners === null || root.solvedWinners.includes(2), `seed ${seed}`).toBe(true);
+    }
   });
 });

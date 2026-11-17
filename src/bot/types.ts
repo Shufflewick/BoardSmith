@@ -156,6 +156,12 @@ export interface MCTSNode {
    */
   solvedWinners: readonly number[] | null;
   /**
+   * True when `allMoves` is, or under a world sampler has taken in, a random
+   * sample of the seat's moves (#1680), so every listed move tried and solved
+   * still leaves moves it never listed.
+   */
+  sampled: boolean;
+  /**
    * How many times this node's move was LEGAL at a selection step (#73).
    *
    * Only meaningful under determinization, where a move's legality depends on

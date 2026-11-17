@@ -31,6 +31,9 @@ type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
  */
 const MAX_SAMPLED_ARGS = 20;
 
+/** A seat's moves, and whether they are a random sample of them rather than every one (#1680). */
+type SeatMoves = { moves: BotMove[]; sampled: boolean };
+
 /**
  * The most memory one search's saved copies may hold (#633): 32 MiB, a quarter
  * of a 128 MB Workers isolate, which leaves the rest for the live game, the
@@ -391,9 +394,10 @@ export class MCTSBot<G extends Game = Game> {
     // Get every available move first (without sampling) for threat response
     // analysis; an action with more moves than enumeration lists gives a
     // random sample of them instead (#691).
-    const allMoves = this.movesFor(this.searchGame, flowState, this.playerIndex, { sample: false });
+    const listing = this.movesFor(this.searchGame, flowState, this.playerIndex, { sample: false });
+    const allMoves = listing.moves;
     this.lastWait = undefined;
-    if (allMoves.length === 0 && this.candidateMoves && this.listSeatMoves(this.searchGame, flowState, this.playerIndex, { sample: false }).length > 0) {
+    if (allMoves.length === 0 && this.candidateMoves && this.listSeatMoves(this.searchGame, flowState, this.playerIndex, { sample: false }).moves.length > 0) {
       // The search copy is fresh from the root, so its step-clock reads are this listing's alone.
       this.lastWait = { ...(this.searchGame._reofferAt !== undefined && { until: this.searchGame._reofferAt }) };
       this.lastStallReason =
@@ -418,7 +422,7 @@ export class MCTSBot<G extends Game = Game> {
     // #73: under determinization one world offering a single move says nothing
     // about the others, so the fast path is only sound without a sampler.
     if (allMoves.length === 1 && !this.determinize) {
-      const root = this.createNode(flowState, null, null, allMoves, this.playerIndex);
+      const root = this.createNode(flowState, null, null, allMoves, this.playerIndex, listing.sampled);
       return { move: allMoves[0], root };
     }
 
@@ -448,7 +452,7 @@ export class MCTSBot<G extends Game = Game> {
     this.raveTable.clear();
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
-    const root = this.createNode(flowState, null, null, moves, this.playerIndex);
+    const root = this.createNode(flowState, null, null, moves, this.playerIndex, listing.sampled || (!this.forcedRootMoves && moves.length < allMoves.length));
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -719,18 +723,8 @@ export class MCTSBot<G extends Game = Game> {
       ? []
       : forced
         ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
-        : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
+        : this.takeInWorldMoves(node, this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true }));
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
-
-    if (!forced) {
-      const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
-      for (const move of legalMoves) {
-        const key = this.getMoveKey(move);
-        if (known.has(key)) continue;
-        known.add(key);
-        node.allMoves.push(move);
-      }
-    }
 
     const explored = new Set(
       node.children.map((child) => this.getMoveKey(child.parentMove!)),
@@ -741,6 +735,19 @@ export class MCTSBot<G extends Game = Game> {
     });
 
     return legal;
+  }
+
+  /** Add `listing`'s moves `node` does not know yet to its `allMoves`, and keep that a sample if `listing` is (#1680); returns `listing.moves`. */
+  private takeInWorldMoves(node: MCTSNode, listing: SeatMoves): BotMove[] {
+    node.sampled ||= listing.sampled;
+    const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
+    for (const move of listing.moves) {
+      const key = this.getMoveKey(move);
+      if (known.has(key)) continue;
+      known.add(key);
+      node.allMoves.push(move);
+    }
+    return listing.moves;
   }
 
   /**
@@ -884,7 +891,7 @@ export class MCTSBot<G extends Game = Game> {
 
     // Create child node (no snapshot needed: every step restores the search
     // game whole, from the root or a saved copy, before it walks the tree)
-    const child = this.createNode(flowState, node, move, next.moves, next.seat);
+    const child = this.createNode(flowState, node, move, next.moves, next.seat, next.sampled);
     node.children.push(child);
 
     return child;
@@ -1205,13 +1212,13 @@ export class MCTSBot<G extends Game = Game> {
    * pattern). The search has no move to make there, so such a node is a
    * leaf, scored as it stands.
    */
-  private seatToMove(flowState: FlowState): { seat: number; moves: BotMove[] } {
+  private seatToMove(flowState: FlowState): { seat: number } & SeatMoves {
     const due = flowState.complete ? [] : dueSeats(flowState);
     for (const seat of due) {
-      const moves = this.movesFor(this.searchGame!, flowState, seat, { sample: true });
-      if (moves.length > 0) return { seat, moves };
+      const listing = this.movesFor(this.searchGame!, flowState, seat, { sample: true });
+      if (listing.moves.length > 0) return { seat, ...listing };
     }
-    return { seat: this.playerIndex, moves: [] };
+    return { seat: this.playerIndex, moves: [], sampled: false };
   }
 
   /**
@@ -1235,24 +1242,26 @@ export class MCTSBot<G extends Game = Game> {
    * follow-up still come from `flowState`, the world's own position.
    *
    * A game's `candidateMoves` hook, when it has one, decides what this
-   * returns, from the listing or from its own list (#1387).
+   * returns, from the listing or from its own list (#1387). The moves are
+   * `sampled` when the listing they came from was (#1680).
    */
-  private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
+  private movesFor(game: G, flowState: FlowState, seat: number, options: { sample: boolean }): SeatMoves {
     // Before the step's first move every seat's copy is the world itself.
     const enumerationGame: G = this.inPlayedSimultaneousStep(flowState)
       ? this.simultaneousSeatGames.get(seat) ?? this.simultaneousBaseline!
       : game;
-    let listed: BotMove[] | undefined;
-    const listMoves = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
-    if (!this.candidateMoves) return listMoves();
+    let listed: SeatMoves | undefined;
+    const list = () => (listed ??= this.listSeatMoves(enumerationGame, flowState, seat, options));
+    if (!this.candidateMoves) return list();
 
     // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
     // An empty list says the seat waits here (#1537): it has no move at this position.
-    return this.candidateMoves(enumerationGame, seat, listMoves);
+    const moves = this.candidateMoves(enumerationGame, seat, () => list().moves);
+    return { moves, sampled: listed?.sampled ?? false };
   }
 
   /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */
-  private listSeatMoves(enumerationGame: G, flowState: FlowState, seat: number, options: { sample: boolean }): BotMove[] {
+  private listSeatMoves(enumerationGame: G, flowState: FlowState, seat: number, options: { sample: boolean }): SeatMoves {
     // The player and action definitions come from the SAME game instance the
     // args are enumerated against: their closures are bound to it.
     const player = enumerationGame.getPlayer(seat);
@@ -1264,15 +1273,16 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     const moves: BotMove[] = [];
+    let sampled = false;
     const add = (actionDef: ActionDefinition, followUp?: FollowUpAction) => {
       // An action with more moves than enumeration lists gives a random
       // sample of them, drawn from the bot's own seeded source (#691).
-      const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng };
+      const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng, onSampled: () => { sampled = true; } };
       const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
         .map((args) => this.serializeArgs(args, actionDef.selections));
-      const kept = options.sample && serialized.length > MAX_SAMPLED_ARGS
-        ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS)
-        : serialized;
+      const cut = options.sample && serialized.length > MAX_SAMPLED_ARGS;
+      sampled ||= cut;
+      const kept = cut ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS) : serialized;
       for (const args of kept) moves.push({ action: actionDef.name, args });
     };
 
@@ -1286,7 +1296,7 @@ export class MCTSBot<G extends Game = Game> {
     const followUpDef = followUp && enumerationGame.getAction(followUp.action);
     if (followUp && followUpDef) add(followUpDef, followUp);
 
-    return moves;
+    return { moves, sampled };
   }
 
   /**
@@ -1457,6 +1467,7 @@ export class MCTSBot<G extends Game = Game> {
     parentMove: BotMove | null,
     allMoves: BotMove[],
     currentPlayer: number,
+    sampled: boolean,
   ): MCTSNode {
     // Order moves if moveOrdering hook is available
     // This determines exploration order: first moves are tried first
@@ -1481,6 +1492,7 @@ export class MCTSBot<G extends Game = Game> {
       // step never advances, #321), and the bot's seat for a node with no moves.
       currentPlayer,
       solvedWinners: this.terminalWinners(flowState),
+      sampled,
       availability: 0,
       refusedMoveKeys: new Set(),
     };
@@ -1511,15 +1523,15 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Solve `node` from its children (#1679). The seat to move takes a solved
    * ending it wins when it has one; with none, it is held to no ending unless
-   * every move is tried and solved. The node is solved only when every ending
-   * it may take agrees on the bot's result, and its winners are the seats that
-   * win in all of them.
+   * every move is tried and solved, which a sampled move list never shows
+   * (#1680). The node is solved only when every ending it may take agrees on
+   * the bot's result, and its winners are the seats that win in all of them.
    */
   private updateSolved(node: MCTSNode): void {
     if (node.children.length === 0) return;
     const solved = node.children.filter(c => c.solvedWinners !== null);
     const wins = solved.filter(c => c.solvedWinners!.includes(node.currentPlayer));
-    const allSolved = node.untriedMoves.length === 0 && solved.length === node.children.length;
+    const allSolved = !node.sampled && node.untriedMoves.length === 0 && solved.length === node.children.length;
     const taken = wins.length > 0 ? wins : allSolved ? solved : [];
     const agree = taken.length > 0 && (taken.every(c => this.isProven(c)) || !taken.some(c => this.isProven(c)));
     node.solvedWinners = agree

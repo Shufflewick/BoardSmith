@@ -371,7 +371,7 @@ describe('MCTSBot simultaneous-step soundness (bot-02 / T-159-07)', () => {
     // The search makes every move through makeSearchMove, which captures the
     // pre-reveal baseline BEFORE seat 1's pick mutates the shared searchGame.
     const { flowState: postPickFlowState } = bot.makeSearchMove({ action: 'pick', args: { choice: pick } }, 1);
-    const seat2Moves = bot.movesFor(bot.searchGame, postPickFlowState, 2, { sample: true });
+    const seat2Moves = bot.movesFor(bot.searchGame, postPickFlowState, 2, { sample: true }).moves;
     return new Set((seat2Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
   }
 
@@ -419,7 +419,7 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // NOTE: the descent (applyMoveToSearchGame) must capture the baseline itself.
 
     const rootFlow = bot.searchGame.getFlowState();
-    const root = bot.createNode(rootFlow, null, null, [], bot.playerIndex);
+    const root = bot.createNode(rootFlow, null, null, [], bot.playerIndex, false);
 
     // Descend seat 1's pick. applyMoveToSearchGame captures the pre-reveal
     // baseline from the world (fresh at the root), then applies the move.
@@ -428,17 +428,17 @@ describe('MCTSBot simultaneous-step soundness with 3 co-deciders (F-07)', () => 
     // which is the seat the node's own moves are made as (#522).
     const move1 = { action: 'pick', args: { choice: pick1 } };
     bot.applyMoveToSearchGame({ parent: root, parentMove: move1 });
-    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, [], bot.seatToMove(bot.searchGame.getFlowState()).seat);
+    const child1 = bot.createNode(bot.searchGame.getFlowState(), root, move1, [], bot.seatToMove(bot.searchGame.getFlowState()).seat, false);
     expect(child1.currentPlayer).toBe(2);
 
     // Descend seat 2's pick (step now mid; baseline must persist from root).
     const move2 = { action: 'pick', args: { choice: pick2 } };
     bot.applyMoveToSearchGame({ parent: child1, parentMove: move2 });
-    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, [], bot.seatToMove(bot.searchGame.getFlowState()).seat);
+    const child2 = bot.createNode(bot.searchGame.getFlowState(), child1, move2, [], bot.seatToMove(bot.searchGame.getFlowState()).seat, false);
     expect(child2.currentPlayer).toBe(3);
 
     // Enumerate seat 3's moves — must be reveal-blind (pre-reveal baseline).
-    const seat3Moves = bot.movesFor(bot.searchGame, child2.flowState, 3, { sample: true });
+    const seat3Moves = bot.movesFor(bot.searchGame, child2.flowState, 3, { sample: true }).moves;
     return new Set((seat3Moves as Array<{ args: { choice: string } }>).map((m) => m.args.choice));
   }
 
