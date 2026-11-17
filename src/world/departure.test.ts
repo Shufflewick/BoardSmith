@@ -5,6 +5,7 @@
 // nobody sends. The engine clears that seat's Player element and frees the
 // chair in the same dispatch, exactly as it does after `world.vacate`.
 import { describe, expect, it } from "vitest";
+import { Player, type GameOptions, type PersistentMap } from "../engine/index.js";
 import { worldAction, worldClockAction } from "./action.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import {
@@ -39,8 +40,26 @@ const reap = worldClockAction<VillageFixture>("reap")
     world.vacate(Number(args.seat));
   });
 
-function village() {
-  const game = new VillageFixture({
+/** A Player with state the engine does not save: a derived getter and a live view onto settings. */
+class Ledgered extends Player {
+  ledger?: PersistentMap<string, number>;
+  get notation(): string {
+    return `seat-${this.seat}`;
+  }
+}
+
+class LedgeredVillage extends VillageFixture {
+  static override PlayerClass = Ledgered;
+  constructor(options: GameOptions) {
+    super(options);
+    for (const player of this.players) {
+      (player as Ledgered).ledger = this.persistentMap(`ledger-${player.seat}`);
+    }
+  }
+}
+
+function village(Fixture: typeof VillageFixture = VillageFixture) {
+  const game = new Fixture({
     playerCount: 3,
     seed: "village",
     worldMode: true,
@@ -131,5 +150,17 @@ describe("ShufflewickPub #813 -- every departed seat comes back clean", () => {
     // The same element, so a reference the world already holds still resolves.
     expect(game.getPlayer(2)!.toJSON().id).toBe(fresh.id);
     expect(() => engine.seat("newcomer", 2)).not.toThrow();
+  });
+
+  it("keeps what the Player derives or views rather than saves, so a release cannot break it", async () => {
+    const { game, engine } = village(LedgeredVillage);
+    const ledger = (game.getPlayer(2) as Ledgered).ledger;
+    await send(engine, "p2", "brand");
+
+    const result = await send(engine, "p2", "leave");
+
+    expect(result.vacated).toEqual({ seat: 2, player: "p2" });
+    expect((game.getPlayer(2) as Ledgered).ledger).toBe(ledger);
+    expect((game.getPlayer(2) as Ledgered).notation).toBe("seat-2");
   });
 });

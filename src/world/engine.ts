@@ -77,7 +77,7 @@ import type { ActionMetadata, PickMetadata } from "../session/types.js";
 import { buildPickMetadata, evaluatePrompt } from "../engine/element/action-metadata.js";
 import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
-import { decodeValue } from "../engine/element/game-element.js";
+import { decodeValue, encodeValue, readDynamicAttribute, savedAttributeKeys } from "../engine/element/game-element.js";
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -602,7 +602,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   /** Each seat's Player as this world built it, by seat: what a freed chair is
    *  reset to, so its next holder starts with nothing of the last one's
    *  (ShufflewickPub #813). */
-  private readonly freshPlayers: ReadonlyMap<number, ElementJSON>;
+  private readonly freshPlayers: ReadonlyMap<number, Readonly<Record<string, unknown>>>;
   /** How many notices one seat's box keeps (ShufflewickPub #521), or
    *  undefined for a world that declares no notice box. */
   private readonly noticesPerSeat: number | undefined;
@@ -668,7 +668,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.vacateByClock = options.vacateByClock;
     // TAKEN BEFORE ANY COMMAND RUNS. A Player is in no partition, so nothing
     // checkpoints it and what the game's constructor built is all it durably is.
-    this.freshPlayers = new Map(this.game.players.map((player) => [player.seat, player.toJSON()]));
+    this.freshPlayers = new Map(this.game.players.map((player) => [player.seat, savedAttributes(player)]));
     this.noticesPerSeat = options.noticesPerSeat;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
@@ -3712,24 +3712,33 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 }
 
+/** A Player's saved attributes, encoded, so a later write cannot reach them. */
+function savedAttributes(player: Player): Record<string, unknown> {
+  const className = player.constructor.name;
+  return Object.fromEntries(
+    savedAttributeKeys(player).map((key) => [
+      key,
+      encodeValue(readDynamicAttribute(player, key), player._ctx, className, key),
+    ]),
+  );
+}
+
 /**
  * PUT A PLAYER BACK THE WAY THIS WORLD BUILT IT (ShufflewickPub #813).
  *
  * In place, so the element every reference resolves to stays the same one:
- * each saved attribute is restored from `fresh`, and every attribute a rule
- * added since is removed. Engine state (`_`-prefixed) and the class's
- * `unserializableAttributes` are not saved state, so they are left alone.
+ * each saved attribute is restored from `fresh`, and every saved attribute a
+ * rule added since is removed. What is not saved (engine state, a derived
+ * getter, a `PersistentMap` view, the class's `unserializableAttributes`) is
+ * left alone.
  */
-function resetPlayer(player: Player, fresh: ElementJSON, game: Game): void {
-  const unsaved = (player.constructor as typeof GameElement).unserializableAttributes;
-  for (const key of Object.keys(player)) {
-    if (key.startsWith("_") || unsaved.includes(key) || Object.hasOwn(fresh.attributes, key)) continue;
-    Reflect.deleteProperty(player, key);
+function resetPlayer(player: Player, fresh: Readonly<Record<string, unknown>>, game: Game): void {
+  for (const key of savedAttributeKeys(player)) {
+    if (!Object.hasOwn(fresh, key)) Reflect.deleteProperty(player, key);
   }
-  for (const [key, value] of Object.entries(fresh.attributes)) {
+  for (const [key, value] of Object.entries(fresh)) {
     Object.assign(player, { [key]: decodeValue(value, game) });
   }
-  if (fresh.name !== undefined) player.name = fresh.name;
 }
 
 /**

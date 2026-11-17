@@ -8,7 +8,7 @@ import { expect, it } from 'vitest';
 
 import { Game, Player, PlayerFacingError, Space, type GameOptions } from '../../engine/index.js';
 import { worldAction, worldBudgets, type WorldDefinition } from '../index.js';
-import { ResidentWorld } from './index.js';
+import { ResidentWorld, type WorldStore } from './index.js';
 import { createMemoryWorldStore } from '../../testing/memory-world-store.js';
 import { TEST_WORLD_ELEMENT_ID_KEY } from '../../engine/element/world-element-id-key.test-helper.js';
 
@@ -91,9 +91,9 @@ function hallBundle() {
   return { gameClass: Hall, gameType: 'hall', displayName: 'Hall', world };
 }
 
-async function openHall() {
+async function openHall(wrap: (store: WorldStore) => WorldStore = (store) => store) {
   const budgets = worldBudgets();
-  const store = createMemoryWorldStore(TEST_WORLD_ELEMENT_ID_KEY, budgets);
+  const store = wrap(createMemoryWorldStore(TEST_WORLD_ELEMENT_ID_KEY, budgets));
   const vacated: { seat: number; player: string }[] = [];
   const world = new ResidentWorld({
     definition: hallBundle() as ConstructorParameters<typeof ResidentWorld>[0]['definition'],
@@ -147,5 +147,28 @@ it('keeps the seat held, and not reusable, when the hook refuses', async () => {
   expect(store.seats().map((row) => [row.player, row.seat])).toEqual([['player-a', 1]]);
   expect(() => world.seat('player-b', 1)).toThrow(expect.objectContaining({ code: 'seat-conflict' }));
   expect(await told('player-a')).toMatchObject({ purse: 5, title: 'Baron', hoard: 5 });
+  await world.close();
+});
+
+it('keeps the seat held when the host cannot finish a departure the hook ran for', async () => {
+  let unreachable = false;
+  const { world, store, vacated, send } = await openHall((inner) => ({
+    ...inner,
+    nextSeq: () => {
+      if (unreachable) throw new Error('The event store did not answer.');
+      return inner.nextSeq();
+    },
+  }));
+  world.seat('player-a', 1);
+  await send('player-a', 'earn');
+
+  unreachable = true;
+  await expect(send('player-a', 'leave')).rejects.toThrow(/did not answer/);
+  unreachable = false;
+
+  expect(vacated).toEqual([]);
+  expect(store.seats().map((row) => [row.player, row.seat])).toEqual([['player-a', 1]]);
+  expect(() => world.seat('player-b', 1)).toThrow(expect.objectContaining({ code: 'seat-conflict' }));
+  await expect(send('player-a', 'tell')).resolves.toBeDefined();
   await world.close();
 });

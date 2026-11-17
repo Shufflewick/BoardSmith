@@ -1002,6 +1002,7 @@ export class ResidentWorld {
     // (BoardSmith #169), read this owner's allowance ONCE, apply with it, and
     // plan the command's schedules against the same allowance. The checkpoint
     // below is this host's own, per command.
+    let applied = false;
     const { result, answers: walked, plan } = await dispatchStep(
       { player, command, timing, arrivedAt },
       {
@@ -1018,8 +1019,8 @@ export class ResidentWorld {
         readActivity: (seat) => Promise.resolve(this.#store.activityOf(seat)),
         readNoticeBox: (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
         allowance: (asking) => Promise.resolve(this.#allowanceFor(asking)),
-        apply: ({ allowance, answers }) =>
-          runner.apply({
+        apply: async ({ allowance, answers }) => {
+          const applying = await runner.apply({
             player,
             command,
             timing,
@@ -1035,7 +1036,10 @@ export class ResidentWorld {
             // seat was last here, not that it is here now.
             activity: this.#activityFor(request.about ?? player),
             ...answers,
-          }),
+          });
+          applied = true;
+          return applying;
+        },
         planning: (owner) => {
           // Read on the first keyed request only: most dispatches schedule nothing keyed.
           let keyed: ReadonlyMap<string, string> | undefined;
@@ -1047,7 +1051,13 @@ export class ResidentWorld {
         },
       },
       this.#budgets,
-    );
+    ).catch((error: unknown) => {
+      // A COMMAND THAT RAN AND COULD NOT BE PLANNED DID NOT HAPPEN EITHER: the
+      // engine already changed, and may have freed a chair (ShufflewickPub #813).
+      if (!applied) throw error;
+      this.#discardResident();
+      throw rolledBack(error, command.name);
+    });
 
     // THE HANDLER'S OWN REQUEST WINS (#583): `queueWrite` drops the re-arm of
     // an occurrence whose plan displaced its own event.

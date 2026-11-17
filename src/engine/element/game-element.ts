@@ -466,6 +466,20 @@ function engineOwnedAttributes(element: GameElement): ReadonlySet<string> {
   return engineOwnedAttributeNames((element as Partial<Pick<Player, '$type'>>).$type);
 }
 
+/**
+ * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
+ * keys that are not `_`-prefixed engine state or one of the class's
+ * `unserializableAttributes`, and whose value is neither `undefined` nor a
+ * {@link PersistentMap}, a live view onto `settings`, which saves its data (#139).
+ */
+export function savedAttributeKeys(element: GameElement): string[] {
+  const unserializable = (element.constructor as typeof GameElement).unserializableAttributes;
+  return Object.keys(element).filter((key) => {
+    const value = readDynamicAttribute(element, key);
+    return !key.startsWith('_') && !unserializable.includes(key) && value !== undefined && !(value instanceof PersistentMap);
+  });
+}
+
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
   name?: string;
@@ -1538,26 +1552,12 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
-   * keys that are not `_`-prefixed engine state or one of the class's
-   * `unserializableAttributes`, and whose value is neither `undefined` nor a
-   * {@link PersistentMap}, a live view onto `settings`, which saves its data (#139).
-   */
-  private savedAttributeKeys(): string[] {
-    const unserializable = (this.constructor as typeof GameElement).unserializableAttributes;
-    return Object.keys(this).filter((key) => {
-      const value = (this as Record<string, unknown>)[key];
-      return !key.startsWith('_') && !unserializable.includes(key) && value !== undefined && !(value instanceof PersistentMap);
-    });
-  }
-
-  /**
    * Serialize this element and its descendants to JSON
    */
   toJSON(): ElementJSON {
     const className = this.constructor.name;
     const attributes: Record<string, unknown> = {};
-    for (const key of this.savedAttributeKeys()) {
+    for (const key of savedAttributeKeys(this)) {
       attributes[key] = encodeValue((this as Record<string, unknown>)[key], this._ctx, className, key);
     }
 
@@ -1628,7 +1628,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * { __elementRef: "path" } objects back to actual element references.
    */
   resolveElementReferences(game: Game): void {
-    for (const key of this.savedAttributeKeys()) {
+    for (const key of savedAttributeKeys(this)) {
       (this as Record<string, unknown>)[key] = decodeValue((this as Record<string, unknown>)[key], game);
     }
 
