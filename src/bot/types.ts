@@ -156,8 +156,9 @@ export interface MCTSNode {
    */
   solvedWinners: readonly number[] | null;
   /**
-   * True when `allMoves` is a random sample of the seat's moves (#1680), so
-   * every listed move tried and solved still leaves moves it never listed.
+   * True when `allMoves` is, or under a world sampler has taken in, a random
+   * sample of the seat's moves (#1680), so every listed move tried and solved
+   * still leaves moves it never listed.
    */
   sampled: boolean;
   /**

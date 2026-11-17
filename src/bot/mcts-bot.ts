@@ -719,14 +719,14 @@ export class MCTSBot<G extends Game = Game> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
     const forced = node.parent === null ? this.forcedRootMoves : undefined;
+    const listing = live.complete || forced ? undefined : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
     const legalMoves = live.complete
       ? []
-      : forced
-        ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
-        : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true }).moves;
+      : listing?.moves ?? forced!.filter((move) => this.worldAllows(live, node.currentPlayer, move));
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
 
-    if (!forced) {
+    if (listing) {
+      node.sampled ||= listing.sampled;
       const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
       for (const move of legalMoves) {
         const key = this.getMoveKey(move);
@@ -1520,9 +1520,9 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Solve `node` from its children (#1679). The seat to move takes a solved
    * ending it wins when it has one; with none, it is held to no ending unless
-   * every move is tried and solved, which a sampled move list never shows (#1680). The node is solved only when every ending
-   * it may take agrees on the bot's result, and its winners are the seats that
-   * win in all of them.
+   * every move is tried and solved, which a sampled move list never shows
+   * (#1680). The node is solved only when every ending it may take agrees on
+   * the bot's result, and its winners are the seats that win in all of them.
    */
   private updateSolved(node: MCTSNode): void {
     if (node.children.length === 0) return;

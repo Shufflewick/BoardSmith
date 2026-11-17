@@ -165,6 +165,22 @@ describe('solving a node whose moves are a sample (#1680)', () => {
     expect(withoutWin).toBeGreaterThan(0);
   });
 
+  it("marks a node sampled when a later world's listing of its moves is a sample", () => {
+    const GameClass = replyGame(replies);
+    const game = new GameClass({ playerCount: 2, seed: 'refresh' });
+    game.startFlow();
+    game.continueFlow('open', { option: 'trust' }, 1);
+    const bot: any = new MCTSBot(game, GameClass, 'reply', 2, { async: false, timeout: Infinity, seed: 'refresh' });
+    bot.rootSnapshot = bot.captureSnapshot();
+    bot.searchGame = bot.restoreGame(bot.rootSnapshot);
+    const node = bot.createNode(bot.searchGame.getFlowState(), null, null, [], 2, false);
+
+    bot.refreshNodeForWorld(node);
+
+    expect(node.allMoves).toHaveLength(20);
+    expect(node.sampled).toBe(true);
+  });
+
   it('never solves a sampled root as lost for the bot', async () => {
     const GameClass = replyGame(replies);
     for (const seed of SEEDS) {
