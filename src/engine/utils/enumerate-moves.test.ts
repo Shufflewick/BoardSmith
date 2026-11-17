@@ -146,7 +146,7 @@ describe('enumerateLegalMoves', () => {
 
     // The bot's unsampled enumeration for its own seat, as its root uses it
     const botMoves: Array<{ action: string; args: Record<string, unknown> }> =
-      (bot as any).movesFor(game, flowState, 1, { sample: false });
+      (bot as any).movesFor(game, flowState, 1, { sample: false }).moves;
 
     // Project enumerateLegalMoves results: element → numeric ID for comparison
     const coreMoves = enumerateLegalMoves(game, 1);
@@ -613,7 +613,7 @@ describe('enumeration leaves out actions the game refuses (#690)', () => {
 
   it("never lets the bot search or play a disabled action", async () => {
     const bot = new MCTSBot(game, GatedGame, 'gated', 1, { iterations: 20, playoutDepth: 2, seed: 'gated-bot' });
-    const rootMoves: Array<{ action: string }> = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false });
+    const rootMoves: Array<{ action: string }> = (bot as any).movesFor(game, game.getFlowState()!, 1, { sample: false }).moves;
     expect(rootMoves.map((m) => m.action).sort()).toEqual(['move', 'move', 'pass']);
     expect((await bot.play())?.action).not.toBe('build');
   });
