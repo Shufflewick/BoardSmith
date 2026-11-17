@@ -719,22 +719,12 @@ export class MCTSBot<G extends Game = Game> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
     const forced = node.parent === null ? this.forcedRootMoves : undefined;
-    const listing = live.complete || forced ? undefined : this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true });
     const legalMoves = live.complete
       ? []
-      : listing?.moves ?? forced!.filter((move) => this.worldAllows(live, node.currentPlayer, move));
+      : forced
+        ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
+        : this.takeInWorldMoves(node, this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true }));
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
-
-    if (listing) {
-      node.sampled ||= listing.sampled;
-      const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
-      for (const move of legalMoves) {
-        const key = this.getMoveKey(move);
-        if (known.has(key)) continue;
-        known.add(key);
-        node.allMoves.push(move);
-      }
-    }
 
     const explored = new Set(
       node.children.map((child) => this.getMoveKey(child.parentMove!)),
@@ -745,6 +735,19 @@ export class MCTSBot<G extends Game = Game> {
     });
 
     return legal;
+  }
+
+  /** Add `listing`'s moves `node` does not know yet to its `allMoves`, and keep that a sample if `listing` is (#1680); returns `listing.moves`. */
+  private takeInWorldMoves(node: MCTSNode, listing: SeatMoves): BotMove[] {
+    node.sampled ||= listing.sampled;
+    const known = new Set(node.allMoves.map((move) => this.getMoveKey(move)));
+    for (const move of listing.moves) {
+      const key = this.getMoveKey(move);
+      if (known.has(key)) continue;
+      known.add(key);
+      node.allMoves.push(move);
+    }
+    return listing.moves;
   }
 
   /**
