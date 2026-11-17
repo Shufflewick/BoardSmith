@@ -906,6 +906,10 @@ inputs: {
 },
 ```
 
+When the function returns a list other than the one whose values the game
+refused, as it does once the position has changed, the walk starts that list
+from its first value.
+
 The walk fails on everything it would fail on without them:
 
 - The game refusing a value from `inputs` fails the walk, as any failed action

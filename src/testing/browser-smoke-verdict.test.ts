@@ -34,6 +34,7 @@ import {
   type SmokeInputView,
   type SmokeWalk,
   type TypedValue,
+  typedFrom,
 } from './browser-smoke-verdict.js';
 
 function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
@@ -583,13 +584,13 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   });
 
   it('gives the text or number the spec names for the field, as text to type', async () => {
-    expect(await inputFor({ attack: { target: 'p2' } }, 'attack', 'target', 'text', page(), 0)).toEqual({ value: 'p2', values: 1 });
-    expect(await inputFor({ bid: { amount: 40 } }, 'bid', 'amount', 'number', page(), 0)).toEqual({ value: '40', values: 1 });
+    expect(await inputFor({ attack: { target: 'p2' } }, 'attack', 'target', 'text', page(), 0)).toEqual({ value: 'p2', values: ['p2'] });
+    expect(await inputFor({ bid: { amount: 40 } }, 'bid', 'amount', 'number', page(), 0)).toEqual({ value: '40', values: ['40'] });
   });
 
   it('gives what a function of the page returns, reading what a player reads there', async () => {
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p2', 'p3'] }), 0)).toEqual({ value: 'p2', values: 1 });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p2', 'p3'] }), 0)).toEqual({ value: 'p2', values: ['p2'] });
   });
 
   it('#471: gives a function the other seats the walk plays, so it can name a player standing with this one', async () => {
@@ -598,7 +599,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
         target: async ({ texts, otherSeats }: SmokeInputView) => (await texts('.nearby li')).find((name) => otherSeats.some((seat) => name === `p${seat}`)),
       },
     };
-    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9', 'p4'] }, [4]), 0)).toEqual({ value: 'p4', values: 1 });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9', 'p4'] }, [4]), 0)).toEqual({ value: 'p4', values: ['p4'] });
     expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9'] }, [4]), 0)).toEqual({ wanting: true });
   });
 
@@ -610,10 +611,10 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
 
   it('#1663: gives the value of a list that the walk has not yet had refused, the next one each time the game refuses one', async () => {
     const inputs = { movePacks: { columns: [-1, 1, -2] } };
-    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 0)).toEqual({ value: '-1', values: 3 });
-    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 2)).toEqual({ value: '-2', values: 3 });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 0)).toEqual({ value: '-1', values: ['-1', '1', '-2'] });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 2)).toEqual({ value: '-2', values: ['-1', '1', '-2'] });
     // Refusals of a longer list in another field of the action leave this one at its last value.
-    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 5)).toEqual({ value: '-2', values: 3 });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page(), 5)).toEqual({ value: '-2', values: ['-1', '1', '-2'] });
     expect(await inputFor({ dig: { spot: ['north', ' '] } }, 'dig', 'spot', 'text', page(), 1)).toEqual({
       problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
     });
@@ -631,8 +632,8 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
       movePacks: { columns: async ({ texts }: SmokeInputView) => ((await texts('[data-round]')).includes('Round 1') ? [-1, 1] : undefined) },
     };
     const round1 = page({ '[data-round]': ['Round 1'] });
-    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', round1, 0)).toEqual({ value: '-1', values: 2 });
-    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', round1, 1)).toEqual({ value: '1', values: 2 });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', round1, 0)).toEqual({ value: '-1', values: ['-1', '1'] });
+    expect(await inputFor(inputs, 'movePacks', 'columns', 'number', round1, 1)).toEqual({ value: '1', values: ['-1', '1'] });
     expect(await inputFor(inputs, 'movePacks', 'columns', 'number', page({ '[data-round]': ['Round 2'] }), 0)).toEqual({ wanting: true });
     expect(await inputFor({ dig: { spot: () => [] } }, 'dig', 'spot', 'text', page(), 0)).toEqual({
       problem: `\`inputs.dig.spot\` in ${SMOKE_SPEC_PATH} gives an empty list. Give the values to try, in order, such as [-1, 1, -2, 2].`,
@@ -661,7 +662,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     expect(await inputFor({ pledge: { coins: () => '7x' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({
       problem: `\`inputs.pledge.coins\` in ${SMOKE_SPEC_PATH} gives "7x" for a number field. Give a number, such as 7.`,
     });
-    expect(await inputFor({ pledge: { coins: ' 7 ' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({ value: '7', values: 1 });
+    expect(await inputFor({ pledge: { coins: ' 7 ' } }, 'pledge', 'coins', 'number', page(), 0)).toEqual({ value: '7', values: ['7'] });
   });
 
   it('#618: lets the page having stopped answering while a function read it end the walk, not count as the input failing', async () => {
@@ -722,7 +723,7 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
     });
 
     it('names the value the spec gave, so a refused input fails the walk and says which', () => {
-      expect(actionFailed('attack', "There's no one here by that name.", [{ field: 'target', value: 'p2', from: 'inputs', values: 1, kind: 'text' }], 0)).toBe(
+      expect(actionFailed('attack', "There's no one here by that name.", [{ field: 'target', value: 'p2', from: 'inputs', values: ['p2'], kind: 'text' }], 0)).toBe(
         `The panel offered "attack", and taking it failed: There's no one here by that name. The walk typed "p2" in its ` +
           `field "target", as \`inputs.attack.target\` in ${SMOKE_SPEC_PATH} gives it.`,
       );
@@ -761,6 +762,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
       lastResolved: undefined,
       failed: new Set(),
       refused: new Map(),
+      refusedLists: new Map(),
       refusals: new Set(),
       typed: new Map(),
       moves: 0,
@@ -844,7 +846,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   it('#470: reports a failed action with what the walk typed in it, and counts each taken action as the game moving on', () => {
     const w = walk({ wanting: new Map([['greet', 'whom'], ['wave', 'whom']]), inputs: { greet: { whom: 'Nobody' } } });
     const m = memory();
-    const nobody = { field: 'whom', value: 'Nobody', from: 'inputs', values: 1, kind: 'text' } as const;
+    const nobody = { field: 'whom', value: 'Nobody', from: 'inputs', values: ['Nobody'], kind: 'text' } as const;
     m.typed.set('greet', [nobody]);
     recordResolved([failed('greet', 'Nobody is called that.'), { action: 'wave', success: true }], w, m, m);
     expect(w.errors).toEqual([actionFailed('greet', 'Nobody is called that.', [nobody], 0)]);
@@ -857,7 +859,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   it('#470: reports a number from `inputs` the game refuses at once, never trying the next one up: it is the spec\'s answer', () => {
     const w = walk({ inputs: { pledge: { coins: 3 } } });
     const m = memory();
-    m.typed.set('pledge', [{ field: 'coins', value: '3', from: 'inputs', values: 1, kind: 'number' }]);
+    m.typed.set('pledge', [{ field: 'coins', value: '3', from: 'inputs', values: ['3'], kind: 'number' }]);
     recordResolved([failed('pledge', 'The pot takes seven coins.')], w, m, m);
     expect(w.errors).toEqual([
       'The panel offered "pledge", and taking it failed: The pot takes seven coins. The walk typed "3" in its field "coins", ' +
@@ -872,8 +874,8 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const m = memory();
     const typedColumns = (value: string) =>
       m.typed.set('movePacks', [
-        { field: 'columns', value, from: 'inputs', values: 3, kind: 'number' },
-        { field: 'rows', value: '0', from: 'inputs', values: 1, kind: 'number' },
+        { field: 'columns', value, from: 'inputs', values: ['-1', '1', '-2'], kind: 'number' },
+        { field: 'rows', value: '0', from: 'inputs', values: ['0'], kind: 'number' },
       ]);
     for (const value of ['-1', '1']) {
       typedColumns(value);
@@ -893,8 +895,8 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   it("#1677: counts each seat's refused values apart, so a seat starts a list from its first value whatever another seat had refused", () => {
     const w = walk({ inputs: { movePacks: { columns: [-1, 1] } } });
     const m = memory();
-    const seat4: SeatAttempts = { refused: new Map(), typed: new Map() };
-    const typedColumns = (attempts: SeatAttempts, value: string) => attempts.typed.set('movePacks', [{ field: 'columns', value, from: 'inputs', values: 2, kind: 'number' }]);
+    const seat4: SeatAttempts = { refused: new Map(), refusedLists: new Map(), typed: new Map() };
+    const typedColumns = (attempts: SeatAttempts, value: string) => attempts.typed.set('movePacks', [{ field: 'columns', value, from: 'inputs', values: ['-1', '1'], kind: 'number' }]);
     typedColumns(m, '-1');
     recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
     expect(m.refused.get('movePacks')).toBe(1);
@@ -908,8 +910,8 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
   it("#1677: forgets every seat's values refused in an action put off, so once the game moves on each starts from the first again", () => {
     const w = walk({ inputs: { movePacks: { columns: [-1, 1], rows: () => undefined } } });
     const m = memory();
-    const seat4: SeatAttempts = { refused: new Map([['movePacks', 1], ['draw', 1]]), typed: new Map() };
-    m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', values: 2, kind: 'number' }]);
+    const seat4: SeatAttempts = { refused: new Map([['movePacks', 1], ['draw', 1]]), refusedLists: new Map(), typed: new Map() };
+    m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', values: ['-1', '1'], kind: 'number' }]);
     recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
     expect(m.refused.get('movePacks')).toBe(1);
     recordPutOff(w, [m, seat4], 'movePacks', 'rows');
@@ -930,13 +932,48 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
       }
       return attempts;
     };
-    const fromList = (field: string, values: number): TypedValue => ({ field, value: '1', from: 'inputs', values, kind: 'number' });
+    const fromList = (field: string, values: string[]): TypedValue => ({ field, value: values[0], from: 'inputs', values, kind: 'number' });
     const walkNumber: TypedValue = { field: 'range', value: '1', from: 'walk', kind: 'number' };
-    expect(tries({ aim: { x: [1, 2], y: [1, 2, 3, 4] } }, [fromList('x', 2), fromList('y', 4)])).toBe(4);
-    expect(tries({ aim: { x: [1, 2] } }, [fromList('x', 2), walkNumber])).toBe(3);
-    expect(tries({ aim: { x: [1, 2, 3, 4, 5] } }, [fromList('x', 5), walkNumber])).toBe(5);
+    expect(tries({ aim: { x: [1, 2], y: [1, 2, 3, 4] } }, [fromList('x', ['1', '2']), fromList('y', ['1', '2', '3', '4'])])).toBe(4);
+    expect(tries({ aim: { x: [1, 2] } }, [fromList('x', ['1', '2']), walkNumber])).toBe(3);
+    expect(tries({ aim: { x: [1, 2, 3, 4, 5] } }, [fromList('x', ['1', '2', '3', '4', '5']), walkNumber])).toBe(5);
     // #1682: a function's list counts as many tries as the list it returned when the walk typed from it.
-    expect(tries({ aim: { x: () => [1, 2, 3, 4] } }, [fromList('x', 4)])).toBe(4);
+    expect(tries({ aim: { x: () => [1, 2, 3, 4] } }, [fromList('x', ['1', '2', '3', '4'])])).toBe(4);
+  });
+
+  it('#1682: starts a list from its first value when the function gives another list than the one the game refused values of, as it does in a new position', () => {
+    const w = walk({ inputs: { movePacks: { columns: () => [-1, 1] } } });
+    const m = memory();
+    const round1 = ['-1', '1'];
+    m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', values: round1, kind: 'number' }]);
+    recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
+    expect(m.refused.get('movePacks')).toBe(1);
+    // The same list again: the walk types its next value.
+    expect(typedFrom({ value: '1', values: round1 }, m, 'movePacks', 'columns', 'number')).toEqual({
+      field: 'columns', value: '1', from: 'inputs', values: round1, kind: 'number',
+    });
+    expect(m.refused.get('movePacks')).toBe(1);
+    // Another list, read from a later round: none of it was refused, so the walk types its first value.
+    expect(typedFrom({ value: '2', values: ['-2', '2'] }, m, 'movePacks', 'columns', 'number')).toEqual({
+      field: 'columns', value: '-2', from: 'inputs', values: ['-2', '2'], kind: 'number',
+    });
+    expect(m.refused.get('movePacks')).toBeUndefined();
+    expect(m.refusedLists.get('movePacks')).toBeUndefined();
+  });
+
+  it('#1682: forgets the lists refused in an action once it is taken or put off', () => {
+    const w = walk({ inputs: { movePacks: { columns: () => [-1, 1] } } });
+    const m = memory();
+    const refuse = () => {
+      m.typed.set('movePacks', [{ field: 'columns', value: '-1', from: 'inputs', values: ['-1', '1'], kind: 'number' }]);
+      recordResolved([failed('movePacks', 'A pack would leave its deployment area.')], w, m, m);
+    };
+    refuse();
+    recordResolved([{ action: 'movePacks', success: true }], w, m, m);
+    expect(m.refusedLists.size).toBe(0);
+    refuse();
+    recordPutOff(w, [m], 'movePacks', 'rows');
+    expect(m.refusedLists.size).toBe(0);
   });
 
   it('#470: tells the numbers apart by field: a refusal is the walk\'s to answer with the next number up only when it chose a number', () => {
@@ -944,7 +981,7 @@ describe('recordResolved: what a resolved action leaves the walk remembering (#4
     const m = memory();
     m.typed.set('bid', [
       { field: 'note', value: 'smoke test', from: 'walk', kind: 'text' },
-      { field: 'amount', value: '40', from: 'inputs', values: 1, kind: 'number' },
+      { field: 'amount', value: '40', from: 'inputs', values: ['40'], kind: 'number' },
     ]);
     recordResolved([failed('bid', 'Too low.')], w, m, m);
     expect(m.refused.get('bid')).toBeUndefined();

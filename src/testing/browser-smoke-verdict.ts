@@ -211,16 +211,19 @@ export type SmokeInputs = Readonly<Record<string, Readonly<Record<string, SmokeI
 type FieldKind = 'text' | 'number' | 'choice';
 
 /**
- * What the walk typed in one field of an action, and whether the spec's `inputs` gave it, with how
- * many values that input gave to try in turn (#1663, #1682), or the walk chose it.
+ * What the walk typed in one field of an action, and whether the spec's `inputs` gave it, with the
+ * values that input gave to try in turn (#1663, #1682), or the walk chose it.
  */
 export type TypedValue = { readonly field: string; readonly value: string; readonly kind: FieldKind } & (
-  | { readonly from: 'inputs'; readonly values: number }
+  | { readonly from: 'inputs'; readonly values: readonly string[] }
   | { readonly from: 'walk' }
 );
 
-/** How a spec's `inputs` answer one field: a value to type, of how many it gives to try in turn, none yet, or a problem with the spec's function. */
-type InputAnswer = { readonly value: string; readonly values: number } | { readonly wanting: true } | { readonly problem: string };
+/** A value to type from the spec's `inputs`, of the `values` its input gives to try in turn. */
+type GivenValue = { readonly value: string; readonly values: readonly string[] };
+
+/** How a spec's `inputs` answer one field: a value to type, none yet, or a problem with the spec's function. */
+type InputAnswer = GivenValue | { readonly wanting: true } | { readonly problem: string };
 
 /** How a message names one input in the spec: `inputs.attack.target`. */
 const inputName = (action: string, field: string) => `\`inputs.${action}.${field}\``;
@@ -251,7 +254,8 @@ export async function inputFor(
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} failed while the walk answered "${action}": ${said}` };
   }
   if (Array.isArray(given)) return listAnswer(given, refused, kind, action, field);
-  return answerOf(String(given ?? ''), kind, action, field, 1);
+  const answer = answerOf(String(given ?? ''), kind, action, field);
+  return 'value' in answer ? { ...answer, values: [answer.value] } : answer;
 }
 
 /** Which value of the list `values` answers a field of `kind` once the game refused `refused` of them: a longer list in another field of the action may outlast it, leaving it at its last. */
@@ -267,18 +271,44 @@ function listAnswer(values: readonly (string | number)[], refused: number, kind:
       problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives a blank value in its list, so the walk would type nothing there. Give the text a player types in that field.`,
     };
   }
-  const answers = values.map((value) => answerOf(String(value), kind, action, field, values.length));
-  return answers.find((answer) => 'problem' in answer) ?? answers[Math.min(refused, values.length - 1)];
+  const texts: string[] = [];
+  for (const value of values) {
+    const answer = answerOf(String(value), kind, action, field);
+    if (!('value' in answer)) return answer;
+    texts.push(answer.value);
+  }
+  return { value: texts[Math.min(refused, texts.length - 1)], values: texts };
 }
 
-/** How the text an input gave, of `values` it gives to try, answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
-function answerOf(text: string, kind: FieldKind, action: string, field: string, values: number): InputAnswer {
+/**
+ * What the walk types in `field` of `action` from the spec's `given` value. When the game refused
+ * values of another list there, the function read a new position, so the walk forgets the seat's
+ * refusals in the action and types the first of this one (#1682).
+ */
+export function typedFrom(given: GivenValue, attempts: SeatAttempts, action: string, field: string, kind: FieldKind): TypedValue {
+  const refusedList = attempts.refusedLists.get(action)?.get(field);
+  if (refusedList === undefined || refusedList === listKey(given.values)) return { field, value: given.value, from: 'inputs', values: given.values, kind };
+  forgetRefusals(attempts, action);
+  return { field, value: given.values[0], from: 'inputs', values: given.values, kind };
+}
+
+/** How a list of values is told apart from another. */
+const listKey = (values: readonly string[]) => JSON.stringify(values);
+
+/** Forgets the values the game refused in `action` in the seat whose `attempts` they are. */
+function forgetRefusals(attempts: SeatAttempts, action: string): void {
+  attempts.refused.delete(action);
+  attempts.refusedLists.delete(action);
+}
+
+/** How the text an input gave answers a field of `kind`: none yet when blank, and a problem when a number field's is not a number. */
+function answerOf(text: string, kind: FieldKind, action: string, field: string): { readonly value: string } | { readonly wanting: true } | { readonly problem: string } {
   if (text.trim() === '') return { wanting: true };
-  if (kind !== 'number') return { value: text, values };
+  if (kind !== 'number') return { value: text };
   if (!Number.isFinite(Number(text))) {
     return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives "${text}" for a number field. Give a number, such as 7.` };
   }
-  return { value: text.trim(), values };
+  return { value: text.trim() };
 }
 
 /** Why the walk cannot press the choice `value` that `field` of `action` gives: the pick offers no choice labelled so, only `offered`. */
@@ -437,6 +467,8 @@ export interface ResolvedMemory {
 export interface SeatAttempts {
   /** How many values the game's own rules have refused in each action since the seat last took it or put it off, so the walk types the next number up, or a list's next value (#923, #1663). */
   readonly refused: Map<string, number>;
+  /** The lists of the spec's `inputs` whose values the game refused, by action and then field, so a different list, read from a new position, starts from its first value (#1682). */
+  readonly refusedLists: Map<string, Map<string, string>>;
   /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
   readonly typed: Map<string, TypedValue[]>;
 }
@@ -463,7 +495,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
     attempts.typed.delete(action);
     if (success) {
       memory.moves++;
-      attempts.refused.delete(action);
+      forgetRefusals(attempts, action);
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
@@ -481,7 +513,7 @@ export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeW
  */
 export function recordPutOff(walk: SmokeWalk, seats: Iterable<SeatAttempts>, action: string, field: string): void {
   walk.wanting.set(action, field);
-  for (const attempts of seats) attempts.refused.delete(action);
+  for (const attempts of seats) forgetRefusals(attempts, action);
 }
 
 /**
@@ -503,11 +535,14 @@ function refusedAValue(
   const refused = attempts.refused.get(action) ?? 0;
   const tries = Math.max(
     typed.some(({ from, kind }) => from === 'walk' && kind === 'number') ? NUMBER_TRIES : 1,
-    ...typed.map((t) => (t.from === 'inputs' ? t.values : 1)),
+    ...typed.map((t) => (t.from === 'inputs' ? t.values.length : 1)),
   );
   if (refused >= tries - 1) return false;
   if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
   attempts.refused.set(action, refused + 1);
+  const lists = new Map<string, string>();
+  for (const t of typed) if (t.from === 'inputs') lists.set(t.field, listKey(t.values));
+  attempts.refusedLists.set(action, lists);
   memory.refusals.add(error);
   return true;
 }

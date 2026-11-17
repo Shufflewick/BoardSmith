@@ -101,6 +101,7 @@ import {
   type SmokeInputView,
   type SmokeWalk,
   type TypedValue,
+  typedFrom,
 } from './browser-smoke-verdict.js';
 
 export type { SmokeInput, SmokeInputs, SmokeInputView } from './browser-smoke-verdict.js';
@@ -1544,15 +1545,15 @@ async function valueToType(answering: Answering, field: Control): Promise<TypedV
   );
   const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
   walk.fieldsMet.get(name)?.set(pick, kind);
-  const refused = attemptsIn(memory, page).refused.get(name) ?? 0;
-  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), refused);
+  const attempts = attemptsIn(memory, page);
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), attempts.refused.get(name) ?? 0);
   if (given !== undefined) {
-    if ('value' in given) return { field: pick, value: given.value, from: 'inputs', values: given.values, kind };
+    if ('value' in given) return typedFrom(given, attempts, name, pick, kind);
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
     return undefined;
   }
   if (kind === 'text') return { field: pick, value: 'smoke test', from: 'walk', kind };
-  const value = await withinPageTime(page, PRESS_MS, 'choosing a number the field accepts', (timeout) => field.target.evaluate(numberToEnter, refused, { timeout }));
+  const value = await withinPageTime(page, PRESS_MS, 'choosing a number the field accepts', (timeout) => field.target.evaluate(numberToEnter, attempts.refused.get(name) ?? 0, { timeout }));
   return { field: pick, value, from: 'walk', kind };
 }
 
@@ -2034,7 +2035,7 @@ interface WalkMemory extends ResolvedMemory {
 function attemptsIn(memory: WalkMemory, page: Page): SeatAttempts {
   const kept = memory.attempts.get(page);
   if (kept !== undefined) return kept;
-  const attempts: SeatAttempts = { refused: new Map(), typed: new Map() };
+  const attempts: SeatAttempts = { refused: new Map(), refusedLists: new Map(), typed: new Map() };
   memory.attempts.set(page, attempts);
   return attempts;
 }
