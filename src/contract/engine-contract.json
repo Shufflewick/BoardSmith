@@ -1,6 +1,6 @@
 {
   "revision": 412,
-  "surfaceHash": "47fe552f6cabe815",
+  "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "7281891f11533f8d",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3235,7 +3235,7 @@
     {
       "revision": 412,
       "date": "2026-11-17",
-      "surfaceHash": "47fe552f6cabe815",
+      "surfaceHash": "caaffcbb71cd9067",
       "payloadHash": "7281891f11533f8d",
       "formatHash": "e7644203601ae348",
       "summary": "World seats come back clean (#1681, ShufflewickPub#813). world.vacate is now REQUIRED: a world bundle that names no departure verb is refused as bundle-not-a-world, so every published world game without one must be rebuilt with one. Dispatching that verb is the seat's departure: when it succeeds the engine resets the seat's Player element to how the world built it, frees the chair and reports vacated: { seat, player } on the result, all in that one dispatch; when it refuses the seat stays held. A vacateByClock release resets and frees the chair the same way. WorldEngine.unseat and WorldRunnerHandle.unseat are removed, so a host frees a chair only through a departure, and the departure verb is no longer offered to seats as an action."

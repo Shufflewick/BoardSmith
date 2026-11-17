@@ -499,7 +499,7 @@ export class LocalWorldHost {
       this.#send(clientId, {
         type: 'world_notice',
         message:
-          `Seat ${vacancy.seat} was vacated, so this page no longer holds it. The world's own ` +
+          `The world freed seat ${vacancy.seat}, so this page no longer holds it. The world's own ` +
           'rules gave the estate behind it back first, and the seat starts fresh for whoever ' +
           'takes it next. Pick a seat again to join as a newcomer.',
       });
