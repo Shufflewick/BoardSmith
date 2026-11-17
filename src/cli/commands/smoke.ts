@@ -37,6 +37,7 @@ import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeDeal, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
 import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
+import { parseGameOptionFlags } from './dev.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
@@ -377,34 +378,37 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
 }
 
 /**
- * The deals `--seed` names, each at the count `--players` names when it names one (#1602), so a
- * failing deal at any player count can be walked again; undefined when `--seed` names none.
+ * The deals `--seed` names, each at the count `--players` names (#1602) and with the game options
+ * `--game-option` names (#1684) when they name them, so a failing deal can be walked again;
+ * undefined when `--seed` names none.
  */
-export function chosenDeals(seeds: readonly string[] | undefined, players: string | undefined): SmokeDeal[] | undefined {
-  if (players === undefined) return seeds === undefined ? undefined : [...seeds];
+export function chosenDeals(seeds: readonly string[] | undefined, players: string | undefined, gameOptions?: string[]): SmokeDeal[] | undefined {
+  if (players === undefined && gameOptions === undefined) return seeds === undefined ? undefined : [...seeds];
   if (seeds === undefined) {
+    const [flag, sets] = players !== undefined ? ['--players', 'how many players sit at'] : ['--game-option', 'the game options of'];
     throw new Error(
-      '`boardsmith smoke --players` sets how many players sit at the deals `--seed` names, and no `--seed` was given. ' +
-        "Add `--seed <seeds...>`, or leave out `--players` to walk the spec's own deals.",
+      `\`boardsmith smoke ${flag}\` sets ${sets} the deals \`--seed\` names, and no \`--seed\` was given. ` +
+        `Add \`--seed <seeds...>\`, or leave out \`${flag}\` to walk the spec's own deals.`,
     );
   }
-  const count = parsePositiveWholeNumber('--players', players);
-  return seeds.map((seed) => ({ seed, players: count }));
+  const count = players === undefined ? {} : { players: parsePositiveWholeNumber('--players', players) };
+  const options = gameOptions === undefined ? {} : { gameOptions: parseGameOptionFlags(gameOptions) };
+  return seeds.map((seed) => ({ seed, ...count, ...options }));
 }
 
 /**
- * `boardsmith smoke [--project <dir>] [--seed <seeds...> [--players <count>]]`: the smoke check
- * alone, on the working tree as it stands, dealt as `--seed` and `--players` say instead of as the
- * spec says when `--seed` names any.
+ * `boardsmith smoke [--project <dir>] [--seed <seeds...> [--players <count>] [--game-option <kv...>]]`:
+ * the smoke check alone, on the working tree as it stands, dealt as `--seed`, `--players` and
+ * `--game-option` say instead of as the spec says when `--seed` names any.
  */
-export async function smokeCommand(options: { project?: string; seed?: string[]; players?: string }): Promise<void> {
+export async function smokeCommand(options: { project?: string; seed?: string[]; players?: string; gameOption?: string[] }): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   const configPath = join(projectDir, 'boardsmith.json');
   if (!existsSync(configPath)) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
   requireTableUi(projectDir, JSON.parse(readFileSync(configPath, 'utf-8')));
-  const seeds = chosenDeals(options.seed, options.players);
+  const seeds = chosenDeals(options.seed, options.players, options.gameOption);
   const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(styleText('dim', line)), seeds });
   if (outcome.passed) {
     console.log(styleText('green', outcome.summary));

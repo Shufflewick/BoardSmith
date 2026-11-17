@@ -4,6 +4,7 @@
  * Kept apart from `browser-smoke.ts`, which drives Chromium under Playwright, so the verdict is
  * decided by plain code a vitest test can hold to its wording.
  */
+import { choiceValueKey } from '../engine/action/choice-matching.js';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { PageFrozen } from './browser-smoke-clock.js';
 import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
@@ -33,25 +34,37 @@ export const DEFAULT_SMOKE_SEED = 'smoke';
 export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
 
 /**
- * A game a table's walk deals (#1602): a seed, dealt at the game's `minPlayers`, as `boardsmith dev`
- * starts, or a seed and how many players sit at it.
+ * A game a table's walk deals (#1602, #1684): a seed, dealt at the game's `minPlayers` with the
+ * options `boardsmith dev` starts with, or a seed with how many players sit at it, the game options
+ * it is dealt with, or both.
  */
-export type SmokeDeal = string | { readonly seed: string; readonly players: number };
+export type SmokeDeal =
+  | string
+  | { readonly seed: string; readonly players?: number; readonly gameOptions?: Readonly<Record<string, unknown>> };
 
-/** "seed "a"", or "seed "a" at 3 players" for a deal that names its player count. */
-const dealName = (deal: SmokeDeal) => (typeof deal === 'string' ? `seed "${deal}"` : `seed "${deal.seed}" at ${deal.players} players`);
+/** ""a"", or ""a" at 3 players with game options {"tower":"tar"}" for a deal that names them. */
+function dealDescription(deal: SmokeDeal): string {
+  if (typeof deal === 'string') return `"${deal}"`;
+  const players = deal.players === undefined ? '' : ` at ${deal.players} players`;
+  const options = deal.gameOptions === undefined ? '' : ` with game options ${JSON.stringify(deal.gameOptions)}`;
+  return `"${deal.seed}"${players}${options}`;
+}
+
+/** "seed "a"", or "seed "a" at 3 players" and so on for a deal that names more (see {@link dealDescription}). */
+const dealName = (deal: SmokeDeal) => `seed ${dealDescription(deal)}`;
 
 /**
  * The deals a walk deals, in order: the seeds `boardsmith smoke --seed` names (`chosen`), else the
  * spec's `seed`, one deal or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
- * write instead, on an empty list, a blank seed, a player count that is not one, or a deal listed twice.
+ * write instead, on an empty list, a blank seed, a player count that is not one, game options that
+ * name none, or a deal listed twice.
  */
 export function smokeSeeds(seed: SmokeDeal | readonly SmokeDeal[] | undefined, chosen?: readonly SmokeDeal[]): SmokeDeal[] {
   if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
   return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : Array.isArray(seed) ? [...seed] : [seed as SmokeDeal], `\`seed\` in ${SMOKE_SPEC_PATH}`);
 }
 
-/** `deals`, which `from` gave, once none has a blank seed or a count that is not one, none is listed twice, and there is one at least. */
+/** `deals`, which `from` gave, once each is one {@link dealProblem} finds nothing wrong with, none is listed twice, and there is one at least. */
 function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
   if (deals.length === 0) {
     throw new Error(
@@ -59,22 +72,33 @@ function checkedSeeds(deals: SmokeDeal[], from: string): SmokeDeal[] {
         `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
     );
   }
-  if (deals.some((deal) => dealSeed(deal).trim() === '')) {
-    throw new Error(`${from} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
-  }
-  const notACount = deals.find((deal) => typeof deal !== 'string' && !(Number.isInteger(deal.players) && deal.players >= 1));
-  if (typeof notACount === 'object') {
-    throw new Error(
-      `${from} deals "${notACount.seed}" at ${notACount.players} players, which is not a number of players. Name how many players sit at the deal, such as 3.`,
-    );
+  for (const deal of deals) {
+    const problem = dealProblem(deal);
+    if (problem !== undefined) throw new Error(`${from} ${problem}`);
   }
   const names = deals.map(dealName);
   const twice = deals.find((_, i) => names.indexOf(names[i]) !== i);
   if (twice !== undefined) {
-    const what = typeof twice === 'string' ? `"${twice}"` : `"${twice.seed}" at ${twice.players} players`;
-    throw new Error(`${from} lists ${what} twice, which walks the same deal twice. List each ${typeof twice === 'string' ? 'seed' : 'deal'} once.`);
+    throw new Error(`${from} lists ${dealDescription(twice)} twice, which walks the same deal twice. List each ${typeof twice === 'string' ? 'seed' : 'deal'} once.`);
   }
   return deals;
+}
+
+/** What is wrong with `deal`, as the rest of a sentence about where it came from: a blank seed, a count that is not one, or options that name none. */
+function dealProblem(deal: SmokeDeal): string | undefined {
+  if (dealSeed(deal).trim() === '') return 'has a blank seed. A seed is any text that is not blank, such as "7" or "opening".';
+  if (typeof deal === 'string') return undefined;
+  if (deal.players !== undefined && !(Number.isInteger(deal.players) && deal.players >= 1)) {
+    return `deals "${deal.seed}" at ${deal.players} players, which is not a number of players. Name how many players sit at the deal, such as 3.`;
+  }
+  const options: unknown = deal.gameOptions;
+  if (options !== undefined && (typeof options !== 'object' || options === null || Array.isArray(options))) {
+    return (
+      `deals "${deal.seed}" with game options ${JSON.stringify(options)}, which do not name any option. ` +
+      "Name each option by its id in boardsmith.json, such as { gameOptions: { tower: 'Tar Works' } }."
+    );
+  }
+  return undefined;
 }
 
 /** The seed `deal` is dealt from. */
@@ -86,12 +110,62 @@ export const dealSeed = (deal: SmokeDeal) => (typeof deal === 'string' ? deal : 
  * the game does not seat.
  */
 export function smokeDealPlayers(deal: SmokeDeal, seats: { min: number; max: number }): number {
-  if (typeof deal === 'string') return seats.min;
+  if (typeof deal === 'string' || deal.players === undefined) return seats.min;
   if (deal.players >= seats.min && deal.players <= seats.max) return deal.players;
   throw new Error(
     `The deal of seed "${deal.seed}" at ${deal.players} players cannot be dealt: this game seats ${seats.min} to ${seats.max}. ` +
       `Choose a count from ${seats.min} to ${seats.max}.`,
   );
+}
+
+/**
+ * One of Table setup's game option fields (#1684), as the walk read it before it dealt anything: a
+ * select's chosen index and the key of each choice's value, a checkbox's tick, or a text or number
+ * field's text.
+ */
+export interface DealOptionField {
+  readonly id: string;
+  readonly kind: 'select' | 'checkbox' | 'text';
+  readonly state: number | boolean | string;
+  readonly choices: readonly string[];
+}
+
+/** What one game option field is set to before Deal is pressed. */
+export type DealOptionState = Pick<DealOptionField, 'id' | 'kind' | 'state'>;
+
+/**
+ * What each of `fields` is set to for `deal` (#1684): the value the deal names for it, else what it
+ * was before the walk dealt anything, so a deal naming none is dealt as `boardsmith dev` starts.
+ * Throws, saying what to write instead, on an option the game does not declare or a value its field
+ * cannot take.
+ */
+export function dealOptionStates(fields: readonly DealOptionField[], deal: SmokeDeal): DealOptionState[] {
+  const named = typeof deal === 'string' ? {} : (deal.gameOptions ?? {});
+  const undeclared = Object.keys(named).find((id) => !fields.some((field) => field.id === id));
+  if (undeclared !== undefined) {
+    const declared = fields.length === 0 ? 'none' : fields.map((field) => `"${field.id}"`).join(', ');
+    throw new Error(`The deal of ${dealName(deal)} names game option "${undeclared}", which this game does not declare. It declares ${declared}.`);
+  }
+  return fields.map(({ id, kind, state, choices }) => {
+    if (!Object.hasOwn(named, id)) return { id, kind, state };
+    const set = (problem: string) => new Error(`The deal of ${dealName(deal)} sets game option "${id}" to ${JSON.stringify(named[id])}, ${problem}.`);
+    return { id, kind, state: fieldState(kind, choices, named[id], set) };
+  });
+}
+
+/** The state of a `kind` field that sets `value`, or the error `set` makes saying why it cannot. */
+function fieldState(kind: DealOptionField['kind'], choices: readonly string[], value: unknown, set: (problem: string) => Error): number | boolean | string {
+  if (kind === 'text') return String(value);
+  if (kind === 'checkbox') {
+    if (value === true || value === 'true') return true;
+    if (value === false || value === 'false') return false;
+    throw set('which is not true or false');
+  }
+  // Text, as `boardsmith smoke --game-option` gives it, names the number or true/false it spells, as the host reads it.
+  const keys = typeof value === 'string' ? [choiceValueKey(value), `number:${value}`, `boolean:${value}`] : [choiceValueKey(value)];
+  const index = choices.findIndex((key) => keys.includes(key));
+  if (index === -1) throw set(`which is not one of its choices: ${choices.map((key) => key.slice(key.indexOf(':') + 1)).join(', ')}`);
+  return index;
 }
 
 /** The spec's `actions`, once none is blank or listed twice (#926). */

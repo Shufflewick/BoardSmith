@@ -8,7 +8,7 @@ import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
 import { chosenDeals, runSmoke } from './smoke.js';
 import { smokeProject } from './smoke-project.test-helper.js';
 import { quiet, smokeIn, smokeOf } from './smoke-walk.test-helper.js';
-import { ACE_SEEDS, aceGame, crowdGame, smokeSpec } from './smoke-fixtures.test-helper.js';
+import { ACE_SEEDS, aceGame, crowdGame, smokeSpec, towerGame } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -50,6 +50,59 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
     expect(steps).toContain('smoke: dealing a game from seed "crowded" at 3 players');
     expect(steps).toContain('smoke: dealing a game from seed "paired" at 2 players');
+  });
+
+  it('#1684: deals each game with the game options its deal names, and one naming none with the options the dev host starts with', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...towerGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'aimTar', 'stoke'], undefined, {
+        seed: [{ seed: 'tarry', gameOptions: { tower: 'tar', lit: true } }, 'plain'],
+        steps: 12,
+      }),
+    });
+
+    expect(outcome.summary).toMatch(
+      /^Served by `boardsmith dev` from a fresh start and dealt from seed "tarry" with game options \{"tower":"tar","lit":true\}, then from seed "plain", a seated player took "aimTar", "draw", "stoke"/,
+    );
+    expect(outcome.passed).toBe(true);
+    expect(steps).toContain('smoke: dealing a game from seed "tarry" at 2 players with game options {"tower":"tar","lit":true}');
+    expect(steps).toContain('smoke: dealing a game from seed "plain" at 2 players');
+  });
+
+  it('#1684: `boardsmith smoke --seed --game-option` walks a deal with game options the spec does not name', async () => {
+    const dir = await smokeProject(false, {
+      ...towerGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'aimTar'], undefined, { seed: 'plain', steps: 12 }),
+    });
+    const { outcome } = await runSmoke({ projectDir: dir, log: quiet, seeds: chosenDeals(['tarry'], undefined, ['tower=tar', 'lit=true']) });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "tarry" with game options \{"tower":"tar","lit":"true"\}, a seated player took "aimTar", "draw"/);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#1684: fails a deal naming a game option the game does not declare, saying which it declares', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...towerGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw'], undefined, { seed: { seed: 'tarry', gameOptions: { towr: 'tar' } }, steps: 12 }),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      'The walk could not go on: The deal of seed "tarry" with game options {"towr":"tar"} names game option "towr", which this game does not declare. It declares "tower", "lit", "rounds".',
+    );
+  });
+
+  it('#1684: fails a deal whose game option Table setup refuses, with the reason it gives', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...towerGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw'], undefined, { seed: { seed: 'tarry', gameOptions: { rounds: 9 } }, steps: 12 }),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      'The walk could not go on: Table setup cannot deal a game from seed "tarry" with game options {"rounds":9}: ' +
+        'its "Rounds" field says "Value must be less than or equal to 5.".',
+    );
   });
 
   it('#460: `boardsmith smoke --seed` deals from the seeds it names instead of the spec\'s', async () => {
@@ -114,5 +167,21 @@ describe('chosenDeals: the deals `boardsmith smoke --seed` and `--players` name 
         "Add `--seed <seeds...>`, or leave out `--players` to walk the spec's own deals.",
     );
     expect(() => chosenDeals(['crowded'], 'three')).toThrow('--players takes a positive whole number, got "three".');
+  });
+
+  it('#1684: deals each seed --seed names with the game options --game-option names, at the count --players names if it names one', () => {
+    expect(chosenDeals(['tarry', 'b'], undefined, ['tower=Tar Works', 'lit=true'])).toEqual([
+      { seed: 'tarry', gameOptions: { tower: 'Tar Works', lit: 'true' } },
+      { seed: 'b', gameOptions: { tower: 'Tar Works', lit: 'true' } },
+    ]);
+    expect(chosenDeals(['tarry'], '3', ['tower=tar'])).toEqual([{ seed: 'tarry', players: 3, gameOptions: { tower: 'tar' } }]);
+  });
+
+  it('#1684: refuses --game-option without --seed, and one that is not key=value', () => {
+    expect(() => chosenDeals(undefined, undefined, ['tower=tar'])).toThrow(
+      '`boardsmith smoke --game-option` sets the game options of the deals `--seed` names, and no `--seed` was given. ' +
+        "Add `--seed <seeds...>`, or leave out `--game-option` to walk the spec's own deals.",
+    );
+    expect(() => chosenDeals(['tarry'], undefined, ['tower'])).toThrow('--game-option takes "key=value", got "tower".');
   });
 });

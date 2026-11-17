@@ -189,9 +189,10 @@ export type ClientInbound =
   | { type: 'leave' }
   /**
    * Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed, at
-   * `playerCount` seats when it names one (#1602), else at the seats the table has.
+   * `playerCount` seats when it names one (#1602), else at the seats the table has, and with
+   * `gameOptions` over the applied options when it names them (#1684), else with the applied options.
    */
-  | { type: 'restart'; seed?: string; playerCount?: number }
+  | { type: 'restart'; seed?: string; playerCount?: number; gameOptions?: Record<string, unknown> }
   /**
    * `loadId` is the page load whose socket sent it, stamped by the connection
    * handler (#1041), never taken from the page's own message.
@@ -749,7 +750,7 @@ export class MultiplayerHost {
       case 'leave':
         return this.handleLeave(clientId);
       case 'restart':
-        return this.handleRestart(clientId, msg.seed, msg.playerCount);
+        return this.handleRestart(clientId, msg);
       case 'server_request':
         return this.handleServerRequest(clientId, msg);
       case 'follow':
@@ -773,7 +774,7 @@ export class MultiplayerHost {
     }
   }
 
-  private async handleRestart(clientId: string, seed: string | undefined, playerCount: unknown): Promise<void> {
+  private async handleRestart(clientId: string, deal: Extract<ClientInbound, { type: 'restart' }>): Promise<void> {
     if (this.starting) {
       this.send(clientId, { type: 'error', message: STARTING });
       return;
@@ -783,16 +784,29 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
+    const { seed, playerCount } = deal;
     const refused = (seed === undefined ? undefined : this.dealRefusal(seed)) ?? (playerCount === undefined ? undefined : this.playerCountRefusal(playerCount));
-    if (refused !== undefined) {
-      this.send(clientId, { type: 'error', message: refused });
+    const options = refused === undefined ? this.dealOptions(deal.gameOptions) : refused;
+    if (typeof options === 'string') {
+      this.send(clientId, { type: 'error', message: options });
       return;
     }
     if (playerCount !== undefined) this.resizeSeats(playerCount as number);
+    this.appliedGameOptions = options;
     // Rebuild the session with the same seats, dealt from the seed named or a
     // fresh one. Follow-mode carries over (#460): the one driver of every seat
     // drives the new game too, and no bot moves in it before the driver can.
     await this.startGame(seed);
+  }
+
+  /** The options a deal naming `options` is dealt with, over the applied ones, or why the game does not admit them: they are the page's, so anything may arrive. */
+  private dealOptions(options: Record<string, unknown> | undefined): GameOptionSelection | string {
+    if (options === undefined) return this.appliedGameOptions;
+    try {
+      return selectDesignerGameOptions(this.opts.declaredGameOptions, { ...this.appliedGameOptions, ...options });
+    } catch (err) {
+      return err instanceof Error ? err.message : 'Invalid game option selection.';
+    }
   }
 
   /** Why a game cannot be dealt at `count` players, or undefined when it can: the count is the page's, so anything may arrive. */

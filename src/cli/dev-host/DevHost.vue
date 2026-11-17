@@ -15,6 +15,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useFrameSafeArea } from './use-frame-safe-area.js';
 import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
+import GameOptionField from './GameOptionField.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { readDevtoolsSnapshot } from '../../ui/components/GameShell.devtools.js';
@@ -85,6 +86,8 @@ const colorInput = ref<string | undefined>(undefined);
 const declaredOptionDefaults = Object.fromEntries(cfg.gameOptions.map((o) => [o.id, o.default]));
 const appliedOptions = ref<Record<string, unknown>>({ ...declaredOptionDefaults });
 const optionSelection = ref<Record<string, unknown>>({ ...declaredOptionDefaults });
+/** The game options Table setup deals the next game with (#1684): the applied ones until one is changed. */
+const dealOptionsInput = ref<Record<string, unknown>>({ ...declaredOptionDefaults });
 const presetSelection = ref('');
 let appliedOptionsKey = '';
 
@@ -100,6 +103,7 @@ function onAppliedOptions(applied: Record<string, unknown>): void {
   appliedOptionsKey = key;
   appliedOptions.value = { ...declaredOptionDefaults, ...applied };
   optionSelection.value = { ...appliedOptions.value };
+  dealOptionsInput.value = { ...appliedOptions.value };
   presetSelection.value = '';
 }
 
@@ -176,16 +180,24 @@ watch(() => seats.value.length, (count) => {
   dealPlayersInput.value = count;
 });
 
-/** Starts a new game dealt from the seed and at the player count typed in Table setup; the host refuses a blank seed or a count the game does not seat. */
+/**
+ * Starts a new game dealt from the seed, at the player count and with the game options set in Table
+ * setup; the host refuses a blank seed, a count the game does not seat or an option it does not admit.
+ */
 function dealFromSeed(): void {
-  restartGame({ seed: dealSeedInput.value, playerCount: dealPlayersInput.value });
+  errorMsg.value = null;
+  const deal = { seed: dealSeedInput.value, playerCount: dealPlayersInput.value };
+  if (cfg.gameOptions.length === 0) return restartGame(deal);
+  // An option with no default and no value set is no choice, as Apply in the lobby sends it.
+  const gameOptions = Object.fromEntries(Object.entries(dealOptionsInput.value).filter(([, value]) => value !== undefined));
+  restartGame({ ...deal, gameOptions });
 }
 
 /**
  * Asks the host for a new game, dealt as `deal` says when one is given. No seed is shown until the
  * new game's state arrives, so a page waiting for a seed never reads the game before it.
  */
-function restartGame(deal?: { seed: string; playerCount: number }): void {
+function restartGame(deal?: { seed: string; playerCount: number; gameOptions?: Record<string, unknown> }): void {
   pendingRestart.value = true;
   dealtFrom.value = null;
   wsSend({ type: 'restart', ...deal });
@@ -767,40 +779,7 @@ onUnmounted(() => {
                 data-testid="designer-only"
                 title="No player sees this option: only boardsmith simulate and this table set it"
               >Designer only</span>
-              <select
-                v-if="opt.choices"
-                v-model="optionSelection[opt.id]"
-                class="dev-chrome__select"
-                :data-testid="`lobby-option-${opt.id}`"
-              >
-                <option v-for="c in opt.choices" :key="choiceValueKey(c.value)" :value="c.value">
-                  {{ choiceLabel(c) }}
-                </option>
-              </select>
-              <!-- WR-03: a real checkbox for `boolean` — no free-text
-                   true/false typing, and `v-model` on a checkbox with no
-                   true-value/false-value produces a genuine boolean, closing
-                   CR-02's client-side gap for this control directly. -->
-              <input
-                v-else-if="opt.type === 'boolean'"
-                v-model="optionSelection[opt.id]"
-                type="checkbox"
-                :data-testid="`lobby-option-${opt.id}`"
-              />
-              <input
-                v-else-if="opt.type === 'number'"
-                v-model.number="optionSelection[opt.id]"
-                type="number"
-                :min="opt.min"
-                :max="opt.max"
-                :data-testid="`lobby-option-${opt.id}`"
-              />
-              <input
-                v-else
-                v-model="optionSelection[opt.id]"
-                type="text"
-                :data-testid="`lobby-option-${opt.id}`"
-              />
+              <GameOptionField v-model="optionSelection[opt.id]" :opt="opt" :testid="`lobby-option-${opt.id}`" />
             </label>
             <button type="button" class="btn" data-testid="lobby-apply-options" @click="applyLobbyOptions">
               Apply
@@ -1139,6 +1118,10 @@ onUnmounted(() => {
                 step="1"
                 data-testid="deal-players"
               />
+            </label>
+            <label v-for="opt in cfg.gameOptions" :key="opt.id">
+              {{ opt.label || opt.id }}
+              <GameOptionField v-model="dealOptionsInput[opt.id]" :opt="opt" :testid="`deal-option-${opt.id}`" />
             </label>
             <button type="submit" class="btn" data-testid="deal">Deal</button>
           </form>

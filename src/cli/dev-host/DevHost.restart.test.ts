@@ -301,6 +301,35 @@ describe('DevHost: dealing from a seed (#460)', () => {
     await wrapper.vm.$nextTick();
     expect(wrapper.find('[data-testid="table-players"]').text()).toBe('3');
   });
+
+  it('#1684: deals with the game options set there, which start at the applied ones, and clears an error about an earlier deal', async () => {
+    const wrapper = await mountAndActivate({
+      ...TEST_CONFIG,
+      gameOptions: [
+        { id: 'tower', type: 'select', label: 'Tower', default: 'none', choices: [{ value: 'none', label: 'None' }, { value: 'tar', label: 'Tar Works' }] },
+        { id: 'lit', type: 'boolean', label: 'Lit', default: false },
+      ],
+    });
+    await openTableSetup(wrapper);
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ ...SEAT_LOBBY, gameOptions: { tower: 'tar', lit: false } });
+    ws.simulateMessage({ type: 'error', message: 'Game option "rounds" must be between 1 and 10, got 11.' });
+    await wrapper.vm.$nextTick();
+    const tower = wrapper.find('[data-testid="deal-option-tower"]');
+    expect((tower.element as HTMLSelectElement).selectedIndex).toBe(1);
+    // The walk finds a choice by the key the engine identifies its value by.
+    expect(tower.findAll('option').map((option) => option.attributes('data-value'))).toEqual(['string:none', 'string:tar']);
+    ws.send.mockClear();
+
+    await wrapper.find('[data-testid="deal-seed"]').setValue('tarry');
+    await wrapper.find('[data-testid="deal-option-lit"]').setValue(true);
+    await wrapper.find('[data-testid="deal-form"]').trigger('submit');
+
+    expect(ws.send.mock.calls.map((c) => JSON.parse(c[0] as string))).toEqual([
+      { type: 'restart', seed: 'tarry', playerCount: 2, gameOptions: { tower: 'tar', lit: true } },
+    ]);
+    expect(wrapper.find('.dev-chrome__error').exists()).toBe(false);
+  });
 });
 
 // ── A new game clears an error about the old one (#343) ──────────────────────

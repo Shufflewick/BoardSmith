@@ -631,6 +631,8 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 // Each deal sits the game's minPlayers unless it names how many: an action only a fuller table
 // offers is reached by a deal such as \`{ seed: 'Kim', players: 3 }\` in that list.
+// An action only some game options offer (one that waits on a random setup draw, say) is
+// reached by a deal naming them: \`{ seed: 'tar', gameOptions: { firstTower: 'Tar Works' } }\`.
 //
 // A world is dealt by \`boardsmith dev\` from its own seed, so a world's spec names none.
 //
