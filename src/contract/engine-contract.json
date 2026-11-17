@@ -1,5 +1,5 @@
 {
-  "revision": 410,
+  "revision": 411,
   "surfaceHash": "508e1a2209279340",
   "payloadHash": "519c7a8725fd10b5",
   "formatHash": "e7644203601ae348",
@@ -3223,6 +3223,14 @@
       "payloadHash": "519c7a8725fd10b5",
       "formatHash": "e7644203601ae348",
       "summary": "The bot search scores each seat from its own result and solves a line as lost only when the seat choosing it wins there (#1679)"
+    },
+    {
+      "revision": 411,
+      "date": "2026-11-17",
+      "surfaceHash": "508e1a2209279340",
+      "payloadHash": "519c7a8725fd10b5",
+      "formatHash": "e7644203601ae348",
+      "summary": "The bot search no longer solves a line from a sampled move list as if it held every move, and enumerateActionMoves's sampleAboveBudget takes an onSampled callback that reports a sample (#1680)."
     }
   ]
 }
