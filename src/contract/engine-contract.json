@@ -1,6 +1,6 @@
 {
-  "revision": 433,
-  "surfaceHash": "fec032ac3c12be93",
+  "revision": 434,
+  "surfaceHash": "6e07e808fd743095",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3407,6 +3407,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The SnapshotSessionHost adapters lose narrateMove; demo narration is always the destination-only default (#1702)"
+    },
+    {
+      "revision": 434,
+      "date": "2026-11-18",
+      "surfaceHash": "6e07e808fd743095",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "GAME_SELF_SERIALIZED_FIELDS is no longer exported; Game derives it from GAME_ROOT_FIELD_AUDIENCE's self-serialized rows (#1703)"
     }
   ]
 }
