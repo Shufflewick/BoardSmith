@@ -226,7 +226,7 @@ describe('the session API reference names only what boardsmith/session exports (
   it('every name a list item of docs/api/session.md opens with is exported', () => {
     const checker = PROGRAM.getTypeChecker();
     const exported = new Set(checker.getExportsOfModule(entryModule(PROGRAM, checker, 'boardsmith/session', ENTRIES['boardsmith/session'])).map((symbol) => symbol.name));
-    const documented = [...sessionDoc.matchAll(/^- `([A-Za-z]\w*)(?:<[^`]*>|\(\))?`/gm)].map(([, name]) => name);
+    const documented = [...sessionDoc.matchAll(/^- `([A-Za-z]\w*)/gm)].map(([, name]) => name);
     expect(
       documented.filter((name) => !exported.has(name)),
       'docs/api/session.md lists these names, but boardsmith/session does not export them. Drop them, or point to the entry point that exports them.',
