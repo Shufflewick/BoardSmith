@@ -53,11 +53,10 @@ export interface SeatActivityState {
  * the game's real turn order, and it is already serialized to every client.
  * This reads it back rather than re-deriving one.
  *
- * Do NOT confuse this with `Game.nextPlayer()`, which is a hardcoded SEAT
- * successor (`sortBy('seat')`, then `idx + 1`). For any game whose turn order is
- * not seat order — a rotating dealer, a reversed round, a rank-ordered co-op —
- * `nextPlayer()` and this function give different answers, and this one is the
- * order the flow will actually take.
+ * Do NOT confuse this with `Game.nextAfter()`, which is a SEAT successor. For
+ * any game whose turn order is not seat order — a rotating dealer, a reversed
+ * round, a rank-ordered co-op — the two give different answers, and this one is
+ * the order the flow will actually take.
  *
  * Nested `eachPlayer` frames resolve to the INNERMOST one: with a round loop
  * outside a bidding loop, the bidding order is the one currently being played.

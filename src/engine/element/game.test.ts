@@ -554,22 +554,6 @@ describe('every player helper answers with the same set of players', () => {
       previousBefore: 3,
     });
   });
-
-  it('never offers a player that getPlayerOrThrow denies exists', () => {
-    const game = new NestedPlayerGame({ playerCount: 3 });
-    game.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    game.setFlow({ root: actionStep({ player: (ctx) => ctx.game.getPlayerOrThrow(3), actions: ['pass'] }) });
-    game.startFlow();
-    expect(game.currentPlayer?.seat).toBe(3);
-
-    const next = game.nextPlayer();
-    expect(next).toBeDefined();
-    expect(game.getPlayerOrThrow(next!.seat)).toBe(next);
-
-    const previous = game.previousPlayer();
-    expect(previous).toBeDefined();
-    expect(game.getPlayerOrThrow(previous!.seat)).toBe(previous);
-  });
 });
 
 describe('setFlow refuses keys a flow definition does not take (#617)', () => {

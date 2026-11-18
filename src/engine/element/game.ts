@@ -3950,71 +3950,11 @@ export class Game<
   }
 
   /**
-   * Get the next player after the current player (circular turn order).
+   * Get the next player after a specific player (circular seat order).
    *
-   * Returns the player with the next-highest seat, wrapping from the last
-   * player back to player 1. Returns `undefined` if there's no current player.
-   *
-   * In a 4-player game: Player 1 → 2 → 3 → 4 → 1 → ...
-   *
-   * @returns The next player in turn order, or `undefined` if no current player
-   *
-   * @example
-   * ```typescript
-   * // Check who's up next
-   * const nextUp = game.nextPlayer();
-   * game.message(`${nextUp?.name} is next`);
-   * ```
-   *
-   * @see {@link nextAfter} - Get next player after any specific player
-   * @see {@link previousPlayer} - Get previous player instead
-   */
-  nextPlayer(): P | undefined {
-    const current = this.currentPlayer;
-    if (!current) return undefined;
-
-    const players = this.players;
-    const idx = players.findIndex(p => p.seat === current.seat);
-    const nextIdx = (idx + 1) % players.length;
-    return players[nextIdx] as P | undefined;
-  }
-
-  /**
-   * Get the previous player before the current player (circular turn order).
-   *
-   * Returns the player with the next-lowest seat, wrapping from player 1
-   * back to the last player. Returns `undefined` if there's no current player.
-   *
-   * In a 4-player game: Player 1 → 4 → 3 → 2 → 1 → ...
-   *
-   * @returns The previous player in turn order, or `undefined` if no current player
-   *
-   * @example
-   * ```typescript
-   * // Who played just before this turn
-   * const prev = game.previousPlayer();
-   * game.message(`${prev?.name} played last`);
-   * ```
-   *
-   * @see {@link previousBefore} - Get previous player before any specific player
-   * @see {@link nextPlayer} - Get next player instead
-   */
-  previousPlayer(): P | undefined {
-    const current = this.currentPlayer;
-    if (!current) return undefined;
-
-    const players = this.players;
-    const idx = players.findIndex(p => p.seat === current.seat);
-    const prevIdx = (idx - 1 + players.length) % players.length;
-    return players[prevIdx] as P | undefined;
-  }
-
-  /**
-   * Get the next player after a specific player (circular turn order).
-   *
-   * Unlike `nextPlayer()`, this takes any player as input rather than using
-   * the current player. Useful when you need to iterate through players or
-   * find who comes after a non-current player.
+   * This is seat order, not turn order: it ignores `eachPlayer`'s direction,
+   * starting player and filter. For the order the flow will take, use
+   * `turnSequence(flowState)`.
    *
    * @param player - The reference player
    * @returns The next player after the given player, or `undefined` if player not found
@@ -4038,7 +3978,6 @@ export class Game<
    * }
    * ```
    *
-   * @see {@link nextPlayer} - Uses current player as reference
    * @see {@link previousBefore} - Get player before any specific player
    */
   nextAfter(player: P): P | undefined {
@@ -4050,10 +3989,11 @@ export class Game<
   }
 
   /**
-   * Get the previous player before a specific player (circular turn order).
+   * Get the previous player before a specific player (circular seat order).
    *
-   * Unlike `previousPlayer()`, this takes any player as input rather than using
-   * the current player. Useful for finding neighbors or reverse iteration.
+   * This is seat order, not turn order: it ignores `eachPlayer`'s direction,
+   * starting player and filter. For the order the flow will take, use
+   * `turnSequence(flowState)`.
    *
    * @param player - The reference player
    * @returns The previous player before the given player, or `undefined` if player not found
@@ -4070,7 +4010,6 @@ export class Game<
    * }
    * ```
    *
-   * @see {@link previousPlayer} - Uses current player as reference
    * @see {@link nextAfter} - Get player after any specific player
    */
   previousBefore(player: P): P | undefined {
