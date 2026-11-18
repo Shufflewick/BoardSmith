@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFile
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 
-import { packAll, packOutputDir, pruneStaleTarballs, readContractRevision } from './pack.js';
+import { packInto, packOutputDir, pruneStaleTarballs, readContractRevision } from './pack.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -24,11 +24,7 @@ describe('pruneStaleTarballs', () => {
     write('boardsmith-0.0.1-20260101000000.tgz');
     write('boardsmith-0.0.1-20260202000000.tgz');
 
-    const removed = pruneStaleTarballs(
-      vendorDir,
-      new Set(['boardsmith-0.0.1-20260202000000.tgz']),
-      ['boardsmith'],
-    );
+    const removed = pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith');
 
     expect(removed).toEqual(['boardsmith-0.0.1-20260101000000.tgz']);
     expect(readdirSync(vendorDir)).toEqual(['boardsmith-0.0.1-20260202000000.tgz']);
@@ -37,7 +33,7 @@ describe('pruneStaleTarballs', () => {
   it('never removes the tarball just written', () => {
     write('boardsmith-0.0.1-20260202000000.tgz');
 
-    pruneStaleTarballs(vendorDir, new Set(['boardsmith-0.0.1-20260202000000.tgz']), ['boardsmith']);
+    pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith');
 
     expect(readdirSync(vendorDir)).toEqual(['boardsmith-0.0.1-20260202000000.tgz']);
   });
@@ -48,7 +44,7 @@ describe('pruneStaleTarballs', () => {
     write('some-other-dep-1.2.3.tgz');
     write('boardsmith-0.0.1-20260101000000.tgz');
 
-    pruneStaleTarballs(vendorDir, new Set(['boardsmith-0.0.1-20260202000000.tgz']), ['boardsmith']);
+    pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith');
 
     expect(readdirSync(vendorDir)).toEqual(['some-other-dep-1.2.3.tgz']);
   });
@@ -57,15 +53,15 @@ describe('pruneStaleTarballs', () => {
     write('README.md');
     write('boardsmith-0.0.1-20260101000000.tgz');
 
-    pruneStaleTarballs(vendorDir, new Set([]), ['boardsmith']);
+    pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith');
 
     expect(readdirSync(vendorDir)).toEqual(['README.md']);
   });
 
   it('is a no-op when the vendor directory does not exist yet', () => {
     const absent = join(vendorDir, 'nope');
-    expect(() => pruneStaleTarballs(absent, new Set([]), ['boardsmith'])).not.toThrow();
-    expect(pruneStaleTarballs(absent, new Set([]), ['boardsmith'])).toEqual([]);
+    expect(() => pruneStaleTarballs(absent, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith')).not.toThrow();
+    expect(pruneStaleTarballs(absent, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith')).toEqual([]);
   });
 
   it('does not treat a package name as a prefix of a different package', () => {
@@ -75,7 +71,7 @@ describe('pruneStaleTarballs', () => {
     write('boardsmith-extras-1.0.0.tgz');
     write('boardsmith-0.0.1-20260101000000.tgz');
 
-    const removed = pruneStaleTarballs(vendorDir, new Set([]), ['boardsmith']);
+    const removed = pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', 'boardsmith');
 
     expect(removed).toEqual(['boardsmith-0.0.1-20260101000000.tgz']);
     expect(readdirSync(vendorDir)).toEqual(['boardsmith-extras-1.0.0.tgz']);
@@ -84,7 +80,7 @@ describe('pruneStaleTarballs', () => {
   it('handles a scoped package name without treating it as a regex', () => {
     write('scope-pkg-1.0.0.tgz');
 
-    const removed = pruneStaleTarballs(vendorDir, new Set([]), ['@scope/pkg']);
+    const removed = pruneStaleTarballs(vendorDir, 'boardsmith-0.0.1-20260202000000.tgz', '@scope/pkg');
 
     expect(removed).toEqual(['scope-pkg-1.0.0.tgz']);
   });
@@ -143,13 +139,13 @@ const [ok, named, twice, edited, revision, unpacked, restored, failed, preexisti
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-ok');
     const outDir = join(root, 'elsewhere', 'nested', 'tarballs');
-    const [result] = await packAll([info('bs-fixture-ok', pkgDir)], outDir);
+    const result = await packInto(info('bs-fixture-ok', pkgDir), outDir);
     return { pkgDir, outDir, result };
   })(),
   (async () => {
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-named');
-    const [result] = await packAll([info('bs-fixture-named', pkgDir, 115)], join(root, 'out'));
+    const result = await packInto(info('bs-fixture-named', pkgDir, 115), join(root, 'out'));
     return { result };
   })(),
   (async () => {
@@ -157,24 +153,24 @@ const [ok, named, twice, edited, revision, unpacked, restored, failed, preexisti
     // nothing about a pack may depend on when it ran.
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-twice');
-    const [first] = await packAll([info('bs-fixture-twice', pkgDir)], join(root, 'first'));
+    const first = await packInto(info('bs-fixture-twice', pkgDir), join(root, 'first'));
     utimesSync(join(pkgDir, 'index.js'), new Date(2030, 0, 1), new Date(2030, 0, 1));
-    const [second] = await packAll([info('bs-fixture-twice', pkgDir)], join(root, 'second'));
+    const second = await packInto(info('bs-fixture-twice', pkgDir), join(root, 'second'));
     return { root, first, second };
   })(),
   (async () => {
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-edited');
-    const [before] = await packAll([info('bs-fixture-edited', pkgDir)], join(root, 'before'));
+    const before = await packInto(info('bs-fixture-edited', pkgDir), join(root, 'before'));
     writeFileSync(join(pkgDir, 'index.js'), 'module.exports = { changed: true };\n');
-    const [after] = await packAll([info('bs-fixture-edited', pkgDir)], join(root, 'after'));
+    const after = await packInto(info('bs-fixture-edited', pkgDir), join(root, 'after'));
     return { before, after };
   })(),
   (async () => {
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-revision');
-    const [r7] = await packAll([info('bs-fixture-revision', pkgDir, 7)], join(root, 'r7'));
-    const [r8] = await packAll([info('bs-fixture-revision', pkgDir, 8)], join(root, 'r8'));
+    const r7 = await packInto(info('bs-fixture-revision', pkgDir, 7), join(root, 'r7'));
+    const r8 = await packInto(info('bs-fixture-revision', pkgDir, 8), join(root, 'r8'));
     return { r7, r8 };
   })(),
   (async () => {
@@ -183,26 +179,25 @@ const [ok, named, twice, edited, revision, unpacked, restored, failed, preexisti
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-unpacked', { files: ['index.js'] });
     writeFileSync(join(pkgDir, 'notes.txt'), 'first\n');
-    const [before] = await packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'before'));
+    const before = await packInto(info('bs-fixture-unpacked', pkgDir), join(root, 'before'));
     writeFileSync(join(pkgDir, 'notes.txt'), 'second\n');
-    const [after] = await packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'after'));
+    const after = await packInto(info('bs-fixture-unpacked', pkgDir), join(root, 'after'));
     return { before, after };
   })(),
   (async () => {
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-restore');
-    await packAll([info('bs-fixture-restore', pkgDir)], join(root, 'out'));
+    await packInto(info('bs-fixture-restore', pkgDir), join(root, 'out'));
     return { pkgDir };
   })(),
   (async () => {
     // `prepack` runs inside `npm pack`, so a failing one is a real pack
     // failure and not a simulated one.
     const root = tempTree('bs-pack-all-');
-    const good = fixturePackage(root, 'bs-fixture-first');
     const bad = fixturePackage(root, 'bs-fixture-broken', { scripts: { prepack: 'exit 1' } });
     const outDir = join(root, 'created-by-pack', 'tarballs');
-    const error = await thrown(packAll([info('bs-fixture-first', good), info('bs-fixture-broken', bad)], outDir));
-    return { root, good, bad, error };
+    const error = await thrown(packInto(info('bs-fixture-broken', bad), outDir));
+    return { root, bad, error };
   })(),
   (async () => {
     // The directory is the caller's, not pack's. A failure may empty out what
@@ -212,7 +207,7 @@ const [ok, named, twice, edited, revision, unpacked, restored, failed, preexisti
     const outDir = join(root, 'mine');
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'KEEP.md'), 'mine\n');
-    const error = await thrown(packAll([info('bs-fixture-preexisting', bad)], outDir));
+    const error = await thrown(packInto(info('bs-fixture-preexisting', bad), outDir));
     return { outDir, error };
   })(),
   (async () => {
@@ -222,20 +217,20 @@ const [ok, named, twice, edited, revision, unpacked, restored, failed, preexisti
     // checkout in #239. The name is content-derived, so a first pack finds it.
     const root = tempTree('bs-pack-all-');
     const pkgDir = fixturePackage(root, 'bs-fixture-blocked');
-    const [probe] = await packAll([info('bs-fixture-blocked', pkgDir)], join(root, 'probe'));
+    const probe = await packInto(info('bs-fixture-blocked', pkgDir), join(root, 'probe'));
     const outDir = join(root, 'blocked');
     mkdirSync(join(outDir, probe.tarball), { recursive: true });
-    const error = await thrown(packAll([info('bs-fixture-blocked', pkgDir)], outDir));
+    const error = await thrown(packInto(info('bs-fixture-blocked', pkgDir), outDir));
     return { pkgDir, error };
   })(),
 ]);
 
 /**
- * `packAll` owns the tarballs and every directory it had to create for them,
+ * `packInto` owns the tarball and every directory it had to create for them,
  * so a failure can leave neither a stray `npm pack` output in the source tree
  * (`*.tgz` is not gitignored) nor a half-filled output directory.
  */
-describe('packAll', () => {
+describe('packInto', () => {
   it('writes the tarball into an absolute output directory it has to create', () => {
     expect(existsSync(join(ok.outDir, ok.result.tarball))).toBe(true);
     // The source tree keeps nothing: `npm pack` writes into the package
@@ -281,10 +276,8 @@ describe('packAll', () => {
     expect(failed.error).toBeInstanceOf(Error);
     expect((failed.error as Error).message).toMatch(/bs-fixture-broken/);
 
-    // Nothing survives: not the directory tree pack made, not the tarball it
-    // had already written into it.
+    // Nothing survives: not the directory tree pack made, not a tarball in the source tree.
     expect(existsSync(join(failed.root, 'created-by-pack'))).toBe(false);
-    expect(readdirSync(failed.good).filter((f) => f.endsWith('.tgz'))).toEqual([]);
     expect(readdirSync(failed.bad).filter((f) => f.endsWith('.tgz'))).toEqual([]);
   });
 

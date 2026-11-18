@@ -1,6 +1,6 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { execFileSync, execSync, spawn, type ChildProcess } from 'node:child_process';
+import { execSync, spawn, type ChildProcess } from 'node:child_process';
 import { once } from 'node:events';
 import { styleText } from 'node:util';
 import ora from 'ora';
@@ -11,12 +11,13 @@ import { withCleanupAfter } from '../lib/command-build-dir.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { gitOutput } from '../lib/git-output.js';
 import { filesContentHash } from '../lib/hash.js';
+import { npmPackedFiles } from '../lib/npm-packed-files.js';
 
 interface PackOptions {
   outDir?: string;
   /**
-   * Repeatable. Multiple targets are integrated from ONE pack, so every target
-   * receives the same tarball file.
+   * Repeatable. Every target is integrated from ONE pack, so each receives the
+   * same tarball file.
    *
    * ShufflewickPub vendors into both `games/` and `executor/` — one validates
    * uploads, the other runs them — and a split between those two lets the
@@ -41,21 +42,15 @@ interface PackResult {
   packVersion: string;
 }
 
-/**
- * Discover the single boardsmith package at the monorepo root.
- * After monorepo collapse, there's only one package to pack.
- */
-function discoverPackages(monorepoRoot: string): PackageInfo[] {
-  const rootPkgJson = join(monorepoRoot, 'package.json');
-  const pkgJson = JSON.parse(readFileSync(rootPkgJson, 'utf-8'));
-
-  // Only return the root package
-  return [{
+/** The boardsmith package at the repository root. */
+function readPackage(root: string): PackageInfo {
+  const pkgJson = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8'));
+  return {
     name: pkgJson.name || 'boardsmith',
-    path: monorepoRoot,
+    path: root,
     version: pkgJson.version || '0.0.1',
-    revision: readContractRevision(monorepoRoot),
-  }];
+    revision: readContractRevision(root),
+  };
 }
 
 /**
@@ -81,22 +76,9 @@ export function readContractRevision(root: string): number {
   return revision;
 }
 
-/**
- * The sha256 of every file `npm pack` would put in the tarball, first 12 hex
- * characters.
- *
- * The file list is npm's own (`npm pack --dry-run`), so the `files` globs in
- * `package.json` are applied by the program that applies them for real.
- */
+/** The sha256 of every file `npm pack` would put in the tarball, first 12 hex characters. */
 function packedContentHash(pkgPath: string): string {
-  const [report] = JSON.parse(
-    execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
-      cwd: pkgPath,
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'pipe'],
-    }),
-  ) as [{ files: { path: string }[] }];
-  return filesContentHash(pkgPath, report.files.map((file) => file.path)).slice(0, 12);
+  return filesContentHash(pkgPath, npmPackedFiles(pkgPath)).slice(0, 12);
 }
 
 /**
@@ -204,8 +186,7 @@ async function packLockFile(pkgPath: string): Promise<string> {
 }
 
 /**
- * Pack every package into `outputPath`, leaving nothing behind if any of them
- * fails.
+ * Pack the package into `outputPath`, leaving nothing behind if it fails.
  *
  * The output directory is created here rather than by the caller because
  * creating it is part of what has to be undone: a pack that fails must not
@@ -213,34 +194,25 @@ async function packLockFile(pkgPath: string): Promise<string> {
  * Only the part of the tree this call had to create is ever removed -- a
  * directory the user already had is theirs.
  */
-export async function packAll(
-  packages: PackageInfo[],
-  outputPath: string,
-): Promise<PackResult[]> {
+export async function packInto(pkg: PackageInfo, outputPath: string): Promise<PackResult> {
   // `recursive` returns the topmost directory it had to create, or undefined
   // when the whole path already existed.
   const createdRoot = mkdirSync(outputPath, { recursive: true });
-  const results: PackResult[] = [];
 
   try {
-    for (const pkg of packages) {
-      const lock = await takeOsLock(await packLockFile(pkg.path), 'boardsmith pack', `boardsmith pack of ${pkg.name}`);
-      if (typeof lock === 'string') throw new Error(lock);
-      let version: string;
-      let tarball: string;
-      try {
-        version = packVersion(pkg);
-        tarball = await packPackage(pkg.path, outputPath, version);
-      } catch (error) {
-        throw new Error(
-          `npm pack failed for ${pkg.name}: ${error instanceof Error ? error.message : String(error)}`,
-        );
-      } finally {
-        await lock.release();
-      }
-      results.push({ name: pkg.name, tarball, packVersion: version });
+    const lock = await takeOsLock(await packLockFile(pkg.path), 'boardsmith pack', `boardsmith pack of ${pkg.name}`);
+    if (typeof lock === 'string') throw new Error(lock);
+    try {
+      const version = packVersion(pkg);
+      const tarball = await packPackage(pkg.path, outputPath, version);
+      return { name: pkg.name, tarball, packVersion: version };
+    } catch (error) {
+      throw new Error(
+        `npm pack failed for ${pkg.name}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    } finally {
+      await lock.release();
     }
-    return results;
   } catch (error) {
     if (createdRoot !== undefined) {
       rmSync(createdRoot, { recursive: true, force: true });
@@ -250,31 +222,29 @@ export async function packAll(
 }
 
 /**
- * Remove tarballs from a previous vendoring of the same packages.
+ * Remove tarballs from a previous vendoring of the same package.
  *
  * Without this, `vendor/` accumulates every engine ever vendored — each one a
  * couple of megabytes of committed binary — and the directory listing stops
  * telling you which tarball is live.
  *
- * Scoped deliberately: only files matching a package we are packing right now,
+ * Scoped deliberately: only files matching the package we are packing right now,
  * and never the one we just wrote.
  */
-export function pruneStaleTarballs(vendorDir: string, keep: Set<string>, packageNames: string[]): string[] {
+export function pruneStaleTarballs(vendorDir: string, keep: string, packageName: string): string[] {
   if (!existsSync(vendorDir)) return [];
 
   // Match `<name>-<version>.tgz` and require the version to start with a
   // digit. A bare `startsWith('boardsmith-')` would also match
   // `boardsmith-extras-1.0.0.tgz` — a DIFFERENT package — and delete it.
-  const patterns = packageNames.map((name) => {
-    const tarballName = name.replace('@', '').replace('/', '-');
-    const escaped = tarballName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`^${escaped}-\\d[^/]*\\.tgz$`);
-  });
+  const tarballName = packageName.replace('@', '').replace('/', '-');
+  const escaped = tarballName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const pattern = new RegExp(`^${escaped}-\\d[^/]*\\.tgz$`);
   const removed: string[] = [];
 
   for (const file of readdirSync(vendorDir)) {
-    if (!file.endsWith('.tgz') || keep.has(file)) continue;
-    if (!patterns.some((pattern) => pattern.test(file))) continue;
+    if (!file.endsWith('.tgz') || file === keep) continue;
+    if (!pattern.test(file)) continue;
     rmSync(join(vendorDir, file));
     removed.push(file);
   }
@@ -283,17 +253,17 @@ export function pruneStaleTarballs(vendorDir: string, keep: Set<string>, package
 }
 
 /**
- * Integrate tarballs into a target consumer project.
- * - Copies tarballs to target's vendor/ directory
+ * Integrate the tarball into a target consumer project.
+ * - Copies the tarball to target's vendor/ directory
  * - Removes tarballs left by a previous vendoring
- * - Updates target's package.json with file: dependencies
- * - Adds npm overrides for all packages to resolve nested deps from vendor/
+ * - Updates target's package.json with a file: dependency
+ * - Adds an npm override so nested deps resolve from vendor/
  * - Runs npm install in target
  */
 async function integrateWithTarget(
   targetPath: string,
   sourceDir: string,
-  results: PackResult[]
+  result: PackResult
 ): Promise<void> {
   const absoluteTarget = resolveUserPath(process.cwd(), targetPath);
   const targetPkgJsonPath = join(absoluteTarget, 'package.json');
@@ -314,71 +284,34 @@ async function integrateWithTarget(
     console.log(styleText('dim', `Created ${vendorDir}`));
   }
 
-  // Copy tarballs to vendor/
-  const copySpinner = ora('Copying tarballs to vendor/').start();
-  for (const result of results) {
-    const sourceTarball = join(sourceDir, result.tarball);
-    const destTarball = join(vendorDir, result.tarball);
-    copyFileSync(sourceTarball, destTarball);
-  }
-  copySpinner.succeed(`Copied ${results.length} tarballs to vendor/`);
+  const copySpinner = ora('Copying the tarball to vendor/').start();
+  copyFileSync(join(sourceDir, result.tarball), join(vendorDir, result.tarball));
+  copySpinner.succeed(`Copied ${result.tarball} to vendor/`);
 
-  const pruned = pruneStaleTarballs(
-    vendorDir,
-    new Set(results.map((r) => r.tarball)),
-    results.map((r) => r.name),
-  );
+  const pruned = pruneStaleTarballs(vendorDir, result.tarball, result.name);
   if (pruned.length > 0) {
     console.log(styleText('dim', `Removed ${pruned.length} stale tarball(s): ${pruned.join(', ')}`));
   }
 
-  // Read and update target's package.json
   const targetPkgJson = JSON.parse(readFileSync(targetPkgJsonPath, 'utf-8'));
+  const spec = `file:./vendor/${result.tarball}`;
   const updatedDeps: string[] = [];
-
-  // Build a map from package name to tarball filename
-  const tarballMap = new Map<string, string>();
-  for (const result of results) {
-    tarballMap.set(result.name, result.tarball);
-  }
-
-  // Update dependencies if they reference BoardSmith packages
-  if (targetPkgJson.dependencies) {
-    for (const pkgName of Object.keys(targetPkgJson.dependencies)) {
-      const tarball = tarballMap.get(pkgName);
-      if (tarball) {
-        targetPkgJson.dependencies[pkgName] = `file:./vendor/${tarball}`;
-        updatedDeps.push(`dependencies.${pkgName}`);
-      }
-    }
-  }
-
-  // Update devDependencies if they reference BoardSmith packages
-  if (targetPkgJson.devDependencies) {
-    for (const pkgName of Object.keys(targetPkgJson.devDependencies)) {
-      const tarball = tarballMap.get(pkgName);
-      if (tarball) {
-        targetPkgJson.devDependencies[pkgName] = `file:./vendor/${tarball}`;
-        updatedDeps.push(`devDependencies.${pkgName}`);
-      }
+  for (const field of ['dependencies', 'devDependencies'] as const) {
+    if (targetPkgJson[field]?.[result.name] !== undefined) {
+      targetPkgJson[field][result.name] = spec;
+      updatedDeps.push(`${field}.${result.name}`);
     }
   }
 
   if (updatedDeps.length === 0) {
-    console.log(styleText('yellow', 'No BoardSmith dependencies found in target package.json'));
-    console.log(styleText('dim', 'Tarballs copied but no dependencies updated'));
+    console.log(styleText('yellow', `No ${result.name} dependency found in target package.json`));
+    console.log(styleText('dim', 'Tarball copied but no dependencies updated'));
     return;
   }
 
-  // Add overrides for all BoardSmith packages
-  // This ensures nested dependencies (workspace:* in tarballs) resolve from vendor/
-  if (!targetPkgJson.overrides) {
-    targetPkgJson.overrides = {};
-  }
-  for (const [pkgName, tarball] of tarballMap) {
-    targetPkgJson.overrides[pkgName] = `file:./vendor/${tarball}`;
-  }
-  console.log(styleText('dim', `Added ${tarballMap.size} overrides for nested dependency resolution`));
+  // The override makes a nested dependency on the package resolve from vendor/ too.
+  targetPkgJson.overrides = { ...targetPkgJson.overrides, [result.name]: spec };
+  console.log(styleText('dim', 'Added an override for nested dependency resolution'));
 
   // Write updated package.json
   writeFileSync(targetPkgJsonPath, JSON.stringify(targetPkgJson, null, 2) + '\n');
@@ -410,9 +343,9 @@ async function integrateWithTarget(
 
 /**
  * Validate that we're running from the BoardSmith repository root.
- * After monorepo collapse, we check for src/engine/ as the indicator.
+ * src/engine/ is the indicator.
  */
-function validateMonorepoRoot(cwd: string): void {
+function validateRepoRoot(cwd: string): void {
   const rootPkgJson = join(cwd, 'package.json');
 
   if (!existsSync(rootPkgJson)) {
@@ -445,8 +378,8 @@ export function packOutputDir(cwd: string, outDir: string | undefined): string {
 }
 
 /**
- * Main pack command: discover packages, pack them with content-derived versions,
- * and collect tarballs in output directory.
+ * Main pack command: pack the package with a content-derived version into the
+ * output directory, and vendor it into each target.
  */
 export async function packCommand(options: PackOptions): Promise<void> {
   const cwd = process.cwd();
@@ -460,8 +393,7 @@ export async function packCommand(options: PackOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Validate we're in monorepo root
-  validateMonorepoRoot(cwd);
+  validateRepoRoot(cwd);
 
   console.log(styleText('cyan', '\nBoardSmith Pack\n'));
 
@@ -478,53 +410,33 @@ export async function packCommand(options: PackOptions): Promise<void> {
     process.exit(1);
   }
 
-  // Discover packages
-  const spinner = ora('Discovering packages...').start();
-  let packages: PackageInfo[];
+  const pkg = readPackage(cwd);
+  const packSpinner = ora(`Packing ${pkg.name}...`).start();
+  let result: PackResult;
   try {
-    packages = discoverPackages(cwd);
-  } catch (error) {
-    spinner.fail('Could not read the package to pack');
-    throw error;
-  }
-
-  if (packages.length === 0) {
-    spinner.fail('No boardsmith package found');
-    process.exit(1);
-  }
-
-  spinner.succeed(`Found ${packages.length} package to pack`);
-
-  const packSpinner = ora(`Packing ${packages.map((p) => p.name).join(', ')}...`).start();
-  let results: PackResult[];
-  try {
-    results = await packAll(packages, outputPath);
+    result = await packInto(pkg, outputPath);
   } catch (error) {
     packSpinner.fail('Pack failed');
     // Rethrown rather than exited: cli.ts reports a thrown Error as one clean
-    // line, and packAll has already put everything it touched back.
+    // line, and packInto has already put everything it touched back.
     throw error;
   }
-  packSpinner.succeed(`Packed ${results.map((r) => r.name).join(', ')}`);
+  packSpinner.succeed(`Packed ${pkg.name}`);
 
-  // Print summary
   console.log(styleText('green', '\nPack complete!\n'));
   console.log(styleText('dim', `Output: ${outputPath}/`));
-  console.log(styleText('dim', 'Tarballs:'));
-  for (const result of results) {
-    console.log(styleText('dim', `  ${result.tarball}`));
-  }
+  console.log(styleText('dim', `Tarball: ${result.tarball}`));
 
-  // If targets specified, integrate the SAME tarballs with each of them.
+  // If targets specified, integrate the SAME tarball with each of them.
   const targets = options.target ?? [];
   if (targets.length > 0) {
     for (const target of targets) {
-      await integrateWithTarget(target, outputPath, results);
+      await integrateWithTarget(target, outputPath, result);
     }
   } else {
     console.log(styleText('cyan', '\nNext steps:'));
     console.log(styleText('dim', '  In your consumer project:'));
-    console.log(styleText('dim', `  npm install ${outputPath}/<package>.tgz`));
+    console.log(styleText('dim', `  npm install ${outputPath}/${result.tarball}`));
     console.log('');
   }
 }

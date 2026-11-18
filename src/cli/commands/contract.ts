@@ -18,6 +18,7 @@ import { styleText } from 'node:util';
 import { buildFormatFixture, computeFingerprints } from '../../contract/fingerprint.js';
 import type { EngineContract } from '../../contract/index.js';
 import { gitNames, gitOutput } from '../lib/git-output.js';
+import { npmPackedFiles } from '../lib/npm-packed-files.js';
 
 export interface ContractOptions {
   update?: boolean;
@@ -142,10 +143,7 @@ async function packedBlobs(repo: string, ref: string): Promise<Map<string, strin
     // npm applies `files` and its negations to a tree on disk, so the commit is exported, never the working tree.
     await gitOutput(repo, ['archive', '-o', join(dir, 'tree.tar'), ref]);
     execFileSync('tar', ['-xf', 'tree.tar'], { cwd: dir });
-    const [report] = JSON.parse(
-      execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], { cwd: dir, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }),
-    ) as [{ files: { path: string }[] }];
-    const packed = new Set(report.files.map((file) => file.path));
+    const packed = new Set(npmPackedFiles(dir));
     const blobs = new Map<string, string>();
     for (const line of (await gitOutput(repo, ['ls-tree', '-r', '-z', ref])).split('\0').filter(Boolean)) {
       const tab = line.indexOf('\t');
