@@ -11,7 +11,7 @@
     "src/session/testing/fixtures/collect-fixture.ts:65-82|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/engine/element/game-element.ts:1136-1142|src/engine/element/game-element.ts:1197-1203",
-    "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
+    "src/cli/commands/verify-classify.ts:1569-1576|src/cli/commands/verify-classify.ts:784-791",
     "src/engine/element/game.ts:3983-3987|src/engine/element/game.ts:4015-4019"
   ],
   "clone_fingerprints": [
