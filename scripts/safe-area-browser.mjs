@@ -172,10 +172,11 @@ function shellInsets(frame) {
   }, SIDES);
 }
 
-/** Open a state with `open`, hold the shell to both checks in it, and leave it with `close`. */
-async function inState(frame, insets, size, state, { open, close }) {
+/** Open a state with `open`, hold the shell to both checks in it and to `also`, if any, and leave it with `close`. */
+async function inState(frame, insets, size, state, { open, also, close }) {
   await step(`opening ${state} at ${size}`, open);
   await checkTaps(frame, insets, state, size);
+  await also?.();
   await step(`closing ${state} at ${size}`, close);
 }
 
@@ -223,9 +224,21 @@ await runBrowserRegression({ script: 'safe-area-browser.mjs', engines: ['chromiu
         await checkTaps(frame, insets, 'the action bar up', size);
         await inState(frame, insets, size, 'the controls menu open', {
           open: async () => {
+            // A host page without the dev host's `* { box-sizing: border-box }`, so the menu's own CSS must size it (#1710).
+            await frame.locator('head').evaluate((head) => head.append(Object.assign(head.ownerDocument.createElement('style'), { textContent: '.menu { box-sizing: content-box; }' })));
             await frame.locator('[data-testid="bs-actionbar"] .menubtn').click();
             await frame.locator('.menu').waitFor();
           },
+          // A menu taller than the screen hides its far items where no tap or scroll reaches them (#1710).
+          also: () => check(`the controls menu fits inside the safe areas at ${size}`, async () => {
+            const { box, width, height } = await frame.locator('.menu').evaluate((el) => ({
+              box: el.getBoundingClientRect().toJSON(),
+              width: el.ownerDocument.documentElement.clientWidth,
+              height: el.ownerDocument.documentElement.clientHeight,
+            }));
+            const inside = box.top >= insets.top && box.left >= insets.left && box.bottom <= height - insets.bottom && box.right <= width - insets.right;
+            assert(inside, `the menu spans ${Math.round(box.left)},${Math.round(box.top)} to ${Math.round(box.right)},${Math.round(box.bottom)} in a ${width}x${height} frame with insets ${JSON.stringify(insets)}`);
+          }),
           close: async () => {
             await page.keyboard.press('Escape');
             await frame.locator('.menu').waitFor({ state: 'detached' });

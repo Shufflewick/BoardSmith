@@ -450,6 +450,8 @@ function runCommand(command: MenuCommand) {
   border-radius: var(--bsg-r-lg);
   box-shadow: var(--bsg-shadow);
   padding: 8px;
+  /* The inline max-height is the whole box, whatever the host page's own reset. */
+  box-sizing: border-box;
   overflow-y: auto;
   animation: pop var(--bsg-dur-fast) var(--bsg-ease);
 }
