@@ -1,7 +1,6 @@
 /**
- * Same-file evidence shared by the element identity rules (no-element-identity-comparison,
- * no-element-array-state): which type names are GameElement classes, and which calls return
- * element collections.
+ * Same-file evidence shared by the plugin's syntactic rules: which type names are GameElement (or
+ * Game) classes, which calls return element collections, and the names keys and annotations spell.
  */
 
 /** Calls on an element that return element collections. */
@@ -21,6 +20,23 @@ export function typeReferenceName(node: Record<string, unknown> | undefined): st
   if (node?.type !== 'TSTypeReference') return undefined;
   const typeName = node.typeName as { type?: string; name?: string } | undefined;
   return typeName?.type === 'Identifier' ? typeName.name : undefined;
+}
+
+/** The name a member key or property spells when it is static: `a.b`, `a['b']`, `{ b }` or `{ 'b': x }`. */
+export function staticName(key: unknown, computed: unknown): string | undefined {
+  const node = key as { type?: string; name?: string; value?: unknown } | undefined;
+  if (node?.type === 'Identifier' && !computed) return node.name;
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  return undefined;
+}
+
+/** The type name a TSTypeAnnotation wrapper names, and whether it is an array of it (`Card[]`). */
+export function annotatedTypeName(typeAnnotationWrapper: unknown): { name: string | undefined; isArray: boolean } {
+  const ta = (typeAnnotationWrapper as { typeAnnotation?: Record<string, unknown> } | undefined)?.typeAnnotation;
+  if (ta?.type === 'TSArrayType') {
+    return { name: typeReferenceName(ta.elementType as Record<string, unknown> | undefined), isArray: true };
+  }
+  return { name: typeReferenceName(ta), isArray: false };
 }
 
 /** Generic deep walker over an ESLint/TS-ESLint AST subtree. */
@@ -52,10 +68,29 @@ function boardsmithLocalNames(node: Record<string, unknown>, roots: readonly str
     .map((spec) => spec.local.name);
 }
 
+/** The name of the class a node extends, when it is a plain identifier. */
+export function superClassName(classNode: Record<string, unknown>): string | undefined {
+  const superClass = classNode.superClass as { type?: string; name?: string } | null | undefined;
+  return superClass?.type === 'Identifier' ? superClass.name : undefined;
+}
+
+/** The class `node` names and the class it extends: `class X extends Y` or `const X = class extends Y`. */
+function namedClass(node: Record<string, unknown>): { name: string; superName: string | undefined } | undefined {
+  const id = node.id as { type?: string; name?: string } | null | undefined;
+  if (!id?.name) return undefined;
+  if (node.type === 'ClassDeclaration') return { name: id.name, superName: superClassName(node) };
+  const init = node.init as Record<string, unknown> | null | undefined;
+  if (node.type === 'VariableDeclarator' && id.type === 'Identifier' && init?.type === 'ClassExpression') {
+    return { name: id.name, superName: superClassName(init) };
+  }
+  return undefined;
+}
+
 /**
  * `roots`, the local name of each root imported from boardsmith under another name
  * (`import { Card as BaseCard } from 'boardsmith'`, #1036), and every class declared in `program`
- * that extends one of them, transitively and in any declaration order.
+ * (`class X extends Y` or `const X = class extends Y`, #1695) that extends one of them,
+ * transitively and in any declaration order.
  */
 export function collectSubclassNames(program: unknown, roots: readonly string[]): Set<string> {
   const names = new Set<string>(roots);
@@ -63,16 +98,10 @@ export function collectSubclassNames(program: unknown, roots: readonly string[])
   walk(program, (node) => {
     if (node.type === 'ImportDeclaration') {
       for (const local of boardsmithLocalNames(node, roots)) names.add(local);
-    } else if (node.type === 'ClassDeclaration') {
-      const id = node.id as { name?: string } | null | undefined;
-      const superClass = node.superClass as { type?: string; name?: string } | null | undefined;
-      if (id?.name) {
-        classDecls.push({
-          name: id.name,
-          superName: superClass?.type === 'Identifier' ? superClass.name : undefined,
-        });
-      }
+      return;
     }
+    const decl = namedClass(node);
+    if (decl) classDecls.push(decl);
   });
 
   let changed = true;

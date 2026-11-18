@@ -1,5 +1,6 @@
 import type { Rule } from 'eslint';
 import { describeEngineFieldShadow, isEngineOwnedGameField } from '../../engine/element/engine-owned-fields.js';
+import { collectSubclassNames, staticName, superClassName } from './element-types.js';
 
 /**
  * Disallows a Game subclass from using the name of a field the engine owns on
@@ -12,8 +13,8 @@ import { describeEngineFieldShadow, isEngineOwnedGameField } from '../../engine/
  * discarded copy while the live tree holds the real one. The same happens,
  * one way or another, to every name in the table.
  *
- * Reported, inside a class that extends `Game` (or a same-file subclass of it,
- * transitively):
+ * Reported, inside a class that extends `Game` (also when imported from
+ * boardsmith under another name, or a same-file subclass of it, transitively):
  *   - a class member of that name: a field (including `declare`), a method, or
  *     an accessor;
  *   - an assignment `this.<name> = ...` whose `this` is the game, including
@@ -30,14 +31,6 @@ import { describeEngineFieldShadow, isEngineOwnedGameField } from '../../engine/
 
 type AstNode = Record<string, unknown> & { type: string; parent?: AstNode };
 
-/** The name a member key or a `this.<name>` property spells, when it is static. */
-function staticName(key: unknown, computed: unknown): string | undefined {
-  const node = key as { type?: string; name?: string; value?: unknown } | undefined;
-  if (node?.type === 'Identifier' && !computed) return node.name;
-  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
-  return undefined;
-}
-
 /** The name a class is known by: its own id, or the variable it is assigned to. */
 function className(classNode: AstNode): string {
   const id = classNode.id as { name?: string } | null | undefined;
@@ -48,11 +41,6 @@ function className(classNode: AstNode): string {
     if (declared.type === 'Identifier' && declared.name) return declared.name;
   }
   return 'This Game subclass';
-}
-
-function superName(classNode: AstNode): string | undefined {
-  const superClass = classNode.superClass as { type?: string; name?: string } | null | undefined;
-  return superClass?.type === 'Identifier' ? superClass.name : undefined;
 }
 
 const MEMBER_TYPES: ReadonlySet<string> = new Set([
@@ -92,24 +80,6 @@ function enclosingThisClass(node: AstNode): AstNode | undefined {
   return undefined;
 }
 
-/** Every class name that is a Game: `Game` itself, then same-file subclasses, transitively. */
-function gameClassNames(classes: readonly AstNode[]): Set<string> {
-  const names = new Set<string>(['Game']);
-  let grew = true;
-  while (grew) {
-    grew = false;
-    for (const classNode of classes) {
-      const parent = superName(classNode);
-      const name = className(classNode);
-      if (parent && names.has(parent) && !names.has(name)) {
-        names.add(name);
-        grew = true;
-      }
-    }
-  }
-  return names;
-}
-
 const rule: Rule.RuleModule = {
   meta: {
     type: 'problem',
@@ -125,18 +95,29 @@ const rule: Rule.RuleModule = {
   },
 
   create(context) {
-    // Collected during the walk and judged at the end, so a subclass declared
-    // above its same-file base class is still recognised.
-    const classes: AstNode[] = [];
-    const claims: Array<{ node: AstNode; classNode: AstNode; field: string }> = [];
+    // Read from the whole file first, so a subclass declared above its same-file base is still recognised.
+    let games = new Set<string>();
+
+    function report(node: AstNode, classNode: AstNode, field: string): void {
+      const parent = superClassName(classNode);
+      if (!parent || !games.has(parent)) return;
+      context.report({
+        node: node as unknown as Rule.Node,
+        messageId: 'engineFieldShadow',
+        data: { text: describeEngineFieldShadow(className(classNode), field) },
+      });
+    }
 
     return {
+      Program(program) {
+        games = collectSubclassNames(program, ['Game']);
+      },
+
       'ClassDeclaration, ClassExpression'(node: Rule.Node) {
         const classNode = node as unknown as AstNode;
-        classes.push(classNode);
         for (const member of (classNode.body as { body: AstNode[] }).body) {
           const field = claimedMemberField(member);
-          if (field) claims.push({ node: member, classNode, field });
+          if (field) report(member, classNode, field);
         }
       },
 
@@ -144,20 +125,7 @@ const rule: Rule.RuleModule = {
         const assignment = node as unknown as AstNode;
         const field = assignedThisField(assignment);
         const classNode = field ? enclosingThisClass(assignment) : undefined;
-        if (field && classNode) claims.push({ node: assignment, classNode, field });
-      },
-
-      'Program:exit'() {
-        const games = gameClassNames(classes);
-        for (const { node, classNode, field } of claims) {
-          const parent = superName(classNode);
-          if (!parent || !games.has(parent)) continue;
-          context.report({
-            node: node as unknown as Rule.Node,
-            messageId: 'engineFieldShadow',
-            data: { text: describeEngineFieldShadow(className(classNode), field) },
-          });
-        }
+        if (field && classNode) report(assignment, classNode, field);
       },
     };
   },

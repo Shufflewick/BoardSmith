@@ -64,6 +64,18 @@ ruleTester.run('no-element-identity-comparison', rule, {
     },
   ],
   invalid: [
+    // A class expression bound to a name is an element class too (#1695).
+    {
+      code: `
+        const C = class extends Card {};
+        function f(a: C, b: C) { return a === b; }
+      `,
+      output: `
+        const C = class extends Card {};
+        function f(a: C, b: C) { return a.id === b.id; }
+      `,
+      errors: [{ messageId: 'identityComparison' }],
+    },
     // An engine class imported under another name is still an element class (#1036).
     {
       code: `

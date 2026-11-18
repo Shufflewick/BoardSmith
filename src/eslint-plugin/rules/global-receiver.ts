@@ -7,6 +7,7 @@
  * references the scope manager resolved to the global scope, not call shapes.
  */
 import type { Rule, Scope, SourceCode } from 'eslint';
+import { staticName } from './element-types.js';
 
 // AST types come through eslint's own typings: 'estree' is not a package boardsmith declares (#380).
 type Identifier = Scope.Reference['identifier'];
@@ -17,13 +18,6 @@ type GlobalRead = (Identifier | MemberExpression) & Rule.NodeParentExtension;
 
 /** Identifiers that really do name the global object. */
 const GLOBAL_RECEIVERS: ReadonlySet<string> = new Set(['window', 'globalThis', 'self', 'global']);
-
-/** The name in `a.b`, `a['b']`, `{ b }` or `{ 'b': x }`, or undefined when it is computed. */
-function staticName(key: MemberExpression['property'], computed: boolean): string | undefined {
-  if (!computed && key.type === 'Identifier') return key.name;
-  if (key.type === 'Literal' && typeof key.value === 'string') return key.value;
-  return undefined;
-}
 
 /** True when a reference only names a type (`x: WebSocket`, `typeof fetch` in a type), so nothing runs. */
 function isTypeOnly(reference: Scope.Reference): boolean {

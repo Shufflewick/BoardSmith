@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, typeReferenceName, walk } from './element-types.js';
+import { annotatedTypeName, COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, walk } from './element-types.js';
 
 /**
  * Disallows `===`/`!==` identity comparison between GameElement instances,
@@ -57,18 +57,6 @@ import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames
  * never auto-fixed (the correct rewrite, `.some(el => el.id === x.id)`,
  * changes the surrounding expression shape rather than a single operand).
  */
-
-/** Resolves a TSTypeAnnotation wrapper to a referenced type name, if any. */
-function resolveTypeAnnotation(typeAnnotationWrapper: unknown): { name: string | undefined; isArray: boolean } {
-  const wrapper = typeAnnotationWrapper as { typeAnnotation?: Record<string, unknown> } | undefined;
-  const ta = wrapper?.typeAnnotation;
-  if (!ta) return { name: undefined, isArray: false };
-
-  if (ta.type === 'TSArrayType') {
-    return { name: typeReferenceName(ta.elementType as Record<string, unknown> | undefined), isArray: true };
-  }
-  return { name: typeReferenceName(ta), isArray: false };
-}
 
 /** Is this expression node "simple" enough to safely rewrite to `<expr>.id`? */
 function isSimpleOperand(node: Record<string, unknown>): boolean {
@@ -142,7 +130,7 @@ const rule: Rule.RuleModule = {
         // initialized from a known collection-returning call.
         walk(program, (node) => {
           if (node.type === 'Identifier' && node.typeAnnotation) {
-            const { name, isArray } = resolveTypeAnnotation(node.typeAnnotation);
+            const { name, isArray } = annotatedTypeName(node.typeAnnotation);
             if (name && elementTypeNames.has(name)) {
               if (isArray) elementArrayVarDeclNodes.add(node);
               else elementVarDeclNodes.add(node);

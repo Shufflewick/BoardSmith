@@ -135,5 +135,21 @@ ruleTester.run('no-engine-field-shadow', rule, {
       code: `const MyGame = class extends Game { 'pile' = null; };`,
       errors: [shadow('MyGame', 'pile')],
     },
+    // Game imported from boardsmith under another name is still Game (#1695).
+    {
+      code: `
+        import { Game as BaseGame } from 'boardsmith';
+        class MyGame extends BaseGame { pile = null; }
+      `,
+      errors: [shadow('MyGame', 'pile')],
+    },
+    // An anonymous class extending a class-expression Game subclass (#1695).
+    {
+      code: `
+        const BaseGame = class extends Game {};
+        export default class extends BaseGame { phase = 'draw'; }
+      `,
+      errors: [shadow('This Game subclass', 'phase')],
+    },
   ],
 });

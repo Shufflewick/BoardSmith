@@ -57,6 +57,14 @@ ruleTester.run('no-element-array-state', rule, {
     },
   ],
   invalid: [
+    // A class expression is checked like a declaration, and names an element class (#1695).
+    {
+      code: `
+        const C = class extends Card {};
+        const Hand2 = class extends Space { cards: C[] = []; picked = this.all(Card); };
+      `,
+      errors: [{ messageId: 'elementArrayField' }, { messageId: 'elementArrayAssignment' }],
+    },
     // Scope-hygiene regression (WR-03): a same-named field (`items`) in two
     // classes. This rule checks each PropertyDefinition by its own type
     // annotation, not a file-wide bare-name set, so only the Piece[] field
