@@ -2,12 +2,13 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatExpiry, isSeatUndo, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, followUpForSeat, toPublicFlowState, isSeatUndo, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata, evaluatePrompt } from '../engine/element/action-metadata.js';
 import { formatElementCandidates, type AnnotatedCandidate } from '../engine/element/pick-candidates.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
+import { notUndoableMessage } from '../runtime/seat-undo.js';
 import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { HistoryEntry, SerializedSeatUndo } from '../engine/action/types.js';
@@ -564,16 +565,7 @@ export function assertUndoAllowed(args: {
     // just below it, or else the irreversible step. That entry is always kept
     // (#997), so a game that drops old history gives the same refusal.
     const blocking = notUndoableBelow(runner, floor);
-    // A seat the host closed at a deadline is not the seat's own move to take back.
-    if (blocking && isSeatExpiry(blocking)) {
-      throw new UndoRefusedError(
-        `Cannot undo: seat ${blocking.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`,
-        'non-undoable',
-      );
-    }
-    if (blocking) {
-      throw new UndoRefusedError(`Cannot undo: ${blocking.name} is marked notUndoable.`, 'non-undoable');
-    }
+    if (blocking) throw new UndoRefusedError(notUndoableMessage(blocking), 'non-undoable');
     throw new UndoRefusedError(
       `Cannot undo: a step marked execute({ irreversible: true }) has ` +
       `committed since the point being restored. If that step only ` +
