@@ -16,6 +16,8 @@ const crash = new TypeError("Cannot read properties of undefined (reading 'roomI
 
 class Yard extends Game<Yard, Player> {
   rocks!: Pile;
+  /** Off while the game starts, so only the availability check under test can crash. */
+  armed = false;
   constructor() {
     super({ playerCount: 1 });
     this.rocks = this.create(Pile, 'rocks');
@@ -24,8 +26,9 @@ class Yard extends Game<Yard, Player> {
       Action.create<Yard>('lift')
         .chooseElement('stone', {
           elementClass: Stone,
-          filter: () => {
-            throw crash;
+          filter: (_stone, ctx) => {
+            if (ctx.game.armed) throw crash;
+            return true;
           },
         })
         .execute(() => ({ success: true })),
@@ -39,9 +42,10 @@ class Yard extends Game<Yard, Player> {
 describe('a crashing element filter (#1699)', () => {
   it('surfaces the original error from a first pick', () => {
     const runner = new GameRunner({ GameClass: Yard, gameType: 'yard', gameOptions: { playerCount: 1, seed: 'i1699' } });
+    runner.start();
+    runner.game.armed = true;
     let thrown: unknown;
     try {
-      runner.start();
       runner.game.getAvailableActions(runner.game.getPlayer(1)!);
     } catch (error) {
       thrown = error;
