@@ -55,6 +55,7 @@
  *       destinationSelector: '[data-crew="{targetCrew}"]',
  *       duration: 500,
  *       elementSize: { width: 40, height: 60 },
+ *       getElementData: () => ({ faceUp: true }),
  *     },
  *     // Flip-in-place animation (auto-detected: same selector for source and destination)
  *     {
@@ -63,6 +64,7 @@
  *       elementSelector: '[data-card-id="{card}"]',
  *       destinationSelector: '[data-card-id="{card}"]', // Same as source = flip-in-place
  *       duration: 400,
+ *       getElementData: (el) => ({ rank: el.getAttribute('data-rank') ?? undefined }),
  *     },
  *   ],
  * });
@@ -110,17 +112,6 @@ import { isDevThrowEnabled } from '../../utils/dev.js';
 import { escapeCssString } from '../utils/css-string.js';
 import type { GameViewElement } from '../types.js';
 import type { UseActionControllerReturn } from './useActionControllerTypes.js';
-
-/**
- * Data extracted from an element for rendering during animation.
- * Extend FlyingCardData for compatibility with FlyingCardsOverlay.
- */
-export interface AnimationElementData extends FlyingCardData {
-  /** HTML content of the element (for custom rendering) */
-  innerHTML?: string;
-  /** CSS class names from the element */
-  className?: string;
-}
 
 /**
  * Configuration for an action animation.
@@ -195,11 +186,11 @@ export interface ActionAnimationConfig {
    *
    * @example
    * getElementData: (el) => ({
-   *   innerHTML: el.innerHTML,
-   *   className: el.className,
+   *   rank: el.getAttribute('data-rank') ?? undefined,
+   *   suit: el.getAttribute('data-suit') ?? undefined,
    * })
    */
-  getElementData?: (el: Element, args: Record<string, unknown>) => AnimationElementData;
+  getElementData: (el: Element, args: Record<string, unknown>) => FlyingCardData;
 
   /**
    * Animation duration in milliseconds.
@@ -261,7 +252,7 @@ interface CapturedAnimationState {
   /** Bounding rect of the source element */
   startRect: DOMRect;
   /** Data extracted from the element for rendering */
-  elementData: AnimationElementData;
+  elementData: FlyingCardData;
   /** Action args (for interpolating destination selector) */
   args: Record<string, unknown>;
   /** Unique ID for this animation */
@@ -408,17 +399,6 @@ function assertPlaceholdersQuoted(action: string, field: string, selector: strin
 }
 
 /**
- * Default element data extractor.
- * Captures innerHTML and className for basic rendering.
- */
-function defaultGetElementData(el: Element): AnimationElementData {
-  return {
-    innerHTML: el.innerHTML,
-    className: el.className,
-  };
-}
-
-/**
  * Detect if this is a flip-in-place animation.
  * Returns true when elementSelector and destinationSelector are identical strings.
  */
@@ -502,8 +482,7 @@ export function useActionAnimations(options: UseActionAnimationsOptions): UseAct
 
     // Capture the element's position and data
     const startRect = sourceElement.getBoundingClientRect();
-    const getElementData = config.getElementData ?? defaultGetElementData;
-    const elementData = getElementData(sourceElement, args);
+    const elementData = config.getElementData(sourceElement, args);
 
     // Hide the source element BEFORE the action executes if needed
     const hidden = new Map<HTMLElement, HiddenLook>();

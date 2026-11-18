@@ -225,7 +225,6 @@ export {
 export {
   useActionAnimations,
   type ActionAnimationConfig,
-  type AnimationElementData,
   type UseActionAnimationsOptions,
   type UseActionAnimationsReturn,
 } from './composables/useActionAnimations.js';

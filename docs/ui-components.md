@@ -1548,6 +1548,8 @@ const actionAnimations = useActionAnimations({
       elementSelector: '[data-duelist="{duelistName}"]',
       destinationSelector: '[data-crew="{targetCrew}"]',
       duration: 500,
+      // What the flying copy shows; FlyingCardsOverlay renders these fields.
+      getElementData: () => ({ faceUp: true }),
     },
     // Flip-in-place (auto-detected: same selector = flip animation)
     {
@@ -1556,6 +1558,7 @@ const actionAnimations = useActionAnimations({
       elementSelector: '[data-card-id="{card}"]',
       destinationSelector: '[data-card-id="{card}"]', // Same = flip-in-place!
       duration: 400,
+      getElementData: (el) => ({ rank: el.getAttribute('data-rank') ?? undefined }),
     },
   ],
 });
@@ -1601,7 +1604,7 @@ You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they'r
 | `elementSize` | `{ width, height }` | 60x84 | Size of flying element |
 | `flip` | `boolean` | auto | Enable 3D flip (auto-enabled for flip-in-place) |
 | `hideDestination` | `boolean` | auto | Hide destination during animation (auto-enabled for flip-in-place) |
-| `getElementData` | `function` | innerHTML | Extract data for rendering flying element |
+| `getElementData` | `function` | required | The data FlyingCardsOverlay renders for the flying element (rank, suit, faceUp, images) |
 
 ### useFLIP
 
