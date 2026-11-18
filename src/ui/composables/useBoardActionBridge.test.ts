@@ -1040,6 +1040,32 @@ describe('useBoardActionBridge selection limit (#1688)', () => {
     expect(controller.lastError.value).toBe(reason);
   });
 
+  it('disables the other copy of a value offered twice once one copy fills the pick', async () => {
+    const { controller, board } = wire({
+      name: 'cards', type: 'choice', prompt: 'Take', multiSelect: { min: 0, max: 1 }, choices: [anchored('x', 11), anchored('x', 12)],
+    });
+    await controller.start('take');
+    await controller.toggleMultiSelect('cards', 'x', 0);
+    await nextTick();
+
+    expect(board.isDisabledElement({ id: 12 })).toBe('You can pick only one — deselect the other first.');
+    expect(board.isDisabledElement({ id: 11 })).toBe(false);
+  });
+
+  it('takes the copy a board click names, so a second copy adds rather than deselects the first', async () => {
+    const { controller, board } = wire({
+      name: 'cards', type: 'choice', prompt: 'Take', multiSelect: { min: 0, max: 2 }, choices: [anchored('x', 11), anchored('x', 12)],
+    });
+    await controller.start('take');
+    await nextTick();
+    board.triggerElementSelect({ id: 11 });
+    await nextTick();
+    board.triggerElementSelect({ id: 12 });
+    await nextTick();
+
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: ['x', 'x'], copies: [0, 1] });
+  });
+
   it('disables the unchosen elements of a full multiSelect element pick', async () => {
     const { controller, board } = wire({
       name: 'pieces', type: 'elements', prompt: 'Take', multiSelect: { min: 0, max: 1 },

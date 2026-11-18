@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1038,23 +1038,8 @@ const _splitChoices = computed(() =>
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
-/**
- * Which copy of its value each choice is: a value offered N times is N multiSelect
- * slots (#1561), counted as the controller counts them, enabled entries first.
- */
-const choiceCopies = computed(() => {
-  const copies: number[] = [];
-  const seen = new Map<string, number>();
-  for (const closed of [false, true]) {
-    filteredChoices.value.forEach((choice, i) => {
-      if (isDisabled(choice.disabled) !== closed) return;
-      const key = choiceValueKey(choice.value);
-      copies[i] = seen.get(key) ?? 0;
-      seen.set(key, copies[i] + 1);
-    });
-  }
-  return copies;
-});
+/** Which copy of its value each choice is (#1561). */
+const choiceCopies = computed(() => choiceCopiesOf(filteredChoices.value));
 /** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
 const isDependentChoicePick = computed(() =>
   !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));

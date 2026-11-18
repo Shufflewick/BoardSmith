@@ -6,7 +6,7 @@
  */
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
-import { findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
+import { choiceValueKey, findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
 
@@ -21,6 +21,24 @@ import { textPickRefusal } from '../../engine/action/text-rules.js';
 export function copyOfChoice<C extends { value: unknown; disabled?: unknown }>(choices: readonly C[], value: unknown, copy: number): C | undefined {
   const same = choices.filter(c => valuesEqual(c.value, value));
   return [...same.filter(c => !c.disabled), ...same.filter(c => c.disabled)][copy];
+}
+
+/**
+ * Which copy of its value each choice is, index for index: a value offered N times
+ * is N multiSelect slots (#1561), counted as `copyOfChoice` counts them, enabled entries first.
+ */
+export function choiceCopies(choices: readonly { value: unknown; disabled?: string | false }[]): number[] {
+  const copies: number[] = [];
+  const seen = new Map<string, number>();
+  for (const closed of [false, true]) {
+    choices.forEach((choice, i) => {
+      if (!!choice.disabled !== closed) return;
+      const key = choiceValueKey(choice.value);
+      copies[i] = seen.get(key) ?? 0;
+      seen.set(key, copies[i] + 1);
+    });
+  }
+  return copies;
 }
 
 /**
