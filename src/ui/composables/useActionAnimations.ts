@@ -363,7 +363,7 @@ export interface UseActionAnimationsReturn {
   flyingElements: ComputedRef<readonly FlyingCard[]>;
 
   /**
-   * Hook to pass to useActionController's onBeforeAutoExecute option.
+   * Hook to register with the action controller's onBeforeAutoExecute method.
    * Captures element positions before the action executes.
    */
   onBeforeAutoExecute: (actionName: string, args: Record<string, unknown>, run: number) => Promise<void>;

@@ -191,7 +191,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     playerSeat,
     autoFill: autoFillOption = true,
     autoExecute: autoExecuteOption = true,
-    onBeforeAutoExecute: initialBeforeAutoExecute,
     isViewingHistory,
   } = options;
 
@@ -237,9 +236,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // independently-registered consumers (e.g. a board component and a player-stats
   // panel) can each register a hook without clobbering the others; the watcher
   // awaits them sequentially in registration order.
-  const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>(
-    initialBeforeAutoExecute ? [initialBeforeAutoExecute] : []
-  );
+  const beforeAutoExecuteHooks = ref<BeforeAutoExecuteHook[]>([]);
   const afterAutoExecuteListeners = ref<AfterAutoExecuteListener[]>([]);
   // Counts auto-executions, so each one's hooks and outcome share a number no other has.
   let autoExecuteRuns = 0;
