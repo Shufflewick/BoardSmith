@@ -487,6 +487,25 @@ describe('runVitest leaves chunk worktrees out of the run', () => {
     }
   });
 
+  it('keeps a character whose bytes arrive in two chunks whole (#1691)', async () => {
+    const sandbox = fixtureSandbox('bs-constraint-output-', { tools: [] });
+    const project = join(sandbox.root, 'game');
+    await fs.mkdir(join(project, 'node_modules', '.bin'), { recursive: true });
+    await fs.writeFile(join(project, GAME_VITE_CONFIG_FILE), GAME_VITE_CONFIG);
+    // Far more than one pipe chunk of three-byte characters, so some chunk ends inside one.
+    await fs.writeFile(
+      join(project, 'node_modules', '.bin', 'vitest'),
+      "#!/usr/bin/env node\nprocess.stdout.write('€'.repeat(200000));\n",
+      { mode: 0o755 },
+    );
+    for (const key of ['HOME', 'TMPDIR', 'PATH', 'NODE_OPTIONS'] as const) vi.stubEnv(key, sandbox.env[key]!);
+    try {
+      expect(await runVitest(project, [])).toMatchObject({ ok: true, output: '€'.repeat(200000) });
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('refuses a project with no vitest of its own, naming the install command, and never runs npx (#595)', async () => {
     const project = await makeProject({ ...WIP, ...GAME });
     const run = await runVitest(project, []);

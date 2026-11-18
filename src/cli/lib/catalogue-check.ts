@@ -56,6 +56,7 @@ import { uncommittedContentHash } from './execution-context.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
 import { groupLeader, killGroup } from './started-processes.js';
 import { readIfExists, readIfExistsSync } from './read-if-exists.js';
+import { collectOutput } from './child-output.js';
 
 /** Where the catalogue is on a machine set up the usual way. */
 export const DEFAULT_CATALOGUE_ROOT = join(homedir(), 'BoardSmithGames');
@@ -325,7 +326,7 @@ class Children {
     return new Promise((resolve) => {
       const child = spawn(process.execPath, [groupLeader(), script, ...args], { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
       this.live.add(child);
-      let output = '';
+      const output = collectOutput(child);
       let timedOut = false;
       const timer = Number.isFinite(timeLimitMs)
         ? setTimeout(() => {
@@ -336,10 +337,8 @@ class Children {
       const settle = (code: number, extra = '') => {
         clearTimeout(timer);
         this.live.delete(child);
-        resolve({ code, output: `${output}${extra}`, timedOut });
+        resolve({ code, output: `${output()}${extra}`, timedOut });
       };
-      child.stdout.on('data', (chunk) => (output += chunk));
-      child.stderr.on('data', (chunk) => (output += chunk));
       // On exit, not close: a process the script left running holds its pipes open, and would go on using the machine (#1657).
       let reaped: Promise<string> = Promise.resolve('');
       child.on('exit', () => (reaped = killGroup(child).then(() => '', (error: Error) => `${error.message}\n`)));
