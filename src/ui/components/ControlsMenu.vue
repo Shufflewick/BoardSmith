@@ -171,8 +171,14 @@ function computePosition() {
   if (!el) return;
   const r = el.getBoundingClientRect();
   const style: Record<string, string> = { position: 'fixed', zIndex: '70' };
-  if (props.openUp) style.bottom = `${Math.round(window.innerHeight - r.top + 6)}px`;
-  else style.top = `${Math.round(r.bottom + 6)}px`;
+  // Capped to the room on its side, so on a short screen (a phone held sideways) it scrolls rather than running off it (#1710).
+  if (props.openUp) {
+    style.bottom = `${Math.round(window.innerHeight - r.top + 6)}px`;
+    style.maxHeight = `calc(${Math.round(r.top - 12)}px - var(--bsg-safe-top))`;
+  } else {
+    style.top = `${Math.round(r.bottom + 6)}px`;
+    style.maxHeight = `calc(${Math.round(window.innerHeight - r.bottom - 12)}px - var(--bsg-safe-bottom))`;
+  }
   if (props.align === 'left') style.left = `${Math.round(r.left)}px`;
   else style.right = `${Math.round(window.innerWidth - r.right)}px`;
   menuStyle.value = style;
@@ -444,6 +450,9 @@ function runCommand(command: MenuCommand) {
   border-radius: var(--bsg-r-lg);
   box-shadow: var(--bsg-shadow);
   padding: 8px;
+  /* The inline max-height is the whole box, whatever the host page's own reset. */
+  box-sizing: border-box;
+  overflow-y: auto;
   animation: pop var(--bsg-dur-fast) var(--bsg-ease);
 }
 
