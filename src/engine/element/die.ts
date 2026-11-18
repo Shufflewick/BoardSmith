@@ -74,12 +74,6 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
   faceLabels?: string[];
 
   /**
-   * Whether the die is currently rolling (for animation).
-   * This is set true briefly during roll() for UI detection.
-   */
-  rolling: boolean = false;
-
-  /**
    * Roll counter - increments each time the die is rolled.
    * UI can watch this to trigger animations on actual rolls.
    */
@@ -158,14 +152,4 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
     }
     return String(this.value);
   }
-
-  /**
-   * Check if this die has a specific number of sides
-   */
-  isD4(): boolean { return this.sides === 4; }
-  isD6(): boolean { return this.sides === 6; }
-  isD8(): boolean { return this.sides === 8; }
-  isD10(): boolean { return this.sides === 10; }
-  isD12(): boolean { return this.sides === 12; }
-  isD20(): boolean { return this.sides === 20; }
 }
