@@ -1,5 +1,5 @@
 {
-  "revision": 428,
+  "revision": 429,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3367,6 +3367,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith/session no longer exports the deleted game server's lobby, request and WebSocket message types; PlayerConfig and the game option types stay (#1697)."
+    },
+    {
+      "revision": 429,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "A seat's client state type is the session's PlayerGameState, which now declares the demoControls and hasBotPlayers fields the host merges in; GameShell reads them without casts (#1698)"
     }
   ]
 }

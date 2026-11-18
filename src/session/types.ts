@@ -323,6 +323,15 @@ export interface HeatmapEntry {
   isBest: boolean;
 }
 
+/** A running bot demo's playback state, as every seat is sent it. */
+export interface DemoControls {
+  paused: boolean;
+  /** Milliseconds between demo moves. */
+  delay: number;
+  /** Whether a demo move can be taken back. */
+  canStepBack: boolean;
+}
+
 /**
  * Player-facing game state - what clients receive
  */
@@ -461,6 +470,20 @@ export interface PlayerGameState {
    * Absent (undefined) when no demo is running.
    */
   isDemoRunning?: boolean;
+  /**
+   * Session-layer only, never serialized. The demo's playback controls, present
+   * with `isDemoRunning` so a page can draw the demo control bar.
+   *
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
+   */
+  demoControls?: DemoControls;
+  /**
+   * Session-layer only, never serialized. True while a bot plays a seat here,
+   * absent otherwise, so a page can offer its teaching tools.
+   *
+   * Merged into the seat's view by `SnapshotSessionHost.mergeTransientState`.
+   */
+  hasBotPlayers?: true;
   /**
    * Whether this seat has a tutorial: the game defines one and this seat is its
    * `learnerSeat`, the only seat that can start it.

@@ -21,6 +21,9 @@ const HISTORICAL: PlayerState = {
   players: [],
   availableActions: [],
   isMyTurn: false,
+  restoreEpoch: 0,
+  gameInstanceId: 'game-1',
+  viewerSeat: 1,
   view: { className: 'Game', id: 0, attributes: {}, phase: 'started', isFinished: false, settings: {} },
 };
 

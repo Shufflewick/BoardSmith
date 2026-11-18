@@ -21,7 +21,7 @@ import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import { StatePushGate } from './state-push-gate.js';
 import { stampRev, type ViewPatch } from './view-patch.js';
-import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
+import type { HeatmapEntry, PlayerGameState, SerializedFlowDebugInfo } from './types.js';
 import { pendingActionForSeat } from './utils.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
@@ -576,7 +576,7 @@ const HOST_STATE_FIELDS = [
   'demoControls',
   'hasBotPlayers',
   'teachingDisabled',
-] as const;
+] as const satisfies readonly (keyof PlayerGameState)[];
 
 /** `state` without {@link HOST_STATE_FIELDS}; `state` itself when it carries none. */
 function withoutHostState(state: Record<string, unknown>): Record<string, unknown> {
@@ -868,7 +868,8 @@ export class SnapshotSessionHost {
     // (`teachingDisabled`), so a restored host would push every page a view
     // that did not change.
     const fromGame = withoutHostState(withState.state);
-    const state = { ...fromGame };
+    // Typed without an index signature, so a misspelt field fails the type check.
+    const state: Pick<PlayerGameState, (typeof HOST_STATE_FIELDS)[number] | 'flowDebugInfo'> = {};
     const transient = this.transientTeachingState.get(seat);
     if (transient?.hint) state.hint = transient.hint;
     if (transient?.heatmap) state.heatmap = transient.heatmap;
@@ -893,7 +894,7 @@ export class SnapshotSessionHost {
     // Always inject teachingDisabled (true or false) so every broadcast carries the
     // authoritative session value regardless of other transient state (criterion 4).
     state.teachingDisabled = this.adapters.teachingDisabled ?? false;
-    return { ...withState, state };
+    return { ...withState, state: { ...fromGame, ...state } };
   }
 
   private hasBotPlayers(): boolean {
