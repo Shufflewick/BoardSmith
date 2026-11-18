@@ -1,4 +1,4 @@
-import { gitOutput as git } from './git-output.js';
+import { gitNames, gitOutput as git } from './git-output.js';
 import { DESIGN_DIR } from './project-paths.js';
 
 /**
@@ -101,8 +101,8 @@ export async function preSpecCodeChanges(projectDir: string, slug: string): Prom
   for (const c of (await readChunkLog(projectDir, slug, true)).reverse()) {
     if (!isBeforeSpec(slug, c.subject)) continue;
     // --cc: a merge commit's own changes, the files it left unlike every parent.
-    const changed = await git(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '-z', '--relative', c.hash]);
-    const files = changed.split('\0').filter((f) => f !== '' && !f.startsWith(`${DESIGN_DIR}/`));
+    const changed = await gitNames(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '--relative', c.hash]);
+    const files = changed.filter((f) => !f.startsWith(`${DESIGN_DIR}/`));
     if (files.length > 0) found.push({ commit: { hash: c.hash, label: c.subject }, files });
   }
   return found;

@@ -32,7 +32,7 @@ import { styleText } from 'node:util';
 import { build } from 'esbuild';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { Started, startDev, tail } from '../lib/started-processes.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { gitNames } from '../lib/git-output.js';
 import { requireTableUi } from '../lib/game-project.js';
 import type { VerifyCheckOutcome } from '../lib/verify-result.js';
 import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeDeal, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
@@ -124,13 +124,13 @@ async function freshCopyDir(projectDir: string): Promise<string> {
  * into `copy`. Modules still resolve from the project's own `node_modules`, which is above it.
  */
 async function copyProject(projectDir: string, copy: string): Promise<void> {
-  const listed = await git(projectDir, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']).catch(() => {
+  const listed = await gitNames(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']).catch(() => {
     throw new Error(
       `The smoke check copies the files git tracks, and ${projectDir} is not a git repository. ` +
         'Run `git init`, commit the game, then run it again.',
     );
   });
-  for (const path of new Set(listed.split('\0').filter(Boolean))) {
+  for (const path of new Set(listed)) {
     const from = join(projectDir, path);
     const stat = await readIfExists(from, fs.lstat);
     if (stat === undefined) continue; // tracked, but deleted in the working tree

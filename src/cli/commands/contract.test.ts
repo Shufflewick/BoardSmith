@@ -204,6 +204,7 @@ async function unmintedAfter(files: Record<string, string>, remove: string[] = [
 // Slow one-time setup lives here, where no test timeout applies: each case exports and packs two trees.
 const changedAndDeleted = await unmintedAfter({ 'src/ui.ts': 'export const label = 2;\n' }, ['src/gone.ts']);
 const unpackedOnly = await unmintedAfter({ 'notes.md': 'edited\n', 'src/ui.test.ts': 'edited\n' });
+const tabbed = await unmintedAfter({ 'src/tab\tname.ts': 'export const tab = 1;\n' });
 const minted = await unmintedAfter({
   'src/ui.ts': 'export const label = 2;\n',
   'src/contract/engine-contract.json': JSON.stringify({ revision: 2 }),
@@ -212,6 +213,10 @@ const minted = await unmintedAfter({
 describe('unmintedPackedChanges (#1534)', () => {
   it('names a packed file changed, and one deleted, with no new revision', () => {
     expect(changedAndDeleted).toEqual(['src/gone.ts', 'src/ui.ts']);
+  });
+
+  it('names a packed file whose name holds a tab whole (#1692)', () => {
+    expect(tabbed).toEqual(['src/tab\tname.ts']);
   });
 
   it('passes a change to files the package does not pack', () => {

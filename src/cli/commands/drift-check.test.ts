@@ -84,6 +84,14 @@ describe('diffedFilesSince', () => {
     expect(result).not.toContain('untouched.txt');
   });
 
+  it('returns a name git would quote as it is written (#1692)', async () => {
+    const { repoDir, secondSha } = await twoCommitRepo();
+    await fs.writeFile(join(repoDir, 'a"b\\c.txt'), 'quoted\n');
+    execSync('git add -A', { cwd: repoDir, stdio: 'ignore' });
+    execSync('git -c user.email=t@t -c user.name=t commit -m third', { cwd: repoDir, stdio: 'ignore' });
+    expect(await diffedFilesSince(repoDir, secondSha)).toEqual(['a"b\\c.txt']);
+  });
+
   it('a file deleted in the second commit appears in the returned list', async () => {
     const { repoDir, firstSha } = await twoCommitRepo();
     const result = await diffedFilesSince(repoDir, firstSha);

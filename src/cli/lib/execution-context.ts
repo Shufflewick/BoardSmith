@@ -22,7 +22,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, sep } from 'node:path';
 import { isSameOrInside } from './path-inside.js';
 import { boardsmithPackageRoot } from './boardsmith-version.js';
-import { gitOutput as git } from './git-output.js';
+import { gitNames, gitOutput as git } from './git-output.js';
 import { readIfExists } from './read-if-exists.js';
 
 /** `dir` and each of its parents, up to the filesystem root: the folders Node resolves packages from. */
@@ -71,7 +71,7 @@ async function checkoutRevision(root: string): Promise<string | undefined> {
 export async function uncommittedContentHash(root: string): Promise<string> {
   const hash = createHash('sha256');
   hash.update(await git(root, ['diff', '--binary', '--no-ext-diff', 'HEAD', '--']));
-  const untracked = (await git(root, ['ls-files', '--others', '--exclude-standard', '-z'])).split('\0').filter(Boolean).sort();
+  const untracked = (await gitNames(root, ['ls-files', '--others', '--exclude-standard'])).sort();
   for (const path of untracked) {
     hash.update(`\0${path}\0`);
     try {
@@ -122,10 +122,8 @@ const prefixes = (parts: string[]) => parts.map((_, n) => parts.slice(0, n + 1).
 
 /** Every ignored file or folder under the folder `parts` names, except those inside `node_modules`. */
 async function ignoredUnder(root: string, parts: string[]): Promise<string[]> {
-  const listing = await git(root, ['ls-files', '-z', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
+  const listing = await gitNames(root, ['ls-files', '--others', '--ignored', '--exclude-standard', '--directory', '--', `${parts.join('/')}/`]);
   return listing
-    .split('\0')
-    .filter(Boolean)
     .map((entry) => entry.replace(/\/$/, ''))
     .filter((path) => !path.split('/').includes('node_modules'));
 }

@@ -7,7 +7,7 @@ import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-
 import { requireGameProject } from '../lib/game-project.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
-import { projectGitOutput } from '../lib/git-output.js';
+import { projectGitNames } from '../lib/git-output.js';
 import { SIM_FILE } from '../../vite-config/test-files.js';
 
 /**
@@ -116,11 +116,11 @@ function refuseChangedWithAnotherSelection(patterns: string[], options: TestOpti
  */
 async function changedFiles(cwd: string, base: string): Promise<string[]> {
   const lists = await Promise.all([
-    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', `${base}...HEAD`]),
-    projectGitOutput(cwd, ['diff', '--name-only', '--no-renames', '--relative', '--cached']),
-    projectGitOutput(cwd, ['ls-files', '--others', '--modified', '--exclude-standard']),
+    projectGitNames(cwd, ['diff', '--name-only', '--no-renames', '--relative', `${base}...HEAD`]),
+    projectGitNames(cwd, ['diff', '--name-only', '--no-renames', '--relative', '--cached']),
+    projectGitNames(cwd, ['ls-files', '--others', '--modified', '--exclude-standard']),
   ]);
-  return [...new Set(lists.flatMap((list) => list.split('\n').filter((file) => file !== '')))];
+  return [...new Set(lists.flat())];
 }
 
 /** A run under `--changed` that ran no test: fails naming each changed file under src/ that is still there and not a sim, and otherwise passes saying why for each file. */

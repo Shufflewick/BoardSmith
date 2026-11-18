@@ -67,7 +67,7 @@ import { scriptRegions } from './test-step-sfc.js';
 import { findCodeRun, supportFilesLoaded, type CodeRunContext } from './test-step-code-run.js';
 import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
-import { blameHeader, gitOutput as git } from '../lib/git-output.js';
+import { blameHeader, gitNames, gitOutput as git } from '../lib/git-output.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { mayBeSameOrInside } from '../lib/path-inside.js';
@@ -231,9 +231,9 @@ async function addedImplementationLines(
 ): Promise<Map<string, Set<number>>> {
   const touched = new Set<string>();
   // `--relative`: log and diff name files from the repo root, ls-files from the project; a nested game needs one base.
-  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', '--relative', ...chunkCommits]);
-  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--relative', '--', 'src']);
-  for (const path of [...committed.split('\n'), ...uncommitted.split('\n')]) {
+  const committed = await gitNames(projectDir, ['log', '--no-walk', '--format=', '--name-only', '--relative', ...chunkCommits]);
+  const uncommitted = await gitNames(projectDir, ['diff', 'HEAD', '--name-only', '--relative', '--', 'src']);
+  for (const path of [...committed, ...uncommitted]) {
     if (isChunkCode(path)) touched.add(path);
   }
 
@@ -247,8 +247,8 @@ async function addedImplementationLines(
     const lines = await ownedLines(projectDir, path, chunkCommits);
     if (lines.size > 0) added.set(path, lines);
   }
-  const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'src']);
-  for (const path of untracked.split('\n').filter(isChunkCode)) {
+  const untracked = await gitNames(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'src']);
+  for (const path of untracked.filter(isChunkCode)) {
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
     added.set(path, new Set(text.split('\n').map((_, i) => i + 1)));
   }
@@ -257,9 +257,9 @@ async function addedImplementationLines(
 
 /** Every implementation file in the working tree, with its text. */
 async function implementationNow(projectDir: string): Promise<SourceFile[]> {
-  const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'src']);
+  const listed = await gitNames(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'src']);
   const files: SourceFile[] = [];
-  for (const path of listed.split('\n').filter(isImplementation)) {
+  for (const path of listed.filter(isImplementation)) {
     const text = await readListedText(join(projectDir, path));
     if (text !== undefined) files.push({ path, text });
   }
@@ -268,9 +268,9 @@ async function implementationNow(projectDir: string): Promise<SourceFile[]> {
 
 /** Every `.ts` file under `tests/`, where a project keeps its test harness. */
 async function testSupportSources(projectDir: string): Promise<SourceFile[]> {
-  const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'tests']);
+  const listed = await gitNames(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard', '--', 'tests']);
   const sources: SourceFile[] = [];
-  for (const path of listed.split('\n').filter((p) => /\.(ts|mts|js|mjs)$/.test(p))) {
+  for (const path of listed.filter((p) => /\.(ts|mts|js|mjs)$/.test(p))) {
     const text = await readListedText(join(projectDir, path));
     if (text !== undefined) sources.push({ path, text });
   }
@@ -570,8 +570,6 @@ interface ChunkTestScope {
   context: CodeRunContext;
 }
 
-const lines = (output: string) => output.split('\n').filter(Boolean);
-
 /** The project-relative paths of the manifest's files, as git writes them, however a row spells one. */
 const manifestPaths = (projectDir: string, testFiles: ChunkTestFile[]) =>
   new Set(testFiles.map((f) => relative(projectDir, f.absPath).split(sep).join('/')));
@@ -587,10 +585,10 @@ export const isTestFile = (path: string) => TEST_FILE.test(path) && !SIM_FILE.te
 
 /** Every script in the project outside `node_modules/`, with its text. */
 async function projectScripts(projectDir: string): Promise<SourceFile[]> {
-  const listed = await git(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
+  const listed = await gitNames(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
   const scripts: SourceFile[] = [];
   const wanted = (p: string) => /\.[cm]?[jt]sx?$/.test(p) && !/(^|\/)node_modules\//.test(p);
-  for (const path of lines(listed).filter(wanted)) {
+  for (const path of listed.filter(wanted)) {
     const text = await readListedText(join(projectDir, path));
     if (text !== undefined) scripts.push({ path, text });
   }
@@ -610,10 +608,10 @@ async function chunkTestScope(
   testFiles: ChunkTestFile[],
 ): Promise<ChunkTestScope> {
   const log = async (...filter: string[]) =>
-    lines(await git(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', '--relative', ...filter, ...chunkCommits]));
+    gitNames(projectDir, ['log', '--no-walk', '--no-renames', '--format=', '--name-only', '--relative', ...filter, ...chunkCommits]);
   const diff = async (...filter: string[]) =>
-    lines(await git(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', '--relative', ...filter]));
-  const untracked = lines(await git(projectDir, ['ls-files', '--others', '--exclude-standard']));
+    gitNames(projectDir, ['diff', 'HEAD', '--no-renames', '--name-only', '--relative', ...filter]);
+  const untracked = await gitNames(projectDir, ['ls-files', '--others', '--exclude-standard']);
   const touched = new Set([...(await log()), ...(await diff()), ...untracked]);
   const created = new Set([...(await log('--diff-filter=A')), ...(await diff('--diff-filter=A')), ...untracked]);
 
