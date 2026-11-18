@@ -107,7 +107,7 @@
     },
     "src/cli/commands/pack.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/cli/commands/publish.ts": {
@@ -561,7 +561,7 @@
     },
     "src/ui/composables/useActionAnimations.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/ui/composables/useActionController.ts": {
