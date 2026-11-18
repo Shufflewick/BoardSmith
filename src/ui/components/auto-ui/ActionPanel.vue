@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1432,12 +1432,7 @@ const orderedListCountDisplay = computed(() => {
  */
 function orderedListAddDisabledReason(own: DisabledReason): DisabledReason {
   if (isDisabled(own)) return own;
-  const max = currentOrderedList.value?.max;
-  if (max === undefined) return false;
-  if (orderedListEntries.value.length < max) return false;
-  return max === 1
-    ? 'The list holds one entry. Remove it to choose differently.'
-    : `The list is full at ${max} entries. Remove one to add another.`;
+  return orderedListFullReason(currentOrderedList.value?.max, orderedListEntries.value.length);
 }
 
 /** Why the ordered list's Done cannot be pressed yet: too few entries. */
@@ -1638,13 +1633,7 @@ const submissionInFlightReason = computed<DisabledReason>(() =>
  */
 function multiSelectDisabledReason(own: DisabledReason, value: unknown, copy?: number): DisabledReason {
   if (isDisabled(own)) return own;
-  const max = currentMultiSelect.value?.max;
-  if (max === undefined) return false;
-  if (isMultiSelectValueSelected(value, copy)) return false;
-  if (multiSelectValues.value.length < max) return false;
-  return max === 1
-    ? 'You can pick only one — deselect the other first.'
-    : `You have already picked ${max}. Deselect one to change your mind.`;
+  return multiSelectFullReason(currentMultiSelect.value?.max, multiSelectValues.value.length, isMultiSelectValueSelected(value, copy));
 }
 
 /**

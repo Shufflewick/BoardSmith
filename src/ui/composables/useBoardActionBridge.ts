@@ -34,7 +34,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { answerMark, choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { answerMark, choiceBoardTarget, formatActionName, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 import { usableVerbs } from './sharedSelection.js';
@@ -538,7 +538,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates, controller.subjects], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates, controller.subjects, controller.multiSelectDraft], ([selection]) => {
     if (!selection) {
       feedStartCandidates();
       return;
@@ -552,8 +552,20 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     let validElems: { id: number; ref: ElementRef; disabled?: string; display?: string }[] = [];
     let onSelect: ((id: number) => void) | null = null;
 
+    // A full pick greys out on the board what the panel greys out, with the same reason (#1688).
+    const draft = controller.multiSelectDraft.value;
+    const drafted = draft?.selectionName === selection.name ? draft.values.length : 0;
+    const limitReason = (value: unknown): string | undefined => {
+      if (currentOrderedList.value) return orderedListFullReason(currentOrderedList.value.max, drafted);
+      if (!currentMultiSelect.value) return undefined;
+      return multiSelectFullReason(currentMultiSelect.value.max, drafted, controller.isMultiSelectSelected(selection.name, value));
+    };
+
     if (selection.type === 'element' || selection.type === 'elements') {
-      validElems = offeredElements.value.map(boardTarget);
+      validElems = offeredElements.value.map(ve => {
+        const target = boardTarget(ve);
+        return { ...target, disabled: target.disabled || limitReason(ve.id) };
+      });
       onSelect = (elementId: number) => {
         const multiSelect = currentMultiSelect.value;
         if (selection.type === 'elements' && multiSelect) {
@@ -585,7 +597,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
           // replaces it.
           if (ref.id !== undefined && refToChoice.has(ref.id)) continue;
           const key = ref.id ?? syntheticKey--;
-          refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled, display: choice.display });
+          refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled || limitReason(choice.value), display: choice.display });
         }
         validElems = Array.from(refToChoice.entries()).map(([id, { ref, disabled, display }]) => ({ id, ref, disabled, display }));
         onSelect = (elementId: number) => {
