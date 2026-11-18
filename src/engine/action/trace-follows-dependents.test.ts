@@ -51,6 +51,32 @@ describe('the availability trace follows declared dependents (#1690)', () => {
     expect(trace.selections[1].notYetAskable).toBe(true);
   });
 
+  it('evaluates a declared dependent past an undeclared step between it and its input (#1709)', () => {
+    game.registerAction(
+      Action.create('trade')
+        .chooseFrom('a', { choices: ['x'] })
+        .chooseFrom('b', { choices: ['y'] })
+        .chooseFrom('c', { dependsOn: 'a', choices: () => [] as string[] })
+        .execute(() => {}),
+    );
+    const debug = game.debugActionAvailability('trade', game.getPlayer(1)!);
+
+    expect(debug.available).toBe(false);
+    expect(debug.details.selections.map((s) => [s.name, s.passed])).toEqual([['a', true], ['b', true], ['c', false]]);
+  });
+
+  it('asks that dependent with the step between it and its input bound, as the player will (#1709)', () => {
+    game.registerAction(
+      Action.create('trade')
+        .chooseFrom('a', { choices: ['x'] })
+        .chooseFrom('b', { choices: ['y'] })
+        .chooseFrom('c', { dependsOn: 'a', choices: (ctx) => (ctx.args.b === 'y' ? ['z'] : []) })
+        .execute(() => {}),
+    );
+
+    expect(game.debugActionAvailability('trade', game.getPlayer(1)!).available).toBe(true);
+  });
+
   it('counts only enabled choices', () => {
     game.registerAction(
       Action.create('pick')

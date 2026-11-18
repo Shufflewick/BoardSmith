@@ -1771,11 +1771,12 @@ export class ActionExecutor {
     return selTrace;
   }
 
-  /** The later steps that declared a dependency (`dependsOn` / `filterBy`) on the step at `index`. */
-  private dependentsOf(selections: Selection[], index: number): Selection[] {
-    const name = selections[index].name;
-    return selections.slice(index + 1).filter(s => ('dependsOn' in s && s.dependsOn === name) ||
-      (s.type === 'choice' && (s as ChoiceSelection).filterBy?.selectionName === name));
+  /** The later steps that declared a dependency (`dependsOn` / `filterBy`) on the step at `index` or on an answer already bound in `args`. */
+  private dependentsOf(selections: Selection[], index: number, args: Record<string, unknown>): Selection[] {
+    const waitsOn = (name: string | undefined) => name !== undefined &&
+      (name === selections[index].name || Object.prototype.hasOwnProperty.call(args, name));
+    return selections.slice(index + 1).filter(s => waitsOn('dependsOn' in s ? s.dependsOn : undefined) ||
+      (s.type === 'choice' && waitsOn((s as ChoiceSelection).filterBy?.selectionName)));
   }
 
   /**
@@ -1802,7 +1803,9 @@ export class ActionExecutor {
    *   A DECLARED DEPENDENCY (`dependsOn` / `filterBy`). The walk enumerates the
    *     earlier step's enabled choices and re-asks the dependent step with each
    *     one BOUND, which is the same question the player's own answer will ask.
-   *     Exhausting them all means no answer leads anywhere.
+   *     Exhausting them all means no answer leads anywhere. A step between the
+   *     dependent and its input is bound the same way, so the dependent is
+   *     asked with every earlier answer it will have (#1709).
    *
    * Both say so out loud through `devWarn` rather than vanishing.
    *
@@ -1852,9 +1855,9 @@ export class ActionExecutor {
     // A pick that takes several values answers with an array, so bind one as the player's would be.
     const takesArray = answersWithList(selection);
     const answers = enabledChoices.map(c => takesArray ? [c.value] : c.value);
-    // Nothing later declared a dependency on this step, so nothing later can be
-    // judged until the player answers it, and one answer makes it offerable.
-    const dependents = this.dependentsOf(selections, index);
+    // Nothing later declared a dependency on this step or on a bound answer, so
+    // nothing later can be judged until the player answers it (#1709).
+    const dependents = this.dependentsOf(selections, index, args);
     const hasDependent = dependents.length > 0;
     if (answers.length > 0 && !hasDependent) {
       this.recordPick(reached, index, selection, enabledChoices.length);
