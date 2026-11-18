@@ -1,5 +1,5 @@
 {
-  "revision": 426,
+  "revision": 427,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3351,6 +3351,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The eslint rules no-engine-field-shadow, no-element-identity-comparison and no-element-array-state recognise Game imported under another name and classes bound with const X = class extends Y."
+    },
+    {
+      "revision": 427,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The CLI reads design-ledger '- Label: value' lines through one reader, which accepts indented lines"
     }
   ]
 }
