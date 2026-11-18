@@ -407,7 +407,7 @@ Send the `demoStart` op to enter demo mode: all seats are bot-controlled, and ea
 
 `delay` must be a whole number of milliseconds from 0 to 3,600,000, or the op is refused. `back` reaches only the last 20 demo moves.
 
-The default narration reads "Player N: actionName" (the host is not handed player names) and adds only destination-like args (`to`, `destination`, `target`, `square`, `cell`, `position`) rather than dumping JSON. Numeric args, such as element ids, are never shown, so the narration is safe to broadcast to every seat in a hidden-information game.
+The narration reads "Player N: actionName" (the host is not handed player names) and adds only destination-like args (`to`, `destination`, `target`, `square`, `cell`, `position`) rather than dumping JSON. Numeric args, such as element ids, are never shown. A string under one of those keys is shown as it is, to every seat, so a hidden-information game must not put a secret string there.
 
 Internally, the demo loop asks for the next move with the read-only `botSuggest` op, sets the narration and broadcasts it, waits the delay, then makes that exact move with an `action` op, so the narrated move and the made move are always the same.
 

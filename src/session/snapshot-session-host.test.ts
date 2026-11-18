@@ -1311,7 +1311,7 @@ describe('SnapshotSessionHost', () => {
       expect(b1.isDemoRunning).toBe(true);
       expect(b1.narration?.text).toBeDefined();
       // Stub canned move is 'move' with args { direction: 'left' }.
-      // 'direction' is not a SAFE_DEST_ARG, so the safe default omits it → "Player 1: move".
+      // 'direction' is not a destination-like key, so the safe default omits it → "Player 1: move".
       expect(b1.narration!.text).toBe('Player 1: move');
 
       // Broadcast 2: state after move (apply broadcast); narration cleared
@@ -1446,7 +1446,7 @@ describe('SnapshotSessionHost', () => {
     // The narration excludes args that are not destination-like
     // (to, destination, target, square, cell, position) to avoid leaking
     // hidden-information data (e.g. card element IDs) to all seats on LAN.
-    // BotGame uses 'direction' which is NOT a SAFE_DEST_ARG → action name only.
+    // BotGame uses 'direction' which is NOT a destination-like key → action name only.
 
     it('demo narration: non-DEST_ARG keys omitted ("Player N: action")', async () => {
       vi.useFakeTimers();
@@ -1470,7 +1470,7 @@ describe('SnapshotSessionHost', () => {
       const [views] = narrationBroadcast as [Array<{ state: { narration?: { text: string } } }>, unknown];
       const text = views[0].state.narration!.text;
       // Canned move: 'move' with args { direction: 'left' }
-      // 'direction' is NOT a SAFE_DEST_ARG → omitted from the safe default narration
+      // 'direction' is NOT a destination-like key → omitted from the safe default narration
       expect(text).toBe('Player 1: move');
     });
 
