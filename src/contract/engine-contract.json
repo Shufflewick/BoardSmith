@@ -1,5 +1,5 @@
 {
-  "revision": 427,
+  "revision": 428,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3359,6 +3359,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The CLI reads design-ledger '- Label: value' lines through one reader, which accepts indented lines"
+    },
+    {
+      "revision": 428,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The session and types surfaces no longer export the deleted game server's lobby, request and WebSocket message types; PlayerConfig and the game option types stay (#1697)."
     }
   ]
 }

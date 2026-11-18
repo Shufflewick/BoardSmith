@@ -1079,20 +1079,9 @@ To test that a preset seats players where its name says, start a test game from 
 
 ### Receiving Options in Game Constructor
 
-Options are passed to your game constructor via `CreateGameRequest`:
+Your game constructor receives its options as one object: each game option at the top level under its `id`, and `playerConfigs`, one `PlayerConfig` per seat holding that seat's name, bot settings and player options:
 
 ```typescript
-export interface CreateGameRequest {
-  gameType: string;
-  playerCount: number;
-  playerNames?: string[];
-  gameOptions?: Record<string, unknown>;    // From gameOptions
-  playerConfigs?: PlayerConfig[];           // From playerOptions
-  botPlayers?: number[];
-  botLevel?: string;
-}
-
-// In your game
 class MyGame extends Game<MyGame, MyPlayer> {
   constructor(options: MyGameOptions) {
     super(options);
