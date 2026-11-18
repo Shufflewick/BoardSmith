@@ -1,6 +1,6 @@
 {
-  "revision": 432,
-  "surfaceHash": "caaffcbb71cd9067",
+  "revision": 433,
+  "surfaceHash": "fec032ac3c12be93",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3399,6 +3399,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The bot benchmark and the simulator's mcts policy read a bot's move, wait or stall through one shared function; behavior is unchanged (#1701)"
+    },
+    {
+      "revision": 433,
+      "date": "2026-11-18",
+      "surfaceHash": "fec032ac3c12be93",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The SnapshotSessionHost adapters lose narrateMove; demo narration is always the destination-only default (#1702)"
     }
   ]
 }

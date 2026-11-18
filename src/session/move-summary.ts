@@ -3,7 +3,7 @@
  * bot move-hint bubble and the bot-vs-bot demo narration so both read as prose
  * (e.g. "c5 → a3 (capture)") instead of dumping raw JSON or element ids.
  *
- * SAFETY (mirrors buildNarration's SAFE_DEST_ARGS rationale): only DESTINATION-like
+ * SAFETY: only DESTINATION-like
  * args are read, and raw numeric element ids are never surfaced — so this can never
  * leak hidden information (e.g. a card's element id) on LAN/multiplayer sessions.
  * Open-information games (Checkers, Hex) carry their target as a notation string or

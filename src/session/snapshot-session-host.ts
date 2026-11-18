@@ -536,23 +536,6 @@ export interface SnapshotSessionAdapters {
    */
   onBackgroundError?: (error: unknown) => void;
   /**
-   * Optional narrator hook for game authors.
-   *
-   * Supplying this hook is required for hidden-information games: the default
-   * narration only includes destination-like args (to, destination, target,
-   * square, cell, position) and omits all other args (e.g. card element IDs)
-   * that must not be broadcast to every seat on a LAN multiplayer session.
-   *
-   * Open-information games do not need this hook — the destination-only default
-   * is sufficient and safe.
-   *
-   * @param player - 1-based seat index of the acting player
-   * @param action - action name (e.g. "playCard")
-   * @param args   - full action args from botSuggest (may contain hidden data)
-   * @returns      a narration string safe to broadcast to all seats
-   */
-  narrateMove?: (player: number, action: string, args: Record<string, unknown>) => string;
-  /**
    * How the host holds the work this session starts itself while the rules it
    * runs on are being replaced (#388). Each demo move goes through it, and a
    * chain of bot moves stops between moves while a reload is pending and
@@ -2025,7 +2008,8 @@ export class SnapshotSessionHost {
         // The announcement broadcast fires so clients see the move description
         // BEFORE the game state changes — this is the teaching signal. It stays
         // visible during the pace/pause below so the learner can read it.
-        this.narrationText = this.buildNarration(botPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
+        // Broadcast to every seat, so it names destination-like args only, never element ids.
+        this.narrationText = describeMoveForNarration(botPlayer, suggestedAction, suggestedArgs as Record<string, unknown>);
         this.broadcastCurrent(); // announcement broadcast (isDemoRunning + narration)
 
         // Phase 3: Pace (speed delay), park (paused), or release-one (step). The
@@ -2195,33 +2179,5 @@ export class SnapshotSessionHost {
     this.demoRewound = true;
     // The game changed: published as a change, and persisted like any other.
     await this.apply(res);
-  }
-
-  /**
-   * Format a narration string for one loop iteration.
-   *
-   * This string is broadcast to ALL seats — including opponents in hidden-
-   * information games. Two strategies are used in priority order:
-   *
-   * 1. `adapters.narrateMove` hook (supplied by the game author): full control.
-   *    Required for hidden-info games where the default would expose private data.
-   *
-   * 2. Safe default: only args whose keys appear in SAFE_DEST_ARGS
-   *    (to, destination, target, square, cell, position) are included in the
-   *    summary. All other args (e.g. card element IDs) are omitted to avoid
-   *    leaking hidden information on LAN sessions. Open-information games
-   *    (Checkers, Hex) are unaffected because their destination args use these
-   *    standard key names.
-   *
-   * Uses "Player N" rather than the player's name: the host is not handed
-   * player names.
-   */
-  private buildNarration(player: number, action: string, args: Record<string, unknown>): string {
-    if (this.adapters.narrateMove) {
-      return this.adapters.narrateMove(player, action, args);
-    }
-    // Safe default: format a readable destination ("c5 → a3 (capture)") from
-    // destination-like args only — never raw element IDs (no hidden-info leak).
-    return describeMoveForNarration(player, action, args);
   }
 }
