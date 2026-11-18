@@ -283,7 +283,8 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   }
 
   /**
-   * Add specific players who can see contents (beyond zone default)
+   * Add specific players who can see contents (beyond zone default).
+   * For one seat, the later of `hideContentsFrom` and `addZoneVisibleTo` wins.
    */
   addZoneVisibleTo(...players: (P | number)[]): void {
     const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
@@ -293,10 +294,13 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
     this._zoneVisibility.addPlayers = Array.from(
       new Set([...(this._zoneVisibility.addPlayers ?? []), ...positions])
     );
+    const exceptPlayers = this._zoneVisibility.exceptPlayers?.filter((seat) => !positions.includes(seat));
+    if (exceptPlayers) this._zoneVisibility.exceptPlayers = exceptPlayers;
   }
 
   /**
-   * Set players who cannot see contents (with 'all' mode)
+   * Set players who cannot see contents (with 'all' mode).
+   * For one seat, the later of `hideContentsFrom` and `addZoneVisibleTo` wins.
    */
   hideContentsFrom(...players: (P | number)[]): void {
     if (!this._zoneVisibility) {
@@ -306,6 +310,8 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
     this._zoneVisibility.exceptPlayers = Array.from(
       new Set([...(this._zoneVisibility.exceptPlayers ?? []), ...positions])
     );
+    const addPlayers = this._zoneVisibility.addPlayers?.filter((seat) => !positions.includes(seat));
+    if (addPlayers) this._zoneVisibility.addPlayers = addPlayers;
   }
 
   // ============================================

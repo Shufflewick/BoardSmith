@@ -66,3 +66,25 @@ describe('hideContentsFrom conceals the zone from the denied seat (#750)', () =>
     expect(children.some((c) => allReal.has(c.id))).toBe(false);
   });
 });
+
+describe('the later of hideContentsFrom and addZoneVisibleTo wins for a seat (#1714)', () => {
+  const realIdsSeen = (game: DeckGame, seat: number) => {
+    const real = new Set(game.table.all(Card).map((c) => c.id));
+    return (zoneIn(game, seat, 'table').children ?? []).filter((c) => real.has(c.id)).length;
+  };
+
+  it('shows the contents to a seat granted after it was hidden', () => {
+    const game = new DeckGame({ playerCount: 3, seed: 'bs1714' });
+    game.table.hideContentsFrom(2, 3);
+    game.table.addZoneVisibleTo(2);
+    expect([1, 2, 3].map((seat) => realIdsSeen(game, seat))).toEqual([5, 5, 0]);
+  });
+
+  it('hides the contents from a seat hidden after it was granted', () => {
+    const game = new DeckGame({ playerCount: 3, seed: 'bs1714' });
+    game.table.contentsHidden();
+    game.table.addZoneVisibleTo(2, 3);
+    game.table.hideContentsFrom(2);
+    expect([1, 2, 3].map((seat) => realIdsSeen(game, seat))).toEqual([0, 0, 5]);
+  });
+});
