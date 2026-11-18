@@ -1,5 +1,5 @@
 {
-  "revision": 442,
+  "revision": 443,
   "surfaceHash": "23557d64e29431aa",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3479,6 +3479,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "chunk-merge's cross-chunk record now reads files git quotes in diff headers and both paths of a rename (CLI only)"
+    },
+    {
+      "revision": 443,
+      "date": "2026-11-18",
+      "surfaceHash": "23557d64e29431aa",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "docs/api/session.md no longer lists seven types boardsmith/session does not export, and names boardsmith/bot for BotStrategy and boardsmith/view-patch for the patch helpers (#1713)."
     }
   ]
 }
