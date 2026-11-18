@@ -39,7 +39,8 @@ import {
 - `flowStateOf()`, `isCompleteOf()`, `winnersOf()` - Read the flow state, the game's end and its winners out of a snapshot
 - `StatePushGate` - Decides per connection whether a frame is news, and turns it into a patch against the last one sent, for a host that pushes outside `SnapshotSessionHost`
 - `SeatPush` - One seat's push: `{ seat, view }` the first time, then `{ seat, patch }`
-- `applyViewPatch(held, patch)`, `ViewPatch`, `ViewPatchOp`, `ViewPath` - Applying a push to the view a page holds. They are exported from `boardsmith/view-patch` only, which imports nothing, so a Worker host or a web app compiles none of the engine under its own `strict` and `noUncheckedIndexedAccess` (#1624). `applyViewPatch` returns the seat view a pushed `patch` turns `held` into, or `undefined` when `held` is not the view the patch was made against
+
+`applyViewPatch(held, patch)`, `ViewPatch`, `ViewPatchOp` and `ViewPath` are for applying a push to the view a page holds. They are exported from `boardsmith/view-patch` only, which imports nothing, so a Worker host or a web app compiles none of the engine under its own `strict` and `noUncheckedIndexedAccess` (#1624). `applyViewPatch` returns the seat view a pushed `patch` turns `held` into, or `undefined` when `held` is not the view the patch was made against
 
 ### Headless Session
 
@@ -86,14 +87,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 
 - `GameClass` - Game class constructor type
 - `GameDefinition` - Game definition with metadata
-- `GameConfig` - Game configuration options
-- `StoredGameState` - Persisted game state
 - `PlayerGameState` - Player-specific state view
-- `SessionInfo` - Session metadata
-- `StateUpdate` - State update message
-- `BotStrategy` - bot player configuration
-- `StorageAdapter` - Storage backend interface
-- `BroadcastAdapter` - WebSocket broadcast interface
 - `PlayerOptionDefinition` - Player option definition
 - `StandardPlayerOption` - Select player option
 - `NumberPlayerOption` - Number player option (`default`, optional `min`, `max` and `step`)
@@ -185,7 +179,7 @@ await session.arrange((game) => {
 ### Adding bot opponents
 
 The third argument names the seats a bot plays. The game definition's `bot`
-field carries its `BotStrategy`.
+field carries its `BotStrategy`, which `boardsmith/bot` exports (see [bot.md](./bot.md)).
 
 ```typescript
 const session = createHeadlessSession(
