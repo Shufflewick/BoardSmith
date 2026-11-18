@@ -1727,71 +1727,24 @@ export class ActionExecutor {
       trace.conditionResult = true;
     }
 
-    // ONE SOURCE OF TRUTH FOR "AVAILABLE" (#270). The trace describes each step;
-    // whether the action is offered is decided by the very walk that offers it,
-    // so a trace can never name a reason the offer does not act on.
-    this.traceSelectionPath(action.selections, player, trace.selections);
+    // ONE SOURCE OF TRUTH FOR "AVAILABLE" (#270, #1690). The trace records the
+    // steps the availability walk itself evaluates, so it can only name a reason
+    // the offer acts on; every step the walk never reaches is `notYetAskable`.
+    const reached: PickTrace[] = [];
+    this.hasValidSelectionPath(action.selections, player, {}, 0, action.name, reached);
+    trace.selections = action.selections.map((s, i) => reached[i] ?? { ...this.describePick(s), notYetAskable: true });
     trace.available = this.isActionAvailable(action, player);
     return trace;
   }
 
-  /**
-   * The same walk as {@link hasValidSelectionPath}, written down (#270).
-   *
-   * A trace that disagreed with the offer is worse than no trace: it would name
-   * a later step as the reason a verb the engine actually offers is missing, and
-   * send the author debugging a question the player has not been asked yet. So
-   * this stops where availability stops, and every step past that is recorded
-   * with `notYetAskable` -- present in the trace, NOT evaluated, and never the
-   * reason for anything.
-   */
-  private traceSelectionPath(
-    selections: Selection[],
-    player: Player,
-    selectionTraces: PickTrace[]
-  ): void {
-    // Nothing is asked, so there is nothing to describe.
-    if (selections.length === 0) {
-      return;
-    }
-
-    // The first step is the only one evaluated, for the reason it is the only
-    // one availability evaluates: it is the only one whose arguments are known.
-    const selection = selections[0];
-    const selTrace = this.describePick(selection);
-
-    // Optional steps and free input always have an answer, and what that answer
-    // will be is unknown, so nothing past them can be judged either.
-    if (selection.optional || selection.type === 'text' || selection.type === 'number') {
-      if (selection.type === 'text' || selection.type === 'number') {
-        selTrace.choiceCount = -1; // -1 indicates free input, not choices
-      }
-      selectionTraces.push(selTrace);
-      this.traceNotYetAskable(selections, 1, selectionTraces);
-      return;
-    }
-
-    const choices = this.getChoices(selection, player, {});
-    selTrace.choiceCount = choices.length; // Total including disabled
-    selectionTraces.push(selTrace);
-    this.traceNotYetAskable(selections, 1, selectionTraces);
-  }
-
-  /**
-   * Record every step after the one the player is waiting on, unevaluated.
-   *
-   * Their candidates are a function of answers that do not exist yet, so the
-   * trace says which step each one is waiting for rather than a choice count
-   * that would only be the empty list a dependent callback correctly returns.
-   */
-  private traceNotYetAskable(
-    selections: Selection[],
-    from: number,
-    selectionTraces: PickTrace[]
-  ): void {
-    for (let i = from; i < selections.length; i++) {
-      selectionTraces.push({ ...this.describePick(selections[i]), notYetAskable: true });
-    }
+  /** Record a step the availability walk evaluated, keeping its best count across the earlier answers it was asked under. */
+  private recordPick(reached: PickTrace[] | undefined, index: number, selection: Selection, choiceCount: number, emptyAllowed = false): void {
+    if (!reached) return;
+    const prev = reached[index];
+    const pick = this.describePick(selection);
+    pick.choiceCount = prev ? Math.max(prev.choiceCount, choiceCount) : choiceCount;
+    if (emptyAllowed || prev?.optional) pick.optional ||= true;
+    reached[index] = pick;
   }
 
   /**
@@ -1819,29 +1772,11 @@ export class ActionExecutor {
     return selTrace;
   }
 
-  /**
-   * Check if any selection after the given index depends on a selection by name
-   */
-  private hasDependentSelection(
-    selections: Selection[],
-    afterIndex: number,
-    selectionName: string
-  ): boolean {
-    for (let i = afterIndex; i < selections.length; i++) {
-      const sel = selections[i];
-      // Check for filterBy dependency (choice selections only)
-      if (sel.type === 'choice') {
-        const choiceSel = sel as ChoiceSelection;
-        if (choiceSel.filterBy?.selectionName === selectionName) {
-          return true;
-        }
-      }
-      // Check for dependsOn dependency (all selection types)
-      if ('dependsOn' in sel && sel.dependsOn === selectionName) {
-        return true;
-      }
-    }
-    return false;
+  /** The later steps that declared a dependency (`dependsOn` / `filterBy`) on the step at `index`. */
+  private dependentsOf(selections: Selection[], index: number): Selection[] {
+    const name = selections[index].name;
+    return selections.slice(index + 1).filter(s => ('dependsOn' in s && s.dependsOn === name) ||
+      (s.type === 'choice' && (s as ChoiceSelection).filterBy?.selectionName === name));
   }
 
   /**
@@ -1880,6 +1815,8 @@ export class ActionExecutor {
    * @param actionName - Propagated from `isActionAvailable` so tutorial gate
    *   disabled reasons are included when filtering enabled choices, and so a
    *   pruning diagnostic can name the verb that disappeared.
+   * @param reached - When given, each step the walk evaluates is recorded at its
+   *   index, which is how the availability trace describes this same walk.
    */
   private hasValidSelectionPath(
     selections: Selection[],
@@ -1887,6 +1824,7 @@ export class ActionExecutor {
     args: Record<string, unknown>,
     index: number,
     actionName: string,
+    reached?: PickTrace[],
   ): boolean {
     // Base case: every step has been walked (or bound by the enumeration above).
     if (index >= selections.length) {
@@ -1898,13 +1836,15 @@ export class ActionExecutor {
     // Already answered by the dependent enumeration below: keep walking, this
     // step is not the one the player is waiting on.
     if (Object.prototype.hasOwnProperty.call(args, selection.name)) {
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName, reached);
     }
 
     // The first unsatisfied step. Optional steps and free input always have an
     // answer, and what that answer will be is unknown, so nothing past them can
     // be judged either.
     if (selection.optional || selection.type === 'text' || selection.type === 'number') {
+      // -1 marks free input, which has no choices to count.
+      this.recordPick(reached, index, selection, selection.optional ? 0 : -1);
       return true;
     }
 
@@ -1915,14 +1855,18 @@ export class ActionExecutor {
     const answers = enabledChoices.map(c => takesArray ? [c.value] : c.value);
     // Nothing later declared a dependency on this step, so nothing later can be
     // judged until the player answers it, and one answer makes it offerable.
-    const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
-    if (answers.length > 0 && !hasDependent) return true;
+    const dependents = this.dependentsOf(selections, index);
+    const hasDependent = dependents.length > 0;
+    if (answers.length > 0 && !hasDependent) {
+      this.recordPick(reached, index, selection, enabledChoices.length);
+      return true;
+    }
 
     // A list pick whose min is 0 can always be answered with nothing ticked (#1558).
     const listContext = { game: this.game, player, args };
-    if ((resolveOrderedList(selection, listContext) ?? resolveMultiSelect(selection, listContext))?.min === 0) {
-      answers.push([]);
-    }
+    const emptyAllowed = (resolveOrderedList(selection, listContext) ?? resolveMultiSelect(selection, listContext))?.min === 0;
+    if (emptyAllowed) answers.push([]);
+    this.recordPick(reached, index, selection, enabledChoices.length, emptyAllowed);
 
     if (answers.length === 0) {
       // ONLY WHERE IT COULD SURPRISE ANYONE. A one-question verb is dropped
@@ -1951,21 +1895,15 @@ export class ActionExecutor {
     // bound, exactly as the player's own answer will.
     for (const answer of answers) {
       const newArgs = { ...args, [selection.name]: answer };
-      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
+      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName, reached)) {
         return true;
       }
     }
 
-    const dependents = selections
-      .slice(index + 1)
-      .filter(s => ('dependsOn' in s && s.dependsOn === selection.name) ||
-        (s.type === 'choice' && (s as ChoiceSelection).filterBy?.selectionName === selection.name))
-      .map(s => `'${s.name}'`)
-      .join(', ');
     devWarn(
       `offer-pruned-dependent:${actionName}:${selection.name}`,
       `Action '${actionName}' was dropped from this player's offers: no value of ` +
-      `'${selection.name}' leaves ${dependents} with anything to pick.\n` +
+      `'${selection.name}' leaves ${dependents.map(s => `'${s.name}'`).join(', ')} with anything to pick.\n` +
       `  A DECLARED dependency is evaluated during availability with the earlier answer bound, ` +
       `which is what dependsOn/filterBy asks for.\n` +
       `  If the verb should be there, narrow '${selection.name}' to the values that lead ` +
