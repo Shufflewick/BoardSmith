@@ -34,6 +34,43 @@ describe('focusFirstBoardTarget', () => {
     expect(focusFirstBoardTarget(host)).toBe(false);
   });
 
+  it('reaches a plain button or link, which is a tab stop without a tabindex (#1693)', () => {
+    host.innerHTML = `<button id="card">7</button>`;
+    expect(focusFirstBoardTarget(host)).toBe(true);
+    expect(document.activeElement?.id).toBe('card');
+    host.innerHTML = `<a href="#x" id="link">x</a>`;
+    expect(focusFirstBoardTarget(host)).toBe(true);
+    expect(document.activeElement?.id).toBe('link');
+  });
+
+  it('skips matches that cannot take focus or sit outside the tab order (#1693)', () => {
+    host.innerHTML = `
+      <button disabled>disabled</button>
+      <button tabindex="-1">parked</button>
+      <button style="display: none">hidden</button>
+      <div inert><button>inert</button></div>
+      <button id="real">real</button>`;
+    expect(focusFirstBoardTarget(host)).toBe(true);
+    expect(document.activeElement?.id).toBe('real');
+  });
+
+  it('still focuses an SVG target such as a hex cell (#1693)', () => {
+    host.innerHTML = `<svg><g tabindex="0" id="hex"></g></svg>`;
+    expect(focusFirstBoardTarget(host)).toBe(true);
+    expect(document.activeElement?.id).toBe('hex');
+  });
+
+  it('moves on when focus does not land on a match, and reports only real success (#1693)', () => {
+    host.innerHTML = `<button id="refuses">a</button><button id="takes">b</button>`;
+    (host.querySelector('#refuses') as HTMLElement).focus = () => {};
+    expect(focusFirstBoardTarget(host)).toBe(true);
+    expect(document.activeElement?.id).toBe('takes');
+    host.innerHTML = `<button id="only">a</button>`;
+    (host.querySelector('#only') as HTMLElement).focus = () => {};
+    (document.activeElement as HTMLElement | null)?.blur?.();
+    expect(focusFirstBoardTarget(host)).toBe(false);
+  });
+
   it('reports failure rather than throwing when there is no container', () => {
     expect(focusFirstBoardTarget(null)).toBe(false);
   });

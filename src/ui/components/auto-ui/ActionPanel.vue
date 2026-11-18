@@ -20,6 +20,7 @@ import { choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, f
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
+import { getFocusable } from '../../composables/useFocusTrap.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -853,9 +854,6 @@ function focusIsStranded(): boolean {
   return !active || active === document.body || !active.isConnected;
 }
 
-const FOCUSABLE =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
 /** The first of `candidates` a keyboard user can actually operate. */
 function firstOperableOf(candidates: Iterable<HTMLElement>): HTMLElement | null {
   for (const candidate of candidates) {
@@ -875,10 +873,6 @@ function firstOperableOf(candidates: Iterable<HTMLElement>): HTMLElement | null 
   return null;
 }
 
-/** Every focusable node in `scope`, in document order. */
-const focusableIn = (scope: HTMLElement): Iterable<HTMLElement> =>
-  scope.querySelectorAll<HTMLElement>(FOCUSABLE);
-
 /**
  * Where focus should land for the step now rendered.
  *
@@ -892,9 +886,9 @@ const focusableIn = (scope: HTMLElement): Iterable<HTMLElement> =>
  */
 function focusTargetFor(root: HTMLElement): HTMLElement | null {
   const selection = root.querySelector<HTMLElement>('.selection-input');
-  if (selection) return firstOperableOf(focusableIn(selection)) ?? firstOperableOf(focusableIn(root));
+  if (selection) return firstOperableOf(getFocusable(selection)) ?? firstOperableOf(getFocusable(root));
   const menu = firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS));
-  return menu ?? firstOperableOf(focusableIn(root));
+  return menu ?? firstOperableOf(getFocusable(root));
 }
 
 // AVAILABILITY IS THE SECOND THING THAT STRANDS FOCUS (#228). The idle list is

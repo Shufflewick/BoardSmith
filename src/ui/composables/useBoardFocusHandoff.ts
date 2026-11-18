@@ -22,21 +22,20 @@
  */
 import { watch, nextTick, type Ref } from 'vue';
 import type { BoardInteraction } from './useBoardInteraction.js';
-
-/** Anything the browser will let a Tab press reach. */
-const TAB_STOP_SELECTOR = '[tabindex]:not([tabindex="-1"])';
+import { getFocusable } from './useFocusTrap.js';
 
 /**
- * Focus the first tab stop inside `container`. Returns whether it found one, so
+ * Focus the first tab stop inside `container`. Returns whether focus landed, so
  * a caller can tell "there was nothing to focus" from "focus moved".
  */
 export function focusFirstBoardTarget(container: HTMLElement | null | undefined): boolean {
-  const target = container?.querySelector(TAB_STOP_SELECTOR);
-  if (!(target instanceof HTMLElement) && !(target instanceof SVGElement)) return false;
-  // SVGElement carries focus() in every browser that supports tabindex on SVG,
-  // which is every browser BoardSmith targets — hex boards are <g> elements.
-  (target as unknown as HTMLElement).focus();
-  return true;
+  if (!container) return false;
+  // A negative tabindex parks a match out of the Tab order, such as a roving grid's other cells.
+  for (const target of getFocusable(container).filter((el) => el.tabIndex >= 0)) {
+    target.focus();
+    if (document.activeElement === target) return true;
+  }
+  return false;
 }
 
 /**

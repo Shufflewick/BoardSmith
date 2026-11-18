@@ -66,7 +66,7 @@ function canTakeFocus(el: HTMLElement): boolean {
   return getComputedStyle(el).visibility === 'visible';
 }
 
-function getFocusable(container: HTMLElement): HTMLElement[] {
+export function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(canTakeFocus);
 }
 
