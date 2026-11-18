@@ -179,24 +179,3 @@ export function getSpriteStyle(
     backgroundSize: `${info.sheetWidth * scaleX}px ${info.sheetHeight * scaleY}px`,
   };
 }
-
-/**
- * Get background style for a URL image.
- *
- * @param image - Image data (should be URL type)
- * @returns CSS properties for background-image
- */
-export function getBackgroundImageStyle(image: unknown): CSSProperties {
-  const info = parseImageInfo(image);
-
-  if (info?.type === 'url') {
-    return {
-      backgroundImage: `url(${info.src})`,
-      backgroundSize: 'contain',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-    };
-  }
-
-  return {};
-}

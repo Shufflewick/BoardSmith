@@ -373,7 +373,6 @@ export {
   isSpriteImage,
   getImageSrc,
   getSpriteStyle,
-  getBackgroundImageStyle,
   type ImageInfo,
   type SpriteData,
 } from './utils/image.js';
