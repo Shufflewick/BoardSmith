@@ -241,6 +241,21 @@ class AllocateGame extends Game<AllocateGame, Player> {
   }
 }
 
+/** A game of one action whose count option is a function that returns undefined, a mistake the engine names (#1694). */
+function undefinedCountGame(option: 'multiSelect' | 'orderedList') {
+  return class UndefinedCountGame extends Game<UndefinedCountGame, Player> {
+    constructor(options: GameOptions) {
+      super(options);
+      this.registerAction(
+        Action.create<UndefinedCountGame>('pick')
+          .chooseFrom('values', { choices: [1, 2, 3], [option]: () => undefined } as never)
+          .execute((_args, ctx) => { ctx.game.finish([]); }),
+      );
+      this.setFlow({ root: actionStep({ actions: ['pick'] }) });
+    }
+  };
+}
+
 const race = { gameClass: RaceGame, gameType: 'race', minPlayers: 2, maxPlayers: 4 };
 
 /** The fixture greedy policy: take the largest step. */
@@ -574,6 +589,15 @@ describe('playGame with policies (#556)', () => {
       expect(result.error).toBeUndefined();
       expect(result.completed).toBe(true);
     }
+  });
+
+  it.each(['multiSelect', 'orderedList'] as const)('random fails with the engine\'s error when a %s function returns undefined, rather than draw a move it rejects (#1694)', async (option) => {
+    const result = await playGame(
+      { gameClass: undefinedCountGame(option) },
+      { playerCount: 2, seed: 'count', policies: [random(), random()], maxActions: 5 },
+    );
+    expect(result.error).not.toContain('rejected the move');
+    expect(result.error).toContain(`Selection "values": its ${option} function returned undefined.`);
   });
 
   it('random still plays a pick the engine offered and the action refuses, so the game fails on it (#910, #1543)', async () => {

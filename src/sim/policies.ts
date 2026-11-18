@@ -16,14 +16,13 @@ import type {
   ActionDefinition,
   Selection,
   NumberSelection,
-  ChoiceSelection,
-  ElementsSelection,
   Player,
   GameClass,
   GameMetrics,
   PublishedFollowUp,
 } from '../engine/index.js';
 import { MoveListTooLargeError } from '../engine/index.js';
+import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import { enumerateActionMoves, enumerateLegalMoves, numberInputValues } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
@@ -278,24 +277,6 @@ export function mcts(level: DifficultyLevel | number): Policy {
   };
 }
 
-/**
- * Resolve a selection's count config -- a `multiSelect` set or an `orderedList`
- * sequence (#249) -- into concrete {min, max}, or null if the selection is
- * single-valued. Both are written the same three ways (a number, a config, or a
- * function of context), which is why one parser answers for both.
- * @internal
- */
-function resolveBounds(
-  raw: unknown,
-  ctx: { game: Game; player: Player; args: Record<string, unknown> }
-): { min: number; max: number } | null {
-  const value = typeof raw === 'function' ? (raw as (c: typeof ctx) => unknown)(ctx) : raw;
-  if (value === undefined || value === null) return null;
-  if (typeof value === 'number') return { min: 1, max: value };
-  const cfg = value as { min?: number; max?: number };
-  return { min: cfg.min ?? 1, max: cfg.max ?? Infinity };
-}
-
 /** An action's random args, or why the random policy has none for it. */
 type RandomArgs = { ok: true; args: Record<string, unknown> } | { ok: false; reason: string };
 
@@ -483,37 +464,26 @@ function drawPicks(
     // identity may fill more than one entry, which is the one thing a set draw
     // cannot produce and therefore the one thing a random game would never
     // exercise if this fell through to the multiSelect path.
-    const orderedListRaw =
-      sel.type === 'choice' ? (sel as ChoiceSelection).orderedList : undefined;
-    if (orderedListRaw !== undefined) {
-      const bounds = resolveBounds(orderedListRaw, ctx);
-      if (bounds) {
-        if (choices.length === 0) {
-          if (bounds.min <= 0 || optional) {
-            if (bounds.min <= 0) working[sel.name] = [];
-            continue;
-          }
-          return {
-            ok: false,
-            reason: `action '${actionDef.name}' selection '${sel.name}' needs at least ${bounds.min} entr(y/ies) but no choices are available`,
-          };
+    const ordered = resolveOrderedList(sel, ctx);
+    if (ordered) {
+      if (choices.length === 0) {
+        if (ordered.min <= 0 || optional) {
+          if (ordered.min <= 0) working[sel.name] = [];
+          continue;
         }
-        const maxEntries = bounds.max === Infinity ? Math.max(bounds.min, choices.length) : bounds.max;
-        const count = bounds.min + rng.nextInt(maxEntries - bounds.min + 1);
-        working[sel.name] = Array.from({ length: count }, () => rng.pick(choices));
-        continue;
+        return {
+          ok: false,
+          reason: `action '${actionDef.name}' selection '${sel.name}' needs at least ${ordered.min} entr(y/ies) but no choices are available`,
+        };
       }
+      const maxEntries = ordered.max ?? Math.max(ordered.min, choices.length);
+      const count = ordered.min + rng.nextInt(maxEntries - ordered.min + 1);
+      working[sel.name] = Array.from({ length: count }, () => rng.pick(choices));
+      continue;
     }
 
-    const multiSelectRaw =
-      sel.type === 'choice'
-        ? (sel as ChoiceSelection).multiSelect
-        : sel.type === 'elements'
-          ? (sel as ElementsSelection).multiSelect
-          : undefined;
     // 'elements' selections always yield an array; default to "any non-empty subset".
-    const multi =
-      resolveBounds(multiSelectRaw, ctx) ?? (sel.type === 'elements' ? { min: 1, max: Infinity } : null);
+    const multi = resolveMultiSelect(sel, ctx) ?? (sel.type === 'elements' ? { min: 1 } : undefined);
 
     if (multi) {
       if (choices.length < multi.min) {
@@ -523,7 +493,7 @@ function drawPicks(
           reason: `action '${actionDef.name}' selection '${sel.name}' needs at least ${multi.min} choice(s) but only ${choices.length} are available`,
         };
       }
-      const maxPick = Math.min(multi.max === Infinity ? choices.length : multi.max, choices.length);
+      const maxPick = Math.min(multi.max ?? choices.length, choices.length);
       const minPick = Math.max(multi.min, 0);
       const count = minPick + rng.nextInt(maxPick - minPick + 1);
       working[sel.name] = rng.shuffle(choices).slice(0, count);
