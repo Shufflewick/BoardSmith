@@ -25,7 +25,7 @@ import { MoveListTooLargeError } from '../engine/index.js';
 import { resolveMultiSelect, resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import { enumerateActionMoves, enumerateLegalMoves, numberInputValues } from '../engine/utils/enumerate-moves.js';
 import { createBot } from '../bot/index.js';
-import { picksFromSeat } from '../engine/element/seat-placeholders.js';
+import { playSeatMove } from '../bot/seat-move.js';
 import type { BotStrategy, DifficultyLevel } from '../bot/types.js';
 import type { SeededRandom } from '../utils/random.js';
 
@@ -268,11 +268,9 @@ export function mcts(level: DifficultyLevel | number): Policy {
       const bot = createBot(game, definition.gameClass, definition.gameType, seat, level, definition.bot, {
         seed: String(rng.next()),
       });
-      const move = await bot.play();
-      if (!move && bot.lastWait?.until !== undefined) return { waitUntil: bot.lastWait.until };
-      if (!move) return { noMove: `${name} found no move for player ${seat}: ${bot.lastStallReason ?? 'no reason recorded'}` };
-      // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
-      return { action: move.action, args: picksFromSeat(game, move.action, move.args, seat) };
+      const move = await playSeatMove(bot, game, seat);
+      if ('stall' in move) return { noMove: `${name} found no move for player ${seat}: ${move.stall}` };
+      return move;
     },
   };
 }

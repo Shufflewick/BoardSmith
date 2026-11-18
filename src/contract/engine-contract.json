@@ -1,5 +1,5 @@
 {
-  "revision": 431,
+  "revision": 432,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3391,6 +3391,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The one-time verify-example-ledger-upgrade CLI command is removed; a pre-lineText example-replay ledger is refused with a delete-and-record-again message"
+    },
+    {
+      "revision": 432,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The bot benchmark and the simulator's mcts policy read a bot's move, wait or stall through one shared function; behavior is unchanged (#1701)"
     }
   ]
 }
