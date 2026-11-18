@@ -19,6 +19,7 @@ import { escapeRegExp } from '../../utils/regexp.js';
 import { toolCommand } from '../lib/run-tool.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { collectOutput } from '../lib/child-output.js';
 import { SIM_FILE } from '../../vite-config/test-files.js';
 
 /**
@@ -403,11 +404,9 @@ export const runVitest: TestRunner = async (projectDir, files) => {
     }
     const { ok, output } = await new Promise<{ ok: boolean; output: string }>((done) => {
       const child = spawn(vitest.command, vitest.commandArgs, { cwd: projectDir, shell: process.platform === 'win32' });
-      let text = '';
-      child.stdout.on('data', (d: Buffer) => (text += d.toString()));
-      child.stderr.on('data', (d: Buffer) => (text += d.toString()));
+      const text = collectOutput(child);
       child.on('error', (error) => done({ ok: false, output: error.message }));
-      child.on('close', (code) => done({ ok: code === 0, output: text }));
+      child.on('close', (code) => done({ ok: code === 0, output: text() }));
     });
     const reportText = await readIfExists(reportPath, (path) => fs.readFile(path, 'utf-8'));
     return { ok, output, ran: testFilesInReport(reportText, await fs.realpath(projectDir)) };

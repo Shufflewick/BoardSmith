@@ -18,8 +18,8 @@ import type { CatalogueRun } from './catalogue-check.js';
  * The stand-in for `boardsmith validate`. It passes only when, in the folder it runs in:
  * `node_modules/boardsmith` and `node_modules/.bin/boardsmith` are this tree, `node_modules/.bin/tool`
  * is still reachable, every catalogue dependency named in `deps.txt` is a committed copy that loads
- * this tree too, and neither it nor any of those has a `BROKEN` file. With `HANG` it never ends, and
- * with `ORPHAN` it passes leaving a child running.
+ * this tree too, and neither it nor any of those has a `BROKEN` file. With `HANG` it never ends,
+ * with `ORPHAN` it passes leaving a child running, and with `OUTPUT` it prints that file and fails.
  */
 const STUB_VALIDATE = `
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -41,7 +41,11 @@ for (const dep of deps) {
   if (loads(dir) !== tree) fail(dep + ' loads boardsmith from ' + loads(dir));
 }
 if (existsSync('BROKEN')) fail('BROKEN: ' + readFileSync('BROKEN', 'utf-8'));
-if (existsSync('HANG')) {
+if (existsSync('OUTPUT')) {
+  // Not process.exit, which can cut off a large write to a pipe.
+  process.stdout.write(readFileSync('OUTPUT', 'utf-8'));
+  process.exitCode = 1;
+} else if (existsSync('HANG')) {
   spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)', join(tree, 'hanging-grandchild')], { stdio: 'ignore' });
   setInterval(() => {}, 1000);
 } else if (existsSync('ORPHAN')) {

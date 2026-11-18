@@ -139,6 +139,17 @@ describe('what each game is checked against (#591)', () => {
     expect(failed?.output).toContain('TableBoardProps is optional now');
   });
 
+  it('keeps a character whose bytes arrive in two chunks whole (#1691)', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    // Far more than one pipe chunk of three-byte characters, so some chunk ends inside one.
+    await makeGame(fx, 'hex', { files: { OUTPUT: '€'.repeat(200000) } });
+
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    expect(run.results[0].output).toBe('€'.repeat(200000));
+  });
+
   it("links a catalogue game the install depends on to that game's committed main, loading the same tree", async () => {
     const fx = fixture();
     await makeTree(fx.tree);
