@@ -74,6 +74,18 @@ export function superClassName(classNode: Record<string, unknown>): string | und
   return superClass?.type === 'Identifier' ? superClass.name : undefined;
 }
 
+/** The class `node` names and the class it extends: `class X extends Y` or `const X = class extends Y`. */
+function namedClass(node: Record<string, unknown>): { name: string; superName: string | undefined } | undefined {
+  const id = node.id as { type?: string; name?: string } | null | undefined;
+  if (!id?.name) return undefined;
+  if (node.type === 'ClassDeclaration') return { name: id.name, superName: superClassName(node) };
+  const init = node.init as Record<string, unknown> | null | undefined;
+  if (node.type === 'VariableDeclarator' && id.type === 'Identifier' && init?.type === 'ClassExpression') {
+    return { name: id.name, superName: superClassName(init) };
+  }
+  return undefined;
+}
+
 /**
  * `roots`, the local name of each root imported from boardsmith under another name
  * (`import { Card as BaseCard } from 'boardsmith'`, #1036), and every class declared in `program`
@@ -88,13 +100,8 @@ export function collectSubclassNames(program: unknown, roots: readonly string[])
       for (const local of boardsmithLocalNames(node, roots)) names.add(local);
       return;
     }
-    const id = node.id as { type?: string; name?: string } | null | undefined;
-    const init = node.init as Record<string, unknown> | null | undefined;
-    if (node.type === 'ClassDeclaration' && id?.name) {
-      classDecls.push({ name: id.name, superName: superClassName(node) });
-    } else if (node.type === 'VariableDeclarator' && id?.type === 'Identifier' && id.name && init?.type === 'ClassExpression') {
-      classDecls.push({ name: id.name, superName: superClassName(init) });
-    }
+    const decl = namedClass(node);
+    if (decl) classDecls.push(decl);
   });
 
   let changed = true;
