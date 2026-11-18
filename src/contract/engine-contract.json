@@ -1,5 +1,5 @@
 {
-  "revision": 439,
+  "revision": 440,
   "surfaceHash": "23557d64e29431aa",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3455,6 +3455,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The controls menu fits a short screen: it caps its height to the room beside its button and scrolls, and sizes itself border-box whatever the host page's reset."
+    },
+    {
+      "revision": 440,
+      "date": "2026-11-18",
+      "surfaceHash": "23557d64e29431aa",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Availability checks a dependsOn/filterBy pick past an undeclared step between it and its input, and no longer judges that undeclared step (#1709)"
     }
   ]
 }
