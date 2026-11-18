@@ -35,6 +35,8 @@ const RECORDED = {
 
 /** The layouts and style recalculations the page has done so far, and the game frame's elements now. */
 async function counts(cdp, frame) {
+  // The bar's More mark is set from its ResizeObserver, which runs in the next frame, so it can be a frame behind a push (#1708).
+  await frame.locator('body').evaluate(() => new Promise((rendered) => requestAnimationFrame(() => requestAnimationFrame(rendered))));
   const { metrics } = await cdp.send('Performance.getMetrics');
   const metric = (name) => metrics.find((each) => each.name === name).value;
   const elements = await frame.locator('body').evaluate((body) => body.ownerDocument.querySelectorAll('*').length);
