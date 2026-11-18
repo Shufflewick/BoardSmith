@@ -2,8 +2,7 @@
  * Shared types for game hosting.
  *
  * Protocol-level types (game options, player configs) are owned by
- * '../types/protocol.js' and re-exported here for the
- * session surface — they are defined once, in one place.
+ * '../types/protocol.js' and only imported or re-exported here, never restated.
  */
 
 import type { FlowState, Game, GameClass, AnimationEvent } from '../engine/index.js';

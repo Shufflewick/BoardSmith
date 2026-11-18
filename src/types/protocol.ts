@@ -1,8 +1,8 @@
 /**
  * @module types/protocol
  *
- * Canonical protocol types for client-server communication in BoardSmith.
- * This is the single source of truth for all protocol-related types.
+ * Shared types every layer hands across its boundary: error codes, game option
+ * definitions, player configs, element refs and pick metadata, each declared once here.
  *
  * Import from here rather than defining these types elsewhere:
  * ```typescript
@@ -84,7 +84,6 @@ export enum ErrorCode {
   ENGINE_ERROR = 'ENGINE_ERROR',
   ACTION_EXECUTION_ERROR = 'ACTION_EXECUTION_ERROR',
 }
-
 
 // ============================================
 // Game Option Types

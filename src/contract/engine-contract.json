@@ -3366,7 +3366,7 @@
       "surfaceHash": "caaffcbb71cd9067",
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
-      "summary": "The session and types surfaces no longer export the deleted game server's lobby, request and WebSocket message types; PlayerConfig and the game option types stay (#1697)."
+      "summary": "boardsmith/session no longer exports the deleted game server's lobby, request and WebSocket message types; PlayerConfig and the game option types stay (#1697)."
     }
   ]
 }
