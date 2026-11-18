@@ -1,5 +1,5 @@
 {
-  "revision": 420,
+  "revision": 421,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3303,6 +3303,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "hideFrom adds to an element's own visibility setting instead of replacing it, and the later of hideFrom and addVisibleTo wins for a seat (#1689)"
+    },
+    {
+      "revision": 421,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The availability trace (debugActionAvailability) now records the steps the availability walk evaluates, so it blames a declared dependent with no answer and counts only enabled choices."
     }
   ]
 }
