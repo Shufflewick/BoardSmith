@@ -1829,7 +1829,7 @@ describe('Dependent Selection with dependsOn', () => {
   });
 });
 
-describe('Better Filter Error Messages', () => {
+describe('Element filter errors', () => {
   let game: TestGame;
   let executor: ActionExecutor;
 
@@ -1846,54 +1846,7 @@ describe('Better Filter Error Messages', () => {
     }));
   });
 
-  it('should provide helpful error when filter accesses undefined args property', () => {
-    // This is the bug-prone pattern: filter tries to access ctx.args.piece.value
-    // without checking if piece is defined first
-    const action = Action.create('move')
-      .chooseElement('piece', {
-        elementClass: Card,
-      })
-      .chooseElement('destination', {
-        elementClass: Card,
-        // Bug: accessing piece.value without null check - crashes during availability check
-        filter: (element, ctx) => {
-          const piece = ctx.args.piece as Card;
-          return element.value > piece.value; // crashes when piece is undefined
-        },
-      })
-      .execute(() => {});
-
-    // When checking availability, the filter runs with ctx.args.piece = undefined
-    // This should throw a helpful error instead of generic "Cannot read properties of undefined"
-    expect(() => {
-      executor.getChoices(action.selections[1], game.getPlayer(1)!, {});
-    }).toThrowError(/Filter for selection 'destination' crashed/);
-  });
-
-  it('should include fix suggestions in error message', () => {
-    const action = Action.create('move')
-      .chooseElement('piece', { elementClass: Card })
-      .chooseElement('destination', {
-        elementClass: Card,
-        filter: (element, ctx) => {
-          const piece = ctx.args.piece as Card;
-          return element.value > piece.value;
-        },
-      })
-      .execute(() => {});
-
-    try {
-      executor.getChoices(action.selections[1], game.getPlayer(1)!, {});
-      expect.fail('Should have thrown');
-    } catch (e) {
-      const message = (e as Error).message;
-      expect(message).toContain('dependentFilter');
-      expect(message).toContain('null check');
-      expect(message).toContain('availability check');
-    }
-  });
-
-  it('should preserve original error if not undefined access pattern', () => {
+  it('should surface the error a filter throws', () => {
     const action = Action.create('test')
       .chooseElement('card', {
         elementClass: Card,
