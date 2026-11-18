@@ -218,15 +218,15 @@ advanceWhen: {
 
 ### Predicate helpers from boardsmith/testing
 
-Three named helpers ship in `src/engine/tutorial/predicates.ts` for common patterns:
+Two named helpers ship in `src/engine/tutorial/predicates.ts` for common patterns:
 
 <!-- typecheck: game src/tutorial/steps.ts -->
 ```typescript
-import { afterFirstTurn, afterTurns, whenForced, type TutorialStep } from 'boardsmith';
+import { afterTurns, whenForced, type TutorialStep } from 'boardsmith';
 
 export const steps: TutorialStep[] = [
   // Advance after the learner's first action:
-  { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } },
+  { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterTurns(1) } },
 
   // Advance after the learner has taken 3 turns:
   { id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } },

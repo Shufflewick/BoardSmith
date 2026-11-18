@@ -2,8 +2,6 @@
  * Tests for tutorial named-predicate helpers.
  *
  * Covers:
- * - afterFirstTurn(): false at game start (no flash-skip), true after the
- *   learner's first action.
  * - afterTurns(n): false before n turns, true after n turns; verified with
  *   the shared evaluateAdvanceWhen (Plan 01) to confirm integration.
  * - whenForced(actionName): false when multiple actions are available, true
@@ -30,7 +28,7 @@ import type { TutorialDefinition, TutorialAdvanceCondition, TutorialGateContext 
 // Type imports are erased; this links the test to the file for verify's related-tests check.
 import './types.js';
 import { evaluateAdvanceWhen } from './progress.js';
-import { afterFirstTurn, afterTurns, whenForced } from './predicates.js';
+import { afterTurns, whenForced } from './predicates.js';
 
 // ============================================================
 // In-test game class
@@ -123,12 +121,12 @@ function act(runner: GameRunner<PredicateTestGame>, seat: number, action = 'move
 }
 
 // ============================================================
-// afterFirstTurn tests
+// afterTurns(1) tests
 // ============================================================
 
-describe('afterFirstTurn()', () => {
+describe('afterTurns(1)', () => {
   it('returns a single-label TutorialAdvanceCondition', () => {
-    const condition = afterFirstTurn();
+    const condition = afterTurns(1);
     expect(typeof condition).toBe('object');
     const entries = Object.entries(condition);
     expect(entries).toHaveLength(1);
@@ -139,13 +137,13 @@ describe('afterFirstTurn()', () => {
     const runner = makeRunner();
     // No action taken yet — predicate must be false so the intro step is not
     // immediately skipped when autoAdvanceTutorial is called at tutorial start.
-    const condition = afterFirstTurn();
+    const condition = afterTurns(1);
     expect(evalCondition(condition, runner.game, /* seat */ 1)).toBe(false);
   });
 
   it('is TRUE only after the learner (seat 1) completes their first action', () => {
     const runner = makeRunner();
-    const condition = afterFirstTurn();
+    const condition = afterTurns(1);
 
     // Still false before the learner acts
     expect(evalCondition(condition, runner.game, 1)).toBe(false);
@@ -157,28 +155,13 @@ describe('afterFirstTurn()', () => {
 
   it('remains TRUE after subsequent turns', () => {
     const runner = makeRunner();
-    const condition = afterFirstTurn();
+    const condition = afterTurns(1);
 
     act(runner, 1); // seat 1 turn 1
     act(runner, 2); // seat 2 turn 1
     act(runner, 1); // seat 1 turn 2
 
     expect(evalCondition(condition, runner.game, 1)).toBe(true);
-  });
-
-  it('is equivalent to afterTurns(1)', () => {
-    const runner = makeRunner();
-    const first = afterFirstTurn();
-    const turns1 = afterTurns(1);
-
-    // Both false at start
-    expect(evalCondition(first, runner.game, 1)).toBe(false);
-    expect(evalCondition(turns1, runner.game, 1)).toBe(false);
-
-    // Both true after the first action
-    act(runner, 1);
-    expect(evalCondition(first, runner.game, 1)).toBe(true);
-    expect(evalCondition(turns1, runner.game, 1)).toBe(true);
   });
 });
 
@@ -283,10 +266,10 @@ describe('afterTurns(n)', () => {
     expect(() => afterTurns(1.5)).toThrow(/n must be a positive integer/i);
   });
 
-  it('error message from afterTurns(0) is actionable — mentions afterFirstTurn() (WR-03)', () => {
+  it('error message from afterTurns(0) is actionable — points at afterTurns(1) (WR-03)', () => {
     let message = '';
     try { afterTurns(0); } catch (err) { message = (err as Error).message; }
-    expect(message).toContain('afterFirstTurn()');
+    expect(message).toContain('afterTurns(1)');
     expect(message).toContain('0');
   });
 });
@@ -352,10 +335,10 @@ function nestedAct(runner: GameRunner<NestedLoopGame>, seat: number, action: 'mo
   }
 }
 
-describe('afterFirstTurn / afterTurns with nested loops (#781)', () => {
-  it('afterFirstTurn is FALSE at game start, so the intro step is not skipped', () => {
+describe('afterTurns with nested loops (#781)', () => {
+  it('afterTurns(1) is FALSE at game start, so the intro step is not skipped', () => {
     const runner = makeNestedRunner();
-    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(false);
+    expect(evalCondition(afterTurns(1), runner.game, 1)).toBe(false);
   });
 
   it('moves inside one learner turn count as that one turn', () => {
@@ -363,10 +346,10 @@ describe('afterFirstTurn / afterTurns with nested loops (#781)', () => {
 
     nestedAct(runner, 1, 'move');
     nestedAct(runner, 1, 'move');
-    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(false);
+    expect(evalCondition(afterTurns(1), runner.game, 1)).toBe(false);
 
     nestedAct(runner, 1, 'end');
-    expect(evalCondition(afterFirstTurn(), runner.game, 1)).toBe(true);
+    expect(evalCondition(afterTurns(1), runner.game, 1)).toBe(true);
     expect(evalCondition(afterTurns(2), runner.game, 1)).toBe(false);
 
     nestedAct(runner, 2, 'move');
@@ -387,7 +370,7 @@ describe('afterFirstTurn / afterTurns with nested loops (#781)', () => {
     nestedAct(runner, 2, 'end');
 
     const restored = GameRunner.fromSnapshot(runner.getSnapshot(), NestedLoopGame);
-    expect(evalCondition(afterFirstTurn(), restored.game, 1)).toBe(true);
+    expect(evalCondition(afterTurns(1), restored.game, 1)).toBe(true);
     expect(evalCondition(afterTurns(2), restored.game, 1)).toBe(false);
 
     nestedAct(restored, 1, 'end');
