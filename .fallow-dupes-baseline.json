@@ -12,8 +12,8 @@
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/engine/element/game-element.ts:1136-1142|src/engine/element/game-element.ts:1197-1203",
     "src/cli/commands/verify-classify.ts:1568-1575|src/cli/commands/verify-classify.ts:783-790",
-    "src/engine/element/game.ts:3970-3976|src/engine/element/game.ts:4000-4006",
-    "src/engine/element/game.ts:4042-4046|src/engine/element/game.ts:4074-4078"
+    "src/engine/element/game.ts:3972-3978|src/engine/element/game.ts:4002-4008",
+    "src/engine/element/game.ts:4044-4048|src/engine/element/game.ts:4076-4080"
   ],
   "clone_fingerprints": [
     "dup:3551213f:2",

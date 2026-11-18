@@ -13,10 +13,10 @@ import {
   simultaneousActionStep,
   enumerateLegalMoves,
   GAME_ROOT_FIELD_AUDIENCE,
-  GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
   type GameOptions,
 } from './index.js';
+import * as engine from './index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
 import * as ui from '../ui/index.js';
 
@@ -106,7 +106,10 @@ describe('enumerateLegalMoves fails loudly on a bad seat (#26)', () => {
 describe('the root-field audience table is reachable from outside (#32)', () => {
   it('exports the audience of each engine-owned root field', () => {
     expect(GAME_ROOT_FIELD_AUDIENCE).toBeDefined();
-    expect(GAME_SELF_SERIALIZED_FIELDS).toBeDefined();
+  });
+
+  it('exports no second copy of the table\'s self-serialized rows (#1703)', () => {
+    expect(Object.keys(engine)).not.toContain('GAME_SELF_SERIALIZED_FIELDS');
   });
 
   it('answers the question a game actually asks: is this field mine to redact?', () => {

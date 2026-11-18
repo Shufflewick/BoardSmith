@@ -775,8 +775,6 @@ function requireWorldElementIdKey(options: GameOptions): string {
   return options.elementIdKey;
 }
 
-export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
-
 /**
  * What each `'fixed'` engine field held when `Game`'s own constructor finished,
  * kept on the game until `constructGame` has checked it (#346).
@@ -919,8 +917,8 @@ function pickDebugNote(sel: PickTrace): string {
  *                       the generic guard cannot synthesise per-seat data for an
  *                       arbitrary field.
  *   'self-serialized' — `Game` emits it outside the generic attribute bag, so
- *                       its audience is settled at that boundary instead. Must
- *                       also appear in {@link GAME_SELF_SERIALIZED_FIELDS}.
+ *                       its audience is settled at that boundary instead.
+ *                       `toJSON` strips these rows from the attribute bag.
  */
 export const GAME_ROOT_FIELD_AUDIENCE: Record<string, 'public' | 'seat-scoped' | 'self-serialized'> = {
   // --- inherited from GameElement / Space -------------------------------
@@ -949,6 +947,10 @@ export const GAME_ROOT_FIELD_AUDIENCE: Record<string, 'public' | 'seat-scoped' |
   messages: 'self-serialized',
   tutorialProgress: 'seat-scoped',
 };
+
+const GAME_SELF_SERIALIZED_FIELDS = Object.keys(GAME_ROOT_FIELD_AUDIENCE).filter(
+  (field) => GAME_ROOT_FIELD_AUDIENCE[field] === 'self-serialized',
+);
 
 /** What the engine has decided about one of its own root fields. */
 export type GameRootFieldAudience = (typeof GAME_ROOT_FIELD_AUDIENCE)[string];
@@ -4875,8 +4877,7 @@ export class Game<
     // over its host's state ceiling. See `Game.messages` / `docs/state-size.md`.
     //
     // Strip the self-serialized fields from the generic attribute bag first.
-    // See GAME_SELF_SERIALIZED_FIELDS — without this the payload carries a
-    // second, never-redacted copy of each.
+    // Without this the payload carries a second, never-redacted copy of each.
     const base = super.toJSON();
     for (const key of GAME_SELF_SERIALIZED_FIELDS) {
       delete base.attributes[key];

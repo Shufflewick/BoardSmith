@@ -23,7 +23,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space } from '../index.js';
-import { GAME_ROOT_FIELD_AUDIENCE, GAME_SELF_SERIALIZED_FIELDS } from './game.js';
+import { GAME_ROOT_FIELD_AUDIENCE } from './game.js';
 import { createPlayerView, createSnapshot, createSeatSnapshot } from '../utils/snapshot.js';
 
 class LeakGame extends Game<LeakGame, Player> {
@@ -55,9 +55,9 @@ describe('SEC-04: no top-level game field is duplicated into `attributes`', () =
     );
 
     // If this fails, a field was hoisted to the top level of `Game.toJSON()`
-    // without being added to GAME_SELF_SERIALIZED_FIELDS. It is now shipping twice,
-    // and the second copy bypasses every redaction pass. Add it to that
-    // constant rather than deleting it here.
+    // without being marked 'self-serialized' in GAME_ROOT_FIELD_AUDIENCE. It is
+    // now shipping twice, and the second copy bypasses every redaction pass.
+    // Mark it there rather than deleting it here.
     expect(duplicated).toEqual([]);
   });
 
@@ -69,7 +69,8 @@ describe('SEC-04: no top-level game field is duplicated into `attributes`', () =
       attributes: Record<string, unknown>;
     };
 
-    for (const field of GAME_SELF_SERIALIZED_FIELDS) {
+    for (const [field, audience] of Object.entries(GAME_ROOT_FIELD_AUDIENCE)) {
+      if (audience !== 'self-serialized') continue;
       expect(json.attributes[field], `${field} must not be in attributes`).toBeUndefined();
     }
 
@@ -275,21 +276,6 @@ describe('SEC-06: the game root declares an audience for every engine field', ()
     const stale = Object.keys(GAME_ROOT_FIELD_AUDIENCE).filter((f) => !live.has(f));
 
     expect(stale).toEqual([]);
-  });
-
-  it('keeps every `self-serialized` field out of the attribute bag', () => {
-    const game = newGame();
-    const attrs = (game.toJSON() as unknown as { attributes: Record<string, unknown> }).attributes;
-
-    for (const [field, audience] of Object.entries(GAME_ROOT_FIELD_AUDIENCE)) {
-      if (audience !== 'self-serialized') continue;
-      expect(attrs[field], `${field} is 'self-serialized' but rode in attributes`).toBeUndefined();
-      expect(
-        (GAME_SELF_SERIALIZED_FIELDS as readonly string[]).includes(field),
-        `${field} is 'self-serialized' but is not in GAME_SELF_SERIALIZED_FIELDS, ` +
-          'so nothing strips it from the attribute bag',
-      ).toBe(true);
-    }
   });
 
   it('serves every `public` field identically to every seat', () => {

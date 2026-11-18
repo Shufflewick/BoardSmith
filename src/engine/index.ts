@@ -28,7 +28,6 @@ export {
   WORLD_PARTITION_ID_FLOOR,
   RandomnessForbiddenError,
   GAME_ROOT_FIELD_AUDIENCE,
-  GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
   ENGINE_OWNED_GAME_OPTION_KEYS,
   animationFloorOf,

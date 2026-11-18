@@ -19,7 +19,6 @@ export {
   // The engine's own root-field audience table, and the two accessors a game
   // uses to defer to it rather than hand-keep a mirror (#32).
   GAME_ROOT_FIELD_AUDIENCE,
-  GAME_SELF_SERIALIZED_FIELDS,
   isEngineRootField,
   // Every GameOptions field, so a host can keep a player's selection off them.
   ENGINE_OWNED_GAME_OPTION_KEYS,
