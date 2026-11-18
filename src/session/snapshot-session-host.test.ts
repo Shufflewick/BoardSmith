@@ -1312,7 +1312,6 @@ describe('SnapshotSessionHost', () => {
       expect(b1.narration?.text).toBeDefined();
       // Stub canned move is 'move' with args { direction: 'left' }.
       // 'direction' is not a SAFE_DEST_ARG, so the safe default omits it → "Player 1: move".
-      // (Hidden-info games must supply adapters.narrateMove for full arg inclusion.)
       expect(b1.narration!.text).toBe('Player 1: move');
 
       // Broadcast 2: state after move (apply broadcast); narration cleared
@@ -1442,14 +1441,14 @@ describe('SnapshotSessionHost', () => {
       expect(vi.getTimerCount()).toBe(0);
     });
 
-    // ── Test 5a: buildNarration safe-default — non-DEST_ARG keys are omitted ───
+    // ── Test 5a: demo narration safe-default — non-DEST_ARG keys are omitted ───
     //
-    // The default narration excludes args that are not in SAFE_DEST_ARGS
+    // The narration excludes args that are not destination-like
     // (to, destination, target, square, cell, position) to avoid leaking
     // hidden-information data (e.g. card element IDs) to all seats on LAN.
     // BotGame uses 'direction' which is NOT a SAFE_DEST_ARG → action name only.
 
-    it('buildNarration safe default: non-DEST_ARG keys omitted ("Player N: action")', async () => {
+    it('demo narration: non-DEST_ARG keys omitted ("Player N: action")', async () => {
       vi.useFakeTimers();
 
       const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
@@ -1473,44 +1472,6 @@ describe('SnapshotSessionHost', () => {
       // Canned move: 'move' with args { direction: 'left' }
       // 'direction' is NOT a SAFE_DEST_ARG → omitted from the safe default narration
       expect(text).toBe('Player 1: move');
-    });
-
-    // ── Test 5b: narrateMove hook overrides the safe default ─────────────────
-    //
-    // Game authors supply adapters.narrateMove to include the full arg list for
-    // open-information games, or to produce a custom human-readable description
-    // for hidden-information games (showing safe info only, determined by the author).
-
-    it('buildNarration: custom narrateMove hook overrides safe default and receives full args', async () => {
-      vi.useFakeTimers();
-
-      const { adapters, broadcastLog } = makeDemoAdapters(botGameOptions, { maxSuggestions: 1 });
-
-      // Supply a custom narrator that formats all args (open-info game scenario)
-      adapters.narrateMove = (player, action, args) => {
-        const summary = Object.entries(args).map(([k, v]) => `${k}=${String(v)}`).join(' ');
-        return summary ? `Player ${player}: ${action} ${summary}` : `Player ${player}: ${action}`;
-      };
-
-      const host = new SnapshotSessionHost(adapters);
-      host.setBotSeats([{ seat: 1 }]);
-      await host.start();
-      broadcastLog.length = 0;
-
-      await host.handleOp(1, { type: 'demoStart', delay: 0 });
-      await vi.runAllTimersAsync();
-
-      // Find the narration broadcast
-      const narrationBroadcast = broadcastLog.find((entry) => {
-        const [views] = entry as [Array<{ state: { narration?: { text: string } } }>, unknown];
-        return views[0]?.state?.narration?.text != null;
-      });
-
-      expect(narrationBroadcast).toBeDefined();
-      const [views] = narrationBroadcast as [Array<{ state: { narration?: { text: string } } }>, unknown];
-      const text = views[0].state.narration!.text;
-      // Custom narrator includes all args — 'direction=left' is now visible
-      expect(text).toBe('Player 1: move direction=left');
     });
 
     // ── #809: a demo loop that throws is reported, not left as an unhandled rejection ──

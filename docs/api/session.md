@@ -31,7 +31,7 @@ import {
 ### Session Host
 
 - `SnapshotSessionHost` - Holds one game's snapshot, runs ops on it through an `executeOp` adapter, publishes views and drives bot seats
-- `SnapshotSessionAdapters` - What a host is built with: `playerCount`, `executeOp`, `record`, `push`, and optionally `persist`, `onPersistenceError`, `onBackgroundError`, `debug`, `teachingDisabled`, `narrateMove`, `hostWork`
+- `SnapshotSessionAdapters` - What a host is built with: `playerCount`, `executeOp`, `record`, `push`, and optionally `persist`, `onPersistenceError`, `onBackgroundError`, `debug`, `teachingDisabled`, `hostWork`
 - `SnapshotHostState` - The durable state a host hands `persist`: `snapshot` and `pendingStates`
 - `HostRestore` - What `SnapshotSessionHost.restore` takes: the durable state, the last views and the bot roster
 - `BotSeat` - A seat a bot plays, and how strongly: `{ seat, level? }`
