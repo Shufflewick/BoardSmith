@@ -385,7 +385,7 @@ export interface ActionCheckpoint {
   draw: boolean;
 
   /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
-  sequence?: number;
+  sequence: number;
 
   /** Seeded RNG internal state (`game.getRandomState()`) at this checkpoint. */
   randomState: RandomState;
@@ -410,11 +410,8 @@ export interface ActionCheckpoint {
    * existed at it. Counting entries ever written, and tracking how many were
    * evicted, costs one number per GAME rather than an identity on every line —
    * which matters in the one system whose problem is that the log grows.
-   *
-   * Absent on a checkpoint captured before this field existed: read as "restore
-   * the whole log", which is the honest reading of no recorded boundary.
    */
-  messageCount?: number;
+  messageCount: number;
 }
 
 /**
