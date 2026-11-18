@@ -1,5 +1,5 @@
 {
-  "revision": 423,
+  "revision": 424,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3327,6 +3327,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The CLI reads every changed-file list NUL-separated, so file names git quotes are kept (#1692)"
+    },
+    {
+      "revision": 424,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The board focus handoff reaches plain buttons and links and skips hidden, inert, disabled and parked matches; the Action Panel and focus trap share one focusable list (#1693)"
     }
   ]
 }
