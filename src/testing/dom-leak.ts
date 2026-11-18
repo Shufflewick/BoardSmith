@@ -503,6 +503,8 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
  * move, so rendering never changes the game or the world. The seat's live
  * regions are drawn beside the board, as its shell draws them; read what the
  * board announces with `watchLiveRegion`.
+ * The seat's `#bs-game-modal` host is put in the page, so a board's Teleported
+ * modal renders there; unmount the wrapper to take it out of the page.
  *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
@@ -611,6 +613,8 @@ interface MountedForSeat<C extends Component> {
   readonly boardPrompt: () => string | null;
   /** Every text the board's announcer wrote to the seat's live regions, a replaced one included. */
   readonly spoken: readonly Spoken[];
+  /** The seat's `#bs-game-modal` host, in the page, which a board's Teleported modal renders into. */
+  readonly modalHost: HTMLElement;
 }
 
 /** One announcement, and which live region spoke it. */
@@ -704,6 +708,17 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   const frame = document.createElement('div');
   const removeRegions = await drawLiveRegions(seatContext.liveRegion, frame);
   const { spoken, stopRecording } = await recordAnnouncements(seatContext.liveRegion);
+  // Only the modal host is in the page, where a Teleport's document-wide lookup finds it; seats mounted together would share ids if their boards were too.
+  const modalHost = document.createElement('div');
+  document.body.append(modalHost);
+  const release = () => {
+    seatContext.stop();
+    removeRegions();
+    stopRecording();
+    releaseModalHost(modalHost);
+    modalHost.remove();
+  };
+  const claim = () => claimModalHost(modalHost);
   let wrapper: VueWrapper<RenderedInstance<C>>;
   try {
     wrapper = mount<Component>(component, {
@@ -714,20 +729,17 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
         config: { errorHandler: (error: unknown) => raised.push(error) },
         plugins: [
           {
-            install: (app) =>
-              app.onUnmount(() => {
-                seatContext.stop();
-                removeRegions();
-                stopRecording();
-              }),
+            install: (app) => {
+              // Before each of the board's renders, so a Teleport it mounts finds this seat's host and not another mounted seat's.
+              app.mixin({ beforeMount: claim, beforeUpdate: claim });
+              app.onUnmount(release);
+            },
           },
         ],
       },
     }) as VueWrapper<RenderedInstance<C>>;
   } catch (failure) {
-    seatContext.stop();
-    removeRegions();
-    stopRecording();
+    release();
     throw failure;
   }
 
@@ -741,7 +753,21 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     wrapper.unmount();
     throw failure;
   }
-  return { wrapper, raised, boardPrompt: seatContext.boardPrompt, spoken };
+  return { wrapper, raised, boardPrompt: seatContext.boardPrompt, spoken, modalHost };
+}
+
+/** The mounted seat whose host holds the `#bs-game-modal` id; only one may, as in a shell's own page. */
+let modalHostHolder: HTMLElement | null = null;
+
+function claimModalHost(host: HTMLElement): void {
+  if (modalHostHolder === host) return;
+  modalHostHolder?.removeAttribute('id');
+  host.id = 'bs-game-modal';
+  modalHostHolder = host;
+}
+
+function releaseModalHost(host: HTMLElement): void {
+  if (modalHostHolder === host) modalHostHolder = null;
 }
 
 /** Records each text written to the seat's live regions as it is written, so a later announcement cannot hide an earlier one. */
@@ -1568,8 +1594,7 @@ function findOwningElementId(el: Element): number | undefined {
  * assertNoHiddenInfoLeak}'s exemption logic (CR-01) for how that distinction
  * is enforced.
  */
-function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceString[] {
-  const root = wrapper.element as HTMLElement;
+function collectScopedSurfaceStrings(roots: readonly Element[]): SurfaceString[] {
   const surfaces: SurfaceString[] = [];
 
   const visit = (el: Element) => {
@@ -1593,8 +1618,10 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
     }
   };
 
-  visit(root);
-  root.querySelectorAll('*').forEach(visit);
+  for (const root of roots) {
+    visit(root);
+    root.querySelectorAll('*').forEach(visit);
+  }
 
   return surfaces;
 }
@@ -1758,9 +1785,10 @@ export async function assertNoHiddenInfoLeak(
 
   // Every render option reaches the mount. Picking them out one by one is how
   // `provide` was accepted here and silently dropped (#405).
-  const { wrapper, raised, boardPrompt, spoken } = await mountForSeat(subject, seat, options);
+  const { wrapper, raised, boardPrompt, spoken, modalHost } = await mountForSeat(subject, seat, options);
   try {
-    const surfaces = collectScopedSurfaceStrings(wrapper);
+    // The board and whatever it Teleported into its modal host (#1717).
+    const surfaces = collectScopedSurfaceStrings([wrapper.element, modalHost]);
     // The action bar shows the board's prompt to the seat, so it is checked
     // against every marker, as an unattributed surface is (#564).
     const prompt = boardPrompt();

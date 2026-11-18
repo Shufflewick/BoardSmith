@@ -1105,6 +1105,8 @@ Notes:
   chrome.
 - Do **not** teleport to `body`/outside GameShell for board modals — you lose
   the board-region confinement and the chrome guarantees.
+- `renderAsSeat` gives the board the same host, so a test can open the modal,
+  and `assertNoHiddenInfoLeak` scans what it shows.
 
 ## The End of the Game
 
