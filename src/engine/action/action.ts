@@ -1844,7 +1844,7 @@ export class ActionExecutor {
     // be judged either.
     if (selection.optional || selection.type === 'text' || selection.type === 'number') {
       // -1 marks free input, which has no choices to count.
-      this.recordPick(reached, index, selection, selection.optional ? 0 : -1);
+      this.recordPick(reached, index, selection, selection.type === 'text' || selection.type === 'number' ? -1 : 0);
       return true;
     }
 

@@ -62,6 +62,13 @@ describe('the availability trace follows declared dependents (#1690)', () => {
     expect(trace.selections[0].choiceCount).toBe(2);
   });
 
+  it('marks an optional text step as free input', () => {
+    game.registerAction(Action.create('name').enterText('title', { optional: true }).execute(() => {}));
+    const trace = game.getActionExecutor().traceActionAvailability(game.getAction('name')!, game.getPlayer(1)!);
+
+    expect(trace.selections[0].choiceCount).toBe(-1);
+  });
+
   it('passes a min-0 list pick with nothing enabled, as availability does', () => {
     game.registerAction(
       Action.create('hire')
