@@ -710,7 +710,7 @@ const FUNCTION_OWN = new Set(['length', 'name', 'prototype', 'arguments', 'calle
  *   (`fieldsOf`), since none exists until the class is constructed;
  * - symbol-keyed members by name (`[Symbol.iterator]`): `for (const x of map)`
  *   calls one;
- * - the own keys of a plain object or a compiled enum (`TurnOrder.DEFAULT`,
+ * - the own keys of a plain object or a compiled enum (`TurnOrder.REVERSE`,
  *   `ErrorCode.NOT_YOUR_TURN`), the same way. Their values are not covered.
  *
  * Built-in ancestors (`Object`, `Array`, `Error`, and the async and generator

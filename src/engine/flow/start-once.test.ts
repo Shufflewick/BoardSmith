@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, TurnOrder, type GameOptions } from '../index.js';
+import { Game, Player, Action, actionStep, eachPlayer, loop, sequence, execute, type GameOptions } from '../index.js';
 import { createTestGame } from '../../testing/test-game.js';
 
 /**
@@ -151,7 +151,7 @@ class StartingPlayerGame extends Game<StartingPlayerGame, Player> {
     this.setFlow({
       root: loop({
         maxIterations: 20,
-        do: eachPlayer({ ...TurnOrder.DEFAULT, startingPlayer: (ctx) => ctx.game.getPlayer(2)!, do: actionStep({ actions: ['pass'] }) }),
+        do: eachPlayer({ startingPlayer: (ctx) => ctx.game.getPlayer(2)!, do: actionStep({ actions: ['pass'] }) }),
       }),
     });
   }

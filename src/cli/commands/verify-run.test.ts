@@ -13,7 +13,6 @@ import {
   RUN_LEDGER_BEGIN,
   RUN_LEDGER_END,
   RUN_ID_RE,
-  atomicWriteFile,
   appendLedgerLine,
   locateFences,
   parseLedgerBody,
@@ -28,6 +27,7 @@ import {
   type ImpactRecord,
   type AdjudicationRecord,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import { traceCheckCommand } from './trace-check.js';
@@ -988,9 +988,8 @@ describe('the staging tree is invisible to every existing rulebook/ consumer', (
 // -------------------------------------------------------------------------------------------
 
 describe('verify-run.ts — ledger helper export surface (174-02)', () => {
-  it('EXPORT-1: the seven ledger helpers are all importable functions from a sibling module', () => {
+  it('EXPORT-1: the six ledger helpers are all importable functions from a sibling module', () => {
     for (const fn of [
-      atomicWriteFile,
       appendLedgerLine,
       locateFences,
       parseLedgerBody,

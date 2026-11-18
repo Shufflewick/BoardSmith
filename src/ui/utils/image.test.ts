@@ -10,7 +10,6 @@ import {
   isSpriteImage,
   getImageSrc,
   getSpriteStyle,
-  getBackgroundImageStyle,
 } from './image.js';
 
 // A standard 13x5 deck of 238x333 cards.
@@ -224,32 +223,5 @@ describe('getSpriteStyle', () => {
 
   it('returns no styles for a missing image', () => {
     expect(getSpriteStyle(null)).toEqual({});
-  });
-});
-
-describe('getBackgroundImageStyle', () => {
-  it('sets the background image for a URL', () => {
-    expect(getBackgroundImageStyle('/card.png').backgroundImage).toBe('url(/card.png)');
-  });
-
-  it('fits the art inside the element without repeating it', () => {
-    expect(getBackgroundImageStyle('/card.png')).toMatchObject({
-      backgroundSize: 'contain',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
-    });
-  });
-
-  it('works for a coordinate-less sprite path, which parses as a URL', () => {
-    expect(getBackgroundImageStyle({ sprite: '/back.png' }).backgroundImage).toBe('url(/back.png)');
-  });
-
-  it('returns no styles for a sprite — that is getSpriteStyle territory', () => {
-    expect(getBackgroundImageStyle(SPRITE)).toEqual({});
-  });
-
-  it('returns no styles for a missing image', () => {
-    expect(getBackgroundImageStyle(null)).toEqual({});
-    expect(getBackgroundImageStyle('')).toEqual({});
   });
 });

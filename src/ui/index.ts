@@ -225,7 +225,6 @@ export {
 export {
   useActionAnimations,
   type ActionAnimationConfig,
-  type AnimationElementData,
   type UseActionAnimationsOptions,
   type UseActionAnimationsReturn,
 } from './composables/useActionAnimations.js';
@@ -233,7 +232,6 @@ export {
 // Animation event playback (sequential handler-based playback)
 export {
   createAnimationEvents,
-  provideAnimationEvents,
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type AnimationHandler,
@@ -322,7 +320,6 @@ export {
 
 // Card display utilities
 export {
-  useCardDisplay,
   getSuitSymbol,
   getSuitColor,
   getRankName,
@@ -376,7 +373,6 @@ export {
   isSpriteImage,
   getImageSrc,
   getSpriteStyle,
-  getBackgroundImageStyle,
   type ImageInfo,
   type SpriteData,
 } from './utils/image.js';

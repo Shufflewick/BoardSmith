@@ -4,6 +4,7 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
 import { gitOutput as git } from './git-output.js';
 import { readIfExists } from './read-if-exists.js';
+import { atomicWriteFile } from './atomic-write-file.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -139,9 +140,7 @@ export function verifyResultPath(projectDir: string, commit: string): string {
 export async function writeVerifyResult(projectDir: string, result: VerifyResult): Promise<string> {
   const path = verifyResultPath(projectDir, result.commit);
   await fs.mkdir(join(path, '..'), { recursive: true });
-  const partial = `${path}.${process.pid}.tmp`;
-  await fs.writeFile(partial, `${JSON.stringify(result, null, 2)}\n`);
-  await fs.rename(partial, path);
+  await atomicWriteFile(path, `${JSON.stringify(result, null, 2)}\n`);
   return path;
 }
 

@@ -22,7 +22,6 @@ import { RULE_DELTA_KINDS, type RuleDelta, type ChunkVerdict, verifyClassifyStat
 import { driftCheckCommand, type ChunkDrift } from './drift-check.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import {
-  atomicWriteFile,
   appendLedgerLine,
   ledgerFilePath,
   readLedgerOrThrow,
@@ -32,6 +31,7 @@ import {
   type AdjudicationRecord,
   type ImpactRecord,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { projectDirOption } from '../lib/user-path.js';
 
@@ -329,7 +329,7 @@ function findSketchEntryRange(
  * CHUNK.md is read, its `## Rules Staleness` section located by line (Task 1's parser helpers);
  * a section present but missing a fence THROWS the fence-refusal error below and touches
  * nothing; a section entirely absent is inserted immediately after `## Verified Against` (its
- * documented end-of-file position); persisted with `atomicWriteFile` (`verify-run.ts`) — never a
+ * documented end-of-file position); persisted with `atomicWriteFile` (`lib/atomic-write-file.ts`) — never a
  * bare `fs.writeFile`. `Marker:` is the LAST line inside the fenced body (see
  * `RULES_STALENESS_LABELS`'s doc comment).
  *
@@ -751,7 +751,7 @@ export function renderRuling(input: {
  * new `### Ruling N` entry to `RULINGS.md`, `N` assigned by `nextRulingNumber`.
  *
  * APPEND-ONLY (T-175-09): reads the existing text, computes the new block, and writes
- * `existingText + separator + newBlock` through `atomicWriteFile` (`verify-run.ts`) — the ONE
+ * `existingText + separator + newBlock` through `atomicWriteFile` (`lib/atomic-write-file.ts`) — the ONE
  * atomic write path this repo has, never a second `fs.writeFile`. A caller-side test proves this
  * is truly append-only by asserting the new file content `startsWith` the original byte-for-byte.
  * An entry whose three fields match a ruling already in the file that nothing supersedes returns

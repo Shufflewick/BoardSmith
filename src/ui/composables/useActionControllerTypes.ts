@@ -317,30 +317,6 @@ export interface UseActionControllerOptions {
     initialArgs?: Record<string, unknown>
   ) => Promise<PickStepResponse>;
   /**
-   * Called before auto-execute fires (when all selections are filled).
-   * Not called for actions the server completes step by step (follow-up
-   * actions, repeating selections, `onSelect: pendingOnServer`), for an
-   * explicit `execute()`, or while viewing history.
-   * Use this to capture element positions for animations before the DOM updates.
-   * Return a Promise to delay execution until animation prep is complete.
-   * `onAfterAutoExecute` tells you how the action then ended.
-   *
-   * @example
-   * ```typescript
-   * const controller = useActionController({
-   *   // ...
-   *   onBeforeAutoExecute: async (actionName, args) => {
-   *     if (actionName === 'assignToCrew') {
-   *       // Capture element position before DOM updates
-   *       const el = document.querySelector(`[data-duelist="${args.duelistName}"]`);
-   *       startRect = el?.getBoundingClientRect();
-   *     }
-   *   },
-   * });
-   * ```
-   */
-  onBeforeAutoExecute?: BeforeAutoExecuteHook;
-  /**
    * Function to cancel a pending action on the server.
    * Called when user cancels an action that has been partially submitted via pickStep.
    */

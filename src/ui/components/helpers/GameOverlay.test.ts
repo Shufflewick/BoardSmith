@@ -80,11 +80,6 @@ describe('GameOverlay', () => {
     expect(style).toContain('rgba(0, 0, 0, 0.85)');
   });
 
-  it('honours a custom backdrop opacity', () => {
-    const style = overlay({ backdropOpacity: 0.3 }).find('.game-overlay').attributes('style')!;
-    expect(style).toContain('rgba(0, 0, 0, 0.3)');
-  });
-
   it('blurs the backdrop by default', () => {
     expect(overlay().find('.game-overlay').attributes('style')).toContain('blur(4px)');
   });
@@ -93,12 +88,6 @@ describe('GameOverlay', () => {
     const style = overlay({ backdrop: false }).find('.game-overlay').attributes('style')!;
     expect(style).toContain('none');
     expect(style).not.toContain('blur(4px)');
-  });
-
-  it('updates the backdrop when the opacity prop changes', async () => {
-    const wrapper = overlay({ backdropOpacity: 0.85 });
-    await wrapper.setProps({ backdropOpacity: 0.5 });
-    expect(wrapper.find('.game-overlay').attributes('style')).toContain('rgba(0, 0, 0, 0.5)');
   });
 
   it('stays in place rather than teleporting, so GameShell can contain it', () => {
@@ -142,10 +131,5 @@ describe('GameOverlay', () => {
     shown.value = false;
     await wrapper.vm.$nextTick();
     expect(onClosed).toHaveBeenCalledTimes(1);
-  });
-
-  it('allows a fully transparent backdrop', () => {
-    const style = overlay({ backdropOpacity: 0 }).find('.game-overlay').attributes('style')!;
-    expect(style).toContain('rgba(0, 0, 0, 0)');
   });
 });

@@ -8,7 +8,7 @@ import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { styleText } from 'node:util';
-import { atomicWriteFile } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
@@ -81,7 +81,7 @@ export const DERIVE_CHECK_ROLES = Object.freeze({
  * `.verify/<runId>/` segment, no `runId` parameter anywhere in any function's signature — CHECK-04
  * has nothing to scope to a run: it is source-free by construction, exactly like its retired
  * predecessor and CHECK-03/CHECK-05. Every durable write in this module goes through
- * `atomicWriteFile` (`verify-run.ts`) — the ONE atomic write path in the repo — never a second
+ * `atomicWriteFile` (`lib/atomic-write-file.ts`) — the ONE atomic write path in the repo — never a second
  * `fs.writeFile`/`writeFileSync` call.
  */
 

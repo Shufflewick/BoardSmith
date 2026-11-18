@@ -116,6 +116,7 @@ const moveConfig: ActionAnimationConfig = {
   elementSelector: '[data-card-id="{cardId}"]',
   destinationSelector: '[data-zone="{zone}"]',
   duration: 50,
+  getElementData: () => ({}),
 };
 
 const flipConfig: ActionAnimationConfig = {
@@ -124,6 +125,7 @@ const flipConfig: ActionAnimationConfig = {
   elementSelector: '[data-card-id="{card}"]',
   destinationSelector: '[data-card-id="{card}"]',
   duration: 50,
+  getElementData: () => ({}),
 };
 
 describe('useActionAnimations', () => {

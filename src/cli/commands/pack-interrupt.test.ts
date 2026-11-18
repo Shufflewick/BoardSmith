@@ -15,9 +15,9 @@ vi.setConfig({ testTimeout: 120_000 });
 
 const driver = await build({
   stdin: {
-    contents: `import { packAll } from './pack.ts';
+    contents: `import { packInto } from './pack.ts';
 const [pkgDir, outDir] = process.argv.slice(2);
-try { await packAll([{ name: 'bs-fixture-held', path: pkgDir, version: '1.0.0', revision: 7 }], outDir); }
+try { await packInto({ name: 'bs-fixture-held', path: pkgDir, version: '1.0.0', revision: 7 }, outDir); }
 catch (error) { console.error(error.message); process.exitCode = 1; }`,
     resolveDir: import.meta.dirname,
   },

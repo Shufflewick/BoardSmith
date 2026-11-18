@@ -57,7 +57,7 @@ function fenceMessage(name: string, fence: SeatUndoFence): string {
 }
 
 /** Why a history entry that is not undoable ends its seat's undo. */
-function notUndoableMessage(entry: HistoryEntry): string {
+export function notUndoableMessage(entry: HistoryEntry): string {
   if (isSeatExpiry(entry)) {
     return `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`;
   }

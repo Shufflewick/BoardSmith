@@ -185,9 +185,6 @@ export interface ActionExecutionResult {
  * the log handed back is a slice of the live log, so its first entry sits at
  * the live offset. Keeping the checkpoint's older count would make the next
  * restore from this one slice the wrong boundary (#803).
- *
- * A checkpoint with no recorded watermark restores the whole log, which is the
- * honest reading of no recorded boundary.
  */
 function checkpointWithLiveLog(
   checkpoint: ActionCheckpoint,
@@ -203,7 +200,6 @@ function checkpointWithLiveLog(
     messagesEvictedTo: live.messagesEvictedTo,
     messagesShownFrom: live.messagesShownFrom,
   };
-  if (checkpoint.messageCount === undefined) return { state, messageLog: log };
   const evicted = live.messagesEvicted ?? 0;
   // The watermark counts entries EVER WRITTEN; `evicted` says how many of those
   // are no longer in the log. The difference is the boundary's position in the
@@ -794,9 +790,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const { state, messageLog } = checkpointWithLiveLog(checkpoint, this.game.messages ?? [], this.game.logEviction);
     this.game.loadSerializedState(state, { messageLog });
     this.game.rollBackFlow(checkpoint.flowState);
-    if (checkpoint.sequence !== undefined) {
-      this.game._ctx.sequence = checkpoint.sequence;
-    }
+    this.game._ctx.sequence = checkpoint.sequence;
     this.game.setRandomState(checkpoint.randomState);
     this.game._afterRestoreSubtree();
     return true;

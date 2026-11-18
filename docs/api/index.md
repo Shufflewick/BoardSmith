@@ -89,7 +89,6 @@ import {
 - `forEach()` - Execute for each item
 - `actionStep()` - Wait for player action
 - `simultaneousActionStep()` - Wait for all players
-- `playerActions()` - Define available actions
 - `switchOn()` - Branch based on value
 - `ifThen()` - Conditional execution
 - `noop()` - No operation

@@ -4,7 +4,7 @@ import { forEachGlobalReference, readsProperty } from './global-receiver.js';
 /**
  * Disallows non-deterministic functions in game rules code
  * - Math.random() - use game.random instead
- * - Date.now() - timestamps break replay
+ * - Date.now() - a restored state would read a different time than the one it was saved at
  * - Date() and new Date() without a fixed value
  * - crypto.randomUUID()
  */
@@ -17,7 +17,7 @@ const rule: Rule.RuleModule = {
     },
     messages: {
       noMathRandom: 'Math.random() is not allowed in game rules. Use game.random instead for deterministic gameplay.',
-      noDateNow: 'Date.now() is not allowed in game rules. Timestamps break replay functionality.',
+      noDateNow: 'Date.now() is not allowed in game rules: it reads the clock, so undo, a restored game and the bot\'s search would each see a different time.',
       noNewDate: 'Date() and new Date() without a fixed value read the clock, which is not allowed in game rules.',
       noCryptoRandom: 'crypto.randomUUID() is not allowed in game rules. Use game.random instead.',
       noPerformanceNow: 'performance.now() is not allowed in game rules.',

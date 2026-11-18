@@ -67,7 +67,6 @@ const dieProps = computed(() => {
     sides: ((attrs.sides as number) ?? 6) as 4 | 6 | 8 | 10 | 12 | 20,
     value: (attrs.value as number) ?? 0,
     color: attrs.color as string | undefined,
-    rolling: (attrs.rolling as boolean) ?? false,
     rollCount: (attrs.rollCount as number) ?? 0,
     faceLabels: attrs.faceLabels as string[] | undefined,
     faceImages: attrs.faceImages as string[] | undefined,

@@ -1,6 +1,6 @@
 # Playing Cards Aspect
 
-**Documentation:** Read `node_modules/boardsmith/docs/core-concepts.md` (Deck, Hand, Card sections) and `node_modules/boardsmith/docs/ui-components.md` (useCardDisplay) before using this template.
+**Documentation:** Read `node_modules/boardsmith/docs/core-concepts.md` (Deck, Hand, Card sections) and `node_modules/boardsmith/docs/ui-components.md` (Card display helpers) before using this template.
 
 ## Element Setup (game.ts)
 

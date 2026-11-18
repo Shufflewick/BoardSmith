@@ -56,6 +56,7 @@ import { uncommittedContentHash } from './execution-context.js';
 import { withDirRemovedAfter } from './command-build-dir.js';
 import { groupLeader, killGroup } from './started-processes.js';
 import { readIfExists, readIfExistsSync } from './read-if-exists.js';
+import { atomicWriteFile } from './atomic-write-file.js';
 import { collectOutput } from './child-output.js';
 
 /** Where the catalogue is on a machine set up the usual way. */
@@ -304,9 +305,7 @@ async function savePasses(path: string, passed: string[]): Promise<void> {
   const onFile = await readPasses(path);
   const passes = [...new Set([...passed, ...onFile])].slice(0, MAX_STORED_PASSES);
   await fs.mkdir(dirname(path), { recursive: true });
-  const partial = `${path}.${process.pid}.tmp`;
-  await fs.writeFile(partial, `${JSON.stringify({ format: CACHE_FORMAT, passes })}\n`);
-  await fs.rename(partial, path);
+  await atomicWriteFile(path, `${JSON.stringify({ format: CACHE_FORMAT, passes })}\n`);
 }
 
 /**

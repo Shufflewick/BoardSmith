@@ -19,7 +19,7 @@
  * const animationEvents = createAnimationEvents({
  *   events: () => state.value?.animationEvents,
  * });
- * provideAnimationEvents(animationEvents);
+ * provide(ANIMATION_EVENTS_KEY, animationEvents);
  *
  * // In child components
  * const animations = useAnimationEvents();
@@ -32,7 +32,7 @@
  * }
  * ```
  */
-import { ref, watch, onScopeDispose, type Ref, type InjectionKey, provide, inject } from 'vue';
+import { ref, watch, onScopeDispose, type Ref, type InjectionKey, inject } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -139,13 +139,6 @@ export interface UseAnimationEventsReturn {
  * Injection key for animation events
  */
 export const ANIMATION_EVENTS_KEY: InjectionKey<UseAnimationEventsReturn> = Symbol('animationEvents');
-
-/**
- * Provide animation events to descendant components
- */
-export function provideAnimationEvents(instance: UseAnimationEventsReturn): void {
-  provide(ANIMATION_EVENTS_KEY, instance);
-}
 
 /**
  * Use animation events from an ancestor component.

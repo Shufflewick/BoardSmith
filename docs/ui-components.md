@@ -950,7 +950,6 @@ const showModal = ref(false);
 **Props:**
 - `active` (boolean) - Whether overlay is visible
 - `backdrop` (boolean, default: true) - Enable backdrop blur
-- `backdropOpacity` (number, default: 0.85) - Backdrop darkness 0-1
 
 **Events:**
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
@@ -1548,6 +1547,8 @@ const actionAnimations = useActionAnimations({
       elementSelector: '[data-duelist="{duelistName}"]',
       destinationSelector: '[data-crew="{targetCrew}"]',
       duration: 500,
+      // What the flying copy shows; FlyingCardsOverlay renders these fields.
+      getElementData: () => ({ faceUp: true }),
     },
     // Flip-in-place (auto-detected: same selector = flip animation)
     {
@@ -1556,6 +1557,7 @@ const actionAnimations = useActionAnimations({
       elementSelector: '[data-card-id="{card}"]',
       destinationSelector: '[data-card-id="{card}"]', // Same = flip-in-place!
       duration: 400,
+      getElementData: (el) => ({ rank: el.getAttribute('data-rank') ?? undefined }),
     },
   ],
 });
@@ -1601,7 +1603,7 @@ You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they'r
 | `elementSize` | `{ width, height }` | 60x84 | Size of flying element |
 | `flip` | `boolean` | auto | Enable 3D flip (auto-enabled for flip-in-place) |
 | `hideDestination` | `boolean` | auto | Hide destination during animation (auto-enabled for flip-in-place) |
-| `getElementData` | `function` | innerHTML | Extract data for rendering flying element |
+| `getElementData` | `function` | required | The data FlyingCardsOverlay renders for the flying element (rank, suit, faceUp, images) |
 
 ### useFLIP
 
@@ -1818,14 +1820,13 @@ const dist = calculateHexDistance(0, 0, 3, 2);
 </template>
 ```
 
-### useCardDisplay
+### Card display helpers
 
 Card display formatting utilities.
 
 <!-- typecheck: game src/ui/cards.ts -->
 ```typescript
 import {
-  useCardDisplay,
   getSuitSymbol,
   getSuitColor,
   getRankName,
@@ -2115,9 +2116,9 @@ The UI-side uses a composable pattern with provide/inject for component tree acc
 
 <!-- typecheck: game src/ui/animation-events.ts -->
 ```typescript
-import type { Ref } from 'vue';
+import { provide, type Ref } from 'vue';
 import type { PlayerGameState } from 'boardsmith/session';
-import { createAnimationEvents, provideAnimationEvents } from 'boardsmith/ui';
+import { createAnimationEvents, ANIMATION_EVENTS_KEY } from 'boardsmith/ui';
 
 // Call from the root component's setup, with the seat's latest state.
 export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
@@ -2133,7 +2134,7 @@ export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
   });
 
   // Provide to component tree
-  provideAnimationEvents(animationEvents);
+  provide(ANIMATION_EVENTS_KEY, animationEvents);
   return animationEvents;
 }
 ```
@@ -2178,7 +2179,6 @@ onUnmounted(() => unregister?.());
 | Function | Description |
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
-| `provideAnimationEvents(instance)` | Provide instance to component tree |
 | `useAnimationEvents()` | Inject animation events from ancestor |
 
 **Instance API:**

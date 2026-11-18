@@ -33,7 +33,6 @@ import {
   type VerifyRunOptions,
   RUN_ID_RE,
   appendLedgerLine,
-  atomicWriteFile,
   ledgerFilePath,
   latestRunId,
   exists,
@@ -43,6 +42,7 @@ import {
   checkRecordedSlices,
   stagingSlicesDir,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { projectDirOption } from '../lib/user-path.js';
 
 /**

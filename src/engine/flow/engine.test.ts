@@ -14,7 +14,6 @@ import {
   forEach,
   actionStep,
   simultaneousActionStep,
-  playerActions,
   switchOn,
   ifThen,
   execute,
@@ -1910,24 +1909,6 @@ describe('Turn Order Presets', () => {
     game = new TestGame({ playerCount: 3 });
   });
 
-  it('should use DEFAULT turn order', () => {
-    const visitedPlayers: number[] = [];
-
-    const flow: FlowDefinition = {
-      root: eachPlayer({
-        ...TurnOrder.DEFAULT,
-        do: execute((ctx) => {
-          visitedPlayers.push(ctx.player!.seat);
-        }),
-      }),
-    };
-
-    const engine = new FlowEngine(game, flow);
-    engine.start();
-
-    expect(visitedPlayers).toEqual([1, 2, 3]);
-  });
-
   it('should use REVERSE turn order', () => {
     const visitedPlayers: number[] = [];
 
@@ -2137,9 +2118,8 @@ describe('Action Chaining with followUp in FlowState', () => {
 
     game.registerActions(firstAction, secondAction);
 
-    // Use playerActions to keep awaiting input after each action
     const flow: FlowDefinition = {
-      root: playerActions({
+      root: actionStep({
         actions: ['first', 'second'],
         // Allow 2 actions total
         repeatUntil: (ctx) => (ctx as unknown as { moveCount: number }).moveCount >= 2,

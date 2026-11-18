@@ -28,7 +28,7 @@ import {
   writeSignoffBlock,
 } from './chunk-signoff.js';
 import { parseInterpretationQuotes, unquotedClaims } from './claim-quotes.js';
-import { atomicWriteFile } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { projectDirOption } from '../lib/user-path.js';

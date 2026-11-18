@@ -8,7 +8,7 @@
  * @example
  * ```typescript
  * // Advance off the intro step after the learner's first action:
- * { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterFirstTurn() } }
+ * { id: 'intro', gate: { action: 'move' }, advanceWhen: { ...afterTurns(1) } }
  *
  * // Advance after the learner has taken 3 turns:
  * { id: 'practice', gate: { action: 'move' }, advanceWhen: { ...afterTurns(3) } }
@@ -31,23 +31,6 @@
  */
 
 import type { TutorialAdvanceCondition, TutorialGateContext } from './types.js';
-
-/**
- * Returns a labeled `advanceWhen` predicate that fires after the tutorial
- * learner has completed their first turn.
- *
- * Alias for `afterTurns(1)`. See {@link afterTurns} for detailed semantics
- * and caveats.
- *
- * **Post-action safety (no flash-skip):** evaluated after each action, never
- * at turn start. False at game start → the intro step's content renders
- * before any action is taken, and the step advances only after the learner
- * acts. This is the correct replacement for a hypothetical "before first turn"
- * trigger (which would flash-skip the intro immediately).
- */
-export function afterFirstTurn(): TutorialAdvanceCondition {
-  return afterTurns(1);
-}
 
 /**
  * Returns a labeled `advanceWhen` predicate that fires after the tutorial
@@ -90,7 +73,7 @@ export function afterTurns(n: number): TutorialAdvanceCondition {
   if (!Number.isInteger(n) || n <= 0) {
     throw new Error(
       `afterTurns(n): n must be a positive integer, got ${n}. ` +
-      `Use afterFirstTurn() for n=1, or afterTurns(2), afterTurns(3), etc.`
+      `Use afterTurns(1) for the first turn, afterTurns(2) for the second, and so on.`
     );
   }
   return {

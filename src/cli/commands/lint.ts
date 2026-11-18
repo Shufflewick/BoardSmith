@@ -265,7 +265,7 @@ function checkUnusedActions(filePath: string, content: string, allFiles: Map<str
         severity: 'info',
         rule: 'unused-action',
         message: `Action '${action.name}' may be unused - not found in any flow actions array`,
-        suggestion: 'Ensure this action is included in an actionStep or playerActions flow node',
+        suggestion: 'Ensure this action is included in an actionStep or simultaneousActionStep flow node',
       });
     }
   }

@@ -23,7 +23,7 @@ import {
   resolveManifestPath,
   stripHtmlComments,
 } from './build-manifest.js';
-import { atomicWriteFile } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
