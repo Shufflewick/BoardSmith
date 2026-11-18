@@ -33,6 +33,7 @@ import {
   type ImpactRecord,
 } from './verify-run.js';
 import { escapeRegExp } from '../../utils/regexp.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-impact.ts` — Phase 175's impact-map / repair-gating surface: VERIFY-05's
@@ -656,7 +657,7 @@ export interface VerifyImpactGateResult {
 export async function verifyImpactGateCommand(
   options: { project?: string; runId?: string; json?: boolean } = {},
 ): Promise<VerifyImpactGateResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
 
@@ -843,7 +844,7 @@ export async function verifyImpactAdjudicateCommand(options: {
   rationale?: string;
   json?: boolean;
 }): Promise<VerifyImpactAdjudicateResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { pairId, outcome } = options;
 
   if (outcome !== 'resolved' && outcome !== 'UNADJUDICATED') {
@@ -1182,7 +1183,7 @@ function printImpactHumanReport(result: VerifyImpactStatusResult): void {
 export async function verifyImpactStatusCommand(
   options: { project?: string; runId?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<VerifyImpactStatusResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const { classifyStatus, runId, contradictions } = await readRunContradictions(projectDir, options.runId);
   const { driftBySlug, statusBySlug } = await readChunkState(projectDir);
@@ -1324,7 +1325,7 @@ function refuseApply(
 export async function verifyImpactApplyCommand(
   options: { project?: string; runId?: string; json?: boolean } = {},
 ): Promise<VerifyImpactApplyResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const { classifyStatus, runId, ledgerFile, relLedgerPath, adjudications, contradictions } = await readRunContradictions(
     projectDir,

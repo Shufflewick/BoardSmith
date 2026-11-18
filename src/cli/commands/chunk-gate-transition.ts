@@ -1,6 +1,5 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
-import { resolve } from 'node:path';
 import { styleText } from 'node:util';
 import {
   GATE_TRANSITION_MD,
@@ -32,6 +31,7 @@ import { parseInterpretationQuotes, unquotedClaims } from './claim-quotes.js';
 import { atomicWriteFile } from './verify-run.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `boardsmith chunk-gate-transition --by <designer>` (#397): the one-time transition for chunks a
@@ -246,7 +246,7 @@ async function completeTransition(dir: string, existing: GateTransition): Promis
 }
 
 export async function recordGateTransition(options: GateTransitionOptions): Promise<GateTransitionResult> {
-  const dir = resolve(options.project ?? process.cwd());
+  const dir = projectDirOption(options.project);
   const nameProblem = designerNameProblem(options.by ?? '', '--by');
   if (nameProblem) throw new Error(nameProblem);
   const ledgerPath = designPath(dir, GATE_TRANSITION_MD);

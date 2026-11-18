@@ -16,6 +16,7 @@ import {
   type ExampleReplayRecord,
   type ExampleTranslation,
 } from './verify-example-replay.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `example-test-emit.ts` — TEST-01's build-side write surface (178-CONTEXT.md decision 8): one
@@ -544,7 +545,7 @@ function countTranslatedTests(executable: readonly TranslatedRecord[], relTestFi
 export async function verifyExampleEmitCommand(
   options: VerifyExampleEmitOptions = {},
 ): Promise<VerifyExampleEmitResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   if (!options.chunk) {
     throw new Error('verify-example-emit requires --chunk <slug>.');

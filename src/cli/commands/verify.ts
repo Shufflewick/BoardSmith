@@ -75,6 +75,7 @@ import { runSmoke } from './smoke.js';
 import { type TypeCheckRun, typeCheckProject, validateProject } from './validate.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { bundleDigest, readDistDir } from '../lib/zip.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 const short = (commit: string) => commit.slice(0, 12);
 
@@ -677,7 +678,7 @@ export async function verifyCommand(
   options: { base?: string; chunk?: string; check?: boolean; project?: string },
   checks: Readonly<Record<VerifyCheckName, CheckRunner>> = VERIFY_CHECKS,
 ): Promise<void> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   if (options.check) {
     if (options.base !== undefined) {
       throw new Error(

@@ -19,6 +19,7 @@ import {
   settingNotShipped,
   testRunScopeProblem,
 } from '../lib/test-run-scope.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `boardsmith doctor` — the one place that knows what a bs-built project's layout is supposed to
@@ -388,7 +389,7 @@ async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
 export async function doctorCommand(
   options: { project?: string; fix?: boolean; json?: boolean; quiet?: boolean } = {},
 ): Promise<DoctorResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   if (!(await exists(join(projectDir, 'boardsmith.json')))) {
     throw new Error(

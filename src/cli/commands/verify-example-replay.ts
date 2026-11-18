@@ -28,6 +28,7 @@ import {
   type WorkedExampleKind,
   type WorkedExampleSpec,
 } from './example-derivation.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-example-replay.ts` — CHECK-06's ledger + read/report command, mirroring the LIVE
@@ -1035,7 +1036,7 @@ function emptyExampleReplayVerdictCounts(): Record<ExampleReplayVerdict, number>
 export async function verifyExampleReplayCommand(
   options: VerifyExampleReplayOptions = {},
 ): Promise<VerifyExampleReplayResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   // Project-level provenance (178-CONTEXT.md decision 12) — obtained once, purely for reporting
   // `unarchivedSources` here. The per-record `provenance` value each ExampleReplayRecord already
@@ -1566,7 +1567,7 @@ export interface VerifyExampleRecordResult {
 export async function verifyExampleRecordCommand(
   options: VerifyExampleRecordOptions = {},
 ): Promise<VerifyExampleRecordResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   if (!options.slicePath) {
     throw new Error('verify-example-record requires --slice-path <path>.');
@@ -1769,7 +1770,7 @@ export interface VerifyExampleTranslateResult {
 export async function verifyExampleTranslateCommand(
   options: VerifyExampleTranslateOptions = {},
 ): Promise<VerifyExampleTranslateResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   if (!options.slicePath) {
     throw new Error('verify-example-translate requires --slice-path <path>.');

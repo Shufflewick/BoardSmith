@@ -15,6 +15,7 @@ import { RUN_MD, SKETCH_MD, designPath } from '../lib/project-paths.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { readSketchChunks } from './parallel-check.js';
 import { dependencyClosure } from './sketch-chunks.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 export interface NextChunks {
   /** The chunks that may be built now, in list order: the first is the one to build next. */
@@ -60,7 +61,7 @@ export async function nextChunks(projectDir: string): Promise<NextChunks> {
  * that it must stop and put its open gates to the designer.
  */
 export async function nextChunkCommand(options: { project?: string; json?: boolean } = {}): Promise<void> {
-  const next = await nextChunks(resolve(options.project ?? process.cwd()));
+  const next = await nextChunks(projectDirOption(options.project));
   const blocked = next.remaining > 0 && next.buildable.length === 0;
   if (blocked) process.exitCode = 1;
   if (options.json) {

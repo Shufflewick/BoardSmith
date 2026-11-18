@@ -4,7 +4,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
-import { resolveUserPath } from './user-path.js';
+import { projectDirOption, resolveUserPath } from './user-path.js';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob(['/src/cli/**/*.ts', '!**/*.test.ts']);
@@ -52,6 +52,24 @@ describe('resolveUserPath', () => {
   });
 });
 
+describe('projectDirOption', () => {
+  it('uses the invocation directory only when --project is omitted', () => {
+    expect(projectDirOption(undefined)).toBe(process.cwd());
+  });
+
+  it('rejects an empty --project rather than running on the invocation directory', () => {
+    expect(() => projectDirOption('')).toThrow(/empty/i);
+  });
+
+  it('expands a quoted leading ~ to the home directory', () => {
+    expect(projectDirOption('~/game')).toBe(join(homedir(), 'game'));
+  });
+
+  it('resolves a relative --project against the invocation directory', () => {
+    expect(projectDirOption('game')).toBe(join(process.cwd(), 'game'));
+  });
+});
+
 /**
  * `resolveUserPath` is not just a convenience: it is meant to be the ONLY way
  * a CLI command turns a path a user typed into an absolute one, because the two
@@ -78,6 +96,14 @@ describe('the CLI has one way to resolve a user-supplied path', () => {
     // because it reads as obviously right.
     const offenders = files
       .filter(({ text }) => /join\(\s*(?:cwd|process\.cwd\(\))\s*,\s*out(?:Dir|putDir)\b/.test(text))
+      .map(({ path }) => path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('turns --project into a directory only through projectDirOption', () => {
+    // `resolve(options.project ?? process.cwd())` ran `--project ''` on cwd and made `'~/x'` into `<cwd>/~/x` (#1706).
+    const offenders = files
+      .filter(({ text }) => /options\.project\s*\?\?/.test(text))
       .map(({ path }) => path);
     expect(offenders).toEqual([]);
   });

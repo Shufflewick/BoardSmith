@@ -80,6 +80,7 @@ import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundVeri
 import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { readProjectConfig } from '../lib/agent-roles.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -1082,7 +1083,7 @@ export async function ledgerCheck(projectDir: string, command: string): Promise<
 export async function ledgerCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const result = await ledgerCheck(projectDir, 'boardsmith ledger-check');
   if (result.findings.length > 0) process.exitCode = 1;
 

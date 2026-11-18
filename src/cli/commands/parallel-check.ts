@@ -38,6 +38,7 @@ import { interpretationTextInForce } from './claim-quotes.js';
 import { LINE_LOCATION_HINT, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
 import { type SliceSection, sectionsHolding, sectionsNamed, sliceSections } from '../lib/slice-sections.js';
 import { type SketchChunk, dependencyClosure, parseSketchChunks } from './sketch-chunks.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /** What one chunk cites of one slice: every section of it, or some of them. */
 interface CitedSlice {
@@ -375,7 +376,7 @@ export async function parallelCheckCommand(
     process.exitCode = 1;
     return;
   }
-  const refusals = await checkParallel(resolve(options.project ?? process.cwd()), slugs);
+  const refusals = await checkParallel(projectDirOption(options.project), slugs);
   if (refusals.length > 0) process.exitCode = 1;
   if (options.json) {
     console.log(JSON.stringify({ chunks: slugs, ok: refusals.length === 0, refusals }, null, 2));

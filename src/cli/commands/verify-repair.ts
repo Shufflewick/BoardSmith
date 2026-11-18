@@ -4,7 +4,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { styleText } from 'node:util';
 import { assertBareName } from '../lib/user-name.js';
 import {
@@ -18,6 +18,7 @@ import {
   type ImpactMapEntry,
   type RepairGate,
 } from './verify-impact.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-repair.ts` — CHECK-02's mechanical core (176-CONTEXT.md decisions 5, 8, 9, 12, 17, 19).
@@ -302,7 +303,7 @@ export async function verifyRepairRoundCommand(options: {
   json?: boolean;
 }): Promise<VerifyRunRoundPlan> {
   assertBareName('--chunk', options.chunk, "Pass the stale chunk's slug, the name of its directory under design/chunks/.");
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { runId } = await staleEntryOf(projectDir, options.runId, options.chunk);
 
   const chunkMd = await readChunkMdIfExists(projectDir, options.chunk);
@@ -338,7 +339,7 @@ export async function verifyRepairGateCommand(options: {
   chunk: string;
   json?: boolean;
 }): Promise<RepairGate> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { gate } = (await staleEntryOf(projectDir, options.runId, options.chunk)).entry;
 
   if (options.json) {
@@ -386,7 +387,7 @@ export interface VerifyRepairStatusResult {
 export async function verifyRepairStatusCommand(
   options: { project?: string; runId?: string; json?: boolean } = {},
 ): Promise<VerifyRepairStatusResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const impactStatus = await verifyImpactStatusCommand({
     project: projectDir,

@@ -21,6 +21,7 @@ import { shortQuoteProblem } from '../lib/quote-length.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { collectOutput } from '../lib/child-output.js';
 import { SIM_FILE } from '../../vite-config/test-files.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -551,7 +552,7 @@ export async function constraintCheckCommand(
     process.exitCode = 1;
     return;
   }
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const result = await checkConstraints(projectDir, { slug, runTests: options.runTests ?? runVitest });
   report(result, slug, options.json);
   if (result.refusals.length) process.exitCode = 1;

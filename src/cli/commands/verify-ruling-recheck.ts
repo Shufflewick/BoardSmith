@@ -5,7 +5,7 @@ import {
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { styleText } from 'node:util';
 import { parseRulings } from './build-manifest.js';
 import { allocatedNumber } from '../lib/ledger-entries.js';
@@ -24,6 +24,7 @@ import {
   rulingVerdictsLedgerPath,
   stagingSlicesDir,
 } from './verify-run.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-ruling-recheck.ts` — CHECK-01's mechanical half (176-CONTEXT.md decision 2): the CLI
@@ -385,7 +386,7 @@ export async function verifyRulingRecheckCommand(
     json?: boolean;
   } = {},
 ): Promise<VerifyRulingRecheckResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { enumerated, skipped, unparsedSupersession } = enumerateRulingsForRecheck(await readRulingsMd(projectDir));
   const transcription = await resolveFreshTranscription(projectDir, options.runId);
 
@@ -559,7 +560,7 @@ export async function verifyRulingRecordCommand(
     json?: boolean;
   } = {},
 ): Promise<VerifyRulingRecordResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const runId = options.runId;
   if (runId === undefined || !RUN_ID_RE.test(runId)) {

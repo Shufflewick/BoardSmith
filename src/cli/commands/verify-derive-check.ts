@@ -38,6 +38,7 @@ import {
   type DerivedLineClassificationResult,
   type MissedFact,
 } from './verify-enumerate.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * The role each of the three CHECK-04 dispatches goes to (#454). The skills name roles, never
@@ -654,7 +655,7 @@ function emptyDeriveCheckVerdictCounts(): Record<DeriveCheckVerdict, number> {
 export async function verifyDeriveCheckCommand(
   options: VerifyDeriveCheckOptions = {},
 ): Promise<VerifyDeriveCheckResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const liveSlices = await readLiveSlices(projectDir);
   const { candidates } = enumerateDerivedLines(liveSlices);
@@ -1374,7 +1375,7 @@ export interface VerifyDeriveRecordResult {
 export async function verifyDeriveRecordCommand(
   options: VerifyDeriveRecordOptions = {},
 ): Promise<VerifyDeriveRecordResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   if (!options.slicePath) {
     throw new Error('verify-derive-record requires --slice-path <path>.');

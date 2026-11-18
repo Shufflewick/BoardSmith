@@ -25,6 +25,7 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
 import { type SharedEdit, assessSignoffs, checkSignoff, readStatus } from './chunk-signoff.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -658,7 +659,7 @@ async function planVerifiedAgainst(
   slug: string,
   options: VerifiedAgainstOptions,
 ): Promise<{ result: VerifiedAgainstWriteResult; chunkPath: string; updated: string }> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const chunkPath = chunkMdPath(projectDir, slug);
   const relChunkPath = relChunkMdPath(slug);
 
@@ -851,7 +852,7 @@ export async function chunkCheckCommand(
 
   // #291: a verified Status must be backed by a recorded sign-off. Nothing here can be repaired:
   // only the designer can sign a chunk off, so this fails without writing anything.
-  const signoffProblems = await checkSignoff(resolve(options.project ?? process.cwd()), slug);
+  const signoffProblems = await checkSignoff(projectDirOption(options.project), slug);
 
   const result = {
     slug,
@@ -1167,7 +1168,7 @@ const SHARED_EDIT_LABEL: Record<SharedEdit['how'], string> = {
 export async function chunkProvenanceStatusCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<ChunkProvenanceStatusResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const slugs = await requireChunkSlugs(projectDir);
 
   const chunks: ChunkProvenanceEntry[] = [];

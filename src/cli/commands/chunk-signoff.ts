@@ -31,6 +31,7 @@ import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { bodyField } from '../lib/ledger-entries.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -975,7 +976,7 @@ function sketchWithStatus(sketch: string, slug: string, status: string): string 
  */
 export async function recordSignoff(slug: string, options: SignoffOptions): Promise<SignoffRecord> {
   assertBareName('<slug>', slug, SLUG_REMEDY);
-  const dir = resolve(options.project ?? process.cwd());
+  const dir = projectDirOption(options.project);
   const chunkText = await readBuiltChunk(dir, slug);
   const ctx = await loadContext(dir, slug, chunkText);
   const record: SignoffRecord = {
@@ -1046,7 +1047,7 @@ interface ReopenOptions {
  */
 export async function recordReopen(slug: string, options: ReopenOptions): Promise<void> {
   assertBareName('<slug>', slug, SLUG_REMEDY);
-  const dir = resolve(options.project ?? process.cwd());
+  const dir = projectDirOption(options.project);
   const rel = relChunkMdPath(slug);
   const chunkText = await readChunkText(dir, slug);
   const status = readStatus(chunkText) ?? '';
@@ -1111,7 +1112,7 @@ function waiverChunks(raw: string, sketch: string): string[] {
 
 /** Appends a designer waiver to design/WAIVERS.md and returns its id. */
 export async function recordWaiver(options: WaiverOptions): Promise<string> {
-  const dir = resolve(options.project ?? process.cwd());
+  const dir = projectDirOption(options.project);
   const now = options.now ?? new Date();
   assertWaiverTerms(options, now);
   const chunks = waiverChunks(options.chunks, await readSketch(dir));

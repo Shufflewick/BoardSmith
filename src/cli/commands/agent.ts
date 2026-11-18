@@ -17,8 +17,9 @@
  */
 import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { ESCALATION_LADDER, type Role, type WorkRole, agentTypeFor, defaultAgentType, nextRole, parseRole, readProjectConfig } from '../lib/agent-roles.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /** Where Claude Code finds an agent a project can dispatch: the project's own, then the user's. */
 function isInstalled(projectDir: string, agentType: string): boolean {
@@ -58,7 +59,7 @@ function escalatedRole(role: Role): Role {
 }
 
 export async function agentCommand(roleName: string, options: { project?: string; escalate?: boolean }): Promise<void> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const asked = parseRole(roleName);
   const role = options.escalate ? escalatedRole(asked) : asked;
   const config = await readProjectConfig(projectDir, { command: 'boardsmith agent', purpose: 'tell which agent each role is dispatched as' });

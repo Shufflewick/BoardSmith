@@ -29,7 +29,7 @@
  * run logs out (#1000); a changed binary file counts as too large to lighten.
  */
 import { promises as fs } from 'node:fs';
-import { relative, resolve } from 'node:path';
+import { relative } from 'node:path';
 import { styleText } from 'node:util';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { RUN_LOG_DIR, designPath } from '../lib/project-paths.js';
@@ -43,6 +43,7 @@ import {
   verifiedProblem,
   verifyResultPath,
 } from '../lib/verify-result.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /** A mechanical change of at most this many lines changed needs no model review. */
 export const SMALL_CHANGE_LINES = 20;
@@ -183,7 +184,7 @@ export async function reviewGate(options: { projectDir: string; slug: string }):
 }
 
 export async function reviewGateCommand(slug: string, options: { project?: string }): Promise<void> {
-  const gate = await reviewGate({ projectDir: resolve(options.project ?? process.cwd()), slug });
+  const gate = await reviewGate({ projectDir: projectDirOption(options.project), slug });
   if (!gate.open) {
     console.error(styleText('red', gate.refusal));
     process.exitCode = 1;

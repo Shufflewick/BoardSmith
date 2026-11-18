@@ -1,7 +1,7 @@
 import {
   designRulebookDir,
 } from '../lib/project-paths.js';
-import { resolveUserPath } from '../lib/user-path.js';
+import { projectDirOption, resolveUserPath } from '../lib/user-path.js';
 import { sha256Hex } from '../lib/hash.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { promises as fs } from 'node:fs';
@@ -309,7 +309,7 @@ ${INDEX_HEADINGS[2]}
 export async function ingestGapsCommand(
   options: { project?: string; json?: boolean; skipRelabel?: boolean; quiet?: boolean; printChanged?: boolean } = {},
 ): Promise<{ gapsWritten: number; slicesScanned: number; changed: boolean; files: string[] }> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const quiet = options.quiet || options.printChanged;
 
   // Relabel FIRST, as part of this command rather than as a second one the session must
@@ -480,7 +480,7 @@ const RELABEL_DERIVED_LINE_RE = new RegExp(
 export async function relabelDerivedLines(
   options: { project?: string; quiet?: boolean } = {},
 ): Promise<{ relabelled: number; changes: Array<{ file: string; line: number; matched: string }> }> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const dir = designRulebookDir(projectDir);
   const lexicon = new RegExp(`(${PRESENTATION_LEXICON.join('|')})`, 'i');
 
@@ -643,7 +643,7 @@ export async function ingestArchiveCommand(
   rulebook: string,
   options: IngestArchiveOptions = {},
 ): Promise<void> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { indexPath } = rulebookArchivePaths(projectDir, rulebook);
   const sources = await readAllSources(projectDir, rulebook, options.additionalSource ?? [], indexPath);
 

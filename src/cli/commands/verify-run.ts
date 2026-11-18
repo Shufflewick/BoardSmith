@@ -9,6 +9,7 @@ import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { parseSliceSource, readRecordedSourcePaths, sliceDocuments } from './rulebook-sources.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-run.ts` — the mechanical half of VERIFY-02 and VERIFY-08: a non-destructive staging
@@ -979,7 +980,7 @@ export interface VerifyRunInitResult {
 export async function verifyRunInitCommand(
   options: VerifyRunOptions & { runId?: string; ranges?: Record<string, string[]> } = {},
 ): Promise<VerifyRunInitResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const rulebookDir = designRulebookDir(projectDir);
 
   if ((await readIfExists(rulebookDir, (p) => fs.stat(p))) === undefined) {
@@ -1155,7 +1156,7 @@ async function recordRangeMarker(
   kind: 'range-complete' | 'range-reset',
   options: { project?: string; runId: string; rangeId: string; json?: boolean },
 ): Promise<VerifyRunRangeActionResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const { runId, rangeId } = options;
   assertValidRunId(runId);
   assertValidRangeId(rangeId);
@@ -1233,7 +1234,7 @@ export async function verifyRunRecordCommand(
   const { runId } = options;
   if (!runId) throw new Error('verify-run-record requires --run-id <id>.');
   assertValidRunId(runId);
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const ledgerFile = ledgerFilePath(projectDir, runId);
   // The lock file sits beside the ledger, so a run that was never initialised is refused first.
   await readLedgerOrThrow(ledgerFile, runId, projectDir);
@@ -1290,7 +1291,7 @@ async function recordInRun(
   if (!unit) throw new Error('verify-run-record requires --unit <unit-id>.');
   if (!slice) throw new Error('verify-run-record requires --slice <path>.');
 
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const stagingDir = stagingSlicesDir(projectDir, runId);
   const ledgerFile = ledgerFilePath(projectDir, runId);
   const relLedgerPath = relative(projectDir, ledgerFile);
@@ -1418,7 +1419,7 @@ export interface VerifyRunStatusResult {
 export async function verifyRunStatusCommand(
   options: VerifyRunOptions & { runId?: string } = {},
 ): Promise<VerifyRunStatusResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   let runId = options.runId;
   if (runId) {
