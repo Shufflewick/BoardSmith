@@ -1,5 +1,5 @@
 {
-  "revision": 436,
+  "revision": 437,
   "surfaceHash": "8019117a6e4e099a",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3431,6 +3431,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "AutoUI renderers read board state from one shared helper; no behavior change"
+    },
+    {
+      "revision": 437,
+      "date": "2026-11-18",
+      "surfaceHash": "8019117a6e4e099a",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "CLI commands resolve --project through one helper that rejects an empty path and expands a quoted ~ (#1706)"
     }
   ]
 }
