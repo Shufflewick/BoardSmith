@@ -22,7 +22,7 @@
  * @module
  */
 
-import type { Component } from 'vue';
+import type { Component, ComponentPublicInstance } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameRootView } from '../ui/types.js';
@@ -708,17 +708,18 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   const frame = document.createElement('div');
   const removeRegions = await drawLiveRegions(seatContext.liveRegion, frame);
   const { spoken, stopRecording } = await recordAnnouncements(seatContext.liveRegion);
-  // Only the modal host is in the page, where a Teleport's document-wide lookup finds it; seats mounted together would share ids if their boards were too.
-  const modalHost = document.createElement('div');
-  document.body.append(modalHost);
-  const release = () => {
+  const { queuePostFlushCb } = await import('vue');
+  const modalHost = openModalHost();
+  const stopSeat = () => {
     seatContext.stop();
     removeRegions();
     stopRecording();
-    releaseModalHost(modalHost);
-    modalHost.remove();
   };
-  const claim = () => claimModalHost(modalHost);
+  // Now, and again before what Vue defers to after the render (a `defer` Teleport), since another seat may render in between.
+  const claim = () => {
+    claimModalHost(modalHost);
+    queuePostFlushCb(() => claimModalHost(modalHost));
+  };
   let wrapper: VueWrapper<RenderedInstance<C>>;
   try {
     wrapper = mount<Component>(component, {
@@ -730,16 +731,25 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
         plugins: [
           {
             install: (app) => {
-              // Before each of the board's renders, so a Teleport it mounts finds this seat's host and not another mounted seat's.
-              app.mixin({ beforeMount: claim, beforeUpdate: claim });
-              app.onUnmount(release);
+              // Before each of the board's renders and teardowns, so a Teleport or lookup finds this seat's host and not another mounted seat's.
+              app.mixin({
+                beforeMount: claim,
+                beforeUpdate: claim,
+                beforeUnmount: claim,
+                unmounted(this: ComponentPublicInstance) {
+                  // The root's, once the board's own teardown is done with the host.
+                  if (this.$parent === null) closeModalHost(modalHost);
+                },
+              });
+              app.onUnmount(stopSeat);
             },
           },
         ],
       },
     }) as VueWrapper<RenderedInstance<C>>;
   } catch (failure) {
-    release();
+    stopSeat();
+    closeModalHost(modalHost);
     throw failure;
   }
 
@@ -756,18 +766,39 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   return { wrapper, raised, boardPrompt: seatContext.boardPrompt, spoken, modalHost };
 }
 
-/** The mounted seat whose host holds the `#bs-game-modal` id; only one may, as in a shell's own page. */
+/** Every mounted seat's modal host, in the order the seats were mounted. */
+const modalHosts: HTMLElement[] = [];
+/** The one holding the `#bs-game-modal` id; only one may, as in a shell's own page. */
 let modalHostHolder: HTMLElement | null = null;
 
+/**
+ * A seat's modal host, put in the page, where a Teleport's document-wide lookup
+ * finds it. The board itself is not: seats mounted together would share ids.
+ */
+function openModalHost(): HTMLElement {
+  const host = document.createElement('div');
+  document.body.append(host);
+  modalHosts.push(host);
+  return host;
+}
+
 function claimModalHost(host: HTMLElement): void {
-  if (modalHostHolder === host) return;
+  if (modalHostHolder === host || !modalHosts.includes(host)) return;
   modalHostHolder?.removeAttribute('id');
   host.id = 'bs-game-modal';
   modalHostHolder = host;
 }
 
-function releaseModalHost(host: HTMLElement): void {
-  if (modalHostHolder === host) modalHostHolder = null;
+/** Takes the host out of the page, giving the id to the latest seat still mounted. */
+function closeModalHost(host: HTMLElement): void {
+  const at = modalHosts.indexOf(host);
+  if (at === -1) return;
+  modalHosts.splice(at, 1);
+  host.remove();
+  if (modalHostHolder !== host) return;
+  modalHostHolder = null;
+  const latest = modalHosts.at(-1);
+  if (latest) claimModalHost(latest);
 }
 
 /** Records each text written to the seat's live regions as it is written, so a later announcement cannot hide an earlier one. */
@@ -1543,6 +1574,10 @@ const IDENTITY_BEARING_ATTRS = ['aria-label', 'alt', 'title', 'aria-description'
  * attributed to any specific element (no `data-element-id` ancestor at all)
  * and must be checked conservatively against every marker (D20).
  */
+const MODAL_WITHOUT_OWNER =
+  "the seat's modal, where no data-element-id says which element it shows " +
+  "(a board's modal is outside the board, so put data-element-id on what it shows if that is the seat's own element)";
+
 interface SurfaceString {
   value: string;
   ownerId?: number;
@@ -1594,7 +1629,7 @@ function findOwningElementId(el: Element): number | undefined {
  * assertNoHiddenInfoLeak}'s exemption logic (CR-01) for how that distinction
  * is enforced.
  */
-function collectScopedSurfaceStrings(roots: readonly Element[]): SurfaceString[] {
+function collectScopedSurfaceStrings(root: Element): SurfaceString[] {
   const surfaces: SurfaceString[] = [];
 
   const visit = (el: Element) => {
@@ -1618,10 +1653,8 @@ function collectScopedSurfaceStrings(roots: readonly Element[]): SurfaceString[]
     }
   };
 
-  for (const root of roots) {
-    visit(root);
-    root.querySelectorAll('*').forEach(visit);
-  }
+  visit(root);
+  root.querySelectorAll('*').forEach(visit);
 
   return surfaces;
 }
@@ -1787,8 +1820,13 @@ export async function assertNoHiddenInfoLeak(
   // `provide` was accepted here and silently dropped (#405).
   const { wrapper, raised, boardPrompt, spoken, modalHost } = await mountForSeat(subject, seat, options);
   try {
-    // The board and whatever it Teleported into its modal host (#1717).
-    const surfaces = collectScopedSurfaceStrings([wrapper.element, modalHost]);
+    // The board and whatever it Teleported into its modal host, where the board's own element ids are not its ancestors (#1717).
+    const surfaces = [
+      ...collectScopedSurfaceStrings(wrapper.element),
+      ...collectScopedSurfaceStrings(modalHost).map((surface) =>
+        surface.ownerId === undefined ? { ...surface, source: MODAL_WITHOUT_OWNER } : surface,
+      ),
+    ];
     // The action bar shows the board's prompt to the seat, so it is checked
     // against every marker, as an unattributed surface is (#564).
     const prompt = boardPrompt();

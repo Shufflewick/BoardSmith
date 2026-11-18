@@ -471,8 +471,11 @@ a diff with nothing on one side of it cannot fail.
 `#bs-game-modal` host in the page, as GameShell gives the board one, so a
 `<Teleport to="#bs-game-modal">` modal opens in that seat's host even while
 several seats are mounted at once, and `assertNoHiddenInfoLeak` scans that host
-as it scans the board. Unmount each wrapper when its test is done, which also
-takes its host out of the page.
+as it scans the board. A modal is outside the board, so the board's
+`data-element-id`s are not its ancestors: put `data-element-id` on what the
+modal shows, or a seat's own card there is checked as if it were anyone's.
+Unmount each wrapper when its test is done, which also takes its host out of
+the page.
 
 <!-- typecheck: game tests/leak.test.ts -->
 ```typescript
