@@ -1,4 +1,9 @@
+import { execFileSync } from 'node:child_process';
+import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { gitOutput } from '../lib/git-output.js';
 import {
   appendCrossChunkEntry,
   changedSide,
@@ -71,6 +76,31 @@ describe('crossReferences', () => {
 +export const questBoard = 'tavern';
 `);
     expect(crossReferences(quests, changedSide(AUCTION_DIFF))).toEqual({ sharedFiles: [], sharedNames: [] });
+  });
+});
+
+describe('changedSide reads the file names git quotes in diff headers (#1712)', () => {
+  // Slow one-time setup lives here, where no test timeout applies.
+  const repo = tempTree('bs-cross-chunk-quoted-');
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo });
+  const QUOTED = ['src/a"b.ts', 'src/c\\d.ts', 'src/e\tf.ts', 'src/g\nh.ts', 'src/i\u0001j.ts', 'src/\u00e9t\u00e9.ts'];
+  git('init', '-q');
+  mkdirSync(join(repo, 'src'));
+  writeFileSync(join(repo, 'src/gone"x.ts'), 'export const goneVenue = 1;\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'base');
+  writeFileSync(join(repo, 'src/plain.ts'), 'export const plainVenue = 1;\n');
+  QUOTED.forEach((name, i) => writeFileSync(join(repo, name), `export const quotedVenue${i} = 1;\n`));
+  rmSync(join(repo, 'src/gone"x.ts'));
+  git('add', '-A');
+  git('commit', '-q', '-m', 'quoted');
+
+  it('records each file under its own name, a deleted one included', async () => {
+    const side = changedSide(await gitOutput(repo, ['diff', '--unified=0', 'HEAD~1', 'HEAD']));
+    expect([...side.files].sort()).toEqual([...QUOTED, 'src/gone"x.ts', 'src/plain.ts'].sort());
+    expect([...side.names.get('plainVenue')!]).toEqual(['src/plain.ts']);
+    QUOTED.forEach((name, i) => expect([...side.names.get(`quotedVenue${i}`)!]).toEqual([name]));
+    expect([...side.names.get('goneVenue')!]).toEqual(['src/gone"x.ts']);
   });
 });
 

@@ -63,9 +63,37 @@ function recordLine(side: ChangedSide, file: string, line: string): void {
   if (key) side.defined.add(key);
 }
 
-/** The file a `diff --git` header line names, when that file is source; undefined otherwise. */
-function sourceFileOf(header: RegExpExecArray): string | undefined {
-  return isSource(header[2]) ? header[2] : undefined;
+/** git's C-style escapes in a quoted path, by the character after the backslash. */
+const C_ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 };
+
+/** A path as git wrote it between quotes, with its escapes undone; `\ooo` octal escapes are bytes. */
+function unquoteGitPath(body: string): string {
+  const bytes = Buffer.from(body, 'utf8');
+  const out: number[] = [];
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== 92) {
+      out.push(bytes[i]);
+      continue;
+    }
+    const next = String.fromCharCode(bytes[++i]);
+    if (/[0-7]/.test(next)) {
+      out.push(parseInt(bytes.subarray(i, i + 3).toString('latin1'), 8));
+      i += 2;
+    } else {
+      out.push(C_ESCAPES[next]);
+    }
+  }
+  return Buffer.from(out).toString('utf8');
+}
+
+/** `diff --git a/<old> b/<new>`, where git wraps either path in quotes when it holds a quote, backslash or control character. */
+const DIFF_HEADER = /^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+?) (?:"b\/((?:[^"\\]|\\.)*)"|b\/(.+))$/;
+
+/** The file a `diff --git` header line names after the change, quoted by git or not. */
+function headerFile(line: string): string {
+  const header = DIFF_HEADER.exec(line);
+  if (!header) throw new Error(`Could not read the file name in this git diff header: ${line}`);
+  return header[1] !== undefined ? unquoteGitPath(header[1]) : header[2];
 }
 
 /** A diff body line that adds or removes content, as opposed to a `+++`/`---` file header. */
@@ -79,9 +107,9 @@ export function changedSide(diff: string): ChangedSide {
   const side: ChangedSide = { files: new Set(), names: new Map(), defined: new Set() };
   let file: string | undefined;
   for (const line of diff.split('\n')) {
-    const header = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
-    if (header) {
-      file = sourceFileOf(header);
+    if (line.startsWith('diff --git ')) {
+      const path = headerFile(line);
+      file = isSource(path) ? path : undefined;
       if (file) side.files.add(file);
       continue;
     }
