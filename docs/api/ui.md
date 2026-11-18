@@ -195,7 +195,6 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 
 #### Card Display
 
-- `useCardDisplay()` - Card display utilities
 - `getSuitSymbol()` - Get suit symbol
 - `getSuitColor()` - Get suit color
 - `getRankName()` - Get rank name

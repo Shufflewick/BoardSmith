@@ -1821,14 +1821,13 @@ const dist = calculateHexDistance(0, 0, 3, 2);
 </template>
 ```
 
-### useCardDisplay
+### Card display helpers
 
 Card display formatting utilities.
 
 <!-- typecheck: game src/ui/cards.ts -->
 ```typescript
 import {
-  useCardDisplay,
   getSuitSymbol,
   getSuitColor,
   getRankName,

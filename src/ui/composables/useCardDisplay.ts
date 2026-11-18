@@ -1,5 +1,5 @@
 /**
- * useCardDisplay - Utilities for displaying playing cards
+ * Utilities for displaying playing cards
  *
  * Provides common functions for rendering playing cards with suit symbols,
  * colors, and rank names. Used by custom game UIs.
@@ -7,15 +7,11 @@
  * ## Usage
  *
  * ```typescript
- * import { useCardDisplay, getSuitSymbol, getSuitColor, getRankName } from 'boardsmith/ui';
+ * import { getSuitSymbol, getSuitColor, getRankName } from 'boardsmith/ui';
  *
- * // Use individual functions
  * const symbol = getSuitSymbol('H'); // '♥'
  * const color = getSuitColor('H'); // '#e74c3c' (red)
  * const name = getRankName('K'); // 'King'
- *
- * // Or use the composable
- * const { getSuitSymbol, getSuitColor, getRankName } = useCardDisplay();
  * ```
  *
  * ## In Vue Templates
@@ -161,21 +157,4 @@ export function isRedSuit(suit: string): boolean {
  */
 export function isBlackSuit(suit: string): boolean {
   return suit === 'C' || suit === 'S';
-}
-
-/**
- * Composable that provides card display utilities.
- * Use this if you prefer the composable pattern.
- */
-export function useCardDisplay() {
-  return {
-    getSuitSymbol,
-    getSuitColor,
-    getRankName,
-    getSuitName,
-    getCardName,
-    getCardPointValue,
-    isRedSuit,
-    isBlackSuit,
-  };
 }

@@ -320,7 +320,6 @@ export {
 
 // Card display utilities
 export {
-  useCardDisplay,
   getSuitSymbol,
   getSuitColor,
   getRankName,

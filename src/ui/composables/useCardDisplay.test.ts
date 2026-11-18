@@ -12,7 +12,6 @@ import {
   getCardPointValue,
   isRedSuit,
   isBlackSuit,
-  useCardDisplay,
 } from './useCardDisplay.js';
 
 const SUITS = ['H', 'D', 'C', 'S'] as const;
@@ -160,36 +159,7 @@ describe('isRedSuit / isBlackSuit', () => {
   });
 });
 
-describe('useCardDisplay', () => {
-  it('exposes the same functions as the module', () => {
-    const display = useCardDisplay();
-    expect(display.getSuitSymbol).toBe(getSuitSymbol);
-    expect(display.getSuitColor).toBe(getSuitColor);
-    expect(display.getRankName).toBe(getRankName);
-    expect(display.getSuitName).toBe(getSuitName);
-    expect(display.getCardName).toBe(getCardName);
-    expect(display.getCardPointValue).toBe(getCardPointValue);
-    expect(display.isRedSuit).toBe(isRedSuit);
-    expect(display.isBlackSuit).toBe(isBlackSuit);
-  });
-
-  it('exposes exactly those eight helpers', () => {
-    expect(Object.keys(useCardDisplay()).sort()).toEqual([
-      'getCardName', 'getCardPointValue', 'getRankName', 'getSuitColor',
-      'getSuitName', 'getSuitSymbol', 'isBlackSuit', 'isRedSuit',
-    ]);
-  });
-
-  it('needs no component instance — it is callable outside setup()', () => {
-    expect(() => useCardDisplay()).not.toThrow();
-  });
-
-  it('works through the destructured form', () => {
-    const { getSuitSymbol: symbol, getCardPointValue: value } = useCardDisplay();
-    expect(symbol('S')).toBe('♠');
-    expect(value('K')).toBe(10);
-  });
-
+describe('card names', () => {
   /**
    * A card drawn as a glyph needs words before a screen reader can read it, and
    * pasting a suit map into every game is how those words drift (issue 82).
