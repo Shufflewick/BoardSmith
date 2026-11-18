@@ -86,14 +86,7 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 
 - `GameClass` - Game class constructor type
 - `GameDefinition` - Game definition with metadata
-- `GameConfig` - Game configuration options
-- `StoredGameState` - Persisted game state
 - `PlayerGameState` - Player-specific state view
-- `SessionInfo` - Session metadata
-- `StateUpdate` - State update message
-- `BotStrategy` - bot player configuration
-- `StorageAdapter` - Storage backend interface
-- `BroadcastAdapter` - WebSocket broadcast interface
 - `PlayerOptionDefinition` - Player option definition
 - `StandardPlayerOption` - Select player option
 - `NumberPlayerOption` - Number player option (`default`, optional `min`, `max` and `step`)
@@ -185,7 +178,7 @@ await session.arrange((game) => {
 ### Adding bot opponents
 
 The third argument names the seats a bot plays. The game definition's `bot`
-field carries its `BotStrategy`.
+field carries its `BotStrategy`, which `boardsmith/bot` exports (see [bot.md](./bot.md)).
 
 ```typescript
 const session = createHeadlessSession(

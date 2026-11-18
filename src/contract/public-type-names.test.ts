@@ -28,6 +28,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import ts from 'typescript';
 import { fileURLToPath } from 'node:url';
+import sessionDoc from '../../docs/api/session.md';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -217,6 +218,18 @@ describe('every public declaration has one entry point (#526)', () => {
       SURFACE.underscored,
       'These exports start with _, which marks a test hook. Import it by relative path in the tests and ' +
         'drop it from the public entry point:\n' + SURFACE.underscored.map((name) => `  ${name}`).join('\n'),
+    ).toEqual([]);
+  });
+});
+
+describe('the session API reference names only what boardsmith/session exports (#1713)', () => {
+  it('every name a list item of docs/api/session.md opens with is exported', () => {
+    const checker = PROGRAM.getTypeChecker();
+    const exported = new Set(checker.getExportsOfModule(entryModule(PROGRAM, checker, 'boardsmith/session', ENTRIES['boardsmith/session'])).map((symbol) => symbol.name));
+    const documented = [...sessionDoc.matchAll(/^- `([A-Za-z]\w*)(?:<[^`]*>|\(\))?`/gm)].map(([, name]) => name);
+    expect(
+      documented.filter((name) => !exported.has(name)),
+      'docs/api/session.md lists these names, but boardsmith/session does not export them. Drop them, or point to the entry point that exports them.',
     ).toEqual([]);
   });
 });
