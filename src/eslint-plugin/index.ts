@@ -43,17 +43,17 @@ export const ruleGroups = {
   security: ['no-network', 'no-filesystem', 'no-eval'],
   /**
    * Enforced only for code that runs inside the executor sandbox: the rules bundle and any shared
-   * modules it imports. The executor must be deterministic and synchronous so games can be
-   * replayed for undo and explored by the MCTS bot, and Workers freeze the clock during sync
+   * modules it imports. The executor must be deterministic and synchronous so a restored state
+   * plays on exactly as it did for undo and for the MCTS bot's search, and Workers freeze the clock during sync
    * execution, so timers never fire there anyway. Not applied to `src/ui/**`: the UI runs in the
    * browser iframe, never in the executor, so timers and randomness there (a
    * `requestAnimationFrame` animation) are legitimate and cannot affect game state.
    */
   determinism: ['no-timers', 'no-nondeterministic'],
   /**
-   * Two anti-patterns that corrupt undo/replay and MCTS exploration without tripping the rules
+   * Two anti-patterns that corrupt undo, restore and MCTS exploration without tripping the rules
    * above: comparing `GameElement` instances by `===` (identity is not stable across
-   * clone/replay) and persisting a raw element array as game state (a second copy of the element
+   * clone/restore) and persisting a raw element array as game state (a second copy of the element
    * tree that drifts from it).
    */
   identity: ['no-element-identity-comparison', 'no-element-array-state'],

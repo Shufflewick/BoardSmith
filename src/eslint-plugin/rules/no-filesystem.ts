@@ -18,7 +18,7 @@ const rule: Rule.RuleModule = {
       noFs: 'Filesystem access is not allowed in game rules. Games run in a sandboxed environment.',
       noPath: 'Path module is not allowed in game rules.',
       noChildProcess: 'Child process execution is not allowed in game rules.',
-      noOs: "The 'os' module is not allowed in game rules: it reports host state (platform, cpus, hostname), which differs per machine and breaks deterministic replay.",
+      noOs: "The 'os' module is not allowed in game rules: it reports host state (platform, cpus, hostname), which differs per machine, so a game restored on another machine would play differently.",
     },
     schema: [],
   },
