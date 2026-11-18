@@ -34,7 +34,7 @@ import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction
 import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
-import { boardCellStates } from './board-cell-states.js';
+import { boardCellStates } from '../../../composables/useElementBoardState.js';
 import { cellCoordinateError, placedCells, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{

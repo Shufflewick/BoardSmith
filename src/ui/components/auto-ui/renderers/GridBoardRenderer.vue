@@ -21,7 +21,7 @@ import ElementRenderer from './ElementRenderer.vue';
 import PieceDetailsTip from './PieceDetailsTip.vue';
 import { isKeyboardModality, trackInputModality } from '../../../composables/useDisabledReasonTooltip.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
-import { boardCellStates } from './board-cell-states.js';
+import { boardCellStates } from '../../../composables/useElementBoardState.js';
 import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
