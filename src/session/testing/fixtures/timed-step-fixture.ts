@@ -24,7 +24,9 @@
  * `src/session/step-clock.test.ts` and the dev host's deadline suite, and for
  * the simulator and the benchmark, which move their clock to the instant the
  * bot waits for (#1541). `ShortWindowGatedGame` closes its step before the
- * playback ends, so the bot waits past the deadline.
+ * playback ends, so the bot waits past the deadline. `CommitRoundGame`, played
+ * with `seatOneWaitsForSeatTwo`, has a seat that waits with no instant while the
+ * other can move, which the simulator and the benchmark hold as a host does (#1719).
  */
 import {
   Game,
@@ -122,6 +124,21 @@ export const fixedDeployDefinition = twoSeat(FixedDeployGame, 'timed-step-fixed'
 export const growingDeployDefinition = twoSeat(GrowingDeployGame, 'timed-step-growing');
 export const untimedDeployDefinition = twoSeat(UntimedDeployGame, 'timed-step-untimed');
 export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
+
+/** One untimed round of `DeployGame`'s deploy step, so the game ends once both seats commit. */
+class CommitRoundGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options);
+    this.setFlow({ root: roundStep('simultaneous', undefined, ['commit']) });
+  }
+}
+
+export const commitRoundDefinition = twoSeat(CommitRoundGame, 'timed-step-commit-round');
+
+/** For `CommitRoundGame`: seat 1 waits, reading no clock, until seat 2 has committed (#1719). */
+export const seatOneWaitsForSeatTwo: BotStrategy = {
+  candidateMoves: (game, seat, listMoves) => (seat === 1 && !(game as DeployGame).committed.includes(2) ? [] : listMoves()),
+};
 
 /** How long `PlaybackGame`'s battle plays back once a deploy step opens. */
 export const PLAYBACK_MS = 30_000;

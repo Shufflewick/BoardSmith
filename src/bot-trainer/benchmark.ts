@@ -355,14 +355,15 @@ async function runBenchmarkGame<G extends Game>(
 
 /**
  * The move `bot` makes for `seat`, the instant it waits for on the step clock
- * (#1541), or why the game cannot go on.
+ * (#1541), undefined when it waits until the game changes (#1719), or why the
+ * game cannot go on.
  */
 async function chooseMove(
   bot: ReturnType<typeof createBot>,
   game: Game,
   seat: number,
   botName: string,
-): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number } | { incomplete: string }> {
+): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number | undefined } | { incomplete: string }> {
   try {
     const move = await playSeatMove(bot, game, seat);
     // In a live game a stall holds one seat; in a benchmark the game cannot

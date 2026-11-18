@@ -6,23 +6,23 @@
  */
 import type { GameRunner } from './runner.js';
 
-/** The instant a seat waits for, and who waits, for messages. */
+/** The instant a seat waits for, if any, and who waits, for messages. */
 interface ClockWait {
-  until: number;
+  until: number | undefined;
   who: string;
 }
 
 /**
- * Seats that chose to wait since the game last changed. They are not asked
- * again until it changes, or until every seat that can move waits: then the
- * clock moves to the earliest instant they wait for, as a host's reoffer timer
- * would, and every seat is asked again.
+ * Seats that chose to wait since the game last changed, as a live host holds
+ * them. They are not asked again until it changes, or until every seat that
+ * can move waits: then the clock moves to the earliest instant they wait for,
+ * as a host's reoffer timer would, and every seat is asked again.
  */
 export class ClockWaits {
   private readonly waits = new Map<number, ClockWait>();
 
-  /** Record that `seat` waits until host instant `until`. */
-  add(seat: number, until: number, who: string): void {
+  /** Record that `seat` waits until host instant `until`, or with no instant, until the game changes (#1719). */
+  add(seat: number, until: number | undefined, who: string): void {
     this.waits.set(seat, { until, who });
   }
 
@@ -34,9 +34,9 @@ export class ClockWaits {
   /**
    * The seats to ask now, from `canMove()`, the seats that can move: those not
    * waiting. When every one waits, the clock moves first and all are asked.
-   * Returns why the game stops instead when the earliest wait reaches the open
-   * step's time limit, when a host would close the seats: these harnesses run
-   * no deadlines.
+   * Returns why the game stops instead when no seat waits for an instant, or
+   * when the earliest wait reaches the open step's time limit, when a host
+   * would close the seats: these harnesses run no deadlines.
    */
   seatsToAsk<S extends { seat: number }>(runner: GameRunner, canMove: () => S[]): S[] | string {
     const seats = canMove();
@@ -48,7 +48,15 @@ export class ClockWaits {
   }
 
   private moveClock(runner: GameRunner): string | undefined {
-    const { until, who } = [...this.waits.values()].reduce((earliest, wait) => (wait.until < earliest.until ? wait : earliest));
+    const timed = [...this.waits.values()].filter((wait): wait is { until: number; who: string } => wait.until !== undefined);
+    if (timed.length === 0) {
+      const seats = [...this.waits].map(([seat, { who }]) => `seat ${seat} (${who})`).join(', ');
+      return (
+        `Every seat that can move waits until the game changes, and none of them will change it: ${seats}. ` +
+        'A host would hold these seats forever, so the game stops here. Have one of them return the move it makes now.'
+      );
+    }
+    const { until, who } = timed.reduce((earliest, wait) => (wait.until < earliest.until ? wait : earliest));
     const now = runner.game._hostNow;
     if (now === undefined || !(until > now)) {
       throw new Error(

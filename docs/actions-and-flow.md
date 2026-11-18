@@ -2569,7 +2569,9 @@ Action.create<MyGame>('levelUp')
   `ms` above 0, and no deadline runs out. An action greyed for the first part of a step is never
   played there, unless a bot waits for it (#1541): once every seat that can
   move waits, the clock moves to the earliest instant they wait for, and they
-  are asked again. A wait that reaches the step's time limit stops the game,
+  are asked again. A seat that waits with no instant is held until another
+  seat moves (#1719), and when every seat that can move waits with no instant
+  the game stops. A wait that reaches the step's time limit stops the game,
   since they run no deadlines.
 - In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
   for the start and `testGame.runner.setNow(ms)` before a later move, or

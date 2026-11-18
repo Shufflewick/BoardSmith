@@ -19,17 +19,17 @@ export async function searchSeat(
 
 /**
  * The move `bot` makes for `seat` as a client would send it, the instant it
- * waits for on the step clock (#1541), or why it has no move (#29). The
+ * waits for on the step clock (#1541), undefined when it waits until the game
+ * changes (#1719), or why it has no move (#29). The
  * benchmark and the sim's mcts policy both play bots through this (#1701).
  */
 export async function playSeatMove(
   bot: MCTSBot,
   game: Game,
   seat: number,
-): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number } | { stall: string }> {
+): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number | undefined } | { stall: string }> {
   const found = await searchSeat(bot);
-  // A harness stops on a wait with no instant; holding the seat as the live host does would change sim and benchmark results (#1715).
-  if ('wait' in found && found.wait.until !== undefined) return { waitUntil: found.wait.until };
+  if ('wait' in found) return { waitUntil: found.wait.until };
   if (!('move' in found)) return { stall: bot.lastStallReason ?? 'no reason recorded' };
   // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
   return { action: found.move.action, args: picksFromSeat(game, found.move.action, found.move.args, seat) };

@@ -14,7 +14,9 @@ import {
   PlaybackTurnGame,
   disabledGatedDefinition,
   shortWindowGatedDefinition,
+  commitRoundDefinition,
   levelUpWhenAllowed,
+  seatOneWaitsForSeatTwo,
 } from '../session/testing/fixtures/timed-step-fixture.js';
 import { createBot } from '../bot/index.js';
 import { GameRunner } from '../runtime/index.js';
@@ -364,6 +366,33 @@ describe('benchmarkBot', () => {
       "The trained bot for seat 1 waits until instant 30000, but the open step's time limit ends at instant 10000, when a host would close the seat. " +
         'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.',
     ]);
+  });
+
+  // #1719: as the live host does, the benchmark holds a seat that waits with no instant until the game changes.
+  it('lets the baseline move while the trained bot waits with no instant, then asks it again', async () => {
+    const result = await benchmarkBot(commitRoundDefinition.gameClass, 'untimed', seatOneWaitsForSeatTwo, noWeights, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'untimed',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.incomplete).toBe(0);
+  });
+
+  it('reports a game where every seat that can move waits with no instant as incomplete (#1719)', async () => {
+    const result = await benchmarkBot(PlaybackTurnGame, 'playback', { candidateMoves: () => [] }, noWeights, {
+      gameCount: 1,
+      mctsIterations: 1,
+      maxActions: 20,
+      seed: 'untimed',
+      allowIncomplete: true,
+    });
+    expect(result.failures).toHaveLength(1);
+    expect(result.failures[0]).toBe(
+      "Every seat that can move waits until the game changes, and none of them will change it: seat 1 (The trained bot for seat 1). " +
+        'A host would hold these seats forever, so the game stops here. Have one of them return the move it makes now.',
+    );
   });
 
   it('checks weights against the objectives of a game whose rules read the step clock (#1535)', () => {

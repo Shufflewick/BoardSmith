@@ -52,10 +52,12 @@ export interface PolicyMove {
 /**
  * A policy's answer: a move, why its seat has none it can play, or the host
  * instant, epoch ms, its seat waits for (a bot whose strategy waits on the step
- * clock, #1541). Once every seat that can move waits, the simulator moves the
- * game's clock to the earliest of them and asks again.
+ * clock, #1541), undefined to wait until the game changes (#1719). The seat is
+ * not asked again until another seat moves; once every seat that can move
+ * waits, the simulator moves the game's clock to the earliest instant and asks
+ * again, and stops the game when none waits for an instant.
  */
-export type PolicyChoice = PolicyMove | { noMove: string } | { waitUntil: number };
+export type PolicyChoice = PolicyMove | { noMove: string } | { waitUntil: number | undefined };
 
 /** What a policy is handed each time its seat is to move. */
 export interface PolicyTurn {
