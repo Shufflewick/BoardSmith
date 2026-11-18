@@ -290,6 +290,7 @@ card.showToAll();
 // Reveal to specific players
 card.showOnlyTo(player);      // Only this player can see
 card.addVisibleTo(player);    // Also show it to this player; everyone else keeps what they had
+card.hideFrom(player);        // Also hide it from this player
 
 // Hide again (e.g., after showing)
 card.hideFromAll();
@@ -311,7 +312,11 @@ zone allows. The extra seats move with the card, and everything else follows
 the zone it is in now: a card peeked at in the deck and drawn into a hand is
 seen by the hand's owner and the peeking seat. `showToAll`, `showOnlyTo`,
 `hideFromAll` and `setVisibility` replace the zone's rule and move with the
-card as a whole. `card.clearVisibility()` drops all of it.
+card as a whole. `hideFrom` adds to the card's own setting, so seats hidden
+earlier stay hidden and no seat gains sight; on a card with no setting of its
+own it replaces the zone's rule with "everyone but these seats". For one seat,
+the later of `hideFrom` and `addVisibleTo` wins.
+`card.clearVisibility()` drops all of it.
 
 `shuffle()` drops all of it too, for every element in the shuffled space and
 everything inside them, so a seat that peeked at a card cannot follow it to its

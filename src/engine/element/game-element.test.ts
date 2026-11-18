@@ -404,6 +404,44 @@ describe('Visibility', () => {
     expect(card.isVisibleTo(2)).toBe(false);
   });
 
+  describe('hideFrom adds to what was already set (#1689)', () => {
+    let table: Space;
+    let piece: Card;
+
+    beforeEach(() => {
+      game = new TestGame({ playerCount: 3 });
+      table = game.create(Space, 'table');
+      piece = table.create(Card, 'piece', { suit: 'H', rank: 'A', value: 14 });
+    });
+
+    it('keeps an earlier hideFrom', () => {
+      piece.hideFrom(1);
+      piece.hideFrom(2);
+      expect([1, 2, 3].map((seat) => piece.isVisibleTo(seat))).toEqual([false, false, true]);
+    });
+
+    it('keeps an earlier addVisibleTo grant in a hidden zone', () => {
+      table.contentsHidden();
+      piece.addVisibleTo(3);
+      piece.hideFrom(2);
+      expect([1, 2, 3].map((seat) => piece.isVisibleTo(seat))).toEqual([true, false, true]);
+    });
+
+    it('reveals to nobody new: showOnlyTo then hideFrom keeps the others out', () => {
+      piece.showOnlyTo(1);
+      piece.hideFrom(2);
+      expect([1, 2, 3].map((seat) => piece.isVisibleTo(seat))).toEqual([true, false, false]);
+    });
+
+    it('lets the later call win for a seat both granted and denied', () => {
+      piece.showOnlyTo(2);
+      piece.hideFrom(2);
+      expect(piece.isVisibleTo(2)).toBe(false);
+      piece.addVisibleTo(2);
+      expect(piece.isVisibleTo(2)).toBe(true);
+    });
+  });
+
   it('should apply space visibility rules on enter', () => {
     hand.contentsVisibleToOwner();
 

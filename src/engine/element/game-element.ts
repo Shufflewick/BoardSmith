@@ -1381,14 +1381,19 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Hide this element from specific players (visible to all others)
+   * Hide this element from specific players. With a setting of its own, this
+   * adds to it: seats hidden earlier stay hidden and no seat gains sight.
+   * Without one, it becomes visible to all but these seats, overriding its zone.
+   * For one seat, the later of `hideFrom` and `addVisibleTo` wins.
    */
   hideFrom(...players: (Player | number)[]): void {
     const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));
+    const own: VisibilityState = this._visibility?.explicit ? this._visibility : { mode: 'all', explicit: true };
+    const addPlayers = own.addPlayers?.filter((seat) => !positions.includes(seat));
     this._visibility = {
-      mode: 'all',
-      exceptPlayers: positions,
-      explicit: true,
+      ...own,
+      ...(addPlayers && { addPlayers }),
+      exceptPlayers: Array.from(new Set([...(own.exceptPlayers ?? []), ...positions])),
     };
   }
 
@@ -1406,9 +1411,11 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // Without a setting of its own the card stores only the seats and keeps following its current zone (#758);
     // 'hidden' is what this state alone shows everyone else, which keeps projection signatures apart.
     const own: VisibilityState = this._visibility ?? { mode: 'hidden', explicit: false };
+    const exceptPlayers = own.exceptPlayers?.filter((seat) => !players.includes(seat));
     this._visibility = {
       ...own,
       addPlayers: Array.from(new Set([...(own.addPlayers ?? []), ...players])),
+      ...(exceptPlayers && { exceptPlayers }),
     };
   }
 

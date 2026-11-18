@@ -1,5 +1,5 @@
 {
-  "revision": 419,
+  "revision": 420,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3295,6 +3295,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The board greys out what a full multiSelect or ordered-list pick cannot take, with the Action Panel's reason, and the controller reports why it refuses an add past the limit (#1688)"
+    },
+    {
+      "revision": 420,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "hideFrom adds to an element's own visibility setting instead of replacing it, and the later of hideFrom and addVisibleTo wins for a seat (#1689)"
     }
   ]
 }
