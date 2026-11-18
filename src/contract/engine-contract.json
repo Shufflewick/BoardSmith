@@ -1,5 +1,5 @@
 {
-  "revision": 438,
+  "revision": 439,
   "surfaceHash": "23557d64e29431aa",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3447,6 +3447,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Dead-code deletions: Die.rolling and isD4..isD20, playerActions, TurnOrder.DEFAULT, afterFirstTurn, provideAnimationEvents, useCardDisplay, getBackgroundImageStyle, useActionController's onBeforeAutoExecute option, GameOverlay backdropOpacity and PlayersPanel maxRows props; ActionCheckpoint sequence and messageCount are required; useActionAnimations' getElementData is required (#1707)"
+    },
+    {
+      "revision": 439,
+      "date": "2026-11-18",
+      "surfaceHash": "23557d64e29431aa",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The controls menu fits a short screen: it caps its height to the room beside its button and scrolls, and sizes itself border-box whatever the host page's reset."
     }
   ]
 }
