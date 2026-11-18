@@ -241,14 +241,14 @@ class AllocateGame extends Game<AllocateGame, Player> {
   }
 }
 
-/** A game of one action whose count option is a function that returns undefined, a mistake the engine names (#1694). */
-function undefinedCountGame(option: 'multiSelect' | 'orderedList') {
+/** A game of one action whose count option is `count`, such as a function that returns undefined, a mistake the engine names (#1694). */
+function countGame(option: 'multiSelect' | 'orderedList', count: unknown) {
   return class UndefinedCountGame extends Game<UndefinedCountGame, Player> {
     constructor(options: GameOptions) {
       super(options);
       this.registerAction(
         Action.create<UndefinedCountGame>('pick')
-          .chooseFrom('values', { choices: [1, 2, 3], [option]: () => undefined } as never)
+          .chooseFrom('values', { choices: [1, 2, 3], [option]: count } as never)
           .execute((_args, ctx) => { ctx.game.finish([]); }),
       );
       this.setFlow({ root: actionStep({ actions: ['pick'] }) });
@@ -593,11 +593,28 @@ describe('playGame with policies (#556)', () => {
 
   it.each(['multiSelect', 'orderedList'] as const)('random fails with the engine\'s error when a %s function returns undefined, rather than draw a move it rejects (#1694)', async (option) => {
     const result = await playGame(
-      { gameClass: undefinedCountGame(option) },
+      { gameClass: countGame(option, () => undefined) },
       { playerCount: 2, seed: 'count', policies: [random(), random()], maxActions: 5 },
     );
     expect(result.error).not.toContain('rejected the move');
     expect(result.error).toContain(`Selection "values": its ${option} function returned undefined.`);
+  });
+
+  it('random draws an orderedList whose max is Infinity as unbounded (#1694)', async () => {
+    const result = await playGame(
+      { gameClass: countGame('orderedList', { min: 1, max: Infinity }) },
+      { playerCount: 2, seed: 'infinite', policies: [random(), random()], maxActions: 5 },
+    );
+    expect(result.error).toBeUndefined();
+    expect(result.completed).toBe(true);
+  });
+
+  it.each(['multiSelect', 'orderedList'] as const)('random names a %s whose max is below its min as the reason it has no move (#1694)', async (option) => {
+    const result = await playGame(
+      { gameClass: countGame(option, { min: 2, max: 1 }) },
+      { playerCount: 2, seed: 'inverted', policies: [random(), random()], maxActions: 5 },
+    );
+    expect(result.error).toContain("selection 'values' allows at most 1 but needs at least 2");
   });
 
   it('random still plays a pick the engine offered and the action refuses, so the game fails on it (#910, #1543)', async () => {

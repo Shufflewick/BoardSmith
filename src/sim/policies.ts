@@ -465,6 +465,16 @@ function drawPicks(
     // cannot produce and therefore the one thing a random game would never
     // exercise if this fell through to the multiSelect path.
     const ordered = resolveOrderedList(sel, ctx);
+    // 'elements' selections always yield an array; default to "any non-empty subset".
+    const multi = ordered ? undefined : resolveMultiSelect(sel, ctx) ?? (sel.type === 'elements' ? { min: 1 } : undefined);
+    const bounds = ordered ?? multi;
+    if (bounds?.max !== undefined && bounds.max < bounds.min) {
+      if (optional) continue;
+      return {
+        ok: false,
+        reason: `action '${actionDef.name}' selection '${sel.name}' allows at most ${bounds.max} but needs at least ${bounds.min}`,
+      };
+    }
     if (ordered) {
       if (choices.length === 0) {
         if (ordered.min <= 0 || optional) {
@@ -476,14 +486,11 @@ function drawPicks(
           reason: `action '${actionDef.name}' selection '${sel.name}' needs at least ${ordered.min} entr(y/ies) but no choices are available`,
         };
       }
-      const maxEntries = ordered.max ?? Math.max(ordered.min, choices.length);
+      const maxEntries = ordered.max === undefined || ordered.max === Infinity ? Math.max(ordered.min, choices.length) : ordered.max;
       const count = ordered.min + rng.nextInt(maxEntries - ordered.min + 1);
       working[sel.name] = Array.from({ length: count }, () => rng.pick(choices));
       continue;
     }
-
-    // 'elements' selections always yield an array; default to "any non-empty subset".
-    const multi = resolveMultiSelect(sel, ctx) ?? (sel.type === 'elements' ? { min: 1 } : undefined);
 
     if (multi) {
       if (choices.length < multi.min) {
