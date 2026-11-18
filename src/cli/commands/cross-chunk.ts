@@ -98,25 +98,23 @@ function headerFile(line: string): string {
   return header[1] !== undefined ? unquoteGitPath(header[1]) : header[2];
 }
 
-/** A diff body line that adds or removes content, as opposed to a `+++`/`---` file header. */
-function changedContent(line: string): string | undefined {
-  if (line.startsWith('+++') || line.startsWith('---')) return undefined;
-  return line.startsWith('+') || line.startsWith('-') ? line.slice(1) : undefined;
+/** The lines a file's diff section adds or removes: those after its first `@@`, where a leading `---`/`+++` is content, not a header. */
+function changedLines(body: string[]): string[] {
+  const firstHunk = body.findIndex((line) => line.startsWith('@@'));
+  if (firstHunk === -1) return [];
+  return body.slice(firstHunk).filter((line) => line.startsWith('+') || line.startsWith('-')).map((line) => line.slice(1));
 }
 
 /** Reads `git diff --unified=0 --no-renames` output, with git's own a/ and b/ prefixes, into what it changed in source files. */
 export function changedSide(diff: string): ChangedSide {
   const side: ChangedSide = { files: new Set(), names: new Map(), defined: new Set() };
-  let file: string | undefined;
-  for (const line of diff.split('\n')) {
-    if (line.startsWith('diff --git ')) {
-      const path = headerFile(line);
-      file = isSource(path) ? path : undefined;
-      if (file) side.files.add(file);
-      continue;
-    }
-    const content = file === undefined ? undefined : changedContent(line);
-    if (file !== undefined && content !== undefined) recordLine(side, file, content);
+  for (const section of diff.split(/^(?=diff --git )/m)) {
+    const [header, ...body] = section.split('\n');
+    if (!header.startsWith('diff --git ')) continue;
+    const file = headerFile(header);
+    if (!isSource(file)) continue;
+    side.files.add(file);
+    for (const line of changedLines(body)) recordLine(side, file, line);
   }
   return side;
 }

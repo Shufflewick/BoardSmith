@@ -1,5 +1,5 @@
 {
-  "revision": 446,
+  "revision": 447,
   "surfaceHash": "23557d64e29431aa",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3511,6 +3511,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "renderAsSeat gives each mounted seat its own #bs-game-modal host in the page, so a board's Teleported modal renders and assertNoHiddenInfoLeak scans it (#1717)"
+    },
+    {
+      "revision": 447,
+      "date": "2026-11-18",
+      "surfaceHash": "23557d64e29431aa",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith cross-chunk now reads diff lines starting with ++ or -- as content, so a changed --name or ++name counts as a cross-chunk reference (CLI only)"
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect } from 'vitest';
+import { beforeAll, describe, it, expect } from 'vitest';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
   appendCrossChunkEntry,
@@ -109,6 +109,49 @@ describe('changedSideBetween reads every file name git writes in a diff header (
     QUOTED.forEach((name, i) => expect([...side.names.get(`quotedVenue${i}`)!]).toEqual([name]));
     expect([...side.names.get('goneVenue')!]).toEqual(['src/gone"x.ts']);
     expect([...side.names.get('movedVenue')!].sort()).toEqual(['src/venue.ts', 'src/venues.ts']);
+  });
+});
+
+describe('changedSideBetween reads content lines that start with ++ or -- (#1718)', () => {
+  // Slow one-time setup lives here, where no test timeout applies.
+  const repo = tempTree('bs-cross-chunk-prefix-');
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo });
+  git('init', '-q');
+  mkdirSync(join(repo, 'src'));
+  writeFileSync(join(repo, 'src/count.ts'), 'export function close() {\n--venueCount;\n}\n');
+  writeFileSync(join(repo, 'src/tally.ts'), 'export function open() {\n}\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'base');
+  writeFileSync(join(repo, 'src/count.ts'), 'export function close() {\n}\n');
+  writeFileSync(join(repo, 'src/tally.ts'), 'export function open() {\n++venueTally;\n}\n');
+  writeFileSync(join(repo, 'src/empty.ts'), '');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'prefixed');
+  let side: ReturnType<typeof changedSide>;
+  beforeAll(async () => {
+    side = await changedSideBetween(repo, 'HEAD~1', 'HEAD');
+  });
+
+  it('records a removed --name and an added ++name in their own files, and a file with no hunks', () => {
+    expect([...side.files].sort()).toEqual(['src/count.ts', 'src/empty.ts', 'src/tally.ts']);
+    expect([...side.names.get('venueCount')!]).toEqual(['src/count.ts']);
+    expect([...side.names.get('venueTally')!]).toEqual(['src/tally.ts']);
+  });
+
+  it('still reads a later file\'s ---/+++ lines as headers, so their path parts are not names', () => {
+    expect(side.names.has('src')).toBe(false);
+    expect(side.names.has('tally')).toBe(false);
+  });
+
+  it('finds the reference when that removal is the branch\'s only mention of a name main defines', () => {
+    const main = changedSide(`diff --git a/src/venues.ts b/src/venues.ts
+--- a/src/venues.ts
++++ b/src/venues.ts
+@@ -1,0 +1,1 @@
++let venueCount = 0;
+`);
+    const refs = crossReferences(side, main);
+    expect(refs.sharedNames.map((n) => n.name)).toContain('venueCount');
   });
 });
 
