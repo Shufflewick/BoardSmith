@@ -2227,7 +2227,6 @@ order, regardless of which player you start from. There is no truncating or
 ```typescript
 eachPlayer({
   name: 'player-turns',
-  ...TurnOrder.DEFAULT,
   filter: (player, ctx) => !player.hasPassed,
   do: /* flow node */,
 })
@@ -2731,14 +2730,13 @@ Control player order with `TurnOrder` presets. Use the spread operator to apply 
 ```typescript
 // TurnOrder, eachPlayer and actionStep come from 'boardsmith'
 
-// Default round-robin from player 1
+// Round-robin backward, from the last seat
 eachPlayer({
-  ...TurnOrder.DEFAULT,
+  ...TurnOrder.REVERSE,
   do: actionStep({ actions: ['play'] }),
 })
 
 // Available presets (player seats are 1-indexed):
-TurnOrder.DEFAULT           // Standard round-robin from player 1
 TurnOrder.REVERSE           // Round-robin backward
 TurnOrder.CONTINUE          // Continue from current player
 TurnOrder.ACTIVE_ONLY       // Only non-eliminated players

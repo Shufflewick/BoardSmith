@@ -203,7 +203,6 @@ export {
   forEach,
   actionStep,
   simultaneousActionStep,
-  playerActions,
   switchOn,
   ifThen,
   noop,

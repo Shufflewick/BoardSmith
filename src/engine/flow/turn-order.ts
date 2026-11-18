@@ -17,7 +17,7 @@ export interface TurnOrderConfig {
  * @example
  * ```typescript
  * eachPlayer({
- *   ...TurnOrder.DEFAULT,
+ *   ...TurnOrder.REVERSE,
  *   do: actionStep({ actions: ['play'] })
  * })
  * ```
@@ -26,13 +26,6 @@ export interface TurnOrderConfig {
  * startingPlayer, so every player gets a turn in the round.
  */
 export const TurnOrder = {
-  /**
-   * Standard round-robin from player 0, going forward through all players
-   */
-  DEFAULT: {
-    direction: 'forward' as const,
-  } satisfies TurnOrderConfig,
-
   /**
    * Round-robin going backward (from last player to first)
    */

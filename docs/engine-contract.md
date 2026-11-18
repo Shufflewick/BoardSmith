@@ -71,7 +71,7 @@ every test run:
   it records the name and, each with its kind: for a class or function, its prototype methods and
   accessors, statics, instance fields and symbol-keyed members such as
   `[Symbol.iterator]`, inherited ones included; for a plain object or an enum,
-  its own keys (`TurnOrder.DEFAULT`, `ErrorCode.NOT_YOUR_TURN`) (#575).
+  its own keys (`TurnOrder.REVERSE`, `ErrorCode.NOT_YOUR_TURN`) (#575).
   Instance fields exist only once a class is constructed, so they are read
   from the entrypoint's TypeScript source. Catches added, removed and renamed
   API, and a member that changed kind (a method turned into a getter, a field

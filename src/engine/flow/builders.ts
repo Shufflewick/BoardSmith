@@ -275,31 +275,6 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
 }
 
 /**
- * Shorthand for a single repeating action step
- *
- * @example
- * ```typescript
- * playerActions({
- *   actions: ['ask'],
- *   repeatUntil: (ctx) => ctx.get('turnEnded')
- * })
- * ```
- */
-export function playerActions<G extends Game = Game>(config: {
-  name?: string;
-  actions: string[] | ((context: FlowContext<G>) => string[]);
-  repeatUntil?: (context: FlowContext<G>) => boolean;
-  skipIf?: (context: FlowContext<G>) => boolean;
-}): FlowNode<G> {
-  return actionStep({
-    name: config.name,
-    actions: config.actions,
-    repeatUntil: config.repeatUntil,
-    skipIf: config.skipIf,
-  });
-}
-
-/**
  * Pause for multiple players to act simultaneously.
  *
  * All specified players can take actions in any order until each has completed.
