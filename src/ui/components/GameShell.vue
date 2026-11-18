@@ -866,15 +866,13 @@ const { previewState } = useZoomPreview();
 // by SnapshotSessionHost while a demo runs. This ensures all connections (second window, reconnect)
 // see the correct toggle state rather than a local ref that can desync (WR-04).
 const isDemoRunning = computed(
-  () => (state.value?.state as any)?.isDemoRunning ?? false
+  () => state.value?.state?.isDemoRunning ?? false
 );
 
 // Live demo playback-control state (paused, current speed delay, whether a
 // step-back is possible), broadcast by SnapshotSessionHost while a demo runs.
 const demoControls = computed(
-  () => (state.value?.state as any)?.demoControls as
-    | { paused: boolean; delay: number; canStepBack: boolean }
-    | undefined
+  () => state.value?.state?.demoControls
 );
 
 // Speed presets for the demo control bar (inter-move delay, ms).
@@ -902,7 +900,7 @@ function setDemoSpeed(delay: number): void {
 // injects hasBotPlayers into broadcast state only while it has bot seats
 // (RESEARCH Pitfall 5).
 const showHintProp = computed<boolean | undefined>(() =>
-  (state.value?.state as any)?.hasBotPlayers ? true : undefined
+  state.value?.state?.hasBotPlayers ? true : undefined
 );
 
 // The move-quality heatmap paints a per-move score chip onto a distinct board
@@ -920,7 +918,7 @@ const heatmapSupportedProp = computed<boolean>(
 // Show Tutorial group when this seat is the learner seat of the game's tutorial.
 // Reads from broadcast state (hasTutorial is set by buildPlayerState).
 const hasTutorialProp = computed<boolean>(
-  () => (state.value?.state as any)?.hasTutorial ?? false
+  () => state.value?.state?.hasTutorial ?? false
 );
 
 // Teaching lockout (LOCK-01, criterion 4): PREFER broadcast state.teachingDisabled
@@ -929,7 +927,7 @@ const hasTutorialProp = computed<boolean>(
 // Falls back to the local `teachingDisabled` ref (set from the init postMessage)
 // for first-render before the first broadcast arrives (criterion 1 / D-02).
 const teachingDisabledProp = computed<boolean>(
-  () => (state.value?.state as any)?.teachingDisabled ?? teachingDisabled.value
+  () => state.value?.state?.teachingDisabled ?? teachingDisabled.value
 );
 
 // True when this seat's tutorial is currently active (status === 'running').
@@ -960,7 +958,7 @@ const heatmapToggling = ref(false);
 const isHeatmapVisibleProp = computed(() =>
   heatmapPending.value !== null
     ? heatmapPending.value
-    : ((state.value?.state as any)?.heatmap?.visible ?? false)
+    : (state.value?.state?.heatmap?.visible ?? false)
 );
 
 // Handle 'teaching-action' emits from ControlsMenu.
@@ -1510,10 +1508,10 @@ defineExpose({
              Text is from broadcast state.narration (engine-derived, plain string —
              never v-html, T-107-08 mitigated). -->
         <BoardMessage
-          v-if="(state?.state as any)?.narration?.text"
+          v-if="state?.state?.narration?.text"
           variant="narration"
           :visible="true"
-        >{{ (state?.state as any)?.narration?.text }}</BoardMessage>
+        >{{ state?.state?.narration?.text }}</BoardMessage>
         <!-- bot demo playback controls — speed + step so the learner follows at
              their own pace. Fixed bottom-center (never over the board). -->
         <div
