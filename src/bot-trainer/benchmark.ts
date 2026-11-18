@@ -3,8 +3,8 @@ import { dueSeatOffers } from '../engine/flow/seat-activity.js';
 import { GameRunner } from '../runtime/index.js';
 import { FROZEN_NOW } from '../runtime/runner.js';
 import { ClockWaits } from '../runtime/clock-waits.js';
-import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { createBot, type BotStrategy, type Objective } from '../bot/index.js';
+import { playSeatMove } from '../bot/seat-move.js';
 import type { GameClass, GameOptions } from '../engine/index.js';
 import type { ObjectiveWeight } from './types.js';
 import { projectColorOptions, projectGameOptions } from '#testing/project-game-options';
@@ -364,16 +364,11 @@ async function chooseMove(
   botName: string,
 ): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number } | { incomplete: string }> {
   try {
-    const move = await bot.play();
-    if (!move && bot.lastWait?.until !== undefined) return { waitUntil: bot.lastWait.until };
-    if (!move) {
-      // The bot found nothing searchable from this seat's view (#29). In a
-      // live game that stalls one seat; in a benchmark the game cannot
-      // proceed, and a game that cannot proceed is not a draw (#37).
-      return { incomplete: `${botName} had no searchable move for seat ${seat}: ${bot.lastStallReason ?? 'no reason recorded'}` };
-    }
-    // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
-    return { action: move.action, args: picksFromSeat(game, move.action, move.args, seat) };
+    const move = await playSeatMove(bot, game, seat);
+    // In a live game a stall holds one seat; in a benchmark the game cannot
+    // proceed, and a game that cannot proceed is not a draw (#37).
+    if ('stall' in move) return { incomplete: `${botName} had no searchable move for seat ${seat}: ${move.stall}` };
+    return move;
   } catch (error) {
     // #37: this used to substitute a RANDOM bot for the crashing one and
     // play on. A trained bot whose objectives function threw on every call
