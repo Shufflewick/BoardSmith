@@ -6,7 +6,7 @@
  */
 
 import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
-import { findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
+import { choiceValueKey, findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
 
@@ -21,6 +21,24 @@ import { textPickRefusal } from '../../engine/action/text-rules.js';
 export function copyOfChoice<C extends { value: unknown; disabled?: unknown }>(choices: readonly C[], value: unknown, copy: number): C | undefined {
   const same = choices.filter(c => valuesEqual(c.value, value));
   return [...same.filter(c => !c.disabled), ...same.filter(c => c.disabled)][copy];
+}
+
+/**
+ * Which copy of its value each choice is, index for index: a value offered N times
+ * is N multiSelect slots (#1561), counted as `copyOfChoice` counts them, enabled entries first.
+ */
+export function choiceCopies(choices: readonly { value: unknown; disabled?: string | false }[]): number[] {
+  const copies: number[] = [];
+  const seen = new Map<string, number>();
+  for (const closed of [false, true]) {
+    choices.forEach((choice, i) => {
+      if (!!choice.disabled !== closed) return;
+      const key = choiceValueKey(choice.value);
+      copies[i] = seen.get(key) ?? 0;
+      seen.set(key, copies[i] + 1);
+    });
+  }
+  return copies;
 }
 
 /**
@@ -119,6 +137,29 @@ export function resolvePickCounts(
     multiSelect: resolveMultiSelectConfig(selection, currentArgs, pickSnapshot),
     orderedList: resolveOrderedListConfig(selection, pickSnapshot),
   };
+}
+
+/**
+ * Why a multiSelect at its max cannot take one more value, or `undefined` when it
+ * can. A held value is never blocked: deselecting is always allowed. The panel,
+ * the board and the controller all read this, so their limits cannot drift (#1688).
+ */
+export function multiSelectFullReason(max: number | undefined, count: number, held: boolean): string | undefined {
+  if (max === undefined || held || count < max) return undefined;
+  return max === 1
+    ? 'You can pick only one — deselect the other first.'
+    : `You have already picked ${max}. Deselect one to change your mind.`;
+}
+
+/**
+ * Why a full ordered list cannot take another entry, or `undefined` when it can.
+ * Unlike a full multiSelect this blocks every option, since adding is never a deselect (#1688).
+ */
+export function orderedListFullReason(max: number | undefined, count: number): string | undefined {
+  if (max === undefined || count < max) return undefined;
+  return max === 1
+    ? 'The list holds one entry. Remove it to choose differently.'
+    : `The list is full at ${max} entries. Remove one to add another.`;
 }
 
 // ============================================

@@ -997,3 +997,100 @@ describe('useBoardActionBridge: an auto-started action the server refused (#1562
     expect(sendAction).toHaveBeenCalledTimes(2);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #1688 -- the board greys out what a full pick cannot take, as the panel does
+// ---------------------------------------------------------------------------
+
+describe('useBoardActionBridge selection limit (#1688)', () => {
+  const anchored = (value: string, id: number) => ({ value, display: value, refs: [{ ref: { id }, role: 'target' as const }] });
+  const choices = [anchored('a', 11), anchored('b', 12), anchored('c', 13)];
+
+  function wire(pick: EnrichedPickMetadata) {
+    // The server answers the pick with what its metadata says, as a table does.
+    const { choices, validElements, multiSelect, orderedList } = pick;
+    const fetchPickChoices = vi.fn(async () => ({ success: true, choices, validElements, multiSelect, orderedList }));
+    const actionMetadata = ref({ take: { name: 'take', prompt: 'Take', selections: [pick] } });
+    const availableActions = ref(['take']);
+    const controller = useActionController({
+      sendAction: vi.fn(async () => ({ success: true })),
+      availableActions, actionMetadata, fetchPickChoices, isMyTurn: ref(true), autoFill: false, autoExecute: false,
+    });
+    const board = createBoardInteraction();
+    useBoardActionBridge({
+      controller, boardInteraction: board, isMyTurn: ref(true), autoEndTurn: ref(false),
+      actionMetadata, availableActions, disabledActions: ref(undefined),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
+    });
+    return { controller, board };
+  }
+
+  it('disables the unchosen choices of a full multiSelect, and the controller says why', async () => {
+    const { controller, board } = wire({ name: 'cards', type: 'choice', prompt: 'Take', multiSelect: { min: 1, max: 2 }, choices });
+    await controller.start('take');
+    await controller.toggleMultiSelect('cards', 'a');
+    await controller.toggleMultiSelect('cards', 'b');
+    await nextTick();
+
+    const reason = 'You have already picked 2. Deselect one to change your mind.';
+    expect(board.isDisabledElement({ id: 13 })).toBe(reason);
+    expect(board.isDisabledElement({ id: 11 })).toBe(false);
+
+    await controller.toggleMultiSelect('cards', 'c');
+    expect(controller.lastError.value).toBe(reason);
+  });
+
+  it('disables the other copy of a value offered twice once one copy fills the pick', async () => {
+    const { controller, board } = wire({
+      name: 'cards', type: 'choice', prompt: 'Take', multiSelect: { min: 0, max: 1 }, choices: [anchored('x', 11), anchored('x', 12)],
+    });
+    await controller.start('take');
+    await controller.toggleMultiSelect('cards', 'x', 0);
+    await nextTick();
+
+    expect(board.isDisabledElement({ id: 12 })).toBe('You can pick only one — deselect the other first.');
+    expect(board.isDisabledElement({ id: 11 })).toBe(false);
+  });
+
+  it('takes the copy a board click names, so a second copy adds rather than deselects the first', async () => {
+    const { controller, board } = wire({
+      name: 'cards', type: 'choice', prompt: 'Take', multiSelect: { min: 0, max: 2 }, choices: [anchored('x', 11), anchored('x', 12)],
+    });
+    await controller.start('take');
+    await nextTick();
+    board.triggerElementSelect({ id: 11 });
+    await nextTick();
+    board.triggerElementSelect({ id: 12 });
+    await nextTick();
+
+    expect(controller.multiSelectDraft.value).toEqual({ selectionName: 'cards', values: ['x', 'x'], copies: [0, 1] });
+  });
+
+  it('disables the unchosen elements of a full multiSelect element pick', async () => {
+    const { controller, board } = wire({
+      name: 'pieces', type: 'elements', prompt: 'Take', multiSelect: { min: 0, max: 1 },
+      validElements: [{ id: 5, refs: [{ ref: { id: 5 }, role: 'highlight' }] }, { id: 6, refs: [{ ref: { id: 6 }, role: 'highlight' }] }],
+    });
+    await controller.start('take');
+    await controller.toggleMultiSelect('pieces', 5);
+    await nextTick();
+
+    expect(board.isDisabledElement({ id: 6 })).toBe('You can pick only one — deselect the other first.');
+    expect(board.isDisabledElement({ id: 5 })).toBe(false);
+  });
+
+  it('disables every choice of a full ordered list, and the controller says why', async () => {
+    const { controller, board } = wire({ name: 'order', type: 'choice', prompt: 'Order', orderedList: { min: 1, max: 2 }, choices });
+    await controller.start('take');
+    await controller.appendListEntry('order', 'a');
+    await controller.appendListEntry('order', 'a');
+    await nextTick();
+
+    const reason = 'The list is full at 2 entries. Remove one to add another.';
+    expect(board.isDisabledElement({ id: 11 })).toBe(reason);
+    expect(board.isDisabledElement({ id: 12 })).toBe(reason);
+
+    await controller.appendListEntry('order', 'b');
+    expect(controller.lastError.value).toBe(reason);
+  });
+});

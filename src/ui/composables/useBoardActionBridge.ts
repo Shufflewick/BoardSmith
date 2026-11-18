@@ -34,7 +34,7 @@ import type {
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { answerMark, choiceBoardTarget, formatActionName, resolvePickCounts } from './actionControllerHelpers.js';
+import { answerMark, choiceBoardTarget, choiceCopies, formatActionName, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 import { usableVerbs } from './sharedSelection.js';
@@ -538,7 +538,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates, controller.subjects], ([selection]) => {
+  watch([shownPick, offeredElements, offeredChoices, controller.startCandidates, controller.subjects, controller.multiSelectDraft], ([selection]) => {
     if (!selection) {
       feedStartCandidates();
       return;
@@ -552,8 +552,20 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     let validElems: { id: number; ref: ElementRef; disabled?: string; display?: string }[] = [];
     let onSelect: ((id: number) => void) | null = null;
 
+    // A full pick greys out on the board what the panel greys out, with the same reason (#1688).
+    const draft = controller.multiSelectDraft.value;
+    const drafted = draft?.selectionName === selection.name ? draft.values.length : 0;
+    const limitReason = (value: unknown, copy?: number): string | undefined => {
+      if (currentOrderedList.value) return orderedListFullReason(currentOrderedList.value.max, drafted);
+      if (!currentMultiSelect.value) return undefined;
+      return multiSelectFullReason(currentMultiSelect.value.max, drafted, controller.isMultiSelectSelected(selection.name, value, copy));
+    };
+
     if (selection.type === 'element' || selection.type === 'elements') {
-      validElems = offeredElements.value.map(boardTarget);
+      validElems = offeredElements.value.map(ve => {
+        const target = boardTarget(ve);
+        return { ...target, disabled: target.disabled || limitReason(ve.id) };
+      });
       onSelect = (elementId: number) => {
         const multiSelect = currentMultiSelect.value;
         if (selection.type === 'elements' && multiSelect) {
@@ -570,7 +582,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       const choices = offeredChoices.value;
       const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => (c.refs ?? []).length > 0);
       if (choicesWithRefs.length > 0) {
-        const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string; display: string }>();
+        const refToChoice = new Map<number, { value: unknown; copy: number; ref: ElementRef; disabled?: string; display: string }>();
+        // A value offered more than once is a slot per copy, counted over every offered choice as the controller counts them.
+        const copies = choiceCopies(choices);
+        const copyOf = new Map(choices.map((c, i) => [c, copies[i]!]));
         // Synthetic key for notation-only (or name-only) target refs that carry no
         // element id (e.g. Checkers destination squares). The key is only a token
         // used to route the click back to its choice; matchesRef matches the clicked
@@ -585,7 +600,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
           // replaces it.
           if (ref.id !== undefined && refToChoice.has(ref.id)) continue;
           const key = ref.id ?? syntheticKey--;
-          refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled, display: choice.display });
+          const copy = copyOf.get(choice)!;
+          refToChoice.set(key, { value: choice.value, copy, ref, disabled: choice.disabled || limitReason(choice.value, copy), display: choice.display });
         }
         validElems = Array.from(refToChoice.entries()).map(([id, { ref, disabled, display }]) => ({ id, ref, disabled, display }));
         onSelect = (elementId: number) => {
@@ -594,7 +610,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
           if (currentOrderedList.value) {
             void appendListValue(selection.name, entry.value);
           } else if (currentMultiSelect.value) {
-            void toggleMultiSelectValue(selection.name, entry.value);
+            void toggleMultiSelectValue(selection.name, entry.value, entry.copy);
           } else {
             void setSelectionValue(selection.name, entry.value);
           }

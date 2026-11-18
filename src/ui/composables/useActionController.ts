@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
-import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, multiSelectFullReason, orderedListFullReason, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -3000,7 +3000,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       setError(refusal);
       return;
     }
-    if (cfg.max !== undefined && current.length >= cfg.max) return;
+    const full = orderedListFullReason(cfg.max, current.length);
+    if (full) {
+      setError(full);
+      return;
+    }
 
     multiSelectDraft.value = listDraft(selectionName, [...current, offered]);
   }
@@ -3092,9 +3096,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         );
         return;
       }
-      // Not selected - add it (respecting max)
-      if (cfg.max !== undefined && current.length >= cfg.max) {
-        // At max capacity - ignore the add
+      const full = multiSelectFullReason(cfg.max, current.length, false);
+      if (full) {
+        setError(full);
         return;
       }
       newValues = [...current, offered];

@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1038,23 +1038,8 @@ const _splitChoices = computed(() =>
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
-/**
- * Which copy of its value each choice is: a value offered N times is N multiSelect
- * slots (#1561), counted as the controller counts them, enabled entries first.
- */
-const choiceCopies = computed(() => {
-  const copies: number[] = [];
-  const seen = new Map<string, number>();
-  for (const closed of [false, true]) {
-    filteredChoices.value.forEach((choice, i) => {
-      if (isDisabled(choice.disabled) !== closed) return;
-      const key = choiceValueKey(choice.value);
-      copies[i] = seen.get(key) ?? 0;
-      seen.set(key, copies[i] + 1);
-    });
-  }
-  return copies;
-});
+/** Which copy of its value each choice is (#1561). */
+const choiceCopies = computed(() => choiceCopiesOf(filteredChoices.value));
 /** A choice pick whose choices depend on an earlier pick (filterBy or dependsOn). */
 const isDependentChoicePick = computed(() =>
   !!(currentPick.value?.filterBy || currentPick.value?.dependsOn));
@@ -1432,12 +1417,7 @@ const orderedListCountDisplay = computed(() => {
  */
 function orderedListAddDisabledReason(own: DisabledReason): DisabledReason {
   if (isDisabled(own)) return own;
-  const max = currentOrderedList.value?.max;
-  if (max === undefined) return false;
-  if (orderedListEntries.value.length < max) return false;
-  return max === 1
-    ? 'The list holds one entry. Remove it to choose differently.'
-    : `The list is full at ${max} entries. Remove one to add another.`;
+  return orderedListFullReason(currentOrderedList.value?.max, orderedListEntries.value.length);
 }
 
 /** Why the ordered list's Done cannot be pressed yet: too few entries. */
@@ -1638,13 +1618,7 @@ const submissionInFlightReason = computed<DisabledReason>(() =>
  */
 function multiSelectDisabledReason(own: DisabledReason, value: unknown, copy?: number): DisabledReason {
   if (isDisabled(own)) return own;
-  const max = currentMultiSelect.value?.max;
-  if (max === undefined) return false;
-  if (isMultiSelectValueSelected(value, copy)) return false;
-  if (multiSelectValues.value.length < max) return false;
-  return max === 1
-    ? 'You can pick only one — deselect the other first.'
-    : `You have already picked ${max}. Deselect one to change your mind.`;
+  return multiSelectFullReason(currentMultiSelect.value?.max, multiSelectValues.value.length, isMultiSelectValueSelected(value, copy));
 }
 
 /**
