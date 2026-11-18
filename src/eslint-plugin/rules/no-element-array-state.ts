@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, typeReferenceName } from './element-types.js';
+import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, annotatedTypeName, collectSubclassNames } from './element-types.js';
 
 /**
  * Disallows storing arrays of GameElement instances as persistent class
@@ -66,14 +66,6 @@ import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames
  * IDs instead" depends on intent, so this rule reports only.
  */
 
-/** Resolves a TSTypeAnnotation wrapper to a referenced array element type name, if any. */
-function resolveArrayElementTypeName(typeAnnotationWrapper: unknown): string | undefined {
-  const wrapper = typeAnnotationWrapper as { typeAnnotation?: Record<string, unknown> } | undefined;
-  const ta = wrapper?.typeAnnotation;
-  if (!ta || ta.type !== 'TSArrayType') return undefined;
-  return typeReferenceName(ta.elementType as Record<string, unknown> | undefined);
-}
-
 /** Is this call expression a known collection-returning query (`.all()`, `.first()`, ...)? */
 function isCollectionCall(node: Record<string, unknown> | null | undefined): boolean {
   if (!node || node.type !== 'CallExpression') return false;
@@ -129,8 +121,8 @@ const rule: Rule.RuleModule = {
           if (propDef.type !== 'PropertyDefinition') continue;
 
           // (b) GameElement[]-typed field.
-          const typeName = resolveArrayElementTypeName((propDef as { typeAnnotation?: unknown }).typeAnnotation);
-          if (typeName && elementTypeNames.has(typeName)) {
+          const { name: typeName, isArray } = annotatedTypeName((propDef as { typeAnnotation?: unknown }).typeAnnotation);
+          if (isArray && typeName && elementTypeNames.has(typeName)) {
             context.report({
               node: propDef as unknown as Rule.Node,
               messageId: 'elementArrayField',
