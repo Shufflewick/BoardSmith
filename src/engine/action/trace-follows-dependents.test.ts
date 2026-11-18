@@ -51,6 +51,64 @@ describe('the availability trace follows declared dependents (#1690)', () => {
     expect(trace.selections[1].notYetAskable).toBe(true);
   });
 
+  it('evaluates a declared dependent past an undeclared step between it and its input (#1709)', () => {
+    game.registerAction(
+      Action.create('trade')
+        .chooseFrom('a', { choices: ['x'] })
+        .chooseFrom('b', { choices: ['y'] })
+        .chooseFrom('c', { dependsOn: 'a', choices: () => [] as string[] })
+        .execute(() => {}),
+    );
+    const debug = game.debugActionAvailability('trade', game.getPlayer(1)!);
+
+    expect(debug.available).toBe(false);
+    expect(debug.details.selections.map((s) => [s.name, s.passed])).toEqual([['a', true], ['b', true], ['c', false]]);
+  });
+
+  it('evaluates a declared dependent past an undeclared text step (#1709)', () => {
+    game.registerAction(
+      Action.create('trade')
+        .chooseFrom('a', { choices: ['x'] })
+        .enterText('b')
+        .chooseFrom('c', { dependsOn: 'a', choices: () => [] as string[] })
+        .execute(() => {}),
+    );
+
+    expect(game.debugActionAvailability('trade', game.getPlayer(1)!).available).toBe(false);
+  });
+
+  it('leaves the undeclared step between unasked, so its empty list prunes nothing (#1709)', () => {
+    game.registerAction(
+      Action.create('trade')
+        .chooseFrom('a', { choices: ['x'] })
+        .chooseFrom('b', { choices: () => [] as string[] })
+        .chooseFrom('c', { dependsOn: 'a', choices: ['z'] })
+        .execute(() => {}),
+    );
+    const trace = game.getActionExecutor().traceActionAvailability(game.getAction('trade')!, game.getPlayer(1)!);
+
+    expect(trace.available).toBe(true);
+    expect(trace.selections[1].notYetAskable).toBe(true);
+  });
+
+  it('warns once, about the input step, and only when no value of it succeeds (#1709)', () => {
+    const register = (name: string, cFor: string[]) => game.registerAction(
+      Action.create(name)
+        .chooseFrom('a', { choices: ['x', 'w'] })
+        .chooseFrom('b', { choices: ['y'] })
+        .chooseFrom('c', { dependsOn: 'a', choices: (ctx) => (cFor.includes(ctx.args.a as string) ? ['z'] : []) })
+        .execute(() => {}),
+    );
+    register('lastWorks', ['w']);
+    register('noneWork', []);
+
+    expect(game.getActionExecutor().isActionAvailable(game.getAction('lastWorks')!, game.getPlayer(1)!)).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
+    expect(game.getActionExecutor().isActionAvailable(game.getAction('noneWork')!, game.getPlayer(1)!)).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain("Action 'noneWork' was dropped from this player's offers: no value of 'a' leaves 'c'");
+  });
+
   it('counts only enabled choices', () => {
     game.registerAction(
       Action.create('pick')

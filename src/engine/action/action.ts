@@ -1771,11 +1771,19 @@ export class ActionExecutor {
     return selTrace;
   }
 
+  /** The earlier picks a step declared it reads (`dependsOn` / `filterBy`). */
+  private declaredInputs(selection: Selection): string[] {
+    const inputs: string[] = [];
+    if ('dependsOn' in selection && selection.dependsOn) inputs.push(selection.dependsOn);
+    const filterBy = selection.type === 'choice' ? (selection as ChoiceSelection).filterBy : undefined;
+    if (filterBy) inputs.push(filterBy.selectionName);
+    return inputs;
+  }
+
   /** The later steps that declared a dependency (`dependsOn` / `filterBy`) on the step at `index`. */
   private dependentsOf(selections: Selection[], index: number): Selection[] {
     const name = selections[index].name;
-    return selections.slice(index + 1).filter(s => ('dependsOn' in s && s.dependsOn === name) ||
-      (s.type === 'choice' && (s as ChoiceSelection).filterBy?.selectionName === name));
+    return selections.slice(index + 1).filter(s => this.declaredInputs(s).includes(name));
   }
 
   /**
@@ -1802,20 +1810,24 @@ export class ActionExecutor {
    *   A DECLARED DEPENDENCY (`dependsOn` / `filterBy`). The walk enumerates the
    *     earlier step's enabled choices and re-asks the dependent step with each
    *     one BOUND, which is the same question the player's own answer will ask.
-   *     Exhausting them all means no answer leads anywhere.
+   *     Exhausting them all means no answer leads anywhere. Once the walk has
+   *     bound an answer, it judges only the later steps whose declared inputs
+   *     are all bound and passes over the rest, so a step between a dependent
+   *     and its input neither hides the dependent nor prunes it (#1709).
    *
    * Both say so out loud through `devWarn` rather than vanishing.
    *
    * An OPTIONAL step, a `text` and a `number` can never be the reason an action
-   * is impossible -- and their answers are equally unknown here, so a step after
-   * one of them is no more askable than a step after a choice. The walk stops
-   * there too.
+   * is impossible -- and their answers are equally unknown here, so a step that
+   * reads one of them is no more askable than a step after a choice.
    *
    * @param actionName - Propagated from `isActionAvailable` so tutorial gate
    *   disabled reasons are included when filtering enabled choices, and so a
    *   pruning diagnostic can name the verb that disappeared.
    * @param reached - When given, each step the walk evaluates is recorded at its
    *   index, which is how the availability trace describes this same walk.
+   * @param walkBound - The walk has bound an answer itself, so only declared
+   *   dependents of bound answers are judged, and none of them warns.
    */
   private hasValidSelectionPath(
     selections: Selection[],
@@ -1824,6 +1836,7 @@ export class ActionExecutor {
     index: number,
     actionName: string,
     reached?: PickTrace[],
+    walkBound = false,
   ): boolean {
     // Base case: every step has been walked (or bound by the enumeration above).
     if (index >= selections.length) {
@@ -1835,16 +1848,21 @@ export class ActionExecutor {
     // Already answered by the dependent enumeration below: keep walking, this
     // step is not the one the player is waiting on.
     if (Object.prototype.hasOwnProperty.call(args, selection.name)) {
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName, reached);
+      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName, reached, walkBound);
     }
 
-    // The first unsatisfied step. Optional steps and free input always have an
-    // answer, and what that answer will be is unknown, so nothing past them can
-    // be judged either.
+    // Past the first unsatisfied step, only a declared dependent of bound answers can be judged.
+    const inputs = this.declaredInputs(selection);
+    const askable = inputs.length > 0 && inputs.every(name => Object.prototype.hasOwnProperty.call(args, name));
+    const rest = () => this.hasValidSelectionPath(selections, player, args, index + 1, actionName, reached, true);
+    if (walkBound && !askable) return rest();
+
+    // Optional steps and free input always have an answer, and what that answer
+    // will be is unknown, so no step that reads it can be judged either.
     if (selection.optional || selection.type === 'text' || selection.type === 'number') {
       // -1 marks free input, which has no choices to count.
       this.recordPick(reached, index, selection, selection.type === 'text' || selection.type === 'number' ? -1 : 0);
-      return true;
+      return rest();
     }
 
     const enabledChoices = this.getChoices(selection, player, args, actionName)
@@ -1852,13 +1870,13 @@ export class ActionExecutor {
     // A pick that takes several values answers with an array, so bind one as the player's would be.
     const takesArray = answersWithList(selection);
     const answers = enabledChoices.map(c => takesArray ? [c.value] : c.value);
-    // Nothing later declared a dependency on this step, so nothing later can be
-    // judged until the player answers it, and one answer makes it offerable.
+    // Nothing later declared a dependency on this step, so only dependents of
+    // answers already bound are left to judge.
     const dependents = this.dependentsOf(selections, index);
     const hasDependent = dependents.length > 0;
     if (answers.length > 0 && !hasDependent) {
       this.recordPick(reached, index, selection, enabledChoices.length);
-      return true;
+      return rest();
     }
 
     // A list pick whose min is 0 can always be answered with nothing ticked (#1558).
@@ -1874,13 +1892,14 @@ export class ActionExecutor {
       // confusion needs a LATER step to have been blamed, so it cannot arise
       // there, and a warning that fires for every such verb on every seat trains
       // its reader to ignore the one that means something.
-      if (selections.length > 1) devWarn(
+      // A dependent the walk asked is not the player's first question; the step it depends on warns.
+      if (selections.length > 1 && !walkBound) devWarn(
         `offer-pruned:${actionName}:${selection.name}`,
         `Action '${actionName}' was dropped from this player's offers: its first question ` +
         `'${selection.name}' has no selectable candidate right now (every candidate is either ` +
         `absent or disabled).\n` +
-        `  That is the ONLY reason an unanswered question drops an action -- a later step is ` +
-        `never evaluated before the player reaches it (#270).\n` +
+        `  A later step is evaluated before the player reaches it only when it declares ` +
+        `dependsOn/filterBy, and then with its input bound (#270, #1709).\n` +
         `  If the verb should be there, give '${selection.name}' a candidate. If it should ` +
         `not, prefer .condition() / .disabled(), so the player reads a reason instead of a ` +
         `missing verb.`
@@ -1888,18 +1907,19 @@ export class ActionExecutor {
       return false;
     }
 
-    if (!hasDependent) return true;
+    if (!hasDependent) return rest();
 
     // A DECLARED dependency: re-ask the dependent step with each answer
     // bound, exactly as the player's own answer will.
     for (const answer of answers) {
       const newArgs = { ...args, [selection.name]: answer };
-      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName, reached)) {
+      if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName, reached, true)) {
         return true;
       }
     }
 
-    devWarn(
+    // Another value of an outer step may still succeed, so only the outermost step says the verb was dropped.
+    if (!walkBound) devWarn(
       `offer-pruned-dependent:${actionName}:${selection.name}`,
       `Action '${actionName}' was dropped from this player's offers: no value of ` +
       `'${selection.name}' leaves ${dependents.map(s => `'${s.name}'`).join(', ')} with anything to pick.\n` +
