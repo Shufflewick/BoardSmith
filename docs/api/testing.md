@@ -467,6 +467,16 @@ the mounted tree raises, give it a turn to arrive, and raise it to the caller
 instead. A subject that holds no elements at all is refused for the same reason:
 a diff with nothing on one side of it cannot fail.
 
+**A board's modal renders, and is scanned** (#1717). Each seat gets its own
+`#bs-game-modal` host in the page, as GameShell gives the board one, so a
+`<Teleport to="#bs-game-modal">` modal opens in that seat's host even while
+several seats are mounted at once, and `assertNoHiddenInfoLeak` scans that host
+as it scans the board. A modal is outside the board, so the board's
+`data-element-id`s are not its ancestors: put `data-element-id` on what the
+modal shows, or a seat's own card there is checked as if it were anyone's.
+Unmount each wrapper when its test is done, which also takes its host out of
+the page.
+
 <!-- typecheck: game tests/leak.test.ts -->
 ```typescript
 import { test } from 'vitest';
