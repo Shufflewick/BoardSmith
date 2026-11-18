@@ -613,8 +613,8 @@ async function readExampleReplayLedger(projectDir: string): Promise<ExampleRepla
     throw new Error(
       `The example-replay ledger at ${relLedgerPath} has ${preLineText} record(s) written before ` +
         `records carried lineText, the text of the slice line each example cites.\n` +
-        `Delete the ledger and record those slices again: verify-example-replay reports each one ` +
-        `pending, and the build's test step records it.`,
+        `Delete the ledger and record every slice's examples again: verify-example-replay reports ` +
+        `each slice pending, and the build's test step records it.`,
     );
   }
   return partitionLedgerLines(lines.filter((line) => line !== PRE_LINE_TEXT), relLedgerPath);

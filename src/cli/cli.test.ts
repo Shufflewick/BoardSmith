@@ -207,7 +207,7 @@ describe('a ledger written before records carried lineText (#1700)', () => {
     const refused = await spawnCli(['ingest-check', '--project', project, '--json']);
     expect(refused.code).toBe(1);
     expect(refused.stderr).toContain('1 record(s) written before records carried lineText');
-    expect(refused.stderr).toContain('Delete the ledger and record those slices again');
+    expect(refused.stderr).toContain("Delete the ledger and record every slice's examples again");
     expect(refused.stderr).not.toContain('verify-example-ledger-upgrade');
     expect(refused.stderr).not.toMatch(/\bat \S+\.ts:\d+/);
   });
