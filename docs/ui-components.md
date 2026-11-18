@@ -157,9 +157,8 @@ high-contrast border carries the cue instead.
 
 The engine helpers behind this are exported if a custom UI wants the same
 ordering: `turnSequence(flowState)` and `orderSeatsByTurn(allSeats, sequence)`.
-Note that `Game.nextPlayer()` is **not** one of them — it is a hardcoded seat
-successor, and it disagrees with the real turn order in exactly the games that
-need this.
+Note that `Game.nextAfter()` is **not** one of them: it is a seat successor,
+and it disagrees with the real turn order in exactly the games that need this.
 
 #### Board props
 

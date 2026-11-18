@@ -40,7 +40,7 @@ export type PlayerStatus = 'active' | 'dormant' | 'eliminated';
  * ```
  *
  * **Helper methods**: For common operations, use Game's player helper methods which
- * provide cleaner syntax: `game.currentPlayer`, `game.getPlayer(1)`, `game.nextPlayer()`.
+ * provide cleaner syntax: `game.currentPlayer`, `game.getPlayer(1)`, `game.nextAfter(player)`.
  *
  * **Custom Player classes**: Extend Player to add game-specific properties:
  *
