@@ -899,9 +899,7 @@ function setDemoSpeed(delay: number): void {
 // Show the Teaching group when the game has a bot seat. SnapshotSessionHost
 // injects hasBotPlayers into broadcast state only while it has bot seats
 // (RESEARCH Pitfall 5).
-const showHintProp = computed<boolean | undefined>(() =>
-  state.value?.state?.hasBotPlayers ? true : undefined
-);
+const showHintProp = computed(() => state.value?.state?.hasBotPlayers);
 
 // The move-quality heatmap paints a per-move score chip onto a distinct board
 // cell. That is only meaningful when each candidate move maps to its own spatial
