@@ -51,13 +51,10 @@ interface Props {
   active: boolean;
   /** Enable backdrop blur effect (default: true) */
   backdrop?: boolean;
-  /** Backdrop opacity 0-1 (default: 0.85) */
-  backdropOpacity?: number;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   backdrop: true,
-  backdropOpacity: 0.85,
 });
 
 const emit = defineEmits<{
@@ -78,7 +75,7 @@ onBeforeUnmount(() => {
 
 // Computed style for backdrop
 const backdropStyle = computed(() => ({
-  background: `rgba(0, 0, 0, ${props.backdropOpacity})`,
+  background: 'rgba(0, 0, 0, 0.85)',
   backdropFilter: props.backdrop ? 'blur(4px)' : 'none',
 }));
 </script>

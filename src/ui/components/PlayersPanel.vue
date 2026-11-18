@@ -70,27 +70,11 @@ const props = withDefaults(defineProps<{
    * per-player flag wins: it is the more specific claim.
    */
   presentSeats?: readonly number[] | null;
-  /**
-   * The most seat cards this panel will draw (#170 R1).
-   *
-   * A world runs 500 seats, and one card each is 4,505 DOM nodes re-patched on
-   * every state push — the O(world) term #169 spent a ticket deleting, put back
-   * in the sidebar. Virtualising it would make it cheap and still useless: the
-   * panel's job is seat IDENTITY, and a list nobody reads to the end of does not
-   * do that job.
-   *
-   * So the panel caps and SAYS SO. Twelve is above every table game in the
-   * catalogue — no table's behaviour changes — and far below the point where a
-   * column of cards is something a person reads. Which rows survive the cap is
-   * `visiblePlayers`.
-   */
-  maxRows?: number;
 }>(), {
   // Vue CASTS an absent Boolean prop to `false`, not `undefined` — so an
   // opt-OUT flag silently defaults to opted-out unless the default is stated
   // here. Every consumer that omits the prop must get the sentence.
   showTurnStatus: true,
-  maxRows: 12,
 });
 
 /**
@@ -168,6 +152,22 @@ function isSeatPresent(player: Player): boolean | undefined {
 }
 
 /**
+ * The most seat cards this panel will draw (#170 R1).
+ *
+ * A world runs 500 seats, and one card each is 4,505 DOM nodes re-patched on
+ * every state push — the O(world) term #169 spent a ticket deleting, put back
+ * in the sidebar. Virtualising it would make it cheap and still useless: the
+ * panel's job is seat IDENTITY, and a list nobody reads to the end of does not
+ * do that job.
+ *
+ * So the panel caps and SAYS SO. Twelve is above every table game in the
+ * catalogue — no table's behaviour changes — and far below the point where a
+ * column of cards is something a person reads. Which rows survive the cap is
+ * `visiblePlayers`.
+ */
+const MAX_ROWS = 12;
+
+/**
  * The rows that survive the cap, in the order they were given.
  *
  * Selection is by what a row ANSWERS, not by position: the viewer's own seat and
@@ -180,11 +180,11 @@ function isSeatPresent(player: Player): boolean | undefined {
  * capping would be answering a question nobody asked.
  */
 const visiblePlayers = computed<Player[]>(() => {
-  if (props.players.length <= props.maxRows) return [...props.players];
+  if (props.players.length <= MAX_ROWS) return [...props.players];
 
   const index = new Map(props.players.map((p, i) => [p.seat, i]));
   const chosen = new Set<number>();
-  const take = (p: Player) => { if (chosen.size < props.maxRows) chosen.add(p.seat); };
+  const take = (p: Player) => { if (chosen.size < MAX_ROWS) chosen.add(p.seat); };
 
   for (const p of props.players) if (p.seat === props.playerSeat) take(p);
   for (const p of props.players) if (isPlayerActive(p.seat)) take(p);

@@ -950,7 +950,6 @@ const showModal = ref(false);
 **Props:**
 - `active` (boolean) - Whether overlay is visible
 - `backdrop` (boolean, default: true) - Enable backdrop blur
-- `backdropOpacity` (number, default: 0.85) - Backdrop darkness 0-1
 
 **Events:**
 - `@click` - Fires when clicking the backdrop (use `@click.stop` on content to prevent)
