@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 import { PersistenceStore, type PersistenceStoreState } from '../../persistence/index.js';
-import { atomicWriteFile } from '../commands/verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 
 /** Where a project's dev store lives, given the project root. */
 export function devStorePath(projectRoot: string): string {

@@ -171,7 +171,7 @@ Return exactly one object:
 This subagent never writes `RULINGS.md`, never edits a ruling, and never fixes reference-game
 content. It reports a verdict plus reasoning; the orchestrator records it with `boardsmith
 verify-ruling-record`, which persists through the single atomic ledger write path
-(`atomicWriteFile`, `verify-run.ts`) into the run's own `RULING-VERDICTS.md`, upsert-appending so
+(`atomicWriteFile`, `lib/atomic-write-file.ts`) into the run's own `RULING-VERDICTS.md`, upsert-appending so
 recording one ruling never destroys another's verdict. Whatever downstream consequence a
 verdict has is computed in code from the verdict you return — a claim about that consequence in
 this return is ignored by the recording step regardless of what it says (`state-machine.md`

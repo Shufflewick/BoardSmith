@@ -4,7 +4,7 @@ import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { styleText } from 'node:util';
-import { atomicWriteFile } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
 import { readLiveSlices } from './rulebook-sources.js';

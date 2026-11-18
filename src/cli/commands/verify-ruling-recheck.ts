@@ -14,7 +14,6 @@ import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { withLedgerLock } from '../lib/ledger-lock.js';
 import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import {
-  atomicWriteFile,
   exists,
   ledgerFilePath,
   latestRunId,
@@ -24,6 +23,7 @@ import {
   rulingVerdictsLedgerPath,
   stagingSlicesDir,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { projectDirOption } from '../lib/user-path.js';
 
 /**
@@ -443,7 +443,7 @@ export async function verifyRulingRecheckCommand(
 
 /**
  * Persists verdicts to this run's ledger through `atomicWriteFile` — the ONE atomic ledger write
- * path in the repo (`verify-run.ts`). Never `fs.writeFile`/`writeFileSync` directly, and never a
+ * path in the repo (`lib/atomic-write-file.ts`). Never `fs.writeFile`/`writeFileSync` directly, and never a
  * write into `RULINGS.md` itself (decision 16).
  *
  * REPLACES the entire ledger body with exactly the `records` supplied — a full rewrite. This is

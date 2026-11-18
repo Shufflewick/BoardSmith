@@ -47,8 +47,8 @@ import {
   resolveLedgerState,
   type ClassificationRecord,
   type AdjudicationRecord,
-  atomicWriteFile,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import {
   verifyClassifyPairsCommand,
   verifyClassifyRecordCommand,
@@ -319,8 +319,8 @@ describe('marker — no bare indexOf on the heading (structural guard)', () => {
  * `write-order` per `175-VALIDATION.md`'s `-t` selection convention.
  */
 
-vi.mock('./verify-run.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./verify-run.js')>();
+vi.mock('../lib/atomic-write-file.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/atomic-write-file.js')>();
   return { ...actual, atomicWriteFile: vi.fn(actual.atomicWriteFile) };
 });
 
@@ -330,7 +330,7 @@ vi.mock('./verify-run.js', async (importOriginal) => {
 // a failure under --sequence.shuffle. Restoring here covers every block, and
 // `vi.clearAllMocks()` is not enough: it clears call records, not implementations.
 afterEach(async () => {
-  const actual = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+  const actual = await vi.importActual<typeof import('../lib/atomic-write-file.js')>('../lib/atomic-write-file.js');
   vi.mocked(atomicWriteFile).mockImplementation(actual.atomicWriteFile);
 });
 
@@ -385,7 +385,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     // Reset the mocked atomicWriteFile back to a plain call-through before every test, so a
     // prior test's mockImplementation override (the simulated SKETCH.md write failure) never
     // leaks into the next test.
-    const actualModule = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+    const actualModule = await vi.importActual<typeof import('../lib/atomic-write-file.js')>('../lib/atomic-write-file.js');
     vi.mocked(atomicWriteFile).mockImplementation(actualModule.atomicWriteFile);
   });
 
@@ -461,7 +461,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
       if (filePath.endsWith('SKETCH.md')) {
         throw new Error('simulated SKETCH.md write failure');
       }
-      const actualModule = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
+      const actualModule = await vi.importActual<typeof import('../lib/atomic-write-file.js')>('../lib/atomic-write-file.js');
       await actualModule.atomicWriteFile(filePath, content);
     });
 

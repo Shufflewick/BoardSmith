@@ -13,8 +13,8 @@ import { loadDevStore } from './persistence-file-store.js';
 /** While set, the next write waits for it, so a test can hold a save mid-write. */
 let hold: Promise<void> | null = null;
 const writes: string[] = [];
-vi.mock('../commands/verify-run.js', async (importOriginal) => {
-  const real = await importOriginal<typeof import('../commands/verify-run.js')>();
+vi.mock('../lib/atomic-write-file.js', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../lib/atomic-write-file.js')>();
   return {
     ...real,
     atomicWriteFile: async (path: string, content: string) => {

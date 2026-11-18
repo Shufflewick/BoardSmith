@@ -8,7 +8,8 @@ import { renderIndex } from './ingest-archive.js';
 import { computeTouchedChunks, verifyCloseRecordCommand } from './verify-close-record.js';
 import { VERIFIED_AGAINST_BEGIN, VERIFIED_AGAINST_END } from './chunk-provenance.js';
 import { computeSourceFreeReport } from './verify-source-free.js';
-import { appendLedgerLine, atomicWriteFile, ledgerFilePath, verifyRunInitCommand } from './verify-run.js';
+import { appendLedgerLine, ledgerFilePath, verifyRunInitCommand } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { readChunkTemplate, withInterpretation, writeChunk } from './design-project.test-helper.js';
 

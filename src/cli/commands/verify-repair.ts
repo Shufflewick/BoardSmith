@@ -8,11 +8,11 @@ import { join } from 'node:path';
 import { styleText } from 'node:util';
 import { assertBareName } from '../lib/user-name.js';
 import {
-  atomicWriteFile,
   readRunLedgerState,
   stagingSlicesDir,
   type ClassificationRecord,
 } from './verify-run.js';
+import { atomicWriteFile } from '../lib/atomic-write-file.js';
 import {
   verifyImpactStatusCommand,
   type ImpactMapEntry,
@@ -35,7 +35,7 @@ import { projectDirOption } from '../lib/user-path.js';
  *   3. `verify-repair-gate` — reads the repair gate `verify-impact-status` derives from the
  *      chunk's code as it is when the gate is asked, so after repair (Pitfall 1).
  *
- * Every write in this module routes through `verify-run.ts`'s `atomicWriteFile` — the ONE atomic
+ * Every write in this module routes through `lib/atomic-write-file.ts`'s `atomicWriteFile` — the ONE atomic
  * ledger/artifact write path in the repo (173-REVIEW.md CR-01's defect class). No second parser,
  * no second pairing algorithm, no second write path.
  */
