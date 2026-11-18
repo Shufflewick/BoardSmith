@@ -1433,6 +1433,19 @@ describe('executeOp', () => {
       expect(res.botStalled).toEqual({ seat: 1, reason: 'The bot failed while choosing a move.' });
     });
 
+    it('botSuggest answers that its seat waits, with no instant, when candidateMoves lists nothing and no step clock was read (#1715)', async () => {
+      const waitingDef: BotSuggestGameDef = { ...botSuggestGameDef, bot: { candidateMoves: () => [] } };
+      const snapshot = await startBotSuggestGame();
+      const res = succeeded(await executeOp(waitingDef, botSuggestOpts, snapshot, null, {
+        type: 'botSuggest',
+        seats: [{ seat: 1 }],
+      }));
+
+      expect(res.botPlayer).toBeUndefined();
+      expect(res.botStalled).toBeUndefined();
+      expect(res.botWaiting).toEqual({ seat: 1 });
+    });
+
     it('botSuggest is refused up front in an order-entry session: bot playouts consume randomness', async () => {
       const snapshot = await startBotSuggestGame();
       const res = refused(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {

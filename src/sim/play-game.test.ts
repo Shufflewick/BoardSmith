@@ -554,6 +554,18 @@ describe('playGame with policies (#556)', () => {
     );
   });
 
+  // #1715: unlike the live host, which holds such a seat until the game changes, the simulator stops on a wait with no instant.
+  it('stops a game whose bot waits with no instant, naming the wait', async () => {
+    const result = await playGame(
+      { ...playbackTurnDefinition, bot: { candidateMoves: () => [] } },
+      { playerCount: 2, seed: 'untimed', policies: [mcts(1), mcts(1)], maxActions: 20 },
+    );
+    expect(result.stuck).toBe(true);
+    expect(result.error).toMatch(
+      /^mcts:1 found no move for player (\d): The bot strategy's candidateMoves returned no moves for seat \1, so the seat waits until the game changes\.$/,
+    );
+  });
+
   it('refuses a policy that waits for an instant that is not after the game\'s own (#1541)', async () => {
     const stalling: Policy = { name: 'stalling', choose: () => ({ waitUntil: 0 }) };
     const result = await playGame(playbackTurnDefinition, { playerCount: 2, seed: 'stall', policies: [stalling, stalling], maxActions: 20 });

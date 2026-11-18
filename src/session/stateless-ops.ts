@@ -32,7 +32,7 @@ import {
 } from '../runtime/index.js';
 import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
-import type { BotMove } from '../bot/types.js';
+import { searchSeat } from '../bot/seat-move.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
@@ -1342,28 +1342,29 @@ async function handleBotSuggest(
   // view is this seat's problem alone. It is reported as stalled, which stalls
   // one seat instead of locking the session: a simultaneous step could
   // otherwise never close its round, and the whole table would wait forever.
-  let move: BotMove | null;
+  let found: Awaited<ReturnType<typeof searchSeat>>;
   try {
-    move = await bot.play();
+    found = await searchSeat(bot);
   } catch (error) {
     console.error(`[BoardSmith] Bot for seat ${botPlayer} failed to choose a move:`, error);
     return { success: true, botStalled: { seat: botPlayer, reason: 'The bot failed while choosing a move.' } };
   }
-  if (!move && bot.lastWait) return { success: true, botWaiting: { seat: botPlayer, ...bot.lastWait } };
-  if (!move) {
+  if ('wait' in found) return { success: true, botWaiting: { seat: botPlayer, ...found.wait } };
+  if ('stall' in found) {
     return {
       success: true,
       botStalled: {
         seat: botPlayer,
-        reason: bot.lastStallReason ?? 'The bot had no move it could search from this seat\'s view.',
+        reason: found.stall ?? 'The bot had no move it could search from this seat\'s view.',
       },
     };
   }
+  // Seat args stay as the bot named them: the action op decodes them once, against the game it runs on.
   return {
     success: true,
     botPlayer,
-    suggestedAction: move.action,
-    suggestedArgs: move.args as Record<string, unknown>,
+    suggestedAction: found.move.action,
+    suggestedArgs: found.move.args as Record<string, unknown>,
   };
 }
 
