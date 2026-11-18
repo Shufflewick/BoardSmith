@@ -1,6 +1,6 @@
 import { constants as fsConstants, promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
-import { projectGitOutput } from './git-output.js';
+import { projectGitNames, projectGitOutput } from './git-output.js';
 import { DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
 
@@ -136,7 +136,7 @@ async function ignored(project: string, path: string): Promise<boolean> {
 
 /** Whether git tracks `path`, read literally: an ignore rule never untracks a file (#1321). */
 async function tracked(project: string, path: string): Promise<boolean> {
-  return (await projectGitOutput(project, ['--literal-pathspecs', 'ls-files', '--', path])) !== '';
+  return (await projectGitNames(project, ['--literal-pathspecs', 'ls-files', '--', path])).length > 0;
 }
 
 /**

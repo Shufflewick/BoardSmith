@@ -17,7 +17,7 @@ import { styleText } from 'node:util';
 
 import { buildFormatFixture, computeFingerprints } from '../../contract/fingerprint.js';
 import type { EngineContract } from '../../contract/index.js';
-import { gitOutput } from '../lib/git-output.js';
+import { gitNames, gitOutput } from '../lib/git-output.js';
 
 export interface ContractOptions {
   update?: boolean;
@@ -148,7 +148,8 @@ async function packedBlobs(repo: string, ref: string): Promise<Map<string, strin
     const packed = new Set(report.files.map((file) => file.path));
     const blobs = new Map<string, string>();
     for (const line of (await gitOutput(repo, ['ls-tree', '-r', '-z', ref])).split('\0').filter(Boolean)) {
-      const [meta, path] = line.split('\t');
+      const tab = line.indexOf('\t');
+      const [meta, path] = [line.slice(0, tab), line.slice(tab + 1)];
       if (packed.has(path)) blobs.set(path, meta.split(' ')[2]);
     }
     return blobs;
@@ -165,7 +166,7 @@ export async function unmintedPackedChanges(repo: string, base: string): Promise
   const revisionAt = async (ref: string) =>
     (JSON.parse(await gitOutput(repo, ['show', `${ref}:src/contract/engine-contract.json`])) as { revision: number }).revision;
   if ((await revisionAt('HEAD')) > (await revisionAt(base))) return [];
-  if ((await gitOutput(repo, ['diff', '--name-only', base, 'HEAD'])).trim() === '') return [];
+  if ((await gitNames(repo, ['diff', '--name-only', base, 'HEAD'])).length === 0) return [];
   const [before, after] = await Promise.all([packedBlobs(repo, base), packedBlobs(repo, 'HEAD')]);
   return [...new Set([...before.keys(), ...after.keys()])].filter((path) => before.get(path) !== after.get(path)).sort();
 }

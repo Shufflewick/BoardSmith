@@ -49,6 +49,26 @@ export async function projectGitOutput(dir: string, args: string[]): Promise<str
   return gitOutput(dir, args, { env });
 }
 
+/** `args` with `-z` after the git subcommand, so the paths it lists come NUL-separated. */
+function nulSeparated(args: string[]): string[] {
+  const at = args.findIndex((arg) => !arg.startsWith('-')) + 1;
+  return [...args.slice(0, at), '-z', ...args.slice(at)];
+}
+
+/**
+ * The paths a git command lists (`diff --name-only`, `ls-files`, `log --name-only`), read with `-z`:
+ * git quotes a name holding a quote, backslash, tab or newline in a newline-separated list even with
+ * `core.quotePath=false`, and never in a NUL-separated one (#834, #1692).
+ */
+export async function gitNames(dir: string, args: string[]): Promise<string[]> {
+  return (await gitOutput(dir, nulSeparated(args))).split('\0').filter(Boolean);
+}
+
+/** `gitNames`, in the project's own repository as `projectGitOutput` runs it. */
+export async function projectGitNames(dir: string, args: string[]): Promise<string[]> {
+  return (await projectGitOutput(dir, nulSeparated(args))).split('\0').filter(Boolean);
+}
+
 /** `gitSucceeds`, in the project's own repository as `projectGitOutput` runs it. */
 export function projectGitSucceeds(dir: string, args: string[]): Promise<boolean> {
   return projectGitOutput(dir, args).then(

@@ -47,7 +47,7 @@ import { join, relative, resolve as pathResolve } from 'node:path';
 import { promisify, styleText } from 'node:util';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
 import { chunkBeforeSpec, chunkVerifyBase, commitName, preSpecCodeChanges } from '../lib/chunk-commits.js';
-import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { gitNames, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { captureExecutionContext, executionContextChange } from '../lib/execution-context.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { projectUiProblem, requireGameProject } from '../lib/game-project.js';
@@ -156,7 +156,7 @@ function addedLines(diff: string): Set<number> {
 export async function changedSince(projectDir: string, baseCommit: string): Promise<ChangedSince> {
   // NUL-separated names are never quoted, so a name with a space, quote or backslash survives (#834).
   const status = (await git(projectDir, ['diff', '--relative', '--name-status', '-z', baseCommit, '--'])).split('\0').filter(Boolean);
-  const untracked = (await git(projectDir, ['ls-files', '-z', '--others', '--exclude-standard'])).split('\0').filter(Boolean);
+  const untracked = await gitNames(projectDir, ['ls-files', '--others', '--exclude-standard']);
 
   // Each entry is a status then its path, or, for a rename or copy, the old path and the new one.
   const sources = new Map<string, string[]>();

@@ -42,7 +42,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { blameHeader, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { blameHeader, gitNames, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join as pathJoin, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import {
   CROSS_CHUNK_MD,
@@ -545,9 +545,7 @@ async function provisionalOnMainLine(projectDir: string): Promise<LedgerFinding[
 async function provisionalCitedOnMainLine(projectDir: string, headed: LedgerFinding[]): Promise<LedgerFinding[]> {
   const design = `${DESIGN_DIR}/`;
   const already = new Set(headed.map((f) => `${design}${f.ledger}\0${f.entry}`));
-  const files = (await git(projectDir, ['ls-files', '-z', '--cached', '--others', '--exclude-standard']))
-    .split('\0')
-    .filter(Boolean);
+  const files = await gitNames(projectDir, ['ls-files', '--cached', '--others', '--exclude-standard']);
   const found: LedgerFinding[] = [];
   for (const file of [...new Set(files)].sort()) {
     const text = await readListedText(pathJoin(projectDir, file));
@@ -675,8 +673,7 @@ async function requireGitRepo(projectDir: string, why: string): Promise<void> {
 /** The subset of `relPaths` that git tracks, in one `ls-files` for all of them. */
 async function trackedFiles(projectDir: string, relPaths: string[]): Promise<Set<string>> {
   if (relPaths.length === 0) return new Set();
-  const listed = await git(projectDir, ['--literal-pathspecs', 'ls-files', '-z', '--', ...relPaths]);
-  return new Set(listed.split('\0').filter(Boolean));
+  return new Set(await gitNames(projectDir, ['--literal-pathspecs', 'ls-files', '--', ...relPaths]));
 }
 
 /**

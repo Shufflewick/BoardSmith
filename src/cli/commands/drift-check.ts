@@ -38,7 +38,7 @@ import {
   resolveManifestPath,
 } from './build-manifest.js';
 import { readChunkMdIfExists, requireChunkSlugs } from '../lib/project-paths.js';
-import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { gitNames, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 
 /**
@@ -73,11 +73,7 @@ export async function diffedFilesSince(
   if (!HASH_SHAPE.test(hash)) return UNRESOLVABLE;
 
   try {
-    const stdout = await git(projectDir, ['diff', '--name-only', '--relative', hash, 'HEAD']);
-    return stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0);
+    return await gitNames(projectDir, ['diff', '--name-only', '--relative', hash, 'HEAD']);
   } catch {
     return UNRESOLVABLE;
   }

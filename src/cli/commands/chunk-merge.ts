@@ -54,7 +54,7 @@
  * the chunk's tests, and run this again.
  */
 import { promises as fs } from 'node:fs';
-import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { gitNames, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { join, posix, resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { sha256Hex } from '../lib/hash.js';
@@ -215,7 +215,7 @@ export function resolveDesignConflicts(text: string): { text: string; unresolved
 
 async function resolveConflicts(ctx: MergeContext): Promise<string[]> {
   const top = ctx.top;
-  const conflicted = (await git(top, ['diff', '--name-only', '--diff-filter=U'])).split('\n').filter(Boolean);
+  const conflicted = await gitNames(top, ['diff', '--name-only', '--diff-filter=U']);
   const left: string[] = [];
   for (const name of conflicted) {
     const inDesign = name.startsWith(`${ctx.prefix}${DESIGN_DIR}/`) && name.endsWith('.md');
@@ -382,9 +382,8 @@ async function allocate(
  */
 async function touchedOnMainLine(ctx: MergeContext): Promise<string[]> {
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
-  const names = await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD', '--', `${design}chunks/`, `${design}${RUN_LOG_DIR}/`]);
+  const names = await gitNames(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD', '--', `${design}chunks/`, `${design}${RUN_LOG_DIR}/`]);
   const slugs = names
-    .split('\n')
     .map((name) => new RegExp(`^${design}(?:chunks/([^/]+)/|${RUN_LOG_DIR}/([^/]+)\\.md$)`).exec(name))
     .map((m) => m?.[1] ?? m?.[2])
     .filter((s): s is string => s !== undefined && s !== ctx.slug);
@@ -429,10 +428,9 @@ async function builtAlongside(ctx: MergeContext, touched: string[]): Promise<str
 
 /** The project-relative files main-line commit `commit` changed against its first parent. */
 async function changedBy(ctx: MergeContext, commit: string): Promise<string[]> {
-  const names = await git(ctx.top, ['diff', '--name-only', `${commit}^1`, commit]);
+  const names = await gitNames(ctx.top, ['diff', '--name-only', `${commit}^1`, commit]);
   return names
-    .split('\n')
-    .filter((name) => name.startsWith(ctx.prefix) && name !== '')
+    .filter((name) => name.startsWith(ctx.prefix))
     .map((name) => posix.normalize(name.slice(ctx.prefix.length)));
 }
 
@@ -494,7 +492,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], { ru
   if (problems.length > 0) return problems;
   const base = await chunkVerifyBase(ctx.projectDir, ctx.slug);
   // The files the chunk's branch changed, as its own `verify --chunk` measured them; not what the main line changed.
-  const changed = (await git(ctx.projectDir, ['diff', '--relative', '--name-only', '-z', base, ctx.branchCommit])).split('\0').filter(Boolean);
+  const changed = await gitNames(ctx.projectDir, ['diff', '--relative', '--name-only', base, ctx.branchCommit]);
   const tests = await chunkTests(ctx.projectDir, ctx.slug, base, changed);
   if (!Array.isArray(tests)) {
     if (!tests.passed) return [`${tests.summary} ${tests.next ?? ''} Then run chunk-merge again.`];
@@ -538,7 +536,7 @@ async function manifestPaths(projectDir: string, slug: string): Promise<Set<stri
  * no such chunk names has no sign-off for the merge to vouch for.
  */
 async function sharedSourceFiles(ctx: MergeContext, touched: string[], renumbered: string[]): Promise<SharedFile[]> {
-  const mainChanged = new Set((await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD'])).split('\n'));
+  const mainChanged = new Set(await gitNames(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD']));
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   const both = ctx.changed
     .filter((name) => mainChanged.has(name) && name.startsWith(ctx.prefix) && !name.startsWith(design))
@@ -830,7 +828,7 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
     prefix,
     base,
     fork: (await git(projectDir, ['rev-parse', `${own[own.length - 1]}^1`])).trim(),
-    changed: (await git(top, ['diff', '--name-only', base, branchCommit])).split('\n').filter(Boolean),
+    changed: await gitNames(top, ['diff', '--name-only', base, branchCommit]),
   };
 }
 
