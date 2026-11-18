@@ -554,7 +554,7 @@ describe('playGame with policies (#556)', () => {
     );
   });
 
-  // #1715: a harness has nothing but the step clock to wake a seat, so a wait with no instant stops the game.
+  // #1715: unlike the live host, which holds such a seat until the game changes, the simulator stops on a wait with no instant.
   it('stops a game whose bot waits with no instant, naming the wait', async () => {
     const result = await playGame(
       { ...playbackTurnDefinition, bot: { candidateMoves: () => [] } },

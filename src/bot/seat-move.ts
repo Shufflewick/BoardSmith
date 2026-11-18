@@ -28,7 +28,7 @@ export async function playSeatMove(
   seat: number,
 ): Promise<{ action: string; args: Record<string, unknown> } | { waitUntil: number } | { stall: string }> {
   const found = await searchSeat(bot);
-  // Only the step clock can wake a harness seat, so a wait with no instant never ends (#1715).
+  // A harness stops on a wait with no instant; holding the seat as the live host does would change sim and benchmark results (#1715).
   if ('wait' in found && found.wait.until !== undefined) return { waitUntil: found.wait.until };
   if (!('move' in found)) return { stall: bot.lastStallReason ?? 'no reason recorded' };
   // The bot names a card its seat cannot see by that seat's placeholder, as a client would (#715).
