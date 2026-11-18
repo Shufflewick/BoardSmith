@@ -2115,9 +2115,9 @@ The UI-side uses a composable pattern with provide/inject for component tree acc
 
 <!-- typecheck: game src/ui/animation-events.ts -->
 ```typescript
-import type { Ref } from 'vue';
+import { provide, type Ref } from 'vue';
 import type { PlayerGameState } from 'boardsmith/session';
-import { createAnimationEvents, provideAnimationEvents } from 'boardsmith/ui';
+import { createAnimationEvents, ANIMATION_EVENTS_KEY } from 'boardsmith/ui';
 
 // Call from the root component's setup, with the seat's latest state.
 export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
@@ -2133,7 +2133,7 @@ export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
   });
 
   // Provide to component tree
-  provideAnimationEvents(animationEvents);
+  provide(ANIMATION_EVENTS_KEY, animationEvents);
   return animationEvents;
 }
 ```
@@ -2178,7 +2178,6 @@ onUnmounted(() => unregister?.());
 | Function | Description |
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
-| `provideAnimationEvents(instance)` | Provide instance to component tree |
 | `useAnimationEvents()` | Inject animation events from ancestor |
 
 **Instance API:**

@@ -20,9 +20,6 @@ export const ONE_SHELL_CONTEXT_FIELDS = ['gameState', 'dueSeats', 'timeTravelDif
 /** The other keys only one shell provides: the table's animations, and the world itself. */
 const ONE_SHELL_KEYS = new Set(['ANIMATION_EVENTS_KEY', 'WORLD_CONTEXT_KEY']);
 
-/** The helper that provides one of those keys. */
-const ONE_SHELL_PROVIDERS = new Set(['provideAnimationEvents']);
-
 /** The stubs whose `provide` option is checked against the real shell when the test runs. */
 const CHECKED_STUBS = new Set(['renderAsSeat', 'tableShellContext', 'worldShellContext', 'assertNoHiddenInfoLeak']);
 
@@ -80,7 +77,6 @@ function inCheckedStubOption(ancestors: AstNode[]): boolean {
 function handProvided(node: AstNode, ancestors: AstNode[]): string | undefined {
   if (node.type === 'CallExpression') {
     const name = calleeName(node);
-    if (name !== undefined && ONE_SHELL_PROVIDERS.has(name)) return name;
     if (name === 'provide') return oneShellKey((node.arguments as AstNode[])[0]);
     return undefined;
   }

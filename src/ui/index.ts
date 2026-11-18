@@ -233,7 +233,6 @@ export {
 // Animation event playback (sequential handler-based playback)
 export {
   createAnimationEvents,
-  provideAnimationEvents,
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type AnimationHandler,

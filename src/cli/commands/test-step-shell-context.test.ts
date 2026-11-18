@@ -21,15 +21,13 @@ const Host = defineComponent({ setup() { provide(GAME_CONTEXT_KEYS.turnDeadline,
     ]);
   });
 
-  it("finds the world's own key, the table's animation key, and the animation provide helper", () => {
+  it("finds the world's own key and the table's animation key", () => {
     const source = `provide(WORLD_CONTEXT_KEY, fakeWorld);
 const p = { [ANNOUNCER_KEY]: a, [ANIMATION_EVENTS_KEY]: e };
-provideAnimationEvents(e);
 `;
     expect(findHandBuiltShellContext(source).map((h) => [h.line, h.key])).toEqual([
       [1, 'WORLD_CONTEXT_KEY'],
       [2, 'ANIMATION_EVENTS_KEY'],
-      [3, 'provideAnimationEvents'],
     ]);
   });
 

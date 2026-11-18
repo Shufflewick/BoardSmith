@@ -5,7 +5,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick, effectScope } from 'vue';
 import {
   createAnimationEvents,
-  provideAnimationEvents,
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type UseAnimationEventsReturn,
@@ -1193,8 +1192,7 @@ describe('useAnimationEvents', () => {
       expect(typeof ANIMATION_EVENTS_KEY).toBe('symbol');
     });
 
-    it('provideAnimationEvents and useAnimationEvents are functions', () => {
-      expect(typeof provideAnimationEvents).toBe('function');
+    it('useAnimationEvents is a function', () => {
       expect(typeof useAnimationEvents).toBe('function');
     });
   });
