@@ -15,12 +15,16 @@ import {
 } from '../engine/index.js';
 import { playGame } from './play-game.js';
 import { random, greedy, mcts, type Policy, type PolicyMove } from './index.js';
+import type { BotStrategy } from '../bot/types.js';
 import {
   playbackTurnDefinition,
   validateGatedDefinition,
   disabledGatedDefinition,
   shortWindowGatedDefinition,
+  commitRoundDefinition,
   levelUpWhenAllowed,
+  seatOneWaitsForSeatTwo,
+  PLAYBACK_MS,
 } from '../session/testing/fixtures/timed-step-fixture.js';
 
 /** Each seat adds 1-3 to its own score; the first to reach 10 ends the game, and the highest score wins. */
@@ -554,15 +558,42 @@ describe('playGame with policies (#556)', () => {
     );
   });
 
-  // #1715: unlike the live host, which holds such a seat until the game changes, the simulator stops on a wait with no instant.
-  it('stops a game whose bot waits with no instant, naming the wait', async () => {
+  // #1719: as the live host does, the simulator holds a seat that waits with no instant until the game changes.
+  it('lets the other seat move while a bot waits with no instant, then asks it again', async () => {
+    for (const seed of ['a', 'b', 'c', 'd']) {
+      const result = await playGame(
+        { ...commitRoundDefinition, bot: seatOneWaitsForSeatTwo },
+        { playerCount: 2, seed, policies: [mcts(1), mcts(1)], maxActions: 20 },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.completed).toBe(true);
+      // One commit a seat.
+      expect(result.actionCount).toBe(2);
+    }
+  });
+
+  it('moves the clock for a seat that waits for an instant while another waits with no instant (#1719)', async () => {
+    for (const seed of ['a', 'b', 'c', 'd']) {
+      const result = await playGame(
+        { gameClass: SeatTwoGatedGame, gameType: 'seat-two-gated', minPlayers: 2, maxPlayers: 2, bot: seatOneDoneAfterSeatTwo },
+        { playerCount: 2, seed, policies: [mcts(1), mcts(1)], maxActions: 20 },
+      );
+      expect(result.error).toBeUndefined();
+      expect(result.completed).toBe(true);
+      // Seat 2 levels up once the playback has ended and is done; then seat 1 is done.
+      expect(result.actionCount).toBe(3);
+    }
+  });
+
+  it('stops a game where every seat that can move waits with no instant, naming them (#1719)', async () => {
     const result = await playGame(
       { ...playbackTurnDefinition, bot: { candidateMoves: () => [] } },
       { playerCount: 2, seed: 'untimed', policies: [mcts(1), mcts(1)], maxActions: 20 },
     );
     expect(result.stuck).toBe(true);
-    expect(result.error).toMatch(
-      /^mcts:1 found no move for player (\d): The bot strategy's candidateMoves returned no moves for seat \1, so the seat waits until the game changes\.$/,
+    expect(result.error).toBe(
+      "Every seat that can move waits until the game changes, and none of them will change it: seat 1 (Policy 'mcts:1'). " +
+        'A host would hold these seats forever, so the game stops here. Have one of them return the move it makes now.',
     );
   });
 
@@ -684,6 +715,47 @@ describe('playGame with policies (#556)', () => {
     ).rejects.toThrow(`A timeout of ${String(timeout)} ms cannot bound a game: give a number of milliseconds above 0.`);
   });
 });
+
+/**
+ * A round of `levelUp` and `done` where only seat 2's `levelUp` waits for the
+ * playback, so seat 1 lists its moves without reading the step clock (#1719).
+ */
+class SeatTwoGatedGame extends Game<SeatTwoGatedGame, Player> {
+  levelledUp: number[] = [];
+  done: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerActions(
+      Action.create<SeatTwoGatedGame>('levelUp')
+        .condition({ 'not levelled up yet': (ctx) => !ctx.game.levelledUp.includes(ctx.player.seat) })
+        .disabled((ctx) => ctx.player.seat === 2 && !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
+        .execute((_args, ctx) => { ctx.game.levelledUp.push(ctx.player.seat); }),
+      Action.create<SeatTwoGatedGame>('done').execute((_args, ctx) => { ctx.game.done.push(ctx.player.seat); }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep<SeatTwoGatedGame>({
+        name: 'deploy',
+        actions: ['levelUp', 'done'],
+        playerDone: (ctx, player) => ctx.game.done.includes(player.seat),
+        allDone: (ctx) => ctx.game.done.length === 2,
+        timeLimitMs: 120_000,
+      }),
+    });
+  }
+}
+
+/** Seat 1 waits, with no instant, until seat 2 is done; seat 2 levels up once it may, then is done. */
+const seatOneDoneAfterSeatTwo: BotStrategy = {
+  candidateMoves: (game, seat, listMoves) => {
+    const gated = game as SeatTwoGatedGame;
+    const moves = listMoves();
+    const done = moves.filter((move) => move.action === 'done');
+    if (seat === 1) return gated.done.includes(2) ? done : [];
+    const up = moves.filter((move) => move.action === 'levelUp');
+    return up.length > 0 ? up : gated.levelledUp.includes(2) ? done : [];
+  },
+};
 
 /** One shared token: each seat acts once, the first takes it, and the game ends. */
 class OneTokenGame extends Game<OneTokenGame, Player> {
