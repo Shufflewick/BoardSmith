@@ -3,7 +3,8 @@
  * already resolved, and turning it into a list safe to render.
  *
  * The whole point is that this is NOT seat order (`Game.nextAfter()`), which
- * is wrong for any game whose turn order is not seat order. The order the flow will actually take is resolved once per round by `eachPlayer`
+ * is wrong for any game whose turn order is not seat order. The order the
+ * flow will actually take is resolved once per round by `eachPlayer`
  * — direction, startingPlayer and filter all applied — and parked in its frame
  * as `eligibleSeats`, which is already serialized to every client. These tests
  * cover reading that back, and the two properties the panel depends on: every

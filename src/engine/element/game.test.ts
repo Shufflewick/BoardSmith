@@ -548,7 +548,7 @@ describe('every player helper answers with the same set of players', () => {
       players: [1, 2, 3],
       others: [2, 3],
       choices: [1, 2, 3],
-      // Turn order wraps within the seated players, so seat 3 is followed by
+      // Seat order wraps within the seated players, so seat 3 is followed by
       // seat 1 and seat 1 is preceded by seat 3.
       nextAfter: 1,
       previousBefore: 3,

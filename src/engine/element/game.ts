@@ -3970,7 +3970,7 @@ export class Game<
    *   player.hand.first(Card)?.putInto(recipient.incoming);
    * }
    *
-   * // Custom turn order starting from a specific player
+   * // Visit every seat once, starting from a specific player
    * let current = startingPlayer;
    * for (let i = 0; i < game.all(Player).length; i++) {
    *   doSomething(current);
