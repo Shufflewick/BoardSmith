@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { MERGE_SIGNOFFS_MD, designPath } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
+import { bodyField } from './ledger-entries.js';
 
 /**
  * `design/MERGE-SIGNOFFS.md` (#403): what `boardsmith chunk-merge` vouched for when the merged
@@ -43,15 +44,11 @@ const HEADER = `# Merge Sign-offs
      sign-off check accepts that edit for each chunk whose sign-off names the file. -->
 `;
 
-function field(body: string, label: string): string | undefined {
-  return new RegExp(`^- ${label}:[ \\t]*(.+?)[ \\t]*$`, 'm').exec(body)?.[1];
-}
-
 function parseEntry(path: string, body: string): MergeSignoff {
-  const content = field(body, 'Content');
-  const chunks = field(body, 'Chunks');
-  const merge = field(body, 'Merge');
-  const when = field(body, 'When');
+  const content = bodyField(body, 'Content');
+  const chunks = bodyField(body, 'Chunks');
+  const merge = bodyField(body, 'Merge');
+  const when = bodyField(body, 'When');
   if (!content || !chunks || !merge || !when) {
     throw new Error(
       `design/${MERGE_SIGNOFFS_MD}'s entry for ${path} is missing a Content, Chunks, Merge or When ` +

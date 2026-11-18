@@ -7,7 +7,7 @@
  * work this one builds on. An entry with no `Depends on:` line has an unknown graph, so it is
  * read as depending on every chunk before it: order-only, never safe to build alongside another.
  */
-import { blankComments } from '../lib/ledger-entries.js';
+import { blankComments, bodyField } from '../lib/ledger-entries.js';
 import { extractSection } from './build-manifest.js';
 
 export interface SketchChunk {
@@ -23,12 +23,8 @@ export interface SketchChunk {
 
 const ORDERED_CHUNK_LIST = '## Ordered Chunk List';
 
-function field(entry: string, pattern: RegExp): string | undefined {
-  return pattern.exec(entry)?.[1].trim();
-}
-
 function readDependsOn(entry: string): string[] | undefined {
-  const value = field(entry, /^- Depends on:[ \t]*(.*)$/m);
+  const value = bodyField(entry, 'Depends on');
   if (value === undefined) return undefined;
   if (value === '' || value.toLowerCase() === 'none') return [];
   return value
@@ -45,10 +41,11 @@ export function parseSketchChunks(sketch: string): SketchChunk[] {
     const entry = list.slice(match.index, i + 1 < headings.length ? headings[i + 1].index : list.length);
     return {
       slug: match[1],
-      citations: field(entry, /^- Citations:[ \t]*(.*)$/m),
+      citations: bodyField(entry, 'Citations'),
       dependsOn: readDependsOn(entry),
-      milestone: field(entry, /^- Milestone:[ \t]*(.*)$/m),
-      status: field(entry, /^- Status(?: \(derived from [^)]*\))?:[ \t]*(.*)$/m),
+      milestone: bodyField(entry, 'Milestone'),
+      // The derived form's qualifier varies by chunk, so Status is not one fixed label for bodyField.
+      status: /^[ \t]*-[ \t]*Status(?: \(derived from [^)]*\))?:[ \t]*(.*?)[ \t]*$/m.exec(entry)?.[1],
     };
   });
 }

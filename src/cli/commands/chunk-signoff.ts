@@ -30,6 +30,7 @@ import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { bodyField } from '../lib/ledger-entries.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -227,7 +228,7 @@ function sketchEntryRange(sketch: string, slug: string): { start: number; end: n
 function readMilestone(sketch: string, slug: string): string {
   const range = sketchEntryRange(sketch, slug);
   const entry = range ? sketch.slice(range.start, range.end) : '';
-  const milestone = /^- Milestone:\s*(\S+)\s*$/m.exec(entry)?.[1] ?? '';
+  const milestone = bodyField(entry, 'Milestone') ?? '';
   if ((MILESTONE_VALUES as readonly string[]).includes(milestone)) return milestone;
   throw new Error(
     `${SKETCH_MD} has no "### ${slug}" entry with a "- Milestone:" line reading ` +
@@ -438,8 +439,7 @@ function parseWaivers(text: string): Waiver[] {
   const waivers: Waiver[] = [];
   for (let i = 1; i < parts.length; i += 2) {
     const body = parts[i + 1] ?? '';
-    const field = (label: string): string =>
-      new RegExp(`^- ${label}:[ \\t]*(.*)$`, 'm').exec(body)?.[1].trim() ?? '';
+    const field = (label: string): string => bodyField(body, label) ?? '';
     waivers.push({
       id: parts[i],
       grantedBy: field('Granted by'),

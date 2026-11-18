@@ -124,6 +124,14 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
     },
   );
 
+  it('reads an indented sketch Milestone line the way parseSketchChunks reads it (#1696)', async () => {
+    const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
+    const sketch = join(project, DESIGN_DIR, 'SKETCH.md');
+    await fs.writeFile(sketch, (await fs.readFile(sketch, 'utf-8')).replace(/^- Milestone:/m, '  - Milestone:'));
+    await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
+    expect(await readChunk(project, 'rules')).toMatch(/^Status: verified$/m);
+  });
+
   it('accepts an automated sign-off, with its evidence, for a chunk no designer playtests', async () => {
     const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
     await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
@@ -219,6 +227,15 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     const chunk = await readChunk(project, 'world-shell');
     expect(chunk).toMatch(/^Status: verified \(user-waived\)$/m);
     expect(parseSignoff(chunk).record).toMatchObject({ basis: 'waiver', waiver: 'W1', by: 'Jane Designer' });
+  });
+
+  it('reads an indented waiver line the way the other design ledgers read it (#1696)', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    await recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW });
+    const path = join(project, DESIGN_DIR, WAIVERS_MD);
+    await fs.writeFile(path, (await fs.readFile(path, 'utf-8')).replace(/^- /gm, '  - '));
+    await signOff('world-shell', { project, waiver: 'W1', now: NOW });
+    expect(parseSignoff(await readChunk(project, 'world-shell')).record).toMatchObject({ basis: 'waiver', by: 'Jane Designer' });
   });
 
   it('a waiver scoped to one chunk cannot be applied to another', async () => {

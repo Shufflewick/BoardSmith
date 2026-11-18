@@ -66,7 +66,14 @@ import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js
 import { withoutQuotedPassages } from './claim-quotes.js';
 import { type ChunkCommit, type PinnedCommit, chunkPins, commitName } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
-import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+import {
+  type EntryField,
+  type LedgerEntry,
+  bodyFields,
+  entryField,
+  parseLedgerEntries,
+  supersessionPatterns,
+} from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings, provisionalReferences } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
 import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundVerifies, runLogEntries } from '../lib/run-log-roles.js';
@@ -244,11 +251,6 @@ const STATUS_BANNER = /^[\s>*_#-]*(POSTED|RECORDED|DECLINED)\b/;
 const URL = /https?:\/\//;
 const STATUSES = 'recorded, posted, posted-by-designer or declined';
 
-function fieldValues(body: string, field: string): string[] {
-  const pattern = new RegExp(`^\\s*-\\s*${field}:[ \\t]*(.*)$`, 'gm');
-  return [...body.matchAll(pattern)].map((m) => m[1].trim());
-}
-
 function isPosted(value: Reported): boolean {
   return value === 'posted' || value === 'posted-by-designer';
 }
@@ -257,7 +259,7 @@ type Problem = { kind: LedgerFindingKind; detail: string };
 
 /** The entry's one `Reported:` status, or the problem that stops it having one. */
 function reportedStatus(body: string, where: string): Reported | Problem {
-  const raw = fieldValues(body, 'Reported');
+  const raw = bodyFields(body, 'Reported');
   if (raw.length === 0) {
     return { kind: 'filing-status-invalid', detail: `${where} has no "- Reported:" field. Add one: ${STATUSES}.` };
   }
@@ -282,7 +284,7 @@ function reportedStatus(body: string, where: string): Reported | Problem {
 
 /** Whether the `Issue:` field agrees with `status`. */
 function issueProblem(body: string, where: string, status: Reported): Problem | undefined {
-  const issues = fieldValues(body, 'Issue');
+  const issues = bodyFields(body, 'Issue');
   if (issues.length !== 1) {
     return {
       kind: 'filing-status-invalid',
