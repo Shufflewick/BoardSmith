@@ -451,13 +451,15 @@ export function tapSizes(frame, targets) {
 }
 
 /**
- * Wait until no transition is running in the frame, so what is measured is where things come to rest.
+ * Wait until no transition or finite animation is running in the frame, so what is measured is where things
+ * come to rest: a menu still on its pop's first frame sits 6px off where it rests (#1710).
  * A finished one stays listed until the next frame, and its settled promise would loop here without
  * ever letting that frame come (#1645), so only those still running are waited on.
  */
 export function settle(frame) {
   return frame.locator('body').evaluate(async (body) => {
-    const running = () => body.ownerDocument.getAnimations().filter((a) => a.transitionProperty && a.playState === 'running');
+    const running = () => body.ownerDocument.getAnimations()
+      .filter((a) => a.playState === 'running' && a.effect.getComputedTiming().endTime !== Infinity);
     while (running().length > 0) await Promise.allSettled(running().map((a) => a.finished));
   });
 }
