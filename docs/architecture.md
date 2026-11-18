@@ -225,7 +225,8 @@ room.showOnlyTo(occupant);    // A Space can say who may see THE SPACE ITSELF
 ```
 
 A `Space` also has the ZONE half, which governs its CONTENTS rather than the
-space: `contentsHidden()`, `addZoneVisibleTo()`, `hideContentsFrom()`. The two
+space: `contentsHidden()`, `addZoneVisibleTo()`, `hideContentsFrom()`. For one
+seat, the later of `addZoneVisibleTo()` and `hideContentsFrom()` wins. The two
 halves are independent — hiding a room from a seat does not hide what is in it,
 and hiding a room's contents does not hide the room.
 
