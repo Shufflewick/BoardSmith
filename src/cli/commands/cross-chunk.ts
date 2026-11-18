@@ -19,6 +19,8 @@
  * next close and the next merge both stop until the audit's cross-chunk lens has ruled.
  */
 
+import { gitOutput } from '../lib/git-output.js';
+
 const SOURCE_EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs|vue|json)$/;
 const NOT_SOURCE = /(?:^|\/)(?:design|tests?|__tests__|node_modules|dist)\/|\.(?:test|spec)\.[a-z]+$|(?:^|\/)package(?:-lock)?\.json$/;
 
@@ -63,9 +65,37 @@ function recordLine(side: ChangedSide, file: string, line: string): void {
   if (key) side.defined.add(key);
 }
 
-/** The file a `diff --git` header line names, when that file is source; undefined otherwise. */
-function sourceFileOf(header: RegExpExecArray): string | undefined {
-  return isSource(header[2]) ? header[2] : undefined;
+/** git's C-style escapes in a quoted path, by the character after the backslash. */
+const C_ESCAPES: Record<string, number> = { a: 7, b: 8, t: 9, n: 10, v: 11, f: 12, r: 13, '"': 34, '\\': 92 };
+
+/** A path as git wrote it between quotes, with its escapes undone; `\ooo` octal escapes are bytes. */
+function unquoteGitPath(body: string): string {
+  const bytes = Buffer.from(body, 'utf8');
+  const out: number[] = [];
+  for (let i = 0; i < bytes.length; i++) {
+    if (bytes[i] !== 92) {
+      out.push(bytes[i]);
+      continue;
+    }
+    const next = String.fromCharCode(bytes[++i]);
+    if (/[0-7]/.test(next)) {
+      out.push(parseInt(bytes.subarray(i, i + 3).toString('latin1'), 8));
+      i += 2;
+    } else {
+      out.push(C_ESCAPES[next]);
+    }
+  }
+  return Buffer.from(out).toString('utf8');
+}
+
+/** `diff --git a/<path> b/<path>` with both halves equal, as `--no-renames` writes it; git quotes a path holding a quote, backslash or control character. */
+const DIFF_HEADER = /^diff --git (?:"a\/((?:[^"\\]|\\.)*)" "b\/\1"|a\/(.+) b\/\2)$/;
+
+/** The file a `diff --git` header line names, quoted by git or not. */
+function headerFile(line: string): string {
+  const header = DIFF_HEADER.exec(line);
+  if (!header) throw new Error(`Could not read the file name in this git diff header, which changedSideBetween should have written: ${line}`);
+  return header[1] !== undefined ? unquoteGitPath(header[1]) : header[2];
 }
 
 /** A diff body line that adds or removes content, as opposed to a `+++`/`---` file header. */
@@ -74,14 +104,14 @@ function changedContent(line: string): string | undefined {
   return line.startsWith('+') || line.startsWith('-') ? line.slice(1) : undefined;
 }
 
-/** Reads `git diff --unified=0` output into what it changed in source files. */
+/** Reads `git diff --unified=0 --no-renames` output, with git's own a/ and b/ prefixes, into what it changed in source files. */
 export function changedSide(diff: string): ChangedSide {
   const side: ChangedSide = { files: new Set(), names: new Map(), defined: new Set() };
   let file: string | undefined;
   for (const line of diff.split('\n')) {
-    const header = /^diff --git a\/(.+) b\/(.+)$/.exec(line);
-    if (header) {
-      file = sourceFileOf(header);
+    if (line.startsWith('diff --git ')) {
+      const path = headerFile(line);
+      file = isSource(path) ? path : undefined;
       if (file) side.files.add(file);
       continue;
     }
@@ -89,6 +119,17 @@ export function changedSide(diff: string): ChangedSide {
     if (file !== undefined && content !== undefined) recordLine(side, file, content);
   }
   return side;
+}
+
+/**
+ * What changed in source between two commits. The diff is pinned to the form changedSide reads,
+ * whatever the user's diff config: renames as a delete and an add so both paths count, a/ and b/
+ * prefixes, and no color, external diff or textconv.
+ */
+export async function changedSideBetween(dir: string, from: string, to: string): Promise<ChangedSide> {
+  return changedSide(
+    await gitOutput(dir, ['diff', '--unified=0', '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', from, to]),
+  );
 }
 
 interface SharedName {

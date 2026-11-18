@@ -88,7 +88,7 @@ import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
 import { besideAnyProblems, pairProblems, readSketchChunks } from './parallel-check.js';
-import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
+import { appendCrossChunkEntry, changedSideBetween, crossReferences } from './cross-chunk.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
@@ -747,9 +747,7 @@ async function vouchForSharedFiles(ctx: MergeContext, shared: SharedFile[], runT
 /** Records where this chunk's changes meet what the main line gained while it was built. */
 async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise<ChunkMergeResult['crossChunk']> {
   if (alongside.length === 0) return 'not built alongside';
-  const branchDiff = await git(ctx.top, ['diff', '--unified=0', ctx.base, ctx.branchCommit]);
-  const mainDiff = await git(ctx.top, ['diff', '--unified=0', ctx.fork, 'HEAD']);
-  const refs = crossReferences(changedSide(branchDiff), changedSide(mainDiff));
+  const refs = crossReferences(await changedSideBetween(ctx.top, ctx.base, ctx.branchCommit), await changedSideBetween(ctx.top, ctx.fork, 'HEAD'));
   const path = designPath(ctx.projectDir, CROSS_CHUNK_MD);
   const existing = await readIfExists(path, (file) => fs.readFile(file, 'utf-8'));
   await fs.writeFile(path, appendCrossChunkEntry(existing, { chunk: ctx.slug, alongside, refs }));
