@@ -43,7 +43,7 @@ export interface FocusTrapOptions {
 // Internal helper: collect all keyboard-focusable elements within a container
 // ---------------------------------------------------------------------------
 
-export const FOCUSABLE_SELECTOR = [
+const FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
   'button:not(:disabled)',
