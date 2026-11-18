@@ -20,6 +20,7 @@ import { choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, f
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
+import { FOCUSABLE_SELECTOR } from '../../composables/useFocusTrap.js';
 import type {
   UseActionControllerReturn,
   EnrichedPickMetadata,
@@ -853,9 +854,6 @@ function focusIsStranded(): boolean {
   return !active || active === document.body || !active.isConnected;
 }
 
-const FOCUSABLE =
-  'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
-
 /** The first of `candidates` a keyboard user can actually operate. */
 function firstOperableOf(candidates: Iterable<HTMLElement>): HTMLElement | null {
   for (const candidate of candidates) {
@@ -877,7 +875,7 @@ function firstOperableOf(candidates: Iterable<HTMLElement>): HTMLElement | null 
 
 /** Every focusable node in `scope`, in document order. */
 const focusableIn = (scope: HTMLElement): Iterable<HTMLElement> =>
-  scope.querySelectorAll<HTMLElement>(FOCUSABLE);
+  scope.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR);
 
 /**
  * Where focus should land for the step now rendered.

@@ -43,7 +43,7 @@ export interface FocusTrapOptions {
 // Internal helper: collect all keyboard-focusable elements within a container
 // ---------------------------------------------------------------------------
 
-const FOCUSABLE_SELECTOR = [
+export const FOCUSABLE_SELECTOR = [
   'a[href]',
   'area[href]',
   'button:not(:disabled)',
@@ -66,7 +66,7 @@ function canTakeFocus(el: HTMLElement): boolean {
   return getComputedStyle(el).visibility === 'visible';
 }
 
-function getFocusable(container: HTMLElement): HTMLElement[] {
+export function getFocusable(container: HTMLElement): HTMLElement[] {
   return Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(canTakeFocus);
 }
 
