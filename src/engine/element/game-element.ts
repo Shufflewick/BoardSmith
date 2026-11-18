@@ -1381,10 +1381,10 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
-   * Hide this element from specific players, adding to its own setting: seats
-   * hidden earlier stay hidden and no other seat gains sight. Without a setting
-   * of its own it becomes visible to all but these seats. For one seat, the
-   * later of `hideFrom` and `addVisibleTo` wins.
+   * Hide this element from specific players. With a setting of its own, this
+   * adds to it: seats hidden earlier stay hidden and no seat gains sight.
+   * Without one, it becomes visible to all but these seats, overriding its zone.
+   * For one seat, the later of `hideFrom` and `addVisibleTo` wins.
    */
   hideFrom(...players: (Player | number)[]): void {
     const positions = players.map((p) => (typeof p === 'number' ? p : p.seat));

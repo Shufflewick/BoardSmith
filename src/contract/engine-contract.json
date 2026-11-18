@@ -3302,7 +3302,7 @@
       "surfaceHash": "caaffcbb71cd9067",
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
-      "summary": "hideFrom adds to an element's own visibility instead of replacing it, never reveals the element to a new seat, and the later of hideFrom and addVisibleTo wins for a seat (#1689)"
+      "summary": "hideFrom adds to an element's own visibility setting instead of replacing it, and the later of hideFrom and addVisibleTo wins for a seat (#1689)"
     }
   ]
 }
