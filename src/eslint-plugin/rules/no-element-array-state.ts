@@ -114,7 +114,8 @@ const rule: Rule.RuleModule = {
         elementTypeNames = collectSubclassNames(program, ENGINE_ELEMENT_CLASS_NAMES);
       },
 
-      ClassDeclaration(classNode) {
+      'ClassDeclaration, ClassExpression'(node: Rule.Node) {
+        const classNode = node as unknown as Record<string, unknown>;
         const body = (classNode.body as { body?: unknown[] }).body ?? [];
         for (const member of body) {
           const propDef = member as Record<string, unknown>;
