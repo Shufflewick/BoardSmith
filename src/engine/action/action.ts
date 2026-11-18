@@ -28,7 +28,6 @@ import type {
   OnSelectContext,
   FollowUpAction,
 } from './types.js';
-import { wrapFilterWithHelpfulErrors } from './helpers.js';
 import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action, answersWithList } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
@@ -853,8 +852,8 @@ export class ActionExecutor {
 
     const elements = elementSel.elementClass ? [...from.all(elementSel.elementClass)] : [...from.all()];
     if (!elementSel.filter) return elements;
-    const wrappedFilter = wrapFilterWithHelpfulErrors(elementSel.filter, elementSel.name);
-    return elements.filter((e) => wrappedFilter(e, context));
+    const filter = elementSel.filter;
+    return elements.filter((e) => filter(e, context));
   }
 
   /**
