@@ -1,6 +1,6 @@
 {
-  "revision": 434,
-  "surfaceHash": "6e07e808fd743095",
+  "revision": 435,
+  "surfaceHash": "8019117a6e4e099a",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3415,6 +3415,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "GAME_SELF_SERIALIZED_FIELDS is no longer exported; Game derives it from GAME_ROOT_FIELD_AUDIENCE's self-serialized rows (#1703)"
+    },
+    {
+      "revision": 435,
+      "date": "2026-11-18",
+      "surfaceHash": "8019117a6e4e099a",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Game loses nextPlayer() and previousPlayer(), which followed seat order rather than turn order; use nextAfter/previousBefore for seat order or turnSequence for turn order (#1704)"
     }
   ]
 }
