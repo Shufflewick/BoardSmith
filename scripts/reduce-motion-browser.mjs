@@ -48,6 +48,21 @@ await runBrowserRegression({ script: 'reduce-motion-browser.mjs', table: true },
       assert(on.transitionMs < 1, `the pill still transitions for ${on.transitionMs}ms`);
     });
 
+    // A transition of .01ms on an element with none of its own transitions every property, holding the old value for a frame (#1711).
+    const untransitioned = await frame.locator('body').evaluate((body) => {
+      const box = body.ownerDocument.createElement('div');
+      body.append(box);
+      box.style.maxHeight = '10px';
+      getComputedStyle(box).maxHeight;
+      box.style.maxHeight = '20px';
+      const seen = { now: getComputedStyle(box).maxHeight, transitions: box.getAnimations().length };
+      box.remove();
+      return seen;
+    });
+    await check('with Reduce motion on, a change to an element with no transition of its own lands at once', async () => {
+      assert(untransitioned.now === '20px' && untransitioned.transitions === 0, JSON.stringify(untransitioned));
+    });
+
     frame = await openTableSample(page, hostUrl);
     const reloaded = await readItem(frame);
     await check('the choice survives a reload', async () => {
