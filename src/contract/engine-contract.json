@@ -1,5 +1,5 @@
 {
-  "revision": 422,
+  "revision": 423,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3319,6 +3319,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "CLI child output is decoded whole in constraint-check and catalogue-check, and smoke logs its walk by whole lines"
+    },
+    {
+      "revision": 423,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The CLI reads every changed-file list NUL-separated, so file names git quotes are kept (#1692)"
     }
   ]
 }
