@@ -57,6 +57,10 @@ describe('parseSketchChunks', () => {
     expect(auctions.status).toBe('proposed (sketch-level — no CHUNK.md yet)');
     expect(legacy.dependsOn).toBeUndefined();
   });
+  it('reads indented field lines the way the other design ledgers read them (#1696)', () => {
+    const indented = SKETCH.replace(/^- /gm, '  - ');
+    expect(parseSketchChunks(indented)).toEqual(parseSketchChunks(SKETCH));
+  });
 });
 
 describe('dependencyClosure', () => {

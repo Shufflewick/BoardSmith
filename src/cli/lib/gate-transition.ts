@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { GATE_TRANSITION_MD, designPath } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
+import { bodyField } from './ledger-entries.js';
 
 /**
  * `design/GATE-TRANSITION.md` (#397): the one-time record of the chunks a project had verified
@@ -53,7 +54,7 @@ const HEADER = `${TITLE}
 `;
 
 function field(body: string, label: string): string {
-  return new RegExp(`^- ${label}:[ \\t]*(.*)$`, 'm').exec(body)?.[1].trim() ?? '';
+  return bodyField(body, label) ?? '';
 }
 
 /** The `### <slug>` entries under one `## ` section, each with its body. */

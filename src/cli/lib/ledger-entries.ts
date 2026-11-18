@@ -122,15 +122,29 @@ export interface EntryField {
   line: number;
 }
 
+/** Every `- <field>: <value>` line in `body`, in order, with the 0-based line each is on. */
+function fieldLines(body: string, field: string): Array<{ value: string; index: number }> {
+  const pattern = new RegExp(`^\\s*-\\s*${escapeRegExp(field)}:[ \\t]*(.*?)\\s*$`);
+  return body.split('\n').flatMap((line, index) => {
+    const match = pattern.exec(line);
+    return match ? [{ value: match[1], index }] : [];
+  });
+}
+
 /** The first `- <field>: <value>` line in `entry`'s body, or undefined when it has none. */
 export function entryField(entry: LedgerEntry, field: string): EntryField | undefined {
-  const lines = entry.body.split('\n');
-  const pattern = new RegExp(`^\\s*-\\s*${escapeRegExp(field)}:[ \\t]*(.*?)\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const match = pattern.exec(lines[i]);
-    if (match) return { value: match[1], line: entry.bodyLine + i };
-  }
-  return undefined;
+  const found = fieldLines(entry.body, field)[0];
+  return found && { value: found.value, line: entry.bodyLine + found.index };
+}
+
+/** The value of the first `- <field>: <value>` line in `body`, or undefined when it has none. */
+export function bodyField(body: string, field: string): string | undefined {
+  return fieldLines(body, field)[0]?.value;
+}
+
+/** The value of every `- <field>: <value>` line in `body`, so a caller can see a field given twice. */
+export function bodyFields(body: string, field: string): string[] {
+  return fieldLines(body, field).map((f) => f.value);
 }
 
 /**

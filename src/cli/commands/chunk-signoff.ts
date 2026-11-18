@@ -30,6 +30,7 @@ import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { bodyField } from '../lib/ledger-entries.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -438,8 +439,7 @@ function parseWaivers(text: string): Waiver[] {
   const waivers: Waiver[] = [];
   for (let i = 1; i < parts.length; i += 2) {
     const body = parts[i + 1] ?? '';
-    const field = (label: string): string =>
-      new RegExp(`^- ${label}:[ \\t]*(.*)$`, 'm').exec(body)?.[1].trim() ?? '';
+    const field = (label: string): string => bodyField(body, label) ?? '';
     waivers.push({
       id: parts[i],
       grantedBy: field('Granted by'),

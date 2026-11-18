@@ -221,6 +221,15 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     expect(parseSignoff(chunk).record).toMatchObject({ basis: 'waiver', waiver: 'W1', by: 'Jane Designer' });
   });
 
+  it('reads an indented waiver line the way the other design ledgers read it (#1696)', async () => {
+    const project = await makeProject([{ slug: 'world-shell' }]);
+    await recordWaiver({ project, chunks: 'world-shell', by: 'Jane Designer', expires: '2026-09-30', reason: 'shell', now: NOW });
+    const path = join(project, DESIGN_DIR, WAIVERS_MD);
+    await fs.writeFile(path, (await fs.readFile(path, 'utf-8')).replace(/^- /gm, '  - '));
+    await signOff('world-shell', { project, waiver: 'W1', now: NOW });
+    expect(parseSignoff(await readChunk(project, 'world-shell')).record).toMatchObject({ basis: 'waiver', by: 'Jane Designer' });
+  });
+
   it('a waiver scoped to one chunk cannot be applied to another', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
     await recordWaiver({
