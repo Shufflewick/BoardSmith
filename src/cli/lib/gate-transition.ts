@@ -1,7 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { GATE_TRANSITION_MD, designPath } from './project-paths.js';
 import { readIfExists } from './read-if-exists.js';
-import { bodyField } from './ledger-entries.js';
+import { bodyField, bodyFields } from './ledger-entries.js';
 
 /**
  * `design/GATE-TRANSITION.md` (#397): the one-time record of the chunks a project had verified
@@ -72,7 +72,8 @@ function entries(text: string, heading: string): Array<{ slug: string; body: str
 }
 
 function parseCode(body: string): Record<string, string> {
-  return Object.fromEntries([...body.matchAll(/^- Code:[ \t]*(.+?)[ \t]+(\S+)[ \t]*$/gm)].map((m) => [m[1], m[2]]));
+  const pairs = bodyFields(body, 'Code').map((value) => /^(.+?)[ \t]+(\S+)$/.exec(value));
+  return Object.fromEntries(pairs.filter((m) => m !== null).map((m) => [m[1], m[2]]));
 }
 
 function renderCode(code: Record<string, string>): string {
@@ -82,7 +83,7 @@ function renderCode(code: Record<string, string>): string {
 
 function parseClaims(body: string): Record<number, string> {
   const claims: Record<number, string> = {};
-  for (const m of body.matchAll(/^- Claim (\d+):[ \t]*([0-9a-f]{64})[ \t]*$/gm)) claims[Number(m[1])] = m[2];
+  for (const m of body.matchAll(/^[ \t]*-[ \t]*Claim (\d+):[ \t]*([0-9a-f]{64})[ \t]*$/gm)) claims[Number(m[1])] = m[2];
   return claims;
 }
 

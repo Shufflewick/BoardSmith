@@ -45,7 +45,7 @@ export function parseSketchChunks(sketch: string): SketchChunk[] {
       dependsOn: readDependsOn(entry),
       milestone: bodyField(entry, 'Milestone'),
       // The derived form's qualifier varies by chunk, so Status is not one fixed label for bodyField.
-      status: /^[ \t]*-\s*Status(?: \(derived from [^)]*\))?:[ \t]*(.*?)\s*$/m.exec(entry)?.[1],
+      status: /^[ \t]*-[ \t]*Status(?: \(derived from [^)]*\))?:[ \t]*(.*?)[ \t]*$/m.exec(entry)?.[1],
     };
   });
 }

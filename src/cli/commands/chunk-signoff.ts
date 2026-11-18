@@ -228,7 +228,7 @@ function sketchEntryRange(sketch: string, slug: string): { start: number; end: n
 function readMilestone(sketch: string, slug: string): string {
   const range = sketchEntryRange(sketch, slug);
   const entry = range ? sketch.slice(range.start, range.end) : '';
-  const milestone = /^- Milestone:\s*(\S+)\s*$/m.exec(entry)?.[1] ?? '';
+  const milestone = bodyField(entry, 'Milestone') ?? '';
   if ((MILESTONE_VALUES as readonly string[]).includes(milestone)) return milestone;
   throw new Error(
     `${SKETCH_MD} has no "### ${slug}" entry with a "- Milestone:" line reading ` +

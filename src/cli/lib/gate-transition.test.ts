@@ -34,14 +34,13 @@ describe('readGateTransition', () => {
     const transition: GateTransition = {
       recorded: '2026-09-23T12:00:00.000Z',
       by: 'Jane Designer',
-      signoffs: [{ slug: 'deal', status: 'verified', reason: 'played', code: {} }],
+      signoffs: [{ slug: 'deal', status: 'verified', reason: 'played', code: { 'a.ts': 'a'.repeat(64) } }],
       kept: [{ slug: 'shuffle', basis: 'recorded' }],
-      claims: {},
+      claims: { deal: { 3: 'b'.repeat(64) } },
     };
     await fs.mkdir(designPath(project), { recursive: true });
-    await fs.writeFile(designPath(project, GATE_TRANSITION_MD), renderGateTransition(transition).replace(/^- (By|Status|Basis):/gm, '  - $1:'));
-    const read = await readGateTransition(project);
-    expect(read).toMatchObject({ by: 'Jane Designer', signoffs: [{ status: 'verified' }], kept: [{ basis: 'recorded' }] });
+    await fs.writeFile(designPath(project, GATE_TRANSITION_MD), renderGateTransition(transition).replace(/^- /gm, '  - '));
+    expect(await readGateTransition(project)).toEqual(transition);
   });
 
   it('reads a record saved with Windows line endings the same as one with plain newlines (#853)', async () => {

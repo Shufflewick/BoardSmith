@@ -124,6 +124,14 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
     },
   );
 
+  it('reads an indented sketch Milestone line the way parseSketchChunks reads it (#1696)', async () => {
+    const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
+    const sketch = join(project, DESIGN_DIR, 'SKETCH.md');
+    await fs.writeFile(sketch, (await fs.readFile(sketch, 'utf-8')).replace(/^- Milestone:/m, '  - Milestone:'));
+    await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
+    expect(await readChunk(project, 'rules')).toMatch(/^Status: verified$/m);
+  });
+
   it('accepts an automated sign-off, with its evidence, for a chunk no designer playtests', async () => {
     const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
     await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
