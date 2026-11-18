@@ -1,5 +1,5 @@
 {
-  "revision": 430,
+  "revision": 431,
   "surfaceHash": "caaffcbb71cd9067",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3383,6 +3383,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "An element filter's own error reaches the author unchanged; the engine no longer replaces a TypeError with outdated dependentFilter advice (#1699)"
+    },
+    {
+      "revision": 431,
+      "date": "2026-11-18",
+      "surfaceHash": "caaffcbb71cd9067",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The one-time verify-example-ledger-upgrade CLI command is removed; a pre-lineText example-replay ledger is refused with a delete-and-record-again message"
     }
   ]
 }
