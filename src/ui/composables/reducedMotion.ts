@@ -95,12 +95,14 @@ let classSynced = false;
 export function syncReducedMotionClass(): void {
   if (classSynced) return;
   classSynced = true;
+  // Transitions get 0s, not .01ms: every element's transition-property is `all`, so any duration or delay transitions every change and holds the old value (#1711).
   const halt = document.createElement('style');
   halt.id = 'bs-reduce-motion';
   halt.textContent = `.bs-reduce-motion *, .bs-reduce-motion *::before, .bs-reduce-motion *::after {
   animation-duration: .01ms !important;
   animation-iteration-count: 1 !important;
-  transition-duration: .01ms !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
 }`;
   document.head.appendChild(halt);
   const root = document.documentElement;

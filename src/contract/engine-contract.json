@@ -1,5 +1,5 @@
 {
-  "revision": 440,
+  "revision": 441,
   "surfaceHash": "23557d64e29431aa",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3463,6 +3463,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Availability checks a dependsOn/filterBy pick past an undeclared step between it and its input, and no longer judges that undeclared step (#1709)"
+    },
+    {
+      "revision": 441,
+      "date": "2026-11-18",
+      "surfaceHash": "23557d64e29431aa",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Reduce motion gives transitions 0s and no delay, so a change lands at once instead of holding its old value for a frame (#1711)"
     }
   ]
 }
