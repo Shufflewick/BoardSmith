@@ -51,7 +51,7 @@
 import { sha256Hex } from '../lib/hash.js';
 import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
-import { join, resolve, sep } from 'node:path';
+import { join, sep } from 'node:path';
 import { styleText } from 'node:util';
 import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
@@ -69,6 +69,7 @@ import { readGateTransition } from '../lib/gate-transition.js';
 import { shortQuoteProblem } from '../lib/quote-length.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 interface QuotedPassage {
   quote: string;
@@ -672,7 +673,7 @@ export async function claimQuoteCheckCommand(
   slug: string,
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   try {
     assertBareName(
       '<slug>',

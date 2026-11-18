@@ -43,6 +43,7 @@ import {
   checkRecordedSlices,
   stagingSlicesDir,
 } from './verify-run.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-classify.ts` — the mechanical, judgment-free half of VERIFY-03: enumerated codes, the
@@ -739,7 +740,7 @@ export interface VerifyClassifyPairsResult {
 export async function verifyClassifyPairsCommand(
   options: VerifyRunOptions & { runId?: string; liveSlice?: string } = {},
 ): Promise<VerifyClassifyPairsResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   // T-174-14: --live-slice must resolve inside this project's rulebook dir, validated before any
   // read. Mirrors verify-run.ts:756-763's path-escape guard verbatim.
@@ -838,7 +839,7 @@ export async function verifyClassifyRecordCommand(
     quotedPass2?: string;
   } = {},
 ): Promise<VerifyClassifyRecordResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   if (!options.runId) throw new Error('verify-classify-record requires --run-id <id>.');
   const runId = await resolveRunId(projectDir, options.runId);
   if (!options.pairId) throw new Error('verify-classify-record requires --pair-id <id>.');
@@ -1491,7 +1492,7 @@ export interface VerifyClassifyStatusResult {
 export async function verifyClassifyStatusCommand(
   options: VerifyRunOptions & { runId?: string } = {},
 ): Promise<VerifyClassifyStatusResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const runId = await resolveRunId(projectDir, options.runId);
   const {
     pairs,

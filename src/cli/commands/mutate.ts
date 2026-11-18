@@ -8,7 +8,6 @@
  * test loads, fails the run, naming its file and line, and so does a sample whose mutants only timed
  * out, since none was shown caught (#1499). Sims never run here (#1494).
  */
-import { resolve as pathResolve } from 'node:path';
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
 import { readProjectConfig } from '../lib/agent-roles.js';
@@ -16,6 +15,7 @@ import { mutationBudget } from '../lib/mutation-budget.js';
 import { gameTestRunProblem } from '../lib/test-run-scope.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { changedSince, resolveBase } from './verify.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 
@@ -111,7 +111,7 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
 }
 
 export async function mutateCommand(options: { base: string; project?: string }): Promise<void> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const result = await runMutate({ projectDir, base: options.base });
   console.log(`${result.passed ? styleText('green', 'pass') : styleText('red', 'FAIL')}  ${result.summary}`);
   for (const f of result.findings) console.log(`        ${f.file}:${f.line} ${f.detail}`);

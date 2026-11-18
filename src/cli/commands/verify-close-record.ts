@@ -1,5 +1,5 @@
 import { styleText } from 'node:util';
-import { relative, resolve } from 'node:path';
+import { relative } from 'node:path';
 import { driftCheckCommand } from './drift-check.js';
 import {
   computeVerificationScope,
@@ -9,6 +9,7 @@ import {
   type ScopeReason,
 } from './chunk-provenance.js';
 import { ledgerFilePath, parseLedgerBody, readLedgerOrThrow } from './verify-run.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-close-record.ts` — the durable write a verify pass's Close performs (179-CONTEXT.md
@@ -101,7 +102,7 @@ export interface VerifyCloseRecordOptions {
 export async function verifyCloseRecordCommand(
   options: VerifyCloseRecordOptions = {},
 ): Promise<VerifyCloseRecordResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   const scope = await computeVerificationScope(projectDir);
   const touched = await computeTouchedChunks(projectDir, { runId: options.run });

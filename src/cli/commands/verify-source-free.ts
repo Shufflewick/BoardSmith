@@ -6,6 +6,7 @@ import {
   SCOPE_FULL,
   type ScopeReason,
 } from './chunk-provenance.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `verify-source-free.ts` — the ONE definition of which `/bs-verify-game` pipeline step maps to
@@ -280,7 +281,7 @@ export interface VerifySourceFreeCheckOptions {
 export async function verifySourceFreeCheckCommand(
   options: VerifySourceFreeCheckOptions = {},
 ): Promise<SourceFreeReport> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const report = await computeSourceFreeReport(projectDir);
 
   // `--json` emits the result and nothing else on stdout.

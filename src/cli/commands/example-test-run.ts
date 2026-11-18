@@ -14,6 +14,7 @@ import {
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `example-test-run.ts` — where a worked example's `agrees`/`disagrees` verdict comes from (#319).
@@ -209,7 +210,7 @@ function printRunResult(result: VerifyExampleRunResult): void {
 export async function verifyExampleRunCommand(
   options: VerifyExampleRunOptions = {},
 ): Promise<VerifyExampleRunResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   if (!options.chunk) {
     throw new Error('verify-example-run requires --chunk <slug>.');
   }

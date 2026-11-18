@@ -72,6 +72,7 @@ import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { mayBeSameOrInside } from '../lib/path-inside.js';
 import { GAME_EXCLUDES, SIM_FILE, TEST_FILE, VITEST_EXCLUDES } from '../../vite-config/test-files.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 const TEST_STEP_FINDING_KINDS = Object.freeze([
   'spec-manifest-empty',
@@ -762,7 +763,7 @@ export async function testStepCheckCommand(
   slug: string,
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
-  const dir = pathResolve(options.project ?? process.cwd());
+  const dir = projectDirOption(options.project);
   const { testFiles, added, ...staticResult } = await checkTestStep(dir, slug);
   const result: TestStepCheckResult = { ...staticResult };
 

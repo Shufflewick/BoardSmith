@@ -15,7 +15,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join, relative, resolve as pathResolve, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import {
   FINDING_KINDS,
   type Finding,
@@ -35,6 +35,7 @@ import {
 import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
 import { listFiles } from '../lib/source-files.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
@@ -232,7 +233,7 @@ function relPosix(projectDir: string, absPath: string): string {
 export async function traceCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<TraceCheckResult> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const slugs = await requireChunkSlugs(projectDir);
 
   const findings: Finding[] = [];

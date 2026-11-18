@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { join, resolve } from 'node:path';
 import { styleText } from 'node:util';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * Which documents a project's rules come from, and which one each slice was transcribed from.
@@ -214,7 +215,7 @@ export async function ingestSliceSourceCommand(
   slices: string[],
   options: { project?: string; json?: boolean } = {},
 ): Promise<{ document: string; written: string[]; unchanged: string[] }> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   await assertRecordedDocument(projectDir, document);
   const texts = await readNamedSlices(projectDir, slices);
 

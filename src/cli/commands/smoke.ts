@@ -26,7 +26,7 @@ import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync, promises as fs, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { dirname, join, resolve as pathResolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { styleText } from 'node:util';
 import { build } from 'esbuild';
@@ -40,6 +40,7 @@ import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { parseGameOptionFlags } from './dev.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { logLines } from '../lib/child-output.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /** Where each run's copy of the project lives, inside the project's own `.boardsmith/`. */
 const SMOKE_DIR = join('.boardsmith', 'smoke');
@@ -422,7 +423,7 @@ export function chosenDeals(flags: Omit<SmokeFlags, 'project'>): SmokeDeal[] | u
  * `--game-option` and `--steps` say instead of as the spec says when `--seed` names any.
  */
 export async function smokeCommand(options: SmokeFlags): Promise<void> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const configPath = join(projectDir, 'boardsmith.json');
   if (!existsSync(configPath)) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);

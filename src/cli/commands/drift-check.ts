@@ -30,7 +30,7 @@
  */
 
 import { promises as fs } from 'node:fs';
-import { join, relative, resolve as pathResolve, sep } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import {
   type Finding,
   parseBuildManifest,
@@ -40,6 +40,7 @@ import {
 import { readChunkMdIfExists, requireChunkSlugs } from '../lib/project-paths.js';
 import { gitNames, gitOutput as git, gitSucceeds } from '../lib/git-output.js';
 import { readIfExists } from '../lib/read-if-exists.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * Closes T-172-01: a hand-edited `## Verified Commit Hash` is untrusted input reaching a git
@@ -154,7 +155,7 @@ async function fileExists(absPath: string): Promise<boolean> {
 export async function driftCheckCommand(
   options: { project?: string; json?: boolean; quiet?: boolean } = {},
 ): Promise<DriftCheckResult> {
-  const projectDir = pathResolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
 
   await assertGitRepo(projectDir);
   const head = await resolveHead(projectDir);

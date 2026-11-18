@@ -1,4 +1,3 @@
-import { resolve } from 'node:path';
 import { styleText } from 'node:util';
 import { ingestGapsCommand, relabelDerivedLines } from './ingest-archive.js';
 import { checkSliceSources, describeSliceSourceProblems } from './rulebook-sources.js';
@@ -7,6 +6,7 @@ import {
   reanchorExampleLedger,
   type ReanchorResult,
 } from './verify-example-replay.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 /**
  * `boardsmith ingest-check` — repair ingest synthesis, and FAIL if repair was needed.
@@ -38,7 +38,7 @@ import {
 export async function ingestCheckCommand(
   options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
-  const projectDir = resolve(options.project ?? process.cwd());
+  const projectDir = projectDirOption(options.project);
   const relabel = await relabelDerivedLines({ project: projectDir, quiet: true });
   const gaps = await ingestGapsCommand({ project: projectDir, skipRelabel: true, quiet: true });
   const examples = await reanchorExampleLedger(projectDir);

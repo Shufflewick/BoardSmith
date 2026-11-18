@@ -93,6 +93,7 @@ import { takeOsLock } from '../lib/os-lock.js';
 import { onlyTestCollectionChanged } from '../lib/test-config-edit.js';
 import { readIfExists, readListedText } from '../lib/read-if-exists.js';
 import { verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
+import { projectDirOption } from '../lib/user-path.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -976,7 +977,7 @@ export async function chunkMergeCommand(
     process.exitCode = 1;
     return;
   }
-  const result = await chunkMerge(options.project ?? process.cwd(), slug, { branch: options.branch });
+  const result = await chunkMerge(projectDirOption(options.project), slug, { branch: options.branch });
   if (!result.merged) process.exitCode = 1;
   if (options.json) console.log(JSON.stringify({ slug, ...result }, null, 2));
   else report(slug, result);

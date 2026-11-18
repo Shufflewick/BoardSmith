@@ -35,3 +35,8 @@ export function resolveUserPath(base: string, userPath: string): string {
 
   return resolve(base, expanded);
 }
+
+/** The project directory a command's `--project` option names: the invocation directory only when it is omitted. */
+export function projectDirOption(project: string | undefined): string {
+  return project === undefined ? process.cwd() : resolveUserPath(process.cwd(), project);
+}
