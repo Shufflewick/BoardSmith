@@ -94,9 +94,6 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `BotStrategy` - bot player configuration
 - `StorageAdapter` - Storage backend interface
 - `BroadcastAdapter` - WebSocket broadcast interface
-- `CreateGameRequest` - Create game request
-- `ActionRequest` - Action request message
-- `WebSocketMessage` - WebSocket message type
 - `PlayerOptionDefinition` - Player option definition
 - `StandardPlayerOption` - Select player option
 - `NumberPlayerOption` - Number player option (`default`, optional `min`, `max` and `step`)
@@ -109,14 +106,6 @@ The rules `boardsmith build` publishes carry the whole list on their `gameDefini
 - `NumberOption` - Numeric option
 - `SelectOption` - Selection option
 - `BooleanOption` - Boolean option
-- `LobbyState` - Lobby state enum
-- `SlotStatus` - Slot status enum
-- `LobbySlot` - Lobby slot data
-- `LobbyInfo` - Lobby information
-- `LobbyUpdate` - Lobby update message
-- `ClaimSeatRequest` - Claim seat request
-- `ClaimSeatResponse` - Claim seat response
-- `UpdateNameRequest` - Update name request
 - `ColorChoice` - Color choice option
 - `ColorOptionDefinition` - Color option definition
 

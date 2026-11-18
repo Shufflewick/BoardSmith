@@ -1,9 +1,8 @@
 /**
  * Shared types for game hosting.
  *
- * Protocol-level types (lobby, game options, WebSocket messages) are owned by
- * '../types/protocol.js' and re-exported here for the
- * session surface — they are defined once, in one place.
+ * Protocol-level types (game options, player configs) are owned by
+ * '../types/protocol.js' and only imported or re-exported here, never restated.
  */
 
 import type { FlowState, Game, GameClass, AnimationEvent } from '../engine/index.js';
@@ -15,21 +14,11 @@ import type { CheckpointPolicy, UndoPolicy, GameMetrics } from '../engine/index.
 import type { WorldDefinition } from '../world/definition.js';
 import type { ColorOptionDefinition } from './colors.js';
 import type {
-  LobbyState,
-  SlotStatus,
-  LobbySlot,
-  LobbyInfo,
   NumberOption,
   SelectOption,
   BooleanOption,
   GameOptionDefinition,
-  WebSocketMessage,
   PlayerConfig,
-  CreateGameRequest,
-  ClaimSeatRequest,
-  ClaimSeatResponse,
-  JoinLobbyRequest,
-  JoinLobbyResponse,
 } from '../types/protocol.js';
 
 // ============================================
@@ -587,21 +576,5 @@ export interface SerializedFlowDebugInfo {
   description: string;
 }
 
-// ============================================
-// Lobby Types
-// ============================================
-
-// Re-export lobby types from canonical source
-export type { LobbyState, SlotStatus, LobbySlot, LobbyInfo };
-
-// ============================================
-// Request/Response Types
-// ============================================
-
-// WebSocketMessage (a discriminated union) is owned by ../types/protocol.js
-// (single source of truth) and re-exported here for the session surface.
-export type { WebSocketMessage };
-
-// The lobby request and response shapes are owned by ../types/protocol.js
-// (#375); the session serves them, so it hands out the protocol's own.
-export type { PlayerConfig, CreateGameRequest, ClaimSeatRequest, ClaimSeatResponse, JoinLobbyRequest, JoinLobbyResponse };
+// PlayerConfig is owned by ../types/protocol.js (#375); re-exported for the session surface.
+export type { PlayerConfig };

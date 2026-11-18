@@ -19,8 +19,6 @@ export type { CheckpointPolicy, UndoPolicy, GameClass } from '../engine/index.js
 export type {
   GameDefinition,
   PlayerGameState,
-  CreateGameRequest,
-  WebSocketMessage,
   // Player option types
   PlayerOptionDefinition,
   StandardPlayerOption,
@@ -35,15 +33,6 @@ export type {
   NumberOption,
   SelectOption,
   BooleanOption,
-  // Lobby types
-  LobbyState,
-  SlotStatus,
-  LobbySlot,
-  LobbyInfo,
-  ClaimSeatRequest,
-  ClaimSeatResponse,
-  JoinLobbyRequest,
-  JoinLobbyResponse,
   // Pick types
   PickMetadata,
   PickFilter,
