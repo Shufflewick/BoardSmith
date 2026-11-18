@@ -112,6 +112,41 @@ describe('changedSideBetween reads every file name git writes in a diff header (
   });
 });
 
+describe('changedSideBetween reads content lines that start with ++ or -- (#1718)', () => {
+  // Slow one-time setup lives here, where no test timeout applies.
+  const repo = tempTree('bs-cross-chunk-prefix-');
+  const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo });
+  git('init', '-q');
+  mkdirSync(join(repo, 'src'));
+  writeFileSync(join(repo, 'src/count.ts'), 'export function close() {\n--venueCount;\n}\n');
+  writeFileSync(join(repo, 'src/tally.ts'), 'export function open() {\n}\n');
+  git('add', '.');
+  git('commit', '-q', '-m', 'base');
+  writeFileSync(join(repo, 'src/count.ts'), 'export function close() {\n}\n');
+  writeFileSync(join(repo, 'src/tally.ts'), 'export function open() {\n++venueTally;\n}\n');
+  writeFileSync(join(repo, 'src/empty.ts'), '');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'prefixed');
+
+  it('records a removed --name and an added ++name in their own files, and a file with no hunks', async () => {
+    const side = await changedSideBetween(repo, 'HEAD~1', 'HEAD');
+    expect([...side.files].sort()).toEqual(['src/count.ts', 'src/empty.ts', 'src/tally.ts']);
+    expect([...side.names.get('venueCount')!]).toEqual(['src/count.ts']);
+    expect([...side.names.get('venueTally')!]).toEqual(['src/tally.ts']);
+  });
+
+  it('finds the reference when that removal is the branch\'s only mention of a name main defines', async () => {
+    const main = changedSide(`diff --git a/src/venues.ts b/src/venues.ts
+--- a/src/venues.ts
++++ b/src/venues.ts
+@@ -1,0 +1,1 @@
++let venueCount = 0;
+`);
+    const refs = crossReferences(await changedSideBetween(repo, 'HEAD~1', 'HEAD'), main);
+    expect(refs.sharedNames.map((n) => n.name)).toContain('venueCount');
+  });
+});
+
 describe('the CROSS-CHUNK.md ledger', () => {
   const refs = crossReferences(changedSide(AUCTION_DIFF), changedSide(WORLD_DIFF));
 
