@@ -19,6 +19,8 @@
  * next close and the next merge both stop until the audit's cross-chunk lens has ruled.
  */
 
+import { gitOutput } from '../lib/git-output.js';
+
 const SOURCE_EXTENSIONS = /\.(?:ts|tsx|mts|cts|js|jsx|mjs|cjs|vue|json)$/;
 const NOT_SOURCE = /(?:^|\/)(?:design|tests?|__tests__|node_modules|dist)\/|\.(?:test|spec)\.[a-z]+$|(?:^|\/)package(?:-lock)?\.json$/;
 
@@ -86,13 +88,13 @@ function unquoteGitPath(body: string): string {
   return Buffer.from(out).toString('utf8');
 }
 
-/** `diff --git a/<old> b/<new>`, where git wraps either path in quotes when it holds a quote, backslash or control character. */
-const DIFF_HEADER = /^diff --git (?:"a\/(?:[^"\\]|\\.)*"|a\/.+?) (?:"b\/((?:[^"\\]|\\.)*)"|b\/(.+))$/;
+/** `diff --git a/<path> b/<path>` with both halves equal, as `--no-renames` writes it; git quotes a path holding a quote, backslash or control character. */
+const DIFF_HEADER = /^diff --git (?:"a\/((?:[^"\\]|\\.)*)" "b\/\1"|a\/(.+) b\/\2)$/;
 
-/** The file a `diff --git` header line names after the change, quoted by git or not. */
+/** The file a `diff --git` header line names, quoted by git or not. */
 function headerFile(line: string): string {
   const header = DIFF_HEADER.exec(line);
-  if (!header) throw new Error(`Could not read the file name in this git diff header: ${line}`);
+  if (!header) throw new Error(`Could not read the file name in this git diff header, which changedSideBetween should have written: ${line}`);
   return header[1] !== undefined ? unquoteGitPath(header[1]) : header[2];
 }
 
@@ -102,7 +104,7 @@ function changedContent(line: string): string | undefined {
   return line.startsWith('+') || line.startsWith('-') ? line.slice(1) : undefined;
 }
 
-/** Reads `git diff --unified=0` output into what it changed in source files. */
+/** Reads `git diff --unified=0 --no-renames` output, with git's own a/ and b/ prefixes, into what it changed in source files. */
 export function changedSide(diff: string): ChangedSide {
   const side: ChangedSide = { files: new Set(), names: new Map(), defined: new Set() };
   let file: string | undefined;
@@ -117,6 +119,17 @@ export function changedSide(diff: string): ChangedSide {
     if (file !== undefined && content !== undefined) recordLine(side, file, content);
   }
   return side;
+}
+
+/**
+ * What changed in source between two commits. The diff is pinned to the form changedSide reads,
+ * whatever the user's diff config: renames as a delete and an add so both paths count, a/ and b/
+ * prefixes, and no color, external diff or textconv.
+ */
+export async function changedSideBetween(dir: string, from: string, to: string): Promise<ChangedSide> {
+  return changedSide(
+    await gitOutput(dir, ['diff', '--unified=0', '--no-renames', '--no-color', '--no-ext-diff', '--no-textconv', '--src-prefix=a/', '--dst-prefix=b/', from, to]),
+  );
 }
 
 interface SharedName {

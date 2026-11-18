@@ -3,10 +3,10 @@ import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { gitOutput } from '../lib/git-output.js';
 import {
   appendCrossChunkEntry,
   changedSide,
+  changedSideBetween,
   checkCrossChunkLedger,
   crossReferences,
 } from './cross-chunk.js';
@@ -79,28 +79,36 @@ describe('crossReferences', () => {
   });
 });
 
-describe('changedSide reads the file names git quotes in diff headers (#1712)', () => {
+describe('changedSideBetween reads every file name git writes in a diff header (#1712)', () => {
   // Slow one-time setup lives here, where no test timeout applies.
   const repo = tempTree('bs-cross-chunk-quoted-');
   const git = (...args: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...args], { cwd: repo });
   const QUOTED = ['src/a"b.ts', 'src/c\\d.ts', 'src/e\tf.ts', 'src/g\nh.ts', 'src/i\u0001j.ts', 'src/\u00e9t\u00e9.ts'];
   git('init', '-q');
-  mkdirSync(join(repo, 'src'));
+  // Config that changes how git writes a diff, which changedSideBetween must override.
+  for (const [key, value] of [['diff.noprefix', 'true'], ['diff.mnemonicPrefix', 'true'], ['color.diff', 'always']]) git('config', key, value);
+  mkdirSync(join(repo, 'src/x b'), { recursive: true });
   writeFileSync(join(repo, 'src/gone"x.ts'), 'export const goneVenue = 1;\n');
+  writeFileSync(join(repo, 'src/venue.ts'), 'export const movedVenue = 1;\n');
   git('add', '.');
   git('commit', '-q', '-m', 'base');
   writeFileSync(join(repo, 'src/plain.ts'), 'export const plainVenue = 1;\n');
+  writeFileSync(join(repo, 'src/x b/y.ts'), 'export const spacedVenue = 1;\n');
   QUOTED.forEach((name, i) => writeFileSync(join(repo, name), `export const quotedVenue${i} = 1;\n`));
   rmSync(join(repo, 'src/gone"x.ts'));
+  git('mv', 'src/venue.ts', 'src/venues.ts');
   git('add', '-A');
   git('commit', '-q', '-m', 'quoted');
 
-  it('records each file under its own name, a deleted one included', async () => {
-    const side = changedSide(await gitOutput(repo, ['diff', '--unified=0', 'HEAD~1', 'HEAD']));
-    expect([...side.files].sort()).toEqual([...QUOTED, 'src/gone"x.ts', 'src/plain.ts'].sort());
+  it('records each file under its own name, a deleted one and both sides of a rename included', async () => {
+    const side = await changedSideBetween(repo, 'HEAD~1', 'HEAD');
+    const expected = [...QUOTED, 'src/gone"x.ts', 'src/plain.ts', 'src/venue.ts', 'src/venues.ts', 'src/x b/y.ts'];
+    expect([...side.files].sort()).toEqual(expected.sort());
     expect([...side.names.get('plainVenue')!]).toEqual(['src/plain.ts']);
+    expect([...side.names.get('spacedVenue')!]).toEqual(['src/x b/y.ts']);
     QUOTED.forEach((name, i) => expect([...side.names.get(`quotedVenue${i}`)!]).toEqual([name]));
     expect([...side.names.get('goneVenue')!]).toEqual(['src/gone"x.ts']);
+    expect([...side.names.get('movedVenue')!].sort()).toEqual(['src/venue.ts', 'src/venues.ts']);
   });
 });
 
