@@ -168,13 +168,9 @@ describe('verify-example-record — registration (CHECK-06, the extraction/trans
   });
 });
 
-describe('verify-example-ledger-upgrade — the one-time lineText upgrade (#371)', () => {
-  it('is registered with --project and --json, and no bypass flag', async () => {
-    await expectHelpWithoutBypass('verify-example-ledger-upgrade', ['--project <dir>', '--json', '-h, --help']);
-  });
-
-  it('ingest-check refuses a pre-lineText ledger naming the upgrade, and passes once it has run', async () => {
-    const dir = tempTree('bs-cli-example-ledger-upgrade-');
+describe('a ledger written before records carried lineText (#1700)', () => {
+  it('ingest-check refuses it, saying to record its slices again', async () => {
+    const dir = tempTree('bs-cli-pre-line-text-ledger-');
     const project = join(dir, 'project');
     const rulebook = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(join(rulebook, '.example-replay'), { recursive: true });
@@ -210,16 +206,10 @@ describe('verify-example-ledger-upgrade — the one-time lineText upgrade (#371)
 
     const refused = await spawnCli(['ingest-check', '--project', project, '--json']);
     expect(refused.code).toBe(1);
-    expect(refused.stderr).toContain('npx boardsmith verify-example-ledger-upgrade');
+    expect(refused.stderr).toContain('1 record(s) written before records carried lineText');
+    expect(refused.stderr).toContain('Delete the ledger and record those slices again');
+    expect(refused.stderr).not.toContain('verify-example-ledger-upgrade');
     expect(refused.stderr).not.toMatch(/\bat \S+\.ts:\d+/);
-
-    const upgraded = await spawnCli(['verify-example-ledger-upgrade', '--project', project, '--json']);
-    expect(upgraded.code).toBe(0);
-    expect(JSON.parse(upgraded.stdout).upgraded).toEqual(['rulebook/02-turn.md:4']);
-
-    const checked = await spawnCli(['ingest-check', '--project', project, '--json']);
-    expect(checked.stderr).not.toContain('example-replay ledger');
-    expect(JSON.parse(checked.stdout).unanchoredExamples).toEqual([]);
   });
 });
 

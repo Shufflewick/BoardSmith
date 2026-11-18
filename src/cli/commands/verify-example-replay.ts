@@ -512,7 +512,7 @@ function assertOneAnswerPerSlice(ledger: ExampleReplayLedger, where: string): vo
  * The ONE durable write: the whole ledger, through `atomicWriteFile`. Example records keep the
  * order given; the no-examples records follow them, in slice order.
  */
-export async function writeExampleReplayLedger(
+async function writeExampleReplayLedger(
   projectDir: string,
   ledger: ExampleReplayLedger,
 ): Promise<{ ledgerPath: string }> {
@@ -534,7 +534,7 @@ export async function writeExampleReplayLedger(
 }
 
 /** Runs one read-modify-write of the ledger while holding its lock (#831). */
-export async function withExampleReplayLedgerLock<T>(projectDir: string, work: () => Promise<T>): Promise<T> {
+async function withExampleReplayLedgerLock<T>(projectDir: string, work: () => Promise<T>): Promise<T> {
   const ledgerPath = exampleReplayLedgerPath(projectDir);
   await fs.mkdir(dirname(ledgerPath), { recursive: true });
   return withLedgerLock(ledgerPath, work);
@@ -613,9 +613,8 @@ async function readExampleReplayLedger(projectDir: string): Promise<ExampleRepla
     throw new Error(
       `The example-replay ledger at ${relLedgerPath} has ${preLineText} record(s) written before ` +
         `records carried lineText, the text of the slice line each example cites.\n` +
-        `Run \`npx boardsmith verify-example-ledger-upgrade\` once. It fills lineText in from the ` +
-        `slices, keeps every recorded verdict it can, and names the records it cannot, whose slices ` +
-        `you then record again.`,
+        `Delete the ledger and record those slices again: verify-example-replay reports each one ` +
+        `pending, and the build's test step records it.`,
     );
   }
   return partitionLedgerLines(lines.filter((line) => line !== PRE_LINE_TEXT), relLedgerPath);
@@ -624,24 +623,20 @@ async function readExampleReplayLedger(projectDir: string): Promise<ExampleRepla
 /** Stands in for a pre-lineText record while `readExampleReplayLedger` counts them. */
 const PRE_LINE_TEXT = Symbol('pre-lineText record');
 
-/**
- * A ledger line written before #350 gave every example record its `lineText`. Only
- * `verify-example-ledger-upgrade` (`example-ledger-upgrade.ts`) reads one; every other reader
- * refuses the ledger and names that command.
- */
-export function isPreLineTextRecord(r: Record<string, unknown>): boolean {
+/** A ledger line written before #350 gave every example record its `lineText`. */
+function isPreLineTextRecord(r: Record<string, unknown>): boolean {
   return !isSliceWithoutExamplesLine(r) && r.lineText === undefined;
 }
 
 /** One validated ledger line: an example record, or a slice recorded as having none. */
-export function readLedgerLine(
+function readLedgerLine(
   r: Record<string, unknown>,
 ): ExampleReplayRecord | SliceWithoutExamplesRecord {
   return isSliceWithoutExamplesLine(r) ? readSliceWithoutExamplesLine(r) : readExampleRecordLine(r);
 }
 
 /** Sorts validated ledger lines into an `ExampleReplayLedger`, refusing two answers for a slice. */
-export function partitionLedgerLines(
+function partitionLedgerLines(
   lines: readonly (ExampleReplayRecord | SliceWithoutExamplesRecord)[],
   relLedgerPath: string,
 ): ExampleReplayLedger {
@@ -654,7 +649,7 @@ export function partitionLedgerLines(
   return ledger;
 }
 
-export function exampleReplayLedgerFile(projectDir: string): FencedJsonLedgerFile {
+function exampleReplayLedgerFile(projectDir: string): FencedJsonLedgerFile {
   return {
     projectDir,
     path: exampleReplayLedgerPath(projectDir),
@@ -839,10 +834,9 @@ export async function reanchorExampleLedger(projectDir: string): Promise<Reancho
 
 /**
  * `records` with every `moved` example in `unanchored` moved to the line its text is now on (new
- * `lineNumber` and `exampleId`, every other field unchanged), in the same order. The one place a
- * record is re-anchored: `ingest-check` and `verify-example-ledger-upgrade` both move through it.
+ * `lineNumber` and `exampleId`, every other field unchanged), in the same order.
  */
-export function moveUnanchoredExamples(
+function moveUnanchoredExamples(
   records: readonly ExampleReplayRecord[],
   unanchored: readonly UnanchoredExample[],
 ): { rewritten: ExampleReplayRecord[]; moved: ReanchorResult['moved'] } {
