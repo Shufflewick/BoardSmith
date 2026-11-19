@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
@@ -25,6 +25,7 @@ import {
   checkRulesAgreement,
   checkSpriteImages,
   projectRules,
+  type ProjectRules,
   validateSpriteImages,
   validateRequiredFiles,
   successGuidance,
@@ -68,6 +69,16 @@ import { withDeclaredGameOptions } from '../../session/game-option-selection.js'
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
 
 const schema = boardsmithSchema as { properties: Record<string, Record<string, unknown>> };
+
+/** The boardsmith.json a fixture wrote, as `runValidation` hands it to a check. */
+function diskConfig(dir: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(dir, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
+}
+
+/** The ProjectRules `runValidation` builds for a fixture project. */
+function rulesOf(dir: string): ProjectRules {
+  return projectRules(dir, diskConfig(dir));
+}
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', () => {
@@ -684,12 +695,12 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     mkdirSync(dirname(join(projectDir, relativePath)), { recursive: true });
     writeFileSync(join(projectDir, relativePath), content);
     writeConfig({ name: 'x' });
-    return validateAssetPaths(projectDir);
+    return validateAssetPaths(projectDir, diskConfig(projectDir));
   }
 
   it('fails on a thumbnail path that resolves to nothing', async () => {
     writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
 
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('thumbnail');
@@ -698,7 +709,7 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
 
   it('fails even when the project has no public/ directory at all', async () => {
     writeConfig({ name: 'x', thumbnail: 'art/cover.png' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(false);
   });
 
@@ -707,13 +718,13 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     writeFileSync(join(projectDir, 'public', 'thumbnail.png'), 'png-bytes');
     writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
 
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(true);
   });
 
   it('passes a manifest that declares no asset paths at all', async () => {
     writeConfig({ name: 'x' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(true);
   });
 
@@ -765,14 +776,16 @@ describe('validate.ts validateCoverArt', () => {
   }
 
   it('passes a logo within the spec, and a game that declares no art', async () => {
-    expect((await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgba')))).passed).toBe(true);
+    const logo = projectWithLogo(pngBytes(1500, 1500, 'rgba'));
+    expect((await validateCoverArt(logo, diskConfig(logo))).passed).toBe(true);
     const none = tempTree('boardsmith-cover-art-check-');
     writeFileSync(join(none, 'boardsmith.json'), JSON.stringify({ name: 'x' }));
-    expect((await validateCoverArt(none)).passed).toBe(true);
+    expect((await validateCoverArt(none, diskConfig(none))).passed).toBe(true);
   });
 
   it('fails a logo outside the spec, naming what to fix', async () => {
-    const result = await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgb')));
+    const dir = projectWithLogo(pngBytes(1500, 1500, 'rgb'));
+    const result = await validateCoverArt(dir, diskConfig(dir));
     expect(result.passed).toBe(false);
     expect(result.severity).toBeUndefined();
     expect((result.details ?? []).join('\n')).toContain('transparent background');
@@ -780,8 +793,8 @@ describe('validate.ts validateCoverArt', () => {
 
   it('leaves a missing logo to Asset Paths, which fails naming the file to add', async () => {
     const dir = projectWithLogo();
-    expect((await validateCoverArt(dir)).passed).toBe(true);
-    const assets = await validateAssetPaths(dir);
+    expect((await validateCoverArt(dir, diskConfig(dir))).passed).toBe(true);
+    const assets = await validateAssetPaths(dir, diskConfig(dir));
     expect(assets.passed).toBe(false);
     expect((assets.details ?? []).join('\n')).toContain(`Add the file at ${join(dir, 'art', 'logo.png')}`);
   });
@@ -947,7 +960,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const cwd = freshProject(wideRules);
     expect(existsSync(join(cwd, '.boardsmith'))).toBe(false);
 
-    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(rulesOf(cwd), false);
 
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
@@ -956,7 +969,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   it('removes the temp dir it made once the check is done', async () => {
     const cwd = freshProject(wideRules);
-    await validateChoiceCardinality(projectRules(cwd), false);
+    await validateChoiceCardinality(rulesOf(cwd), false);
     expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
   }, 30_000);
 
@@ -965,7 +978,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('lets two validates of the same game run at once, and both leave nothing behind', async () => {
     const cwd = freshProject(wideRules);
 
-    const results = await Promise.all([validateChoiceCardinality(projectRules(cwd), false), validateChoiceCardinality(projectRules(cwd), false)]);
+    const results = await Promise.all([validateChoiceCardinality(rulesOf(cwd), false), validateChoiceCardinality(rulesOf(cwd), false)]);
 
     for (const [result] of results) expect(result.details!.join('\n')).toContain('shout');
     expect(readdirSync(join(cwd, '.boardsmith'))).toEqual([]);
@@ -978,7 +991,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     const other = makeCommandBuildDir(cwd, 'validate');
     writeFileSync(join(other, 'simulate-bundle.mjs'), 'export {};');
 
-    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(rulesOf(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
     expect(existsSync(join(other, 'simulate-bundle.mjs')), 'validate removed another run’s bundle').toBe(true);
@@ -988,13 +1001,13 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   it('plays the game at the seat count its definition starts from', async () => {
     const cwd = freshProject(rulesFor('ThreeSeatWideGame', ', minPlayers: 3, maxPlayers: 4'));
 
-    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(rulesOf(cwd), false);
 
     expect(result.details!.join('\n')).toContain('shout');
   }, 30_000);
 
   it('says it could not run when a table game declares no minPlayers to play it at', async () => {
-    const [result] = await validateChoiceCardinality(projectRules(freshProject(rulesFor('WideGame', ''))), false);
+    const [result] = await validateChoiceCardinality(rulesOf(freshProject(rulesFor('WideGame', ''))), false);
 
     expectNotRun(result, /could not run.*minPlayers/is);
   }, 30_000);
@@ -1009,7 +1022,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   // #323: a world gets a real verdict, driven the way a host drives it.
   it('drives a world and reports the flat list it offers, with a world’s way out', async () => {
-    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['shout', 'mark']), 'world')), true);
+    const [result] = await validateChoiceCardinality(rulesOf(freshProject(worldRulesFor(['shout', 'mark']), 'world')), true);
 
     expect(result).toMatchObject({ passed: false, severity: 'warning' });
     expect(result.details).toEqual([expect.stringContaining("'shout' step 'verb' offered 40")]);
@@ -1017,7 +1030,7 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   }, 30_000);
 
   it('refuses a world whose top level shows ten ungrouped start buttons (#1639)', async () => {
-    const [, levels] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['chores']), 'world')), true);
+    const [, levels] = await validateChoiceCardinality(rulesOf(freshProject(worldRulesFor(['chores']), 'world')), true);
 
     expect(levels).toMatchObject({ name: 'Start buttons per level', passed: false });
     expect(levels.severity).toBeUndefined();
@@ -1025,25 +1038,25 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   }, 30_000);
 
   it('says the level count could not run either when the walk could not run', async () => {
-    const [, levels] = await validateChoiceCardinality(projectRules(freshProject(null)), false);
+    const [, levels] = await validateChoiceCardinality(rulesOf(freshProject(null)), false);
 
     expectNotRun(levels, /could not run/i);
   }, 30_000);
 
   it('passes a world whose every list is short', async () => {
-    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['nod']), 'world')), true);
+    const [result] = await validateChoiceCardinality(rulesOf(freshProject(worldRulesFor(['nod']), 'world')), true);
 
     expect(result.passed).toBe(true);
   }, 30_000);
 
   it('says it could not run when a world offers nothing it could drive', async () => {
-    const [result] = await validateChoiceCardinality(projectRules(freshProject(worldRulesFor(['say']), 'world')), true);
+    const [result] = await validateChoiceCardinality(rulesOf(freshProject(worldRulesFor(['say']), 'world')), true);
 
     expectNotRun(result, /could not run.*no seat was offered/is);
   }, 30_000);
 
   it('does not report a pass when the check could not run, and says why', async () => {
-    const [result] = await validateChoiceCardinality(projectRules(freshProject(null)), false);
+    const [result] = await validateChoiceCardinality(rulesOf(freshProject(null)), false);
 
     expectNotRun(result, /could not run/i);
   }, 30_000);
@@ -1130,7 +1143,7 @@ describe('validate.ts sprite images (#1021)', () => {
       "export const gameDefinition = { gameClass: MissingSheetSizeGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 2, maxPlayers: 2 };",
     ].join('\n'));
 
-    const result = await validateSpriteImages(projectRules(cwd));
+    const result = await validateSpriteImages(rulesOf(cwd));
 
     expect(result.passed).toBe(false);
     expect(result.details!.join('\n')).toContain("Card '2H', $images.face");
@@ -1140,7 +1153,7 @@ describe('validate.ts sprite images (#1021)', () => {
     const cwd = tempTree('bs-validate-sprites-');
     writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
 
-    const result = await validateSpriteImages(projectRules(cwd));
+    const result = await validateSpriteImages(rulesOf(cwd));
 
     expect(result.passed).toBe(false);
     // The rules never loaded, so nothing was built: the message says which (#1303).
@@ -1213,13 +1226,13 @@ describe('validate.ts sprite images (#1021)', () => {
       "export const gameDefinition = { gameClass: PaletteSpriteGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 2, maxPlayers: 4 };",
     ].join('\n'));
 
-    const { passed, details } = await validateSpriteImages(projectRules(cwd));
+    const { passed, details } = await validateSpriteImages(rulesOf(cwd));
     expect({ passed, details }).toEqual({ passed: true, details: undefined });
     expect(checkRulesAgreement({ backend: 'table', colorPalette }, definition(PaletteSpriteGame, 2, 4)).details).toBeUndefined();
   }, 30_000);
 
   it('loads the rules once for every check that reads them (#1303)', () => {
-    const rules = projectRules(tempTree('bs-validate-loader-'));
+    const rules = projectRules(tempTree('bs-validate-loader-'), {});
     const first = rules.load();
     first.catch(() => {});
     expect(rules.load()).toBe(first);
@@ -1388,7 +1401,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': JSON.stringify(imageSources === undefined ? {} : { imageSources }),
       'dist/ui/index.html': `<!doctype html><img src="${source}">`,
     });
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, diskConfig(cwd));
     return { passed: result.passed, details: (result.details ?? []).join('\n'), message: result.message };
   }
 
@@ -1428,7 +1441,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       ['dist/ui/.vite/chunk.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
-      const result = await validateAssetPaths(cwd);
+      const result = await validateAssetPaths(cwd, diskConfig(cwd));
       expect(result.passed, `${rel} should have been scanned`).toBe(false);
       expect((result.details ?? []).join('\n')).toContain(REMOTE);
     }
@@ -1439,7 +1452,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': '{}',
       'dist/ui/index.html': `<img src="${REMOTE}"><img src="${REMOTE}"><img src="${REMOTE}">`,
     });
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, diskConfig(cwd));
     const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
     expect(lines).toHaveLength(1);
   });
@@ -1454,7 +1467,7 @@ describe('absolute asset paths are found in subfolders too (#1111)', () => {
     mkdirSync(join(cwd, 'public', 'cards'), { recursive: true });
     mkdirSync(join(cwd, rel, '..'), { recursive: true });
     writeFileSync(join(cwd, rel), contents);
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, {});
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
   });
@@ -1466,7 +1479,7 @@ async function validatePrinted(cwd: string): Promise<{ thrown: unknown; printed:
   const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void lines.push(String(line)));
   try {
     const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
-    await validateProject(cwd, { typeCheck });
+    await validateProject(cwd, 'boardsmith validate', { typeCheck });
     return { thrown: undefined, printed: stripVTControlCharacters(lines.join('\n')) };
   } catch (thrown) {
     return { thrown, printed: stripVTControlCharacters(lines.join('\n')) };
@@ -1562,11 +1575,39 @@ describe('validateProject stops by throwing, so a command running it stops too (
     try {
       // A type check already run, as verify hands one over, so this fixture needs no compiler.
       const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
-      await expect(validateProject(dir, { typeCheck })).rejects.toThrow('Validation failed. Please fix the issues above.');
+      await expect(validateProject(dir, 'boardsmith validate', { typeCheck })).rejects.toThrow('Validation failed. Please fix the issues above.');
     } finally {
       log.mockRestore();
     }
     expect(printed.join('\n')).toContain('playerCount');
+  });
+});
+
+describe('validate reads boardsmith.json once and names a broken one (#1728)', () => {
+  const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
+
+  function projectWith(text: string | undefined): string {
+    const dir = tempTree('bs-validate-manifest-');
+    if (text !== undefined) writeFileSync(join(dir, 'boardsmith.json'), text);
+    return dir;
+  }
+
+  it('refuses a boardsmith.json that is not JSON, naming the command that was run', async () => {
+    await expect(validateProject(projectWith('{ "name": "fixture", }'), 'boardsmith verify', { typeCheck })).rejects.toThrow(
+      /boardsmith\.json in .* is not valid JSON .*Fix it, then run boardsmith verify again\./,
+    );
+  });
+
+  it('refuses a boardsmith.json that is not an object', async () => {
+    await expect(validateProject(projectWith('[]'), 'boardsmith validate', { typeCheck })).rejects.toThrow(
+      /boardsmith\.json in .* holds a list, not an object.*Fix it, then run boardsmith validate again\./,
+    );
+  });
+
+  it('tells a directory with no boardsmith.json to run in the game, offering no flag validate lacks', async () => {
+    const result = validateProject(projectWith(undefined), 'boardsmith validate', { typeCheck });
+    await expect(result).rejects.toThrow("has no boardsmith.json, so it is not a BoardSmith game project. Run this in the game's directory.");
+    await expect(result).rejects.not.toThrow('--project');
   });
 });
 
@@ -1579,7 +1620,7 @@ describe('a project with no vitest is told to install it, never to run npx (#595
     const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
     try {
       const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
-      await expect(validateProject(dir, { typeCheck })).rejects.toThrow('Validation failed.');
+      await expect(validateProject(dir, 'boardsmith validate', { typeCheck })).rejects.toThrow('Validation failed.');
     } finally {
       log.mockRestore();
     }

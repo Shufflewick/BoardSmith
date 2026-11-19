@@ -12,7 +12,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
@@ -186,7 +186,7 @@ describe('a printed replay command plays the game that failed (#322)', () => {
   it('boardsmith validate: the choice cardinality check names a command that replays its failure', async () => {
     const cwd = deadEndProject();
 
-    const [result] = await validateChoiceCardinality(projectRules(cwd), false);
+    const [result] = await validateChoiceCardinality(projectRules(cwd, JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8'))), false);
     const failure = /seed (\S+): (.+?)\. "(boardsmith [^"]+)" shows the same failure/s.exec(result.message);
     expect(failure, result.message).not.toBeNull();
     const [, seed, reason, command] = failure!;

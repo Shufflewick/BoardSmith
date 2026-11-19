@@ -44,7 +44,7 @@ const printed: string[] = [];
 const log = vi.spyOn(console, 'log').mockImplementation((line?: unknown) => void printed.push(String(line)));
 const error = vi.spyOn(console, 'error').mockImplementation(() => {});
 const build = await runStep(() => buildProject(link, {}));
-const validate = await runStep(() => validateProject(link));
+const validate = await runStep(() => validateProject(link, 'boardsmith validate'));
 log.mockRestore();
 error.mockRestore();
 process.env.NODE_ENV = vitestNodeEnv;

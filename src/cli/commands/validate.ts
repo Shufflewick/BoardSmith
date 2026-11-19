@@ -14,7 +14,7 @@ import {
   ALLOWED_PLATFORM_ID_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
-import { agentsBlockProblems } from '../lib/agent-roles.js';
+import { agentsBlockProblems, readProjectConfig } from '../lib/agent-roles.js';
 import { coverArtProblems } from '../lib/cover-art.js';
 import { mutationBlockProblems } from '../lib/mutation-budget.js';
 import {
@@ -77,6 +77,9 @@ export interface TypeCheckRun {
   compilerReport: string[];
 }
 
+/** The project's boardsmith.json, parsed once by `runValidation` and handed to each check that reads it. */
+type ProjectConfig = Record<string, unknown>;
+
 /** Every check's verdict, and which backend the project declares. */
 interface ValidationRun {
   results: ValidationResult[];
@@ -90,25 +93,23 @@ interface ValidationRun {
  */
 async function runValidation(
   projectDir: string,
-  options: { typeCheck?: TypeCheckRun } = {},
+  command: string,
+  options: { typeCheck?: TypeCheckRun },
 ): Promise<ValidationRun> {
   // The real path, as a shell's working directory always is, so paths the tools report (vue-tsc's
   // program, vitest's file list) compare equal to paths built from it.
   const cwd = realpathSync(projectDir);
-  const configPath = requireGameProject(cwd);
   const results: ValidationResult[] = [];
 
-  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as {
-    backend?: unknown;
-    paths?: { rules?: string };
-  };
+  requireGameProject(cwd);
+  const config: ProjectConfig = await readProjectConfig(cwd, { command, purpose: 'validate the game' });
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
   const worldMode = resolveWorldMode(config);
 
   // 1. Check metadata completeness
-  results.push(await validateMetadata(cwd));
+  results.push(validateMetadata(config));
 
   // 2. TypeScript compilation
   const typeCheck = options.typeCheck ?? (await typeCheckProject(cwd));
@@ -121,10 +122,10 @@ async function runValidation(
   results.push(await validateSecurity(cwd));
 
   // 4. Asset path check (absolute paths break on platform)
-  results.push(await validateAssetPaths(cwd));
+  results.push(await validateAssetPaths(cwd, config));
 
   // 4b. Cover art inside the spec the platform checks again on upload.
-  results.push(await validateCoverArt(cwd));
+  results.push(await validateCoverArt(cwd, config));
 
   // 5. Bundle size check
   results.push(await validateBundleSize(cwd, worldMode));
@@ -132,7 +133,7 @@ async function runValidation(
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd, worldMode, config));
 
-  const rules = projectRules(cwd);
+  const rules = projectRules(cwd, config);
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   // 7b. And no Action Panel level shows more than nine ungrouped start buttons, from the same walk (#1639).
@@ -149,11 +150,12 @@ async function runValidation(
 
 /**
  * Validates the project in `cwd` and prints every verdict. Throws when a check blocks, so a caller
- * (`publish`, `verify`) stops there, and the CLI exits non-zero with the message.
+ * (`verify`) stops there, and the CLI exits non-zero with the message. `command` is the one the
+ * author ran, so a broken boardsmith.json tells them what to run again.
  */
-export async function validateProject(cwd: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
+export async function validateProject(cwd: string, command: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
   console.log(styleText('cyan', '\nValidating game...\n'));
-  const { results, worldMode } = await runValidation(cwd, options);
+  const { results, worldMode } = await runValidation(cwd, command, options);
   printResults(results);
   if (hasBlockingFailure(results)) {
     throw new Error('Validation failed. Please fix the issues above.');
@@ -164,7 +166,7 @@ export async function validateProject(cwd: string, options: { typeCheck?: TypeCh
 
 /** `boardsmith validate`, in the current directory. */
 export async function validateCommand(): Promise<void> {
-  await validateProject(process.cwd());
+  await validateProject(process.cwd(), 'boardsmith validate');
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -588,26 +590,14 @@ function checkPlaytimeShape(playtime: unknown): string[] {
   return [];
 }
 
-async function validateMetadata(cwd: string): Promise<ValidationResult> {
-  const configPath = join(cwd, 'boardsmith.json');
-
-  try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    const issues = checkMetadataIssues(config);
-
-    return {
-      name: 'Metadata',
-      passed: issues.length === 0,
-      message: issues.length > 0 ? 'Missing or invalid metadata' : '',
-      details: issues,
-    };
-  } catch (error) {
-    return {
-      name: 'Metadata',
-      passed: false,
-      message: `Failed to parse boardsmith.json: ${(error as Error).message}`,
-    };
-  }
+function validateMetadata(config: ProjectConfig): ValidationResult {
+  const issues = checkMetadataIssues(config);
+  return {
+    name: 'Metadata',
+    passed: issues.length === 0,
+    message: issues.length > 0 ? 'Missing or invalid metadata' : '',
+    details: issues,
+  };
 }
 
 /**
@@ -978,19 +968,7 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
  * `thumbnail: './public/thumbnail.png'` survived across eight games with every
  * gate green (issue 142).
  */
-function findDanglingManifestAssets(cwd: string): string[] {
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) return [];
-
-  let config: Record<string, unknown>;
-  try {
-    config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-  } catch {
-    // A boardsmith.json it cannot read or parse is the Metadata check's report, not
-    // this one's; reporting it twice would only obscure the real error.
-    return [];
-  }
-
+function findDanglingManifestAssets(cwd: string, config: ProjectConfig): string[] {
   const issues: string[] = [];
   for (const key of ASSET_PATH_KEYS) {
     const declared = config[key];
@@ -1022,8 +1000,8 @@ function findDanglingManifestAssets(cwd: string): string[] {
  * origin. Anything the scan finds and no declaration covers is named, once per
  * distinct URL, with the line the author has to add.
  */
-function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
-  const declared = declaredImageSources(cwd);
+function findUndeclaredImageSources(cwd: string, files: string[], config: ProjectConfig): string[] {
+  const declared = declaredImageSources(config);
   const found = new Map<string, string>();
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
@@ -1046,19 +1024,11 @@ function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
   });
 }
 
-/** `boardsmith.json`'s declared sources, or none. A config it cannot read or
- *  parse is the Metadata check's report, not this one's. */
-function declaredImageSources(cwd: string): string[] {
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) return [];
-  try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { imageSources?: unknown };
-    return Array.isArray(config.imageSources)
-      ? config.imageSources.filter((entry): entry is string => typeof entry === 'string')
-      : [];
-  } catch {
-    return [];
-  }
+/** `boardsmith.json`'s declared sources, or none. */
+function declaredImageSources(config: ProjectConfig): string[] {
+  return Array.isArray(config.imageSources)
+    ? config.imageSources.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
 /** CSP's own rule: a source ending in `/` is a path prefix, a bare origin
@@ -1083,8 +1053,8 @@ function originOf(url: string): string {
 const REMOTE_IMAGE_URL_RE =
   /https?:\/\/[A-Za-z0-9._~:\/?#[\]@!$&'()*+,;=%-]+?\.(?:png|jpe?g|gif|webp|avif|svg|bmp|ico)/gi;
 
-export async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
-  const danglingIssues = findDanglingManifestAssets(cwd);
+export async function validateAssetPaths(cwd: string, config: ProjectConfig): Promise<ValidationResult> {
+  const danglingIssues = findDanglingManifestAssets(cwd, config);
 
   const publicDir = join(cwd, 'public');
   const publicDirs = existsSync(publicDir)
@@ -1123,7 +1093,7 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   }
 
   const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
-  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles);
+  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles, config);
 
   if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
@@ -1154,14 +1124,7 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
 }
 
 /** The cover art `boardsmith.json` declares is inside the spec the platform checks again on upload (#1630). */
-export async function validateCoverArt(cwd: string): Promise<ValidationResult> {
-  let config: Record<string, unknown>;
-  try {
-    config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
-  } catch {
-    // A boardsmith.json it cannot read or parse is the Metadata check's report, not this one's.
-    return { name: 'Cover Art', passed: true, message: '' };
-  }
+export async function validateCoverArt(cwd: string, config: ProjectConfig): Promise<ValidationResult> {
   const problems = coverArtProblems(cwd, config);
   if (problems.length === 0) return { name: 'Cover Art', passed: true, message: '' };
   return { name: 'Cover Art', passed: false, message: 'Cover art is outside the platform\'s spec', details: problems };
@@ -1313,7 +1276,7 @@ export async function validateChoiceCardinality(rules: ProjectRules, isWorld: bo
   const spinner = ora('Checking choice cardinality and start buttons per level...').start();
 
   try {
-    const audit = isWorld ? await auditWorld(rules.cwd) : await auditTable(await rules.load());
+    const audit = isWorld ? await auditWorld(rules) : await auditTable(await rules.load());
 
     const results = [buildChoiceCardinalityResult(audit.unbounded, isWorld ? 'world' : 'table'), buildLevelButtonsResult(audit.crowded)];
     if (results.every((result) => result.passed)) spinner.succeed('Choice cardinality and start buttons per level OK');
@@ -1337,9 +1300,9 @@ export async function validateChoiceCardinality(rules: ProjectRules, isWorld: bo
  * world host inside it, come out of the rules' own bundle, exactly as
  * `boardsmith dev` takes its world host from there.
  */
-function auditWorld(cwd: string): Promise<ChoiceAudit> {
+function auditWorld(rules: ProjectRules): Promise<ChoiceAudit> {
   return withProjectBundle(
-    cwd,
+    rules,
     'world-cardinality',
     (cliSourceFile) => [
       `export { auditWorldChoiceCardinality } from ${JSON.stringify(cliSourceFile('lib/choice-cardinality.ts'))};`,
@@ -1371,20 +1334,22 @@ function auditTable(gameDefinition: GameDefinition): Promise<ChoiceAudit> {
  * `.boardsmith` is shared with a running dev server and with other validates of
  * the same game (#543), so this removes only the directory it made.
  */
-async function loadProjectRules(cwd: string): Promise<GameDefinition> {
-  return withProjectBundle(cwd, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
+async function loadProjectRules(rules: ProjectRules): Promise<GameDefinition> {
+  return withProjectBundle(rules, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
 }
 
-/** A project's folder and its compiled rules, bundled at most once however many checks read them (#1303). */
+/** A project's folder, its boardsmith.json and its compiled rules, bundled at most once however many checks read them (#1303). */
 export interface ProjectRules {
   cwd: string;
+  config: ProjectConfig;
   load(): Promise<GameDefinition>;
 }
 
 /** The {@link ProjectRules} of the project in `cwd`: nothing is bundled until a check asks. */
-export function projectRules(cwd: string): ProjectRules {
+export function projectRules(cwd: string, config: ProjectConfig): ProjectRules {
   let loading: Promise<GameDefinition> | undefined;
-  return { cwd, load: () => (loading ??= loadProjectRules(cwd)) };
+  const rules: ProjectRules = { cwd, config, load: () => (loading ??= loadProjectRules(rules)) };
+  return rules;
 }
 
 /**
@@ -1395,15 +1360,11 @@ export function projectRules(cwd: string): ProjectRules {
  * the absolute, forward-slashed path an `export ... from` line needs.
  */
 async function withProjectBundle<T>(
-  cwd: string,
+  { cwd, config }: ProjectRules,
   name: string,
   exports: (cliSourceFile: (pathUnderCli: string) => string) => string[],
   use: (bundle: { gameDefinition: GameDefinition } & Record<string, unknown>) => Promise<T>,
 ): Promise<T> {
-  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as {
-    paths?: { rules?: string };
-    gameOptions?: unknown;
-  };
   const rulesPath = resolveRulesDir(cwd, config);
   return withCommandBuildDir(cwd, 'validate', async (tempDir) => {
     const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
@@ -1464,15 +1425,13 @@ export function checkRulesAgreement(
 /** Load the compiled rules and run {@link checkRulesAgreement} against boardsmith.json. */
 async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationResult> {
   const spinner = ora('Checking rules against boardsmith.json...').start();
-  const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
-
   let result: ValidationResult;
   try {
     const gameDefinition = await rules.load();
     // Constructs the game at every seat count with every combination of its
     // boolean and select options to read its flow, so a constructor that
     // throws for any of them is reported here too, naming the combination.
-    result = checkRulesAgreement(config, gameDefinition);
+    result = checkRulesAgreement(rules.config, gameDefinition);
   } catch (error) {
     spinner.fail('Rules could not be loaded');
     return {
@@ -1599,8 +1558,7 @@ export async function validateSpriteImages(rules: ProjectRules): Promise<Validat
   }
   let result: ValidationResult;
   try {
-    const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as { colorPalette?: unknown };
-    result = checkSpriteImages(gameDefinition, config.colorPalette);
+    result = checkSpriteImages(gameDefinition, rules.config.colorPalette);
   } catch (error) {
     spinner.fail('Sprite images could not be checked');
     return {

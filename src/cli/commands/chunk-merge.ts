@@ -96,8 +96,6 @@ import { verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 import { projectDirOption } from '../lib/user-path.js';
 
 interface ChunkMergeOptions {
-  /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
-  branch?: string;
   /** Runs the measurement tests and the chunk's own tests. Defaults to the project's own vitest. */
   runTests?: TestRunner;
   /** Type-checks the combined tree. Defaults to vue-tsc, as `boardsmith typecheck` runs it. */
@@ -800,7 +798,7 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   // One process for both: --show-prefix prints an empty line at the top level.
   const where = await git(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix']);
   if (!(await gitSucceeds(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`]))) {
-    return `There is no branch ${branch}. A chunk built alongside others lives on chunk/<slug>; pass --branch if it is elsewhere.`;
+    return `There is no branch ${branch}. Every chunk is built on chunk/<slug>; check the slug against SKETCH.md's Ordered Chunk List.`;
   }
   if (await gitSucceeds(projectDir, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'])) {
     return (
@@ -921,7 +919,7 @@ async function checkStartedMerge(ctx: MergeContext, left: string[], runners: Run
  */
 export async function chunkMerge(projectDir: string, slug: string, options: ChunkMergeOptions = {}): Promise<ChunkMergeResult> {
   const dir = resolve(projectDir);
-  const branch = options.branch ?? `chunk/${slug}`;
+  const branch = `chunk/${slug}`;
   const common = await git(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']).catch(() => undefined);
   if (common === undefined) return refused([`${dir} is not in a git repository. Run chunk-merge from the game project's main checkout.`]);
   const lock = await takeOsLock(join(common.trim(), 'boardsmith-chunk-merge.flock'), 'chunk-merge', `chunk-merge of ${slug} (branch ${branch})`);
@@ -963,10 +961,10 @@ function report(slug: string, result: ChunkMergeResult): void {
   }
 }
 
-/** `boardsmith chunk-merge <slug> [--branch <name>] [--project <dir>] [--json]`. Exits 1 when refused. */
+/** `boardsmith chunk-merge <slug> [--project <dir>] [--json]`. Exits 1 when refused. */
 export async function chunkMergeCommand(
   slug: string,
-  options: { branch?: string; project?: string; json?: boolean } = {},
+  options: { project?: string; json?: boolean } = {},
 ): Promise<void> {
   try {
     assertBareName('<slug>', slug, "Pass the slug of the chunk whose branch to merge, as SKETCH.md's Ordered Chunk List names it.");
@@ -975,7 +973,7 @@ export async function chunkMergeCommand(
     process.exitCode = 1;
     return;
   }
-  const result = await chunkMerge(projectDirOption(options.project), slug, { branch: options.branch });
+  const result = await chunkMerge(projectDirOption(options.project), slug);
   if (!result.merged) process.exitCode = 1;
   if (options.json) console.log(JSON.stringify({ slug, ...result }, null, 2));
   else report(slug, result);

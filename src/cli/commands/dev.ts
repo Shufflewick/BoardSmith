@@ -31,7 +31,6 @@ import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-
 import {
   answerAlive,
   devNotFoundMiddleware,
-  monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
   resolveDevHostDir,
   serveDevDocuments,
@@ -357,8 +356,8 @@ export const GAME_IFRAME_PATH = '/__boardsmith-play';
 
 /**
  * The dev-host Vite plugin: it serves the HOST page in the main window, serves
- * the game UI document at the board iframe route, and exposes the author's
- * gameDefinition + dev config as virtual modules. This is what makes
+ * the game UI document at the board iframe route, and exposes the dev config
+ * as a virtual module. This is what makes
  * `boardsmith dev` drive the game through the production iframe/postMessage path.
  *
  * It routes both HTML documents itself and sets `appType: 'custom'`, so Vite
@@ -372,12 +371,9 @@ export function boardsmithDevHostPlugin(args: {
   devHostDir: string;
   /** Vite root — the game project directory whose `index.html` is the board document. */
   uiPath: string;
-  rulesIndexPath: string;
   devConfig: DevHostConfig;
 }): VitePlugin {
-  const VIRTUAL_GAME = 'virtual:boardsmith-game';
   const VIRTUAL_CONFIG = 'virtual:boardsmith-dev-config';
-  const RESOLVED_GAME = '\0' + VIRTUAL_GAME;
   const RESOLVED_CONFIG = '\0' + VIRTUAL_CONFIG;
 
   const hostHtmlPath = join(args.devHostDir, 'host.html');
@@ -393,16 +389,10 @@ export function boardsmithDevHostPlugin(args: {
       return { appType: 'custom' as const };
     },
     resolveId(source) {
-      if (source === VIRTUAL_GAME) return RESOLVED_GAME;
       if (source === VIRTUAL_CONFIG) return RESOLVED_CONFIG;
       return null;
     },
     load(id) {
-      if (id === RESOLVED_GAME) {
-        // Re-export the author's compiled rules so the host page runs the SAME
-        // gameDefinition the executor would, with no sandbox (author's own code).
-        return `export { gameDefinition } from ${JSON.stringify(toPosix(args.rulesIndexPath))};`;
-      }
       if (id === RESOLVED_CONFIG) {
         return `export const devConfig = ${JSON.stringify(args.devConfig)};`;
       }
@@ -603,9 +593,6 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   }
 
   const context = getProjectContext(cwd);
-  if (context === 'monorepo') {
-    console.log(styleText('dim', '  Running in monorepo context (using source resolution)'));
-  }
 
   const uiPath = config.paths?.ui ? resolveUserPath(cwd, config.paths.ui) : cwd;
   const rulesPath = resolveRulesDir(cwd, config);
@@ -617,7 +604,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     );
   }
 
-  const rulesIndexPath = requireRulesIndex(rulesPath);
+  requireRulesIndex(rulesPath);
 
   // The Node-side rules bundle is built into this run's own directory, and the stop
   // removes that directory alone: the rest of `.boardsmith/` holds scratch and
@@ -807,14 +794,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   }
 
   const vitePlugins: VitePlugin[] = [
-    boardsmithDevHostPlugin({ devHostDir, uiPath, rulesIndexPath, devConfig }),
+    boardsmithDevHostPlugin({ devHostDir, uiPath, devConfig }),
   ];
-
-  // In monorepo context, `boardsmith/*` must resolve to this repo's own src/,
-  // or the dev host runs a different engine from the one being edited.
-  if (context === 'monorepo') {
-    vitePlugins.unshift(monorepoBoardsmithResolvePlugin());
-  }
 
   // Always exclude all boardsmith subpaths - Vite requires exact matches for deep imports
   const optimizeDepsExclude = ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'];
