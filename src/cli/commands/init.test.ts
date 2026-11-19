@@ -317,7 +317,8 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
   });
 
   it('passes the Asset Paths gate that now opens boardsmith.json', async () => {
-    const result = await validateAssetPaths(await scaffold());
+    const projectPath = await scaffold();
+    const result = await validateAssetPaths(projectPath, JSON.parse(read('boardsmith.json')));
     expect(result.passed).toBe(true);
   });
 
@@ -328,7 +329,7 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
     config.thumbnail = './public/thumbnail.png';
     writeFileSync(configPath, JSON.stringify(config, null, 2));
 
-    const result = await validateAssetPaths(projectPath);
+    const result = await validateAssetPaths(projectPath, config);
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('thumbnail');
   });

@@ -14,7 +14,7 @@ import {
   ALLOWED_PLATFORM_ID_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
-import { agentsBlockProblems } from '../lib/agent-roles.js';
+import { agentsBlockProblems, readProjectConfig } from '../lib/agent-roles.js';
 import { coverArtProblems } from '../lib/cover-art.js';
 import { mutationBlockProblems } from '../lib/mutation-budget.js';
 import {
@@ -27,7 +27,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
-import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
+import { resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -77,6 +77,9 @@ export interface TypeCheckRun {
   compilerReport: string[];
 }
 
+/** The project's boardsmith.json, parsed once by `runValidation` and handed to each check that reads it. */
+type ProjectConfig = Record<string, unknown>;
+
 /** Every check's verdict, and which backend the project declares. */
 interface ValidationRun {
   results: ValidationResult[];
@@ -95,20 +98,16 @@ async function runValidation(
   // The real path, as a shell's working directory always is, so paths the tools report (vue-tsc's
   // program, vitest's file list) compare equal to paths built from it.
   const cwd = realpathSync(projectDir);
-  const configPath = requireGameProject(cwd);
   const results: ValidationResult[] = [];
 
-  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as {
-    backend?: unknown;
-    paths?: { rules?: string };
-  };
+  const config: ProjectConfig = await readProjectConfig(cwd, { command: 'boardsmith validate', purpose: 'validate the game' });
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
   const worldMode = resolveWorldMode(config);
 
   // 1. Check metadata completeness
-  results.push(await validateMetadata(cwd));
+  results.push(validateMetadata(config));
 
   // 2. TypeScript compilation
   const typeCheck = options.typeCheck ?? (await typeCheckProject(cwd));
@@ -121,10 +120,10 @@ async function runValidation(
   results.push(await validateSecurity(cwd));
 
   // 4. Asset path check (absolute paths break on platform)
-  results.push(await validateAssetPaths(cwd));
+  results.push(await validateAssetPaths(cwd, config));
 
   // 4b. Cover art inside the spec the platform checks again on upload.
-  results.push(await validateCoverArt(cwd));
+  results.push(await validateCoverArt(cwd, config));
 
   // 5. Bundle size check
   results.push(await validateBundleSize(cwd, worldMode));
@@ -588,26 +587,14 @@ function checkPlaytimeShape(playtime: unknown): string[] {
   return [];
 }
 
-async function validateMetadata(cwd: string): Promise<ValidationResult> {
-  const configPath = join(cwd, 'boardsmith.json');
-
-  try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
-    const issues = checkMetadataIssues(config);
-
-    return {
-      name: 'Metadata',
-      passed: issues.length === 0,
-      message: issues.length > 0 ? 'Missing or invalid metadata' : '',
-      details: issues,
-    };
-  } catch (error) {
-    return {
-      name: 'Metadata',
-      passed: false,
-      message: `Failed to parse boardsmith.json: ${(error as Error).message}`,
-    };
-  }
+function validateMetadata(config: ProjectConfig): ValidationResult {
+  const issues = checkMetadataIssues(config);
+  return {
+    name: 'Metadata',
+    passed: issues.length === 0,
+    message: issues.length > 0 ? 'Missing or invalid metadata' : '',
+    details: issues,
+  };
 }
 
 /**
@@ -978,19 +965,7 @@ function findAbsolutePathIssues(cwd: string, files: string[], publicDirs: string
  * `thumbnail: './public/thumbnail.png'` survived across eight games with every
  * gate green (issue 142).
  */
-function findDanglingManifestAssets(cwd: string): string[] {
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) return [];
-
-  let config: Record<string, unknown>;
-  try {
-    config = JSON.parse(readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-  } catch {
-    // A boardsmith.json it cannot read or parse is the Metadata check's report, not
-    // this one's; reporting it twice would only obscure the real error.
-    return [];
-  }
-
+function findDanglingManifestAssets(cwd: string, config: ProjectConfig): string[] {
   const issues: string[] = [];
   for (const key of ASSET_PATH_KEYS) {
     const declared = config[key];
@@ -1022,8 +997,8 @@ function findDanglingManifestAssets(cwd: string): string[] {
  * origin. Anything the scan finds and no declaration covers is named, once per
  * distinct URL, with the line the author has to add.
  */
-function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
-  const declared = declaredImageSources(cwd);
+function findUndeclaredImageSources(cwd: string, files: string[], config: ProjectConfig): string[] {
+  const declared = declaredImageSources(config);
   const found = new Map<string, string>();
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
@@ -1046,19 +1021,11 @@ function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
   });
 }
 
-/** `boardsmith.json`'s declared sources, or none. A config it cannot read or
- *  parse is the Metadata check's report, not this one's. */
-function declaredImageSources(cwd: string): string[] {
-  const configPath = join(cwd, 'boardsmith.json');
-  if (!existsSync(configPath)) return [];
-  try {
-    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { imageSources?: unknown };
-    return Array.isArray(config.imageSources)
-      ? config.imageSources.filter((entry): entry is string => typeof entry === 'string')
-      : [];
-  } catch {
-    return [];
-  }
+/** `boardsmith.json`'s declared sources, or none. */
+function declaredImageSources(config: ProjectConfig): string[] {
+  return Array.isArray(config.imageSources)
+    ? config.imageSources.filter((entry): entry is string => typeof entry === 'string')
+    : [];
 }
 
 /** CSP's own rule: a source ending in `/` is a path prefix, a bare origin
@@ -1083,8 +1050,8 @@ function originOf(url: string): string {
 const REMOTE_IMAGE_URL_RE =
   /https?:\/\/[A-Za-z0-9._~:\/?#[\]@!$&'()*+,;=%-]+?\.(?:png|jpe?g|gif|webp|avif|svg|bmp|ico)/gi;
 
-export async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
-  const danglingIssues = findDanglingManifestAssets(cwd);
+export async function validateAssetPaths(cwd: string, config: ProjectConfig): Promise<ValidationResult> {
+  const danglingIssues = findDanglingManifestAssets(cwd, config);
 
   const publicDir = join(cwd, 'public');
   const publicDirs = existsSync(publicDir)
@@ -1123,7 +1090,7 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   }
 
   const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
-  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles);
+  const remoteIssues = findUndeclaredImageSources(cwd, remoteFiles, config);
 
   if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
@@ -1154,14 +1121,7 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
 }
 
 /** The cover art `boardsmith.json` declares is inside the spec the platform checks again on upload (#1630). */
-export async function validateCoverArt(cwd: string): Promise<ValidationResult> {
-  let config: Record<string, unknown>;
-  try {
-    config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
-  } catch {
-    // A boardsmith.json it cannot read or parse is the Metadata check's report, not this one's.
-    return { name: 'Cover Art', passed: true, message: '' };
-  }
+export async function validateCoverArt(cwd: string, config: ProjectConfig): Promise<ValidationResult> {
   const problems = coverArtProblems(cwd, config);
   if (problems.length === 0) return { name: 'Cover Art', passed: true, message: '' };
   return { name: 'Cover Art', passed: false, message: 'Cover art is outside the platform\'s spec', details: problems };

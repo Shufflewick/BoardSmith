@@ -79,7 +79,6 @@ describe('boardsmith dev asset serving (issue 134)', () => {
         boardsmithDevHostPlugin({
           devHostDir,
           uiPath: projectDir,
-          rulesIndexPath: join(projectDir, 'src', 'rules', 'index.ts'),
           devConfig,
         }),
       ],

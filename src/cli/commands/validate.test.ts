@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
@@ -68,6 +68,11 @@ import { withDeclaredGameOptions } from '../../session/game-option-selection.js'
 import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
 
 const schema = boardsmithSchema as { properties: Record<string, Record<string, unknown>> };
+
+/** The boardsmith.json a fixture wrote, as `runValidation` hands it to a check. */
+function diskConfig(dir: string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(dir, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
+}
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', () => {
@@ -684,12 +689,12 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     mkdirSync(dirname(join(projectDir, relativePath)), { recursive: true });
     writeFileSync(join(projectDir, relativePath), content);
     writeConfig({ name: 'x' });
-    return validateAssetPaths(projectDir);
+    return validateAssetPaths(projectDir, diskConfig(projectDir));
   }
 
   it('fails on a thumbnail path that resolves to nothing', async () => {
     writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
 
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain('thumbnail');
@@ -698,7 +703,7 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
 
   it('fails even when the project has no public/ directory at all', async () => {
     writeConfig({ name: 'x', thumbnail: 'art/cover.png' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(false);
   });
 
@@ -707,13 +712,13 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
     writeFileSync(join(projectDir, 'public', 'thumbnail.png'), 'png-bytes');
     writeConfig({ name: 'x', thumbnail: './public/thumbnail.png' });
 
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(true);
   });
 
   it('passes a manifest that declares no asset paths at all', async () => {
     writeConfig({ name: 'x' });
-    const result = await validateAssetPaths(projectDir);
+    const result = await validateAssetPaths(projectDir, diskConfig(projectDir));
     expect(result.passed).toBe(true);
   });
 
@@ -765,14 +770,16 @@ describe('validate.ts validateCoverArt', () => {
   }
 
   it('passes a logo within the spec, and a game that declares no art', async () => {
-    expect((await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgba')))).passed).toBe(true);
+    const logo = projectWithLogo(pngBytes(1500, 1500, 'rgba'));
+    expect((await validateCoverArt(logo, diskConfig(logo))).passed).toBe(true);
     const none = tempTree('boardsmith-cover-art-check-');
     writeFileSync(join(none, 'boardsmith.json'), JSON.stringify({ name: 'x' }));
-    expect((await validateCoverArt(none)).passed).toBe(true);
+    expect((await validateCoverArt(none, diskConfig(none))).passed).toBe(true);
   });
 
   it('fails a logo outside the spec, naming what to fix', async () => {
-    const result = await validateCoverArt(projectWithLogo(pngBytes(1500, 1500, 'rgb')));
+    const dir = projectWithLogo(pngBytes(1500, 1500, 'rgb'));
+    const result = await validateCoverArt(dir, diskConfig(dir));
     expect(result.passed).toBe(false);
     expect(result.severity).toBeUndefined();
     expect((result.details ?? []).join('\n')).toContain('transparent background');
@@ -780,8 +787,8 @@ describe('validate.ts validateCoverArt', () => {
 
   it('leaves a missing logo to Asset Paths, which fails naming the file to add', async () => {
     const dir = projectWithLogo();
-    expect((await validateCoverArt(dir)).passed).toBe(true);
-    const assets = await validateAssetPaths(dir);
+    expect((await validateCoverArt(dir, diskConfig(dir))).passed).toBe(true);
+    const assets = await validateAssetPaths(dir, diskConfig(dir));
     expect(assets.passed).toBe(false);
     expect((assets.details ?? []).join('\n')).toContain(`Add the file at ${join(dir, 'art', 'logo.png')}`);
   });
@@ -1388,7 +1395,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': JSON.stringify(imageSources === undefined ? {} : { imageSources }),
       'dist/ui/index.html': `<!doctype html><img src="${source}">`,
     });
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, diskConfig(cwd));
     return { passed: result.passed, details: (result.details ?? []).join('\n'), message: result.message };
   }
 
@@ -1428,7 +1435,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       ['dist/ui/.vite/chunk.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
-      const result = await validateAssetPaths(cwd);
+      const result = await validateAssetPaths(cwd, diskConfig(cwd));
       expect(result.passed, `${rel} should have been scanned`).toBe(false);
       expect((result.details ?? []).join('\n')).toContain(REMOTE);
     }
@@ -1439,7 +1446,7 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': '{}',
       'dist/ui/index.html': `<img src="${REMOTE}"><img src="${REMOTE}"><img src="${REMOTE}">`,
     });
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, diskConfig(cwd));
     const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
     expect(lines).toHaveLength(1);
   });
@@ -1454,7 +1461,7 @@ describe('absolute asset paths are found in subfolders too (#1111)', () => {
     mkdirSync(join(cwd, 'public', 'cards'), { recursive: true });
     mkdirSync(join(cwd, rel, '..'), { recursive: true });
     writeFileSync(join(cwd, rel), contents);
-    const result = await validateAssetPaths(cwd);
+    const result = await validateAssetPaths(cwd, {});
     expect(result.passed).toBe(false);
     expect((result.details ?? []).join('\n')).toContain(`${rel}: absolute path "/cards/..." found`);
   });
@@ -1567,6 +1574,17 @@ describe('validateProject stops by throwing, so a command running it stops too (
       log.mockRestore();
     }
     expect(printed.join('\n')).toContain('playerCount');
+  });
+});
+
+describe('validate reads boardsmith.json once and names a broken one (#1728)', () => {
+  it('refuses a boardsmith.json that is not JSON with a message saying what to fix', async () => {
+    const dir = tempTree('bs-validate-bad-json-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{ "name": "fixture", }');
+    const typeCheck = { result: { name: 'TypeScript', passed: true, message: '' }, programFiles: [], compilerReport: [] };
+    await expect(validateProject(dir, { typeCheck })).rejects.toThrow(
+      /boardsmith\.json in .* is not valid JSON .*Fix it, then run boardsmith validate again\./,
+    );
   });
 });
 
