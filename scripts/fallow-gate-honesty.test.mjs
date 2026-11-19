@@ -23,12 +23,11 @@
  *
  * ## Why the fix is the config and not a coverage report
  *
- * Measured, not assumed: `fallow audit` 2.48.0 has no `--coverage` flag, there
- * is no `health.coverage` key in `fallow config-schema`, and it ignores
- * `FALLOW_COVERAGE` — pointed at a real Istanbul report it returns identical
- * CRAP scores. Only `fallow health` reads coverage, and health has no dead-code
- * or duplication verdict, so it cannot be what the gate runs. A partial report
- * is worse than none: an unmatched function scores 0%.
+ * Measured, not assumed, on fallow 2.48.0: `fallow audit` had no `--coverage`
+ * flag, no `health.coverage` key and ignored `FALLOW_COVERAGE`. The pinned 3.28.0
+ * reads coverage in `fallow audit` through all three, but the gate runs no test
+ * suite and so has no Istanbul report to hand it. A partial report is worse than
+ * none: an unmatched function scores 0%.
  *
  * So `maxCrap` is parked out of reach — fallow's only way to switch CRAP off —
  * and `maxCyclomatic` carries the rule at the number the estimate was already

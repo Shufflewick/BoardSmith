@@ -124,10 +124,7 @@ describe('updateBotWeights', () => {
     });
 
     it('records the run when asked for', () => {
-      const updated = updateBotWeights(BOT_FILE, [objective('centre-control', 1)], {
-        addMetadata: true,
-        evolutionStats: stats,
-      });
+      const updated = updateBotWeights(BOT_FILE, [objective('centre-control', 1)], { evolutionStats: stats });
       expect(updated).toContain('Weight Evolution');
       expect(updated).toContain('Generations: 5');
       expect(updated).toContain('Population: 20');

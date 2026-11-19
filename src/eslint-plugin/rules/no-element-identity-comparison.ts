@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { annotatedTypeName, COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, walk } from './element-types.js';
+import { annotatedTypeName, ENGINE_ELEMENT_CLASS_NAMES, collectSubclassNames, isCollectionCall, walk } from './element-types.js';
 
 /**
  * Disallows `===`/`!==` identity comparison between GameElement instances,
@@ -49,23 +49,11 @@ import { annotatedTypeName, COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, c
  *     Considered acceptable risk for an authoring lint (see RESEARCH
  *     Pitfall #3) -- real games are exercised in a later phase, not here.
  *
- * Auto-fix: only applied to `===`/`!==` between two syntactically "simple"
- * operands (an identifier, or a non-computed member-expression chain
- * rooted in an identifier) -- rewritten to compare `.id` on each side.
- * Complex operands (calls, computed access, etc.) are reported without a
- * fix so a human decides how to rewrite them. `.includes()` matches are
+ * Auto-fix: `===`/`!==` is only flagged between two identifiers, so it is
+ * always rewritten to compare `.id` on each side. `.includes()` matches are
  * never auto-fixed (the correct rewrite, `.some(el => el.id === x.id)`,
  * changes the surrounding expression shape rather than a single operand).
  */
-
-/** Is this expression node "simple" enough to safely rewrite to `<expr>.id`? */
-function isSimpleOperand(node: Record<string, unknown>): boolean {
-  if (node.type === 'Identifier') return true;
-  if (node.type === 'MemberExpression' && node.computed === false) {
-    return isSimpleOperand(node.object as Record<string, unknown>);
-  }
-  return false;
-}
 
 const rule: Rule.RuleModule = {
   meta: {
@@ -139,19 +127,7 @@ const rule: Rule.RuleModule = {
 
           if (node.type === 'VariableDeclarator') {
             const id = node.id as { type?: string; name?: string } | undefined;
-            const init = node.init as
-              | { type?: string; callee?: { type?: string; property?: { type?: string; name?: string } } }
-              | null
-              | undefined;
-            if (
-              id?.type === 'Identifier' &&
-              id.name &&
-              init?.type === 'CallExpression' &&
-              init.callee?.type === 'MemberExpression' &&
-              init.callee.property?.type === 'Identifier' &&
-              init.callee.property.name &&
-              COLLECTION_CALL_NAMES.has(init.callee.property.name)
-            ) {
+            if (id?.type === 'Identifier' && id.name && isCollectionCall(node.init as Record<string, unknown> | null | undefined)) {
               elementArrayVarDeclNodes.add(id as unknown as object);
             }
           }
@@ -171,18 +147,15 @@ const rule: Rule.RuleModule = {
         const sourceCode = context.sourceCode;
         const leftText = sourceCode.getText(left);
         const rightText = sourceCode.getText(right);
-        const canAutoFix = isSimpleOperand(left as unknown as Record<string, unknown>) && isSimpleOperand(right as unknown as Record<string, unknown>);
 
         context.report({
           node,
           messageId: 'identityComparison',
           data: { operator: node.operator, leftText, rightText },
-          fix: canAutoFix
-            ? (fixer) => [
-                fixer.replaceText(left, `${leftText}.id`),
-                fixer.replaceText(right, `${rightText}.id`),
-              ]
-            : undefined,
+          fix: (fixer) => [
+            fixer.replaceText(left, `${leftText}.id`),
+            fixer.replaceText(right, `${rightText}.id`),
+          ],
         });
       },
 

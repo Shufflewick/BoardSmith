@@ -33,9 +33,7 @@ export function readObjectiveWeights(source: string): ObjectiveWeight[] {
 
 /** Options for {@link updateBotWeights}. */
 export interface UpdateWeightsOptions {
-  /** Add metadata comment about evolution */
-  addMetadata?: boolean;
-  /** Evolution statistics to include in metadata */
+  /** Evolution statistics, recorded in a metadata comment when given */
   evolutionStats?: {
     generations: number;
     population: number;
@@ -75,7 +73,7 @@ export function updateBotWeights(
     result = result.slice(0, literal.start) + String(weight) + result.slice(literal.end);
   }
 
-  if (options.addMetadata && options.evolutionStats) {
+  if (options.evolutionStats) {
     result = withEvolutionMetadata(result, options.evolutionStats);
   }
   return result;

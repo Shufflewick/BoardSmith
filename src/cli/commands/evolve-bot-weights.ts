@@ -136,7 +136,6 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
       const originalCode = readFileSync(botPath, 'utf-8');
       const updatedCode = updateBotWeights(originalCode, result.objectives, {
-        addMetadata: true,
         evolutionStats: {
           generations,
           population,

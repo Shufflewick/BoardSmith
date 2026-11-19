@@ -49,7 +49,8 @@ a property whose value is an object literal with both a `checker` and a
   win rates, and the `confirmation`
 - `WeightConfirmation` - The confirmation rematch: games each, both win rates,
   and whether the new weights were accepted
-- `UpdateWeightsOptions` - Options for `updateBotWeights`
+- `UpdateWeightsOptions` - `evolutionStats`, which `updateBotWeights` records
+  in a metadata comment when given
 
 ## Training from the CLI
 
