@@ -131,7 +131,7 @@ describe('updateBotWeights', () => {
     });
 
     it('reports the win rates and the improvement between them', () => {
-      const updated = updateBotWeights(BOT_FILE, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(BOT_FILE, [], { evolutionStats: stats });
       expect(updated).toContain('Initial win rate: 50.0%');
       expect(updated).toContain('Final win rate: 62.0%');
       expect(updated).toContain('Improvement: 12.0%');
@@ -139,21 +139,19 @@ describe('updateBotWeights', () => {
 
     it('signs a regression rather than hiding it', () => {
       const updated = updateBotWeights(BOT_FILE, [], {
-        addMetadata: true,
         evolutionStats: { ...stats, finalWinRate: 0.4 },
       });
       expect(updated).toContain('Improvement: -10.0%');
     });
 
     it('places the block above the imports', () => {
-      const updated = updateBotWeights(BOT_FILE, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(BOT_FILE, [], { evolutionStats: stats });
       expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf('import '));
     });
 
     it('replaces a previous evolution block instead of stacking them up', () => {
-      const once = updateBotWeights(BOT_FILE, [], { addMetadata: true, evolutionStats: stats });
+      const once = updateBotWeights(BOT_FILE, [], { evolutionStats: stats });
       const twice = updateBotWeights(once, [], {
-        addMetadata: true,
         evolutionStats: { ...stats, generations: 9 },
       });
       expect(twice.match(/Weight Evolution/g)).toHaveLength(1);
@@ -162,16 +160,15 @@ describe('updateBotWeights', () => {
 
     it('records the run in a bot.ts whose first line is an import (#875)', () => {
       const startsWithImport = BOT_FILE.slice(BOT_FILE.indexOf('import '));
-      const updated = updateBotWeights(startsWithImport, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(startsWithImport, [], { evolutionStats: stats });
       expect(updated.indexOf('Weight Evolution')).toBeGreaterThanOrEqual(0);
       expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf('import '));
     });
 
     it('replaces the block in a bot.ts whose first line was an import', () => {
       const startsWithImport = BOT_FILE.slice(BOT_FILE.indexOf('import '));
-      const once = updateBotWeights(startsWithImport, [], { addMetadata: true, evolutionStats: stats });
+      const once = updateBotWeights(startsWithImport, [], { evolutionStats: stats });
       const twice = updateBotWeights(once, [], {
-        addMetadata: true,
         evolutionStats: { ...stats, generations: 9 },
       });
       expect(twice.match(/Weight Evolution/g)).toHaveLength(1);
@@ -180,11 +177,10 @@ describe('updateBotWeights', () => {
 
     it('records the run at the top of a bot.ts with no import, and replaces it on the next run', () => {
       const noImport = BOT_FILE.replace("import type { Game } from 'boardsmith';\n", '');
-      const once = updateBotWeights(noImport, [], { addMetadata: true, evolutionStats: stats });
+      const once = updateBotWeights(noImport, [], { evolutionStats: stats });
       expect(once.indexOf('Weight Evolution')).toBeGreaterThanOrEqual(0);
       expect(once.indexOf('Weight Evolution')).toBeLessThan(once.indexOf('export const bot'));
       const twice = updateBotWeights(once, [], {
-        addMetadata: true,
         evolutionStats: { ...stats, generations: 9 },
       });
       expect(twice.match(/Weight Evolution/g)).toHaveLength(1);
@@ -193,35 +189,34 @@ describe('updateBotWeights', () => {
 
     it('places the record at the real import, not at the word import in a doc comment above it', () => {
       const source = `/**\n * We import the game type below.\n */\nimport type { Game } from 'boardsmith';\nexport const bot = {};\n`;
-      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(source, [], { evolutionStats: stats });
       expect(updated).toContain(' * We import the game type below.\n */\n//\n// Weight Evolution');
       expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf("import type { Game }"));
     });
 
     it('leaves the word import inside a string alone in a file with no import declaration', () => {
       const source = `export const note = 'import helper';\nexport const bot = {};\n`;
-      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(source, [], { evolutionStats: stats });
       expect(updated).toContain(`export const note = 'import helper';`);
       expect(updated.indexOf('Weight Evolution')).toBeLessThan(updated.indexOf('export const note'));
     });
 
     it("keeps an author's own Weight Evolution notes after the imports", () => {
       const source = `import x from 'y';\n//\n// Weight Evolution notes by author\nconst a = 1;\nconst b = 2;\n//\nexport const bot = {};\n`;
-      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(source, [], { evolutionStats: stats });
       expect(updated).toContain(source.slice(source.indexOf('//\n// Weight Evolution notes')));
       expect(updated).toContain('Generations: 5');
     });
 
     it('keeps the shebang first in a file with no import', () => {
       const source = `#!/usr/bin/env node\nexport const bot = {};\n`;
-      const updated = updateBotWeights(source, [], { addMetadata: true, evolutionStats: stats });
+      const updated = updateBotWeights(source, [], { evolutionStats: stats });
       expect(updated.startsWith('#!/usr/bin/env node\n')).toBe(true);
       expect(updated).toContain('Generations: 5');
     });
 
     it('does nothing when the flag is set but no stats are given', () => {
       const updated = updateBotWeights(BOT_FILE, [objective('centre-control', 1)], {
-        addMetadata: true,
       });
       expect(updated).not.toContain('Weight Evolution');
     });
