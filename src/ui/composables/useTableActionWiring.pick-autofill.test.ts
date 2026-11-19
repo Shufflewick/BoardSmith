@@ -49,6 +49,7 @@ class EquipGame extends Game<EquipGame, Player> {
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
+  EquipGame.cardsAutoFill = undefined;
 });
 
 async function autoModeSeat(cardsAutoFill: false | undefined) {
