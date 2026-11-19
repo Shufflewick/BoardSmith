@@ -86,3 +86,26 @@ describe('auto-fill of a list pick a list of one does not fit (#1562)', () => {
     expect(sendAction).not.toHaveBeenCalled();
   });
 });
+
+describe('a pick that opts out of auto-fill (#1721)', () => {
+  it('is not filled when execute() is called without it', async () => {
+    const sendAction = createMockSendAction();
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['keep']),
+      actionMetadata: ref<Record<string, EnrichedActionMetadata>>({
+        keep: {
+          name: 'keep', prompt: 'Keep',
+          selections: [{ name: 'card', type: 'choice', prompt: 'Which?', choices: ONE, autoFill: false }],
+        },
+      }),
+      isMyTurn: ref(true),
+      autoFill: true,
+    });
+
+    const result = await controller.execute('keep', {});
+
+    expect(result.success).toBe(false);
+    expect(sendAction).not.toHaveBeenCalled();
+  });
+});

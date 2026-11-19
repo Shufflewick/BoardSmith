@@ -1125,6 +1125,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
     // ActionPanel parity — both funnel through this one controller.
     if (currentActionMeta.value?.manual) return true;
+    if (selection.autoFill === false) return true;
 
     // Tutorial auto-fill suppression: when a step wants the learner to perform
     // the click, preserve the teaching interaction instead of auto-resolving.
@@ -2105,7 +2106,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         if (getAutoFill()) {
           const choices = choicesIn(run, finalArgs, selection);
           const enabledChoices = choices.filter(c => !c.disabled);
-          if (enabledChoices.length === 1 && !selection.optional) {
+          if (enabledChoices.length === 1 && !selection.optional && selection.autoFill !== false) {
             finalArgs[selection.name] = enabledChoices[0].value;
             continue;
           }

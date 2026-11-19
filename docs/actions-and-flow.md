@@ -1176,7 +1176,8 @@ The rules, in full:
 
 - Applies to a **non-optional** selection with exactly **one enabled** choice.
   Optional selections are never auto-filled (skipping is a real decision), and
-  disabled choices don't count toward the one.
+  disabled choices don't count toward the one. Neither is a pick declared with
+  `autoFill: false`.
 - A list pick (`multiSelect` or ordered list) is filled with its one choice
   only when a list of one fits its bounds. One whose `max` is 0 takes only the
   empty list, so it is answered with `[]` whatever it offers.
@@ -1189,16 +1190,25 @@ The rules, in full:
 - Both defaults are on, and both are properties of the controller every UI shares
   (`useActionController`), so a custom board and the action panel behave alike.
 
-Two ways to keep the beat:
+Three ways to keep the beat:
 
 ```typescript
 // The player must take the action deliberately, even when it needs no choices
 // at all (e.g. drawing a card — the reveal should be theirs to trigger).
 Action.create('draw').manual().execute(...)
+
+// One pick waits for the player; the others still fill. A lone MERC is chosen
+// at once, but a lone card is never taken without a press.
+Action.create('equip')
+  .chooseElement('merc', { elementClass: Merc })
+  .chooseElements('cards', { elements: ..., multiSelect: { min: 1, max: 6 }, autoFill: false })
+  .execute(...)
 ```
 
 `.manual()` suppresses auto-fill for that action, so the player's own tap is what
-dispatches it. Tutorials can suppress auto-fill per step instead, when the point
+dispatches it. `autoFill: false` (on `chooseFrom`, `chooseElement` and
+`chooseElements`) holds back only that pick, and unlike `optional` it adds no
+Skip: the pick must still be answered. Tutorials can suppress auto-fill per step instead, when the point
 is for the learner to perform the click — see
 [Teaching & Tutorials](./teaching-and-tutorials.md) for `suppressAutoFill`.
 
