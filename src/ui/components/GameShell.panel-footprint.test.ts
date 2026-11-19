@@ -299,8 +299,9 @@ describe('#230, #1439: the bar put down is a thin line', () => {
     expect(declaration('.actionbar.collapsed :deep(.menubtn)::before', 'bottom')).toBe('0');
     expect(declaration('.actionbar.collapsed', 'overflow')).toBe('visible');
     const tokens = tokensFor('base');
-    expect(px(declaration('.bar-edge', 'width'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
-    expect(px(declaration('.bar-edge', 'height'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
+    // The bar's toggle shares its circle with the players panel's (#1722).
+    expect(px(declaration('.side-edge,\n.bar-edge', 'width'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
+    expect(px(declaration('.side-edge,\n.bar-edge', 'height'), tokens, { safeArea: 0 })).toBeGreaterThanOrEqual(24);
   });
 
   it('keeps the collapsed bar to a single un-wrapping row', () => {

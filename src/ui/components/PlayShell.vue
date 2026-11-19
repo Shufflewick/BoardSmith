@@ -805,6 +805,12 @@ const mobileToggleLabel = computed(() => {
      line holds, and the rest rising above the bar. */
   --bsg-bar-edge: 26px;
   --bsg-bar-edge-drop: 13px;
+
+  /* How far the players panel's edge toggle, the same size and centred on the
+     panel's right edge, reaches over the board region's top-left corner on
+     screen (#1722). 0 wherever no toggle shows. The board reads it, in its own
+     zoomed pixels, as --bsg-rail-toggle-overhang. */
+  --bsg-rail-toggle-reach: calc(var(--bsg-bar-edge) / 2);
 }
 /* A finger's target (#1611): WCAG 2.5.5 and Apple's 44pt. */
 @media (pointer: coarse) {
@@ -864,33 +870,9 @@ const mobileToggleLabel = computed(() => {
 .side-edge {
   position: absolute;
   top: 14px;
-  right: -13px;
+  /* `right` counts from inside the sidebar's 1px border, so centre on the board's edge. */
+  right: calc(-1 * var(--bsg-rail-toggle-reach) - 1px);
   z-index: 6;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  background: var(--bsg-surface);
-  border: 1px solid var(--bsg-line);
-  box-shadow: var(--bsg-shadow-sm);
-  color: var(--bsg-ink-2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-@media (pointer: coarse) {
-  .side-edge {
-    right: -22px;
-    width: 44px;
-    height: 44px;
-  }
-}
-.side-edge svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  transition: transform var(--bsg-dur-fast);
 }
 .sidebar.rail .side-edge svg {
   transform: rotate(180deg);
@@ -1161,6 +1143,10 @@ const mobileToggleLabel = computed(() => {
   transform: translateY(calc(var(--bsg-bar-edge-drop) - 100%));
   /* Ties the game modal host and game-over scrim, and wins as the later element (#1346). */
   z-index: 32;
+}
+/* The two edge toggles: one circle and chevron. */
+.side-edge,
+.bar-edge {
   width: var(--bsg-bar-edge);
   height: var(--bsg-bar-edge);
   border-radius: 50%;
@@ -1172,6 +1158,7 @@ const mobileToggleLabel = computed(() => {
   place-items: center;
   cursor: pointer;
 }
+.side-edge svg,
 .bar-edge svg {
   width: 15px;
   height: 15px;
@@ -1262,6 +1249,9 @@ const mobileToggleLabel = computed(() => {
   /* The desktop rail toggle has no role on phones. */
   .side-edge {
     display: none;
+  }
+  .game-shell__game {
+    --bsg-rail-toggle-reach: 0px;
   }
   /* Compact strip: player icons on the left, expand chevron on the right. */
   .mobile-strip {
@@ -1440,6 +1430,8 @@ const mobileToggleLabel = computed(() => {
      which does that too but keeps a board wider than the region from scrolling it. */
   transform: scale(var(--zoom-level));
   transform-origin: 0 0;
+  /* In board pixels, so padding by it clears the unscaled toggle at any zoom (#1722). */
+  --bsg-rail-toggle-overhang: calc(var(--bsg-rail-toggle-reach) / var(--zoom-level));
 }
 
 /* The adapter's overlays (see the template). Clicks pass through the empty
@@ -1500,6 +1492,7 @@ const mobileToggleLabel = computed(() => {
 /* Nothing to reserve room for or keep overlays clear of. */
 .game-shell__game.chrome-hidden {
   --bsg-panel-reserved: 0px;
+  --bsg-rail-toggle-reach: 0px;
 }
 .chrome-hidden .board-viewport {
   --bsg-panel-overlap: 0px;

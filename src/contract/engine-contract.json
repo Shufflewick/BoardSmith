@@ -1,5 +1,5 @@
 {
-  "revision": 457,
+  "revision": 458,
   "surfaceHash": "d8fde872c86fab07",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3599,6 +3599,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "A pick can opt out of single-choice auto-fill with autoFill: false, carried on its pick metadata so the shared controller leaves a lone choice to the player (#1721)."
+    },
+    {
+      "revision": 458,
+      "date": "2026-11-19",
+      "surfaceHash": "d8fde872c86fab07",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The shell gives how far the players panel's edge toggle reaches over the board's top-left corner as --bsg-rail-toggle-overhang (13px, 22px on touch, 0px below 640px or with the chrome hidden), so a board keeps that corner clear (#1722)"
     }
   ]
 }
