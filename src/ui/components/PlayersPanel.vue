@@ -501,16 +501,6 @@ defineSlots<{
   gap: 4px;
 }
 
-/* Only the token dims: a game's #player-strip-extra content stays legible. */
-.strip-tokens .pt > .tok {
-  opacity: 0.6;
-  transition: opacity var(--bsg-dur-fast);
-}
-
-.strip-tokens .pt.strip-active > .tok {
-  opacity: 1;
-}
-
 /* Its own stacking context, so the outline sits behind the token rather than behind the strip. */
 .strip-tokens .pt.strip-active > .tok {
   isolation: isolate;
