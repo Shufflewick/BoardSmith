@@ -32,7 +32,8 @@ import {
   type GameOptions,
   type ElementJSON,
 } from '../engine/index.js';
-import { defineComponent, h, type PropType } from 'vue';
+import { defineComponent, h, onMounted, type PropType } from 'vue';
+import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { TestGame } from './test-game.js';
 import {
   assertNoHiddenInfoLeak,
@@ -520,6 +521,7 @@ describe('assertNoHiddenInfoLeak — TOOL-04 (D20): symmetric-deck (identical-na
 
 class PrefixCard extends Card<PrefixNameGame> {
   tier?: string;
+  motto?: string;
 }
 
 class PrefixNameGame extends Game<PrefixNameGame, Player> {
@@ -529,8 +531,9 @@ class PrefixNameGame extends Game<PrefixNameGame, Player> {
 
     const table = this.create(Space, 'table');
     table.contentsVisible();
-    // Its short own value "47" sits inside the hidden name, and must not cut that name apart.
-    table.create(PrefixCard, 'AK-47 with Burst Fire', { tier: '47' });
+    // Its short own value "47" sits inside the hidden name and must not cut it apart; its
+    // motto overlaps its name, so "AK-47 with Burst Fire AK-47" is all its own text.
+    table.create(PrefixCard, 'AK-47 with Burst Fire', { tier: '47', motto: 'Burst Fire AK-47' });
 
     const deck = this.create(Space, 'deck');
     deck.contentsHidden();
@@ -549,11 +552,13 @@ interface PrefixViewNode {
   children?: PrefixViewNode[];
 }
 
-/** Draws the face-up table card as `data-card`, with `suffix` appended to that surface. */
-function prefixBoard(suffix: string) {
+/** Draws the face-up table card as `data-card`, with `suffix` appended to that surface, and makes `announcements`. */
+function prefixBoard(suffix: string, ...announcements: string[]) {
   return defineComponent({
     props: { gameView: { type: Object as PropType<PrefixViewNode | null>, default: null } },
     setup(props) {
+      const { announce } = useAnnouncer();
+      onMounted(() => announcements.forEach((text) => announce(text)));
       return () => {
         const table = props.gameView?.children?.find((child) => child.name === 'table');
         return h(
@@ -574,10 +579,28 @@ describe('assertNoHiddenInfoLeak — #1720: a visible card whose own name contai
     await expect(assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard('') })).resolves.not.toThrow();
   });
 
+  it('does not report a surface made only of the owner\'s own values, where two of them overlap', async () => {
+    await expect(assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard(' AK-47') })).resolves.not.toThrow();
+  });
+
   it('still reports the hidden name when that surface shows it beyond the owner\'s own name', async () => {
     await expect(
       assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard(' / next: AK-47') }),
     ).rejects.toThrow(/Hidden-info leak: "AK-47"/);
+  });
+
+  it('does not report an announcement of the visible card\'s name', async () => {
+    await expect(
+      assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard('', 'Player 1 plays AK-47 with Burst Fire') }),
+    ).resolves.not.toThrow();
+  });
+
+  it('still reports an announcement that names the hidden card beyond the visible name', async () => {
+    await expect(
+      assertNoHiddenInfoLeak(makeGame(), 2, {
+        component: prefixBoard('', 'Player 1 plays AK-47 with Burst Fire, then draws AK-47'),
+      }),
+    ).rejects.toThrow(/Hidden-info leak: "AK-47".*announced/);
   });
 });
 

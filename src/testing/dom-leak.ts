@@ -1482,11 +1482,11 @@ interface LeakDetectionData {
  * per-seat tree — `game.toJSONForPlayer(seat)`, post-`playerView`) AND, for
  * every element that IS visible, its own surviving identity values.
  *
- * The `ownValuesById` map is what makes the D20/CR-01 exemption precise (see
- * {@link assertNoHiddenInfoLeak}): a surface attributed to an ancestor/owner
- * element can only be exempted from a marker check when the collision is
- * fully explained by THAT owner's own legitimate content — never merely
- * because the owner's id differs from the marker's element id.
+ * The `ownValuesById` map is what makes the D20/CR-01/#1720 exemption precise
+ * (see {@link assertNoHiddenInfoLeak}): on a surface attributed to an owner
+ * element other than the marker's, only the text that is one of THAT owner's
+ * own values containing the marker is exempted, and the rest of the surface is
+ * still checked — never the whole surface merely because the ids differ.
  */
 function deriveLeakDetectionData(
   unredacted: readonly ElementJSON[],
@@ -1679,13 +1679,18 @@ function saysWord(text: string, word: string): boolean {
   });
 }
 
-/** `surface` with each own value that contains `marker` cut out, longest first. A shorter own value could cut the marker apart and hide a leak; a NUL marks each cut so the pieces either side cannot join into a marker. */
-function withoutOwnValues(surface: string, own: ReadonlySet<string> | undefined, marker: string): string {
-  if (!own) return surface;
-  return [...own]
-    .filter((value) => value.includes(marker))
-    .sort((a, b) => b.length - a.length)
-    .reduce((rest, value) => rest.split(value).join('\0'), surface);
+/** `text` with every occurrence of each `own` value that contains `marker` blanked out as NULs, so the marker is found only where it is not part of one. A shorter own value is skipped because it could cut the marker apart and hide a leak. */
+function withoutOwnValues(text: string, own: Iterable<string> | undefined, marker: string): string {
+  if (!own) return text;
+  const covered = new Array<boolean>(text.length).fill(false);
+  for (const value of own) {
+    if (!value.includes(marker)) continue;
+    for (let at = text.indexOf(value); at !== -1; at = text.indexOf(value, at + 1)) covered.fill(true, at, at + value.length);
+  }
+  return text
+    .split('')
+    .map((unit, at) => (covered[at] ? '\0' : unit))
+    .join('');
 }
 
 /** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
@@ -1701,7 +1706,9 @@ function refuseSpokenLeak(
     if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || spokenForms(marker.value).some((form) => shown.has(form))) continue;
     const { value, attribute, elementId, elementLabel } = marker;
     const leak = spoken.find(
-      ({ text }) => saysWord(text, value) && !allow(value, { attribute, elementId, elementLabel, announcement: text }),
+      ({ text }) =>
+        saysWord(withoutOwnValues(text.toLowerCase(), shown, value.toLowerCase()), value) &&
+        !allow(value, { attribute, elementId, elementLabel, announcement: text }),
     );
     if (leak) {
       const quote = JSON.stringify;
