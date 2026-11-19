@@ -10,10 +10,10 @@
  * the class keeps it in step itself (#1446).
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trackedFiles } from './tracked-tests.test-helper.mjs';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob(['/src/**/*.{ts,vue,css}', '!**/*.test.ts']);
@@ -22,8 +22,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const OWNER = 'src/ui/composables/reducedMotion.ts';
 const SYNC = /\bsyncReducedMotionClass\(\)/;
 
-const shippedSources = () => execFileSync('git', ['ls-files', 'src'], { cwd: ROOT, encoding: 'utf-8' })
-  .split('\n')
+const shippedSources = () => trackedFiles(['src'])
   .filter((path) => /\.(?:ts|vue|css)$/.test(path))
   .filter((path) => !/\.test\.ts$|\.test-helper\.ts$/.test(path) && path !== OWNER)
   .map((path) => ({ path, text: readFileSync(join(ROOT, path), 'utf-8') }));

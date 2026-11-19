@@ -137,14 +137,16 @@ legible.
 
 ### Why not wire in a real coverage report
 
-That was the preferred answer and it does not work, measured on fallow 2.48.0:
+When this was decided, on fallow 2.48.0, it did not work: `fallow audit` had no
+`--coverage` flag, no `health.coverage` key and ignored `FALLOW_COVERAGE`, so
+pointed at a genuine Istanbul report it returned byte-identical CRAP scores.
+The pinned fallow 3.28.0 does read coverage in `fallow audit`, through
+`--coverage`, `FALLOW_COVERAGE` or `health.coverage`, but the gate still hands it
+none, and two things keep `maxCrap` parked:
 
-- **`fallow audit` cannot read coverage at all.** It has no `--coverage` flag,
-  there is no `health.coverage` key in `fallow config-schema`, and it ignores
-  `FALLOW_COVERAGE` — pointed at a genuine Istanbul report it returns
-  byte-identical CRAP scores with no `istanbul_matched` in its summary. Only
-  `fallow health` reads coverage, and `fallow health` cannot be what the gate
-  runs: it has no dead-code and no duplication verdict.
+- **The gate has no coverage report to hand it.** `boardsmith audit` runs no
+  test suite, and producing an Istanbul report means a full coverage run before
+  every audit.
 - **A partial report is worse than none.** fallow scores a function it cannot
   match in the report as 0% covered, so a three-file report does not degrade to
   the old estimate — it degrades to something more confidently wrong.

@@ -4,7 +4,19 @@
  */
 
 /** Calls on an element that return element collections. */
-export const COLLECTION_CALL_NAMES = new Set(['all', 'first', 'firstN', 'last', 'lastN']);
+const COLLECTION_CALL_NAMES = new Set(['all', 'first', 'firstN', 'last', 'lastN']);
+
+/** Is this call expression a known collection-returning query (`.all()`, `.first()`, ...)? */
+export function isCollectionCall(node: Record<string, unknown> | null | undefined): boolean {
+  if (!node || node.type !== 'CallExpression') return false;
+  const callee = node.callee as { type?: string; property?: { type?: string; name?: string } } | undefined;
+  return (
+    callee?.type === 'MemberExpression' &&
+    callee.property?.type === 'Identifier' &&
+    typeof callee.property.name === 'string' &&
+    COLLECTION_CALL_NAMES.has(callee.property.name)
+  );
+}
 
 /**
  * Every GameElement class the engine exports, GameElement included. Games extend these, never

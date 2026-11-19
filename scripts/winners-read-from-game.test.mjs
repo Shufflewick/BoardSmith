@@ -12,10 +12,10 @@
  * that undo rolls it back.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { trackedFiles } from './tracked-tests.test-helper.mjs';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob(['/src/**/*.{ts,vue}', '!**/*.test.ts']);
@@ -56,8 +56,7 @@ describe('winnersReads', () => {
 
 describe('settings.winners is read only by Game (#503)', () => {
   it('no shipped source outside Game reads it', () => {
-    const sources = execFileSync('git', ['ls-files', 'src'], { cwd: ROOT, encoding: 'utf-8' })
-      .split('\n')
+    const sources = trackedFiles(['src'])
       .filter((path) => /\.(?:ts|vue)$/.test(path))
       .filter((path) => !/\.test\.ts$|\.test-helper\.ts$/.test(path))
       .filter((path) => path !== OWNER);

@@ -1,5 +1,5 @@
 {
-  "revision": 453,
+  "revision": 454,
   "surfaceHash": "d8fde872c86fab07",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3567,6 +3567,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "CLI only: remove the dead dev virtual module, dev's monorepo resolve branch, chunk-merge --branch and ingest-gaps --skip-relabel; validate reads boardsmith.json once"
+    },
+    {
+      "revision": 454,
+      "date": "2026-11-19",
+      "surfaceHash": "d8fde872c86fab07",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Shares a NUL-safe tracked-file lister in the guard scans, removes a dead ESLint autofix guard and unused bot-trainer options, and corrects the fallow gate docs; no behavior change (#1729)"
     }
   ]
 }

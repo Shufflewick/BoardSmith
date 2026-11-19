@@ -1,5 +1,5 @@
 import type { Rule } from 'eslint';
-import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, annotatedTypeName, collectSubclassNames } from './element-types.js';
+import { ENGINE_ELEMENT_CLASS_NAMES, annotatedTypeName, collectSubclassNames, isCollectionCall } from './element-types.js';
 
 /**
  * Disallows storing arrays of GameElement instances as persistent class
@@ -65,18 +65,6 @@ import { COLLECTION_CALL_NAMES, ENGINE_ELEMENT_CLASS_NAMES, annotatedTypeName, c
  * Not auto-fixable: whether the fix is "query at point of use" or "store
  * IDs instead" depends on intent, so this rule reports only.
  */
-
-/** Is this call expression a known collection-returning query (`.all()`, `.first()`, ...)? */
-function isCollectionCall(node: Record<string, unknown> | null | undefined): boolean {
-  if (!node || node.type !== 'CallExpression') return false;
-  const callee = node.callee as { type?: string; property?: { type?: string; name?: string } } | undefined;
-  return (
-    callee?.type === 'MemberExpression' &&
-    callee.property?.type === 'Identifier' &&
-    typeof callee.property.name === 'string' &&
-    COLLECTION_CALL_NAMES.has(callee.property.name)
-  );
-}
 
 /** Is this a `this.<prop>` member expression (a persistent class property target)? */
 function isThisPropertyTarget(node: Record<string, unknown> | null | undefined): boolean {
