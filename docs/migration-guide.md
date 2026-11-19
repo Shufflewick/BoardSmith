@@ -1,5 +1,12 @@
 # Migration Guide
 
+## `usePlayerStatAnimation()` is removed (#1716)
+
+It only returned `getPlayerStatElement` and `flyToPlayerStat`, which `boardsmith/ui`
+exports itself. Import those two directly: replace
+`const { getPlayerStatElement } = usePlayerStatAnimation();` with
+`import { getPlayerStatElement } from 'boardsmith/ui'`.
+
 ## `provideTableActionWiring` takes the element that holds the board (#1678)
 
 `provideTableActionWiring(wiring)` is now `provideTableActionWiring(wiring, boardEl)`,
