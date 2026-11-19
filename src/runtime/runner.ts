@@ -1801,7 +1801,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         gameInstanceId: snapshot.gameInstanceId,
       },
       GameClass,
-      { animationFloor, ...options },
+      { ...options, animationFloor },
     );
   }
 }
@@ -1836,7 +1836,7 @@ export function restoreEarlierSnapshot<G extends Game>(
   const runner = GameRunner.fromSnapshot(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1, seatRestoreEpochs: live.seatRestoreEpochs },
     GameClass,
-    { animationFloor: animationFloorOf(snapshotTree(live)), ...options },
+    { ...options, animationFloor: animationFloorOf(snapshotTree(live)) },
   );
   // `earlier` may be an arranged position, edited to a finished game after its flow was saved.
   runner.game.endFlowIfFinished();
