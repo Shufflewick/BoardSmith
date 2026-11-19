@@ -1,5 +1,5 @@
 /**
- * usePlayerStatAnimation - Utilities for animating elements to player stats in the panel
+ * Player stat animation - Utilities for animating elements to player stats in the panel
  *
  * Provides helpers for flying cards/tokens to player stat displays (scores, books, resources, etc.)
  *
@@ -20,10 +20,9 @@
  * ## Usage in Custom UI
  *
  * ```typescript
- * import { usePlayerStatAnimation, useFlyingElements } from 'boardsmith/ui';
+ * import { flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
  *
  * const { flyingElements, flyMultiple } = useFlyingElements();
- * const { flyToPlayerStat, getPlayerStatElement } = usePlayerStatAnimation();
  *
  * // Fly cards to a player's stat
  * flyToPlayerStat(flyMultiple, {
@@ -119,7 +118,7 @@ export function flyToPlayerStat(
   if (!targetEl) {
     if (warnIfMissing) {
       console.warn(
-        `[usePlayerStatAnimation] Target element not found for player ${playerSeat}, stat "${statName}". ` +
+        `[flyToPlayerStat] Target element not found for player ${playerSeat}, stat "${statName}". ` +
         `Make sure the element has data-player-stat="${statName}" and data-player-seat="${playerSeat}".`
       );
     }
@@ -150,14 +149,4 @@ export function flyToPlayerStat(
   );
 
   return true;
-}
-
-/**
- * Composable that provides player stat animation utilities.
- */
-export function usePlayerStatAnimation() {
-  return {
-    getPlayerStatElement,
-    flyToPlayerStat,
-  };
 }

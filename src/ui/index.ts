@@ -268,7 +268,6 @@ export {
 
 // Player stat animation utilities
 export {
-  usePlayerStatAnimation,
   getPlayerStatElement,
   flyToPlayerStat,
   type CardForAnimation,

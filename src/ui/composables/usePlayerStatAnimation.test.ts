@@ -9,7 +9,6 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   getPlayerStatElement,
   flyToPlayerStat,
-  usePlayerStatAnimation,
   type CardForAnimation,
 } from './usePlayerStatAnimation.js';
 import type { FlyConfig } from './useFlyingElements.js';
@@ -206,22 +205,5 @@ describe('flyToPlayerStat', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     flyToPlayerStat(flyMultiple, { cards: [], playerSeat: 1, statName: 'books' });
     expect(warn).not.toHaveBeenCalled();
-  });
-});
-
-describe('usePlayerStatAnimation', () => {
-  it('exposes the module functions themselves', () => {
-    const animation = usePlayerStatAnimation();
-    expect(animation.getPlayerStatElement).toBe(getPlayerStatElement);
-    expect(animation.flyToPlayerStat).toBe(flyToPlayerStat);
-  });
-
-  it('exposes exactly those two helpers', () => {
-    expect(Object.keys(usePlayerStatAnimation()).sort())
-      .toEqual(['flyToPlayerStat', 'getPlayerStatElement']);
-  });
-
-  it('is callable outside a component setup', () => {
-    expect(() => usePlayerStatAnimation()).not.toThrow();
   });
 });

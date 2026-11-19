@@ -1669,19 +1669,17 @@ const auto = useFLIP({
 | `auto` | `boolean` | Enable auto-mode with gameView watcher |
 | `gameView` | `() => unknown` | Required when auto: true |
 
-### usePlayerStatAnimation
+### Player stat animation
 
-Animate stat changes and fly elements to player stat displays.
+Fly elements to player stat displays. `getPlayerStatElement(seat, statName)` returns the stat's element in the players panel, for your own animations.
 
 <!-- typecheck: board -->
 ```vue
 <script setup lang="ts">
-import { usePlayerStatAnimation, flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
+import { flyToPlayerStat, useFlyingElements } from 'boardsmith/ui';
 
 // Get flyMultiple function from useFlyingElements
 const { flyMultiple } = useFlyingElements();
-// The stat's element in the players panel, for your own animations
-const { getPlayerStatElement } = usePlayerStatAnimation();
 
 // Fly cards to seat 1's "books" stat display (seats are 1-indexed)
 function flyBooksHome(removedCards: { rect: DOMRect; rank: string; suit: string }[]) {
