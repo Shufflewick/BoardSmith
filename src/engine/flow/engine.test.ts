@@ -18,7 +18,6 @@ import {
   ifThen,
   execute,
   setVar,
-  noop,
   phase,
   TurnOrder,
   turnLoop,
@@ -40,7 +39,7 @@ class Deck extends Space<TestGame> {}
 
 describe('Flow Builders', () => {
   it('should create sequence node', () => {
-    const node = sequence(noop(), noop());
+    const node = sequence(sequence(), sequence());
     expect(node.type).toBe('sequence');
     expect((node.config as { steps: unknown[] }).steps).toHaveLength(2);
   });
@@ -49,19 +48,19 @@ describe('Flow Builders', () => {
     const node = loop({
       maxIterations: 10,
       while: () => true,
-      do: noop(),
+      do: sequence(),
     });
     expect(node.type).toBe('loop');
   });
 
   it('should create repeat node', () => {
-    const node = repeat(3, noop());
+    const node = repeat(3, sequence());
     expect(node.type).toBe('repeat');
   });
 
   it('should create eachPlayer node', () => {
     const node = eachPlayer({
-      do: noop(),
+      do: sequence(),
     });
     expect(node.type).toBe('each-player');
   });
@@ -70,7 +69,7 @@ describe('Flow Builders', () => {
     const node = forEach({
       collection: [1, 2, 3],
       as: 'item',
-      do: noop(),
+      do: sequence(),
     });
     expect(node.type).toBe('for-each');
   });
@@ -86,8 +85,8 @@ describe('Flow Builders', () => {
     const node = switchOn({
       on: () => 'a',
       cases: {
-        a: noop(),
-        b: noop(),
+        a: sequence(),
+        b: sequence(),
       },
     });
     expect(node.type).toBe('switch');
@@ -96,15 +95,15 @@ describe('Flow Builders', () => {
   it('should create if node', () => {
     const node = ifThen({
       condition: () => true,
-      then: noop(),
-      else: noop(),
+      then: sequence(),
+      else: sequence(),
     });
     expect(node.type).toBe('if');
   });
 
   it('should create flow definition', () => {
     const flow: FlowDefinition = {
-      root: noop(),
+      root: sequence(),
     };
     expect(flow.root).toBeDefined();
   });
@@ -734,7 +733,7 @@ describe('FlowEngine', () => {
           // Cast past the compile-time constraint to exercise the runtime guard.
           collection: [{ round: 1 }, { round: 2 }] as unknown as number[],
           as: 'r',
-          do: noop(),
+          do: sequence(),
         }),
       };
 
@@ -1501,7 +1500,7 @@ describe('Named Phases', () => {
   });
 
   it('should create phase node', () => {
-    const node = phase('duel', { do: noop() });
+    const node = phase('duel', { do: sequence() });
     expect(node.type).toBe('phase');
     expect(node.config.name).toBe('duel');
   });
@@ -2657,7 +2656,7 @@ describe('game.currentPlayer follows the flow (#780)', () => {
     const visited: number[] = [];
     game.setFlow({
       root: sequence(
-        eachPlayer({ filter: (p) => p.seat === 2, do: noop() }),
+        eachPlayer({ filter: (p) => p.seat === 2, do: sequence() }),
         eachPlayer({ ...TurnOrder.CONTINUE, do: execute((ctx) => { visited.push(ctx.player!.seat); }) }),
       ),
     });
@@ -2684,7 +2683,7 @@ describe('game.currentPlayer follows the flow (#780)', () => {
     );
     game.setFlow({
       root: sequence(
-        eachPlayer({ filter: (p) => p.seat === 1, do: noop() }),
+        eachPlayer({ filter: (p) => p.seat === 1, do: sequence() }),
         simultaneousActionStep({ actions: ['pass'] }),
       ),
     });

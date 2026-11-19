@@ -1,7 +1,7 @@
 /**
  * The BoardSmith implementation of `WorldEngine` (#35 item 2).
  *
- * `world-engine.ts` states the platform's requirement and why each member
+ * `src/world/contract.ts` states the platform's requirement and why each member
  * exists; this file is the engine that meets it, and it is deliberately thin.
  * BoardSmith supplies every primitive it needs -- `adoptSubtree`,
  * `takeTouchedPartitions`, `partitionBaseline`, `GameElement.toJSON()` and
@@ -387,8 +387,8 @@ export interface BoardSmithWorldEngineOptions {
    * registry a table's actions land in and are reached through the same
    * `game.getAction`. That is what lets one enumeration serve both backends --
    * and it is the single property that keeps a world bot possible, since MCTS
-   * finds its moves through `getAction` and `enumerateSelectionsInternal` with
-   * no world-only path to teach it.
+   * finds its moves through `getAction` and `enumerateActionMoves` (from
+   * `movesFor` -> `listSeatMoves`) with no world-only path to teach it.
    *
    * Taken as a list rather than read off the game, because a game class may
    * register a table's actions in its own constructor and those are not this
@@ -3381,11 +3381,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
   /**
    * EVERY RESIDENT PARTITION AS IT STANDS BEFORE THIS COMMAND RUNS (#68, #294).
    *
-   * NOT the forbidden per-action snapshot. `world-engine.ts` prohibits
+   * NOT the forbidden per-action snapshot. `src/world/contract.ts` prohibits
    * `createSnapshot(game)`, which is the whole WORLD -- history, flow, players,
    * every partition in storage -- and is the cost this mode exists to delete.
    * This is the RESIDENT set, which is what the world is paying for in memory
-   * already and what `WORLD_MAX_RESIDENT_PARTITIONS` bounds.
+   * already and what `WorldBudgets.maxResidentPartitions` bounds, applied by
+   * the host on eviction.
    *
    * IT COVERS WHAT THE COMMAND DID NOT DECLARE, and that is the whole point of
    * the change (#294). It used to snapshot the declaration alone, and a handler

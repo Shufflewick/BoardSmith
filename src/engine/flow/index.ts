@@ -13,7 +13,6 @@ export {
   simultaneousActionStep,
   switchOn,
   ifThen,
-  noop,
   execute,
   setVar,
   turnLoop,

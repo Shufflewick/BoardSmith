@@ -341,7 +341,7 @@ minted for. Every operation that mints reports it:
 ```ts
 const { partitions, nextElementId } = await runner.genesis();
 const built = await runner.createPartition(name);   // { partition, nextElementId }
-const added = await runner.migrateCreate(existing, ctx); // { created, nextElementId }
+const migrated = await runner.migrateAll(stored, ctx); // { partitions, created, nextElementId }
 const checkpoint = await runner.serialize(dirty);   // { partitions, nextElementId }
 ```
 

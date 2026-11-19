@@ -5424,9 +5424,9 @@ export class Game<
     // person learning the game, not a fact about the game.
     //
     // A seat keeps its OWN entry so the redacted view stays self-consistent —
-    // `isTutorialGateActive`/`getDisabledActions` evaluate the same way
-    // against a restored per-seat clone as against the live game. The spectator
-    // is nobody, so it gets nothing.
+    // `getDisabledActions` evaluates the same way against a restored per-seat
+    // clone as against the live game. The spectator is nobody, so it gets
+    // nothing.
     //
     // Rebuilt by re-serializing a filtered Map from the live source rather than
     // by editing the tagged `{__map: [...]}` encoding in place — the redaction

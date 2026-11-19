@@ -1354,7 +1354,7 @@ function assertCoversWorldOffer(facts: {
  * ENGINE-PRODUCED rather than a literal, unlike the durability fixture: this
  * one CAN be produced, because `createWorld` is the call a host makes and its
  * answer canonicalizes. So the hash covers the validation too -- a rule dropped
- * from `worldVacateAction` lets a declaration through that this fixture would
+ * from `assertWorldVacate` lets a declaration through that this fixture would
  * then report differently.
  */
 async function computeWorldDeclaration(): Promise<unknown> {

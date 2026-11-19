@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Action, FlowEngine, actionStep, repeat, noop } from '../index.js';
+import { Game, Player, Action, FlowEngine, actionStep, repeat, sequence } from '../index.js';
 import type { FlowDefinition } from '../index.js';
 
 /**
@@ -69,10 +69,10 @@ describe('action step entry (#786)', () => {
 
 describe('repeat count (#786)', () => {
   it.each([NaN, -1, 1.5, Infinity])('refuses repeat(%s)', (times) => {
-    expect(() => repeat(times, noop())).toThrow(/repeat\(\) needs a whole number of times, 0 or more/);
+    expect(() => repeat(times, sequence())).toThrow(/repeat\(\) needs a whole number of times, 0 or more/);
   });
 
   it('accepts 0', () => {
-    expect(() => repeat(0, noop())).not.toThrow();
+    expect(() => repeat(0, sequence())).not.toThrow();
   });
 });

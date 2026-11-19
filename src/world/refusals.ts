@@ -588,7 +588,7 @@ export type WorldRefusalCode = keyof typeof WORLD_REFUSALS;
  * An `Error` subclass rather than a returned result, because every site that
  * raises one is deep inside a command the caller cannot usefully continue --
  * and because the alternative, threading a result type through the engine, is
- * the change `world-engine.ts` deliberately did not make.
+ * the change `src/world/contract.ts` deliberately did not make.
  */
 export class WorldRefusal extends Error {
   readonly code: WorldRefusalCode;

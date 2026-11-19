@@ -38,7 +38,7 @@ export interface WorldBudgets {
    *
    * A ceiling on the bundle's own `maxPlayers`, not a substitute for it: the
    * game says how many players its world holds and this says how large a world
-   * the host is prepared to keep resident. `assertWorldSeatCount` is where the
+   * the host is prepared to keep resident. `worldSeatCount` is where the
    * two meet.
    *
    * It also bounds the per-seat colour spread: hues are rounded to whole

@@ -130,12 +130,7 @@ export type {
 } from './scoring/index.js';
 
 // Element visibility
-export {
-  canPlayerSee,
-  visibilityFromMode,
-  resolveVisibility,
-  DEFAULT_VISIBILITY,
-} from './element/visibility.js';
+export { canPlayerSee } from './element/visibility.js';
 
 export type { VisibilityMode, VisibilityState } from './element/visibility.js';
 
@@ -205,7 +200,6 @@ export {
   simultaneousActionStep,
   switchOn,
   ifThen,
-  noop,
   execute,
   setVar,
   turnLoop,

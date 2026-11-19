@@ -419,13 +419,6 @@ export function ifThen<G extends Game = Game>(config: {
 }
 
 /**
- * Create a "do nothing" node (useful as placeholder or in conditionals)
- */
-export function noop<G extends Game = Game>(): FlowNode<G> {
-  return sequence();
-}
-
-/**
  * Execute a function during flow (for side effects)
  *
  * @example
