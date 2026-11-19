@@ -1,6 +1,6 @@
 {
-  "revision": 451,
-  "surfaceHash": "68cd407d95737a05",
+  "revision": 452,
+  "surfaceHash": "d8fde872c86fab07",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3551,6 +3551,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "UI dedupe: one fly() takes FlyConfig, useHexGrid drops axialToCube/cubeToAxial, isOwnedByPlayer is removed (use isMyElement), CardForAnimation extends FlyingCardData."
+    },
+    {
+      "revision": 452,
+      "date": "2026-11-19",
+      "surfaceHash": "d8fde872c86fab07",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Engine cleanup (#1727). BREAKING: the noop() flow builder is removed (use sequence()), and the engine barrel no longer exports resolveVisibility, visibilityFromMode or DEFAULT_VISIBILITY; FlowEngine drops its private isOver pass-through."
     }
   ]
 }

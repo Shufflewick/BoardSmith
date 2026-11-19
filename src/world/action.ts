@@ -909,7 +909,7 @@ function forwardCount<G extends Game, C>(
  * form, `dependsOn`, `filterBy` or `repeat`: each of those makes an
  * enumeration whose size is a function of the RESIDENT tree rather than of the
  * declaration, and the resident tree is a function of what every other player
- * recently touched. `assertWorldActions` refuses them on a definition built by
+ * recently touched. `assertWorldAction` refuses them on a definition built by
  * any other route, so the omission here is a signpost and not the enforcement.
  */
 /*

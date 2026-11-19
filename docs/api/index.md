@@ -60,9 +60,6 @@ import {
 ### Visibility
 
 - `canPlayerSee()` - Check visibility for player
-- `visibilityFromMode()` - Convert mode to visibility state
-- `resolveVisibility()` - Resolve visibility configuration
-- `DEFAULT_VISIBILITY` - Default visibility settings
 
 ### Action System
 
@@ -91,7 +88,6 @@ import {
 - `simultaneousActionStep()` - Wait for all players
 - `switchOn()` - Branch based on value
 - `ifThen()` - Conditional execution
-- `noop()` - No operation
 - `execute()` - Execute function
 - `setVar()` - Set flow variable
 - `turnLoop()` - Standard turn-based loop

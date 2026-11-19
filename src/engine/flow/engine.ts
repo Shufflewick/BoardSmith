@@ -1287,7 +1287,7 @@ export class FlowEngine<G extends Game = Game> {
     try {
       // The action finished the game, whoever else was still to act. run()
       // ends the flow before anything else is asked or offered (#492).
-      if (this.isOver()) return this.run();
+      if (this.game.isFinished()) return this.run();
 
       const context = this.createContext();
       this.reevaluateSimultaneousSeat(frame, config, playerState, player, context);
@@ -1726,7 +1726,8 @@ export class FlowEngine<G extends Game = Game> {
    * Uses a stack-based state machine to execute nested flow nodes. Each iteration
    * processes one node, which may push children onto the stack (e.g., sequence steps)
    * or mark itself complete. The loop exits when:
-   * - The flow is over (see `isOver`), checked on entry and after every node,
+   * - The game is finished (`game.isFinished()`, #492, #503), checked on entry
+   *   and after every node,
    *   so a game finished by an action or a node runs nothing further and
    *   leaves no step open
    * - A node requires player input (awaitingInput)
@@ -1743,7 +1744,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Once on entry (a resume can arrive after the action that finished the
     // game), then once after each node that runs.
-    if (!this.complete && this.isOver()) this.endFlow();
+    if (!this.complete && this.game.isFinished()) this.endFlow();
 
     while (!this.complete && !this.awaitingInput) {
       if (this.stack.length === 0) {
@@ -1790,25 +1791,10 @@ export class FlowEngine<G extends Game = Game> {
         this.stack.pop();
       }
 
-      if (this.isOver()) this.endFlow();
+      if (this.game.isFinished()) this.endFlow();
     }
 
     return this.getState();
-  }
-
-  /**
-   * Whether the game is over: it was finished (`game.finish(winners)`, or a
-   * game's own `isFinished()` override). The game is the one place that
-   * declares its end (#503).
-   *
-   * A finished game ends the flow whatever loop it is in (#492). Only
-   * `turnLoop` and `stateAwareLoop` used to stop on `isFinished()`, so a game
-   * finished inside `eachPlayer`, `loop`, `sequence` or `repeat` kept waiting
-   * on the next seat: hosts reported it incomplete beside its winners and its
-   * players could keep acting.
-   */
-  private isOver(): boolean {
-    return this.game.isFinished();
   }
 
   /**
@@ -1817,7 +1803,7 @@ export class FlowEngine<G extends Game = Game> {
    * edited to a finished game (an arranged one, #1427) still awaits a seat.
    */
   endIfOver(): boolean {
-    if (this.complete || !this.isOver()) return false;
+    if (this.complete || !this.game.isFinished()) return false;
     this.endFlow();
     return true;
   }

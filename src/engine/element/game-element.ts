@@ -527,8 +527,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * non-enumerable accessor on this element that THROWS
    * {@link RedactedAttributeError} on read, so a withheld attribute cannot be
    * mistaken for its class-field default. Non-enumerable is what keeps
-   * `toJSON` and `resolveReferences` (both `Object.keys` walks) from reading
-   * it back.
+   * `toJSON` and `resolveElementReferences` (both walk `savedAttributeKeys`,
+   * an `Object.keys` filter) from reading it back.
    */
   _redactedAttributes?: Set<string>;
 

@@ -447,11 +447,14 @@ export function readWorldDefinition(definition: {
   return world;
 }
 
+/** The bundle's `world.vacate`, which `assertWorldVacate` checked when the world was read. */
+export function worldVacateAction(world: WorldDefinition): string {
+  return world.vacate;
+}
+
 /**
- * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399, #813).
- *
- * The bundle's `world.vacate`, checked and handed back as a name a host may
- * dispatch.
+ * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK, checked at read time
+ * (ShufflewickPub #399, #813).
  *
  * FOUR RULES, and each has a failure with no symptom behind it.
  *
@@ -475,11 +478,6 @@ export function readWorldDefinition(definition: {
  * gone, so there is nobody left to answer one and a host could only dispatch it
  * with no arguments and watch it refuse.
  */
-export function worldVacateAction(world: WorldDefinition): string {
-  return world.vacate;
-}
-
-/** `worldVacateAction`'s four rules, raised as refusals at read time. */
 function assertWorldVacate(world: WorldDefinition): void {
   if (world.vacate === undefined) {
     throw worldRefusal(
@@ -911,7 +909,7 @@ export interface WorldRunnerOptions {
    * THE WORLD'S DURABLE ID ALLOCATION STAMP (ShufflewickPub #377).
    *
    * The `nextElementId` this world last reported -- from `genesis()`, from
-   * `createPartition()`, or from `migrateCreate()` -- as the host persisted it.
+   * `createPartition()`, or from `migrateAll()` -- as the host persisted it.
    * Element ids outlive the process that minted them and only a fraction of the
    * partitions holding them is ever resident, so a host that omits this builds
    * a world whose counter speaks only for what it happens to have loaded.
