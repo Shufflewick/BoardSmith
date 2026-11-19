@@ -6,6 +6,10 @@
  * - `FlowStepResult`: the flow engine's own step result. It is internal to the
  *   flow engine, so the type import below must fail; `boardsmith typecheck`
  *   reports an unused `@ts-expect-error` if the type is exported again.
+ * - `noop()`: it only returned `sequence()`, which is the empty node (#1727).
+ * - `resolveVisibility`, `visibilityFromMode`, `DEFAULT_VISIBILITY`: engine
+ *   internals no caller outside `src/engine` reached through the barrel (#1727).
+ * - `FlowEngine.isOver`: it only returned `game.isFinished()` (#1727).
  */
 import { describe, it, expect } from 'vitest';
 import { Game, FlowEngine } from './index.js';
