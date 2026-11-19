@@ -18,7 +18,8 @@
  *
  * Glyph ink (LIBX-03/D30) is luminance-adaptive: black on light seat colors,
  * white on dark, via `seatInk`. The `text-shadow` halo is derived
- * opposite the chosen ink so it never fights legibility.
+ * opposite the chosen ink so it never fights legibility. The same ink edges
+ * the shape, so a token stands off a ground as light or dark as itself.
  */
 import { computed } from 'vue';
 import { seatInk } from '../utils/color-contrast';
@@ -77,6 +78,7 @@ const ink = computed(() => seatInk(props.color, 'PlayerToken'));
       width: `${size}px`,
       height: `${size}px`,
       fontSize: `${Math.round(size * 0.42)}px`,
+      '--tok-edge': ink.ink,
       ...(color ? { '--tc': color } : {}),
     }"
     aria-hidden="true"
@@ -96,11 +98,18 @@ const ink = computed(() => seatInk(props.color, 'PlayerToken'));
   place-items: center;
   flex: none;
 }
-.tok .shape {
+/* A 1px edge in the glyph's ink, opposite the seat colour, so a token reads on any ground (#1723). */
+.tok::before {
+  content: '';
   position: absolute;
   inset: 0;
+  clip-path: var(--tok-shape);
+  background: var(--tok-edge);
+}
+.tok .shape {
+  position: absolute;
+  inset: 1px;
   background: var(--tc, var(--bsg-accent));
-  box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
 }
 .tok .ini {
   position: relative;

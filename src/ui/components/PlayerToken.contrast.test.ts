@@ -41,6 +41,13 @@ describe('PlayerToken contrast ink', () => {
     expect(style).toContain('text-shadow');
   });
 
+  it('edges a light token in black and a dark one in white, so it stands off any strip (#1723)', () => {
+    const light = mount(PlayerToken, { props: { name: 'Alice', seat: 0, color: '#f2c230' } });
+    const dark = mount(PlayerToken, { props: { name: 'Bob', seat: 1, color: '#0b0b0d' } });
+    expect(light.find('.tok').attributes('style')).toContain('--tok-edge: #000000');
+    expect(dark.find('.tok').attributes('style')).toContain('--tok-edge: #ffffff');
+  });
+
   it('renders without throwing when color is absent', () => {
     expect(() => mount(PlayerToken, { props: { name: 'Carol', seat: 2 } })).not.toThrow();
   });

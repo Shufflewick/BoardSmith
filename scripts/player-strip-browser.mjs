@@ -117,6 +117,20 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', engines: ['chro
       assert(mismatches.length === 0, mismatches.join('; '));
     });
 
+    await check('every badge is drawn at full strength, edged in its own shape opposite its colour (#1723)', async () => {
+      const faults = await frame.locator('.mobile-strip .strip-tokens').evaluate((row) => [...row.querySelectorAll('.pt > .tok')].flatMap((tok) => {
+        const edge = getComputedStyle(tok, '::before');
+        const shape = getComputedStyle(tok.querySelector('.shape'));
+        const ink = getComputedStyle(tok.querySelector('.ini')).color;
+        const out = [];
+        if (getComputedStyle(tok).opacity !== '1') out.push(`opacity ${getComputedStyle(tok).opacity}`);
+        if (edge.content === 'none' || edge.clipPath !== shape.clipPath) out.push(`edge ${edge.content} clipped ${edge.clipPath}, token ${shape.clipPath}`);
+        if (edge.backgroundColor !== ink) out.push(`edge ${edge.backgroundColor}, ink ${ink}`);
+        return out;
+      }));
+      assert(faults.length === 0, faults.join('; '));
+    });
+
     await check('with more seats than fit at 320px the strip stays one row and scrolls, clear of the toggle', async () => {
       await page.setViewportSize({ width: 320, height: 800 });
       // The table sample seats two; copies of a seat stand in for a bigger table.
