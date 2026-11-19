@@ -32,6 +32,7 @@ import {
   type GameOptions,
   type ElementJSON,
 } from '../engine/index.js';
+import { defineComponent, h, type PropType } from 'vue';
 import { TestGame } from './test-game.js';
 import {
   assertNoHiddenInfoLeak,
@@ -507,6 +508,76 @@ describe('assertNoHiddenInfoLeak — TOOL-04 (D20): symmetric-deck (identical-na
     await expect(
       assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
     ).rejects.toThrow(/hidden-info leak/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #1720: a visible card whose own name CONTAINS a hidden card's name ("AK-47
+// with Burst Fire" vs "AK-47"). The visible card drawing its own name is
+// explained by its own identity, so it is no leak; anything left on that
+// surface once the owner's own values are taken out is still checked.
+// ---------------------------------------------------------------------------
+
+class PrefixCard extends Card<PrefixNameGame> {
+  tier?: string;
+}
+
+class PrefixNameGame extends Game<PrefixNameGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([PrefixCard]);
+
+    const table = this.create(Space, 'table');
+    table.contentsVisible();
+    // Its short own value "47" sits inside the hidden name, and must not cut that name apart.
+    table.create(PrefixCard, 'AK-47 with Burst Fire', { tier: '47' });
+
+    const deck = this.create(Space, 'deck');
+    deck.contentsHidden();
+    deck.create(PrefixCard, 'AK-47');
+
+    this.registerAction(Action.create<PrefixNameGame>('pass').execute(() => ({ success: true })));
+    this.setFlow({
+      root: loop({ while: () => false, maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }),
+    });
+  }
+}
+
+interface PrefixViewNode {
+  id?: number;
+  name?: string;
+  children?: PrefixViewNode[];
+}
+
+/** Draws the face-up table card as `data-card`, with `suffix` appended to that surface. */
+function prefixBoard(suffix: string) {
+  return defineComponent({
+    props: { gameView: { type: Object as PropType<PrefixViewNode | null>, default: null } },
+    setup(props) {
+      return () => {
+        const table = props.gameView?.children?.find((child) => child.name === 'table');
+        return h(
+          'div',
+          (table?.children ?? []).map((card) =>
+            h('div', { 'data-element-id': String(card.id), 'data-card': `${card.name}${suffix}` }),
+          ),
+        );
+      };
+    },
+  });
+}
+
+describe('assertNoHiddenInfoLeak — #1720: a visible card whose own name contains a hidden name', () => {
+  const makeGame = () => TestGame.create(PrefixNameGame, { playerCount: 2, seed: 'dom-leak-prefix-01' });
+
+  it('does not report the visible card drawing its own name', async () => {
+    await expect(assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard('') })).resolves.not.toThrow();
+  });
+
+  it('still reports the hidden name when that surface shows it beyond the owner\'s own name', async () => {
+    await expect(
+      assertNoHiddenInfoLeak(makeGame(), 2, { component: prefixBoard(' / next: AK-47') }),
+    ).rejects.toThrow(/Hidden-info leak: "AK-47"/);
   });
 });
 
