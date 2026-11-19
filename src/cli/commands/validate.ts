@@ -27,7 +27,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip, formatBytes } from '../lib/zip.js';
-import { resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -93,14 +93,16 @@ interface ValidationRun {
  */
 async function runValidation(
   projectDir: string,
-  options: { typeCheck?: TypeCheckRun } = {},
+  command: string,
+  options: { typeCheck?: TypeCheckRun },
 ): Promise<ValidationRun> {
   // The real path, as a shell's working directory always is, so paths the tools report (vue-tsc's
   // program, vitest's file list) compare equal to paths built from it.
   const cwd = realpathSync(projectDir);
   const results: ValidationResult[] = [];
 
-  const config: ProjectConfig = await readProjectConfig(cwd, { command: 'boardsmith validate', purpose: 'validate the game' });
+  requireGameProject(cwd);
+  const config: ProjectConfig = await readProjectConfig(cwd, { command, purpose: 'validate the game' });
   // Which BACKEND this game declares, read once. `backend` is the single
   // declaration (#171), and what it changes below is which entry point the
   // project must have.
@@ -131,7 +133,7 @@ async function runValidation(
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd, worldMode, config));
 
-  const rules = projectRules(cwd);
+  const rules = projectRules(cwd, config);
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   // 7b. And no Action Panel level shows more than nine ungrouped start buttons, from the same walk (#1639).
@@ -148,11 +150,12 @@ async function runValidation(
 
 /**
  * Validates the project in `cwd` and prints every verdict. Throws when a check blocks, so a caller
- * (`publish`, `verify`) stops there, and the CLI exits non-zero with the message.
+ * (`verify`) stops there, and the CLI exits non-zero with the message. `command` is the one the
+ * author ran, so a broken boardsmith.json tells them what to run again.
  */
-export async function validateProject(cwd: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
+export async function validateProject(cwd: string, command: string, options: { typeCheck?: TypeCheckRun } = {}): Promise<void> {
   console.log(styleText('cyan', '\nValidating game...\n'));
-  const { results, worldMode } = await runValidation(cwd, options);
+  const { results, worldMode } = await runValidation(cwd, command, options);
   printResults(results);
   if (hasBlockingFailure(results)) {
     throw new Error('Validation failed. Please fix the issues above.');
@@ -163,7 +166,7 @@ export async function validateProject(cwd: string, options: { typeCheck?: TypeCh
 
 /** `boardsmith validate`, in the current directory. */
 export async function validateCommand(): Promise<void> {
-  await validateProject(process.cwd());
+  await validateProject(process.cwd(), 'boardsmith validate');
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -1273,7 +1276,7 @@ export async function validateChoiceCardinality(rules: ProjectRules, isWorld: bo
   const spinner = ora('Checking choice cardinality and start buttons per level...').start();
 
   try {
-    const audit = isWorld ? await auditWorld(rules.cwd) : await auditTable(await rules.load());
+    const audit = isWorld ? await auditWorld(rules) : await auditTable(await rules.load());
 
     const results = [buildChoiceCardinalityResult(audit.unbounded, isWorld ? 'world' : 'table'), buildLevelButtonsResult(audit.crowded)];
     if (results.every((result) => result.passed)) spinner.succeed('Choice cardinality and start buttons per level OK');
@@ -1297,9 +1300,9 @@ export async function validateChoiceCardinality(rules: ProjectRules, isWorld: bo
  * world host inside it, come out of the rules' own bundle, exactly as
  * `boardsmith dev` takes its world host from there.
  */
-function auditWorld(cwd: string): Promise<ChoiceAudit> {
+function auditWorld(rules: ProjectRules): Promise<ChoiceAudit> {
   return withProjectBundle(
-    cwd,
+    rules,
     'world-cardinality',
     (cliSourceFile) => [
       `export { auditWorldChoiceCardinality } from ${JSON.stringify(cliSourceFile('lib/choice-cardinality.ts'))};`,
@@ -1331,20 +1334,22 @@ function auditTable(gameDefinition: GameDefinition): Promise<ChoiceAudit> {
  * `.boardsmith` is shared with a running dev server and with other validates of
  * the same game (#543), so this removes only the directory it made.
  */
-async function loadProjectRules(cwd: string): Promise<GameDefinition> {
-  return withProjectBundle(cwd, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
+async function loadProjectRules(rules: ProjectRules): Promise<GameDefinition> {
+  return withProjectBundle(rules, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
 }
 
-/** A project's folder and its compiled rules, bundled at most once however many checks read them (#1303). */
+/** A project's folder, its boardsmith.json and its compiled rules, bundled at most once however many checks read them (#1303). */
 export interface ProjectRules {
   cwd: string;
+  config: ProjectConfig;
   load(): Promise<GameDefinition>;
 }
 
 /** The {@link ProjectRules} of the project in `cwd`: nothing is bundled until a check asks. */
-export function projectRules(cwd: string): ProjectRules {
+export function projectRules(cwd: string, config: ProjectConfig): ProjectRules {
   let loading: Promise<GameDefinition> | undefined;
-  return { cwd, load: () => (loading ??= loadProjectRules(cwd)) };
+  const rules: ProjectRules = { cwd, config, load: () => (loading ??= loadProjectRules(rules)) };
+  return rules;
 }
 
 /**
@@ -1355,15 +1360,11 @@ export function projectRules(cwd: string): ProjectRules {
  * the absolute, forward-slashed path an `export ... from` line needs.
  */
 async function withProjectBundle<T>(
-  cwd: string,
+  { cwd, config }: ProjectRules,
   name: string,
   exports: (cliSourceFile: (pathUnderCli: string) => string) => string[],
   use: (bundle: { gameDefinition: GameDefinition } & Record<string, unknown>) => Promise<T>,
 ): Promise<T> {
-  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as {
-    paths?: { rules?: string };
-    gameOptions?: unknown;
-  };
   const rulesPath = resolveRulesDir(cwd, config);
   return withCommandBuildDir(cwd, 'validate', async (tempDir) => {
     const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
@@ -1424,15 +1425,13 @@ export function checkRulesAgreement(
 /** Load the compiled rules and run {@link checkRulesAgreement} against boardsmith.json. */
 async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationResult> {
   const spinner = ora('Checking rules against boardsmith.json...').start();
-  const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
-
   let result: ValidationResult;
   try {
     const gameDefinition = await rules.load();
     // Constructs the game at every seat count with every combination of its
     // boolean and select options to read its flow, so a constructor that
     // throws for any of them is reported here too, naming the combination.
-    result = checkRulesAgreement(config, gameDefinition);
+    result = checkRulesAgreement(rules.config, gameDefinition);
   } catch (error) {
     spinner.fail('Rules could not be loaded');
     return {
@@ -1559,8 +1558,7 @@ export async function validateSpriteImages(rules: ProjectRules): Promise<Validat
   }
   let result: ValidationResult;
   try {
-    const config = JSON.parse(readFileSync(join(rules.cwd, 'boardsmith.json'), 'utf-8')) as { colorPalette?: unknown };
-    result = checkSpriteImages(gameDefinition, config.colorPalette);
+    result = checkSpriteImages(gameDefinition, rules.config.colorPalette);
   } catch (error) {
     spinner.fail('Sprite images could not be checked');
     return {

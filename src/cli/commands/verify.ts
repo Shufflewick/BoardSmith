@@ -408,7 +408,7 @@ async function buildCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
 /** 4. `boardsmith validate`, run in this process on the type check the run already has. */
 async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   try {
-    await validateProject(ctx.projectDir, { typeCheck: await ctx.typeCheck() });
+    await validateProject(ctx.projectDir, 'boardsmith verify', { typeCheck: await ctx.typeCheck() });
     return { passed: true, summary: '`boardsmith validate` passed.' };
   } catch (error) {
     console.log(styleText('red', (error as Error).message));
