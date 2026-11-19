@@ -561,10 +561,18 @@ export function toStartPayload(
 ): { payload: PersistStartPayload; dropped: string[] } | null {
   if (value === null || value === undefined) return null;
   if (!isPlainObject(value) || !Array.isArray(value.entries)) return null;
+  return rowsToStartPayload(value.entries, sessionKey, players);
+}
 
+/** {@link toStartPayload} once the answer is known to be a list of rows: each row parsed, or named in `dropped`. */
+export function rowsToStartPayload(
+  rows: readonly unknown[],
+  sessionKey: string,
+  players: PersistPlayer[],
+): { payload: PersistStartPayload; dropped: string[] } {
   const entries: PersistedEntry[] = [];
   const dropped: string[] = [];
-  for (const row of value.entries) {
+  for (const row of rows) {
     const entry = toPersistedEntry(row);
     if (entry) {
       entries.push(entry);

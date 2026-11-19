@@ -334,7 +334,7 @@ function makeDivergenceRunner(): GameRunner<DivergenceGame> {
  * `buildPlayerState`. A state that omits availableActions fails the test here.
  */
 function seatOneActionSets(runner: GameRunner<DivergenceGame>): { available: string[]; metadataKeys: string[] } {
-  const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
+  const state = buildPlayerState(runner, 1, { includeActionMetadata: true });
   if (!state.availableActions) throw new Error('buildPlayerState returned no availableActions for the seat');
   return { available: state.availableActions, metadataKeys: Object.keys(state.actionMetadata ?? {}) };
 }

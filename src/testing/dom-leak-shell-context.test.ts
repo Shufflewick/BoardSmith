@@ -208,10 +208,9 @@ async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, boa
   await nextTick();
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'init', seat } }));
   await nextTick();
-  const names = game.game.players.map((player) => player.name ?? `Player ${player.seat}`);
   const frame = {
     flowState: game.runner.getFlowState(),
-    state: buildPlayerState(game.runner, names, seat, { includeActionMetadata: true }),
+    state: buildPlayerState(game.runner, seat, { includeActionMetadata: true }),
   };
   window.dispatchEvent(
     new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', type: 'game_state', view: frame, winners: [] } }),

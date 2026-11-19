@@ -57,7 +57,7 @@ function fiveSeatView() {
     gameOptions: { playerCount: 5, playerNames: names, seed: 'seats' },
   });
   runner.start();
-  return { flowState: runner.getFlowState(), state: buildPlayerState(runner, names, 1) };
+  return { flowState: runner.getFlowState(), state: buildPlayerState(runner, 1) };
 }
 
 afterEach(() => {

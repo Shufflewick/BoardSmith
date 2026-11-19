@@ -277,10 +277,9 @@ export interface KeptHistory {
 }
 
 /**
- * The minimal `FlowState` shape {@link computeUndoEligibility} reads. Kept
- * structural (not the concrete engine `FlowState`) so a caller with a
- * narrower flow-state type (`stateless-ops.ts`'s `BotFlowState`) can pass it
- * without a cast, the same way `seat-activity.ts`'s `SeatActivityState` does.
+ * The minimal `FlowState` shape {@link computeUndoEligibility} reads, kept
+ * structural the same way `seat-activity.ts`'s `SeatActivityState` is, so it
+ * names only the fields undo eligibility depends on.
  */
 export interface UndoFlowState {
   currentPlayer?: number;
@@ -702,7 +701,6 @@ function decideSeatUndo(runner: GameRunner, seat: number, actionsThisTurn: numbe
  */
 export function buildPlayerState(
   runner: GameRunner,
-  playerNames: string[],
   playerPosition: number,
   options?: { includeActionMetadata?: boolean }
 ): PlayerGameState {
@@ -1025,6 +1023,6 @@ export function debuggingOffMessage(requestName: string): string {
 export function buildSpectatorView(runner: GameRunner): unknown {
   return {
     flowState: toPublicFlowState(runner.getFlowState(), 0),
-    state: buildPlayerState(runner, [], 0, { includeActionMetadata: false }),
+    state: buildPlayerState(runner, 0, { includeActionMetadata: false }),
   };
 }

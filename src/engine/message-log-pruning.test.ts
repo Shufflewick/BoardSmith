@@ -351,7 +351,7 @@ describe("each seat's own eviction offset (#903)", () => {
 
   it("reaches each seat's session state as its own offset", () => {
     const runner = whisperedThenPruned();
-    const state = (seat: number) => buildPlayerState(runner, ['A', 'B'], seat);
+    const state = (seat: number) => buildPlayerState(runner, seat);
     expect([1, 2].map((seat) => state(seat).messageOffset)).toEqual([3, 1]);
     expect(JSON.stringify(state(2))).not.toContain('messagesEvicted');
   });

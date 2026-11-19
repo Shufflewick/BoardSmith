@@ -83,13 +83,8 @@ export { PickHandler } from './pick-handler.js';
 
 export type { PickStepResult } from './pending-action-manager.js';
 
-// Exposed so stateless hosts (the ShufflewickPub executor) can replicate
-// undo-to-turn-start by truncating the action history and replaying.
-export { computeUndoInfo, debuggingOffMessage } from './utils.js';
-
-// Exposed so the stateless executor can enrich an action's followUp with the
-// same metadata the dev server attaches, letting the embedded UI auto-start it.
-export { buildSingleActionMetadata } from './utils.js';
+// Exposed so a host that refuses a debug request says it the way the executor does.
+export { debuggingOffMessage } from './utils.js';
 
 // The one reader of a snapshot's element tree (#804): hosts that inspect a
 // stored snapshot read the tree through it, never `snapshot.state`.

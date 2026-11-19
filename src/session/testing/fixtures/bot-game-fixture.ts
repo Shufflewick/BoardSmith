@@ -79,7 +79,7 @@ const botGameBotDef: BotStrategy = {
     },
   }),
   // Extract 'direction' arg as notation so heatmap entries have extractable cell refs.
-  // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would be empty.
+  // Without this, DEST_KEYS fallback wouldn't find 'direction' and entries would be empty.
   hintTargetFromMove: (move) => {
     const dir = (move.args as { direction?: string }).direction;
     return dir ? { notation: dir } : undefined;

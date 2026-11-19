@@ -57,7 +57,7 @@ describe('state.players routed through visibility filtering (SEC-03 / F8)', () =
   });
 
   it('hides a restricted Player attribute from an opponent\'s state.players', () => {
-    const opponentState = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    const opponentState = buildPlayerState(runner, 2);
     const ownerEntry = opponentState.players.find((p) => p.seat === 1);
 
     expect(ownerEntry).toBeDefined();
@@ -66,7 +66,7 @@ describe('state.players routed through visibility filtering (SEC-03 / F8)', () =
   });
 
   it('shows the restricted Player attribute in the owner\'s own state.players', () => {
-    const ownState = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const ownState = buildPlayerState(runner, 1);
     const ownEntry = ownState.players.find((p) => p.seat === 1);
 
     expect(ownEntry).toBeDefined();
@@ -75,7 +75,7 @@ describe('state.players routed through visibility filtering (SEC-03 / F8)', () =
   });
 
   it('state.players agrees with the filtered view for a given viewer', () => {
-    const opponentState = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    const opponentState = buildPlayerState(runner, 2);
     const view = opponentState.view as { children?: any[] };
 
     // Locate seat 1's Player node in the SAME filtered tree that backs

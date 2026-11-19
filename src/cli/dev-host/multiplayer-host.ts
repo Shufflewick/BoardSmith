@@ -1436,7 +1436,6 @@ export class MultiplayerHost {
     if (!persistence) return;
     const sessionKey = `${persistence.runKey}-${++this.gamesStarted}`;
     const read = persistence.store.readForSession(sessionKey, this.persistPlayers);
-    if (read === null) return;
     if (read.dropped.length > 0) {
       console.warn(
         `[boardsmith dev] Some saved rows could not be read and were left out of this game: ` +

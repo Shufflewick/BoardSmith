@@ -9,7 +9,8 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
+import type { Game, GameClass, TutorialDefinition, Annotation, ElementRef, FlowState, FollowUpOffer } from '../engine/index.js';
+import type { BotMove, BotStrategy } from '../bot/types.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
 import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError, toPublicFlowState } from '../engine/index.js';
@@ -33,12 +34,12 @@ import {
 import { snapshotTree } from '../engine/utils/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import { searchSeat } from '../bot/seat-move.js';
-import { describeMoveForHint } from './move-summary.js';
+import { describeMoveForHint, DEST_KEYS } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
 import { missingFieldError } from './parse-executor-op.js';
-import { runnerFromSnapshot, withHostState } from './runner-from-snapshot.js';
+import { restorePolicies, runnerFromSnapshot, withHostState } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
   offerFollowUp,
@@ -606,7 +607,7 @@ export interface GameDefinitionLike {
    * game author configured. When absent entirely, hint/heatmap ops return a
    * protocol error (fail-loud: no bot config → no hint available).
    */
-  bot?: import('../bot/types.js').BotStrategy;
+  bot?: BotStrategy;
   /**
    * Optional per-action undo checkpoint retention policy — threaded into EVERY
    * runner this module builds (fresh, restored, and checkpoint-restored alike).
@@ -651,18 +652,6 @@ type RunnerDef = GameDefinitionLike & {
 // Internal helpers
 // ---------------------------------------------------------------------------
 
-type BotFlowState = {
-  awaitingInput?: boolean;
-  complete?: boolean;
-  currentPlayer?: number;
-  moveCount?: number;
-  awaitingPlayers?: Array<{
-    playerIndex: number;
-    completed: boolean;
-    availableActions: string[];
-  }>;
-};
-
 /**
  * Each seat's published view, indexed by seat - 1: its cut of the flow state and
  * its state, with each action's opening element pick answered where the seat
@@ -672,7 +661,7 @@ export function buildViews(runner: GameRunner, playerCount: number): unknown[] {
   const flowState = runner.getFlowState();
   const picks = new PickHandler(runner);
   return Array.from({ length: playerCount }, (_, i) => {
-    const state = buildPlayerState(runner, [], i + 1, { includeActionMetadata: true });
+    const state = buildPlayerState(runner, i + 1, { includeActionMetadata: true });
     picks.answerOpeningPicks(i + 1, state.actionMetadata);
     return { flowState: toPublicFlowState(flowState, i + 1), state };
   });
@@ -795,7 +784,7 @@ function refuseStaleSubmission(snapshot: GameStateSnapshot | null, op: Executabl
  * so a table stuck on disabled actions is said out loud rather than gone quiet.
  */
 function selectDueBotSeat(
-  flowState: BotFlowState,
+  flowState: FlowState,
   game: Game,
   botSeats: Set<number>,
 ): { seat: number } | { stalled: { seat: number; reason: string } } | undefined {
@@ -1100,8 +1089,16 @@ function handleUndo(
 // Teaching op handlers (hint / heatmapToggle)
 // ---------------------------------------------------------------------------
 
-/** Fallback destination argument names — checked when hintTargetFromMove is absent. */
-const DEST_ARGS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
+/** The board element a move targets: the game's `hintTargetFromMove`, else the first destination arg. */
+function moveTarget(bot: BotStrategy, move: BotMove): ElementRef | undefined {
+  if (bot.hintTargetFromMove) return bot.hintTargetFromMove(move);
+  for (const key of DEST_KEYS) {
+    const val = (move.args as Record<string, unknown>)[key];
+    if (typeof val === 'number') return { id: val };
+    if (typeof val === 'string') return { notation: val };
+  }
+  return undefined;
+}
 
 async function handleHint(
   def: RunnerDef,
@@ -1128,10 +1125,9 @@ async function handleHint(
   }
 
   const runner = runnerFromSnapshot(snapshot, def);
-  const flowState = runner.getFlowState() as BotFlowState;
 
   // Fail-loud: seat not awaiting input (per-spec: hint only when the seat can act).
-  if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
+  if (!canSeatAct(runner.getFlowState(), op.seat)) {
     return errorResult(`Cannot hint: seat ${op.seat} is not awaiting input`, 'protocol');
   }
 
@@ -1154,17 +1150,7 @@ async function handleHint(
     );
   }
 
-  // Extract the board highlight target: hintTargetFromMove first, then DEST_ARGS fallback.
-  let target: import('../engine/index.js').ElementRef | undefined;
-  if (def.bot.hintTargetFromMove) {
-    target = def.bot.hintTargetFromMove(move);
-  } else {
-    for (const key of DEST_ARGS) {
-      const val = (move.args as Record<string, unknown>)[key];
-      if (typeof val === 'number') { target = { id: val }; break; }
-      if (typeof val === 'string') { target = { notation: val }; break; }
-    }
-  }
+  const target = moveTarget(def.bot, move);
 
   const annotation: Annotation = {
     text: describeMoveForHint(move.args as Record<string, unknown>),
@@ -1217,8 +1203,7 @@ async function handleHeatmapToggle(
     return errorResult('No bot configuration on this game — heatmap is unavailable.', 'protocol');
   }
 
-  const flowState = runner.getFlowState() as BotFlowState;
-  if (!canSeatAct(flowState as unknown as FlowState, op.seat)) {
+  if (!canSeatAct(runner.getFlowState(), op.seat)) {
     return errorResult(`Cannot show heatmap: seat ${op.seat} is not awaiting input`, 'protocol');
   }
 
@@ -1237,17 +1222,7 @@ async function handleHeatmapToggle(
   // Keep the highest normalizedValue per cell key; mark exactly one isBest=true.
   const byCell = new Map<string, HeatmapEntry>();
   for (const stat of stats) {
-    // Extract the cell ref from the move using the same priority chain as hint.
-    let ref: import('../engine/index.js').ElementRef | undefined;
-    if (def.bot.hintTargetFromMove) {
-      ref = def.bot.hintTargetFromMove(stat.move);
-    } else {
-      for (const key of DEST_ARGS) {
-        const val = (stat.move.args as Record<string, unknown>)[key];
-        if (typeof val === 'number') { ref = { id: val }; break; }
-        if (typeof val === 'string') { ref = { notation: val }; break; }
-      }
-    }
+    const ref = moveTarget(def.bot, stat.move);
     if (!ref) continue;
     const cellKey = ref.id !== undefined ? `id:${ref.id}`
       : ref.notation !== undefined ? `notation:${ref.notation}`
@@ -1315,7 +1290,7 @@ async function handleBotSuggest(
   op: Extract<Op, { type: 'botSuggest' }>,
 ): Promise<OpResultFor<'botSuggest'>> {
   const runner = runnerFromSnapshot(snapshot, def);
-  const flowState = runner.getFlowState() as BotFlowState | undefined;
+  const flowState = runner.getFlowState();
   if (!flowState?.awaitingInput || flowState.complete) return { success: true };
   const due = selectDueBotSeat(flowState, runner.game as Game, new Set(op.seats.map((s) => s.seat)));
   if (due === undefined) return { success: true };
@@ -1386,11 +1361,7 @@ function runnerFromCheckpoint(
 ): GameRunner | null {
   // Carry checkpoints up to and including the restore point so a later getSnapshot
   // keeps the linear history coherent (mirrors the undo op).
-  const runner = GameRunner.fromCheckpoint(snap, actionIndex, def.gameClass, {
-    checkpoints: def.checkpoints,
-    randomness: def.randomness,
-    undo: def.undo,
-  });
+  const runner = GameRunner.fromCheckpoint(snap, actionIndex, def.gameClass, restorePolicies(def));
   return runner && withHostState(runner, def);
 }
 
@@ -1421,11 +1392,8 @@ function handleRestoreEarlier(
   snapshot: GameStateSnapshot,
   op: Extract<Op, { type: 'restoreEarlier' }>,
 ): OpResultFor<'restoreEarlier'> {
-  const runner = withHostState(restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, {
-    checkpoints: def.checkpoints,
-    randomness: def.randomness,
-    undo: def.undo,
-  }), def);
+  const earlier = restoreEarlierSnapshot(snapshot, op.snapshot as GameStateSnapshot, def.gameClass, restorePolicies(def));
+  const runner = withHostState(earlier, def);
   return { success: true, ...stateEnvelope(runner, gameOptions.playerCount) };
 }
 
@@ -1454,7 +1422,7 @@ function handleDebugStateAt(
   return {
     success: true,
     ...stateEnvelope(runners.current, gameOptions.playerCount),
-    historicalState: buildPlayerState(runners.at, [], op.player, { includeActionMetadata: false }),
+    historicalState: buildPlayerState(runners.at, op.player, { includeActionMetadata: false }),
   };
 }
 
@@ -1476,8 +1444,8 @@ function handleDebugStateDiff(
   if (!fromRunner) return missingCheckpoint(def, snapshot, op.fromIndex);
   const toRunner = runnerFromCheckpoint(def, snapshot, op.toIndex);
   if (!toRunner) return missingCheckpoint(def, snapshot, op.toIndex);
-  const fromView = buildPlayerState(fromRunner, [], op.player, { includeActionMetadata: false }).view;
-  const toView = buildPlayerState(toRunner, [], op.player, { includeActionMetadata: false }).view;
+  const fromView = buildPlayerState(fromRunner, op.player, { includeActionMetadata: false }).view;
+  const toView = buildPlayerState(toRunner, op.player, { includeActionMetadata: false }).view;
 
   const { added, removed, changed } = computeElementDiff(fromView, toView);
 

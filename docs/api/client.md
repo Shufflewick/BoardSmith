@@ -29,6 +29,7 @@ Import from `boardsmith/client` when you want to:
 ### Types
 
 - `DevHostClient`, `DevHostClientOptions`, `DevHostSeatInfo`, `DevHostLobbyReply`, `DevHostStateReply`, `DevHostInboundMessage` - The dev-host client and its replies
+- `DevHostSeatInfo` - One lobby seat, the host's own `LobbySeat`: `seat`, `held`, `mine`, `name`, `color`, `connected`, `bot` and `playerOptions`
 - `GameState` - What a host sends one seat: `{ flowState, state, playerSeat, isSpectator }`
 - `PlayerState` - The seat's own state (`players`, `view`, `isMyTurn`, `actionMetadata`, `messages`, ...)
 - `PublicFlowState` - What a seat is told of the flow

@@ -298,7 +298,7 @@ export interface BotStrategy {
    * Provide this override when the game uses non-standard arg names.
    *
    * @param move - The chosen move from the MCTS search
-   * @returns The target element reference, or `undefined` to fall back to session-layer extraction
+   * @returns The target element reference, or `undefined` when the move has no target
    */
   hintTargetFromMove?: (move: BotMove) => ElementRef | undefined;
 

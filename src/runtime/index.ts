@@ -26,6 +26,7 @@ export {
   type RunnerCheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
+  type RestorePolicies,
   type ActionExecutionResult,
 } from './runner.js';
 

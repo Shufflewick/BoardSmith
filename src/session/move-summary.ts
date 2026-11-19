@@ -10,8 +10,8 @@
  * a `{ fromNotation, toNotation, isCapture }` object, which is exactly what we format.
  */
 
-/** Destination-like arg keys that are safe to surface (an open board target). */
-const DEST_KEYS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
+/** Destination-like arg keys: what narration surfaces and where hint and heatmap find a move's target. */
+export const DEST_KEYS = ['to', 'destination', 'target', 'square', 'cell', 'position'] as const;
 
 /**
  * Derive a short destination description from a move's args, or `null` when none

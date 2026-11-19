@@ -12,23 +12,13 @@
 
 import { resolveWsCtor } from './ws-ctor.js';
 import { applyViewPatch, type ViewPatch } from '../session/view-patch.js';
+import type { LobbySeat } from '../cli/dev-host/multiplayer-host.js';
 
 /** Default timeout for requestId-correlated requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-/**
- * One seat's lobby info, mirroring `multiplayer-host.ts`'s `LobbySeat`. The
- * host never says who holds a seat, only whether one is held and whether it
- * is yours (#481).
- */
-export interface DevHostSeatInfo {
-  seat: number;
-  held: boolean;
-  mine: boolean;
-  name: string;
-  color?: string;
-  connected: boolean;
-}
+/** One seat's lobby info, exactly the host's `LobbySeat`. */
+export type DevHostSeatInfo = LobbySeat;
 
 /** Reply shape for `getLobby()` — same fields as the `lobby` broadcast, minus wire framing. */
 export interface DevHostLobbyReply {
