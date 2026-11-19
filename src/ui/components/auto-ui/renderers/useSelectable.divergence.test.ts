@@ -7,15 +7,16 @@
  *      - `handleCellClick`        — old grid cell click handler name
  *      - `handleHexClick`         — old hex cell click handler name
  *   2. `@click` is NOT bound directly to `triggerElementSelect` (bypassing the composable).
- *   3. Each renderer imports `useSelectable` or `useSelectableGrid`.
+ *   3. Each renderer imports `useSelectable`, `useSelectableGrid`, or `useBoardCells`
+ *      (the grid and hex boards' wrapper around `useSelectableGrid`).
  *
  * Purpose: Makes "Critical finding #1" (keyboard-via-one-composable) divergence-
  * impossible in CI. Any future edit that re-adds a per-renderer click handler causes
  * this test to fail, surfacing the regression before it ships.
  *
- * Note: `handleCellActivate` and `handleHexActivate` (used in GridBoardRenderer /
- * HexBoardRenderer) are NOT forbidden — they are the correct post-migration local
- * wrappers that go through `useSelectableGrid` and `boardInteraction.triggerElementSelect`.
+ * Note: `activateCell` (from `useBoardCells`, used by GridBoardRenderer /
+ * HexBoardRenderer) is NOT forbidden — it is the post-migration activation that
+ * goes through `useSelectableGrid` and `boardInteraction.triggerElementSelect`.
  * Only the original pre-migration names are listed here.
  */
 
@@ -71,7 +72,7 @@ describe('useSelectable divergence guard — renderer source scan', () => {
   for (const filename of RENDERER_FILES) {
     const filepath = join(RENDERERS_DIR, filename);
 
-    it(`${filename}: no forbidden handlers; imports useSelectable or useSelectableGrid`, () => {
+    it(`${filename}: no forbidden handlers; imports useSelectable, useSelectableGrid or useBoardCells`, () => {
       let source: string;
       try {
         source = readFileSync(filepath, 'utf8');
@@ -95,12 +96,11 @@ describe('useSelectable divergence guard — renderer source scan', () => {
       }
 
       // ── 2. Assert composable import is present ───────────────────────────────
-      // Both useSelectable (element renderers) and useSelectableGrid (grid renderers)
-      // satisfy this requirement — the import pattern covers both forms.
-      const importsComposable = /useSelectable(?:Grid)?/.test(source);
+      // An import, not a mention: a comment naming the composable does not wire anything.
+      const importsComposable = /import\s*\{[^}]*\b(?:useSelectable|useSelectableGrid|useBoardCells)\b[^}]*\}\s*from/.test(source);
       expect(
         importsComposable,
-        `${filename}: missing import of useSelectable or useSelectableGrid. ` +
+        `${filename}: missing import of useSelectable, useSelectableGrid or useBoardCells. ` +
         `Every interactive renderer must wire click+keydown through the shared A11Y-01 composable.`,
       ).toBe(true);
     });
