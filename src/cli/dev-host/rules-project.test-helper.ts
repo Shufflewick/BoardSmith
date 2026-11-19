@@ -17,7 +17,7 @@ import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 /** Install boardsmith into the project at `dir` the way a game has it: `node_modules/boardsmith` linked to this checkout. */
 export function linkBoardsmith(dir: string): void {
   mkdirSync(join(dir, 'node_modules'), { recursive: true });
-  symlinkSync(fileURLToPath(new URL('../../..', import.meta.url)), join(dir, 'node_modules', 'boardsmith'), 'dir');
+  symlinkSync(fileURLToPath(new URL('../../..', import.meta.url)), join(dir, 'node_modules', 'boardsmith'), 'junction');
 }
 
 export function rulesProject(prefix: string, source: string) {

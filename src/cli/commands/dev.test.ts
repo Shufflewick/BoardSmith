@@ -228,7 +228,7 @@ describe('dev bundles the rules against the project\'s own boardsmith, whatever 
     writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'boardsmith', type: 'module', exports: { '.': './index.js' } }));
     writeFileSync(join(installed, 'index.js'), 'export const gameDefinition = {};');
     mkdirSync(join(project, 'node_modules'));
-    symlinkSync(installed, join(project, 'node_modules', 'boardsmith'), 'dir');
+    symlinkSync(installed, join(project, 'node_modules', 'boardsmith'), 'junction');
     const cli = realpathSync.native(fileURLToPath(new URL('../../..', import.meta.url)));
     // Its own process: the guard reads the working directory esbuild started in, which a chdir here would not move.
     const run = spawnDev(project, await freePort());
