@@ -1531,9 +1531,11 @@ At 640px and wider the players panel's expand toggle sits on the panel's right
 edge, so it reaches over the board's top-left corner: 13px with a mouse, 22px
 on a touch screen, from 14px down to 40px (58px on touch). The shell gives that
 reach as `--bsg-rail-toggle-overhang`, which is 0px below 640px and with the
-chrome hidden. A board that draws something in its top-left corner pads it by
-the token, for example `padding-left: var(--bsg-rail-toggle-overhang)` on a top
-bar, rather than copying the shell's numbers.
+chrome hidden. It is set on the board's zoomed container in the board's own
+pixels, so padding by it clears the toggle at any zoom. A board that draws
+something in its top-left corner pads it by the token, for example
+`padding-left: var(--bsg-rail-toggle-overhang)` on a top bar, rather than
+copying the shell's numbers.
 
 Shown working by [the rail toggle regression](https://github.com/Shufflewick/BoardSmith/blob/main/scripts/rail-toggle-browser.mjs).
 

@@ -807,9 +807,10 @@ const mobileToggleLabel = computed(() => {
   --bsg-bar-edge-drop: 13px;
 
   /* How far the players panel's edge toggle, the same size and centred on the
-     panel's right edge, reaches over the board region's top-left corner (#1722),
-     so a board can keep what it draws there clear. 0 wherever no toggle shows. */
-  --bsg-rail-toggle-overhang: calc(var(--bsg-bar-edge) / 2);
+     panel's right edge, reaches over the board region's top-left corner on
+     screen (#1722). 0 wherever no toggle shows. The board reads it, in its own
+     zoomed pixels, as --bsg-rail-toggle-overhang. */
+  --bsg-rail-toggle-reach: calc(var(--bsg-bar-edge) / 2);
 }
 /* A finger's target (#1611): WCAG 2.5.5 and Apple's 44pt. */
 @media (pointer: coarse) {
@@ -870,7 +871,7 @@ const mobileToggleLabel = computed(() => {
   position: absolute;
   top: 14px;
   /* `right` counts from inside the sidebar's 1px border, so centre on the board's edge. */
-  right: calc(-1 * var(--bsg-rail-toggle-overhang) - 1px);
+  right: calc(-1 * var(--bsg-rail-toggle-reach) - 1px);
   z-index: 6;
   width: var(--bsg-bar-edge);
   height: var(--bsg-bar-edge);
@@ -1263,7 +1264,7 @@ const mobileToggleLabel = computed(() => {
     display: none;
   }
   .game-shell__game {
-    --bsg-rail-toggle-overhang: 0px;
+    --bsg-rail-toggle-reach: 0px;
   }
   /* Compact strip: player icons on the left, expand chevron on the right. */
   .mobile-strip {
@@ -1442,6 +1443,8 @@ const mobileToggleLabel = computed(() => {
      which does that too but keeps a board wider than the region from scrolling it. */
   transform: scale(var(--zoom-level));
   transform-origin: 0 0;
+  /* In board pixels, so padding by it clears the unscaled toggle at any zoom (#1722). */
+  --bsg-rail-toggle-overhang: calc(var(--bsg-rail-toggle-reach) / var(--zoom-level));
 }
 
 /* The adapter's overlays (see the template). Clicks pass through the empty
@@ -1502,7 +1505,7 @@ const mobileToggleLabel = computed(() => {
 /* Nothing to reserve room for or keep overlays clear of. */
 .game-shell__game.chrome-hidden {
   --bsg-panel-reserved: 0px;
-  --bsg-rail-toggle-overhang: 0px;
+  --bsg-rail-toggle-reach: 0px;
 }
 .chrome-hidden .board-viewport {
   --bsg-panel-overlap: 0px;
