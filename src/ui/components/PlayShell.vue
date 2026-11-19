@@ -873,24 +873,6 @@ const mobileToggleLabel = computed(() => {
   /* `right` counts from inside the sidebar's 1px border, so centre on the board's edge. */
   right: calc(-1 * var(--bsg-rail-toggle-reach) - 1px);
   z-index: 6;
-  width: var(--bsg-bar-edge);
-  height: var(--bsg-bar-edge);
-  border-radius: 50%;
-  background: var(--bsg-surface);
-  border: 1px solid var(--bsg-line);
-  box-shadow: var(--bsg-shadow-sm);
-  color: var(--bsg-ink-2);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.side-edge svg {
-  width: 15px;
-  height: 15px;
-  stroke: currentColor;
-  fill: none;
-  stroke-width: 2;
-  transition: transform var(--bsg-dur-fast);
 }
 .sidebar.rail .side-edge svg {
   transform: rotate(180deg);
@@ -1161,6 +1143,10 @@ const mobileToggleLabel = computed(() => {
   transform: translateY(calc(var(--bsg-bar-edge-drop) - 100%));
   /* Ties the game modal host and game-over scrim, and wins as the later element (#1346). */
   z-index: 32;
+}
+/* The two edge toggles: one circle and chevron. */
+.side-edge,
+.bar-edge {
   width: var(--bsg-bar-edge);
   height: var(--bsg-bar-edge);
   border-radius: 50%;
@@ -1172,6 +1158,7 @@ const mobileToggleLabel = computed(() => {
   place-items: center;
   cursor: pointer;
 }
+.side-edge svg,
 .bar-edge svg {
   width: 15px;
   height: 15px;
