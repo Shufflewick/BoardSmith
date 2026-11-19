@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
-import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, multiSelectFullReason, orderedListFullReason, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, multiSelectFullReason, orderedListFullReason, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal, snapshotMetadata } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -1312,16 +1312,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   const currentActionMeta = computed((): EnrichedActionMetadata | undefined => {
     if (!currentAction.value) return undefined;
-
-    // PIT OF SUCCESS: Use snapshot metadata when available
-    // This ensures we don't lose metadata when server broadcasts update
-    // (e.g., when onEach modifies game state and action disappears from availableActions)
-    if (actionSnapshot.value?.actionName === currentAction.value) {
-      return actionSnapshot.value.metadata;
-    }
-
-    // Fallback to live metadata (e.g., for execute() which doesn't use snapshot)
-    return getActionMetadata(currentAction.value);
+    // Live metadata covers an action with no snapshot, such as one execute() runs directly.
+    return snapshotMetadata(currentAction.value, actionSnapshot.value) ?? getActionMetadata(currentAction.value);
   });
 
   const currentPick = computed((): EnrichedPickMetadata | null => {

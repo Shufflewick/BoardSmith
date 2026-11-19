@@ -101,10 +101,6 @@ export interface HexGridReturn<TCell = GameViewElement> {
   getHexPoints: (scale?: number) => string;
   /** Calculate SVG viewBox bounds for all cells */
   hexGridBounds: ComputedRef<HexBounds>;
-  /** Convert axial to cube coordinates */
-  axialToCube: (q: number, r: number) => { x: number; y: number; z: number };
-  /** Convert cube to axial coordinates */
-  cubeToAxial: (x: number, y: number, z: number) => { q: number; r: number };
   /** Get hex distance between two cells (in hex steps) */
   hexDistance: (q1: number, r1: number, q2: number, r2: number) => number;
   /** Get neighboring hex coordinates */
@@ -115,8 +111,8 @@ export interface HexGridReturn<TCell = GameViewElement> {
   findCells: (predicate: (cell: TCell, q: number, r: number) => boolean) => TCell[];
 }
 
-// Neighbor offsets for axial coordinates
-const POINTY_NEIGHBORS = [
+// Neighbor offsets for axial coordinates; the same offsets work for both orientations
+const NEIGHBORS = [
   { q: 1, r: 0 },
   { q: 1, r: -1 },
   { q: 0, r: -1 },
@@ -124,8 +120,6 @@ const POINTY_NEIGHBORS = [
   { q: -1, r: 1 },
   { q: 0, r: 1 },
 ];
-
-const FLAT_NEIGHBORS = POINTY_NEIGHBORS; // Same offsets work for both orientations
 
 /**
  * The cell attribute names a hex board's axial coordinates live in: its
@@ -240,21 +234,7 @@ export function useHexGrid<TCell = GameViewElement>(
    * Uses the current hexSize and orientation from board attributes.
    */
   function getHexPosition(q: number, r: number): HexPosition {
-    const size = hexSize.value;
-    const orient = orientation.value;
-
-    if (orient === 'pointy') {
-      return {
-        x: size * (Math.sqrt(3) * q + (Math.sqrt(3) / 2) * r),
-        y: size * ((3 / 2) * r),
-      };
-    } else {
-      // flat-top
-      return {
-        x: size * ((3 / 2) * q),
-        y: size * ((Math.sqrt(3) / 2) * q + Math.sqrt(3) * r),
-      };
-    }
+    return hexToPixel(q, r, hexSize.value, orientation.value);
   }
 
   /**
@@ -262,19 +242,7 @@ export function useHexGrid<TCell = GameViewElement>(
    * @param scale - Scale factor (1.0 = full size, 0.85 = inner hex for borders)
    */
   function getHexPoints(scale: number = 1): string {
-    const size = hexSize.value * scale;
-    const orient = orientation.value;
-    const points: string[] = [];
-
-    for (let i = 0; i < 6; i++) {
-      const angleDeg = orient === 'pointy' ? 60 * i - 30 : 60 * i;
-      const angleRad = (Math.PI / 180) * angleDeg;
-      const x = size * Math.cos(angleRad);
-      const y = size * Math.sin(angleRad);
-      points.push(`${x},${y}`);
-    }
-
-    return points.join(' ');
+    return getHexPolygonPoints(hexSize.value, orientation.value, scale);
   }
 
   /**
@@ -315,37 +283,17 @@ export function useHexGrid<TCell = GameViewElement>(
   });
 
   /**
-   * Convert axial coordinates to cube coordinates.
-   */
-  function axialToCube(q: number, r: number): { x: number; y: number; z: number } {
-    const x = q;
-    const z = r;
-    const y = -x - z;
-    return { x, y, z };
-  }
-
-  /**
-   * Convert cube coordinates to axial coordinates.
-   */
-  function cubeToAxial(x: number, _y: number, z: number): { q: number; r: number } {
-    return { q: x, r: z };
-  }
-
-  /**
    * Calculate hex distance between two cells (number of hex steps).
    */
   function hexDistance(q1: number, r1: number, q2: number, r2: number): number {
-    const a = axialToCube(q1, r1);
-    const b = axialToCube(q2, r2);
-    return Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y), Math.abs(a.z - b.z));
+    return calculateHexDistance(q1, r1, q2, r2);
   }
 
   /**
    * Get the six neighboring hex coordinates.
    */
   function getNeighbors(q: number, r: number): Array<{ q: number; r: number }> {
-    const neighbors = orientation.value === 'pointy' ? POINTY_NEIGHBORS : FLAT_NEIGHBORS;
-    return neighbors.map((offset) => ({
+    return NEIGHBORS.map((offset) => ({
       q: q + offset.q,
       r: r + offset.r,
     }));
@@ -381,8 +329,6 @@ export function useHexGrid<TCell = GameViewElement>(
     getHexPosition,
     getHexPoints,
     hexGridBounds,
-    axialToCube,
-    cubeToAxial,
     hexDistance,
     getNeighbors,
     iterateCells,

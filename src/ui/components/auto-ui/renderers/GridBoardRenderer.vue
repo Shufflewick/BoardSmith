@@ -6,22 +6,20 @@
  * When coordinates are missing/undeclared, renders the locked error panel.
  * Each cell is placed by its own coordinates (grid-row/grid-column), never by tree order.
  *
- * A11Y-01: uses useSelectableGrid() for roving-tabindex grid navigation.
+ * A11Y-01: uses useSelectableGrid() (through useBoardCells) for roving-tabindex grid navigation.
  * The board-grid container is role="grid"; each cell is role="gridcell".
  * Arrow/Home/End move focus; Enter/Space activates the focused cell.
  * Passive selectElement branch preserved: non-selectable named cells call
  * boardInteraction.selectElement() on activation (same as click).
  */
 
-import { computed, watch, watchEffect, ref, nextTick, useId } from 'vue';
-import { placedCells, resolveGridSize } from '../auto-ui-helpers.js';
+import { computed, watchEffect, ref, useId } from 'vue';
+import { placedCells, resolveGridSize, useBoardCells } from '../auto-ui-helpers.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
-import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import PieceDetailsTip from './PieceDetailsTip.vue';
 import { isKeyboardModality, trackInputModality } from '../../../composables/useDisabledReasonTooltip.js';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
-import { boardCellStates } from '../../../composables/useElementBoardState.js';
 import { toAlgebraicNotation } from '../../../composables/useGameGrid.js';
 import type { GameElement } from '../auto-ui-helpers.js';
 
@@ -88,17 +86,6 @@ const children = computed(() => {
   return gridResult.value.ok ? placedCells(props.element, attrs.$rowCoord as string, attrs.$colCoord as string) : [];
 });
 
-const {
-  cellIdentity,
-  isCellHighlighted,
-  isCellSelected,
-  isCellActionSelectable,
-  isCellDropTarget,
-  isCellDropHover,
-  isCellDisabled,
-  cellStateLabel,
-} = boardCellStates(boardInteraction);
-
 // 0-based row and column of a cell, from the board's declared coordinates (#891).
 function cellPosition(cell: GameElement) {
   return gridResult.value.ok ? gridResult.value.position(cell) : { row: 0, col: 0 };
@@ -137,52 +124,22 @@ function closeCellTip() {
 const colsRef = computed(() => (gridResult.value.ok ? gridResult.value.cols : 0));
 const rowsRef = computed(() => (gridResult.value.ok ? gridResult.value.rows : 0));
 
-// Cell activation: handles selectable AND passive selectElement branches.
-// Called from both click and keyboard (Enter/Space) for consistent behavior.
-// Passive branch: non-selectable named cells call selectElement() so the board
-// can track which cell is focused for highlighting/annotation purposes.
-function handleCellActivate(cell: GameElement) {
-  if (!boardInteraction) return;
-  if (isCellDisabled(cell)) return;
-  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
-    boardInteraction.triggerElementSelect(cellIdentity(cell));
-  } else if (cell.name) {
-    boardInteraction.selectElement(cellIdentity(cell));
-  }
-}
-
 const {
+  cellIdentity,
+  isCellHighlighted,
+  isCellSelected,
+  isCellActionSelectable,
+  isCellDropTarget,
+  isCellDropHover,
+  isCellDisabled,
+  cellStateLabel,
   currentIdx,
   handleGridKeydown,
   handleGridFocusIn,
   registerCell,
-  focusCursorCell,
   cellAttrs,
-  focusFirstCandidate,
-} = useSelectableGrid(
-  children,
-  cellPosition,
-  cellIdentity,
-  boardInteraction,
-  handleCellActivate,
-  'grid-cell',
-  // #172: the roving cursor has to know which cells the current choice accepts,
-  // or a keyboard player arrows blind across a board of unpickable squares.
-  isCellActionSelectable,
-);
-
-// #172: when the Action Panel hands a large board-anchored choice to the board,
-// the board is the ONLY path into it — so focus has to make the journey too.
-// Without this, the player who pressed "Choose on the board" is left on a button
-// that just unmounted, with focus on <body>.
-watch(
-  () => boardInteraction?.boardFocusRequest,
-  (tick) => {
-    if (!tick) return;
-    if (!focusFirstCandidate()) return;
-    void nextTick(focusCursorCell);
-  },
-);
+  activateCell,
+} = useBoardCells(boardInteraction, children, cellPosition, 'grid-cell');
 
 // Per-cell aria-label: coordinate notation + state, mirroring mockup:574-581
 function cellAriaLabel(cell: GameElement): string {
@@ -257,7 +214,7 @@ function cellAriaLabel(cell: GameElement): string {
               'is-disabled': isCellDisabled(cell),
             }"
             :title="cell.name ?? undefined"
-            @click.stop="handleCellActivate(cell)"
+            @click.stop="activateCell(cell)"
             @focus="onCellFocus(cell, $event)"
             @blur="closeCellTip"
           >

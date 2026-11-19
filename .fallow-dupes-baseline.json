@@ -2,10 +2,8 @@
   "kind": "dupes",
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
-    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:99-113|src/ui/composables/useHexGrid.ts:300-315",
-    "src/ui/components/auto-ui/renderers/HandRenderer.vue:434-440|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:259-265",
-    "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue:144-162|src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:215-233",
-    "src/ui/composables/useHexGrid.ts:270-277|src/ui/composables/useHexGrid.ts:427-434",
+    "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:97-111|src/ui/composables/useHexGrid.ts:268-283",
+    "src/ui/components/auto-ui/renderers/HandRenderer.vue:430-436|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:259-265",
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
     "src/session/testing/fixtures/collect-fixture.ts:65-82|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
@@ -17,8 +15,6 @@
     "dup:3551213f:2",
     "dup:63b0d6ee:2",
     "dup:d3c05801:2",
-    "dup:a5bfd3c3:2",
-    "dup:3e4d18b1:2",
     "dup:58325c49:2",
     "dup:55865142:2",
     "dup:e68013f8:2",
@@ -27,16 +23,14 @@
     "dup:60e2d102:2"
   ],
   "normalized_clone_fingerprints": [
-    "dup:c77b3abb6f87acd9-r4:2",
-    "dup:c77b3abb6f87acd9-r11:2",
+    "dup:c77b3abb6f87acd9-r3:2",
     "dup:c77b3abb6f87acd9-r9:2",
     "dup:c77b3abb6f87acd9-r7:2",
-    "dup:c77b3abb6f87acd9-r2:2",
-    "dup:c77b3abb6f87acd9-r10:2",
-    "dup:c77b3abb6f87acd9-r1:2",
-    "dup:c77b3abb6f87acd9-r3:2",
     "dup:c77b3abb6f87acd9-r8:2",
-    "dup:c77b3abb6f87acd9-r5:2",
-    "dup:c77b3abb6f87acd9-r6:2"
+    "dup:c77b3abb6f87acd9-r1:2",
+    "dup:c77b3abb6f87acd9-r2:2",
+    "dup:c77b3abb6f87acd9-r6:2",
+    "dup:c77b3abb6f87acd9-r4:2",
+    "dup:c77b3abb6f87acd9-r5:2"
   ]
 }

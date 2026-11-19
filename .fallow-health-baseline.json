@@ -601,9 +601,6 @@
     "src/ui/composables/useFlyingElements.ts": {
       "complexity_critical": {
         "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/ui/composables/useFocusTrap.ts": {
@@ -667,16 +664,15 @@
     "src/ui/components/auto-ui/ActionPanel.vue:complexity",
     "src/ui/components/debug/debug-format.ts:high impact",
     "src/ui/components/GameShell.vue:complexity",
+    "src/ui/components/auto-ui/auto-ui-helpers.ts:high impact",
     "src/eslint-plugin/rules/element-types.ts:high impact",
     "src/bot/mcts-bot.ts:complexity",
     "src/engine/element/game.ts:complexity",
     "src/engine/element/game-element.ts:circular dependency",
-    "src/ui/components/auto-ui/auto-ui-helpers.ts:high impact",
     "src/session/snapshot-session-host.ts:complexity",
     "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/verify-run.ts:complexity",
     "src/engine/element/seat-placeholders.ts:high impact",
-    "src/ui/composables/useElementBoardState.ts:high impact",
     "src/testing/dom-leak.ts:complexity",
     "src/engine/element/action-metadata.ts:complexity",
     "src/ui/composables/sharedSelection.ts:high impact",
@@ -684,6 +680,7 @@
     "src/cli/commands/chunk-provenance.ts:complexity",
     "src/sim/play-game.ts:complexity",
     "src/cli/lib/child-output.ts:high impact",
+    "src/ui/composables/useElementBoardState.ts:high impact",
     "src/cli/commands/ingest-archive.ts:complexity",
     "src/engine/action/subject-type.ts:high impact",
     "src/engine/action/subject-index.ts:high impact",

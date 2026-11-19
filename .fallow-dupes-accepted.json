@@ -61,21 +61,6 @@
       ]
     },
     {
-      "content": "c5a0dad62bc6ae6b",
-      "lines": 19,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
-      ]
-    },
-    {
-      "content": "ca704472e0333fde",
-      "lines": 8,
-      "files": [
-        "src/ui/composables/useHexGrid.ts"
-      ]
-    },
-    {
       "content": "db1eb8419dc57e42",
       "lines": 5,
       "files": [

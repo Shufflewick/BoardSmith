@@ -431,7 +431,7 @@ function rectOf(target: DOMRect | HTMLElement): DOMRect {
   return target instanceof DOMRect ? target : target.getBoundingClientRect();
 }
 
-/** Recognized anchor attributes, checked in priority order (mirrors useFLIP's getElementId). */
+/** Recognized anchor attributes, checked in priority order. */
 const FLY_ANCHOR_ATTRS = ['data-bs-el-id', 'data-card-id', 'data-piece-id', 'data-element-id'];
 
 /**
@@ -513,45 +513,25 @@ export function useFlyingElements(
   }
 
   /**
-   * Internal options type for the core animation implementation
+   * Fly a single element
    */
-  interface InternalFlyOptions {
-    id: string;
-    startRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
-    endRect: DOMRect | HTMLElement | (() => DOMRect | HTMLElement | null);
-    cardData: FlyingCardData;
-    flip?: boolean;
-    duration?: number;
-    zIndex?: number;
-    cardSize?: { width: number; height: number };
-    holdDuration?: number;
-    onPositionComplete?: () => void;
-    skipFadeOut?: boolean;
-    from?: string;
-    to?: string;
-    element?: string;
-  }
-
-  /**
-   * Core flying animation implementation
-   */
-  async function flyCardInternal(flyOptions: InternalFlyOptions): Promise<void> {
+  async function fly(config: FlyConfig): Promise<void> {
     const {
       id,
       startRect: startTarget,
       endRect: endTarget,
-      cardData,
+      elementData: cardData,
       flip = false,
       duration = defaultDuration,
       zIndex = DEFAULT_Z_INDEX,
-      cardSize,
+      elementSize = defaultElementSize,
       holdDuration = defaultHoldDuration,
       onPositionComplete,
       skipFadeOut = false,
       from: fromOverride,
       to: toOverride,
       element: elementOverride,
-    } = flyOptions;
+    } = config;
 
     // First-resolution fail-loud (dev-gated): the caller's start/end target
     // must exist when fly() is invoked. This is a distinct, one-time check
@@ -593,9 +573,8 @@ export function useFlyingElements(
 
     const startZoom = zoomOf(start);
 
-    // Use explicit card size if provided, otherwise use default
-    const cardWidth = cardSize?.width ?? defaultElementSize.width;
-    const cardHeight = cardSize?.height ?? defaultElementSize.height;
+    const cardWidth = elementSize.width;
+    const cardHeight = elementSize.height;
 
     // Calculate start position - center the element on the start rect's center
     const startCenterX = startRect.left + startRect.width / 2;
@@ -745,32 +724,6 @@ export function useFlyingElements(
   }
 
   /**
-   * Fly a single element (new API)
-   */
-  async function fly(config: FlyConfig): Promise<void> {
-    // NOTE: the reduced-motion / test-mode gating happens inside
-    // flyCardInternal (test mode is checked BEFORE reduced motion there) —
-    // no early-return here, so test mode can still record a trace even when
-    // the user prefers reduced motion.
-    await flyCardInternal({
-      id: config.id,
-      startRect: config.startRect,
-      endRect: config.endRect,
-      cardData: config.elementData,
-      flip: config.flip,
-      duration: config.duration ?? defaultDuration,
-      zIndex: config.zIndex,
-      cardSize: config.elementSize ?? defaultElementSize,
-      holdDuration: config.holdDuration ?? defaultHoldDuration,
-      onPositionComplete: config.onPositionComplete,
-      skipFadeOut: config.skipFadeOut,
-      from: config.from,
-      to: config.to,
-      element: config.element,
-    });
-  }
-
-  /**
    * Fly multiple elements with optional stagger (new API)
    */
   async function flyMultiple(configs: FlyConfig[], staggerMs: number = 50): Promise<void> {
@@ -778,7 +731,7 @@ export function useFlyingElements(
       return;
     }
     // NOTE: reduced-motion / test-mode gating happens per-element inside
-    // flyCardInternal (via fly()) — no blanket early-return here, so test
+    // fly() — no blanket early-return here, so test
     // mode can still record traces even when reduced motion is preferred.
 
     const promises: Promise<void>[] = [];
@@ -828,7 +781,7 @@ export function useFlyingElements(
 
         // NOTE: no prefersReducedMotion check here — test mode must still be
         // able to record a trace regardless of the user's a11y preference
-        // (never merged, per useAnimationTestMode.ts). fly() → flyCardInternal
+        // (never merged, per useAnimationTestMode.ts). fly()
         // checks test mode BEFORE reduced motion, and honors reduced motion
         // internally for the real (non-test-mode) path.
 
@@ -1008,7 +961,7 @@ export function useFlyingElements(
         // must still be able to record traces regardless of the user's a11y
         // preference (never merged, per useAnimationTestMode.ts). Each
         // individual fly() call still honors reduced motion internally
-        // (inside flyCardInternal, after the test-mode check).
+        // (after the test-mode check).
 
         // Build container element map
         const containerElements = new Map<string, AutoWatchGameElement | null>();

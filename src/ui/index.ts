@@ -289,7 +289,6 @@ export {
   getCards,
   getFirstCard,
   getElementOwner,
-  isOwnedByPlayer,
   isMyElement,
   isOpponentElement,
   type FindElementOptions,

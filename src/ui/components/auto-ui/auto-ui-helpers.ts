@@ -1,11 +1,14 @@
 /**
  * auto-ui-helpers — Internal rendering helpers for the auto-UI system.
  *
- * These are pure functions: no Vue reactivity, no DOM access.
- * Shared by all per-element renderers (CardRenderer, PieceRenderer, etc.).
+ * Pure functions with no Vue reactivity or DOM access, shared by all
+ * per-element renderers (CardRenderer, PieceRenderer, etc.), plus
+ * useBoardCells, the one composable the grid and hex boards share.
  */
-import type { InjectionKey, Ref } from 'vue';
-import type { ElementRef } from '../../composables/useBoardInteraction.js';
+import { nextTick, watch, type ComputedRef, type InjectionKey, type Ref } from 'vue';
+import type { BoardInteraction, ElementRef } from '../../composables/useBoardInteraction.js';
+import { boardCellStates } from '../../composables/useElementBoardState.js';
+import { useSelectableGrid } from '../../composables/useSelectable.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
 import { isHiddenPlaceholder } from '../../../engine/element/hidden-placeholder.js';
 import { isGameAttributeName } from '../../../engine/element/engine-attributes.js';
@@ -171,4 +174,47 @@ function span(values: number[]): [number, number] {
   const min = values.reduce((a, b) => Math.min(a, b));
   const max = values.reduce((a, b) => Math.max(a, b));
   return [min, max - min + 1];
+}
+
+/**
+ * A grid or hex board's cells: their board states, the roving-tabindex grid
+ * (A11Y-01), and activation from click or Enter/Space alike.
+ */
+export function useBoardCells(
+  boardInteraction: BoardInteraction | undefined,
+  cells: ComputedRef<GameElement[]>,
+  position: (cell: GameElement) => { row: number; col: number },
+  elementType: string,
+) {
+  const states = boardCellStates(boardInteraction);
+  const { cellIdentity, isCellDisabled } = states;
+
+  // A non-selectable named cell is still selected, passively, so the board can highlight or annotate it.
+  function activateCell(cell: GameElement) {
+    if (!boardInteraction) return;
+    if (isCellDisabled(cell)) return;
+    if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
+      boardInteraction.triggerElementSelect(cellIdentity(cell));
+    } else if (cell.name) {
+      boardInteraction.selectElement(cellIdentity(cell));
+    }
+  }
+
+  // #172: the roving cursor has to know which cells the current choice accepts,
+  // or a keyboard player arrows blind across a board of unpickable cells.
+  const grid = useSelectableGrid(cells, position, cellIdentity, boardInteraction, activateCell, elementType, states.isCellActionSelectable);
+
+  // #172: when the Action Panel hands a large board-anchored choice to the board,
+  // the board is the only path into it, so focus has to make the journey too,
+  // rather than staying on a button that just unmounted.
+  watch(
+    () => boardInteraction?.boardFocusRequest,
+    (tick) => {
+      if (!tick) return;
+      if (!grid.focusFirstCandidate()) return;
+      void nextTick(grid.focusCursorCell);
+    },
+  );
+
+  return { ...states, ...grid, activateCell };
 }

@@ -19,7 +19,6 @@ import {
   getCards,
   getFirstCard,
   getElementOwner,
-  isOwnedByPlayer,
   isMyElement,
   isOpponentElement,
 } from './useGameViewHelpers.js';
@@ -357,19 +356,13 @@ describe('ownership helpers', () => {
     expect(getElementOwner(null)).toBeUndefined();
   });
 
-  it('isOwnedByPlayer matches only the owning seat', () => {
-    expect(isOwnedByPlayer(HAND_ONE, 1)).toBe(true);
-    expect(isOwnedByPlayer(HAND_ONE, 2)).toBe(false);
+  it('isMyElement matches only the owning seat', () => {
+    expect(isMyElement(HAND_ONE, 1)).toBe(true);
+    expect(isMyElement(HAND_ONE, 2)).toBe(false);
   });
 
-  it('isOwnedByPlayer is false for an unowned element', () => {
-    expect(isOwnedByPlayer(BOARD, 1)).toBe(false);
-  });
-
-  it('isMyElement agrees with isOwnedByPlayer', () => {
-    for (const seat of [1, 2, 3]) {
-      expect(isMyElement(HAND_ONE, seat)).toBe(isOwnedByPlayer(HAND_ONE, seat));
-    }
+  it('isMyElement is false for an unowned element', () => {
+    expect(isMyElement(BOARD, 1)).toBe(false);
   });
 
   it('isOpponentElement is true only for another seat owner', () => {
@@ -414,7 +407,6 @@ describe('the helpers as a whole', () => {
       getCards(null);
       getFirstCard(null);
       getElementOwner(null);
-      isOwnedByPlayer(null, 1);
       isMyElement(null, 1);
       isOpponentElement(null, 1);
     }).not.toThrow();

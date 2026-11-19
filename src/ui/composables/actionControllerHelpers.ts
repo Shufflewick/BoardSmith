@@ -5,7 +5,7 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
+import type { ActionStateSnapshot, EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { choiceValueKey, findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
@@ -225,6 +225,26 @@ export function formatActionName(name: string): string {
     .replace(/([a-z\d])([A-Z])/g, '$1 $2')
     .replace(/([A-Z])([A-Z][a-z])/g, '$1 $2')
     .replace(/^./, str => str.toUpperCase());
+}
+
+/**
+ * Each available action's metadata, with a minimal entry synthesized for an
+ * action that has none, so the Action Panel and a custom UI list the same actions.
+ */
+export function availableActionMetadata(
+  names: readonly string[],
+  metadata: Record<string, EnrichedActionMetadata> | undefined,
+): EnrichedActionMetadata[] {
+  return names.map((name) => metadata?.[name] ?? { name, prompt: formatActionName(name), selections: [] as EnrichedPickMetadata[] });
+}
+
+/**
+ * The metadata frozen when `actionName` started, if the snapshot is that
+ * action's: a follow-up the step does not list, or an action that left the
+ * available actions mid-build, still has it.
+ */
+export function snapshotMetadata(actionName: string, snapshot: ActionStateSnapshot | null | undefined): EnrichedActionMetadata | undefined {
+  return snapshot?.actionName === actionName ? snapshot.metadata : undefined;
 }
 
 // ============================================

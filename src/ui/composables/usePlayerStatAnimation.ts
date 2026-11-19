@@ -33,27 +33,12 @@
  * ```
  */
 
-import type { FlyConfig } from './useFlyingElements.js';
-import type { SpriteData } from '../utils/image.js';
+import type { FlyConfig, FlyingCardData } from './useFlyingElements.js';
 import { escapeCssString } from '../utils/css-string.js';
 
-export interface CardForAnimation {
+export interface CardForAnimation extends FlyingCardData {
   /** Bounding rect of the card's original position */
   rect: DOMRect;
-  /** Card rank (optional, for display) */
-  rank?: string;
-  /** Card suit (optional, for display) */
-  suit?: string;
-  /** Whether card is face up (default: true) */
-  faceUp?: boolean;
-  /** Face image - URL string or sprite object (optional) */
-  faceImage?: string | SpriteData;
-  /** Back image - URL string or sprite object (optional) */
-  backImage?: string | SpriteData;
-  /** Player seat who owns this card/piece (for piece rendering) */
-  playerSeat?: number;
-  /** Allow additional custom properties */
-  [key: string]: unknown;
 }
 
 export interface FlyToStatOptions {

@@ -567,7 +567,7 @@ describe('useFlyingElements', () => {
       const { sourceEl, targetEl } = sourceAndTarget();
 
       // Reduced motion preferred: without CR-01's fix, flyOnAppear's own
-      // early-return would bypass fly()/flyCardInternal entirely and no
+      // early-return would bypass fly() entirely and no
       // trace would ever be recorded, regardless of test mode.
       prefersReducedMotion.value = true;
 
@@ -611,7 +611,7 @@ describe('useFlyingElements', () => {
       await nextTick();
       await new Promise((r) => setTimeout(r, 10));
 
-      // flyCardInternal's internal prefersReducedMotion check (after the
+      // fly()'s internal prefersReducedMotion check (after the
       // test-mode check) still short-circuits the real RAF-driven path.
       expect(isAnimating.value).toBe(false);
       expect(getAnimationTrace()).toHaveLength(0);
@@ -676,7 +676,7 @@ describe('useFlyingElements', () => {
       });
 
       // requestAnimationFrame(animate) is queued synchronously inside the
-      // Promise executor before flyCardInternal's returned promise settles.
+      // Promise executor before fly()'s returned promise settles.
       expect(flyingElements.value).toHaveLength(1);
       expect(rafQueue.length).toBeGreaterThan(0);
 
