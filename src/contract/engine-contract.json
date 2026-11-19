@@ -1,5 +1,5 @@
 {
-  "revision": 450,
+  "revision": 451,
   "surfaceHash": "68cd407d95737a05",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3543,6 +3543,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Session, runtime, client and persistence lose duplicated code and dead types (#1725). BREAKING: buildPlayerState drops its unused playerNames parameter; boardsmith/session no longer exports computeUndoInfo or buildSingleActionMetadata; DevHostSeatInfo is now the host's LobbySeat, gaining bot and playerOptions; PersistenceStore.readForSession never returns null. GameRunner restores take one RestorePolicies type, and boardsmith/persistence adds rowsToStartPayload."
+    },
+    {
+      "revision": 451,
+      "date": "2026-11-19",
+      "surfaceHash": "68cd407d95737a05",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "UI dedupe: one fly() takes FlyConfig, useHexGrid drops axialToCube/cubeToAxial, isOwnedByPlayer is removed (use isMyElement), CardForAnimation extends FlyingCardData."
     }
   ]
 }
