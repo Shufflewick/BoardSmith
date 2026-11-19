@@ -18,7 +18,7 @@ import.meta.glob('./table-rules-worker.ts');
 /** A table project whose rules are `source`, and the one move an author makes to it: saving them. */
 export function tableProject(prefix: string, source: string) {
   const { rulesPath, tempDir, save } = rulesProject(prefix, source);
-  const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo', undefined);
+  const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, undefined);
   return { save, load };
 }
 
@@ -29,7 +29,7 @@ export function tableProject(prefix: string, source: string) {
  */
 export async function bundledTable(prefix: string, source: string): Promise<() => Promise<TableRuntime>> {
   const { rulesPath, tempDir } = rulesProject(prefix, source);
-  const bundlePath = await bundleTableRules(rulesPath, tempDir, 'monorepo');
+  const bundlePath = await bundleTableRules(rulesPath, tempDir);
   return () => startTableRuntime(bundlePath, undefined);
 }
 

@@ -100,7 +100,7 @@ export const gameDefinition = {
 
 // Bundling is the slow part, so it happens here, where no test timeout applies (#363).
 const project = rulesProject('bs-world-connections-', RULES);
-const bundlePath = await bundleWorldRules(project.rulesPath, project.tempDir, 'monorepo');
+const bundlePath = await bundleWorldRules(project.rulesPath, project.tempDir);
 
 let cleanup: Array<() => Promise<void> | void> = [];
 afterEach(async () => {

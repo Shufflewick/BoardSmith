@@ -1,9 +1,8 @@
 /**
  * WHAT `boardsmith/<x>` RESOLVES TO IN A MONOREPO CHECKOUT, AND WHO DECIDES.
  *
- * The two loaders that answer this -- esbuild's, for a project's rules, and
- * Vite's, for its UI -- used to read a hand-written map of specifier to `src/`
- * subdirectory. A hand-written copy of a list that already exists drifts, and
+ * esbuild's loader for a project's rules used to read a hand-written map of
+ * specifier to `src/` subdirectory. A hand-written copy of a list that already exists drifts, and
  * this one had: eight of the package's nineteen exports, missing
  * `boardsmith/world` among six others. In monorepo context a world project's
  * rules could not resolve the module that makes it a world, and the failure
@@ -19,7 +18,6 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { boardsmithSourceEntries, cliMonorepoRoot } from './game-runtime.js';
-import { monorepoBoardsmithResolvePlugin } from './dev-server.js';
 import { PLATFORM_ENTRYPOINTS } from '../../contract/fingerprint.js';
 
 /** Every subpath this package declares, read the same way Node reads it. */
@@ -30,13 +28,6 @@ function declaredSpecifiers(): string[] {
   return Object.keys(manifest.exports).map((subpath) =>
     subpath === '.' ? 'boardsmith' : `boardsmith/${subpath.replace(/^\.\//, '')}`,
   );
-}
-
-/** The Vite plugin's own answer for one specifier. */
-function viteResolves(source: string): string | null {
-  const { resolveId } = monorepoBoardsmithResolvePlugin();
-  const hook = resolveId as unknown as (this: unknown, source: string) => string | null;
-  return hook.call(null, source);
 }
 
 describe('boardsmith/* resolution is derived from the package exports', () => {
@@ -78,20 +69,6 @@ describe('boardsmith/* resolution is derived from the package exports', () => {
     // A typo has to stay a typo: resolving it to some plausible file inside the
     // library turns "no such entrypoint" into a missing module deep in a build.
     expect(boardsmithSourceEntries().has('boardsmith/wrold')).toBe(false);
-    expect(viteResolves('boardsmith/wrold')).toBeNull();
-  });
-
-  it('answers the same thing in both loaders, since a game imports through both', () => {
-    // The rules go through esbuild and the UI through Vite. Two answers for one
-    // specifier is a project whose rules and board are different builds of the
-    // library, which is the failure the shared derivation exists to forbid.
-    for (const specifier of declaredSpecifiers()) {
-      expect(viteResolves(specifier)).toBe(boardsmithSourceEntries().get(specifier));
-    }
-  });
-
-  it('leaves a specifier that is not the library alone', () => {
-    expect(viteResolves('vue')).toBeNull();
   });
 
   /**

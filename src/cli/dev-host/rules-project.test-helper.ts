@@ -7,14 +7,22 @@
  * road's (`world-rules-reload.test.ts`), which each load it with their own
  * road's loader.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { makeCommandBuildDir } from '../lib/command-build-dir.js';
 
+/** Install boardsmith into the project at `dir` the way a game has it: `node_modules/boardsmith` linked to this checkout. */
+export function linkBoardsmith(dir: string): void {
+  mkdirSync(join(dir, 'node_modules'), { recursive: true });
+  symlinkSync(fileURLToPath(new URL('../../..', import.meta.url)), join(dir, 'node_modules', 'boardsmith'), 'junction');
+}
+
 export function rulesProject(prefix: string, source: string) {
   const dir = tempTree(prefix);
+  linkBoardsmith(dir);
   const rulesPath = join(dir, 'src', 'rules');
   mkdirSync(rulesPath, { recursive: true });
   const tempDir = makeCommandBuildDir(dir, 'dev');

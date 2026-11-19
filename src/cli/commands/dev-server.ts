@@ -12,9 +12,6 @@
  *     HTTP 200, so a missing card image silently became a placeholder with no
  *     error anywhere (issue 134) -- which is why both roads set
  *     `appType: 'custom'` and both end in a PLAIN TEXT 404;
- *   - in a monorepo checkout, `boardsmith/*` has to resolve to this repo's own
- *     `src/`, or the dev host runs a different engine from the one being
- *     edited;
  *   - editing `vite.config.ts` makes Vite replace its own HTTP server, so a
  *     socket registered once at startup is left on a closed object and every
  *     page afterwards loads but never connects (issue 214) -- which is why the
@@ -51,7 +48,6 @@ import { createServer as createViteServer, type Connect, type InlineConfig, type
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
-import { boardsmithSourceEntries } from './game-runtime.js';
 import type { HeldResource } from '../dev-host/shutdown.js';
 import { portRefusal } from '../dev-host/port.js';
 import { DEV_HOST_ALIVE_PATH } from '../../testing/browser-smoke-clock.js';
@@ -279,31 +275,6 @@ export function resolveDevHostDir(fromDir: string, marker: string): string {
     if (existsSync(join(candidate, marker))) return candidate;
   }
   return candidates[0]!;
-}
-
-/**
- * In a monorepo checkout, `boardsmith/*` resolves to this repo's own `src/`.
- *
- * Without it the dev host loads the PUBLISHED engine while an author edits the
- * local one, so a change appears to have no effect for reasons nothing reports.
- *
- * ONE LOOKUP, against the package's own `exports` (`boardsmithSourceEntries`).
- * This used to rebuild a subpath from a directory name and three guesses at the
- * layout -- `src/<pkg>/src/<subpath>`, from a layout this repo has not had --
- * so `boardsmith/ui/auto-ui` and both CSS exports resolved to files that are
- * not there, and every entry missing from the hand-written map resolved to
- * nothing at all. An export is a declared fact; guessing at one is how a
- * loader ends up disagreeing with Node about what a game imports.
- */
-export function monorepoBoardsmithResolvePlugin(): VitePlugin {
-  return {
-    name: 'boardsmith-resolve',
-    enforce: 'pre',
-    resolveId(source: string) {
-      if (!source.startsWith('boardsmith')) return null;
-      return boardsmithSourceEntries().get(source) ?? null;
-    },
-  };
 }
 
 /**

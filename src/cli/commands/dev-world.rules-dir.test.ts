@@ -26,15 +26,14 @@ vi.setConfig({ testTimeout: 90_000 });
 /** Serve `cwd`'s world with its rules in `rulesDir`, save a rules file, and expect the world to reload. */
 async function reloadsOnSave(cwd: string, rulesDir: string): Promise<void> {
   const tempDir = makeCommandBuildDir(cwd, 'dev');
-  const reloadRules = vi.fn(() => loadWorldRuntime(rulesDir, tempDir, 'standalone'));
+  const reloadRules = vi.fn(() => loadWorldRuntime(rulesDir, tempDir));
   const log = vi.spyOn(console, 'log').mockImplementation(() => {});
   const host = await startWorldDevServer({
     cwd,
     uiPath: cwd,
     rulesDir,
-    runtime: await loadWorldRuntime(rulesDir, tempDir, 'standalone'),
+    runtime: await loadWorldRuntime(rulesDir, tempDir),
     displayName: 'Rules Dir Game',
-    context: 'standalone',
     port: await freePort(),
     host: '127.0.0.1',
     holdings: hostHoldings(),

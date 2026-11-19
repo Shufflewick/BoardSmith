@@ -251,7 +251,7 @@ describe('#885: the table road', () => {
 /** A world on `worldRules(1)` with one page seated, and the run's reload queue. */
 async function servedWorld() {
   const { rulesPath, tempDir, save } = rulesProject('bs-rules-worker-world-', worldRules(1));
-  const load = () => loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+  const load = () => loadWorldRuntime(rulesPath, tempDir);
   const cwd = tempTree('bs-rules-worker-world-run-');
   const run = await openWorldRun({
     cwd,
@@ -292,7 +292,7 @@ describe('#885: the world road', () => {
   it('refuses a second run on the same world, naming the first run (#881)', async () => {
     const world = await servedWorld();
     const { rulesPath, tempDir } = rulesProject('bs-rules-worker-second-', worldRules(1));
-    const load = () => loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    const load = () => loadWorldRuntime(rulesPath, tempDir);
     const runtime = await load();
     closing.push(() => runtime.worker.close());
 
@@ -414,7 +414,7 @@ describe('#885: the world road', () => {
     const world = await servedWorld();
     await sparked(world, before);
     const { rulesPath, tempDir } = rulesProject('bs-rules-worker-stopped-', worldRules(1));
-    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    const runtime = await loadWorldRuntime(rulesPath, tempDir);
     closing.push(() => runtime.worker.close());
 
     await expect(
@@ -428,7 +428,7 @@ describe('#609: the dev host answers only when its rules do', () => {
   // worker, as a loaded machine keeps them, answer late, so the host must too.
   it('answers once the rules worker has answered what was sent it first', async () => {
     const { rulesPath, tempDir } = rulesProject('bs-rules-worker-alive-', worldRules(1));
-    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    const runtime = await loadWorldRuntime(rulesPath, tempDir);
     closing.push(() => runtime.worker.close());
     const order: string[] = [];
 
