@@ -1100,6 +1100,11 @@ function moveTarget(bot: BotStrategy, move: BotMove): ElementRef | undefined {
   return undefined;
 }
 
+/** The bot hint and heatmap search with for `seat`: the game's own hooks, at medium strength. */
+function teachingBot(def: RunnerDef, runner: GameRunner, seat: number) {
+  return createBot(runner.game as Game, def.gameClass, def.gameType, seat, parseBotLevel('medium'), def.bot);
+}
+
 async function handleHint(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -1131,14 +1136,7 @@ async function handleHint(
     return errorResult(`Cannot hint: seat ${op.seat} is not awaiting input`, 'protocol');
   }
 
-  const bot = createBot(
-    runner.game as Game,
-    def.gameClass,
-    def.gameType,
-    op.seat,
-    parseBotLevel('medium'),
-    def.bot,
-  );
+  const bot = teachingBot(def, runner, op.seat);
 
   const move = await bot.play();
   if (!move) {
@@ -1207,14 +1205,7 @@ async function handleHeatmapToggle(
     return errorResult(`Cannot show heatmap: seat ${op.seat} is not awaiting input`, 'protocol');
   }
 
-  const bot = createBot(
-    runner.game as Game,
-    def.gameClass,
-    def.gameType,
-    op.seat,
-    parseBotLevel('medium'),
-    def.bot,
-  );
+  const bot = teachingBot(def, runner, op.seat);
 
   const { stats } = await bot.playWithStats();
 
