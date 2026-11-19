@@ -4,9 +4,6 @@
  *
  * Renders children (cards) via ElementRenderer.
  * Supports fan, overlap, and two-row layout modes.
- *
- * The two-row hand sorting logic is copied verbatim from the source component
- * lines 409-453 (named Phase 92 carry-forward; Pitfall 6).
  */
 
 import { computed, inject, type Ref } from 'vue';
@@ -100,8 +97,7 @@ const childBackImage = computed((): ImageInfo | null => {
 });
 
 // ---------------------------------------------------------------------------
-// TWO-ROW HAND SORTING LOGIC — COPIED VERBATIM FROM LEGACY COMPONENT LINES 409-453
-// Phase 92 carry-forward; Pitfall 6 — DO NOT RE-IMPLEMENT
+// TWO-ROW HAND SORTING
 // ---------------------------------------------------------------------------
 
 // Threshold for splitting hand into two rows (cards per row)

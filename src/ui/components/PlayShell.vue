@@ -30,10 +30,9 @@
  *
  * ## The `data-testid`s are load-bearing
  *
- * ShufflewickPub's world e2e specs currently select on a platform-owned form.
- * When `WorldStage` is deleted (SWP #357) they re-point here, at markup the
- * platform does not own. Selecting on classes would make every chrome CSS change
- * a platform test break, so the shell names its own surfaces and keeps the names.
+ * ShufflewickPub's world e2e specs select on these, at markup the platform does
+ * not own. Selecting on classes would make every chrome CSS change a platform
+ * test break, so the shell names its own surfaces and keeps the names.
  */
 import { computed, inject, nextTick, ref, watch } from 'vue';
 import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';

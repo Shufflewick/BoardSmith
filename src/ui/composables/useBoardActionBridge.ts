@@ -29,12 +29,11 @@ import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
 import { matchesRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
-  EnrichedPickMetadata,
   EnrichedActionMetadata,
   ChoiceWithRefs,
   EnrichedValidElement,
 } from './useActionControllerTypes.js';
-import { answerMark, choiceBoardTarget, choiceCopies, formatActionName, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from './actionControllerHelpers.js';
+import { answerMark, availableActionMetadata, choiceBoardTarget, choiceCopies, multiSelectFullReason, orderedListFullReason, resolvePickCounts, snapshotMetadata } from './actionControllerHelpers.js';
 import { devWarn } from '../../utils/dev.js';
 import { createActionMutators } from './actionMutators.js';
 import { usableVerbs } from './sharedSelection.js';
@@ -165,15 +164,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const isExecuting = controller.isExecuting;
 
   // Metadata for available actions, with a basic fallback for actions lacking metadata.
-  const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
-    const names = availableActions.value ?? [];
-    const meta = actionMetadata.value;
-    return names.map(name => {
-      const m = meta?.[name];
-      if (m) return m;
-      return { name, prompt: formatActionName(name), selections: [] as EnrichedPickMetadata[] };
-    });
-  });
+  const actionsWithMetadata = computed(() => availableActionMetadata(availableActions.value ?? [], actionMetadata.value));
 
   /**
    * Why this action is disabled for the local player, or `undefined` when it is
@@ -190,11 +181,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   // actions that aren't in availableActions).
   const currentActionMeta = computed<EnrichedActionMetadata | null>(() => {
     if (!currentAction.value) return null;
-    const snapshot = controller.actionSnapshot?.value;
-    if (snapshot?.actionName === currentAction.value && snapshot.metadata) {
-      return snapshot.metadata;
-    }
-    return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
+    return snapshotMetadata(currentAction.value, controller.actionSnapshot?.value)
+      ?? actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
   });
 
   // Delegates to the shared `resolvePickCounts` helper — the single source of

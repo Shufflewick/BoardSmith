@@ -175,7 +175,6 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 - `getCards()` - Get cards from container
 - `getFirstCard()` - Get first card
 - `getElementOwner()` - Get element owner
-- `isOwnedByPlayer()` - Check ownership
 - `isMyElement()` - Check if current player's
 - `isOpponentElement()` - Check if opponent's
 

@@ -234,23 +234,13 @@ export function getElementOwner(element: GameViewElement | null | undefined): nu
 }
 
 /**
- * Check if an element belongs to a specific player.
- */
-export function isOwnedByPlayer(
-  element: GameViewElement | null | undefined,
-  playerSeat: number
-): boolean {
-  return getElementOwner(element) === playerSeat;
-}
-
-/**
  * Check if an element belongs to the specified player (convenience for "my" checks).
  */
 export function isMyElement(
   element: GameViewElement | null | undefined,
   myPlayerSeat: number
 ): boolean {
-  return isOwnedByPlayer(element, myPlayerSeat);
+  return getElementOwner(element) === myPlayerSeat;
 }
 
 /**

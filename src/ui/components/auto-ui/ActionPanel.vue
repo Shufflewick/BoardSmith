@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts } from '../../composables/actionControllerHelpers.js';
+import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -276,33 +276,8 @@ const heldFollowUpButton = computed(() => {
   return { action: offer.action, prompt: offer.metadata?.prompt || formatActionName(offer.action) };
 });
 
-// Get metadata for available actions
-// Annotated as EnrichedActionMetadata[] on purpose: without it the synthesized
-// fallback entries below form a union with the real metadata, and reading an
-// OPTIONAL field (help) off that union fails to compile even
-// though it is valid on both arms. The annotation says what this list is — action
-// metadata, with a minimal entry synthesized for actions that have none.
-const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
-  if (!props.actionMetadata) {
-    return props.availableActions.map(name => ({
-      name,
-      prompt: formatActionName(name),
-      selections: [] as EnrichedPickMetadata[],
-    }));
-  }
-  // Map available actions to their metadata, falling back to a basic entry
-  // if the action doesn't have metadata (e.g., actions with no selections)
-  return props.availableActions.map(name => {
-    const meta = props.actionMetadata![name];
-    if (meta) return meta;
-    // Fallback for actions without metadata entry
-    return {
-      name,
-      prompt: formatActionName(name),
-      selections: [] as EnrichedPickMetadata[],
-    };
-  });
-});
+// Metadata for available actions, with a minimal entry synthesized for an action that has none
+const actionsWithMetadata = computed(() => availableActionMetadata(props.availableActions, props.actionMetadata));
 
 // ── The start-button hierarchy (#228) ──────────────────────────────────────
 //
@@ -585,15 +560,8 @@ watch([actionMenu, shownMenuKey], (_, [, wasKey]) => {
 // so we check the controller's snapshot first (which has the correct metadata)
 const currentActionMeta = computed(() => {
   if (!currentAction.value) return null;
-
-  // Check actionSnapshot first - handles followUp actions that aren't in availableActions
-  const snapshotMeta = actionController.actionSnapshot?.value;
-  if (snapshotMeta?.actionName === currentAction.value && snapshotMeta.metadata) {
-    return snapshotMeta.metadata;
-  }
-
-  // Fall back to looking up in actionsWithMetadata
-  return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
+  return snapshotMetadata(currentAction.value, actionController.actionSnapshot?.value)
+    ?? actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
 });
 
 // Current pick - delegates to controller (required)

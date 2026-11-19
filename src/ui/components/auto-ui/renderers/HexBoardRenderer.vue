@@ -8,7 +8,7 @@
  *
  * No hand-rolled trig: never re-implement the closed-form functions here.
  *
- * A11Y-01: uses useSelectableGrid() for roving-tabindex keyboard navigation.
+ * A11Y-01: uses useSelectableGrid() (through useBoardCells) for roving-tabindex keyboard navigation.
  * Each hex <g> cell gets role="gridcell" + tabindex + aria-label.
  * The SVG root gets role="grid" + aria-label + aria-rowcount/colcount + @keydown
  * + @focusin. Both belong on the root, not on each cell: `focusin` bubbles where
@@ -28,14 +28,12 @@
  * position:relative container.
  */
 
-import { computed, nextTick, watch } from 'vue';
+import { computed } from 'vue';
 import { hexToPixel, getHexPolygonPoints, hexCoordNames } from '../../../composables/useHexGrid.js';
 import { tryUseBoardInteraction } from '../../../composables/useBoardInteraction.js';
-import { useSelectableGrid } from '../../../composables/useSelectable.js';
 import ElementRenderer from './ElementRenderer.vue';
 import { usePresentationEntry } from '../../../composables/usePresentationEntry.js';
-import { boardCellStates } from '../../../composables/useElementBoardState.js';
-import { cellCoordinateError, placedCells, type GameElement } from '../auto-ui-helpers.js';
+import { cellCoordinateError, placedCells, useBoardCells, type GameElement } from '../auto-ui-helpers.js';
 
 const props = defineProps<{
   element: GameElement;
@@ -147,18 +145,6 @@ function getPieceGlyph(piece: GameElement): string {
 // Effective hex piece circle radius: 35% of hexSize (from UI-SPEC)
 const pieceRadius = computed(() => hexSize.value * 0.35);
 
-const {
-  cellIdentity,
-  isCellHighlighted,
-  isCellSelected,
-  isCellActionSelectable,
-  isCellDropTarget,
-  isCellDropHover,
-  isCellDisabled,
-  cellStateLabel,
-} = boardCellStates(boardInteraction);
-
-
 const presentationEntry = usePresentationEntry(() => props.element);
 
 // Display label for the board header — overlay label wins, then engine fallback
@@ -210,49 +196,22 @@ function hexCellAxes(cell: GameElement) {
   return { row: r, col: q };
 }
 
-// Hex cell activation: selectable AND passive selectElement branches.
-// Called from both click and keyboard (Enter/Space) for consistent behavior.
-function handleHexActivate(cell: GameElement) {
-  if (!boardInteraction) return;
-  if (isCellDisabled(cell)) return;
-  if (boardInteraction.isSelectableElement(cellIdentity(cell))) {
-    boardInteraction.triggerElementSelect(cellIdentity(cell));
-  } else if (cell.name) {
-    boardInteraction.selectElement(cellIdentity(cell));
-  }
-}
-
 const {
+  cellIdentity,
+  isCellHighlighted,
+  isCellSelected,
+  isCellActionSelectable,
+  isCellDropTarget,
+  isCellDropHover,
+  isCellDisabled,
+  cellStateLabel,
   currentIdx,
   handleGridKeydown,
   handleGridFocusIn,
   registerCell,
-  focusCursorCell,
   cellAttrs,
-  focusFirstCandidate,
-} = useSelectableGrid(
-  hexCells,
-  hexCellAxes,
-  cellIdentity,
-  boardInteraction,
-  handleHexActivate,
-  'hex-cell',
-  // #172: the roving cursor has to know which cells the current choice accepts.
-  // Hex is the case this exists for: ~50 empty cells, and a cursor parked on
-  // cell 0 leaves a keyboard player arrowing across squares nobody can pick.
-  isCellActionSelectable,
-);
-
-// #172: when the Action Panel hands a large board-anchored choice to the board,
-// the board is the ONLY path into it, so focus has to make the journey too.
-watch(
-  () => boardInteraction?.boardFocusRequest,
-  (tick) => {
-    if (!tick) return;
-    if (!focusFirstCandidate()) return;
-    void nextTick(focusCursorCell);
-  },
-);
+  activateCell,
+} = useBoardCells(boardInteraction, hexCells, hexCellAxes, 'hex-cell');
 
 // Per-cell aria-label: coord + occupant names + state
 function hexCellAriaLabel(cell: GameElement): string {
@@ -312,7 +271,7 @@ function hexCellAriaLabel(cell: GameElement): string {
         :aria-selected="isCellSelected(cell) || undefined"
         :aria-disabled="isCellDisabled(cell) || undefined"
         :transform="`translate(${placeOf(cell).x}, ${placeOf(cell).y})`"
-        @click="handleHexActivate(cell)"
+        @click="activateCell(cell)"
       >
         <!-- Hex polygon with board-interaction state classes (all six required states) -->
         <polygon

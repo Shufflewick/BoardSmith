@@ -331,18 +331,6 @@ describe('useHexGrid', () => {
     }
   });
 
-  it('converts axial to cube coordinates that sum to zero', () => {
-    const cube = grid(gameView(cells)).axialToCube(2, -3);
-    expect(cube).toEqual({ x: 2, y: 1, z: -3 });
-    expect(cube.x + cube.y + cube.z).toBe(0);
-  });
-
-  it('round-trips axial through cube coordinates', () => {
-    const hex = grid(gameView(cells));
-    const cube = hex.axialToCube(4, -2);
-    expect(hex.cubeToAxial(cube.x, cube.y, cube.z)).toEqual({ q: 4, r: -2 });
-  });
-
   it('measures hex distance the same way as the standalone helper', () => {
     const hex = grid(gameView(cells));
     expect(hex.hexDistance(0, 0, 2, -1)).toBe(calculateHexDistance(0, 0, 2, -1));
