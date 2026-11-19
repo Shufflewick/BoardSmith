@@ -32,13 +32,13 @@ export interface TableRuntime {
 }
 
 /** Bundle a table project's rules with what runs them; answers the bundle's path, for {@link startTableRuntime}. */
-export function bundleTableRules(rulesPath: string, tempDir: string, context: 'monorepo' | 'standalone'): Promise<string> {
+export function bundleTableRules(rulesPath: string, tempDir: string): Promise<string> {
   const worker = JSON.stringify(toPosix(cliSourceFile('dev-host/table-rules-worker.ts')));
   return buildRuntimeBundle({
     rulesPath,
     tempDir,
     name: 'runtime',
-    context,
+    context: 'standalone',
     exports: [`import { serveTableRules } from ${worker};`, 'serveTableRules(gameDefinition);'],
   });
 }
@@ -61,10 +61,9 @@ export async function startTableRuntime(bundlePath: string, declaredOptions: unk
 export async function loadTableRuntime(
   rulesPath: string,
   tempDir: string,
-  context: 'monorepo' | 'standalone',
   declaredOptions: unknown,
 ): Promise<TableRuntime> {
-  return startTableRuntime(await bundleTableRules(rulesPath, tempDir, context), declaredOptions);
+  return startTableRuntime(await bundleTableRules(rulesPath, tempDir), declaredOptions);
 }
 
 /**

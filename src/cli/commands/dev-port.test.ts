@@ -70,7 +70,7 @@ describe('boardsmith dev on a taken port (#345)', () => {
     const cwd = await devProject(true);
     const tempDir = makeCommandBuildDir(cwd, 'dev');
     const rulesPath = join(cwd, 'src', 'rules');
-    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'standalone');
+    const runtime = await loadWorldRuntime(rulesPath, tempDir);
     const held = await holdPort();
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
@@ -81,13 +81,12 @@ describe('boardsmith dev on a taken port (#345)', () => {
           rulesDir: rulesPath,
           runtime,
           displayName: 'Port Game',
-          context: 'standalone',
           port: held.port,
           host: '127.0.0.1',
           holdings: hostHoldings(),
           openBrowser: false,
           watch: true,
-          reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
+          reloadRules: () => loadWorldRuntime(rulesPath, tempDir),
         }),
       ).rejects.toThrow(`Port ${held.port} is already in use`);
     } finally {

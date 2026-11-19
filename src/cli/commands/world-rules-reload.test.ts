@@ -64,7 +64,7 @@ type Rules = () => Promise<WorldRuntime>;
  */
 async function worldRules(source: string): Promise<Rules> {
   const { rulesPath, tempDir } = rulesProject('bs-world-rules-reload-', source);
-  const bundlePath = await bundleWorldRules(rulesPath, tempDir, 'monorepo');
+  const bundlePath = await bundleWorldRules(rulesPath, tempDir);
   return () => startWorldRuntime(bundlePath);
 }
 
@@ -76,7 +76,7 @@ const afterEdit = await worldRules(rulesSource(10));
 // version and declares no migration (#381).
 const unopenableEdit = await worldRules(rulesSource(10, 1));
 const broken = rulesProject('bs-world-rules-reload-', 'export const gameDefinition = ;');
-const brokenEdit = await buildFailure(() => loadWorldRuntime(broken.rulesPath, broken.tempDir, 'monorepo'));
+const brokenEdit = await buildFailure(() => loadWorldRuntime(broken.rulesPath, broken.tempDir));
 
 const closing: Array<() => Promise<void>> = [];
 beforeEach(() => {

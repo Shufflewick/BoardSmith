@@ -24,6 +24,7 @@ import { openWorldStore } from '../dev-host/world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadWorldRuntime } from './dev-world.js';
 import { loadGameDefinition } from './game-runtime.js';
+import { linkBoardsmith } from '../dev-host/rules-project.test-helper.js';
 
 // The bundle runs the rules worker by its path; this links these tests to it, loading nothing (#1415).
 import.meta.glob('../dev-host/world-rules-worker.ts');
@@ -31,6 +32,7 @@ import.meta.glob('../dev-host/world-rules-worker.ts');
 /** A one-room world project, written the way an author writes one. */
 function worldProject(): { rulesPath: string; tempDir: string } {
   const dir = tempTree('bs-dev-world-runtime-');
+  linkBoardsmith(dir);
   const rulesPath = join(dir, 'src', 'rules');
   mkdirSync(rulesPath, { recursive: true });
   writeFileSync(
@@ -68,7 +70,7 @@ function worldProject(): { rulesPath: string; tempDir: string } {
 // here, while the file is collected and no test timeout applies. Each test
 // still opens its own store.
 const project = worldProject();
-const runtime = await loadWorldRuntime(project.rulesPath, project.tempDir, 'monorepo');
+const runtime = await loadWorldRuntime(project.rulesPath, project.tempDir);
 // The rules alone, bundled on their own engine, loaded into this process.
 const definitionOnly = await loadGameDefinition(project.rulesPath, project.tempDir, 'monorepo', undefined);
 

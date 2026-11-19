@@ -54,7 +54,6 @@ import {
   answerAlive,
   devNotFoundMiddleware,
   fromOurOwnPage,
-  monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
   requestPath,
   resolveDevHostDir,
@@ -234,13 +233,13 @@ export interface WorldRuntime {
 }
 
 /** Bundle a world project's rules with the host that runs them; answers the bundle's path, for {@link startWorldRuntime}. */
-export function bundleWorldRules(rulesPath: string, tempDir: string, context: 'monorepo' | 'standalone'): Promise<string> {
+export function bundleWorldRules(rulesPath: string, tempDir: string): Promise<string> {
   const worker = JSON.stringify(toPosix(cliSourceFile('dev-host/world-rules-worker.ts')));
   return buildRuntimeBundle({
     rulesPath,
     tempDir,
     name: 'world-runtime',
-    context,
+    context: 'standalone',
     exports: [`import { serveWorld } from ${worker};`, 'serveWorld(gameDefinition);'],
   });
 }
@@ -252,12 +251,8 @@ export async function startWorldRuntime(bundlePath: string): Promise<WorldRuntim
 }
 
 /** Bundle a world project's rules and start them. */
-export async function loadWorldRuntime(
-  rulesPath: string,
-  tempDir: string,
-  context: 'monorepo' | 'standalone',
-): Promise<WorldRuntime> {
-  return startWorldRuntime(await bundleWorldRules(rulesPath, tempDir, context));
+export async function loadWorldRuntime(rulesPath: string, tempDir: string): Promise<WorldRuntime> {
+  return startWorldRuntime(await bundleWorldRules(rulesPath, tempDir));
 }
 
 interface WorldDevServerOptions {
@@ -268,7 +263,6 @@ interface WorldDevServerOptions {
   /** The rules and the host that runs them, from one bundle (#283). */
   readonly runtime: WorldRuntime;
   readonly displayName: string;
-  readonly context: 'monorepo' | 'standalone';
   readonly port: number;
   readonly host: string;
   /**
@@ -623,7 +617,6 @@ export async function startWorldDevServer(
       read: () => run.read(),
     }),
   ];
-  if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
   // The pages in front of the world, forgotten before their sockets are ended,
   // so their sockets closing is no departure (#1304).

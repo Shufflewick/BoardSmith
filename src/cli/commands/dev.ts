@@ -16,7 +16,7 @@ import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/wo
 import { announceHost, hostHoldings, onShutdown, type HostHoldings } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
-import { getProjectContext, toPosix } from './game-runtime.js';
+import { toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { RulesError } from '../dev-host/rules-worker.js';
@@ -592,8 +592,6 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     console.log(styleText('yellow', `    Pass --host 127.0.0.1 for local-only.`));
   }
 
-  const context = getProjectContext(cwd);
-
   const uiPath = config.paths?.ui ? resolveUserPath(cwd, config.paths.ui) : cwd;
   const rulesPath = resolveRulesDir(cwd, config);
 
@@ -643,7 +641,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     try {
       // The world's run stops the worker it runs in; this stops it if the run never opens.
       runtime = await holdings.acquire(
-        () => loadWorldRuntime(rulesPath, tempDir, context),
+        () => loadWorldRuntime(rulesPath, tempDir),
         (loaded) => [{ name: 'the rules worker', close: () => loaded.worker.close() }],
       );
     } catch (error) {
@@ -656,7 +654,6 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       rulesDir: rulesPath,
       runtime,
       displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
-      context,
       port,
       host,
       holdings,
@@ -664,7 +661,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       watch: options.watch !== false,
       // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
       // bundles the author's edited source into a new worker (#885).
-      reloadRules: () => loadWorldRuntime(rulesPath, tempDir, context),
+      reloadRules: () => loadWorldRuntime(rulesPath, tempDir),
     });
     return;
   }
@@ -678,7 +675,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
     runtime = await holdings.acquire(
-      () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
+      () => loadTableRuntime(rulesPath, tempDir, config.gameOptions),
       (loaded) => [{ name: 'the rules worker', close: () => loaded.close() }],
     );
     gameDefinition = runtime.gameDefinition;
@@ -867,7 +864,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
     const rulesReload = tableRulesReloadQueue({
       host: mpHost,
       running: runtime,
-      load: () => loadTableRuntime(rulesPath, tempDir, context, config.gameOptions),
+      load: () => loadTableRuntime(rulesPath, tempDir, config.gameOptions),
     });
     holdings.hold([{ name: "the table's rules worker", close: () => rulesReload.closeRules() }]);
 

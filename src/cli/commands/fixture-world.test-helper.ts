@@ -127,16 +127,15 @@ async function startWorldHost(fixture: string, displayName: string, holdings: Ho
     cwd: fixture,
     uiPath: fixture,
     rulesDir: rulesPath,
-    runtime: await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, 'standalone'), () => []),
+    runtime: await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir), () => []),
     displayName,
-    context: 'standalone',
     port,
     host: '127.0.0.1',
     // The build directory is inside the fixture, which is held whole.
     holdings,
     openBrowser: false,
     watch: true,
-    reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
+    reloadRules: () => loadWorldRuntime(rulesPath, tempDir),
   });
   // The host reports the URL Vite resolved, which is `localhost`; a check has
   // to reach the interface the port was actually taken on.

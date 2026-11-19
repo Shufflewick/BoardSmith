@@ -1,10 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { freePort } from '../lib/free-port.js';
+import { endsWithTest, spawnDev } from './dev-project.test-helper.js';
 import {
   assertWorldProjectForReset,
   devCommand,
@@ -212,6 +214,32 @@ describe('a startup failure after the flags is the same plain Error, through the
       cwd.mockRestore();
     }
   });
+});
+
+describe('dev bundles the rules against the project\'s own boardsmith, whatever its layout (#1731)', () => {
+  it('a project with a src/engine directory is not bundled against this checkout', async () => {
+    const project = tempTree('bs-dev-engine-dir-');
+    writeFileSync(join(project, 'boardsmith.json'), JSON.stringify({ name: 'engine-dir-test' }));
+    writeFileSync(join(project, 'index.html'), '<!doctype html>');
+    mkdirSync(join(project, 'src', 'engine'), { recursive: true });
+    mkdirSync(join(project, 'src', 'rules'), { recursive: true });
+    writeFileSync(join(project, 'src', 'rules', 'index.ts'), "export { gameDefinition } from 'boardsmith';");
+    const installed = tempTree('bs-dev-other-boardsmith-');
+    writeFileSync(join(installed, 'package.json'), JSON.stringify({ name: 'boardsmith', type: 'module', exports: { '.': './index.js' } }));
+    writeFileSync(join(installed, 'index.js'), 'export const gameDefinition = {};');
+    mkdirSync(join(project, 'node_modules'));
+    symlinkSync(installed, join(project, 'node_modules', 'boardsmith'), 'dir');
+    const cli = realpathSync.native(fileURLToPath(new URL('../../..', import.meta.url)));
+    // Its own process: the guard reads the working directory esbuild started in, which a chdir here would not move.
+    const run = spawnDev(project, await freePort());
+    endsWithTest(run.child);
+    const { code, output } = await run.ended;
+    expect(code).toBe(1);
+    expect(output).toContain(
+      `Failed to load this game's rules: This game's rules import boardsmith from ${realpathSync.native(installed)}, ` +
+        `but this boardsmith command runs from ${cli}.`,
+    );
+  }, 60_000);
 });
 
 describe('validateBotLevel (--bot-level names a real preset or a real count)', () => {
