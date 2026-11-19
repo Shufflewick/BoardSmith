@@ -1947,6 +1947,7 @@ Common tokens (the full set lives in `src/ui/theme.ts`, the single source of tru
 | `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
 | `--bsg-host-corner-width`, `--bsg-host-corner-height` | The frame's top-right corner left to the host page (below) |
 | `--bsg-safe-top`, `--bsg-safe-right`, `--bsg-safe-bottom`, `--bsg-safe-left` | The frame's safe areas, as the host page sends them (below); 0px until it does |
+| `--bsg-rail-toggle-overhang` | How far the players panel's edge toggle reaches over the board's top-left corner: 13px, 22px on a touch screen, 0px below 640px or with the chrome hidden ([custom UI guide](./custom-ui-guide.md#keep-the-boards-top-left-corner-clear-of-the-panel-toggle)) |
 
 ### The host's corner
 

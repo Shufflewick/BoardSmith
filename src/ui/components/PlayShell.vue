@@ -805,6 +805,11 @@ const mobileToggleLabel = computed(() => {
      line holds, and the rest rising above the bar. */
   --bsg-bar-edge: 26px;
   --bsg-bar-edge-drop: 13px;
+
+  /* How far the players panel's edge toggle, the same size and centred on the
+     panel's right edge, reaches over the board region's top-left corner (#1722),
+     so a board can keep what it draws there clear. 0 wherever no toggle shows. */
+  --bsg-rail-toggle-overhang: calc(var(--bsg-bar-edge) / 2);
 }
 /* A finger's target (#1611): WCAG 2.5.5 and Apple's 44pt. */
 @media (pointer: coarse) {
@@ -864,10 +869,11 @@ const mobileToggleLabel = computed(() => {
 .side-edge {
   position: absolute;
   top: 14px;
-  right: -13px;
+  /* `right` counts from inside the sidebar's 1px border, so centre on the board's edge. */
+  right: calc(-1 * var(--bsg-rail-toggle-overhang) - 1px);
   z-index: 6;
-  width: 26px;
-  height: 26px;
+  width: var(--bsg-bar-edge);
+  height: var(--bsg-bar-edge);
   border-radius: 50%;
   background: var(--bsg-surface);
   border: 1px solid var(--bsg-line);
@@ -876,13 +882,6 @@ const mobileToggleLabel = computed(() => {
   display: grid;
   place-items: center;
   cursor: pointer;
-}
-@media (pointer: coarse) {
-  .side-edge {
-    right: -22px;
-    width: 44px;
-    height: 44px;
-  }
 }
 .side-edge svg {
   width: 15px;
@@ -1263,6 +1262,9 @@ const mobileToggleLabel = computed(() => {
   .side-edge {
     display: none;
   }
+  .game-shell__game {
+    --bsg-rail-toggle-overhang: 0px;
+  }
   /* Compact strip: player icons on the left, expand chevron on the right. */
   .mobile-strip {
     display: flex;
@@ -1500,6 +1502,7 @@ const mobileToggleLabel = computed(() => {
 /* Nothing to reserve room for or keep overlays clear of. */
 .game-shell__game.chrome-hidden {
   --bsg-panel-reserved: 0px;
+  --bsg-rail-toggle-overhang: 0px;
 }
 .chrome-hidden .board-viewport {
   --bsg-panel-overlap: 0px;
