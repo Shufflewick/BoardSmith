@@ -18,7 +18,7 @@ class Merc extends Piece<EquipGame> {}
 class Gear extends Piece<EquipGame> {}
 
 class EquipGame extends Game<EquipGame, Player> {
-  equipped: string[][] = [];
+  equipped: Array<Array<string | undefined>> = [];
   static cardsAutoFill: false | undefined;
 
   constructor(options: GameOptions) {
