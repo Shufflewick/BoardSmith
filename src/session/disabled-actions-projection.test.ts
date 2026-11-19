@@ -70,13 +70,13 @@ describe('disabled-action reasons reach the client without a tutorial', () => {
   });
 
   it('buildPlayerState carries the reason for the active seat', () => {
-    const state = buildPlayerState(runner, playerNames, 1);
+    const state = buildPlayerState(runner, 1);
 
     expect(state.disabledActions).toEqual({ build: NO_WOOD });
   });
 
   it('the disabled action is still OFFERED — the player sees it, greyed out', () => {
-    const state = buildPlayerState(runner, playerNames, 1);
+    const state = buildPlayerState(runner, 1);
 
     expect(state.availableActions).toContain('build');
   });
@@ -90,12 +90,12 @@ describe('disabled-action reasons reach the client without a tutorial', () => {
   it('omits the field entirely once nothing is disabled', () => {
     runner.game.wood = 5;
 
-    expect(buildPlayerState(runner, playerNames, 1).disabledActions).toBeUndefined();
+    expect(buildPlayerState(runner, 1).disabledActions).toBeUndefined();
     expect(createPlayerView(runner.game, 1).disabledActions).toBeUndefined();
   });
 
   it('sends nothing to a spectator, who has no actions to disable', () => {
-    expect(buildPlayerState(runner, playerNames, 0).disabledActions).toBeUndefined();
+    expect(buildPlayerState(runner, 0).disabledActions).toBeUndefined();
     expect(createPlayerView(runner.game, 0).disabledActions).toBeUndefined();
   });
 });

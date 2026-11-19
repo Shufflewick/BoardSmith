@@ -936,7 +936,7 @@ describe('executeOp', () => {
         },
       }),
       // Extract 'direction' arg as notation so heatmap entries have a cell ref.
-      // Without this, DEST_ARGS fallback wouldn't find 'direction' and entries would
+      // Without this, DEST_KEYS fallback wouldn't find 'direction' and entries would
       // be empty (heatmap dedup only aggregates moves that have an extractable target).
       hintTargetFromMove: (move) => {
         const dir = (move.args as { direction?: string }).direction;

@@ -32,7 +32,7 @@ describe("a seat's message text names a card it cannot see by its concealer (#11
     runner.start();
     expect(runner.performAction('draw', 1, {}).success).toBe(true);
 
-    const textFor = (seat: number) => buildPlayerState(runner, ['Alice', 'Bob'], seat).messages?.map((m) => m.text);
+    const textFor = (seat: number) => buildPlayerState(runner, seat).messages?.map((m) => m.text);
     expect(textFor(1)).toEqual(['Alice drew Ace of Spades']);
     expect(textFor(2)).toEqual(['Alice drew Hand']);
     expect(textFor(0)).toEqual(['Alice drew Hand']);
@@ -43,6 +43,6 @@ describe("a seat's message text names a card it cannot see by its concealer (#11
     runner.start();
     expect(runner.performAction('draw', 1, {}).success).toBe(true);
     expect(runner.performAction('play', 1, {}).success).toBe(true);
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 2).messages?.map((m) => m.text)).toEqual(['Alice drew Hand']);
+    expect(buildPlayerState(runner, 2).messages?.map((m) => m.text)).toEqual(['Alice drew Hand']);
   });
 });

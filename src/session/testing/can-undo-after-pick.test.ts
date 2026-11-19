@@ -160,7 +160,7 @@ async function observePickHandler(max: number, upTo: number): Promise<Observed> 
     }
   }
   const snapshot = runner.getSnapshot();
-  const broadcast = buildPlayerState(runner, [], 1, { includeActionMetadata: true });
+  const broadcast = buildPlayerState(runner, 1, { includeActionMetadata: true });
   const undo = await executeOp(def, { playerCount: 1, seed: 'pick-385' }, snapshot, pending, { type: 'undo', player: 1 });
   return { broadcast: canUndoOf(broadcast), undoSucceeded: undo.success };
 }

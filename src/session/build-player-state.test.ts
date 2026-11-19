@@ -109,7 +109,7 @@ describe('buildPlayerState - single truth view (SES-01)', () => {
   });
 
   it('returns view field with truth state and no currentView field', () => {
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
 
     // view field exists and contains state
     expect(state.view).toBeDefined();
@@ -124,8 +124,8 @@ describe('buildPlayerState - single truth view (SES-01)', () => {
   });
 
   it('preserves per-player visibility filtering', () => {
-    const stateP1 = buildPlayerState(runner, ['Alice', 'Bob'], 1);
-    const stateP2 = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    const stateP1 = buildPlayerState(runner, 1);
+    const stateP2 = buildPlayerState(runner, 2);
 
     // Each player should see different views (hidden hands)
     expect(stateP1.view).not.toEqual(stateP2.view);
@@ -145,20 +145,20 @@ describe('buildPlayerState - availableActions scoped to current player', () => {
   });
 
   it('current player sees available actions', () => {
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
     expect(state.isMyTurn).toBe(true);
     expect(state.availableActions).toBeDefined();
     expect(state.availableActions!.length).toBeGreaterThan(0);
   });
 
   it('non-current player sees empty available actions', () => {
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    const state = buildPlayerState(runner, 2);
     expect(state.isMyTurn).toBe(false);
     expect(state.availableActions).toEqual([]);
   });
 
   it('non-current player gets no action metadata even when requested', () => {
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 2, { includeActionMetadata: true });
+    const state = buildPlayerState(runner, 2, { includeActionMetadata: true });
     expect(state.isMyTurn).toBe(false);
     expect(state.availableActions).toEqual([]);
     expect(state.actionMetadata).toBeUndefined();
@@ -181,7 +181,7 @@ describe('buildPlayerState - animation events (SES-02)', () => {
     // Perform an action that triggers game.animate()
     runner.performAction('strike', 1, {});
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
 
     expect(state.animationEvents).toBeDefined();
     expect(state.animationEvents!.length).toBeGreaterThan(0);
@@ -191,7 +191,7 @@ describe('buildPlayerState - animation events (SES-02)', () => {
 
   it('omits animationEvents when buffer is empty', () => {
     // No action performed -- buffer is empty
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
 
     expect(state.animationEvents).toBeUndefined();
     expect(state.lastAnimationEventId).toBeUndefined();
@@ -201,7 +201,7 @@ describe('buildPlayerState - animation events (SES-02)', () => {
     // Perform an action that triggers 3 animate() calls
     runner.performAction('combo', 1, {});
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
 
     expect(state.animationEvents).toHaveLength(3);
     expect(state.animationEvents![0].id).toBe(1);
@@ -306,7 +306,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
 
   it('omits tutorial + disabledActions when no tutorial running', () => {
     // No tutorial started — both projections omit tutorial fields
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
     const psv = createPlayerView(runner.game, 1);
 
     expect(pgs.tutorial).toBeUndefined();
@@ -318,7 +318,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
   it('both projections surface identical tutorial + disabledActions when running', () => {
     controller.start(1); // step: 'intro', suppressAutoFill: true, gate.action: 'move'
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
     const psv = createPlayerView(runner.game, 1);
 
     // tutorial fields match
@@ -335,7 +335,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
   it('tutorial field carries stepId and suppressAutoFill from the step', () => {
     controller.start(1);
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
 
     expect(pgs.tutorial?.stepId).toBe('intro');
     expect(pgs.tutorial?.suppressAutoFill).toBe(true);
@@ -344,7 +344,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
   it('disabledActions names actions gated by the step', () => {
     controller.start(1); // gate.action = 'move', so 'pass' is gated
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
 
     // 'pass' is blocked because the gate only allows 'move'
     expect(pgs.disabledActions?.['pass']).toBeDefined();
@@ -355,7 +355,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
   it('omits tutorial for seat 2 when only seat 1 has started', () => {
     controller.start(1);
 
-    const pgs2 = buildPlayerState(runner, ['Alice', 'Bob'], 2);
+    const pgs2 = buildPlayerState(runner, 2);
     const psv2 = createPlayerView(runner.game, 2);
 
     expect(pgs2.tutorial).toBeUndefined();
@@ -365,7 +365,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
   it('omits tutorial + disabledActions for spectator (position 0)', () => {
     controller.start(1);
 
-    const pgs0 = buildPlayerState(runner, ['Alice', 'Bob'], 0);
+    const pgs0 = buildPlayerState(runner, 0);
 
     expect(pgs0.tutorial).toBeUndefined();
     expect(pgs0.disabledActions).toBeUndefined();
@@ -380,7 +380,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
     controller.start(1);
     controller.exit(1);
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
     const psv = createPlayerView(runner.game, 1);
 
     expect(pgs.tutorial).toBeUndefined();
@@ -392,7 +392,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
     controller.advance(1); // intro → next
     controller.advance(1); // next → completed
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
     const psv = createPlayerView(runner.game, 1);
 
     expect(pgs.tutorial).toBeUndefined();
@@ -403,7 +403,7 @@ describe('tutorial projection parity (buildPlayerState vs createPlayerView)', ()
     controller.start(1);
     controller.advance(1); // intro → next (gate.action: 'pass')
 
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
     const psv = createPlayerView(runner.game, 1);
 
     expect(pgs.tutorial).toEqual(psv.tutorial);
@@ -503,7 +503,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
     tutorialOf(runner.game, SUPPRESS_TUTORIAL).start(1);
 
     // Get the REAL buildPlayerState projection (not a hand-authored literal)
-    const pgs = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const pgs = buildPlayerState(runner, 1);
 
     // Verify the projection carries suppressAutoFill from the step
     expect(pgs.tutorial?.suppressAutoFill).toBe(true);
@@ -614,7 +614,7 @@ describe('buildPlayerState - hasTutorial field', () => {
       steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
     };
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
     expect(state.hasTutorial).toBe(true);
   });
 
@@ -622,7 +622,7 @@ describe('buildPlayerState - hasTutorial field', () => {
     // Default: tutorialDefinition is undefined (no tutorial in options)
     expect((runner.game as any).tutorialDefinition).toBeUndefined();
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
     expect(state.hasTutorial).toBeUndefined();
   });
 
@@ -632,14 +632,14 @@ describe('buildPlayerState - hasTutorial field', () => {
       steps: [{ id: 'intro', gate: { action: 'pass' }, content: [{ text: 'Test.' }] }],
     };
 
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 2).hasTutorial).toBe(true);
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 1).hasTutorial).toBeUndefined();
-    expect(buildPlayerState(runner, ['Alice', 'Bob'], 0).hasTutorial).toBeUndefined();
+    expect(buildPlayerState(runner, 2).hasTutorial).toBe(true);
+    expect(buildPlayerState(runner, 1).hasTutorial).toBeUndefined();
+    expect(buildPlayerState(runner, 0).hasTutorial).toBeUndefined();
   });
 
   it('sends no seat or spectator a global action count or history index (#449)', () => {
     for (const position of [1, 2, 0]) {
-      const state = buildPlayerState(runner, ['Alice', 'Bob'], position) as unknown as Record<string, unknown>;
+      const state = buildPlayerState(runner, position) as unknown as Record<string, unknown>;
       expect(state).not.toHaveProperty('actionCount');
       expect(state).not.toHaveProperty('turnStartActionIndex');
     }
@@ -714,7 +714,7 @@ describe('buildPlayerState - a seat with no name (#906, #1044)', () => {
       gameOptions: { playerCount: 2, playerNames: ['', 'Bob'], seed: 'test' },
     });
     runner.start();
-    const state = buildPlayerState(runner, ['', 'Bob'], 1);
+    const state = buildPlayerState(runner, 1);
     expect(state.players.map((p) => p.name)).toEqual(['Player 1', 'Bob']);
   });
 });

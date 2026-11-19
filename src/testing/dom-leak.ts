@@ -915,12 +915,7 @@ async function seatContextFor(
 ): Promise<SeatContext> {
   if (shell.kind === 'table') {
     const { table } = shell;
-    const seatState = buildPlayerState(
-      table.runner,
-      table.game.players.map((player: { name: string }) => player.name),
-      seat,
-      { includeActionMetadata: true },
-    );
+    const seatState = buildPlayerState(table.runner, seat, { includeActionMetadata: true });
     // As a session publishes it (buildViews): the opening picks the seat sees answered (#1615).
     new PickHandler(table.runner).answerOpeningPicks(seat, seatState.actionMetadata);
     const gameView =

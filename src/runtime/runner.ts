@@ -138,6 +138,9 @@ export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameO
   discardsFailedOps?: boolean;
 }
 
+/** The policies every restore re-supplies, since no snapshot carries them. */
+export type RestorePolicies = Pick<GameRunnerOptions<Game>, 'checkpoints' | 'randomness' | 'undo'>;
+
 /**
  * Result of performing an action through the runner
  */
@@ -336,10 +339,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   executeBarrierIndex = 0;
 
   /**
-   * How many CHECKPOINT RESTORES (undo / rewind / host-driven restore) this
-   * timeline has undergone. Advanced in exactly one place —
-   * `fromCheckpoint`, the single sanctioned restore site — and adopted from
-   * the snapshot by `fromSnapshot`, so it is durable across the stateless
+   * How many RESTORES (undo / rewind / host-driven restore) this timeline has
+   * undergone. Advanced only by the two sanctioned restores —
+   * `fromCheckpoint` and `restoreEarlierSnapshot` — and adopted from the
+   * snapshot by `fromSnapshot`, so it is durable across the stateless
    * boundary exactly like `executeBarrierIndex`.
    *
    * Published to every seat as `PlayerGameState.restoreEpoch`: it is the
@@ -1548,13 +1551,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   static fromSnapshot<G extends Game>(
     snapshot: GameStateSnapshot,
     GameClass: new (options: GameOptions) => G,
-    options?: {
-      animationFloor?: AnimationFloor;
-      checkpoints?: RunnerCheckpointPolicy;
-      randomness?: RandomnessPolicy;
-      undo?: UndoPolicy;
-      discardsFailedOps?: boolean;
-    }
+    options?: RestorePolicies & { animationFloor?: AnimationFloor; discardsFailedOps?: boolean }
   ): GameRunner<G> {
     const tree = snapshotTree(snapshot);
     // Use full gameOptions from snapshot if available, falling back to basic options
@@ -1628,8 +1625,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     runner.executeBarrierIndex = snapshot.executeBarrierIndex ?? 0;
 
     // Adopt the restore epoch as-is. A plain rehydration is NOT a restore --
-    // only `fromCheckpoint` advances it (it hands us an already-incremented
-    // snapshot), so reloading the same snapshot twice can never look like a
+    // only `fromCheckpoint` and `restoreEarlierSnapshot` advance it (they hand
+    // us an already-incremented snapshot), so reloading the same snapshot twice can never look like a
     // restore to a client comparing epochs.
     runner.restoreEpoch = snapshot.restoreEpoch ?? 0;
     runner.seatRestoreEpochs = { ...snapshot.seatRestoreEpochs };
@@ -1727,7 +1724,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     snapshot: GameStateSnapshot,
     actionIndex: number,
     GameClass: new (options: GameOptions) => G,
-    options?: { checkpoints?: RunnerCheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+    options?: RestorePolicies
   ): GameRunner<G> | null {
     const window = snapshot.actionCheckpoints;
     const found = checkpointAt(window, actionIndex);
@@ -1793,10 +1790,10 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
           entries: [...window!.entries.slice(0, actionIndex - window!.baseIndex), { ...checkpoint, state }],
         },
         executeBarrierIndex,
-        // The restore itself, recorded durably. This is the ONE site that
-        // advances the epoch -- same reasoning as `animationFloor` and the
-        // `executeBarrierIndex` clamp above: derived at the single sanctioned
-        // checkpoint-restore site, so no undo/rewind caller has to remember it,
+        // The restore itself, recorded durably. Advanced here, as
+        // `restoreEarlierSnapshot` does for a whole snapshot -- same reasoning
+        // as `animationFloor` and the `executeBarrierIndex` clamp above: derived
+        // at the sanctioned restore site, so no undo/rewind caller has to remember it,
         // and no host can ship a restore that forgets to tell its clients.
         restoreEpoch: (snapshot.restoreEpoch ?? 0) + 1,
         seatRestoreEpochs: snapshot.seatRestoreEpochs,
@@ -1804,12 +1801,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         gameInstanceId: snapshot.gameInstanceId,
       },
       GameClass,
-      {
-        animationFloor,
-        checkpoints: options?.checkpoints,
-        randomness: options?.randomness,
-        undo: options?.undo,
-      },
+      { ...options, animationFloor },
     );
   }
 }
@@ -1833,7 +1825,7 @@ export function restoreEarlierSnapshot<G extends Game>(
   live: GameStateSnapshot,
   earlier: GameStateSnapshot,
   GameClass: new (options: GameOptions) => G,
-  options?: { checkpoints?: RunnerCheckpointPolicy; randomness?: RandomnessPolicy; undo?: UndoPolicy }
+  options?: RestorePolicies
 ): GameRunner<G> {
   if (earlier.gameInstanceId !== live.gameInstanceId) {
     throw new Error(
@@ -1844,12 +1836,7 @@ export function restoreEarlierSnapshot<G extends Game>(
   const runner = GameRunner.fromSnapshot(
     { ...earlier, restoreEpoch: (live.restoreEpoch ?? 0) + 1, seatRestoreEpochs: live.seatRestoreEpochs },
     GameClass,
-    {
-      animationFloor: animationFloorOf(snapshotTree(live)),
-      checkpoints: options?.checkpoints,
-      randomness: options?.randomness,
-      undo: options?.undo,
-    },
+    { ...options, animationFloor: animationFloorOf(snapshotTree(live)) },
   );
   // `earlier` may be an arranged position, edited to a finished game after its flow was saved.
   runner.game.endFlowIfFinished();

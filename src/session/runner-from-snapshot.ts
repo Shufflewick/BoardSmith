@@ -2,6 +2,7 @@ import type { Game, GameClass, TutorialDefinition } from '../engine/index.js';
 import {
   GameRunner,
   type GameStateSnapshot,
+  type RestorePolicies,
   type RunnerCheckpointPolicy,
   type UndoPolicy,
   type RandomnessPolicy,
@@ -31,9 +32,14 @@ export function runnerFromSnapshot(snapshot: GameStateSnapshot, def: RunnerPolic
     snapshot,
     def.gameClass,
     // A host keeps the game from before a failed op, so a failed action changed nothing (#1254).
-    { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo, discardsFailedOps: true },
+    { ...restorePolicies(def), discardsFailedOps: true },
   );
   return withHostState(runner, def);
+}
+
+/** The restore policies `def` declares, which every runner rebuilt from its snapshot is handed. */
+export function restorePolicies(def: RestorePolicies): RestorePolicies {
+  return { checkpoints: def.checkpoints, randomness: def.randomness, undo: def.undo };
 }
 
 /**

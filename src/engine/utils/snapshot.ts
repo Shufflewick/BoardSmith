@@ -173,10 +173,9 @@ interface SnapshotFields {
   executeBarrierIndex?: number;
 
   /**
-   * Monotonic count of CHECKPOINT RESTORES this timeline has undergone
-   * (undo / rewind / any future host-driven restore). Bumped in exactly one
-   * place — `GameRunner.fromCheckpoint`, the single sanctioned restore site —
-   * and carried through `getSnapshot`/`fromSnapshot` so it survives the
+   * Monotonic count of RESTORES this timeline has undergone (undo / rewind /
+   * host-driven restore). Bumped only by the two sanctioned restores —
+   * `GameRunner.fromCheckpoint` and `restoreEarlierSnapshot` — and carried through `getSnapshot`/`fromSnapshot` so it survives the
    * stateless boundary and a cold restart.
    *
    * After a restore, every element id captured from the old runner is stale.

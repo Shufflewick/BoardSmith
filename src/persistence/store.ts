@@ -64,7 +64,7 @@
 import {
   PLAYER_KEY_PREFIX,
   readPersistCommit,
-  toStartPayload,
+  rowsToStartPayload,
   type PersistCommit,
   type PersistCommitEntry,
   type PersistPlayer,
@@ -72,7 +72,7 @@ import {
 } from './persistence.js';
 
 /** One row as the store holds it: `value` still a JSON string, exactly as the
- *  platform stores it and exactly as `toStartPayload` expects to receive it. */
+ *  platform stores it and exactly as `rowsToStartPayload` expects to receive it. */
 export interface StoredRow {
   key: string;
   value: string;
@@ -140,9 +140,7 @@ export class PersistenceStore {
   }
 
   /**
-   * The payload injected into a session's `start` gameOptions, or `null` for
-   * "inject nothing" -- which is what a game that opted out gets, and is NOT
-   * the same as an empty store.
+   * The payload injected into a session's `start` gameOptions.
    *
    * The seal is applied HERE, on the READ, because that is where the platform
    * applies it: a session is handed sealed rows only for the players it acts
@@ -152,13 +150,13 @@ export class PersistenceStore {
   readForSession(
     sessionKey: string,
     players: PersistPlayer[],
-  ): { payload: PersistStartPayload; dropped: string[] } | null {
+  ): { payload: PersistStartPayload; dropped: string[] } {
     const tokens = actingTokens(players);
     const visible = this.rows.filter((row) => {
       const owner = sealedKeyOwner(row.key);
       return owner === null || tokens.has(owner);
     });
-    return toStartPayload({ entries: visible }, sessionKey, players);
+    return rowsToStartPayload(visible, sessionKey, players);
   }
 
   /**

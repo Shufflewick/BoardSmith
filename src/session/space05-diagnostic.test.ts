@@ -61,7 +61,7 @@ describe('SPACE-05 silent-narrowing diagnostic (F-10)', () => {
     _clearShownWarnings();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const state = buildPlayerState(runner, ['A', 'B'], 2, { includeActionMetadata: true });
+    const state = buildPlayerState(runner, 2, { includeActionMetadata: true });
 
     expect(state.isMyTurn).toBe(true); // seat 2 still awaiting
     expect(state.availableActions).toEqual([]); // narrowed to empty
@@ -75,7 +75,7 @@ describe('SPACE-05 silent-narrowing diagnostic (F-10)', () => {
     _clearShownWarnings();
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-    const state = buildPlayerState(runner, ['A', 'B'], 2, { includeActionMetadata: true });
+    const state = buildPlayerState(runner, 2, { includeActionMetadata: true });
 
     expect(state.availableActions).toEqual(['play']);
     expect(warnSpy).not.toHaveBeenCalledWith(expect.stringContaining('stranding'));

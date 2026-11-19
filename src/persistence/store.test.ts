@@ -78,10 +78,10 @@ describe('#47 -- a session may seal only for a player it acts for', () => {
       { key: 'player:p1/sheet', value: 2 },
     ]);
     const payload = store.readForSession('session-1', SEATED);
-    expect(payload?.payload.entries.map((e) => e.key).sort()).toEqual(['player:p1/sheet', 'shared']);
+    expect(payload.payload.entries.map((e) => e.key).sort()).toEqual(['player:p1/sheet', 'shared']);
 
     const other = store.readForSession('session-1', [{ seat: 1, playerId: 'p2' }]);
-    expect(other?.payload.entries.map((e) => e.key)).toEqual(['shared']);
+    expect(other.payload.entries.map((e) => e.key)).toEqual(['shared']);
   });
 });
 
@@ -101,8 +101,8 @@ describe('#740 -- small store defects', () => {
       ],
     });
     const read = store.readForSession('session-1', SEATED);
-    expect(read?.payload.entries.map((e) => e.key)).toEqual(['good']);
-    expect(read?.dropped).toEqual(['hand-edited']);
+    expect(read.payload.entries.map((e) => e.key)).toEqual(['good']);
+    expect(read.dropped).toEqual(['hand-edited']);
   });
 });
 
