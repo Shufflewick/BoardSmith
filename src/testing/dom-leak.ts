@@ -1482,11 +1482,11 @@ interface LeakDetectionData {
  * per-seat tree — `game.toJSONForPlayer(seat)`, post-`playerView`) AND, for
  * every element that IS visible, its own surviving identity values.
  *
- * The `ownValuesById` map is what makes the D20/CR-01 exemption precise (see
- * {@link assertNoHiddenInfoLeak}): a surface attributed to an ancestor/owner
- * element can only be exempted from a marker check when the collision is
- * fully explained by THAT owner's own legitimate content — never merely
- * because the owner's id differs from the marker's element id.
+ * The `ownValuesById` map is what makes the D20/CR-01/#1720 exemption precise
+ * (see {@link assertNoHiddenInfoLeak}): on a surface attributed to an owner
+ * element other than the marker's, only the text that is one of THAT owner's
+ * own values containing the marker is exempted, and the rest of the surface is
+ * still checked — never the whole surface merely because the ids differ.
  */
 function deriveLeakDetectionData(
   unredacted: readonly ElementJSON[],
@@ -1679,6 +1679,20 @@ function saysWord(text: string, word: string): boolean {
   });
 }
 
+/** `text` with every occurrence of each `own` value that contains `marker` blanked out as NULs, so the marker is found only where it is not part of one. A shorter own value is skipped because it could cut the marker apart and hide a leak. */
+function withoutOwnValues(text: string, own: Iterable<string> | undefined, marker: string): string {
+  if (!own) return text;
+  const covered = new Array<boolean>(text.length).fill(false);
+  for (const value of own) {
+    if (!value.includes(marker)) continue;
+    for (let at = text.indexOf(value); at !== -1; at = text.indexOf(value, at + 1)) covered.fill(true, at, at + value.length);
+  }
+  return text
+    .split('')
+    .map((unit, at) => (covered[at] ? '\0' : unit))
+    .join('');
+}
+
 /** Throws on the first announcement that says a marker the seat is not shown anywhere, as a whole word of {@link MIN_SPOKEN_MARKER_LENGTH} or more characters. */
 function refuseSpokenLeak(
   spoken: readonly Spoken[],
@@ -1692,7 +1706,9 @@ function refuseSpokenLeak(
     if (marker.value.length < MIN_SPOKEN_MARKER_LENGTH || spokenForms(marker.value).some((form) => shown.has(form))) continue;
     const { value, attribute, elementId, elementLabel } = marker;
     const leak = spoken.find(
-      ({ text }) => saysWord(text, value) && !allow(value, { attribute, elementId, elementLabel, announcement: text }),
+      ({ text }) =>
+        saysWord(withoutOwnValues(text.toLowerCase(), shown, value.toLowerCase()), value) &&
+        !allow(value, { attribute, elementId, elementLabel, announcement: text }),
     );
     if (leak) {
       const quote = JSON.stringify;
@@ -1829,26 +1845,22 @@ export async function assertNoHiddenInfoLeak(
 
     for (const marker of activeMarkers) {
       for (const surface of surfaces) {
-        // D20/CR-01: a surface attributed to a DIFFERENT element than the
-        // marker's owning element is exempted ONLY when that owner's OWN
-        // legitimate rendered identity (ownValuesById) already explains the
-        // collision — e.g. a same-named symmetric-deck sibling showing its
-        // own name. It is NOT exempted merely because the ids differ: an
-        // ancestor that AGGREGATES a hidden descendant's identity into its
-        // own surface (HexBoardRenderer's cell aria-label/<title> folding in
-        // occupant piece names — CR-01) is not explained by the owner's own
-        // identity and must still be checked. Un-attributed surfaces (no
-        // owning `data-element-id` found) are always checked against every
-        // marker — never drop a possible leak just because it couldn't be
-        // attributed.
-        if (
-          surface.ownerId !== undefined &&
-          surface.ownerId !== marker.elementId &&
-          ownValuesById.get(surface.ownerId)?.has(marker.value)
-        ) {
-          continue;
-        }
-        if (surface.value.includes(marker.value)) {
+        // D20/CR-01/#1720: on a surface attributed to a DIFFERENT element than
+        // the marker's owning element, that owner's OWN legitimate rendered
+        // identity (ownValuesById) is taken out before the check, so the
+        // owner showing its own values explains the collision — a same-named
+        // symmetric-deck sibling, or a visible "AK-47 with Burst Fire" beside
+        // a hidden "AK-47". Whatever is left is still checked: an ancestor
+        // that AGGREGATES a hidden descendant's identity into its own surface
+        // (HexBoardRenderer's cell aria-label/<title> folding in occupant
+        // piece names — CR-01) is not explained by the owner's own identity.
+        // Un-attributed surfaces (no owning `data-element-id` found) are
+        // always checked whole against every marker.
+        const explained =
+          surface.ownerId === undefined || surface.ownerId === marker.elementId
+            ? undefined
+            : ownValuesById.get(surface.ownerId);
+        if (withoutOwnValues(surface.value, explained, marker.value).includes(marker.value)) {
           throw new Error(
             `Hidden-info leak: "${marker.value}"` +
               `${marker.attribute ? ` (attribute "${marker.attribute}")` : ''} ` +

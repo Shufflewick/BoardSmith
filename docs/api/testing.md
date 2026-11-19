@@ -576,7 +576,9 @@ it says the marker as a whole word, in any case or as a plural in "s" (or in
 and "two Kings", not in "Kingdom"), the marker is three or more characters
 long, and the seat is not shown that same value or its plural, in any case, on
 any element it can see (seat 1 holding a King of its own may hear "Bob asked
-for a king"). A one- or two-character hidden value,
+for a king"), and the marker is not only part of a longer value the seat is
+shown ("Plays AK-47 with Burst Fire" names a visible "AK-47 with Burst Fire",
+not a hidden "AK-47", #1720). A one- or two-character hidden value,
 such as a rank "7", is therefore never caught in an announcement; check it
 with `assertHidden` or by reading the region with `watchLiveRegion`.
 
@@ -686,7 +688,15 @@ tree, so it honors a game's `static playerView` hook automatically. The Game
 root is checked too, except its engine root fields (such as `tutorialProgress`)
 and the public `persist` record; a `persistPrivate` value is a marker. Pass an
 `allow` predicate to exclude known-safe, coincidentally-colliding substrings
-(the predicate is scoped **per elementId**, not global):
+(the predicate is scoped **per elementId**, not global).
+
+A visible element may show its own values even where they contain a hidden
+one: a face-up "AK-47 with Burst Fire" drawn on a surface is no leak of a hidden
+"AK-47" (#1720), and the rest of that surface is still checked. "Its own" means
+the element the surface sits under, the nearest `data-element-id` ancestor, so
+give each card its own `data-element-id`. A hand or cell whose label lists its
+cards without them is checked against every hidden value, and a visible name
+there that contains one fails until `allow` accepts it:
 
 ```typescript
 await assertNoHiddenInfoLeak(testGame, 2, {

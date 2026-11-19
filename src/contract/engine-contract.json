@@ -1,5 +1,5 @@
 {
-  "revision": 455,
+  "revision": 456,
   "surfaceHash": "d8fde872c86fab07",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3583,6 +3583,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "CLI only: boardsmith dev always bundles a game's rules against the game's own boardsmith install; the monorepo context and its Vite resolve plugin are gone from dev"
+    },
+    {
+      "revision": 456,
+      "date": "2026-11-19",
+      "surfaceHash": "d8fde872c86fab07",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "assertNoHiddenInfoLeak no longer reports a visible element's own value that contains a hidden one (on its own surface or in an announcement) as a leak (#1720)"
     }
   ]
 }
