@@ -20,6 +20,7 @@ import type {
   OrderedListConfig,
   ConditionConfig,
   OnSelectContext,
+  AutoFillRule,
 } from './types.js';
 import { DEFAULT_TEXT_MAX_LENGTH } from './types.js';
 import type { TextPattern } from './text-rules.js';
@@ -210,7 +211,7 @@ function assertBindsOneValue(
  * what `ctx.args` holds in the callbacks other than `validate`; see
  * {@link RepeatContextArgs}.
  */
-type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, V = ChoiceValue<T>, C extends Record<string, unknown> = A> = {
+type ChooseFromOptions<G extends Game, A extends Record<string, unknown>, T, O, V = ChoiceValue<T>, C extends Record<string, unknown> = A> = AutoFillRule & {
   prompt?: string | ((context: PickContext<G, C>) => string);
   /**
    * The choices: each a value, or `{ value, label }` to give a value its own
@@ -277,7 +278,7 @@ type OneOptions = { multiSelect?: undefined; orderedList?: undefined };
  * Every `chooseElement` option except the repeat options ({@link RepeatingOptions})
  * and the disabled rule ({@link DisabledOptions}). `C` is as in {@link ChooseFromOptions}.
  */
-type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T extends GameElement, O, C extends Record<string, unknown> = A> = {
+type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T extends GameElement, O, C extends Record<string, unknown> = A> = AutoFillRule & {
   prompt?: string | ((context: PickContext<G, C>) => string);
   elementClass?: ElementClass<T>;
   from?: GameElement | ((context: PickContext<G, C>) => GameElement);
@@ -834,6 +835,7 @@ export class Action<
       group: options.group,
       subject: options.subject,
       optional: options.optional,
+      autoFill: options.autoFill,
       validate: options.validate,
       boardRefs: options.boardRefs,
       filterBy: options.filterBy,
@@ -937,6 +939,7 @@ export class Action<
       filter: options.filter,
       elements: options.elements,
       optional: options.optional,
+      autoFill: options.autoFill,
       validate: options.validate,
       display: options.display as ElementSelection<T>['display'],
       group: options.group as ElementSelection<T>['group'],
@@ -995,7 +998,7 @@ export class Action<
    */
   chooseElements<K extends string, T extends GameElement, P = undefined, O extends boolean | string = false>(
     name: K,
-    options: DisabledOptions<G, A, T, P> & {
+    options: DisabledOptions<G, A, T, P> & AutoFillRule & {
       prompt?: string | ((context: PickContext<G, A>) => string);
       /**
        * Elements to choose from - can be static array or function.
@@ -1050,6 +1053,7 @@ export class Action<
       multiSelect: options.multiSelect ?? { min: 1 },
       display: options.display,
       optional: options.optional,
+      autoFill: options.autoFill,
       validate: options.validate as ElementsSelection<T>['validate'],
       boardRef: options.boardRef,
       dependsOn: options.dependsOn,

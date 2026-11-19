@@ -1,5 +1,5 @@
 {
-  "revision": 456,
+  "revision": 457,
   "surfaceHash": "d8fde872c86fab07",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3591,6 +3591,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "assertNoHiddenInfoLeak no longer reports a visible element's own value that contains a hidden one (on its own surface or in an announcement) as a leak (#1720)"
+    },
+    {
+      "revision": 457,
+      "date": "2026-11-19",
+      "surfaceHash": "d8fde872c86fab07",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "A pick can opt out of single-choice auto-fill with autoFill: false, carried on its pick metadata so the shared controller leaves a lone choice to the player (#1721)."
     }
   ]
 }

@@ -221,6 +221,9 @@ export function buildPickMetadata(
   if (selection.onSelect) {
     base.hasOnSelect = true;
   }
+  if ((selection.type === 'choice' || selection.type === 'element' || selection.type === 'elements') && selection.autoFill === false) {
+    base.autoFill = false;
+  }
   if ((selection.type === 'choice' || selection.type === 'element' || selection.type === 'text') && selection.subject) {
     base.subjectTypes = selection.subject.types.map((type) => type.info);
   }

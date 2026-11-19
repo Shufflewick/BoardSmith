@@ -1082,9 +1082,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @returns true if auto-fill was applied, false otherwise
    */
   function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
-    if (autoFillHeldBack(selection) || selection.optional) return false;
+    if (autoFillHeldBack(selection)) return false;
 
-    const answer = loneAnswer(selection);
+    const answer = loneAnswer(selection, getChoices(selection));
     if (!answer) return false;
     currentArgs.value[selection.name] = answer.value;
 
@@ -1095,12 +1095,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return true;
   }
 
-  /** The one answer `selection` takes, with its label, or undefined when the player has a choice to make. */
-  function loneAnswer(selection: EnrichedPickMetadata): { value: unknown; display: string } | undefined {
+  /** The one answer `selection` takes from `choices`, with its label, or undefined when the player has a choice to make. */
+  function loneAnswer(
+    selection: EnrichedPickMetadata,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>,
+  ): { value: unknown; display: string } | undefined {
     // A list pick whose max is 0 takes only the empty list, whatever it offers (#1562).
     if ((resolveOrderedListConfig(selection) ?? resolveMultiSelectConfig(selection))?.max === 0) return { value: [], display: '' };
 
-    const enabledChoices = getChoices(selection).filter(c => !c.disabled);
+    const enabledChoices = choices.filter(c => !c.disabled);
     if (enabledChoices.length !== 1) return undefined;
     const choice = enabledChoices[0];
     // A list of one that breaks the pick's bounds (a min of 2) is no answer (#1562).
@@ -1116,6 +1119,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // A prefill the caller queued for this pick settles it, never a choice of ours (#226, #1298).
     if (actionSnapshot.value?.prefills.has(selection.name)) return true;
 
+    return pickHeldBack(currentActionMeta.value, selection);
+  }
+
+  /** Whether `action` or `selection` itself asks that a lone choice of `selection` be left to the player. */
+  function pickHeldBack(action: EnrichedActionMetadata | undefined, selection: EnrichedPickMetadata): boolean {
     // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
     // selection for the player. Auto-filling a single enabled choice would flip
     // `isReady` true with no player input and the auto-execute watcher would
@@ -1124,7 +1132,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // what flips `isReady` and executes. Suppressing auto-fill here (not
     // auto-execute) keeps that single deliberate tap and preserves custom-UI ↔
     // ActionPanel parity — both funnel through this one controller.
-    if (currentActionMeta.value?.manual) return true;
+    if (action?.manual) return true;
+    // Skipping an optional pick is a real decision, and `autoFill: false` asks for a press (#1721).
+    if (selection.optional || selection.autoFill === false) return true;
 
     // Tutorial auto-fill suppression: when a step wants the learner to perform
     // the click, preserve the teaching interaction instead of auto-resolving.
@@ -2101,14 +2111,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     for (const selection of meta.selections) {
       if (finalArgs[selection.name] === undefined) {
-        // Try auto-fill (but not for optional selections - user must consciously choose or skip)
-        if (getAutoFill()) {
-          const choices = choicesIn(run, finalArgs, selection);
-          const enabledChoices = choices.filter(c => !c.disabled);
-          if (enabledChoices.length === 1 && !selection.optional) {
-            finalArgs[selection.name] = enabledChoices[0].value;
-            continue;
-          }
+        // Filled by the rules a started action's picks are filled by (#1721).
+        const answer = getAutoFill() && !pickHeldBack(meta, selection) ? loneAnswer(selection, choicesIn(run, finalArgs, selection)) : undefined;
+        if (answer) {
+          finalArgs[selection.name] = answer.value;
+          continue;
         }
 
         // Check if required

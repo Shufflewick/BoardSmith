@@ -272,6 +272,20 @@ export interface UnavailableRule {
 }
 
 /**
+ * Whether a lone enabled choice of this pick (`chooseFrom`, `chooseElement`,
+ * `chooseElements`) is filled for the player (#1721).
+ */
+export interface AutoFillRule {
+  /**
+   * `false` keeps this pick from being filled when it offers one enabled
+   * choice, so the player takes it with a press, while the action's other
+   * picks still fill. Unlike `optional`, the pick cannot be skipped; unlike
+   * `.manual()`, it holds back only this pick.
+   */
+  autoFill?: false;
+}
+
+/**
  * A chooseFrom choice that carries its own label. Its value is `value`, and
  * `label` is what the player reads.
  *
@@ -295,7 +309,7 @@ export type ChoiceValue<T> = T extends LabelledChoice<infer V>
  * choices themselves are values or {@link LabelledChoice}s, which the engine
  * reads where the choices are built.
  */
-export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
+export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule, AutoFillRule {
   type: 'choice';
   /** Choices - can be static array or function. Each is a value or a {@link LabelledChoice}. */
   choices: unknown[] | ((context: ActionContext) => unknown[]);
@@ -380,7 +394,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
 /**
  * Select an element from the board
  */
-export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
+export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule, AutoFillRule {
   type: 'element';
   /**
    * Elements to choose from (alternative to filter/from pattern).
@@ -446,7 +460,7 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
  *   });
  * ```
  */
-export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
+export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule, AutoFillRule {
   type: 'elements';
   /**
    * Elements to choose from - can be static array or function.

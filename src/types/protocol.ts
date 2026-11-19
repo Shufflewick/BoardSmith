@@ -300,6 +300,8 @@ export interface PickMetadata<TElement extends ValidElement = ValidElement> {
   prompt?: string;
   /** If true, shows "Skip" button. If a string, shows that text instead. */
   optional?: boolean | string;
+  /** `false`: a lone enabled choice is left for the player to take, never filled for them (#1721). */
+  autoFill?: false;
   /** The subject types this pick's values are things of (#1640). */
   subjectTypes?: readonly PickSubjectType[];
   // Choice-specific properties

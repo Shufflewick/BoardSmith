@@ -86,3 +86,50 @@ describe('auto-fill of a list pick a list of one does not fit (#1562)', () => {
     expect(sendAction).not.toHaveBeenCalled();
   });
 });
+
+const held: Record<string, EnrichedActionMetadata> = {
+  keep: {
+    name: 'keep', prompt: 'Keep',
+    selections: [{ name: 'card', type: 'choice', prompt: 'Which?', choices: ONE, autoFill: false }],
+  },
+  draw: {
+    name: 'draw', prompt: 'Draw', manual: true,
+    selections: [{ name: 'source', type: 'choice', prompt: 'Which?', choices: ONE }],
+  },
+};
+
+/** What execute() sends for `action` called with no args, with auto-fill on, or undefined when it sends nothing. */
+async function executedWithNoArgs(action: string, actions: Record<string, EnrichedActionMetadata>) {
+  const sendAction = createMockSendAction();
+  const controller = useActionController({
+    sendAction,
+    availableActions: ref(Object.keys(actions)),
+    actionMetadata: ref(actions),
+    isMyTurn: ref(true),
+    autoFill: true,
+  });
+  await controller.execute(action, {});
+  return sendAction.mock.calls[0]?.[1];
+}
+
+describe('execute() fills a missing pick by the same rules as a started action (#1721)', () => {
+  it.each([
+    ['keep', 'a pick declared autoFill: false'],
+    ['draw', 'a pick of a .manual() action'],
+  ])('leaves %s unsent: %s is not filled', async (action) => {
+    expect(await executedWithNoArgs(action, held)).toBeUndefined();
+  });
+
+  it.each([
+    ['pickCards', { cards: [7] }],
+    ['pickMany', { many: ['x'] }],
+    ['pickNone', { none: [] }],
+    ['pickOne', { one: 'x' }],
+  ])('sends %s as %j', async (action, args) => {
+    expect(await executedWithNoArgs(action, metadata)).toEqual(args);
+  });
+
+  it('leaves a pick of at least two unsent', async () => {
+    expect(await executedWithNoArgs('pickTwo', metadata)).toBeUndefined();
+  });
+});
