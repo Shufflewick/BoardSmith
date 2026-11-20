@@ -719,6 +719,11 @@ export interface WorldCommandStamp {
    * One object rather than a number per cap, because there are four of them
    * now (#105) and a stamp that grew a field each time would be four numbers a
    * caller could transpose with no type error anywhere.
+   *
+   * On the clock's road it is what the queue holds for the WORLD ITSELF: a due
+   * event's own schedules are charged to the world under a reserved owner --
+   * the one path that can grow a queue with nobody to bill -- so it is capped
+   * like everybody else.
    */
   readonly allowance: ScheduleAllowance;
   /**
@@ -742,6 +747,10 @@ export interface WorldCommandStamp {
    * now. The platform does NOT distinguish "left" from "dropped and about to
    * reconnect" -- a game that wants durable consequences of leaving models
    * them as explicit state changed by commands.
+   *
+   * It rides the clock's road too, so the 03:00 raid handler can ask whether
+   * the defender is watching; an event that ran while the world was empty is
+   * handed an empty list rather than a memory.
    */
   readonly presence: readonly number[];
   /**
@@ -753,6 +762,14 @@ export interface WorldCommandStamp {
    * over is the one from BEFORE this command.
    *
    * Null when there is no seat behind the command.
+   *
+   * ON THE CLOCK'S ROAD it is the event's OWNER's watermark -- not the charge
+   * owner, which for a due event is always the world, but the seat whose timer
+   * this is. This is the road the feature exists for: an irreversible cleanup
+   * deadline armed twenty days ago rechecks the watermark as it fires, so a
+   * player who came back on day nineteen keeps their empire and the handler
+   * re-arms instead of reaping. Null for an event the world armed for itself,
+   * which is about nobody.
    */
   readonly activity: SeatActivityStamp | null;
   /**
@@ -767,6 +784,12 @@ export interface WorldCommandStamp {
    * remembers which chairs have been answered either: a watermark left over in
    * a child between two dispatches would be read by the second one as an answer
    * to a question it never asked.
+   *
+   * The clock's road is THE road it exists for: a world-owned event is handed
+   * `activity: null` because it is about nobody, and the whole of an occupied
+   * world's lifecycle -- the hourly sweep, the successor election, the recheck
+   * before the countdown fires -- is world-owned. This is how such an event
+   * learns anything about a person at all.
    */
   readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
   /**
@@ -783,49 +806,7 @@ export interface WorldCommandStamp {
  * on it: a scheduled event's clock is its own `due`, which `onEvent`'s timing
  * already carries, and a second copy would be a second source of truth.
  */
-export interface WorldEventStamp {
-  /**
-   * What the queue holds for the WORLD ITSELF, for the same reason a player's
-   * command carries theirs. A due event's own schedules are charged to the
-   * world under a reserved owner -- the one path that can grow a queue with
-   * nobody to bill -- so it is capped like everybody else.
-   */
-  readonly allowance: ScheduleAllowance;
-  /**
-   * Which seats are connected as this event runs -- `WorldCommandStamp`'s
-   * field, on the clock's road, so the 03:00 raid handler can ask whether the
-   * defender is watching. Derived at the drain, so an event that ran while
-   * the world was empty is handed an empty list rather than a memory.
-   */
-  readonly presence: readonly number[];
-  /**
-   * THE ACTIVITY OF THE SEAT THIS EVENT IS ABOUT (ShufflewickPub #383).
-   *
-   * The event's OWNER's watermark -- not the charge owner, which for a due
-   * event is always the world, but the seat whose timer this is. This is the
-   * road the feature exists for: an irreversible cleanup deadline armed twenty
-   * days ago rechecks the watermark as it fires, so a player who came back on
-   * day nineteen keeps their empire and the handler re-arms instead of
-   * reaping. Null for an event the world armed for itself, which is about
-   * nobody.
-   */
-  readonly activity: SeatActivityStamp | null;
-  /**
-   * THE CHAIRS THIS EVENT'S WALK NAMED (ShufflewickPub #423).
-   *
-   * `WorldCommandStamp`'s field, and THE road it exists for: a world-owned
-   * event is handed `activity: null` because it is about nobody, and the whole
-   * of an occupied world's lifecycle -- the hourly sweep, the successor
-   * election, the recheck before the countdown fires -- is world-owned. This is
-   * how such an event learns anything about a person at all.
-   */
-  readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
-  /**
-   * THE NOTICE BOXES THIS DISPATCH'S WALK NAMED, answered (ShufflewickPub
-   * #521). One per `.noticeBox()` round that named a seat, in the order asked.
-   */
-  readonly declaredNotices: readonly DeclaredNoticeBox[];
-}
+export type WorldEventStamp = Omit<WorldCommandStamp, "now">;
 
 /**
  * ONE PARTITION AS THE CHECKPOINT STORE HOLDS IT.

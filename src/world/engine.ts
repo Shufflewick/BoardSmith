@@ -119,7 +119,6 @@ import type {
 import {
   scheduleBudget,
   WORLD_OWNER,
-  type ScheduleAllowance,
   type ScheduleArm,
   type ScheduleCancel,
   type ScheduleRequest,
@@ -129,7 +128,6 @@ import {
   applyNoticeWrite,
   NOTICE_SCOPE,
   stampNotice,
-  type DeclaredNoticeBox,
   type WorldNoticeBox,
   type WorldNoticeWrite,
 } from "./notices.js";
@@ -1139,19 +1137,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // The acting player is the schedule OWNER: their events are charged to
     // their budget, and a bundle cannot charge them to somebody else because
     // it never gets to name one.
-    return this.dispatch(command, seat, null, {
-      now: stamp.now,
-      owner: player,
-      allowance: stamp.allowance,
-      presence: stamp.presence,
-      activity: stamp.activity,
-      // EMPTY ON A SEAT'S ROAD, ALWAYS. A seated action may not declare an
-      // activity round (ShufflewickPub #423), so the only honest thing to hand
-      // its handler is nothing to read.
-      declaredActivity: stamp.declaredActivity,
-      // THE NOTICE BOXES ITS WALK NAMED (ShufflewickPub #521), on either road.
-      declaredNotices: stamp.declaredNotices,
-    });
+    return this.dispatch(command, seat, null, { ...stamp, owner: player });
   }
 
   async onEvent(
@@ -1171,25 +1157,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // event has no acting player, and an unowned event would be uncapped -- a
     // recurring handler that re-armed itself without a key is precisely the
     // shape that would then grow a queue forever with nobody to refuse.
-    return this.dispatch(event, null, timing, {
-      now: timing.due,
-      owner: WORLD_OWNER,
-      allowance: stamp.allowance,
-      presence: stamp.presence,
-      // THE CHARGE OWNER AND THE SUBJECT ARE DIFFERENT SEATS (#383). This
-      // event's schedules are billed to the world, because a due event has no
-      // acting player; the watermark it is handed is the OWNER's, because the
-      // deadline is about them. Collapsing the two would either bill a seat for
-      // the clock's work or hand a reaper somebody else's idleness.
-      activity: stamp.activity,
-      // AND THE CHAIRS THIS PHASE NAMED (ShufflewickPub #423). The road the
-      // point read exists for: a world-owned event is handed `activity: null`
-      // because it is about nobody, and these are how it learns anything about
-      // a person at all.
-      declaredActivity: stamp.declaredActivity,
-      // THE NOTICE BOXES ITS WALK NAMED (ShufflewickPub #521), on either road.
-      declaredNotices: stamp.declaredNotices,
-    });
+    //
+    // THE CHARGE OWNER AND THE SUBJECT ARE DIFFERENT SEATS (#383). This
+    // event's schedules are billed to the world, because a due event has no
+    // acting player; the watermark it is handed is the OWNER's, because the
+    // deadline is about them. Collapsing the two would either bill a seat for
+    // the clock's work or hand a reaper somebody else's idleness.
+    return this.dispatch(event, null, timing, { ...stamp, now: timing.due, owner: WORLD_OWNER });
   }
 
   /**
@@ -2606,15 +2580,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     command: WorldCommand,
     seat: number | null,
     timing: { readonly due: number; readonly missedCount: number } | null,
-    charge: {
-      now: number;
-      owner: string;
-      allowance: ScheduleAllowance;
-      presence: readonly number[];
-      activity: SeatActivityStamp | null;
-      declaredActivity: readonly DeclaredSeatActivityStamp[];
-      declaredNotices: readonly DeclaredNoticeBox[];
-    },
+    charge: WorldCommandStamp & { readonly owner: string },
   ): Promise<WorldCommandResult> {
     const definition = this.actionFor(command.name, seat);
 
@@ -2919,13 +2885,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     namedSeats: readonly number[],
     namedBoxes: readonly number[],
     timing: { readonly due: number; readonly missedCount: number } | null,
-    charge: {
-      now: number;
-      presence: readonly number[];
-      activity: SeatActivityStamp | null;
-      declaredActivity: readonly DeclaredSeatActivityStamp[];
-      declaredNotices: readonly DeclaredNoticeBox[];
-    },
+    charge: WorldCommandStamp,
     budget: ReturnType<typeof scheduleBudget>,
     ledger: DispatchLedger,
   ): WorldClockFacilities {
