@@ -325,7 +325,7 @@ happened, and it is never replayed to rebuild state.
 Time-travel is built on **per-action checkpoints**: on every recorded
 action the runner captures a full copy of the tree (plus flow position,
 element-sequence counter, and RNG state) into
-`snapshot.actionCheckpoints`. Undo, rewind, and `getStateAtAction` all
+`snapshot.actionCheckpoints`. Undo, rewind, and `debugStateAt` all
 restore the checkpoint at the target action count *directly*
 (`GameRunner.fromCheckpoint`) — nothing is re-run.
 
