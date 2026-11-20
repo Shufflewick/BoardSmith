@@ -83,7 +83,7 @@
 
       <!-- A world has no turn, undo or zoom, so its menu holds only Preferences (#1443). -->
       <template #controls>
-        <ControlsMenu class="actionbar-controls" open-up align="left" :has-action-help="hasHelpToShow" :preferences="preferences" :commands="menuCommands.commands.value" />
+        <ControlsMenu class="actionbar-controls" :has-action-help="hasHelpToShow" :preferences="preferences" :commands="menuCommands.commands.value" />
       </template>
 
       <template #board>

@@ -15,7 +15,7 @@
  * // Add ZoomPreviewOverlay to template
  * ```
  */
-import { ref, reactive, onMounted, onUnmounted, type Ref } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 export interface CardPreviewData {
@@ -69,13 +69,6 @@ export interface PreviewState {
   originalWidth: number;
   /** Original element height (for sizing the wrapper in clone mode) */
   originalHeight: number;
-}
-
-export interface ZoomPreviewOptions {
-  /** Container element ref to attach event listeners to (defaults to document) */
-  containerRef?: Ref<HTMLElement | null>;
-  /** Scale factor for the preview (default: 2.5) */
-  scale?: number;
 }
 
 export interface ZoomPreviewReturn {
@@ -160,8 +153,8 @@ function detachGlobals() {
   isAltPressed.value = false;
 }
 
-export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewReturn {
-  const scale = options.scale ?? 2.5;
+export function useZoomPreview(): ZoomPreviewReturn {
+  const scale = 2.5;
 
   const previewState = reactive<PreviewState>({
     visible: false,
@@ -563,8 +556,7 @@ export function useZoomPreview(options: ZoomPreviewOptions = {}): ZoomPreviewRet
     instanceCount++;
     attachGlobals();
 
-    // Get container (default to document.body)
-    const container = options.containerRef?.value || document.body;
+    const container = document.body;
 
     // Attach mouse event delegation listeners
     container.addEventListener('mouseover', handleMouseOver);

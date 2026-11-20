@@ -1,5 +1,20 @@
 # Migration Guide
 
+## Props and options no caller passed are removed (#1777)
+
+Delete these from your code; each now behaves as its default did, unless noted:
+
+- `ControlsMenu`: `openUp` and `align`. The menu always opens upward from its trigger's left edge, where both shells put it.
+- `useZoomPreview()` takes no options: the preview always zooms 2.5x and listens on `document.body`.
+- `ZoomPreviewOverlay`: `getSuitSymbol` and `getSuitColor`. It uses the `boardsmith/ui` suit helpers.
+- `Die3D`: `zeroIndexed`. A d10 reads 1 to 10; give it `faceLabels` for other words.
+- `BoardMessage`: `position`. A message sits at the bottom of the board.
+- `useFLIP`: `threshold` (moves under 1px are skipped), `onAnimationStart` and `onAnimationEnd` (watch `isAnimating`).
+- `isBlackSuit()`: use `!isRedSuit(suit)` for a standard suit.
+- `audioService.init()`: `enabled` and `volume`; it takes only `turnSoundUrl`, now required. Use `setEnabled()` and `setVolume()`.
+- `toDebugString()`: `showIds` and `showAttributes`. Ids and attributes always show.
+- `boardsmith lint`: `--eslint`, `--css` and `--pitfalls`. It runs every check the project configures.
+
 ## `usePlayerStatAnimation()` is removed (#1716)
 
 It only returned `getPlayerStatElement` and `flyToPlayerStat`, which `boardsmith/ui`

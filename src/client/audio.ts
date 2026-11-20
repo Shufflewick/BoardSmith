@@ -5,12 +5,8 @@
  */
 
 export interface AudioServiceOptions {
-  /** Enable/disable sound notifications (default: true) */
-  enabled?: boolean;
-  /** Volume level 0-1 (default: 0.5) */
-  volume?: number;
   /** URL to the turn notification sound file */
-  turnSoundUrl?: string;
+  turnSoundUrl: string;
 }
 
 /** Say in the console why the turn chime did not play, so a silent game has a visible cause. */
@@ -41,9 +37,6 @@ class AudioService {
   private listeners = new Set<() => void>();
 
   /**
-   * Initialize the audio service with options
-   */
-  /**
    * The ONE place a volume is validated, so a new entry point cannot
    * reintroduce the hole this closes. Two traps live here:
    *
@@ -66,23 +59,13 @@ class AudioService {
     return true;
   }
 
-  init(options: AudioServiceOptions = {}): void {
-    if (options.enabled !== undefined) {
-      this.enabled = options.enabled;
-    }
-    if (options.volume !== undefined) {
-      this.applyVolume(options.volume);
-    }
-    const urlChanged = options.turnSoundUrl !== undefined && options.turnSoundUrl !== this.turnSoundUrl;
-    if (options.turnSoundUrl !== undefined) {
-      this.turnSoundUrl = options.turnSoundUrl;
-    }
-
-    // Pre-create audio element for faster playback
-    if (this.turnSoundUrl && (urlChanged || !this.audioElement)) {
-      this.setTurnSoundUrl(this.turnSoundUrl);
-    }
-    this.notify();
+  /**
+   * Initialize the audio service with its turn sound, pre-creating the audio element for faster playback
+   */
+  init(options: AudioServiceOptions): void {
+    if (options.turnSoundUrl === this.turnSoundUrl && this.audioElement) return;
+    this.turnSoundUrl = options.turnSoundUrl;
+    if (this.turnSoundUrl) this.setTurnSoundUrl(this.turnSoundUrl);
   }
 
   /**
@@ -155,7 +138,7 @@ class AudioService {
   }
 
   /**
-   * Call `listener` after each `init`, `loadPreferences`, `setEnabled` or accepted `setVolume`, so a game
+   * Call `listener` after each `loadPreferences`, `setEnabled` or accepted `setVolume`, so a game
    * that synthesizes sound or shows its own control follows the shell's menu.
    * Returns the unsubscribe.
    */

@@ -317,7 +317,6 @@ export {
   getCardName,
   getCardPointValue,
   isRedSuit,
-  isBlackSuit,
   type SuitAbbreviation,
   type RankAbbreviation,
 } from './composables/useCardDisplay.js';

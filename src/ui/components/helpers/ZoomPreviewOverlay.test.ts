@@ -24,9 +24,9 @@ const state = (overrides: Partial<PreviewState> = {}): PreviewState => ({
 });
 
 /** Teleports to body, so assertions read the document rather than the wrapper. */
-const overlay = (previewState: PreviewState, props: Record<string, unknown> = {}) =>
+const overlay = (previewState: PreviewState) =>
   mount(ZoomPreviewOverlay, {
-    props: { previewState, ...props },
+    props: { previewState },
     attachTo: document.body,
   });
 
@@ -106,16 +106,7 @@ describe('ZoomPreviewOverlay', () => {
       expect(rendered()!.querySelector('.preview-card-back')).not.toBeNull();
     });
 
-    it('colours the fallback with the supplied suit-colour function', () => {
-      overlay(
-        state({ cardData: { rank: 'A', suit: 'H' } }),
-        { getSuitColor: () => 'rgb(1, 2, 3)' },
-      );
-      const fallback = rendered()!.querySelector('.preview-fallback') as HTMLElement;
-      expect(fallback.getAttribute('style')).toContain('rgb(1, 2, 3)');
-    });
-
-    it('falls back to its own suit colouring when none is supplied', () => {
+    it('colours the fallback by its suit', () => {
       overlay(state({ cardData: { rank: 'A', suit: 'H' } }));
       const fallback = rendered()!.querySelector('.preview-fallback') as HTMLElement;
       expect(fallback.getAttribute('style')).toBeTruthy();

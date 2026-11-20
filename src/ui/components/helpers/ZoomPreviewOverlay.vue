@@ -30,7 +30,7 @@ import type { PreviewState } from '../../composables/useZoomPreview.js';
 // drawing dice already does). See dice/die-preview-registry.ts.
 import { ADD_DICE_SUPPORT_ADVICE, getDiePreviewComponent } from '../dice/die-preview-registry.js';
 import { parseImageInfo, getSpriteStyle } from '../../utils/image.js';
-import { getSuitSymbol as defaultSuitSymbol, getSuitColor as defaultSuitColor } from '../../composables/useCardDisplay.js';
+import { getSuitSymbol, getSuitColor } from '../../composables/useCardDisplay.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
 
 syncReducedMotionClass();
@@ -38,10 +38,6 @@ syncReducedMotionClass();
 const props = defineProps<{
   /** Preview state from useZoomPreview */
   previewState: PreviewState;
-  /** Optional custom suit symbol getter */
-  getSuitSymbol?: (suit: string) => string;
-  /** Optional custom suit color getter */
-  getSuitColor?: (suit: string) => string;
 }>();
 
 // Default card display size (standard playing card proportion)
@@ -202,10 +198,10 @@ const previewCardStyle = computed(() => ({
             <div
               v-else
               class="preview-fallback"
-              :style="{ color: (getSuitColor || defaultSuitColor)(previewState.cardData?.suit || '') }"
+              :style="{ color: getSuitColor(previewState.cardData?.suit || '') }"
             >
               <span class="preview-rank">{{ previewState.cardData?.rank }}</span>
-              <span class="preview-suit">{{ (getSuitSymbol || defaultSuitSymbol)(previewState.cardData?.suit || '') }}</span>
+              <span class="preview-suit">{{ getSuitSymbol(previewState.cardData?.suit || '') }}</span>
             </div>
           </template>
         </div>
