@@ -1,5 +1,5 @@
 {
-  "revision": 475,
+  "revision": 476,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3743,6 +3743,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Unused imports, a local and two private parameters are gone from the engine and world, with no behavior change (#1750)"
+    },
+    {
+      "revision": 476,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Docs name debugStateAt instead of the removed getStateAtAction (#1751)"
     }
   ]
 }
