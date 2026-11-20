@@ -12,38 +12,14 @@
 
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
-import { ref } from 'vue';
 
-// ---------------------------------------------------------------------------
-// reducedMotion reads window.matchMedia at module-load time. Mock the
-// composables that pull it in before AutoRenderer.vue is imported.
-// vi.mock() calls are hoisted before imports by vitest.
-// ---------------------------------------------------------------------------
-vi.mock('../../composables/useFlyingElements.js', () => ({
-  useFlyingElements: () => ({
-    flyingElements: ref([]),
-    fly: vi.fn().mockResolvedValue(undefined),
-  }),
-}));
-
-vi.mock('../../composables/useAnimationEvents.js', () => ({
-  useAnimationEvents: () => undefined,
-}));
-
-vi.mock('./useAutoRendererAnimations.js', () => ({
-  useAutoRendererAnimations: vi.fn(),
-}));
-
-// eslint-disable-next-line import/first -- must follow vi.mock calls
 import AutoRenderer from './AutoRenderer.vue';
-// eslint-disable-next-line import/first -- must follow vi.mock calls
 import { REQUEST_HOST_STATE_KEY } from '../../composables/requestHostState.js';
 
 // ---------------------------------------------------------------------------
 // Stub child components that are too expensive / require inject context
 // ---------------------------------------------------------------------------
 const stubs = {
-  FlyingCardsOverlay: true,
   GridBoardTemplate: true,
   CardTemplate: true,
   TableauTemplate: true,

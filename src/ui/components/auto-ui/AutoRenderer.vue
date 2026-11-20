@@ -7,8 +7,6 @@
  *   1. Side-effect import of builtin-renderers.ts (registers all 8 built-ins once)
  *   2. Provide the full context chain expected by per-element renderers
  *   3. Select the archetype via selectArchetype() and dispatch to the matching template
- *   4. Wire FlyingCardsOverlay for flying-element animations
- *   5. Wire useAutoRendererAnimations (added in Task 2)
  *
  * Interaction state is not provided here: per-element renderers read it from
  * useBoardInteraction() through useElementBoardState(). No dual path for
@@ -22,12 +20,8 @@ import './builtin-renderers.js';
 import { computed, inject, onMounted, onUnmounted, provide, ref, watch } from 'vue';
 import type { PresentationOverlay } from './presentation.js';
 import { parseImageInfo, type ImageInfo } from '../../utils/image.js';
-import { useFlyingElements } from '../../composables/useFlyingElements.js';
-import FlyingCardsOverlay from '../helpers/FlyingCardsOverlay.vue';
 import { DIE_ANIMATION_CONTEXT_KEY, createDieAnimationContext } from '../dice/die3d-state.js';
-import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { selectArchetype } from './archetype-selector.js';
-import { useAutoRendererAnimations } from './useAutoRendererAnimations.js';
 import GridBoardTemplate from './archetypes/GridBoardTemplate.vue';
 import CardTemplate from './archetypes/CardTemplate.vue';
 import TableauTemplate from './archetypes/TableauTemplate.vue';
@@ -151,24 +145,10 @@ watch(
     }
   },
 );
-
-// ---------------------------------------------------------------------------
-// Flying elements — for FlyingCardsOverlay; fly API passed to animation wiring
-// ---------------------------------------------------------------------------
-const { flyingElements, fly } = useFlyingElements();
-
-// ---------------------------------------------------------------------------
-// Animation event wiring (RENDER-05) — inject-only, never createAnimationEvents
-// If GameShell hasn't provided animation events, returns silently (no throw).
-// ---------------------------------------------------------------------------
-const animationEvents = useAnimationEvents();
-useAutoRendererAnimations(animationEvents, { fly });
 </script>
 
 <template>
   <div class="auto-renderer">
-    <FlyingCardsOverlay :flying-cards="flyingElements" />
-
     <!-- CF-3: null gameView loading state — animated skeleton + timeout retry -->
     <div v-if="!gameView" class="auto-renderer-empty">
       <div class="auto-renderer-skeleton" aria-busy="true" aria-label="Loading game…">

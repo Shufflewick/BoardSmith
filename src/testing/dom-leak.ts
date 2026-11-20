@@ -106,8 +106,8 @@ export type HiddenInfoGameView = GameRootView;
 // They do not stub or alter any BoardSmith behavior.
 //
 // `window.matchMedia`: `reducedMotion.ts` reads it (`prefersReducedMotion`
-// top-level ref) on first read, and it is pulled in transitively by
-// AutoRenderer's `useFlyingElements()` call. Importing no longer throws without
+// top-level ref) on first read, and AutoRenderer imports it through
+// `syncReducedMotionClass()`. Importing no longer throws without
 // it, but a real mount of `AutoUI` (no stubs; we need the actual renderers to
 // exercise the real leak surface) still reads it, so it is installed before
 // `AutoUI.vue`'s module graph is evaluated. A static `import AutoUI from '...'`
