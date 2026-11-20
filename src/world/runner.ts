@@ -532,7 +532,7 @@ function surveyPass(
   survey: WorldMigrationSurvey<unknown>,
   page: readonly string[],
   ctx: WorldMigrateContext,
-): WorldMigrated {
+): WorldMigrated & { partitions: Record<string, never>; created: Record<string, never> } {
   return {
     partitions: {},
     created: {},
