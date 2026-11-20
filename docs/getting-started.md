@@ -263,9 +263,9 @@ at its cap.
 changed since the merge base with `<base>`, never sims. When no unit test
 imports anything the change touched, it passes and lists each changed file
 with why no test ran for it, so a change guarded by its types alone or a
-cleanup with no new behaviour needs no filler test. Changed code that no test
-imports is still caught by `boardsmith mutate` below. It fails only when
-nothing changed since `<base>`.
+cleanup with no new behaviour needs no filler test. `boardsmith mutate` below
+is what shows the tests of a change can fail, and a mutant it tries in a file no
+test imports fails it. It fails only when nothing changed since `<base>`.
 
 #### Showing the tests of a change can fail: `boardsmith mutate`
 

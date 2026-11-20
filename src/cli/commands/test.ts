@@ -122,18 +122,17 @@ async function changedFiles(cwd: string, base: string): Promise<string[]> {
 
 /**
  * A run under `--changed` that ran no test: fails when nothing changed, and otherwise passes saying
- * why each file ran none. A src/ file no test imports passes here because `boardsmith mutate` is what
- * judges changed code, so a change guarded by its types alone, or one with no breakable code, needs no filler test (#1757).
+ * why each file ran none, so a change guarded by its types alone, or a cleanup, needs no filler test (#1757).
  */
 function explainNoRelatedTests(cwd: string, changed: string[], base: string): void {
   if (changed.length === 0) {
-    fail(`Nothing changed since the merge base with ${base}, so there is no change to test. Commit or stage the change, then run this again.`, 1);
+    fail(`Nothing changed since the merge base with ${base}, so there is no change to test. Pass the ref the work started from, such as main from a work branch.`, 1);
   }
   const why = (file: string): string => {
     if (!existsSync(join(cwd, file))) return 'deleted or renamed by this change';
     if (SIM_FILE.test(file)) return 'a sim, which runs only under `boardsmith test --sims`';
     if (!file.startsWith('src/')) return 'outside src/, so no unit test has to import it';
-    return 'no unit test imports it, so `boardsmith mutate` fails on any code it changed that a mutant can break';
+    return 'no unit test imports it, so no test checks it';
   };
   console.log(
     styleText(

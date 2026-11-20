@@ -118,7 +118,7 @@ describe('boardsmith test', () => {
     );
     const run = await spawnCli(['test', '--changed', 'main'], project);
     expect(run.stdout).toContain('No unit test is related to this change since its merge base with main');
-    expect(run.stdout).toContain('  src/rules.ts: no unit test imports it, so `boardsmith mutate` fails on any code it changed that a mutant can break');
+    expect(run.stdout).toContain('  src/rules.ts: no unit test imports it, so no test checks it');
     expect(run.code).toBe(0);
   });
 
