@@ -1,5 +1,5 @@
 {
-  "revision": 474,
+  "revision": 475,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3735,6 +3735,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The executor's missing-field refusal comes from one function, missingFieldMessage, with unchanged text (#1749)"
+    },
+    {
+      "revision": 475,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Unused imports, a local and two private parameters are gone from the engine and world, with no behavior change (#1750)"
     }
   ]
 }
