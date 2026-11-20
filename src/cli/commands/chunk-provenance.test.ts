@@ -583,6 +583,36 @@ describe('chunk-check', () => {
     expect(after).toContain(`| rulebook/01-setup-and-round-structure.md | ${sliceHash} |`);
   });
 
+  it('refuses a CHUNK.md whose sections appear twice, and writes nothing (#1784)', async () => {
+    const { project } = await makeCheckProject();
+    const chunkPath = await makeChunk(project, 'jab', JAB_CITES);
+    const doubled = (await fs.readFile(chunkPath, 'utf-8')).repeat(2);
+    await fs.writeFile(chunkPath, doubled);
+
+    await expect(chunkCheckCommand('jab', { project, json: true })).rejects.toThrow(
+      /"## Step Checklist" appears 2 times/,
+    );
+    expect(await fs.readFile(chunkPath, 'utf-8')).toBe(doubled);
+  });
+
+  it('refuses a heading or checklist line inside an HTML comment, naming its line (#1784)', async () => {
+    const { project } = await makeCheckProject();
+    const chunkPath = await makeChunk(project, 'jab', JAB_CITES);
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    const hidden = text.replace(
+      /^## Redteam Rounds\n<!--/m,
+      '## Redteam Rounds\n<!--\n### Redteam Round 2\n- claim 1 — outcome: stands',
+    );
+    expect(hidden).not.toBe(text);
+    await fs.writeFile(chunkPath, hidden);
+    const line = hidden.split('\n').indexOf('### Redteam Round 2') + 1;
+
+    await expect(chunkCheckCommand('jab', { project, json: true })).rejects.toThrow(
+      new RegExp(`Line ${line} .*inside an HTML comment.*### Redteam Round 2`),
+    );
+    expect(await fs.readFile(chunkPath, 'utf-8')).toBe(hidden);
+  });
+
   it('writes the whole fenced section when none exists, and exits non-zero', async () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
@@ -1369,16 +1399,11 @@ describe('chunk-provenance-status', () => {
       expect(parsed.blockMalformed).toBe(false);
     });
 
-    it('a chunk whose real "## Verified Against" section is deleted, with the template\'s line-18 prose mention of the heading still present, returns unknown/not-malformed — never blockMalformed: true', async () => {
+    it('a chunk whose real "## Verified Against" section is deleted, with a prose mention of the heading still present, returns unknown/not-malformed — never blockMalformed: true', async () => {
       const template = skillMarkdown('bs/templates/CHUNK.template.md');
       const headingIdx = template.indexOf('\n## Verified Against\n');
       expect(headingIdx).toBeGreaterThan(-1); // sanity: the real section exists in the shipped template
-      const sectionDeleted = template.slice(0, headingIdx) + '\n';
-
-      // The template's own PARSE CONTRACT comment (line 18) legitimately names "## Verified Against"
-      // in prose — confirm the fixture still carries that prose mention after the real section is gone.
-      expect(sectionDeleted).toContain('"## Verified Against"');
-      expect(sectionDeleted).not.toContain('\n## Verified Against\n');
+      const sectionDeleted = '<!-- required: "## Verified Against" -->\n' + template.slice(0, headingIdx) + '\n';
 
       const parsed = parseVerifiedAgainst(sectionDeleted);
       expect(parsed.state).toBe(PROVENANCE_UNKNOWN);

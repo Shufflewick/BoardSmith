@@ -40,6 +40,7 @@ import {
   checkRunLog,
   ledgerCheck,
 } from '../../commands/ledger-check.js';
+import { CHUNK_HEADINGS, chunkStructureProblems } from '../../commands/chunk-structure.js';
 import { tempTree } from '../../../testing/temp-tree.test-helper.js';
 import { skillMarkdown } from '../skill-markdown.test-helper.js';
 
@@ -512,32 +513,34 @@ describe('PROV-01 — CHUNK.template.md scaffolds the machine-owned Verified Aga
   });
 });
 
+describe('CHUNK.template.md comments hold no copy of a heading or checklist line (#1784)', () => {
+  const chunkTemplate = read('templates/CHUNK.template.md');
+
+  it('has the structure chunk-check accepts', () => {
+    expect(chunkStructureProblems(chunkTemplate)).toEqual([]);
+  });
+
+  it('names headings and checklist items in comments without their markup, so a first-match edit cannot land there', () => {
+    const marked = [...chunkTemplate.matchAll(/<!--[\s\S]*?-->/g)].flatMap((comment) =>
+      comment[0].split('\n').filter((line) => /#{1,6} \S|\[[ xX]\]/.test(line)),
+    );
+    expect(marked).toEqual([]);
+  });
+
+  it('first-match edits of a checklist item land on the real Step Checklist', () => {
+    const checked = chunkTemplate.replace('- [ ] build', '- [x] build');
+    const checklist = checked.slice(checked.indexOf('\n## Step Checklist'), checked.indexOf('\n## Interpretation'));
+    expect(checklist.split('\n')).toContain('- [x] build');
+  });
+});
+
 describe('TMPL-02 — parse-contract heading lists match each template\'s actual headings', () => {
   // The exact H2 headings each template ships, in order. A template's PARSE
   // CONTRACT comment must enumerate exactly these, and the file body must
   // contain exactly these — a mismatch in either direction (a heading shipped
   // but missing from the contract, or vice versa) is the CR-01 defect class.
   const EXPECTED_HEADINGS: Record<string, string[]> = {
-    'templates/CHUNK.template.md': [
-      '## ui:',
-      '## Ceremony',
-      '## Step Checklist',
-      '## Interpretation',
-      '## Visibility Declaration',
-      '## Newly Discovered Citations',
-      '## Redteam Rounds',
-      '## Constraints Review',
-      '## Findings Ledger',
-      '## Revision Rounds',
-      '## Spec Manifest',
-      '## Build Manifest',
-      '## Playtest Test Script',
-      '## Verified Checklist',
-      '## Sign-off',
-      '## Verified Commit Hash',
-      '## Verified Against',
-      '## Rules Staleness',
-    ],
+    'templates/CHUNK.template.md': [...CHUNK_HEADINGS],
     'templates/SKETCH.template.md': [
       '## Player Counts',
       '## Design Session',
@@ -571,7 +574,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       const contract = parseContractBlock(read(path));
       let cursor = -1;
       for (const heading of expected) {
-        const index = contract.indexOf(heading, cursor + 1);
+        const index = contract.indexOf(heading.replace(/^## /, ''), cursor + 1);
         expect(
           index,
           `PARSE CONTRACT must list "${heading}" (after the previously listed heading)`

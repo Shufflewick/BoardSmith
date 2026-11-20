@@ -11,14 +11,14 @@ Status: proposed
      and must match — see state-machine.md ("Authority" + "Write Order" sections). On contradiction,
      THIS file wins; SKETCH.md gets repaired to match, never the other way around. -->
 
-<!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
-     "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
-     "## Newly Discovered Citations", "## Redteam Rounds", "## Constraints Review", "## Findings Ledger",
-     "## Revision Rounds",
-     "## Spec Manifest", "## Build Manifest", "## Playtest Test Script",
-     "## Verified Checklist", "## Sign-off", "## Verified Commit Hash", "## Verified Against",
-     "## Rules Staleness". If any required
-     heading is missing, or the Status line doesn't match a recognized enum value above, a
+<!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, then these
+     second-level headings, each once: "ui:", "Ceremony", "Step Checklist", "Interpretation",
+     "Visibility Declaration", "Newly Discovered Citations", "Redteam Rounds", "Constraints Review",
+     "Findings Ledger", "Revision Rounds", "Spec Manifest", "Build Manifest", "Playtest Test Script",
+     "Verified Checklist", "Sign-off", "Verified Commit Hash", "Verified Against", "Rules Staleness".
+     No comment in this file writes a heading or checklist line, so an edit that takes the first
+     match lands on the real one; `boardsmith chunk-check` refuses a file where one does, or where a
+     section appears twice. If any required heading is missing, or the Status line doesn't match a recognized enum value above, a
      resuming session STOPS and asks the user — it never guesses the intended state. See
      state-machine.md "Cold-Resume Parse Contract". -->
 
@@ -36,7 +36,7 @@ none
      because the light path has no spec step and a rules claim must get a failing test before code
      (state-machine.md "Step Names (exact, light path — trivial chunks)"). The user is told which path is in effect when the chunk is proposed.
      The `final-acceptance` value is reserved for the sketch's ONE mandated final-acceptance chunk
-     (templates/SKETCH.template.md's "## Mandated Chunks") — it is neither full nor light: its Step
+     (templates/SKETCH.template.md's "Mandated Chunks" section) — it is neither full nor light: its Step
      Checklist is the fixed 4-item group [final-acceptance, playtest, revise, close], build-chunk.md's
      "Final-acceptance chunk target" rule (Step 2) owns its routing, and it is exempt from Step 3's
      full/light ceremony routing. -->
@@ -51,17 +51,10 @@ full
 
      CEREMONY-CONDITIONAL: this section contains exactly ONE checklist matching the declared
      Ceremony above. When Ceremony: full, it is the 11-item list below. When Ceremony: light,
-     replace it with exactly these three items (in order):
-     - [ ] build
-     - [ ] test
-     - [ ] playtest
+     replace it with exactly these three unchecked items, in order: build, test, playtest.
      When Ceremony: final-acceptance (the sketch's ONE mandated final-acceptance chunk only —
-     templates/SKETCH.template.md "## Mandated Chunks"), replace it with exactly these four items
-     (in order):
-     - [ ] final-acceptance
-     - [ ] playtest
-     - [ ] revise
-     - [ ] close
+     templates/SKETCH.template.md's "Mandated Chunks" section), replace it with exactly these four
+     unchecked items, in order: final-acceptance, playtest, revise, close.
      This third variant is filled by build-chunk.md's "Final-acceptance chunk target" rule
      (Step 2) when that chunk is first detailed — the leading `final-acceptance` content step
      dispatches build/final-acceptance.md (coverage check + 7-point design-QA pass), then
@@ -127,13 +120,13 @@ full
 ## Redteam Rounds
 <!-- Written by the ORCHESTRATOR at the end of each redteam round, BEFORE the ask step starts —
      this is what makes the round's outcome cold-resumable (a crash or handoff between redteam
-     and ask must not lose the verdicts). Append-only: each round is a new "### Redteam Round N"
-     entry; never edit or renumber a prior round. Vote-privacy (build/redteam.md) governs what
+     and ask must not lose the verdicts). Append-only: each round is a new entry under a
+     third-level heading "Redteam Round N"; never edit or renumber a prior round. Vote-privacy (build/redteam.md) governs what
      is SHOWN to the user — never a raw tally or agent transcript — not what is recorded here:
      this section is internal state, and per-claim verdicts + objections are recorded in full.
      Distinct from the Findings Ledger below, which is populated by audit, not redteam. -->
 
-<!-- ### Redteam Round 1
+<!-- Example, under the third-level heading "Redteam Round 1":
 - claim 1 — verdicts: stands / stands — outcome: stands
 - claim 7 — verdicts: refuted / refuted — objections: <objection text> — outcome: refuted twice, escalated to user
 - coverage: <missing interactions found, or "none">
@@ -153,20 +146,19 @@ full
      state-machine.md "Repair Loop Bound"); after round 3, remaining findings are triaged with
      the user: real blocker, defer to a later chunk, or auditor was wrong (refuted). -->
 
-<!-- ### Audit Round 1
-- F1: <!-- finding --> — disposition: <!-- fixed | deferred | refuted -->
+<!-- Example, under the third-level heading "Audit Round 1":
+- F1: <finding> — disposition: <fixed | deferred | refuted>
 -->
 
 ## Revision Rounds
 <!-- Append-only. Never edit or delete a prior round's entry — a new round is always a new
-     "### Revise N" section, even if it supersedes an earlier one. Fed by the revise step's
+     third-level "Revise N" section, even if it supersedes an earlier one. Fed by the revise step's
      four-category triage (see build/revise.md): category (a) this-chunk defect = fix now
      (recorded here), category (b) future scope (goes to SKETCH.md's Ideas Backlog instead),
      category (c) not-built-yet = expectation reset (no write is made — nothing to record, the
      chunk already correctly excluded it), category (d) rules change (goes to RULINGS.md). -->
 
-<!--
-### Revise 1
+<!-- Example, under the third-level heading "Revise 1":
 - date:
 - triaged feedback items:
 - disposition:
@@ -189,7 +181,7 @@ full
      its tests ran, measured with coverage; a mock counts only as far as it lets the real code run),
      at most 100 mutants per row, and a test is credited only for a failure on its own assertion
      (expect, assert, toThrow, snapshot), never for an error the broken game code threw.
-     Claims Covered lists the ## Interpretation claim numbers that file pins. RED Observed flips
+     Claims Covered lists the Interpretation claim numbers that file pins. RED Observed flips
      from `pending` to `yes` only after that file's tests have ACTUALLY been run and seen failing —
      never ahead of the run, never in a batch at the end.
 
@@ -236,7 +228,7 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
 ## Verified Checklist
 <!-- Explicit item-by-item checklist confirmed by the human at playtest/close. Every item must
      be individually confirmed by the designer (or the chunk waived by the designer instead; see
-     "## Sign-off" below) before Status can move to `verified`. Status moves only through
+     "Sign-off" below) before Status can move to `verified`. Status moves only through
      `boardsmith chunk-signoff`, which refuses a sign-off that leaves any item unobserved. -->
 
 - [ ] <!-- item 1 -->
@@ -274,7 +266,7 @@ _Not yet signed off._
 <!-- MACHINE-OWNED. Written by `boardsmith chunk-check <slug>` and by nothing else — never
      hand-author anything between the fences below; the next `chunk-check` run overwrites it
      regardless of what a session puts there. It is fenced rather than merely documented because
-     on 2026-07-28 a session filled a machine-owned section (`## Open Rules Gaps`) by hand and the
+     on 2026-07-28 a session filled a machine-owned section (INDEX.md's Open Rules Gaps) by hand and the
      result looked entirely healthy while being wrong — prose asking a session not to do this did
      not stop it; a fence makes hand-authoring detectable, and `chunk-check` makes it fatal. -->
 
@@ -286,8 +278,8 @@ _Not yet recorded._
 <!-- MACHINE-OWNED. Written by `boardsmith verify-impact-apply <slug>` and by nothing else —
      never hand-author anything between the fences below; the next `verify-impact-apply` run
      overwrites it regardless of what a session puts there. It is fenced for the same reason
-     "## Verified Against" above is: on 2026-07-28 a session filled a machine-owned section
-     (`## Open Rules Gaps`) by hand and the result looked entirely healthy while being wrong —
+     "Verified Against" above is: on 2026-07-28 a session filled a machine-owned section
+     (INDEX.md's Open Rules Gaps) by hand and the result looked entirely healthy while being wrong —
      prose asking a session not to do this did not stop it; a fence makes hand-authoring
      detectable, and `verify-impact-apply` makes it fatal.
 

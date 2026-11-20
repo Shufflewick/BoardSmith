@@ -278,7 +278,7 @@ describe('BUILD-03 — Redteam Rounds persistence + check-off discipline (CR-02 
   it('CHUNK.template.md carries the ## Redteam Rounds section and the entry grammar', () => {
     const template = read('templates/CHUNK.template.md');
     expect(template).toContain(REDTEAM_ROUNDS_HEADING);
-    expect(template).toContain('### Redteam Round 1');
+    expect(template).toContain('third-level heading "Redteam Round N"');
   });
 
   it('ask.md reads the persisted round record (cold resume at ask consumes the verdicts)', () => {
@@ -430,7 +430,7 @@ describe('TDD-01 — spec step (tests first, observed failing)', () => {
     expect(template).toContain('## Spec Manifest');
     expect(template).toContain('| Test File | Claims Covered | RED Observed |');
     // The parse contract must list it, or a cold resume won't know to require it.
-    expect(template).toContain('"## Spec Manifest", "## Build Manifest"');
+    expect(template).toContain('"Spec Manifest", "Build Manifest"');
     // The checklist itself must carry the step.
     expect(template).toContain('- [ ] ask\n- [ ] spec\n- [ ] build\n- [ ] test');
   });
@@ -1202,8 +1202,7 @@ describe('UIQ-05 — final-acceptance coherent-cluster fixes (146-REVIEW iter-2 
     expect(template).toContain('full | light | final-acceptance');
     expect(template).toMatch(/When Ceremony: final-acceptance/);
     // The 4-item variant is documented in the CEREMONY-CONDITIONAL block.
-    expect(template).toContain('- [ ] final-acceptance');
-    expect(template).toContain('- [ ] revise');
+    expect(template.replace(/\s+/g, ' ')).toContain('unchecked items, in order: final-acceptance, playtest, revise, close');
   });
 
   it('WR-01: build-chunk.md Step 3 exempts the final-acceptance chunk from full/light ceremony routing', () => {

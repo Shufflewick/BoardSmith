@@ -82,6 +82,31 @@ describe('findHeadingIndex / extractSection', () => {
     expect(body).not.toContain('unrelated');
   });
 
+  it('skips a heading line inside an HTML comment, and a commented heading does not end a section (#1784)', () => {
+    const text = [
+      '<!-- an example section:',
+      '## Interpretation',
+      '1. hidden claim',
+      '-->',
+      '',
+      '## Interpretation',
+      '',
+      '1. visible claim',
+      '<!--',
+      '## Build Manifest',
+      '-->',
+      '2. second visible claim',
+      '',
+      '## Build Manifest',
+      '',
+    ].join('\n');
+    expect(findHeadingIndex(text, '## Interpretation')).toBe(text.indexOf('## Interpretation\n\n1. visible'));
+    const body = extractSection(text, '## Interpretation');
+    expect(body).toContain('1. visible claim');
+    expect(body).toContain('2. second visible claim');
+    expect(body).not.toContain('hidden claim');
+  });
+
   it('absent heading returns -1 / undefined, never a partial body', () => {
     const text = '## Something Else\n\nbody\n';
     expect(findHeadingIndex(text, '## Build Manifest')).toBe(-1);
