@@ -42,8 +42,8 @@ interface TestOptions {
  * vitest in the `sims` mode its config (`defineGameViteConfig`) reads (#1494).
  *
  * `--changed <base>` runs the unit tests related to what changed since the merge base with `<base>`,
- * never sims (#1502). A change with no related unit test fails when it changed a file under src/
- * that is still there and is not a sim, and otherwise passes saying why each file needs none.
+ * never sims (#1502). A run with no related unit test passes saying why each changed file has none,
+ * and fails only when nothing changed (#1757).
  *
  * `--browser`, in the BoardSmith repository only, runs the browser regressions in Chromium, and WebKit for those that name it
  * (`BROWSER_SUITE_CONFIG`, #533) instead of the default suite, without the type check.
@@ -120,34 +120,25 @@ async function changedFiles(cwd: string, base: string): Promise<string[]> {
   return [...new Set(lists.flat())];
 }
 
-/** A run under `--changed` that ran no test: fails naming each changed file under src/ that is still there and not a sim, and otherwise passes saying why for each file. */
+/**
+ * A run under `--changed` that ran no test: fails when nothing changed, and otherwise passes saying
+ * why each file ran none. A src/ file no test imports passes here because `boardsmith mutate` is what
+ * judges changed code, so a change guarded by its types alone, or one with no breakable code, needs no filler test (#1757).
+ */
 function explainNoRelatedTests(cwd: string, changed: string[], base: string): void {
-  const why = (file: string): string | undefined => {
+  if (changed.length === 0) {
+    fail(`Nothing changed since the merge base with ${base}, so there is no change to test. Commit or stage the change, then run this again.`, 1);
+  }
+  const why = (file: string): string => {
     if (!existsSync(join(cwd, file))) return 'deleted or renamed by this change';
     if (SIM_FILE.test(file)) return 'a sim, which runs only under `boardsmith test --sims`';
     if (!file.startsWith('src/')) return 'outside src/, so no unit test has to import it';
-    return undefined;
+    return 'no unit test imports it, so `boardsmith mutate` fails on any code it changed that a mutant can break';
   };
-  const untested = changed.filter((file) => why(file) === undefined);
-  if (changed.length === 0 || untested.length > 0) {
-    const files = changed.length === 0 ? ['  (nothing changed)'] : untested.map((file) => `  ${file}`);
-    fail(
-      [
-        `No unit test is related to this change since its merge base with ${base}. No unit test imports these changed files under src/:`,
-        ...files,
-        'Add a unit test (*.test.ts, not *.sim.test.ts) that imports them.',
-      ].join('\n'),
-      1,
-    );
-  }
   console.log(
     styleText(
       'green',
-      [
-        `\nNo unit test is related to this change, and none needs to be. Every file it changed since its merge base with ${base} is a sim, removed, or outside src/:`,
-        ...changed.map((file) => `  ${file}: ${why(file)}`),
-        '',
-      ].join('\n'),
+      [`\nNo unit test is related to this change since its merge base with ${base}:`, ...changed.map((file) => `  ${file}: ${why(file)}`), ''].join('\n'),
     ),
   );
 }

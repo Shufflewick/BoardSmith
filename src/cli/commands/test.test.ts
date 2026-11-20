@@ -90,7 +90,7 @@ describe('boardsmith test', () => {
       async (_project, git) => git('mv', 'tests/play.test.ts', 'tests/play.sim.test.ts'),
     );
     const run = await spawnCli(['test', '--changed', 'main'], project);
-    expect(run.stdout).toContain('No unit test is related to this change, and none needs to be');
+    expect(run.stdout).toContain('No unit test is related to this change since its merge base with main:');
     expect(run.stdout).toContain('  tests/play.sim.test.ts: a sim, which runs only under `boardsmith test --sims`');
     expect(run.stdout).toContain('  tests/play.test.ts: deleted or renamed by this change');
     expect(run.stdout).not.toContain('plays');
@@ -111,14 +111,21 @@ describe('boardsmith test', () => {
     expect(run.code).toBe(0);
   });
 
-  it('fails under --changed a src/ change no unit test imports, and names the file (#1502)', async () => {
+  it('passes under --changed a src/ change no unit test imports, such as one guarded by its types alone, and names the file (#1757)', async () => {
     const project = await changedGame(
-      { 'src/rules.ts': 'export const n = 1;\n' },
-      (project) => fs.writeFile(join(project, 'src/rules.ts'), 'export const n = 2;\n'),
+      { 'src/rules.ts': 'export type Side = string;\n' },
+      (project) => fs.writeFile(join(project, 'src/rules.ts'), "export type Side = 'white' | 'black';\n"),
     );
     const run = await spawnCli(['test', '--changed', 'main'], project);
-    expect(run.stderr).toContain('No unit test is related to this change since its merge base with main');
-    expect(run.stderr).toContain('  src/rules.ts');
+    expect(run.stdout).toContain('No unit test is related to this change since its merge base with main');
+    expect(run.stdout).toContain('  src/rules.ts: no unit test imports it, so `boardsmith mutate` fails on any code it changed that a mutant can break');
+    expect(run.code).toBe(0);
+  });
+
+  it('fails under --changed when nothing changed since the base, and says so (#1757)', async () => {
+    const project = await changedGame({ 'src/rules.ts': 'export const n = 1;\n' }, (project) => fs.writeFile(join(project, 'src/rules.ts'), 'export const n = 2;\n'));
+    const run = await spawnCli(['test', '--changed', 'HEAD'], project);
+    expect(run.stderr).toContain('Nothing changed since the merge base with HEAD, so there is no change to test.');
     expect(run.code).toBe(1);
   });
 
