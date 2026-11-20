@@ -1,5 +1,5 @@
 {
-  "revision": 488,
+  "revision": 489,
   "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3847,6 +3847,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The dev-host world store drops its empty layout upgrade chain; a store under any other layout is refused as before."
+    },
+    {
+      "revision": 489,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "worldBudgets validates its overrides in one loop over the defaults; with several bad overrides a different field may be named first."
     }
   ]
 }
