@@ -453,11 +453,6 @@ loop({
 })
 ```
 
-`turnLoop()` and `stateAwareLoop()` build on `loop()` but default
-`maxIterations` to `100` if you don't pass one, so they don't throw — but an
-explicit value tuned to your game's actual turn structure is still
-recommended.
-
 ### Genuinely unbounded games: use `unbounded: true`, not an arbitrary cap
 
 Some games have no natural per-loop iteration bound (e.g. a game that runs
@@ -1688,42 +1683,14 @@ loop<HeroGame>({
 
 ### The Solution
 
-Use `stateAwareLoop()` to automatically check for pending state before exiting:
-
-```typescript
-// stateAwareLoop comes from 'boardsmith'
-
-stateAwareLoop<HeroGame>({
-  name: 'duel-action-loop',
-  actions: ['move', 'attack', 'endTurn'],
-  while: (ctx) => ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false,
-  pendingStates: (ctx) => [
-    ctx.game.activeDuel,    // Keep looping while duel pending
-    ctx.game.pendingDuel,   // Keep looping while duel about to start
-  ],
-})
-```
-
-**How it works:**
-- `pendingStates` returns an array of values to check
-- If ANY are truthy, the loop continues even if `while` returns false
-- This ensures async state (duel, animations, etc.) resolves before the loop exits
-
-### Alternative: Manual Check
-
-You can also add checks directly in a regular `loop`:
+Check the pending state in the loop's `while`, before the normal condition:
 
 ```typescript
 loop<HeroGame>({
+  maxIterations: 100,
   while: (ctx) => {
-    const game = ctx.game;
-
-    // Always stop if game is finished
-    if (game.isFinished()) return false;
-
-    // Keep looping while duel needs resolution
-    if (game.activeDuel) return true;
-    if (game.pendingDuel) return true;
+    // Keep looping while a duel needs resolution
+    if (ctx.game.activeDuel || ctx.game.pendingDuel) return true;
 
     // Then check normal action availability
     return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
@@ -2137,7 +2104,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
 | **followUp args in filter** | Bare numeric id in followUp args stays a number | Pass `{ id, className }` (auto-resolved) or call `getElementById()` yourself |
 | **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
-| **Loop exit with pending state** | Loop checks only actions remaining | Use `stateAwareLoop()` with `pendingStates` |
+| **Loop exit with pending state** | Loop checks only actions remaining | Return `true` from `while` while the pending state is set |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 | **Drag-drop not working** | No drop targets when dragging | Start the action with a `chooseElement`; give `chooseFrom` choices `boardRefs` |
 | **Mixing dice randomization** | `die.roll()` then `die.setValue(Math.random())` | Use only `die.roll()` for normal rolling |

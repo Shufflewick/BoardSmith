@@ -90,7 +90,6 @@ import {
 - `ifThen()` - Conditional execution
 - `execute()` - Execute function
 - `setVar()` - Set flow variable
-- `turnLoop()` - Standard turn-based loop
 - `TurnOrder` - Turn order utilities
 
 ### Balance Metrics
