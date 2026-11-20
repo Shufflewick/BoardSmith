@@ -1,5 +1,5 @@
 {
-  "revision": 467,
+  "revision": 468,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3679,6 +3679,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "DevHostLobbyReply is now derived from the dev host's lobby message type; declared types only, wire data unchanged (#1740)."
+    },
+    {
+      "revision": 468,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith test no longer accepts --verdict-file (#1741)"
     }
   ]
 }
