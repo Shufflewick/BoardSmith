@@ -1,5 +1,5 @@
 /**
- * Every host reports a game finished inside a non-turnLoop flow as complete
+ * Every host reports a game finished inside an eachPlayer turn as complete
  * (#492).
  *
  * Hosts read `isComplete` from the flow and `winners` from the game. A game

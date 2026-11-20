@@ -2,7 +2,7 @@
  * A finished game is a complete flow, whatever loop it is in (#492).
  *
  * `isComplete` comes from the flow and `winners` from the game, and only
- * `turnLoop` and `stateAwareLoop` used to stop on `game.isFinished()`. A game
+ * two loop builders (since removed) used to stop on `game.isFinished()`. A game
  * that called `this.finish([p])` from inside an
  * `eachPlayer`, `loop`, `sequence` or `repeat` therefore kept waiting on the
  * next action step: every host reported `isComplete: false` beside a winner,
@@ -25,8 +25,6 @@ import {
   phase,
   actionStep,
   simultaneousActionStep,
-  turnLoop,
-  stateAwareLoop,
   execute,
   type FlowNode,
   type GameOptions,
@@ -113,8 +111,6 @@ const constructs: Array<[string, () => FlowNode<EndingGame>]> = [
   ['repeat', () => repeat(5, step())],
   ['forEach', () => forEach({ collection: [1, 2, 3], as: 'n', do: step() })],
   ['phase', () => phase('main', { do: sequence(step(), step()) })],
-  ['turnLoop', () => turnLoop({ actions: ACTIONS, turnScope: 'restart' })],
-  ['stateAwareLoop', () => stateAwareLoop({ actions: ACTIONS, turnScope: 'restart' })],
   [
     'actionStep that keeps the seat acting',
     () => actionStep({ actions: ACTIONS, repeatUntil: () => false, turnScope: 'continue' }),

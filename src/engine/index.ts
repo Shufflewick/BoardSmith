@@ -202,8 +202,6 @@ export {
   ifThen,
   execute,
   setVar,
-  turnLoop,
-  stateAwareLoop,
   TurnOrder,
   dueSeats,
   canSeatAct,

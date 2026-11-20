@@ -201,7 +201,6 @@ next time their file is edited, and the answer will be to split them:
 | `src/cli/commands/game-runtime.ts` `boardsmithSourceEntries` | 13 | 14 |
 | `src/cli/commands/lint.ts` `lintCommand` | 13 | 15 |
 | `src/cli/commands/verify-derive-check.ts` `createDeriveCheckRecord` | 13 | 12 |
-| `src/engine/flow/builders.ts` `stateAwareLoop` | 13 | 12 |
 | `src/engine/utils/arg-builder.ts` `buildActionArgs` | 13 | 13 |
 | `src/engine/utils/dev-state.ts` `restoreDevState` | 13 | 15 |
 | `src/world/definition.ts` `readWorldDefinition` | 13 | 12 |

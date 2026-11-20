@@ -2178,9 +2178,8 @@ The flow engine checks before every node, so once the game is finished no
 further node runs and no seat is offered an action, not even a `followUp` the
 finishing action asked for. That holds in every construct: `eachPlayer`,
 `loop`, `sequence`, `repeat`, `forEach`, `phase`, a `simultaneousActionStep`
-with seats still to act, `turnLoop` and `stateAwareLoop` alike. A loop's
-`while` therefore only needs the loop's own condition; it does not have to test
-`isFinished()`.
+with seats still to act. A loop's `while` therefore only needs the loop's own
+condition; it does not have to test `isFinished()`.
 
 Put anything that must happen at the end (final scoring, a closing message)
 into the code that finishes the game, before it calls `finish()`. A node placed
@@ -2342,9 +2341,6 @@ misleading "No actions to undo".
 
 On a `'continue'` step, `minMoves`/`maxMoves` bound the whole run rather than
 the single entry -- which is the same thing when the run is one turn.
-
-`turnLoop` and `stateAwareLoop` forward `turnScope` to the action step they
-build, and leave it undeclared by default for the same reason.
 
 #### `simultaneousActionStep` - All players act at once
 

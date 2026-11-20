@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loop, sequence, turnLoop, stateAwareLoop, switchOn } from './builders.js';
+import { loop, sequence, switchOn } from './builders.js';
 
 describe('loop() — PIT-01 construction-time maxIterations guard', () => {
   it('throws an actionable error when maxIterations is omitted', () => {
@@ -75,46 +75,6 @@ describe('loop() — 164-IN-02 conflicting unbounded + maxIterations guard', () 
 
   it('does not throw for maxIterations alone (no unbounded)', () => {
     expect(() => loop({ maxIterations: 50, do: sequence() })).not.toThrow();
-  });
-});
-
-describe('turnLoop()/stateAwareLoop() — LIBX-02 / F-16 unbounded passthrough', () => {
-  it('turnLoop forwards unbounded: true so a genuinely unbounded game does not throw at iteration 100', () => {
-    expect(() => turnLoop({ actions: ['play'], unbounded: true })).not.toThrow();
-    const node = turnLoop({ actions: ['play'], unbounded: true });
-    expect((node.config as { unbounded?: boolean }).unbounded).toBe(true);
-    expect((node.config as { maxIterations?: number }).maxIterations).toBeUndefined();
-  });
-
-  it('turnLoop still defaults to a bounded 100 cap when unbounded is not set', () => {
-    const node = turnLoop({ actions: ['play'] });
-    expect((node.config as { maxIterations?: number }).maxIterations).toBe(100);
-  });
-
-  it('turnLoop rejects combining unbounded with an explicit maxIterations (fail fast)', () => {
-    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
-    expect(() => turnLoop({ actions: ['play'], unbounded: true, maxIterations: 50 })).toThrow(
-      /cannot combine unbounded/
-    );
-  });
-
-  it('stateAwareLoop rejects combining unbounded with an explicit maxIterations (fail fast)', () => {
-    // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
-    expect(() => stateAwareLoop({ actions: ['play'], unbounded: true, maxIterations: 50 })).toThrow(
-      /cannot combine unbounded/
-    );
-  });
-
-  it('stateAwareLoop forwards unbounded: true', () => {
-    expect(() => stateAwareLoop({ actions: ['play'], unbounded: true })).not.toThrow();
-    const node = stateAwareLoop({ actions: ['play'], unbounded: true });
-    expect((node.config as { unbounded?: boolean }).unbounded).toBe(true);
-    expect((node.config as { maxIterations?: number }).maxIterations).toBeUndefined();
-  });
-
-  it('stateAwareLoop still defaults to a bounded 100 cap when unbounded is not set', () => {
-    const node = stateAwareLoop({ actions: ['play'] });
-    expect((node.config as { maxIterations?: number }).maxIterations).toBe(100);
   });
 });
 

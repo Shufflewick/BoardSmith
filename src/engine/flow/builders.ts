@@ -1,17 +1,15 @@
-import type { Game, PlayerOf } from '../element/game.js';
+import type { Game } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type {
   FlowNode,
   FlowContext,
   LoopConfig,
-  LoopBound,
   EachPlayerConfig,
   ForEachConfig,
   ActionStepConfig,
   SimultaneousActionStepConfig,
   SwitchConfig,
   IfConfig,
-  TurnScope,
 } from './types.js';
 import { checkDeclaredTimeLimit } from './step-time-limit.js';
 import { SWITCH_DEFAULT_KEY } from './flow-navigation.js';
@@ -127,18 +125,6 @@ export function loop<G extends Game = Game>(config: LoopConfig<G>): FlowNode<G> 
   }
 
   return { type: 'loop', config };
-}
-
-/**
- * The bound turnLoop and stateAwareLoop hand to loop(): their `maxIterations`
- * cap, 100 when not given, or `unbounded: true` in its place.
- */
-function defaultLoopBound(bound: Partial<LoopBound>): LoopBound {
-  // A rule compiled without the type check may give both; forwarding its
-  // maxIterations alongside unbounded lets loop() refuse that loudly.
-  return bound.unbounded
-    ? { unbounded: true, maxIterations: bound.maxIterations }
-    : { maxIterations: bound.maxIterations ?? 100 };
 }
 
 /**
@@ -466,237 +452,5 @@ export function setVar<G extends Game = Game>(
   return execute((ctx) => {
     const resolvedValue = typeof value === 'function' ? (value as Function)(ctx) : value;
     ctx.set(name, resolvedValue);
-  });
-}
-
-/**
- * A simplified loop for turn-based action sequences.
- *
- * This is syntactic sugar for the common pattern of looping an action step
- * while a condition is true. Like every flow node, it stops as soon as the game
- * is finished: the flow engine ends the flow then, whatever loop it is in.
- *
- * @example
- * ```typescript
- * // Simple turn loop - continue while player has actions remaining
- * turnLoop({
- *   actions: ['move', 'attack', 'endTurn'],
- *   while: (ctx) => ctx.player.actionsRemaining > 0,
- * })
- * ```
- *
- * @example
- * ```typescript
- * // With all options
- * turnLoop({
- *   name: 'outlaw-action-loop',
- *   actions: ['move', 'explore', 'train', 'endTurn'],
- *   while: (ctx) => {
- *     const player = ctx.player as OutlawPlayer;
- *     return player.team.some(m => m.actionsRemaining > 0);
- *   },
- *   maxIterations: 30,
- * })
- * ```
- *
- * @example
- * ```typescript
- * // Minimal - just loop until endTurn or game ends
- * turnLoop({
- *   actions: ['playCard', 'drawCard', 'endTurn'],
- * })
- * ```
- *
- * This is equivalent to:
- * ```typescript
- * loop({
- *   while: (ctx) => customCondition(ctx),
- *   do: actionStep({ actions: [...] }),
- * })
- * ```
- */
-export function turnLoop<G extends Game = Game>(config: {
-  /** Optional name for debugging */
-  name?: string;
-  /** Actions available during the loop */
-  actions: string[] | ((context: FlowContext<G>) => string[]);
-  /** Continue looping while this returns true. A finished game ends the flow regardless. */
-  while?: (context: FlowContext<G>) => boolean;
-  /**
-   * Whether a second pass round this loop continues the same seat's turn or
-   * starts a new one, forwarded to the action step it builds. Deliberately
-   * undefaulted: the name says "turn loop", but the builder is used both for a
-   * single seat's multi-action turn (`'continue'`) and as a whole game's turn
-   * rotation (`'restart'`), and only the author knows which. See
-   * {@link ActionStepConfig.turnScope}.
-   */
-  turnScope?: TurnScope;
-} & Partial<LoopBound>): FlowNode<G> {
-  return loop({
-    name: config.name,
-    while: (ctx) => {
-      // Check custom condition if provided
-      if (config.while) {
-        return config.while(ctx);
-      }
-      // Default: continue forever. The flow engine ends the flow as soon as
-      // the game is finished, whatever loop it is in.
-      return true;
-    },
-    ...defaultLoopBound(config),
-    do: actionStep({
-      actions: config.actions,
-      turnScope: config.turnScope,
-    }),
-  });
-}
-
-/**
- * A state-aware loop that checks for pending async game state before exiting.
- *
- * Use this instead of loop() or turnLoop() when your game has async state
- * (like duel resolution) that must complete before the loop can exit.
- *
- * The key insight: A regular loop's `while` condition might become false
- * (e.g., player has no actions left), but there could be pending game state
- * (e.g., active duel) that needs resolution first. This helper ensures
- * the loop continues until all pending states are resolved.
- *
- * @example
- * ```typescript
- * // Duel game - keep looping while duel is pending, even if no actions left
- * stateAwareLoop({
- *   name: 'hero-action-loop',
- *   actions: ['move', 'attack', 'endTurn'],
- *   while: (ctx) => {
- *     const player = ctx.player as HeroPlayer;
- *     return player.team.some(m => m.actionsRemaining > 0);
- *   },
- *   pendingStates: (ctx) => [
- *     (ctx.game as HeroGame).activeDuel,    // Duel waiting for resolution
- *     (ctx.game as HeroGame).pendingDuel,   // Duel about to start
- *   ],
- * })
- * ```
- *
- * @example
- * ```typescript
- * // Simple case - just check one pending state
- * stateAwareLoop({
- *   actions: ['playCard', 'endTurn'],
- *   pendingStates: (ctx) => [ctx.game.pendingAnimation],
- * })
- * ```
- *
- * @example
- * ```typescript
- * // A composite body: act, then drain whatever the action queued (#35). This
- * // is the shape the example above actually needs — a bare
- * // actionStep cannot both take the action and resolve what it produced.
- * stateAwareLoop({
- *    (ctx.game as HeroGame).rebelsHaveActions(),=>name: 'hero-phase',
- *   while: (ctx) => (ctx.game as HeroGame).heroesHaveActions(),=> (ctx.game as HeroGame).rebelsHaveActions(),
- *   pendingStates: (ctx) => [(ctx.game as HeroGame).pendingDuel],
- *   do: sequence(
- *     actionStep({ actions: ['move', 'attack'], player: (ctx) => ctx.game.getPlayer(1)! }),
- *     execute((ctx) => (ctx.game as HeroGame).drainPendingDuel()),
- *   ),
- * })
- * ```
- */
-export function stateAwareLoop<G extends Game = Game>(config: {
-  /** Optional name for debugging */
-  name?: string;
-  /**
-   * Actions available during the loop — the simple form, which wraps them in an
-   * `actionStep` for you. Mutually exclusive with `do`.
-   */
-  actions?: string[] | ((context: FlowContext<G>) => string[]);
-  /**
-   * The loop body, for anything an `actionStep` alone cannot express: a
-   * sequence that acts and then drains the pending state it produced, a phase
-   * with several steps in it (#35).
-   *
-   * This is the shape the builder's own documented example needs. Without it,
-   * a game whose body is a sequence had to hand-roll the entire pending-state
-   * guard, which is what this builder exists to remove.
-   *
-   * Mutually exclusive with `actions`.
-   */
-  do?: FlowNode<G>;
-  /**
-   * Who acts, when the body is the built-in `actionStep`. Mirrors
-   * `actionStep`'s own `player` (#35). Ignored when `do` is supplied — the body
-   * owns its own actors then.
-   */
-  player?: (context: FlowContext<G>) => PlayerOf<G>;
-  /**
-   * Skip the body for this iteration. Mirrors `actionStep`'s own `skipIf`
-   * (#35), and applies to a composite `do` body too.
-   */
-  skipIf?: (context: FlowContext<G>) => boolean;
-  /** Continue looping while this returns true. A finished game ends the flow regardless. */
-  while?: (context: FlowContext<G>) => boolean;
-  /**
-   * Return an array of pending state values to check.
-   * If ANY of these are truthy, the loop continues even if `while` returns false.
-   * This ensures async game state (like duel) is resolved before the loop exits.
-   */
-  pendingStates?: (context: FlowContext<G>) => unknown[];
-  /**
-   * Whether a second pass round this loop continues the same seat's turn or
-   * starts a new one, forwarded to the action step it builds. Ignored when
-   * `do` is supplied -- the body owns its own steps then. See
-   * {@link ActionStepConfig.turnScope}.
-   */
-  turnScope?: TurnScope;
-} & Partial<LoopBound>): FlowNode<G> {
-  // Two ways to say what the body is, and exactly one must be used. Accepting
-  // both would mean silently ignoring one of them.
-  if (config.actions !== undefined && config.do !== undefined) {
-    throw new Error(
-      'stateAwareLoop: pass either `actions` (the built-in action step) or `do` (your own body), not both. ' +
-        'With `do`, put the actions in the actionStep inside it.',
-    );
-  }
-  if (config.actions === undefined && config.do === undefined) {
-    throw new Error(
-      'stateAwareLoop: needs a body — pass `actions` for a single action step, or `do` for a sequence.',
-    );
-  }
-
-  const body: FlowNode<G> = config.do ?? actionStep({
-    actions: config.actions!,
-    ...(config.player ? { player: config.player } : {}),
-    ...(config.skipIf ? { skipIf: config.skipIf } : {}),
-    ...(config.turnScope ? { turnScope: config.turnScope } : {}),
-  });
-
-  return loop({
-    name: config.name,
-    while: (ctx) => {
-      // Keep looping if any pending state exists (even if while() would return false)
-      if (config.pendingStates) {
-        const pending = config.pendingStates(ctx);
-        if (pending.some(state => !!state)) {
-          return true; // Must resolve pending state before exiting
-        }
-      }
-
-      // Check custom condition
-      if (config.while) {
-        return config.while(ctx);
-      }
-
-      // Default: continue forever. The flow engine ends the flow as soon as
-      // the game is finished, whatever loop it is in.
-      return true;
-    },
-    ...defaultLoopBound(config),
-    // `skipIf` on a COMPOSITE body cannot ride on the actionStep (there may be
-    // several, or none), so it gates the whole iteration here instead.
-    do: config.do && config.skipIf
-      ? ifThen({ condition: (ctx) => !config.skipIf!(ctx), then: body })
-      : body,
   });
 }
