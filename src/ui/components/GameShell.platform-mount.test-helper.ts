@@ -80,6 +80,7 @@ interface PlatformShellOptions {
    * form a template writes them (#433).
    */
   props?: {
+    platformActionPanelEscapeHatch?: boolean;
     providesOwnGameOverUi?: boolean;
     'provides-own-game-over-ui'?: boolean;
     formatTurnDeadline?: (remainingMs: number) => string;

@@ -3,7 +3,7 @@
  * THE GAME CONTEXT GATES ITS TURN SIGNALS DURING TIME TRAVEL, LIKE THE BOARD'S PROPS (#520).
  *
  * While the debug panel shows history, the board is handed `isMyTurn` and
- * `availableActions` gated off (GameShell.custom-board-history-parity.test.ts).
+ * `availableActions` gated off (`../board-props.shells.test.ts`).
  * The context published the LIVE ones beside the historical `gameView`, so a
  * child of the board that read the context offered controls the action
  * controller would refuse, and had no `isViewingHistory` to tell it why.

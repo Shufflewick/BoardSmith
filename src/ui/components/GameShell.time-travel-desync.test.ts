@@ -18,8 +18,7 @@
  *       independent of the display fix.
  *
  * Two testing strategies, matching this codebase's established convention for
- * GameShell-derived tests (see GameShell.ia.test.ts, GameShell.action-panel-
- * suppression.test.ts): GameShell itself requires full WS client setup to mount,
+ * GameShell-derived tests: GameShell itself requires full WS client setup to mount,
  * so (1) a harness component mirrors displayedState's exact computed logic and
  * BOTH board-render branches (Pitfall 3: dynamic-component AND slot paths), and
  * (2) the action-bridge guard is tested directly against the REAL

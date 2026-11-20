@@ -4,7 +4,7 @@
  *
  * Mounting the full GameShell (client wiring, WS connection, platform postMessage
  * bridge) is impractical for a unit test — this file follows the established
- * harness pattern (see GameShell.ia.test.ts Suite 5, WinnerCaptureHarness):
+ * harness pattern:
  * an isolated component that mirrors GameShell.vue's exact mount-guard template
  * logic for the `#game-over` slot / `providesOwnGameOverUi` prop, using the REAL
  * GameOverCard component so labeling/dismiss behavior is exercised for real.
