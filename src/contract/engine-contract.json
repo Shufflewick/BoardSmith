@@ -1,5 +1,5 @@
 {
-  "revision": 497,
+  "revision": 498,
   "surfaceHash": "1484bbee9c830c13",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3919,6 +3919,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Small cleanups (#1778): HexGrid loses $coordSystem and the HexCoordSystem type (axial was the only value; the UI still refuses any other a JavaScript game sets), WorldAction.build() is removed (no caller), and one shared isRecord replaces six identical copies. Platform: nothing to do; published games need no rebuild."
+    },
+    {
+      "revision": 498,
+      "date": "2026-11-20",
+      "surfaceHash": "1484bbee9c830c13",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "chunk-check refuses a CHUNK.md with a section written twice or a heading or checklist line inside a comment, section lookup reads comments and code as CommonMark does, and CHUNK.template.md's comments no longer copy heading or checklist lines"
     }
   ]
 }
