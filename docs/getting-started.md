@@ -312,11 +312,15 @@ execute((ctx) => ctx.game.startDay1(), { irreversible: true }),
 ```
 
 The mark leaves out only that mutant; the line's other mutants can still be
-sampled, and the sample is filled from them. Every run names each mutant a
-mark left out, with its reason. A mark with no reason (nothing after ` -- `),
-or one the line below has no such mutant for, fails the run, so a mark cannot
-outlive its code. Prefer a test: mark a mutant only when no test could fail on
-it.
+sampled, and the sample is filled from them. Marks stacked on the lines above
+one code line all apply to it. When the line has more than one mutant with that
+name (two `<` on one line), add `#n` for the nth, counting left to right:
+`// boardsmith-mutate-equivalent: < -> <= #2 -- <reason>`. Every run names each
+mutant a mark left out, with its reason, under "Left out as equivalent". A mark
+with no reason (nothing after ` -- `), one the line has no such mutant for, and
+one that could name more than one fail the run, so a mark cannot outlive its
+code or leave out more than it says. Marks are read only by `boardsmith mutate`.
+Prefer a test: mark a mutant only when no test could fail on it.
 
 Because only the test files that import the changed files run, a test that
 passes only after another test file has run (shared state under `isolate:

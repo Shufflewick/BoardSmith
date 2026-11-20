@@ -25,6 +25,8 @@ interface MutateVerdict {
   summary: string;
   next?: string;
   findings: Array<{ file: string; line: number; detail: string }>;
+  /** The mutants a mark left out of the sample, as `file:line mutant: marked at line n: reason`. */
+  equivalent?: string[];
 }
 
 type DiffMutationRun = Awaited<ReturnType<typeof runDiffMutationCheck>>;
@@ -42,7 +44,12 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [],
     };
   }
-  if (summary.mutants === 0) return { passed: true, summary: `No line changed since ${since} holds code a mutant can change.`, findings: [] };
+  if (summary.mutants === 0) {
+    const none = run.equivalent.length > 0
+      ? `Every mutant of the lines changed since ${since} is marked equivalent, so none was tried.`
+      : `No line changed since ${since} holds code a mutant can change.`;
+    return { passed: true, summary: none, findings: [] };
+  }
   const of = `of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since}`;
   const said: string[] = [];
   const next: string[] = [];
@@ -112,9 +119,7 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
     log: options.log ?? ((line) => console.error(styleText('dim', line))),
     budget,
   });
-  const said = verdict(since, run);
-  const marked = run.equivalent.map((e) => ({ file: e.file, line: e.line, detail: `${e.description}: marked equivalent at line ${e.markLine}: ${e.reason}` }));
-  return { ...said, findings: [...said.findings, ...marked] };
+  return { ...verdict(since, run), equivalent: run.equivalent.map((e) => `${e.file}:${e.line} ${e.name}: marked at line ${e.markLine}: ${e.reason}`) };
 }
 
 export async function mutateCommand(options: { base: string; project?: string }): Promise<void> {
@@ -122,6 +127,7 @@ export async function mutateCommand(options: { base: string; project?: string })
   const result = await runMutate({ projectDir, base: options.base });
   console.log(`${result.passed ? styleText('green', 'pass') : styleText('red', 'FAIL')}  ${result.summary}`);
   for (const f of result.findings) console.log(`        ${f.file}:${f.line} ${f.detail}`);
+  if (result.equivalent?.length) console.log(`Left out as equivalent:\n${result.equivalent.map((e) => `        ${e}`).join('\n')}`);
   if (result.next) console.log(`\n${result.next}`);
   if (!result.passed) process.exitCode = 1;
 }

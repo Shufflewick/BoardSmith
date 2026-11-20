@@ -1371,39 +1371,59 @@ interface SurvivingMutant {
 
 /** A mutant left out of the sample because a mark above its line says no test can tell it from the code (#1781). */
 interface EquivalentMutant extends SurvivingMutant {
+  /** The 0-based column of the start of the code it changes, which tells apart mutants a line has the same description for. */
+  column: number;
+  /** The mutant as the mark names it: its description, with `#n` when the line has more than one such mutant. */
+  name: string;
   markLine: number;
   reason: string;
 }
 
-/** A line of the form `// boardsmith-mutate-equivalent: <mutant> -- <reason>`, where `<mutant>` is a mutant of the next line as the check names it. */
-const EQUIVALENT_MARK = /^\s*\/\/\s*boardsmith-mutate-equivalent:(.*)$/;
+/** The text of a `//` comment that marks a mutant equivalent: ` <mutant> -- <reason>` follows it. */
+const EQUIVALENT_MARK = /^\s*boardsmith-mutate-equivalent:(.*)$/;
+const MARK_FORM = '`// boardsmith-mutate-equivalent: <mutant> -- <why no test can tell it from the code>`';
 
 /**
- * The equivalent marks of `source`, each naming one mutant of the line below it. Throws on a mark
- * with no reason, and on one whose line has no such mutant, so a mark cannot outlive its code.
+ * The mutants of `source` its equivalent marks name. A mark is a `//` comment naming one mutant of
+ * the code line below it and any marks stacked under it, as `boardsmith mutate` prints it, plus
+ * `#n` for the nth of several such mutants on the line, left to right. Throws on a mark with no
+ * reason, one that names no mutant of its line, and one that could name more than one, so a mark
+ * cannot outlive its code or leave out more than it says.
  */
 function equivalentMarks(file: string, source: string): Array<Omit<EquivalentMutant, 'file'>> {
-  return source.split('\n').flatMap((text, i) => {
-    const mark = EQUIVALENT_MARK.exec(text)?.[1];
-    if (mark === undefined) return [];
-    const [markLine, line] = [i + 1, i + 2];
-    const split = mark.indexOf(' -- ');
-    const description = (split === -1 ? mark : mark.slice(0, split)).trim();
-    const reason = split === -1 ? '' : mark.slice(split + 4).trim();
-    if (!reason) {
+  const marks = codeRegions(file, source).flatMap((region) =>
+    parseSource(region.text, file).comments.flatMap((comment) => {
+      const text = comment.type === 'Line' ? EQUIVALENT_MARK.exec(comment.value)?.[1] : undefined;
+      return text === undefined ? [] : [{ markLine: region.firstLine + comment.loc.start.line - 1, text }];
+    }),
+  );
+  const markLines = new Set(marks.map((m) => m.markLine));
+  const lineBelow = (markLine: number) => {
+    let line = markLine + 1;
+    while (markLines.has(line)) line++;
+    return line;
+  };
+  const sites = mutationSites(file, source, new Set(marks.map((m) => lineBelow(m.markLine))));
+  return marks.map(({ markLine, text }) => {
+    const line = lineBelow(markLine);
+    const split = text.indexOf(' -- ');
+    const name = (split === -1 ? text : text.slice(0, split)).trim();
+    const reason = split === -1 ? '' : text.slice(split + 4).trim();
+    if (!reason) throw new Error(`${file}:${markLine} marks a mutant equivalent without a reason. Write it as ${MARK_FORM}, or remove it.`);
+    const [, description, nth] = /^(.*?)(?: #(\d+))?$/.exec(name)!;
+    const onLine = sites.filter((site) => site.line === line);
+    const same = onLine.filter((site) => site.description === description);
+    const site = nth === undefined ? (same.length === 1 ? same[0] : undefined) : same[Number(nth) - 1];
+    if (!site) {
+      const has = same.length > 1
+        ? `${same.length} such mutants; name one as ${same.map((_, i) => `\`${description} #${i + 1}\``).join(', ')}, counting left to right`
+        : `no such mutant (${onLine.length > 0 ? `its mutants are ${onLine.map((d) => `\`${d.description}\``).join(', ')}` : 'it has none'})`;
       throw new Error(
-        `${file}:${markLine} marks a mutant equivalent without a reason. Write it as \`// boardsmith-mutate-equivalent: <mutant> -- <why no test can tell it from the code>\`, or remove it.`,
+        `${file}:${markLine} marks \`${name}\` equivalent, but line ${line} has ${has}. ` +
+          `A mark names one mutant of the code line below it as \`boardsmith mutate\` prints it, in the form ${MARK_FORM}: fix the mark or remove it.`,
       );
     }
-    const found = mutationSites(file, source, new Set([line])).map((site) => site.description);
-    if (!found.includes(description)) {
-      const has = found.length > 0 ? `its mutants are ${found.map((d) => `\`${d}\``).join(', ')}` : 'it has none';
-      throw new Error(
-        `${file}:${markLine} marks \`${description}\` equivalent, but line ${line} has no such mutant (${has}). ` +
-          'A mark names one mutant of the line below it as `boardsmith mutate` prints it: fix the mark or remove it.',
-      );
-    }
-    return [{ line, description, markLine, reason }];
+    return { line, column: site.column, description, name, markLine, reason };
   });
 }
 
@@ -1560,15 +1580,18 @@ export async function runDiffMutationCheck(
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
-  const marks = new Map<string, ReturnType<typeof equivalentMarks>>();
-  for (const file of input.added.keys()) marks.set(file, equivalentMarks(file, await fs.readFile(join(projectDir, file), 'utf-8')));
-  const markOf = (m: LocatedMutant) => marks.get(m.file)?.find((mark) => mark.line === m.line && mark.description === m.description);
-  const candidates = await collectMutants(projectDir, input.added);
-  const equivalent = candidates.flatMap((m) => {
-    const mark = markOf(m);
-    return mark ? [{ file: m.file, ...mark }] : [];
-  });
-  const all = candidates.filter((m) => !markOf(m));
+  const all: LocatedMutant[] = [];
+  const equivalent: EquivalentMutant[] = [];
+  for (const [file, lines] of input.added) {
+    const absPath = join(projectDir, file);
+    const source = await fs.readFile(absPath, 'utf-8');
+    const marks = equivalentMarks(file, source);
+    for (const mutant of generateMutants(file, source, lines)) {
+      const mark = marks.find((m) => m.line === mutant.line && m.column === mutant.column && m.description === mutant.description);
+      if (mark) equivalent.push({ file, ...mark });
+      else all.push({ ...mutant, absPath });
+    }
+  }
   // Seeded by what the mutants change, not where or in which commit, so the branch tip and the merge commit that lands it try the same ones (#1500).
   const seed = all.map((m) => [m.file, m.description, m.change.before, m.change.after].join('\0')).join('\n');
   const mutants = sampleMutants(all, seed, MUTATE_SAMPLE_SIZE);
