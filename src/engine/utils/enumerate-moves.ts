@@ -723,7 +723,7 @@ function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveLi
   );
 }
 
-// ─── Pure Combinatorics Helpers (exported for bot import + testability) ──────
+// ─── Pure Combinatorics Helpers ───────────────────────────────────────────────
 
 /**
  * bot-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
