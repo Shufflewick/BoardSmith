@@ -157,7 +157,6 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 
 ##### Other Animation Utilities
 
-- `useActionAnimations()` - Action-triggered animations
 - `useZoomPreview()` - Card/die zoom preview
 - `getPlayerStatElement()` - Get player stat element
 - `flyToPlayerStat()` - Fly to player stat

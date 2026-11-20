@@ -1,5 +1,5 @@
 {
-  "revision": 482,
+  "revision": 483,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3799,6 +3799,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "AutoUI no longer holds the Action Panel back for 3s on each animation event it has no handler for: it claims no events, and the queue skips them at once while no handler is registered (claimNoEvents, #1758). Published games need no rebuild."
+    },
+    {
+      "revision": 483,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Delete the unused useActionAnimations composable and its ActionAnimationConfig, UseActionAnimationsOptions and UseActionAnimationsReturn types from boardsmith/ui; an animation trace's kind is no longer 'action' (#1761). Published games need no rebuild."
     }
   ]
 }

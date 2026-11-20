@@ -554,11 +554,6 @@
         "count": 1
       }
     },
-    "src/ui/composables/useActionAnimations.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/composables/useActionController.ts": {
       "complexity_high": {
         "count": 2

@@ -1536,93 +1536,6 @@ const { isFlying } = flyOnAppear({
 </template>
 ```
 
-### useActionAnimations
-
-Declarative animations triggered by action execution. Captures element positions before actions execute and animates to the new position after the DOM updates. Integrates with `actionController.onBeforeAutoExecute()`, which returns an unregister function.
-
-**Key Feature: Flip-in-Place Auto-Detection**
-
-When `elementSelector` equals `destinationSelector`, the composable auto-detects a "flip-in-place" animation and configures everything correctly:
-
-<!-- typecheck: board -->
-```vue
-<script setup lang="ts">
-import { toRef } from 'vue';
-import { useActionAnimations, FlyingCardsOverlay, type TableBoardProps } from 'boardsmith/ui';
-
-// The board receives `actionController` and `gameView` as props from GameShell.
-const props = defineProps<TableBoardProps>();
-
-const actionAnimations = useActionAnimations({
-  gameView: toRef(props, 'gameView'),
-  // Tells the composable how each action ended, so a refused one puts its element back.
-  actionController: props.actionController,
-  animations: [
-    // Movement animation (element moves to a different destination)
-    {
-      action: 'assignToCrew',
-      elementSelection: 'duelistName',
-      elementSelector: '[data-duelist="{duelistName}"]',
-      destinationSelector: '[data-crew="{targetCrew}"]',
-      duration: 500,
-      // What the flying copy shows; FlyingCardsOverlay renders these fields.
-      getElementData: () => ({ faceUp: true }),
-    },
-    // Flip-in-place (auto-detected: same selector = flip animation)
-    {
-      action: 'flipCard',
-      elementSelection: 'card',
-      elementSelector: '[data-card-id="{card}"]',
-      destinationSelector: '[data-card-id="{card}"]', // Same = flip-in-place!
-      duration: 400,
-      getElementData: (el) => ({ rank: el.getAttribute('data-rank') ?? undefined }),
-    },
-  ],
-});
-
-// Returns an unregister function. Called inside setup(), the hook is also
-// unregistered automatically when the component's effect scope disposes.
-// A game may wrap this hook (to skip some actions, say); pass all three
-// arguments through, since `run` is what matches the action to its outcome.
-props.actionController.onBeforeAutoExecute(actionAnimations.onBeforeAutoExecute);
-
-// Top-level, so the template unwraps it.
-const { flyingElements } = actionAnimations;
-</script>
-
-<template>
-  <FlyingCardsOverlay :flying-cards="flyingElements" />
-</template>
-```
-
-A `{selection}` placeholder goes only inside a double-quoted attribute value, as above. Its value is escaped for that spot, so quotes and backslashes in it are safe; a placeholder anywhere else (`#card-{card}`, `[data-x='{card}']`) is refused when `useActionAnimations` is set up.
-
-**Flip-in-Place Behavior:**
-
-When the composable detects a flip-in-place animation (`elementSelector === destinationSelector`), it automatically:
-- Hides the element during animation (prevents "double card" effect)
-- Enables 3D flip animation
-- Uses instant reveal (no crossfade) to prevent visual artifacts
-- Configures internal timing to avoid flash/flicker issues
-
-You don't need to set `hideDestination`, `flip`, or `crossfadeDuration` - they're configured automatically.
-
-**When it plays:** the composable listens to `actionController.onAfterAutoExecute` for each action's result. The flight plays only once the server has accepted the action and the state it produced has rendered; a state update from another seat while the action is in flight does not play it. If the server refuses the action, or it is cancelled before it is sent, the hidden element gets back exactly the inline styles it had and no flight plays. If the player cancels while a game's own before-hook is still waiting, no hook after it is called for that action, and its outcome carries the `run` number the hooks were given, so whether the game's hook is registered before or after this one, the cancelled action cannot undo or overwrite the capture of the action the player started next (#1026).
-
-**Animation Config Options:**
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `action` | `string` | required | Action name that triggers this animation |
-| `elementSelection` | `string` | required | Selection name whose value identifies the element |
-| `elementSelector` | `string` | required | CSS selector with `{placeholder}` for action args |
-| `destinationSelector` | `string \| function` | required | Where element moves to (same as source = flip-in-place) |
-| `duration` | `number` | 400 | Animation duration in ms |
-| `elementSize` | `{ width, height }` | 60x84 | Size of flying element |
-| `flip` | `boolean` | auto | Enable 3D flip (auto-enabled for flip-in-place) |
-| `hideDestination` | `boolean` | auto | Hide destination during animation (auto-enabled for flip-in-place) |
-| `getElementData` | `function` | required | The data FlyingCardsOverlay renders for the flying element (rank, suit, faceUp, images) |
-
 ### useFLIP
 
 Unified FLIP animation API with multi-container support. FLIP (First-Last-Invert-Play) animations smoothly transition elements when they move within containers.
@@ -2313,7 +2226,7 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | `getValidElements` | `(pick: EnrichedPickMetadata) => EnrichedValidElement[]` | Valid elements for an element pick, from the cache. Not reactive; use `validElements` for the current pick |
 | `getActionMetadata` | `(actionName: string) => EnrichedActionMetadata \| undefined` | Metadata for an action |
 | `getCollectedPick` | `(name: string) => CollectedPick \| undefined` | A pick collected so far: `{ value, display, skipped }` |
-| `onBeforeAutoExecute` | `(hook: BeforeAutoExecuteHook) => () => void` | Add a hook that runs just before a pick auto-executes an action. Returns a function that removes it. See [useActionAnimations](#useactionanimations) |
+| `onBeforeAutoExecute` | `(hook: BeforeAutoExecuteHook) => () => void` | Add a hook that runs just before a pick auto-executes an action. Returns a function that removes it. The DOM still shows the state before the action, so a board captures element positions here to animate from |
 | `onAfterAutoExecute` | `(listener: AfterAutoExecuteListener) => () => void` | Add a listener told how each auto-executed action ended. Returns a function that removes it |
 
 **StartOptions:**

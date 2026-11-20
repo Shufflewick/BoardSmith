@@ -6,9 +6,8 @@
  * This module is DELIBERATELY Vue-free — not even a type-only Vue import —
  * so it can be statically re-exported from both `boardsmith/ui` and
  * `boardsmith/testing` without pulling Vue into the testing subpath. The
- * animation composables (`useFLIP`, `useFlyingElements`,
- * `useActionAnimations`, and friends) consult `isAnimationTestModeEnabled()`
- * and call `recordTrace()` so an agent/test can enable an instant/traced mode
+ * animation composables (`useFLIP`, `useFlyingElements`, and friends)
+ * consult `isAnimationTestModeEnabled()` and call `recordTrace()` so an agent/test can enable an instant/traced mode
  * and assert "card X flew from A to B" headlessly, without a real DOM or
  * requestAnimationFrame timing.
  *
@@ -36,7 +35,7 @@
  * data belongs in `meta`.
  */
 export interface AnimationTrace {
-  kind: 'flip' | 'fly' | 'element' | 'action';
+  kind: 'flip' | 'fly' | 'element';
   /** data-bs-el-id / element id / caller-supplied identifier, or null if not applicable */
   element: string | null;
   /** Container / anchor identity the element animated FROM (assertable) */

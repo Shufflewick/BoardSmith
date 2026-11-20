@@ -716,12 +716,12 @@ export interface UseActionControllerReturn {
    * @example
    * ```typescript
    * // In the board component's <script setup>
-   * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-   * const { onBeforeAutoExecute } = useActionAnimations({
-   *   gameView, actionController: props.actionController, animations: [...],
-   * });
+   * const props = defineProps<{ actionController: UseActionControllerReturn }>();
    *
-   * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
+   * props.actionController.onBeforeAutoExecute((actionName, args) => {
+   *   // The DOM still shows the state before the action: capture positions here.
+   *   if (actionName === 'discard') captureCardRects(args.cards);
+   * });
    * ```
    *
    * `onAfterAutoExecute` is told how each such action ended.
