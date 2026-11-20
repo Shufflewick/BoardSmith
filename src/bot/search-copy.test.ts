@@ -156,6 +156,7 @@ class KitGame extends Game<KitGame, Player> {
     deck.contentsCountOnly();
     deck.create(Kit, 'sword', { training: 2 });
     this.create(Space, 'table');
+    this.create(Space, 'rack').create(Kit, 'shield', { training: 1 });
   }
 }
 
@@ -169,13 +170,19 @@ function copyWithTheDrawnCard(): KitGame {
 }
 
 describe('a hidden card\'s name in a search copy (#1782)', () => {
-  it('is withheld once the card is drawn into view, so a lookup by name cannot take it for another card', () => {
-    const copy = copyWithTheDrawnCard();
-    const card = copy.first(Space, 'table')!.first(Kit)!;
+  it('is withheld once the card is drawn into view', () => {
+    const card = copyWithTheDrawnCard().first(Space, 'table')!.first(Kit)!;
 
     expect(card.isAttributeRedacted('name')).toBe(true);
     expect(() => card.name).toThrow(RedactedAttributeError);
-    expect(() => copy.first(Kit, 'sword')).toThrow(RedactedAttributeError);
+  });
+
+  it('matches no lookup by name, which still finds the cards the seat can name', () => {
+    const copy = copyWithTheDrawnCard();
+
+    expect(copy.first(Kit, 'sword')).toBeUndefined();
+    expect(copy.first(Kit, { name: 'sword' })).toBeUndefined();
+    expect(copy.first(Kit, 'shield')?.training).toBe(1);
   });
 
   it('stays withheld in a copy made from that copy', () => {

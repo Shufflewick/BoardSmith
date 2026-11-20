@@ -466,6 +466,11 @@ function engineOwnedAttributes(element: GameElement): ReadonlySet<string> {
   return engineOwnedAttributeNames((element as Partial<Pick<Player, '$type'>>).$type);
 }
 
+/** An element's name, or undefined when this copy was not told it (#1782). */
+export function knownName(element: GameElement): string | undefined {
+  return element.isAttributeRedacted('name') ? undefined : element.name;
+}
+
 /**
  * Why `create` refuses an attribute a new element of its class does not have
  * (#1782): a seat's copy rebuilds a hidden element from a new one, so it
@@ -1621,9 +1626,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       attributes,
     };
 
-    if (!this.isAttributeRedacted('name') && this.name) {
-      json.name = this.name;
-    }
+    const name = knownName(this);
+    if (name) json.name = name;
 
     // #19: carry the redaction forward. An MCTS descendant clone re-serializes
     // an ALREADY redacted sandbox with plain `toJSON()` — without this flag the
