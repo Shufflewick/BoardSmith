@@ -1,5 +1,5 @@
 {
-  "revision": 470,
+  "revision": 471,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3703,6 +3703,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "useActionController's availableActions and isMyTurn options no longer accept undefined (#1745)"
+    },
+    {
+      "revision": 471,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "AutoUI no longer handles deal, flip or reveal animation events (#1746)"
     }
   ]
 }
