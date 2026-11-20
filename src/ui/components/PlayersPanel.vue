@@ -213,6 +213,8 @@ const visiblePlayers = computed<Player[]>(() => {
 });
 
 const stripes = computed(() => props.playerColorMarks.includes('stripe'));
+const hasStripe = (player: Player) => stripes.value && !!player.color;
+const stripeStyle = (player: Player) => (hasStripe(player) ? { '--bs-seat-color': player.color } : undefined);
 
 /**
  * The seats whose name is written in their colour: those whose colour reads on
@@ -248,6 +250,8 @@ function judgeNames(): void {
 }
 
 // panelEl, because the cards mount only when the panel leaves seat-strip mode.
+const nameStyle = (player: Player) => (colorNames.value.has(player.seat) ? { color: player.color } : undefined);
+
 watch([() => props.playerColorMarks, visiblePlayers, dueSet, themeTick, panelEl], judgeNames, { flush: 'post' });
 
 // The scheme is switched on <html> (data-theme, applyTheme's token overrides) or by the device.
@@ -326,8 +330,8 @@ defineSlots<{
       v-for="player in visiblePlayers"
       :key="player.seat"
       class="player-card"
-      :class="{ current: isPlayerActive(player.seat), 'color-stripe': stripes && player.color }"
-      :style="stripes && player.color ? { '--bs-seat-color': player.color } : undefined"
+      :class="{ current: isPlayerActive(player.seat), 'color-stripe': hasStripe(player) }"
+      :style="stripeStyle(player)"
       :data-seat="player.seat"
       role="listitem"
       :aria-current="isPlayerActive(player.seat) ? 'true' : undefined"
@@ -354,7 +358,7 @@ defineSlots<{
       <div class="player-info">
         <div class="player-name-row">
           <span v-if="isPlayerActive(player.seat)" class="turn-indicator-dot"></span>
-          <span class="player-name" :style="colorNames.has(player.seat) ? { color: player.color } : undefined">{{ player.name }}</span>
+          <span class="player-name" :style="nameStyle(player)">{{ player.name }}</span>
           <span v-if="player.seat === playerSeat" class="you-badge">(You)</span>
           <!-- Per-player connection indicator (A11Y: distinguished by SHAPE — filled
                dot vs hollow ring — not color alone, plus an accessible label). Only
