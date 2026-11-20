@@ -25,7 +25,7 @@ import type { FlowNode, SwitchConfig } from './types.js';
  * iterating node's one `do`, an `if`'s then/else, a switch's cases in
  * declaration order followed by its default. Leaves have none.
  */
-function flowChildren<G extends Game>(node: FlowNode<G>): FlowNode<G>[] {
+export function flowChildren<G extends Game>(node: FlowNode<G>): FlowNode<G>[] {
   switch (node.type) {
     case 'sequence':
       return node.config.steps;

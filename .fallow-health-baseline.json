@@ -305,11 +305,6 @@
         "count": 9
       }
     },
-    "src/engine/flow/walk-flow-nodes.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/engine/tutorial/progress.ts": {
       "complexity_high": {
         "count": 1
