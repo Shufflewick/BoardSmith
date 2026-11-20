@@ -57,8 +57,6 @@ import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.j
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
 interface GameShellProps {
-  /** Enable debug panel (default: true in dev) */
-  debugMode?: boolean;
   /**
    * Platform-only escape hatch that suppresses the entire Action Panel
    * (D-02 escape hatch, LIBX-01). Do NOT use from a game's own
@@ -174,7 +172,6 @@ interface GameShellProps {
 }
 
 const props = withDefaults(defineProps<GameShellProps>(), {
-  debugMode: true,
   platformActionPanelEscapeHatch: false,
   providesOwnGameOverUi: false,
   playerOrder: 'turn',
@@ -1714,12 +1711,12 @@ defineExpose({
         </div>
       </template>
 
-      <template v-if="debugMode && isDevBuild && devDebugAvailable" #debug>
+      <template v-if="isDevBuild && devDebugAvailable" #debug>
     <!-- Debug Panel: dev only. Renders inside the dev host iframe (a dev
          build), and only while the dev host has debugging on (#481); never in a
          deployed/production embed. -->
     <DebugPanel
-      v-if="debugMode && isDevBuild && devDebugAvailable"
+      v-if="isDevBuild && devDebugAvailable"
       :state="state"
       :player-seat="playerSeat"
       :history-has-messages="historyPanel?.hasMessages ?? false"
