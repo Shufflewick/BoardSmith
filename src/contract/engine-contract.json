@@ -1,5 +1,5 @@
 {
-  "revision": 495,
+  "revision": 496,
   "surfaceHash": "a51fc3c45daf0de3",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3903,6 +3903,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Engine build where generateCombinations drops its unreachable limit parameter and export; enumeration output is unchanged (#1776)"
+    },
+    {
+      "revision": 496,
+      "date": "2026-11-20",
+      "surfaceHash": "a51fc3c45daf0de3",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Props and options no caller passed are removed (#1777): ControlsMenu openUp/align, useZoomPreview options, ZoomPreviewOverlay getSuitSymbol/getSuitColor, Die3D zeroIndexed, BoardMessage position, useFLIP threshold/onAnimationStart/onAnimationEnd, isBlackSuit, audioService.init enabled/volume, toDebugString showIds/showAttributes, and boardsmith lint --eslint/--css/--pitfalls. Platform: nothing to do; published games need no rebuild."
     }
   ]
 }
