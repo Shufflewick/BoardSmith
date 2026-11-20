@@ -1,5 +1,5 @@
 {
-  "revision": 487,
+  "revision": 488,
   "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3839,6 +3839,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "WorldEventStamp is now declared as WorldCommandStamp without now, the same five fields it always had, and the world engine spreads each stamp into its dispatch instead of copying fields one by one. No field, payload, stored byte or behaviour changes; the build carries changed packed source, so it needs a revision of its own (#1767)."
+    },
+    {
+      "revision": 488,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The dev-host world store drops its empty layout upgrade chain; a store under any other layout is refused as before."
     }
   ]
 }
