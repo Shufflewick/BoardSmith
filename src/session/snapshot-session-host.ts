@@ -485,7 +485,7 @@ export interface SnapshotSessionAdapters {
    * was last pushed rather than its whole view (#1616). Every view the host
    * hands out, here and to `record`, carries `rev`, and a patch names the `rev`
    * it was made against, so a page applies it with `applyViewPatch`
-   * (`boardsmith/client`), which answers `undefined` when the page does not
+   * (`boardsmith/view-patch`), which answers `undefined` when the page does not
    * hold that view: serve that page the seat's view of record from `record`.
    */
   push: (changed: ReadonlyArray<SeatPush>, meta: PublishMeta) => void;
