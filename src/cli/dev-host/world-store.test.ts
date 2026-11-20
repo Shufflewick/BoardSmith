@@ -20,13 +20,11 @@ import type { WorldGenesis, WorldSerialized } from '../../world/runner.js';
 import {
   assertNodeSupportsSqlite,
   openWorldStore,
-  prepareSchema,
   resetWorldStore,
   worldStoreDir,
   worldStorePath,
   worldResetNotice,
   REQUIRED_NODE_VERSION,
-  type SqliteDatabase,
   type LocalWorldStore,
 } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -704,16 +702,13 @@ describe('the local world store', () => {
   });
 
   /**
-   * #225: A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER AN OLDER LAYOUT.
+   * A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER ANOTHER LAYOUT, IS REFUSED WHOLE.
    *
-   * The fixture is a layout-4 store written through the real doors and then
-   * wound back to exactly what layout 3 held, because layout 3 is a layout this
-   * code no longer writes and a hand-built one would be a fixture asserting
-   * against a shape production never produced. The whole of the difference is
-   * the seat activity table and the recording epoch (`36d723d6`); every other
-   * table was already what it is now.
+   * The older fixture is a layout-8 store written through the real doors and
+   * wound back by `rewindToLayout7`, so the refusal is checked against a shape
+   * production really produced, and the file is shown to be left untouched.
    */
-  describe('a world written under an older store layout (#225)', () => {
+  describe('a world written under another store layout', () => {
     /** The store as an occupied world leaves it: bytes, a dirty mark, a seated
      *  player, a queued event, a receipt, an advanced clock and both stamps. */
     async function anOccupiedWorld(): Promise<void> {
@@ -758,64 +753,6 @@ describe('the local world store', () => {
       );
       expect(layoutOf(worldStorePath(root))).toBe('2');
       expect(keyOf(worldStorePath(root))).toBeUndefined();
-    });
-
-    /**
-     * A STEP THAT DOES NOT LEAVE THE STAMP IT PROMISED (#273).
-     *
-     * Unreachable while the chain is empty, which is exactly why the guard
-     * has to be proved rather than assumed: the next step somebody writes is
-     * the one that can forget, and what it would produce is a store whose
-     * tables and stamp disagree -- read wrong by every later open, or spun on
-     * forever by this loop. So the chain is a parameter here, and the tests
-     * below hand `prepareSchema` the step that forgets.
-     */
-    describe('an upgrade step that does not stamp what it promised (#273)', () => {
-      /** The layout-7 world from the fixtures above, on a raw handle. */
-      const layout7Database = async (): Promise<{ db: SqliteDatabase; path: string }> => {
-        await anOccupiedWorld();
-        const path = worldStorePath(root);
-        rewindToLayout7(path);
-        const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
-          DatabaseSync: new (file: string) => SqliteDatabase;
-        };
-        return { db: new DatabaseSync(path), path };
-      };
-
-      it('refuses the store when the step leaves no stamp at all', async () => {
-        const { db, path } = await layout7Database();
-        try {
-          expect(() =>
-            prepareSchema(db, path, [
-              { from: '7', to: '8', apply: (one) => one.exec("DELETE FROM meta WHERE key = 'schemaVersion'") },
-            ]),
-          ).toThrow(/upgraded from layout 7 to layout 8.*carrying no layout stamp at all.*report it/s);
-        } finally {
-          db.close();
-        }
-      });
-
-      it('refuses the store when the step leaves the stamp where it was', async () => {
-        const { db, path } = await layout7Database();
-        try {
-          expect(() =>
-            prepareSchema(db, path, [{ from: '7', to: '8', apply: () => {} }]),
-          ).toThrow(/upgraded from layout 7 to layout 8.*layout 7.*report it/s);
-        } finally {
-          db.close();
-        }
-      });
-
-      it('names the store so the author knows which world to keep', async () => {
-        const { db, path } = await layout7Database();
-        try {
-          expect(() =>
-            prepareSchema(db, path, [{ from: '7', to: '8', apply: () => {} }]),
-          ).toThrow(new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-        } finally {
-          db.close();
-        }
-      });
     });
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
