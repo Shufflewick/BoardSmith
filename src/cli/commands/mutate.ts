@@ -6,7 +6,8 @@
  * the mutants change, so the same change tries the same ones whichever commit holds it (#1500), and
  * runs the unit tests that import the changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
  * test loads, fails the run, naming its file and line, and so does a sample whose mutants only timed
- * out, since none was shown caught (#1499). Sims never run here (#1494).
+ * out, since none was shown caught (#1499). A mutant marked equivalent above its line is left out of the
+ * sample and named with the mark's reason (#1781). Sims never run here (#1494).
  */
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
@@ -47,7 +48,11 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
   const next: string[] = [];
   if (survivors.length > 0) {
     said.push(`${survivors.length} ${of} survived: every test that loads its file still passed with the code changed`);
-    next.push('For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith mutate` again.');
+    next.push(
+      'For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith mutate` again. ' +
+        'Only when no test could ever tell the change from the code, mark that one mutant on the line above it with ' +
+        '`// boardsmith-mutate-equivalent: <mutant> -- <reason>`, naming it as it is printed here and saying why.',
+    );
   }
   if (unreached.length > 0) {
     said.push(`${unreached.length} ${of} were in a file no test imports, so no test could notice the change`);
@@ -107,7 +112,9 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
     log: options.log ?? ((line) => console.error(styleText('dim', line))),
     budget,
   });
-  return verdict(since, run);
+  const said = verdict(since, run);
+  const marked = run.equivalent.map((e) => ({ file: e.file, line: e.line, detail: `${e.description}: marked equivalent at line ${e.markLine}: ${e.reason}` }));
+  return { ...said, findings: [...said.findings, ...marked] };
 }
 
 export async function mutateCommand(options: { base: string; project?: string }): Promise<void> {

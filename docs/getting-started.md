@@ -302,6 +302,22 @@ FAIL  1 of 3 mutants of the lines changed since main (4f2a9c1e0b3d) survived: ev
         src/rules/trade.ts:42 > -> >=: no test failed
 ```
 
+A mutant no test could ever tell from the code (an equivalent mutant) can be
+left out with a mark on the line directly above it, naming that one mutant as
+the output prints it and saying why:
+
+```ts
+// boardsmith-mutate-equivalent: true -> false -- the step before is always a .notUndoable() action, so the undo floor lands here either way
+execute((ctx) => ctx.game.startDay1(), { irreversible: true }),
+```
+
+The mark leaves out only that mutant; the line's other mutants can still be
+sampled, and the sample is filled from them. Every run names each mutant a
+mark left out, with its reason. A mark with no reason (nothing after ` -- `),
+or one the line below has no such mutant for, fails the run, so a mark cannot
+outlive its code. Prefer a test: mark a mutant only when no test could fail on
+it.
+
 Because only the test files that import the changed files run, a test that
 passes only after another test file has run (shared state under `isolate:
 false`, or the order files run in) fails the unchanged run, and the message
