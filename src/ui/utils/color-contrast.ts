@@ -273,99 +273,96 @@ function parseHex(digits: string): Rgba {
   return { r, g, b, a: a === undefined ? 1 : a / 255 };
 }
 
-function parseFunction(name: string, body: string, input: string): Rgba | undefined {
-  const isLegacyName = /^(rgba?|hsla?)$/.test(name);
-  let space: string | undefined;
-  if (name === 'color') {
-    const match = body.match(/^([a-z0-9-]+)\s+(.*)$/i);
-    if (!match) return undefined;
-    space = match[1].toLowerCase();
-    body = match[2];
-  }
-  const args = splitArgs(body, isLegacyName);
-  if (!args || args.parts.length !== 3) return undefined;
-  const parts = args.parts.map(component);
-  const alphaPart = args.alpha === undefined ? undefined : component(args.alpha);
-  if (parts.some((p) => p === undefined) || (args.alpha !== undefined && alphaPart === undefined)) return undefined;
-  const channels = parts as Component[];
-  if (args.legacy && [...channels, alphaPart].some((p) => p?.kind === 'none')) return undefined;
-  const a = alphaPart === undefined ? 1 : resolve(alphaPart, 1);
-  if (a === undefined) return undefined;
-  const srgb = toSrgb(name, space, channels, args.legacy, input);
-  if (!srgb) return undefined;
-  const [r, g, b] = srgb.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255));
-  return { r, g, b, a: Math.min(1, Math.max(0, a)) };
+function xyzToSrgb(xyz: Vec3): Vec3 {
+  return gamSrgb(multiply(XYZ_TO_SRGB, xyz));
 }
 
-/** A non-hue component as a number, a percentage scaled so 100% is `ref`; `none` is zero. */
-function resolve(c: Component, ref: number): number | undefined {
+/** A lightness clamped to 0..`max`, as CSS clamps it when it parses lab() and its kin. */
+function clampL([l, x, y]: Vec3, max: number): Vec3 {
+  return [Math.min(max, Math.max(0, l)), x, y];
+}
+
+/** A component's value at 100%, or `hue` for an angle. */
+type Reference = number | 'hue';
+
+interface ColorFunction {
+  refs: [Reference, Reference, Reference];
+  /** Whether the legacy comma form is allowed with these component kinds; absent when it never is. */
+  legacy?: (kinds: Component['kind'][]) => boolean;
+  /** The resolved components as sRGB, 0-1 per channel. */
+  toSrgb: (v: Vec3, input: string) => Vec3;
+}
+
+function rgbToSrgb(rgb: Vec3, input: string): Vec3 {
+  if (rgb.some((c) => c < 0 || c > 255)) {
+    throw new Error(`BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`);
+  }
+  return rgb.map((c) => c / 255) as Vec3;
+}
+
+function checkedHslToSrgb([h, s, l]: Vec3, input: string): Vec3 {
+  if ([s, l].some((c) => c < 0 || c > 100)) {
+    throw new Error(`BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`);
+  }
+  return hslToSrgb(h, s, l);
+}
+
+const RGB: ColorFunction = { refs: [255, 255, 255], legacy: (kinds) => new Set(kinds).size === 1, toSrgb: rgbToSrgb };
+const HSL: ColorFunction = {
+  refs: ['hue', 100, 100],
+  legacy: ([, s, l]) => s === 'percent' && l === 'percent',
+  toSrgb: checkedHslToSrgb,
+};
+
+const COLOR_FUNCTIONS: Record<string, ColorFunction> = {
+  rgb: RGB,
+  rgba: RGB,
+  hsl: HSL,
+  hsla: HSL,
+  hwb: { refs: ['hue', 100, 100], toSrgb: (v) => hwbToSrgb(...v) },
+  lab: { refs: [100, 125, 125], toSrgb: (v) => xyzToSrgb(labToXyz(clampL(v, 100))) },
+  lch: { refs: [100, 150, 'hue'], toSrgb: (v) => xyzToSrgb(labToXyz(polar(clampL(v, 100)))) },
+  oklab: { refs: [1, 0.4, 0.4], toSrgb: (v) => xyzToSrgb(oklabToXyz(clampL(v, 1))) },
+  oklch: { refs: [1, 0.4, 'hue'], toSrgb: (v) => xyzToSrgb(oklabToXyz(polar(clampL(v, 1)))) },
+};
+
+/** `color(<space> ...)` as the colour function for that space, with the space's name removed from the body. */
+function colorSpaceFunction(body: string): { fn: ColorFunction; body: string } | undefined {
+  const match = body.match(/^([a-z0-9-]+)\s+(.*)$/i);
+  const toXyz = match && Object.hasOwn(COLOR_SPACES, match[1].toLowerCase()) ? COLOR_SPACES[match[1].toLowerCase()] : undefined;
+  if (!match || !toXyz) return undefined;
+  return { fn: { refs: [1, 1, 1], toSrgb: (v) => xyzToSrgb(toXyz(v)) }, body: match[2] };
+}
+
+/** A component resolved against its reference: a percentage scaled so 100% is `ref`, `none` as zero. */
+function resolve(c: Component, ref: Reference): number | undefined {
   if (c.kind === 'none') return 0;
+  if (ref === 'hue') return c.kind === 'percent' ? undefined : c.value;
   if (c.kind === 'angle') return undefined;
   return c.kind === 'percent' ? (c.value / 100) * ref : c.value;
 }
 
-function hue(c: Component): number | undefined {
-  if (c.kind === 'none') return 0;
-  return c.kind === 'percent' ? undefined : c.value;
+function lookupFunction(name: string, body: string): { fn: ColorFunction; body: string } | undefined {
+  if (name === 'color') return colorSpaceFunction(body);
+  return Object.hasOwn(COLOR_FUNCTIONS, name) ? { fn: COLOR_FUNCTIONS[name], body } : undefined;
 }
 
-function triple(values: (number | undefined)[]): Vec3 | undefined {
-  return values.every((v) => v !== undefined) ? (values as Vec3) : undefined;
+/** The three components and the alpha written in a colour function's body, or undefined when the browser would not draw it. */
+function readComponents(fn: ColorFunction, body: string): Component[] | undefined {
+  const args = splitArgs(body, fn.legacy !== undefined);
+  if (!args || args.parts.length !== 3) return undefined;
+  const all = [...args.parts, args.alpha ?? '1'].map(component);
+  if (!all.every((c) => c !== undefined)) return undefined;
+  const legal = !args.legacy || (fn.legacy?.(all.slice(0, 3).map((c) => c.kind)) && all.every((c) => c.kind !== 'none'));
+  return legal ? all : undefined;
 }
 
-function toSrgb(name: string, space: string | undefined, [c1, c2, c3]: Component[], legacy: boolean, input: string): Vec3 | undefined {
-  switch (name) {
-    case 'rgb':
-    case 'rgba': {
-      if (legacy && new Set([c1.kind, c2.kind, c3.kind]).size > 1) return undefined;
-      const rgb = triple([c1, c2, c3].map((c) => resolve(c, 255)));
-      if (rgb?.some((c) => c < 0 || c > 255)) {
-        throw new Error(`BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`);
-      }
-      return rgb?.map((c) => c / 255) as Vec3 | undefined;
-    }
-    case 'hsl':
-    case 'hsla': {
-      if (legacy && (c2.kind !== 'percent' || c3.kind !== 'percent')) return undefined;
-      const hsl = triple([hue(c1), resolve(c2, 100), resolve(c3, 100)]);
-      if (hsl && [hsl[1], hsl[2]].some((c) => c < 0 || c > 100)) {
-        throw new Error(`BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`);
-      }
-      return hsl && hslToSrgb(...hsl);
-    }
-    case 'hwb': {
-      const hwb = triple([hue(c1), resolve(c2, 100), resolve(c3, 100)]);
-      return hwb && hwbToSrgb(...hwb);
-    }
-    case 'lab':
-    case 'lch': {
-      const lab = name === 'lab'
-        ? triple([resolve(c1, 100), resolve(c2, 125), resolve(c3, 125)])
-        : triple([resolve(c1, 100), resolve(c2, 150), hue(c3)]);
-      if (!lab) return undefined;
-      lab[0] = Math.min(100, Math.max(0, lab[0]));
-      return xyzToSrgb(labToXyz(name === 'lab' ? lab : polar(lab)));
-    }
-    case 'oklab':
-    case 'oklch': {
-      const lab = name === 'oklab'
-        ? triple([resolve(c1, 1), resolve(c2, 0.4), resolve(c3, 0.4)])
-        : triple([resolve(c1, 1), resolve(c2, 0.4), hue(c3)]);
-      if (!lab) return undefined;
-      lab[0] = Math.min(1, Math.max(0, lab[0]));
-      return xyzToSrgb(oklabToXyz(name === 'oklab' ? lab : polar(lab)));
-    }
-    case 'color': {
-      const toXyz = space === undefined ? undefined : COLOR_SPACES[space];
-      const v = triple([c1, c2, c3].map((c) => resolve(c, 1)));
-      return toXyz && v && xyzToSrgb(toXyz(v));
-    }
-  }
-  return undefined;
-}
-
-function xyzToSrgb(xyz: Vec3): Vec3 {
-  return gamSrgb(multiply(XYZ_TO_SRGB, xyz));
+function parseFunction(name: string, rawBody: string, input: string): Rgba | undefined {
+  const found = lookupFunction(name, rawBody);
+  const values = found && readComponents(found.fn, found.body)?.map((c, i) => resolve(c, i < 3 ? found.fn.refs[i] : 1));
+  if (!found || !values?.every((v) => v !== undefined)) return undefined;
+  const [r, g, b] = found.fn.toSrgb(values.slice(0, 3) as Vec3, input).map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255));
+  return { r, g, b, a: Math.min(1, Math.max(0, values[3])) };
 }
 
 function srgbChannelToLinear(channel: number): number {
