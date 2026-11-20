@@ -24,7 +24,6 @@ import type { ActionDefinition, FollowUpAction, NumberSelection, PendingActionSt
 import { availableActionsForSeat, followUpForSeat } from '../flow/seat-activity.js';
 import type { PerformOptions } from '../action/action.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
-import { elementsAsIds } from './arg-builder.js';
 import { isElement } from '../element/game-element.js';
 import { numberRangeValues } from '../action/number-labels.js';
 import { choiceValueKey } from '../action/choice-matching.js';
@@ -39,8 +38,7 @@ import type { SeededRandom } from '../../utils/random.js';
  * state.
  *
  * Each move is an `{ action, args }` pair where `args` contains in-process
- * element objects (not serialized IDs). Callers that need JSON-safe args
- * should convert via `buildActionArgs(..., { format: 'wire' })`.
+ * element objects (not serialized IDs).
  *
  * Throws rather than returning `[]` for a bad seat, a non-numeric seat, or a
  * game with no flow state (#26) — an empty enumeration must only ever mean
@@ -544,7 +542,7 @@ const heldElements = new WeakSet<object>();
 function holdElements(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(holdElements);
   if (!isElement(value)) return value;
-  const ref = elementsAsIds(value) as object;
+  const ref = { id: value.id, className: value.constructor.name };
   heldElements.add(ref);
   return ref;
 }

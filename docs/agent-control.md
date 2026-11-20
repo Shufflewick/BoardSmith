@@ -86,9 +86,8 @@ All player seats throughout the engine, session, and testing layers are
 
 ## Introspection APIs
 
-These five methods/functions are the complete headless introspection
-surface. All of them are pure reads (or, for `buildActionArgs`, pure
-validation) — none of them mutate game state.
+These four methods/functions are the complete headless introspection
+surface. All of them are pure reads — none of them mutate game state.
 
 ### `game.getActionSpace(seat)`
 
@@ -165,48 +164,6 @@ const rankChoices = testGame.game.getSelectionChoices('ask', 'rank', player, { t
 ergonomic multi-step selection — see
 [boardsmith/testing](./api/testing.md#actionbuilder-multi-step--dependent-selections).)
 
-### `buildActionArgs(actionName, selectionValues, game, seat, options?)`
-
-Validates a record of plain selection values (element objects, strings,
-numbers, …) against an action's declared selections and returns
-ready-to-submit args.
-
-<!-- typecheck: game tests/build-args.ts -->
-```typescript
-import { buildActionArgs } from 'boardsmith';
-import { createTestGame } from 'boardsmith/testing';
-import { GoFishGame } from '../src/rules/game.js';
-
-const testGame = createTestGame(GoFishGame, { playerCount: 2 });
-const args = buildActionArgs('ask', { target: 2, rank: '7' }, testGame.game, 1);
-testGame.doAction(1, 'ask', args);
-```
-
-Throws (with an actionable message) if the action is unknown, the seat has
-no player, a supplied key isn't a declared selection name, or a required
-selection is missing.
-
-By default (`format: 'in-process'`), element-object values pass through
-unchanged — the result is ready for `testGame.doAction` /
-`runner.performAction` in the same process. Pass `{ format: 'wire' }` for
-cross-process transmission (e.g. a remote agent submitting an action over
-WebSocket): each element value, alone or in an array, is written as
-`{ id, className }`, and everything else is left as given (an element nested
-inside a plain object is not converted). That is exactly
-what `runner.performAction` resolves back to the elements, so the wire
-args, after a JSON round trip, can be submitted as they are:
-
-```typescript
-const wireArgs = buildActionArgs('move', { target: token }, game, 1, { format: 'wire' });
-// { target: { id: 42, className: 'Token' } } -- JSON.stringify-safe
-runner.performAction('move', 1, JSON.parse(JSON.stringify(wireArgs)));
-```
-
-A player is an element too, so a `chooseElement` over players gets
-`{ id, className }` like any other. A `chooseFrom` over
-`game.playerChoices()` takes the player's seat number, so pass the seat,
-not the `Player`.
-
 ### `enumerateLegalMoves(game, seat, options?)`
 
 Expands the current action space into every **concrete** legal move —
@@ -230,9 +187,7 @@ testGame.doAction(1, move.action, move.args);
 ```
 
 Args are returned in **in-process** format (element objects, not IDs) —
-pass them straight to `doAction`/`performAction`, or run them through
-`buildActionArgs(..., { format: 'wire' })` for cross-process use; the
-wire form is accepted by `performAction` as well.
+pass them straight to `doAction`/`performAction`.
 
 By default enumeration lists every move, within the limits below. A `number`
 selection with `min`, `max` and `integer: true` is listed like a choice: each

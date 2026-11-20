@@ -36,7 +36,3 @@ export type {
 // Legal-move enumeration (INTRO-04)
 export { enumerateLegalMoves } from './enumerate-moves.js';
 
-// Arg builder (INTRO-03)
-export { buildActionArgs } from './arg-builder.js';
-export type { BuildActionArgsOptions } from './arg-builder.js';
-

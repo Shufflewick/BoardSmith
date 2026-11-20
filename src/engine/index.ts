@@ -247,7 +247,6 @@ export type {
 
 // Utilities (action helpers, checkpoints)
 export {
-  buildActionArgs,
   enumerateLegalMoves,
   createActionCheckpoint,
   checkpointAt,
@@ -255,7 +254,6 @@ export {
 } from './utils/index.js';
 
 export type {
-  BuildActionArgsOptions,
   ActionCheckpoint,
   ActionCheckpointWindow,
   CheckpointAbsence,

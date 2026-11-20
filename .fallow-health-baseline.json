@@ -318,11 +318,6 @@
         "count": 1
       }
     },
-    "src/engine/utils/arg-builder.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/engine/utils/enumerate-moves.ts": {
       "complexity_moderate": {
         "count": 1
