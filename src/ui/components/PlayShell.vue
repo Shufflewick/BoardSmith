@@ -37,7 +37,7 @@
 import { computed, inject, nextTick, ref, watch } from 'vue';
 import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';
 import GameHistory, { type HistoryMessage } from './GameHistory.vue';
-import PlayersPanel, { type Player } from './PlayersPanel.vue';
+import PlayersPanel, { type Player, type PlayerColorMark } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { tryUseBoardInteraction } from '../composables/useBoardInteraction.js';
@@ -69,6 +69,8 @@ const props = withDefaults(defineProps<{
   presentSeats?: readonly number[] | null;
   /** Whether the seat card carries the shell's own turn-status sentence. */
   showTurnStatus?: boolean;
+  /** The colour treatments each seat card carries. See `PlayersPanel.playerColorMarks`. */
+  playerColorMarks?: readonly PlayerColorMark[];
 
   // ── The log ────────────────────────────────────────────────────────────────
   /** The lines the log shows, oldest first. */
@@ -486,6 +488,7 @@ const mobileToggleLabel = computed(() => {
             :present-seats="presentSeats"
             :seat-strip="!isCompact && railed"
             :show-turn-status="showTurnStatus"
+            :player-color-marks="playerColorMarks"
           >
             <!-- Beneath the identity token, in the card's narrow first column —
                  for content that reads as part of the seat's identity (a

@@ -20,6 +20,7 @@ import ActionPanel from './auto-ui/ActionPanel.vue';
 import BoardErrorBoundary from './BoardErrorBoundary.vue';
 import ControlsMenu from './ControlsMenu.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
+import type { PlayerColorMark } from './PlayersPanel.vue';
 import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
 import { useDevDebugGate } from '../composables/useDevDebugGate.js';
@@ -131,6 +132,14 @@ interface GameShellProps {
    * highlight, the turn-change pulse, and `aria-current` all remain.
    */
   showTurnStatus?: boolean;
+  /**
+   * Marks each seat card in the players panel with its player's colour (#1733):
+   * `'stripe'` draws a stripe down the card's edge, `'name'` writes the name in
+   * the colour where it reads on the card at WCAG AA, else in the normal text
+   * colour. BoardSmith draws both, so the card stays the same in every game.
+   * Default: none.
+   */
+  playerColorMarks?: readonly PlayerColorMark[];
   /**
    * Writes the Action Panel's countdown line from the time left on the host's
    * clock, in ms (#1437). Default: "Time left: M:SS". At zero the panel always
@@ -1415,6 +1424,7 @@ defineExpose({
       :player-seat="playerSeat"
       :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
+      :player-color-marks="props.playerColorMarks"
       :messages="gameMessages"
       :message-offset="messageOffset"
       :unread-log-count="unreadLogCount"

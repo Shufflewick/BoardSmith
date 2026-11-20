@@ -4,6 +4,7 @@ import GameShell from './GameShell.vue';
 import DebugPanel from './DebugPanel.vue';
 import { defineGameUIs, defaultUI, type GameUIRegistry } from '../game-uis.js';
 import type { PlayerPreferences } from '../player-preferences.js';
+import type { PlayerColorMark } from './PlayersPanel.vue';
 
 /**
  * MOUNTING THE REAL `GameShell` THE WAY A PLATFORM HOST DOES.
@@ -86,6 +87,7 @@ interface PlatformShellOptions {
     actionBarOpensForActions?: boolean;
     sidebarStartsCollapsed?: boolean;
     preferences?: PlayerPreferences;
+    playerColorMarks?: readonly PlayerColorMark[];
   };
   /** GameShell slots, for a test about what a slot is handed. */
   slots?: Record<string, (slotProps: Record<string, unknown>) => unknown>;

@@ -218,6 +218,18 @@ export function contrastInk(seatColor: string): ContrastInk {
   return { ink, textShadow };
 }
 
+/** WCAG 2.1 AA contrast for normal-size text (SC 1.4.3). */
+const TEXT_CONTRAST = 4.5;
+
+/**
+ * Whether text in `color` reads on `background` at WCAG AA (4.5:1).
+ *
+ * @throws {Error} if `color` is unparseable, as `contrastInk()` does.
+ */
+export function readsOn(color: string, background: Rgb): boolean {
+  return contrastRatio(relativeLuminance(parseColor(color)), relativeLuminance(background)) >= TEXT_CONTRAST;
+}
+
 /** The ink for a seat with no colour, drawn in the accent colour: white with a dark halo. */
 const DEFAULT_SEAT_INK: ContrastInk = { ink: '#ffffff', textShadow: '0 1px 2px rgba(0,0,0,.5)' };
 

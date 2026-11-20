@@ -11,8 +11,11 @@
  * A11Y-08: under reduced motion the breathe becomes a static
  *   high-contrast border instead of disappearing.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import PlayerToken from './PlayerToken.vue';
+import { readsOn } from '../utils/color-contrast.js';
+import { effectiveBackground } from '../utils/effective-background.js';
+import { devWarn } from '../../utils/dev.js';
 import { YOUR_MOVE, describePlaying } from '../composables/liveRegionAnnouncer.js';
 import { syncReducedMotionClass } from '../composables/reducedMotion.js';
 
@@ -29,6 +32,16 @@ export interface Player {
    */
   connected?: boolean;
 }
+
+/**
+ * A treatment that marks a seat card with its player's colour (#1733), drawn by
+ * BoardSmith so every game's panel stays alike:
+ *
+ * - `'stripe'`: a stripe in the player's colour down the card's edge;
+ * - `'name'`: the name in the player's colour, where it reads on the card at
+ *   WCAG AA, else in the normal text colour.
+ */
+export type PlayerColorMark = 'stripe' | 'name';
 
 const props = withDefaults(defineProps<{
   /** Array of players in the game */
@@ -70,7 +83,10 @@ const props = withDefaults(defineProps<{
    * per-player flag wins: it is the more specific claim.
    */
   presentSeats?: readonly number[] | null;
+  /** The colour treatments each seat card carries (#1733). Default: none. */
+  playerColorMarks?: readonly PlayerColorMark[];
 }>(), {
+  playerColorMarks: () => [],
   // Vue CASTS an absent Boolean prop to `false`, not `undefined` — so an
   // opt-OUT flag silently defaults to opted-out unless the default is stated
   // here. Every consumer that omits the prop must get the sentence.
@@ -196,6 +212,61 @@ const visiblePlayers = computed<Player[]>(() => {
     .sort((a, b) => (index.get(a.seat) ?? 0) - (index.get(b.seat) ?? 0));
 });
 
+const stripes = computed(() => props.playerColorMarks.includes('stripe'));
+
+/**
+ * The seats whose name is written in their colour: those whose colour reads on
+ * the card as drawn. Judged in the browser, after each render that could change
+ * the card or the colour, because the theme decides the card's background.
+ */
+const panelEl = ref<HTMLElement>();
+const colorNames = ref<ReadonlySet<number>>(new Set());
+const themeTick = ref(0);
+
+function nameReads(player: Player, name: Element): boolean {
+  try {
+    return readsOn(player.color!, effectiveBackground(name));
+  } catch (err) {
+    devWarn(
+      `PlayersPanel-name-color:${player.color}`,
+      `PlayersPanel writes ${player.name}'s name in the normal text colour, because it cannot judge whether ` +
+        `"${player.color}" reads on the card. ${err instanceof Error ? err.message : String(err)}`,
+    );
+    return false;
+  }
+}
+
+function judgeNames(): void {
+  const seats = new Set<number>();
+  if (props.playerColorMarks.includes('name') && panelEl.value) {
+    for (const player of visiblePlayers.value) {
+      const name = panelEl.value.querySelector(`.player-card[data-seat="${player.seat}"] .player-name`);
+      if (player.color && name && nameReads(player, name)) seats.add(player.seat);
+    }
+  }
+  colorNames.value = seats;
+}
+
+watch([() => props.playerColorMarks, visiblePlayers, dueSet, themeTick], judgeNames, { flush: 'post' });
+
+// The scheme is switched on <html> (data-theme, applyTheme's token overrides) or by the device.
+const themeObserver = typeof MutationObserver === 'function'
+  ? new MutationObserver(() => { themeTick.value++; })
+  : undefined;
+const schemeQuery = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+  ? window.matchMedia('(prefers-color-scheme: light)')
+  : undefined;
+const bumpTheme = () => { themeTick.value++; };
+onMounted(() => {
+  themeObserver?.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme', 'style', 'class'] });
+  schemeQuery?.addEventListener('change', bumpTheme);
+  judgeNames();
+});
+onUnmounted(() => {
+  themeObserver?.disconnect();
+  schemeQuery?.removeEventListener('change', bumpTheme);
+});
+
 /** How many seats the cap left out. Zero when nothing was cut. */
 const hiddenCount = computed(() => props.players.length - visiblePlayers.value.length);
 const overflowText = computed(() => `and ${hiddenCount.value} ${hiddenCount.value === 1 ? 'other' : 'others'}`);
@@ -249,12 +320,14 @@ defineSlots<{
   </div>
 
   <!-- ── Standard mode: full per-player cards ──────────────────────────────── -->
-  <div v-else class="players-panel" role="list" aria-label="Players">
+  <div v-else ref="panelEl" class="players-panel" role="list" aria-label="Players">
     <div
       v-for="player in visiblePlayers"
       :key="player.seat"
       class="player-card"
-      :class="{ current: isPlayerActive(player.seat) }"
+      :class="{ current: isPlayerActive(player.seat), 'color-stripe': stripes && player.color }"
+      :style="stripes && player.color ? { '--bs-seat-color': player.color } : undefined"
+      :data-seat="player.seat"
       role="listitem"
       :aria-current="isPlayerActive(player.seat) ? 'true' : undefined"
     >
@@ -280,7 +353,7 @@ defineSlots<{
       <div class="player-info">
         <div class="player-name-row">
           <span v-if="isPlayerActive(player.seat)" class="turn-indicator-dot"></span>
-          <span class="player-name">{{ player.name }}</span>
+          <span class="player-name" :style="colorNames.has(player.seat) ? { color: player.color } : undefined">{{ player.name }}</span>
           <span v-if="player.seat === playerSeat" class="you-badge">(You)</span>
           <!-- Per-player connection indicator (A11Y: distinguished by SHAPE — filled
                dot vs hollow ring — not color alone, plus an accessible label). Only
@@ -329,6 +402,11 @@ defineSlots<{
   border-radius: var(--bsg-r-md);
   border: 1px solid transparent;
   background: var(--bsg-field);
+}
+
+/* Inset, so the stripe follows the card's corner and changes nothing of its size. */
+.player-card.color-stripe {
+  box-shadow: inset 4px 0 0 var(--bs-seat-color);
 }
 
 .player-card.current {
