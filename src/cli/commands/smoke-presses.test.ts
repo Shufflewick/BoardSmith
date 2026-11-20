@@ -161,10 +161,10 @@ describe('boardsmith verify: the smoke check', () => {
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 22 }),
     });
 
+    expect(outcome.passed, outcome.summary).toBe(true);
     // Without the third time, this test would not reach the count that reports a button.
     expect(steps.filter((line) => line.includes('the panel\'s "draw" went away by itself'))).toHaveLength(3);
     expect(outcome.summary).not.toContain('went away');
-    expect(outcome.passed).toBe(true);
   });
 
   it('#1475: a board control that goes away by itself each time the walk goes to press it is reported', async () => {

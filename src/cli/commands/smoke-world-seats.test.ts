@@ -85,9 +85,10 @@ describe('boardsmith verify: the smoke check', () => {
   });
 
   it('#1659: a seat after the first takes what only it is offered before the board controls its board keeps offering', async () => {
-    const { steps } = await smokeOf(true, { ...gladeWorld({ watching: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
+    const { outcome, steps } = await smokeOf(true, { ...gladeWorld({ watching: true }), 'tests/browser/smoke.spec.ts': gladeSpec({ seats: '[1, 4]', steps: 12 }) });
 
-    expect(steps[steps.findIndex((line) => line.endsWith(': acting as seat 4')) + 1]).toMatch(/: taking "arrive"$/);
+    // 12 steps is too few to take everything offered, so the walk does not pass; its summary still says how it went.
+    expect(steps[steps.findIndex((line) => line.endsWith(': acting as seat 4')) + 1], outcome.summary).toMatch(/: taking "arrive"$/);
   });
 
   it('#471: fails a walk whose second seat alone fails, naming that seat in every problem from its browser', async () => {
