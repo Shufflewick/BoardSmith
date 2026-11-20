@@ -1,4 +1,4 @@
-import { isDeepStrictEqual, styleText } from 'node:util';
+import { isDeepStrictEqual } from 'node:util';
 import type { GameDefinition, GamePreset, PlayerOptionDefinition } from '../../session/types.js';
 import { createColorOption, paletteChoices, type ColorChoice, type ColorOptionDefinition } from '../../session/colors.js';
 import { numberBoundsProblem } from '../../session/game-option-selection.js';
@@ -350,30 +350,6 @@ export function presetSeatSetup(
 }
 
 /**
- * Normalize colorPalette entries to {value, label} format.
- * Accepts plain hex strings, {value, label}, or {hex, label, id} objects.
- *
- * IN-01: an object entry missing all of `value`/`hex`/`color` is malformed
- * (a typo'd field name, most often) — warn loudly (matches the
- * `formatUnknownKeyWarnings` non-exiting pattern) and DROP the entry instead
- * of emitting an invisible/unclickable empty-string swatch in the lobby
- * color picker.
- */
-function normalizeColorPalette(
-  palette: ReadonlyArray<string | object>
-): Array<{ value: string; label: string }> {
-  const { choices, unnamed } = paletteChoices(palette);
-  for (const entry of unnamed) {
-    console.warn(
-      styleText('yellow',
-        `  Warning: colorPalette entry ${JSON.stringify(entry)} is missing "value"/"hex"/"color" — skipped (not rendered as a swatch).`,
-      ),
-    );
-  }
-  return choices;
-}
-
-/**
  * D16/DEVHOST-04: the dev `color` player option, always offered, resolved as
  * production does: the published manifest carries only `boardsmith.json`'s
  * `colorPalette`, else players are seated in the engine palette (#814). A palette a
@@ -383,13 +359,13 @@ function normalizeColorPalette(
  */
 export function resolveColorOption(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
-  config: { colorPalette?: Array<string | Record<string, unknown>> },
+  config: { colorPalette?: readonly unknown[] },
 ): ColorOptionDefinition {
   const option = createColorOption();
-  if (config.colorPalette) option.choices = normalizeColorPalette(config.colorPalette);
+  if (config.colorPalette) option.choices = paletteChoices(config.colorPalette);
   const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
   for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
-    if (palette && !samePalette(normalizeColorPalette(palette), option.choices)) {
+    if (palette && !samePalette(palette, option.choices)) {
       throw new Error(
         `Your gameDefinition declares ${where} in code, but the live lobby uses ${source} ` +
           `(${option.choices.map((c) => c.label).join(', ')}), so dev would show colours players never get. ` +
@@ -407,7 +383,7 @@ export function resolveColorOption(
  */
 export function resolveDevPlayerOptions(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
-  config: { playerOptions?: unknown; colorPalette?: Array<string | Record<string, unknown>> },
+  config: { playerOptions?: unknown; colorPalette?: readonly unknown[] },
 ): Record<string, PlayerOptionDefinition> & { color: ColorOptionDefinition } {
   return {
     ...mergePlayerOptions(gameDefinition.playerOptions, config.playerOptions),
@@ -420,7 +396,7 @@ function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' 
   const declared = gameDefinition.playerOptions?.color;
   // A `color` option that is not a colour list (or has no choices) can never match, so it is refused too.
   const choices = declared?.type === 'color' ? declared.choices : undefined;
-  return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette };
+  return { 'playerOptions.color': declared && (choices ?? []), colorPalette: gameDefinition.colorPalette?.map(({ hex, label }) => ({ value: hex, label })) };
 }
 
 function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {

@@ -378,6 +378,12 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
     });
   });
 
+  it('refuses a boardsmith.json palette entry that is not { id, hex, label }, naming it (#1739)', () => {
+    expect(() => resolveColorOption({}, { colorPalette: [{ value: '#111111', label: 'Coal' }] })).toThrow(
+      /"colorPalette" entry 1, \{"value":"#111111","label":"Coal"\}, needs a "hex" and a "label"/,
+    );
+  });
+
   it('falls back to the engine palette, named, when boardsmith.json declares none', () => {
     const option = resolveColorOption({}, {});
     expect(option.choices.map((p) => p.value)).toEqual([...DEFAULT_COLOR_PALETTE]);

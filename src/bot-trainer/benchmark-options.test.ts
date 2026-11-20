@@ -56,7 +56,7 @@ class PaletteGame extends Game<PaletteGame, Player> {
 describe('the bot benchmark seats players in boardsmith.json\'s colorPalette (#1560)', () => {
   it('plays every game, and weighs the objectives, in the declared colours', async () => {
     const dir = tempTree('bs-benchmark-palette-');
-    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'palette', backend: 'table', colorPalette: palette }));
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'palette', backend: 'table', colorPalette: palette.map((hex, i) => ({ id: `c${i}`, hex, label: `Colour ${i}` })) }));
     process.chdir(dir);
     const result = await benchmarkBot(PaletteGame, 'palette', undefined, [], { gameCount: 2, mctsIterations: 1, maxActions: 4, seed: 'r' });
     expect(result.failures).toEqual([]);

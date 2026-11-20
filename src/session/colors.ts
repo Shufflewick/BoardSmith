@@ -61,27 +61,21 @@ export function createColorOption(): ColorOptionDefinition {
 }
 
 /**
- * `colorPalette` entries as choices: a plain hex string, or an object naming its
- * hex as `value`, `hex` or `color` and its label as `label` or `name` (the hex
- * when it has neither). An object naming no hex is left out and returned in `unnamed`.
+ * boardsmith.json's `colorPalette` entries, each `{ id, hex, label }`, as choices.
+ *
+ * @throws When an entry has no `hex` or `label` string, naming it.
  */
-export function paletteChoices(palette: ReadonlyArray<string | object>): { choices: ColorChoice[]; unnamed: object[] } {
-  const choices: ColorChoice[] = [];
-  const unnamed: object[] = [];
-  for (const item of palette) {
-    if (typeof item === 'string') {
-      choices.push({ value: item, label: item });
-      continue;
+export function paletteChoices(palette: readonly unknown[]): ColorChoice[] {
+  return palette.map((item, index) => {
+    const entry = (typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>;
+    if (typeof entry.hex !== 'string' || !entry.hex || typeof entry.label !== 'string' || !entry.label) {
+      throw new Error(
+        `boardsmith.json's "colorPalette" entry ${index + 1}, ${JSON.stringify(item)}, needs a "hex" and a "label": ` +
+          'each entry is { "id", "hex", "label" } (e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }). Fix that entry.',
+      );
     }
-    const entry = item as Record<string, unknown>;
-    const hex = (entry.value ?? entry.hex ?? entry.color) as string | undefined;
-    if (hex === undefined) {
-      unnamed.push(item);
-      continue;
-    }
-    choices.push({ value: hex, label: (entry.label ?? entry.name ?? hex) as string });
-  }
-  return { choices, unnamed };
+    return { value: entry.hex, label: entry.label };
+  });
 }
 
 /**
@@ -118,7 +112,7 @@ export function paletteGameOptions(
         '(e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }), so players cannot be given its colours. Fix the list.',
     );
   }
-  const { choices } = paletteChoices(colorPalette);
+  const choices = paletteChoices(colorPalette);
   // The dev host seats every player in the engine palette when this one cannot colour them all.
   if (choices.length < playerCount) return {};
   return {
