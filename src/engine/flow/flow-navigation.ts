@@ -39,10 +39,16 @@ export function flowChildren<G extends Game>(node: FlowNode<G>): FlowNode<G>[] {
     case 'simultaneous-action-step':
     case 'execute':
       return [];
-    default:
-      // loop / repeat / each-player / for-each / phase. A new node type
-      // without a `do` fails to compile here until it is given a case.
+    case 'loop':
+    case 'repeat':
+    case 'each-player':
+    case 'for-each':
+    case 'phase':
       return [node.config.do];
+    default: {
+      const unknown: never = node;
+      throw new Error(`Unknown flow node type "${(unknown as { type: unknown }).type}": flowChildren needs a case for it.`);
+    }
   }
 }
 
