@@ -1773,6 +1773,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         flowState: checkpoint.flowState,
         winners: checkpoint.winners,
         draw: checkpoint.draw,
+        places: checkpoint.places,
         actionHistory: historyBefore(snapshot, actionIndex),
         actionHistoryBase: snapshot.actionHistoryBase,
         seed: snapshot.seed,

@@ -431,6 +431,29 @@ export type RestoreOnlyRootField = Exclude<keyof ReturnType<Game['toJSON']>, key
  */
 export type GamePhase = 'setup' | 'started' | 'finished';
 
+/** How to fix finishing places the engine refused (#1724). */
+export const PLACES_REMEDY =
+  'Give every seat exactly one place, best place first, with tied seats (a team, say) in the same place.';
+
+/**
+ * What is wrong with `places` as the finishing places of `seats`, worded to
+ * follow "places", or `null` when every seat has exactly one place.
+ */
+export function placesProblem(places: readonly (readonly number[])[], seats: readonly number[]): string | null {
+  const empty = places.findIndex(group => group.length === 0);
+  if (empty >= 0) return `with an empty place (place ${empty + 1})`;
+  const placed = places.flat();
+  const twice = placed.find((seat, i) => placed.indexOf(seat) !== i);
+  if (twice !== undefined) return `that place seat ${twice} more than once`;
+  const missing = seats.filter(seat => !placed.includes(seat));
+  return missing.length > 0 ? `that leave out ${seatList(missing)}` : null;
+}
+
+/** "seat 3", or "seats 1, 2". */
+export function seatList(seats: readonly number[]): string {
+  return seats.length === 1 ? `seat ${seats[0]}` : `seats ${seats.join(', ')}`;
+}
+
 /**
  * Animation event emitted during game execution.
  * These are UI hints, NOT state mutations. They flow through the session
@@ -4152,9 +4175,12 @@ export class Game<
    * actions can be taken. Use `getWinners()` to retrieve the winners and
    * `isDraw()` to ask whether it was a draw.
    *
-   * @param result - The winning players, or `'draw'`. If not provided, the
-   *                 game names no winners unless it overrides `getWinners()`,
-   *                 which is a loss for everyone, not a draw (#1625).
+   * @param result - The winning players, `'draw'`, or `{ places }`: every
+   *                 player's finishing place, best first, with tied players
+   *                 (a team, say) sharing a place; the first place is the
+   *                 winners (#1724). If not provided, the game names no
+   *                 winners unless it overrides `getWinners()`, which is a
+   *                 loss for everyone, not a draw (#1625).
    *
    * @example
    * ```typescript
@@ -4167,16 +4193,47 @@ export class Game<
    * // End in a draw
    * this.finish('draw');
    *
+   * // End with every player's place: seat 2 wins, seats 1 and 3 tie for second
+   * this.finish({ places: [[p2], [p1, p3], [p4]] });
+   *
    * // End with nobody winning (a solo game lost, a cooperative game lost)
    * this.finish();
    * ```
    */
-  finish(result?: P[] | 'draw'): void {
+  finish(result?: P[] | 'draw' | { places: P[][] }): void {
+    const places = result === undefined || result === 'draw' || Array.isArray(result)
+      ? null
+      : result.places.map(group => group.map(p => p.seat));
+    if (places) {
+      const problem = placesProblem(places, this.players.map(p => p.seat));
+      if (problem) throw new Error(`finish() was given places ${problem}. ${PLACES_REMEDY}`);
+    }
     this.phase = 'finished';
     stateChanged(this._ctx);
-    // The last call is the outcome, so a draw and winners are never both stored.
-    this.settings.winners = result === 'draw' || !result ? [] : result.map(p => p.seat);
+    // The last call is the outcome, so a draw, winners and places are never stored from two calls.
+    this.settings.winners = places ? places[0] : Array.isArray(result) ? result.map(p => p.seat) : [];
     this.settings.declaredDraw = result === 'draw';
+    this.settings.declaredPlaces = places;
+  }
+
+  /**
+   * Every player's finishing place once the game is finished, best first:
+   * players who tie share a place, and the first place is exactly
+   * `getWinners()` (#1724). `[]` while the game is running.
+   *
+   * Override it to declare the places from the game's own state, beside
+   * `getWinners()`; otherwise it returns the places `finish({ places })` named,
+   * or, when the game named only winners, the winners sharing first place and
+   * everyone else sharing the next. A draw, or a game nobody won, has every
+   * player share one place.
+   */
+  getPlaces(): P[][] {
+    if (!this.isFinished()) return [];
+    const declared = this.settings.declaredPlaces as number[][] | null | undefined;
+    if (declared) return declared.map(group => group.map(seat => this.getPlayer(seat)!));
+    const winners = new Set(this.getWinners());
+    const rest = this.players.filter(p => !winners.has(p));
+    return [[...winners], rest].filter(group => group.length > 0);
   }
 
   /**

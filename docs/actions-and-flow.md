@@ -2160,6 +2160,20 @@ override `isDraw()` beside `isFinished()` and `getWinners()`; the card then says
 "Draw". A draw names no winners: a snapshot of a finished game whose `isDraw()`
 is true while `getWinners()` names a seat throws, naming both.
 
+**Report the whole finishing order when there is one.** A rating for three or
+more players needs second and last place, not just the winner. Call
+`finish({ places: [[first], [second, alsoSecond], [last]] })`, best place
+first: players who tie share a place, and in a team game the whole team shares
+one. The first place is the winners. Or override `getPlaces()` beside
+`getWinners()`. A game that reports no places has its winners share first and
+everyone else the next place; a draw, or a game nobody won, has everyone share
+one place. Places must give every seat exactly one place, and the first place
+must be exactly the winners (with no winners, every seat shares one place):
+`finish()` refuses places that leave a seat out or place one twice, and a
+snapshot of a game whose `getPlaces()` and `getWinners()` disagree throws,
+naming the seats. Snapshots carry the places as `places`, and the session host
+publishes them beside `winners` and `isDraw`.
+
 The flow engine checks before every node, so once the game is finished no
 further node runs and no seat is offered an action, not even a `followUp` the
 finishing action asked for. That holds in every construct: `eachPlayer`,

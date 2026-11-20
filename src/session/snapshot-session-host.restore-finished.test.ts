@@ -194,6 +194,21 @@ describe('a host restored from a finished game publishes its outcome (#490)', ()
     expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [], isDraw: false });
   });
 
+  it("publishes every seat's finishing place beside the winners (#1724)", async () => {
+    const { records } = await restoredFromFinished([2]);
+    expect(records.at(-1)!.meta).toMatchObject({ winners: [2], places: [[2], [1, 3]] });
+  });
+
+  it('a finished game from an engine that wrote no places publishes none (#1724)', async () => {
+    const { host } = makeHost(finishedGameDef([2]));
+    await host.start();
+    const { places: _p, ...older } = host.durableState().snapshot!;
+    const { adapters, records } = makeAdapters(finishedGameDef([2]));
+    SnapshotSessionHost.restore(adapters, { ...host.durableState(), snapshot: older as SnapshotHostState['snapshot'], botSeats: [] });
+    expect(records.at(-1)!.meta).toMatchObject({ isComplete: true, winners: [2] });
+    expect(records.at(-1)!.meta.places).toBeUndefined();
+  });
+
   it('durableState() is the snapshot and the pending selections, and nothing else (#536)', async () => {
     expectTypeOf<keyof SnapshotHostState>().toEqualTypeOf<'snapshot' | 'pendingStates'>();
     const { host } = makeHost(finishedGameDef([2]));

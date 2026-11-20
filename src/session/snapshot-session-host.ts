@@ -446,6 +446,13 @@ export interface PublishMeta {
   isComplete: boolean;
   winners: number[];
   isDraw: boolean;
+  /**
+   * The seats in each finishing place, best first, tied seats sharing a place
+   * (`GameStateSnapshot.places`, #1724): `[]` while the game runs. Absent
+   * before the game starts, and for a snapshot from an engine before r460,
+   * which declared no places.
+   */
+  places?: number[][];
   turnBoundary: TurnBoundary;
 }
 
@@ -946,6 +953,7 @@ export class SnapshotSessionHost {
       winners: this.winners,
       // A snapshot from an engine before r384 has no draw flag: that game declared no draw.
       isDraw: this.isComplete && this.snapshot?.draw === true,
+      places: this.snapshot?.places,
       turnBoundary: this.turnBoundary(),
     };
     const views = this.mergedViews();
