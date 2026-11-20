@@ -31,6 +31,10 @@ interface MutateVerdict {
 
 type DiffMutationRun = Awaited<ReturnType<typeof runDiffMutationCheck>>;
 
+/** Why a run tried no mutant: the changed lines have none, or marks left out every one. */
+const noneTried = (since: string, marked: number) =>
+  marked > 0 ? `Every mutant of the lines changed since ${since} is marked equivalent, so none was tried.` : `No line changed since ${since} holds code a mutant can change.`;
+
 /** What a finished run says: a red run before any mutant, survivors, mutants no test loads, only timeouts, or every mutant caught. */
 function verdict(since: string, run: DiffMutationRun): MutateVerdict {
   const { summary, survivors, unreached, timedOut, notGreen } = run;
@@ -44,12 +48,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [],
     };
   }
-  if (summary.mutants === 0) {
-    const none = run.equivalent.length > 0
-      ? `Every mutant of the lines changed since ${since} is marked equivalent, so none was tried.`
-      : `No line changed since ${since} holds code a mutant can change.`;
-    return { passed: true, summary: none, findings: [] };
-  }
+  if (summary.mutants === 0) return { passed: true, summary: noneTried(since, run.equivalent.length), findings: [] };
   const of = `of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since}`;
   const said: string[] = [];
   const next: string[] = [];
