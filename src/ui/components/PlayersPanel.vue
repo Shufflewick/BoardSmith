@@ -246,7 +246,9 @@ function judgeNames(): void {
       if (player.color && name && nameReads(player, name)) seats.add(player.seat);
     }
   }
-  colorNames.value = seats;
+  // Only a changed answer is written: each write re-renders every card, and a judge runs on each state push.
+  const same = seats.size === colorNames.value.size && [...seats].every((seat) => colorNames.value.has(seat));
+  if (!same) colorNames.value = seats;
 }
 
 // panelEl, because the cards mount only when the panel leaves seat-strip mode.

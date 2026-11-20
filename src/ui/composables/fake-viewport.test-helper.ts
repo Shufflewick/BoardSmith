@@ -3,7 +3,7 @@
  * its listeners when the size changes, as a browser does on resize or rotation.
  * jsdom lays nothing out and ships no matchMedia, so this is the only way a
  * shell test can see a phone. It understands the queries the shells ask:
- * `(width < Npx)` and `(orientation: portrait)`, and reduced motion is off.
+ * `(width < Npx)` and `(orientation: portrait)`, reduced motion is off and the scheme is dark.
  */
 type Size = { width: number; height: number };
 type Listener = (event: { matches: boolean; media: string }) => void;
@@ -19,6 +19,7 @@ function answer(media: string, { width, height }: Size): boolean {
   if (below) return width < Number(below[1]);
   if (media === '(orientation: portrait)') return height >= width;
   if (media === '(prefers-reduced-motion: reduce)') return false;
+  if (media === '(prefers-color-scheme: light)') return false;
   throw new Error(`The fake viewport cannot answer the media query ${media}; teach fake-viewport.test-helper.ts it.`);
 }
 
