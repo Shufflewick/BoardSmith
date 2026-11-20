@@ -1667,10 +1667,11 @@ Your flow loop's `while` condition only checks action availability, but doesn't 
 ```typescript
 // WRONG - Exits when actions are depleted, even if duel is pending
 loop<HeroGame>({
+  maxIterations: 100,
   while: (ctx) => {
     return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
   },
-  do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
+  do: actionStep({ actions: ['move', 'attack', 'endTurn'], turnScope: 'continue' })
 })
 ```
 
@@ -1695,7 +1696,7 @@ loop<HeroGame>({
     // Then check normal action availability
     return ctx.player?.team.some(m => m.actionsRemaining > 0) ?? false;
   },
-  do: actionStep({ actions: ['move', 'attack', 'endTurn'] })
+  do: actionStep({ actions: ['move', 'attack', 'endTurn'], turnScope: 'continue' })
 })
 ```
 
@@ -1708,13 +1709,10 @@ Any loop that can trigger async state changes should check for that state:
 loop({
   maxIterations: 100,
   while: (ctx) => {
-    // 1. Check game completion
-    if (ctx.game.isFinished()) return false;
-
-    // 2. Check for pending async state (duel, animations, etc.)
+    // 1. Check for pending async state (duel, animations, etc.)
     if (hasPendingAsyncState(ctx)) return true;
 
-    // 3. Check normal loop condition (action availability, etc.)
+    // 2. Check normal loop condition (action availability, etc.)
     return normalLoopCondition(ctx);
   },
   do: ...
