@@ -43,37 +43,6 @@ export function isDevMode(): boolean {
 }
 
 /**
- * Check whether the animation composables' fail-loud `throw new Error(...)`
- * paths (missing anchor attribute / missing fly target / missing action
- * animation destination) are enabled.
- *
- * Unlike {@link isDevMode}, which defaults to "dev" unless an environment is
- * *positively and exactly* labeled `'production'` (safe for non-fatal
- * `devWarn`/`console.warn` calls), this predicate inverts that default: it
- * requires a *positive* dev/test signal before allowing a genuine throw.
- * An unset/unlabeled/custom-named environment (a common real-world
- * misconfiguration) falls through to `false` here, so a live game degrades
- * to `console.error` + skip instead of crashing on a missing anchor —
- * per CONTEXT.md's ANIM-03 requirement that animation failures are cosmetic
- * and must never crash a live game.
- *
- * Used ONLY by the animation composables' fail-loud throw sites
- * (`useFLIP`, `useFlyingElements`, `useActionAnimations`).
- * Do NOT use this for `devWarn`/non-fatal diagnostics — those should keep
- * using {@link isDevMode}'s broader "not positively production" semantics.
- *
- * @returns true only when the environment is positively labeled dev/test
- *
- * @example
- * ```typescript
- * if (isDevThrowEnabled()) {
- *   throw new Error(message);
- * } else {
- *   console.error(message);
- * }
- * ```
- */
-/**
  * Pure decision logic for {@link isDevThrowEnabled}, separated from live
  * environment access so it can be unit-tested deterministically (bundler/test
  * runner quirks around `import.meta.env`'s mutability and evaluation timing
@@ -97,6 +66,33 @@ export function _resolveDevThrowEnabled(source: {
   return source.nodeEnv === 'development' || source.nodeEnv === 'test';
 }
 
+/**
+ * Check whether fail-loud `throw new Error(...)` paths are enabled.
+ *
+ * Unlike {@link isDevMode}, which defaults to "dev" unless an environment is
+ * *positively and exactly* labeled `'production'` (safe for non-fatal
+ * `devWarn`/`console.warn` calls), this predicate inverts that default: it
+ * requires a *positive* dev/test signal before allowing a genuine throw.
+ * An unset/unlabeled/custom-named environment (a common real-world
+ * misconfiguration) falls through to `false` here, so a live game degrades
+ * to `console.error` + skip instead of crashing on a missing anchor —
+ * per CONTEXT.md's ANIM-03 requirement that animation failures are cosmetic
+ * and must never crash a live game.
+ *
+ * Do NOT use this for `devWarn`/non-fatal diagnostics — those should keep
+ * using {@link isDevMode}'s broader "not positively production" semantics.
+ *
+ * @returns true only when the environment is positively labeled dev/test
+ *
+ * @example
+ * ```typescript
+ * if (isDevThrowEnabled()) {
+ *   throw new Error(message);
+ * } else {
+ *   console.error(message);
+ * }
+ * ```
+ */
 export function isDevThrowEnabled(): boolean {
   // Browser (Vite) - a genuine dev server run, or an explicit dev/test mode label.
   if (typeof import.meta !== 'undefined' && (import.meta as any).env) {

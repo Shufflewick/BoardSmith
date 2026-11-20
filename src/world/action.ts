@@ -1702,15 +1702,14 @@ function assertNamedCandidates(action: string, shape: WorldSelectionShape): void
 /** (d) and its refusal. */
 function assertIndependentSelection(action: string, shape: WorldSelectionShape): void {
   const selection = shape;
-  // (d) NO SELECTION MAY DEPEND ON ANOTHER, YET.
+  // (d) NO SELECTION MAY DEPEND ON ANOTHER.
   //
   // `dependsOn` asks the engine to compute a selection's candidates for EVERY
   // value of the selection it depends on, which in a world is a per-candidate
-  // declaration and a per-candidate hydration -- and the world protocol is
-  // single-shot, so the offer would have to carry the whole product. Refused
-  // rather than capped until the protocol is step-wise (#170); the fix is
-  // one action per shape, which is also what makes each one's declaration
-  // honest.
+  // declaration and a per-candidate hydration inside one enumeration. A later
+  // pick that reads an earlier one's argument is re-asked one pick at a time
+  // instead (`BoardSmithWorldEngine.resolvePick` says why); the fix is one
+  // action per shape, which is also what makes each one's declaration honest.
   if (shape.dependsOn !== undefined || shape.filterBy !== undefined) {
     throw worldRefusal(
       "invalid-world-action",

@@ -121,10 +121,6 @@ export interface WorldBudgets {
    * constant for the same reason the other two are: a host that keeps its
    * worlds small may allow a wider choice, and one running 500-seat worlds may
    * not, and neither may discover that silently.
-   *
-   * Nothing enforces it yet. It is declared here so #169 configures a budget
-   * rather than inventing one, and so the number is the host's from the first
-   * line of code that reads it.
    */
   readonly maxCandidatesPerSelection: number;
   /**

@@ -1,5 +1,5 @@
 {
-  "revision": 476,
+  "revision": 477,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3751,6 +3751,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Docs name debugStateAt instead of the removed getStateAtAction (#1751)"
+    },
+    {
+      "revision": 477,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Stale comments in the engine, world and session are corrected, with no behavior change (#1752)"
     }
   ]
 }
