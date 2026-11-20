@@ -1,5 +1,5 @@
 {
-  "revision": 486,
+  "revision": 487,
   "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3831,6 +3831,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "buildActionArgs() and its BuildActionArgsOptions type are removed from boardsmith's exports; nothing called them. Pass element objects to runner.performAction in process, or write each element as { id, className } for the wire. Games already published on an earlier revision are unaffected; a game rebuilt on this revision that imports either no longer builds (#1766)."
+    },
+    {
+      "revision": 487,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "WorldEventStamp is now declared as WorldCommandStamp without now, the same five fields it always had, and the world engine spreads each stamp into its dispatch instead of copying fields one by one. No field, payload, stored byte or behaviour changes; the build carries changed packed source, so it needs a revision of its own (#1767)."
     }
   ]
 }
