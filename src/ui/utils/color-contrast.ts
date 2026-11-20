@@ -377,14 +377,12 @@ function relativeLuminance({ r, g, b }: Rgb): number {
   return 0.2126 * rl + 0.7152 * gl + 0.0722 * bl;
 }
 
-function contrastRatio(l1: number, l2: number): number {
-  const lighter = Math.max(l1, l2);
-  const darker = Math.min(l1, l2);
-  return (lighter + 0.05) / (darker + 0.05);
+/** WCAG 2.1 contrast ratio between two opaque colours, 1 to 21. */
+export function contrastRatio(a: Rgb, b: Rgb): number {
+  const l1 = relativeLuminance(a);
+  const l2 = relativeLuminance(b);
+  return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
 }
-
-const BLACK_LUMINANCE = relativeLuminance({ r: 0, g: 0, b: 0 });
-const WHITE_LUMINANCE = relativeLuminance({ r: 255, g: 255, b: 255 });
 
 /**
  * Compute the ink color (black or white) and derived text-shadow that reads
@@ -403,10 +401,8 @@ export function contrastInk(seatColor: string): ContrastInk {
         'Give the seat an opaque colour.'
     );
   }
-  const bgLuminance = relativeLuminance(rgb);
-
-  const blackContrast = contrastRatio(bgLuminance, BLACK_LUMINANCE);
-  const whiteContrast = contrastRatio(bgLuminance, WHITE_LUMINANCE);
+  const blackContrast = contrastRatio(rgb, { r: 0, g: 0, b: 0 });
+  const whiteContrast = contrastRatio(rgb, { r: 255, g: 255, b: 255 });
 
   const ink = whiteContrast >= blackContrast ? '#ffffff' : '#000000';
   const textShadow = ink === '#ffffff' ? '0 1px 2px rgba(0,0,0,.5)' : 'none';
@@ -425,7 +421,7 @@ const TEXT_CONTRAST = 4.5;
  */
 export function readsOn(color: string, background: Rgb): boolean {
   const drawn = composite(parseColor(color), background);
-  return contrastRatio(relativeLuminance(drawn), relativeLuminance(background)) >= TEXT_CONTRAST;
+  return contrastRatio(drawn, background) >= TEXT_CONTRAST;
 }
 
 /** The ink for a seat with no colour, drawn in the accent colour: white with a dark halo. */

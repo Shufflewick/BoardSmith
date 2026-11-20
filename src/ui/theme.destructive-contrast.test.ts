@@ -22,14 +22,14 @@ import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
 import {
-  contrastRatio,
-  parseColor,
+  parseSolidColor,
   resolve,
   ruleBody,
   styleOf,
   ROOT_TOKENS,
   PALETTES,
 } from './theme-contrast.test-helper.js';
+import { contrastRatio } from './utils/color-contrast.js';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob('/src/ui/components/auto-ui/ActionPanel.vue');
@@ -97,8 +97,8 @@ describe('The destructive action button is measurable (#268)', () => {
   for (const { name, palette } of PALETTES) {
     it(`label clears 4.5:1 against its own ground — ${name}`, () => {
       const decls = ruleBody(css, DESTRUCTIVE);
-      const ground = parseColor(resolve(decls.background, palette));
-      const ink = parseColor(resolve(decls.color, palette));
+      const ground = parseSolidColor(resolve(decls.background, palette));
+      const ink = parseSolidColor(resolve(decls.color, palette));
       const ratio = contrastRatio(ground, ink);
       expect(
         ratio,
@@ -112,8 +112,8 @@ describe('The destructive action button is measurable (#268)', () => {
       // The ring is a non-text indicator: WCAG 2.2 AA SC 1.4.11 puts its floor
       // at 3:1. It is drawn in the label's ink, so this rides the same pair.
       const decls = ruleBody(css, DESTRUCTIVE);
-      const ground = parseColor(resolve(decls.background, palette));
-      const ring = parseColor(resolve(decls['outline-color'] ?? decls.color, palette));
+      const ground = parseSolidColor(resolve(decls.background, palette));
+      const ring = parseSolidColor(resolve(decls['outline-color'] ?? decls.color, palette));
       const ratio = contrastRatio(ground, ring);
       expect(
         ratio,

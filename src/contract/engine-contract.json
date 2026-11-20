@@ -1,5 +1,5 @@
 {
-  "revision": 493,
+  "revision": 494,
   "surfaceHash": "a51fc3c45daf0de3",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3887,6 +3887,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Removed an internal survey-pass assertion that could never fail; migration behaviour is unchanged (#1774)."
+    },
+    {
+      "revision": 494,
+      "date": "2026-11-20",
+      "surfaceHash": "a51fc3c45daf0de3",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The contrast maths is shared between the runtime and its theme tests; seat ink and contrast results are unchanged (#1775)"
     }
   ]
 }
