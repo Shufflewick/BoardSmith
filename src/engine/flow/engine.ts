@@ -1173,8 +1173,6 @@ export class FlowEngine<G extends Game = Game> {
     frame: ExecutionFrame<G>,
     onAccepted: AcceptedArgs | undefined,
   ): FlowState {
-    const config = frame.node.config as SimultaneousActionStepConfig;
-
     // Determine which player is acting
     let actingPlayerIndex = playerIndex;
     if (actingPlayerIndex === undefined) {
@@ -1829,11 +1827,11 @@ export class FlowEngine<G extends Game = Game> {
 
     switch (frame.node.type) {
       case 'sequence':
-        return this.executeSequence(frame, frame.node.config, context);
+        return this.executeSequence(frame, frame.node.config);
       case 'loop':
         return this.executeLoop(frame, frame.node.config, context);
       case 'repeat':
-        return this.executeRepeat(frame, frame.node.config, context);
+        return this.executeRepeat(frame, frame.node.config);
       case 'each-player':
         return this.executeEachPlayer(frame, frame.node.config, context);
       case 'for-each':
@@ -1863,8 +1861,7 @@ export class FlowEngine<G extends Game = Game> {
 
   private executeSequence(
     frame: ExecutionFrame<G>,
-    config: SequenceConfig<G>,
-    context: FlowContext<G>
+    config: SequenceConfig<G>
   ): StepResult {
     if (frame.index >= config.steps.length) {
       frame.completed = true;
@@ -1926,8 +1923,7 @@ export class FlowEngine<G extends Game = Game> {
 
   private executeRepeat(
     frame: ExecutionFrame<G>,
-    config: RepeatNodeConfig<G>,
-    context: FlowContext<G>
+    config: RepeatNodeConfig<G>
   ): StepResult {
     const iteration = (frame.data?.iteration as number) ?? 0;
     if (iteration >= config.times) {

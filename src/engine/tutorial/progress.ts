@@ -11,7 +11,7 @@
  */
 
 import type { Game } from '../element/game.js';
-import type { TutorialDefinition, TutorialProgress, TutorialStep } from './types.js';
+import type { TutorialDefinition, TutorialProgress } from './types.js';
 import { getActiveStep } from './gate.js';
 import { evaluateConditionWithTrace } from '../action/action.js';
 

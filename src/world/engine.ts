@@ -73,7 +73,7 @@ import type {
   Game,
   Player,
 } from "../engine/index.js";
-import type { ActionMetadata, PickMetadata } from "../session/types.js";
+import type { PickMetadata } from "../session/types.js";
 import { buildPickMetadata, evaluatePrompt } from "../engine/element/action-metadata.js";
 import { picksFromSeat, placeholderIdOf, sharePlaceholders } from "../engine/element/seat-placeholders.js";
 import { PARTITION_ROOT_RULE } from "../engine/element/game.js";
