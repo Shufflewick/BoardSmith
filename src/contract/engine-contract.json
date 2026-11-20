@@ -1,5 +1,5 @@
 {
-  "revision": 479,
+  "revision": 480,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3775,6 +3775,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Seat ink and colour helpers read every CSS Color 4 colour (oklch, lab, lch, hwb, color()), refuse ink for translucent seat colours, and keep alpha when lightening or darkening (#1754)."
+    },
+    {
+      "revision": 480,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "On a phone the board no longer ends in half a screen of empty scroll room: the room follows what the Action Panel has covered since it came up and is gone while the panel is put down (#1755)."
     }
   ]
 }
