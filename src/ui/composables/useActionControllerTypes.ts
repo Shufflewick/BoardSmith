@@ -718,9 +718,13 @@ export interface UseActionControllerReturn {
    * // In the board component's <script setup>
    * const props = defineProps<{ actionController: UseActionControllerReturn }>();
    *
-   * props.actionController.onBeforeAutoExecute((actionName, args) => {
+   * const startRects = new Map<string, DOMRect>();
+   * props.actionController.onBeforeAutoExecute((actionName) => {
+   *   if (actionName !== 'discard') return;
    *   // The DOM still shows the state before the action: capture positions here.
-   *   if (actionName === 'discard') captureCardRects(args.cards);
+   *   for (const el of document.querySelectorAll<HTMLElement>('[data-bs-el-id]')) {
+   *     startRects.set(el.dataset.bsElId!, el.getBoundingClientRect());
+   *   }
    * });
    * ```
    *

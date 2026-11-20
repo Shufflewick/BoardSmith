@@ -7,8 +7,8 @@
  * so it can be statically re-exported from both `boardsmith/ui` and
  * `boardsmith/testing` without pulling Vue into the testing subpath. The
  * animation composables (`useFLIP`, `useFlyingElements`, and friends)
- * consult `isAnimationTestModeEnabled()` and call `recordTrace()` so an agent/test can enable an instant/traced mode
- * and assert "card X flew from A to B" headlessly, without a real DOM or
+ * consult `isAnimationTestModeEnabled()` and call `recordTrace()` so an
+ * agent/test can enable an instant/traced mode and assert "card X flew from A to B" headlessly, without a real DOM or
  * requestAnimationFrame timing.
  *
  * Test mode is an EXPLICIT, opt-in flag — default OFF. It is never toggled by

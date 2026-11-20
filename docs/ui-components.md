@@ -2227,7 +2227,7 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 | `getActionMetadata` | `(actionName: string) => EnrichedActionMetadata \| undefined` | Metadata for an action |
 | `getCollectedPick` | `(name: string) => CollectedPick \| undefined` | A pick collected so far: `{ value, display, skipped }` |
 | `onBeforeAutoExecute` | `(hook: BeforeAutoExecuteHook) => () => void` | Add a hook that runs just before a pick auto-executes an action. Returns a function that removes it. The DOM still shows the state before the action, so a board captures element positions here to animate from |
-| `onAfterAutoExecute` | `(listener: AfterAutoExecuteListener) => () => void` | Add a listener told how each auto-executed action ended. Returns a function that removes it |
+| `onAfterAutoExecute` | `(listener: AfterAutoExecuteListener) => () => void` | Add a listener told how each auto-executed action ended. Its `run` argument is the number the before-hooks were given for that action, so a late outcome of a cancelled action is not taken for the next one's. Returns a function that removes it |
 
 **StartOptions:**
 
