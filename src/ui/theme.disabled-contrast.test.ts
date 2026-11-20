@@ -9,9 +9,8 @@
  * This test does not check for a class name. It parses the real disabled rules
  * out of the real component sources, resolves every var() against a real palette
  * (the shipped dark and light token blocks, plus the overriding palette from the
- * ticket), applies any opacity multiplier the way a browser composites it, and
- * computes the WCAG contrast ratio of the resulting label against the resulting
- * ground.
+ * ticket), refuses any opacity multiplier or filter, and computes the WCAG
+ * contrast ratio of the label against its ground.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -203,20 +202,11 @@ describe('Disabled controls keep a measurable ground/ink pair (#259)', () => {
           ).toBeDefined();
 
           const backdrop = parseSolidColor(resolve(control.backdrop, palette));
-          let ground =
+          const ground =
             groundValue === 'none'
               ? backdrop
               : parseSolidColor(resolve(groundValue, palette));
-          let ink = parseSolidColor(resolve(inkValue, palette));
-
-          // A browser paints the element, then composites the whole result over
-          // the backdrop at `opacity`. Reproduce that before measuring.
-          const alphaValue = disabled.opacity ?? base.opacity;
-          const alpha = alphaValue ? Number(alphaValue) : 1;
-          if (alpha < 1) {
-            ground = composite({ ...ground, a: alpha }, backdrop);
-            ink = composite({ ...ink, a: alpha }, backdrop);
-          }
+          const ink = parseSolidColor(resolve(inkValue, palette));
 
           const ratio = contrastRatio(ground, ink);
           expect(

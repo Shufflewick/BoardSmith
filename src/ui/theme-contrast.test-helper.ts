@@ -12,14 +12,15 @@ import { readFileSync } from 'node:fs';
 import { themeCSS } from './theme.js';
 import { parseColor, type Rgb } from './utils/color-contrast.js';
 
-/** The runtime parser, held to opaque hex so every claimed pair is measurable. */
+/** The runtime parser, refusing a translucent colour so every claimed pair is measurable. */
 export function parseSolidColor(value: string): Rgb {
-  if (!/^#(?:[0-9a-f]{3}|[0-9a-f]{6})$/i.test(value.trim())) {
+  const { r, g, b, a } = parseColor(value);
+  if (a < 1) {
     throw new Error(
       `Cannot read "${value}" as a solid colour. A control whose contrast is claimed must name a solid token for its ground and its ink so the pair can be measured.`,
     );
   }
-  return parseColor(value);
+  return { r, g, b };
 }
 
 // ---------------------------------------------------------------------------
