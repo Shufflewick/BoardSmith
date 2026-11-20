@@ -5,8 +5,8 @@ import { join } from 'node:path';
 /**
  * Which kind of BoardSmith workspace a command is running in.
  *
- * - `monorepo`  — the BoardSmith library repo itself (has `src/engine/`).
  * - `standalone` — a game project created by `boardsmith init` (has `boardsmith.json`).
+ * - `monorepo`  — the BoardSmith library repo itself (has `src/engine/` and no `boardsmith.json`).
  */
 export type ProjectContext = 'monorepo' | 'standalone';
 
@@ -17,16 +17,11 @@ export type ProjectContext = 'monorepo' | 'standalone';
  * repo versus a game project asks this, so the two never drift apart.
  */
 export function getProjectContext(cwd: string): ProjectContext {
-  const hasSrcEngine = existsSync(join(cwd, 'src', 'engine'));
-  const hasBoardsmithJson = existsSync(join(cwd, 'boardsmith.json'));
+  // boardsmith.json first: a game may keep its own rules under src/engine (#1732).
+  if (existsSync(join(cwd, 'boardsmith.json'))) return 'standalone';
+  if (existsSync(join(cwd, 'src', 'engine'))) return 'monorepo';
 
-  // If we're in the monorepo root, it has src/engine
-  if (hasSrcEngine) return 'monorepo';
-
-  // Standalone game project
-  if (hasBoardsmithJson) return 'standalone';
-
-  // Fallback - treat as standalone (will fail with proper error if neither)
+  // Neither: treat as standalone, which fails with a proper error.
   return 'standalone';
 }
 
