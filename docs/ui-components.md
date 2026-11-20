@@ -2027,7 +2027,7 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 
 **The client owns playback entirely.** The server broadcasts truth and moves on. The client processes events through a FIFO queue, playing animations sequentially via registered handlers. The server has no knowledge of animation playback state.
 
-**Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes immediately. If the timeout expires, the event is skipped with a console warning. AutoUI registers no handlers, so while it is the board it calls `claimNoEvents()` and the queue skips every unhandled event at once, without a warning.
+**Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes immediately. If the timeout expires, the event is skipped with a console warning. AutoUI registers no handlers, so it calls `claimNoEvents()`, and while no handler is registered the queue skips every event at once, without a warning. A board that registers any handler keeps its waits, even with AutoUI inside it.
 
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
@@ -2204,7 +2204,7 @@ onUnmounted(() => unregister?.());
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
 | `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
-| `claimNoEvents()` | `() => () => void` | Declare that the mounted board handles no event types, so an event with no handler is skipped at once instead of waiting `handlerWaitTimeout` for one. Returns the release function. AutoUI calls it. |
+| `claimNoEvents()` | `() => () => void` | Declare that the mounted board handles no event types, so while no handler is registered an event is skipped at once instead of waiting `handlerWaitTimeout` for one. Returns the release function. AutoUI calls it. |
 | `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
 | `paused` | `Ref<boolean>` | Pause/resume control |
 | `skipAll()` | `() => void` | Skip remaining animations |

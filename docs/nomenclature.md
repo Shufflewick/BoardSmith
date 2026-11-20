@@ -459,7 +459,7 @@ Terms related to the animation event system for asynchronous UI playback.
 
 ### Wait-for-Handler
 
-**Definition:** Queue behavior where processing pauses when encountering an event type with no registered handler. This allows components that register handlers during `onMounted` to claim their events even if the events arrive before the component mounts. Configurable via `handlerWaitTimeout` (default 3s). A board that registers no handlers (AutoUI) calls `claimNoEvents()`, and the queue then skips unhandled events without waiting.
+**Definition:** Queue behavior where processing pauses when encountering an event type with no registered handler. This allows components that register handlers during `onMounted` to claim their events even if the events arrive before the component mounts. Configurable via `handlerWaitTimeout` (default 3s). A board that registers no handlers (AutoUI) calls `claimNoEvents()`, and while no handler is registered the queue then skips events without waiting.
 
 **In Code:** `handlerWaitTimeout` option in `createAnimationEvents()`
 **Related Terms:** Animation Timeline, Animation Handler

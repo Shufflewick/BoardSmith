@@ -13,7 +13,8 @@
  * resumes immediately. If the timeout expires, a console warning is logged with
  * the event type and ID, the event is skipped, and the queue continues. A board
  * that registers no handlers at all (AutoUI) calls `claimNoEvents()`, and while it
- * holds that claim an unhandled event is skipped at once, without a warning.
+ * holds that claim and no handler is registered, an unhandled event is skipped at
+ * once, without a warning.
  *
  * @example
  * ```typescript
@@ -68,6 +69,9 @@ export interface AnimationHandlerOptions {
    */
   skip: 'run' | 'drop';
 }
+
+/** How a wait for a handler ended: the handler that registered, its timeout, or skipAll or a claim cutting it short. */
+type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
 
 /**
  * Options for creating an animation events instance
@@ -128,8 +132,8 @@ export interface UseAnimationEventsReturn {
   /** Register a handler for an event type. Returns unregister function. */
   registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /**
-   * Declare that the mounted board handles no event types, so an event without a
-   * handler is skipped at once instead of waiting for one to mount. Returns the release function.
+   * Declare that the mounted board handles no event types, so while no handler is
+   * registered an event is skipped at once instead of waiting for one to mount. Returns the release function.
    */
   claimNoEvents: () => () => void;
   /** Whether animations are currently playing */
@@ -200,7 +204,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // Wait-for-handler synchronization
   let waitingForType: string | null = null;
-  let waitResolve: ((handler: AnimationHandler | null) => void) | null = null;
+  let waitResolve: ((outcome: WaitOutcome) => void) | null = null;
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
   const noEventClaims = new Set<symbol>();
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
@@ -217,11 +221,16 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     });
   }
 
+  /** A claim counts only while no board registers handlers on this queue, so one that does keeps its waits. */
+  function claimedNone(): boolean {
+    return noEventClaims.size > 0 && handlers.size === 0;
+  }
+
   /**
    * Wait for a handler to register for the given event type, or timeout.
-   * Returns the handler if one registers, or null if timeout expires.
+   * Resolves with the handler, 'timeout', or 'interrupted' (skipAll or a claim ended the wait).
    */
-  function waitForHandler(type: string, timeout: number): Promise<AnimationHandler | null> {
+  function waitForHandler(type: string, timeout: number): Promise<WaitOutcome> {
     return new Promise((resolve) => {
       waitingForType = type;
       waitResolve = resolve;
@@ -230,7 +239,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           waitResolve = null;
           waitingForType = null;
           waitTimer = null;
-          resolve(null); // timeout -- no handler arrived
+          resolve('timeout');
         }
       }, timeout);
     });
@@ -267,24 +276,23 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const event = queue.shift()!;
       pendingCount.value = queue.length;
 
-      let handler: AnimationHandler | null | undefined = handlers.get(event.type)?.handler;
-
-      if (!handler && handlerWaitTimeout > 0 && noEventClaims.size === 0) {
-        // Wait for handler registration or timeout
-        handler = await waitForHandler(event.type, handlerWaitTimeout);
-
-        if (!handler) {
-          // skipAll may have resolved the wait -- check before warning
-          if (skipRequested) {
-            break;
-          }
-          if (noEventClaims.size > 0) continue;
-          // Timeout expired -- warn and skip
-          console.warn(
-            `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
-          );
-          continue;
+      let handler = handlers.get(event.type)?.handler;
+      let timedOut = false;
+      while (!handler && handlerWaitTimeout > 0 && !claimedNone() && !skipRequested) {
+        const outcome = await waitForHandler(event.type, handlerWaitTimeout);
+        if (outcome === 'timeout') {
+          timedOut = true;
+          break;
         }
+        // An interrupted wait looks again: a claim may have been released before the queue resumed.
+        handler = outcome === 'interrupted' ? handlers.get(event.type)?.handler : outcome;
+      }
+      if (skipRequested) break;
+      if (timedOut) {
+        console.warn(
+          `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
+        );
+        continue;
       }
 
       if (handler) {
@@ -348,7 +356,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
 
     // If waiting for a handler, cancel the wait
-    endWait(null);
+    endWait('interrupted');
 
     // Execute 'run' handlers with pre-aborted signal (fire-and-forget)
     const abortedSignal = AbortSignal.abort();
@@ -369,8 +377,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     isAnimating.value = false;
   }
 
-  /** End the current wait for a handler, if any, handing the queue `handler`. */
-  function endWait(handler: AnimationHandler | null): void {
+  /** End the current wait for a handler, if any, handing the queue `outcome`. */
+  function endWait(outcome: AnimationHandler | 'interrupted'): void {
     if (!waitResolve) return;
     const resolve = waitResolve;
     waitResolve = null;
@@ -379,7 +387,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       clearTimeout(waitTimer);
       waitTimer = null;
     }
-    resolve(handler);
+    resolve(outcome);
   }
 
   /**
@@ -401,7 +409,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   function claimNoEvents(): () => void {
     const claim = Symbol('no animation events');
     noEventClaims.add(claim);
-    endWait(null);
+    if (claimedNone()) endWait('interrupted');
     return () => {
       noEventClaims.delete(claim);
     };
