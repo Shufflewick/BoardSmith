@@ -83,10 +83,8 @@ import type {
 } from "./contract.js";
 import type { Game, GameElement } from "../engine/index.js";
 import type {
-  WorldMigrationContext,
+  WorldMigration,
   WorldMigrationCreateContext,
-  WorldMigrationDeriveContext,
-  WorldMigrationFinalizeContext,
   WorldMigrationJoin,
   WorldMigrationSurvey,
 } from "./migration.js";
@@ -858,17 +856,10 @@ export interface WorldMigrated extends WorldAllocation {
  * handed the ENGINE rather than the game, and only `createWorld` holds both the
  * game and the bundle's declaration.
  */
-export interface WorldMigrationHooks {
-  readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
-  readonly derive?: (
-    element: GameElement,
-    ctx: WorldMigrationDeriveContext,
-  ) => Record<string, GameElement>;
-  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
-  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
-  readonly survey?: WorldMigrationSurvey<unknown>;
-  readonly join?: WorldMigrationJoin<unknown>;
-}
+export type WorldMigrationHooks = Pick<
+  WorldMigration,
+  "partition" | "derive" | "create" | "finalize" | "survey" | "join"
+>;
 
 /**
  * ONE COMMAND, AS THE PARENT HANDS IT ACROSS THE BOUNDARY.

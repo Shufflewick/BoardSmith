@@ -1097,19 +1097,8 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     engine,
     store,
     () => buildGenesis(game, world, engine),
-    // The bundle's own migration hooks, or a world that declares none. The
-    // engine refuses a duplicate name and an unusable answer; what is decided
-    // here is only which hooks exist at all.
-    {
-      ...(world.migration?.partition === undefined
-        ? {}
-        : { partition: world.migration.partition }),
-      ...(world.migration?.derive === undefined ? {} : { derive: world.migration.derive }),
-      ...(world.migration?.create === undefined ? {} : { create: world.migration.create }),
-      ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
-      ...(world.migration?.survey === undefined ? {} : { survey: world.migration.survey }),
-      ...(world.migration?.join === undefined ? {} : { join: world.migration.join }),
-    },
+    // The bundle's own migration hooks, or a world that declares none.
+    world.migration ?? {},
   );
   return {
     runner,
