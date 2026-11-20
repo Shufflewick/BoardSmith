@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import {
   useActionController,
   type EnrichedActionMetadata,
@@ -43,9 +43,9 @@ function captureActionResolvedEvents(): {
 
 describe('useActionController devtools CustomEvent (boardsmith:action-resolved)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   beforeEach(() => {
     sendAction = createMockSendAction();
@@ -149,7 +149,7 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
     };
 
     actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-    availableActions.value = [...(availableActions.value ?? []), 'singleStepAction'];
+    availableActions.value = [...availableActions.value, 'singleStepAction'];
 
     const controller = useActionController({
       sendAction,
@@ -216,7 +216,7 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
     };
 
     actionMetadata.value = { ...createTestMetadata(), ...askMeta };
-    availableActions.value = [...(availableActions.value ?? []), 'ask'];
+    availableActions.value = [...availableActions.value, 'ask'];
 
     const controller = useActionController({
       sendAction,

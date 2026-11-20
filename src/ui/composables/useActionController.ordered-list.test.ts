@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { ref } from 'vue';
+import { ref, type Ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.test-helper.js';
 
@@ -44,9 +44,9 @@ function repairMetadata(): Record<string, EnrichedActionMetadata> {
 
 describe('useActionController ordered lists (#249)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   beforeEach(() => {
     sendAction = createMockSendAction();

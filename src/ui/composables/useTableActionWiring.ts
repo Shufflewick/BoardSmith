@@ -73,7 +73,7 @@ export interface TableActionWiringOptions extends ControllerTransportOptions {
   /** Reactive: the action names this seat may take now. */
   availableActions: Ref<string[]> | ComputedRef<string[]>;
   /** Reactive: is it this seat's turn. */
-  isMyTurn: Ref<boolean | undefined> | ComputedRef<boolean | undefined>;
+  isMyTurn: Ref<boolean> | ComputedRef<boolean>;
   /** This seat's player number (1-indexed). */
   playerSeat: Ref<number>;
   /** The board substrate the bridge feeds. Created with `createBoardInteraction()`. */

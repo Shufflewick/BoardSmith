@@ -8,7 +8,7 @@
  * and `false` must still refuse.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, type Ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
 
@@ -38,9 +38,9 @@ function metaWithOptional(optional: boolean | string): Record<string, EnrichedAc
 
 describe('skip() with a custom Skip label (#152)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   function controllerFor(optional: boolean | string, autoExecute = false) {
     actionMetadata.value = { ...createTestMetadata(), ...metaWithOptional(optional) };

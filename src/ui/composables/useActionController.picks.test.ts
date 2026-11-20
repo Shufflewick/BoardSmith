@@ -11,7 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, type Ref } from 'vue';
 import {
   useActionController,
   type EnrichedActionMetadata,
@@ -22,9 +22,9 @@ import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 describe('useActionController picks', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   beforeEach(() => {
     sendAction = createMockSendAction();
@@ -61,7 +61,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
+      availableActions.value = [...availableActions.value, 'repeatAction'];
 
       const controller = useActionController({
         sendAction,
@@ -106,7 +106,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
+      availableActions.value = [...availableActions.value, 'repeatAction'];
 
       const controller = useActionController({
         sendAction,
@@ -205,7 +205,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
+      availableActions.value = [...availableActions.value, 'repeatAction'];
 
       const controller = useActionController({
         sendAction,
@@ -260,7 +260,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'collectThenPlace'];
+      availableActions.value = [...availableActions.value, 'collectThenPlace'];
 
       const controller = useActionController({
         sendAction,
@@ -305,7 +305,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
+      availableActions.value = [...availableActions.value, 'repeatAction'];
 
       const controller = useActionController({
         sendAction,
@@ -348,7 +348,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'repeatAction'];
+      availableActions.value = [...availableActions.value, 'repeatAction'];
 
       const controller = useActionController({
         sendAction,
@@ -405,7 +405,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'dependsAction'];
+      availableActions.value = [...availableActions.value, 'dependsAction'];
 
       const controller = useActionController({
         sendAction,
@@ -458,7 +458,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'dependsAction'];
+      availableActions.value = [...availableActions.value, 'dependsAction'];
 
       const controller = useActionController({
         sendAction,
@@ -510,7 +510,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...dependsMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'dependsAction'];
+      availableActions.value = [...availableActions.value, 'dependsAction'];
 
       const controller = useActionController({
         sendAction,
@@ -570,7 +570,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...filterMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'filterAction'];
+      availableActions.value = [...availableActions.value, 'filterAction'];
 
       const controller = useActionController({
         sendAction,
@@ -648,7 +648,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...filterMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'filterAction'];
+      availableActions.value = [...availableActions.value, 'filterAction'];
 
       const controller = useActionController({
         sendAction,
@@ -683,7 +683,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...textMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'nameAction'];
+      availableActions.value = [...availableActions.value, 'nameAction'];
 
       const controller = useActionController({
         sendAction,
@@ -718,7 +718,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...numberMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'bidAction'];
+      availableActions.value = [...availableActions.value, 'bidAction'];
 
       const controller = useActionController({
         sendAction,
@@ -747,7 +747,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...textMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'nameAction'];
+      availableActions.value = [...availableActions.value, 'nameAction'];
 
       const controller = useActionController({
         sendAction,
@@ -850,7 +850,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'moveWithCallback'];
+      availableActions.value = [...availableActions.value, 'moveWithCallback'];
 
       const controller = useActionController({
         sendAction,
@@ -894,7 +894,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'singleStepOnSelect'];
+      availableActions.value = [...availableActions.value, 'singleStepOnSelect'];
 
       const controller = useActionController({
         sendAction,
@@ -952,7 +952,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'twoStepOnSelect'];
+      availableActions.value = [...availableActions.value, 'twoStepOnSelect'];
 
       const controller = useActionController({
         sendAction,
@@ -1002,7 +1002,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'autoExecTest'];
+      availableActions.value = [...availableActions.value, 'autoExecTest'];
 
       const controller = useActionController({
         sendAction,
@@ -1056,7 +1056,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...onSelectMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'cancelTest'];
+      availableActions.value = [...availableActions.value, 'cancelTest'];
 
       const controller = useActionController({
         sendAction,
@@ -1121,7 +1121,7 @@ describe('useActionController picks', () => {
 
     it('does NOT auto-fill/auto-execute a single-choice .manual() action', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...makeDrawMeta('drawManual', true) };
-      availableActions.value = [...(availableActions.value ?? []), 'drawManual'];
+      availableActions.value = [...availableActions.value, 'drawManual'];
 
       const controller = useActionController({
         sendAction,
@@ -1149,7 +1149,7 @@ describe('useActionController picks', () => {
 
     it('negative control: a NON-manual single-choice action DOES auto-execute', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...makeDrawMeta('drawAuto', false) };
-      availableActions.value = [...(availableActions.value ?? []), 'drawAuto'];
+      availableActions.value = [...availableActions.value, 'drawAuto'];
 
       const controller = useActionController({
         sendAction,
@@ -1203,7 +1203,7 @@ describe('useActionController picks', () => {
 
     it('does NOT auto-fill a later single-choice selection reached through fill()', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...makeTwoStepMeta(true) };
-      availableActions.value = [...(availableActions.value ?? []), 'allocateManual'];
+      availableActions.value = [...availableActions.value, 'allocateManual'];
 
       const controller = useActionController({
         sendAction,
@@ -1232,7 +1232,7 @@ describe('useActionController picks', () => {
 
     it('negative control: a NON-manual action still auto-fills the later single-choice selection', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...makeTwoStepMeta(false) };
-      availableActions.value = [...(availableActions.value ?? []), 'allocateAuto'];
+      availableActions.value = [...availableActions.value, 'allocateAuto'];
 
       const controller = useActionController({
         sendAction,
@@ -1295,7 +1295,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...multiJumpMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+      availableActions.value = [...availableActions.value, 'jump'];
 
       // Initial action (the first jump) returns a followUp with piece pre-filled.
       sendAction.mockResolvedValueOnce({
@@ -1376,7 +1376,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...multiChoiceMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+      availableActions.value = [...availableActions.value, 'jump'];
 
       sendAction.mockResolvedValueOnce({
         success: true,
@@ -1459,7 +1459,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...multiJumpMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'jump'];
+      availableActions.value = [...availableActions.value, 'jump'];
 
       // First action returns a followUp with piece pre-filled (the state broadcast
       // that advances tutorialStep will arrive separately — simulated below).
@@ -1545,7 +1545,7 @@ describe('useActionController picks', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...noPickStepMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'collect'];
+      availableActions.value = [...availableActions.value, 'collect'];
 
       sendAction.mockResolvedValueOnce({
         success: true,
@@ -1620,7 +1620,7 @@ describe('useActionController picks', () => {
         },
       };
       actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'move'];
+      availableActions.value = [...availableActions.value, 'move'];
 
       const controller = useActionController({
         sendAction,
@@ -1676,7 +1676,7 @@ describe('useActionController picks', () => {
         },
       };
       actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'move'];
+      availableActions.value = [...availableActions.value, 'move'];
 
       const controller = useActionController({
         sendAction,
@@ -1736,7 +1736,7 @@ describe('useActionController picks', () => {
             selections: [{ name: 'destination', type: 'choice', prompt: 'Select destination' }],
           },
         };
-        availableActions.value = [...(availableActions.value ?? []), 'move'];
+        availableActions.value = [...availableActions.value, 'move'];
         const controller = useActionController({
           sendAction, availableActions, actionMetadata, isMyTurn,
           autoExecute: false, autoFill: false, playerSeat: ref(0), fetchPickChoices,
@@ -1790,7 +1790,7 @@ describe('useActionController picks', () => {
             selections: [{ name: 'destination', type: 'choice', prompt: 'Select destination' }],
           },
         };
-        availableActions.value = [...(availableActions.value ?? []), 'move'];
+        availableActions.value = [...availableActions.value, 'move'];
         const controller = useActionController({
           sendAction, availableActions, actionMetadata, isMyTurn,
           autoExecute: false, autoFill: false, playerSeat: ref(0),
@@ -1823,7 +1823,7 @@ describe('useActionController picks', () => {
         },
       };
       actionMetadata.value = { ...createTestMetadata(), ...moveMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'move'];
+      availableActions.value = [...availableActions.value, 'move'];
 
       const controller = useActionController({
         sendAction,
@@ -1870,7 +1870,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'build'];
+    availableActions.value = [...availableActions.value, 'build'];
     const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
       pick === 'size'
         ? { success: true, prompt: 'Size for commons', choices: [{ value: 'small', display: 'Small' }] }
@@ -1898,7 +1898,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'refuel'];
+    availableActions.value = [...availableActions.value, 'refuel'];
     const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> =>
       pick === 'amount'
         ? { success: true, prompt: 'Fuel for the dory' }
@@ -1926,7 +1926,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    availableActions.value = [...availableActions.value, 'board'];
     const crew = [{ value: 'ann', display: 'Ann' }, { value: 'bo', display: 'Bo' }];
     const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
       if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
@@ -1997,7 +1997,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    availableActions.value = [...availableActions.value, 'board'];
     const held = new Map<string, () => void>();
     const fetchPickChoices = vi.fn(async (_action: string, pick: string, _player: number, args: Record<string, unknown>): Promise<PickChoicesResult> => {
       if (pick !== 'crew') return { success: true, choices: [{ value: 'dory', display: 'Dory' }, { value: 'skiff', display: 'Skiff' }] };
@@ -2057,7 +2057,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    availableActions.value = [...availableActions.value, 'board'];
     const held = new Map<string, (result: PickChoicesResult) => void>();
     const fetchPickChoices = vi.fn((_action: string, pick: string) =>
       new Promise<PickChoicesResult>(resolve => { held.set(pick, resolve); }));
@@ -2130,7 +2130,7 @@ describe('useActionController picks', () => {
         ],
       },
     };
-    availableActions.value = [...(availableActions.value ?? []), 'board'];
+    availableActions.value = [...availableActions.value, 'board'];
     let settleFirst: (() => void) | undefined;
     let crewAsks = 0;
     const fetchPickChoices = vi.fn(async (_action: string, pick: string): Promise<PickChoicesResult> => {
@@ -2244,7 +2244,7 @@ describe('useActionController picks', () => {
         };
 
         actionMetadata.value = { ...createTestMetadata(), ...pickByCountMeta };
-        availableActions.value = [...(availableActions.value ?? []), 'pickByCount'];
+        availableActions.value = [...availableActions.value, 'pickByCount'];
 
         const fetchPickChoices = vi.fn().mockImplementation(
           async (_actionName: string, selectionName: string, _player: number, currentArgs: Record<string, unknown>): Promise<PickChoicesResult> => {
