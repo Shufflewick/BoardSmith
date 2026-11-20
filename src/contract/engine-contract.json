@@ -1,6 +1,6 @@
 {
-  "revision": 485,
-  "surfaceHash": "a91e87d89d56e6da",
+  "revision": 486,
+  "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3823,6 +3823,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Game.debugElementTree() is removed. Count elements with game.all(Class).length instead; development mode already throws TREE CORRUPTION when a query reaches an element twice. Games already published on an earlier revision are unaffected; a game rebuilt on this revision that calls it no longer builds."
+    },
+    {
+      "revision": 486,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "buildActionArgs() and its BuildActionArgsOptions type are removed from boardsmith's exports; nothing called them. Pass element objects to runner.performAction in process, or write each element as { id, className } for the wire. Games already published on an earlier revision are unaffected; a game rebuilt on this revision that imports either no longer builds (#1766)."
     }
   ]
 }
