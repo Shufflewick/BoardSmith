@@ -388,11 +388,8 @@
       }
     },
     "src/testing/debug.ts": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/testing/dom-leak.ts": {
@@ -519,9 +516,6 @@
     "src/ui/components/dice/Die3D.vue": {
       "complexity_critical": {
         "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
@@ -630,23 +624,23 @@
   "target_keys": [
     "src/ui/composables/useActionController.ts:complexity",
     "src/cli/lib/source-files.ts:high impact",
+    "src/cli/lib/player-options.ts:high impact",
     "src/engine/action/action.ts:circular dependency",
     "src/cli/dev-host/multiplayer-host.ts:complexity",
-    "src/cli/lib/player-options.ts:high impact",
     "src/ui/components/auto-ui/ActionPanel.vue:complexity",
     "src/ui/components/debug/debug-format.ts:high impact",
-    "src/ui/components/GameShell.vue:complexity",
-    "src/ui/components/auto-ui/auto-ui-helpers.ts:high impact",
     "src/eslint-plugin/rules/element-types.ts:high impact",
-    "src/bot/mcts-bot.ts:complexity",
+    "src/ui/components/auto-ui/auto-ui-helpers.ts:high impact",
     "src/engine/element/game.ts:complexity",
+    "src/ui/components/GameShell.vue:complexity",
+    "src/bot/mcts-bot.ts:complexity",
     "src/engine/element/game-element.ts:circular dependency",
     "src/session/snapshot-session-host.ts:complexity",
     "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/cli/commands/verify-run.ts:complexity",
     "src/engine/element/seat-placeholders.ts:high impact",
-    "src/testing/dom-leak.ts:complexity",
     "src/engine/element/action-metadata.ts:complexity",
+    "src/testing/dom-leak.ts:complexity",
     "src/ui/composables/sharedSelection.ts:high impact",
     "src/cli/lib/config.ts:dead code",
     "src/cli/commands/chunk-provenance.ts:complexity",
@@ -662,11 +656,12 @@
     "src/engine/element/concealed-refs.ts:high impact",
     "src/cli/lib/execution-context.ts:high impact",
     "src/ui/components/ControlsMenu.vue:complexity",
+    "src/ui/composables/useAnimationEvents.ts:complexity",
     "src/cli/commands/trace-check.ts:complexity",
     "src/engine/tutorial/progress.ts:complexity",
     "src/cli/lib/test-run-scope.ts:high impact",
-    "src/ui/composables/useFlyingElements.ts:complexity",
     "src/engine/action/choice-matching.ts:high impact",
+    "src/ui/components/PlayersPanel.vue:complexity",
     "src/engine/tutorial/gate.ts:circular dependency",
     "src/cli/commands/dev.ts:complexity",
     "src/cli/commands/verify-classify.ts:complexity",
@@ -675,17 +670,17 @@
     "src/cli/lib/mutation-budget.ts:high impact",
     "src/cli/dev-host/DevHost.vue:complexity",
     "src/ui/components/helpers/ZoomPreviewOverlay.vue:complexity",
-    "src/sim/policies.ts:complexity",
     "src/cli/commands/drift-check.ts:complexity",
+    "src/sim/policies.ts:complexity",
     "src/cli/commands/publish.ts:complexity",
+    "src/ui/composables/useFlyingElements.ts:complexity",
     "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/lib/cover-art.ts:high impact",
     "src/ui/components/debug/HistoryTab.vue:complexity",
     "src/cli/commands/test-step-ast.ts:high impact",
     "src/cli/commands/test-step-sfc.ts:high impact",
-    "src/ui/components/PlayersPanel.vue:complexity",
-    "src/cli/commands/lint.ts:complexity",
     "src/cli/commands/verify-enumerate.ts:complexity",
+    "src/cli/commands/lint.ts:complexity",
     "src/ui/components/debug/DecksTab.vue:complexity",
     "src/ui/components/dice/Die3D.vue:complexity",
     "src/ui/components/debug/ActionsTab.vue:complexity"
