@@ -1,5 +1,5 @@
 {
-  "revision": 489,
+  "revision": 490,
   "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3855,6 +3855,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "worldBudgets validates its overrides in one loop over the defaults; with several bad overrides a different field may be named first."
+    },
+    {
+      "revision": 490,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "WorldMigrationHooks is now derived from WorldMigration and createWorld passes world.migration to the runner directly, with no change to behaviour (#1771)"
     }
   ]
 }

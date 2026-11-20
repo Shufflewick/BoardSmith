@@ -617,7 +617,7 @@
     },
     "src/world/definition.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/world/migration.ts": {

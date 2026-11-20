@@ -83,10 +83,8 @@ import type {
 } from "./contract.js";
 import type { Game, GameElement } from "../engine/index.js";
 import type {
-  WorldMigrationContext,
+  WorldMigration,
   WorldMigrationCreateContext,
-  WorldMigrationDeriveContext,
-  WorldMigrationFinalizeContext,
   WorldMigrationJoin,
   WorldMigrationSurvey,
 } from "./migration.js";
@@ -858,17 +856,9 @@ export interface WorldMigrated extends WorldAllocation {
  * handed the ENGINE rather than the game, and only `createWorld` holds both the
  * game and the bundle's declaration.
  */
-export interface WorldMigrationHooks {
-  readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
-  readonly derive?: (
-    element: GameElement,
-    ctx: WorldMigrationDeriveContext,
-  ) => Record<string, GameElement>;
-  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
-  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
-  readonly survey?: WorldMigrationSurvey<unknown>;
-  readonly join?: WorldMigrationJoin<unknown>;
-}
+export type WorldMigrationHooks = Readonly<
+  Pick<WorldMigration, "partition" | "derive" | "create" | "finalize" | "survey" | "join">
+>;
 
 /**
  * ONE COMMAND, AS THE PARENT HANDS IT ACROSS THE BOUNDARY.
@@ -1196,13 +1186,6 @@ export function createWorldRunner(
   engine: WorldEngine,
   store: InlinedPartitionStore,
   buildGenesis: () => Record<string, StoredPartition> = () => ({}),
-  /**
-   * The bundle's `world.migration.create`, or a world that adds no roots (#218).
-   *
-   * Supplied the same way `buildGenesis` is, and for the same reason: the
-   * runner is handed the ENGINE rather than the game, and only `createWorld`
-   * holds both the game and the bundle's declaration.
-   */
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
   /** What each player's view named on the last round of the look in
