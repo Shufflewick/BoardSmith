@@ -187,7 +187,11 @@ testGame.doAction(1, move.action, move.args);
 ```
 
 Args are returned in **in-process** format (element objects, not IDs) —
-pass them straight to `doAction`/`performAction`.
+pass them straight to `doAction`/`performAction`. To send them across a
+process, write each element value, alone or in an array, as
+`{ id, className }`, which `performAction` resolves back to the element; a
+`chooseFrom` over `game.playerChoices()` takes the player's seat number. See
+[common pitfalls](./common-pitfalls.md#why-only-the-idclassname-shape-resolves).
 
 By default enumeration lists every move, within the limits below. A `number`
 selection with `min`, `max` and `integer: true` is listed like a choice: each
