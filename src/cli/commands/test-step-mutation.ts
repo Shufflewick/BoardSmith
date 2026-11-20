@@ -7,8 +7,9 @@
  * chunk added — flip a comparison, negate a condition, drop a statement, return `undefined` — and
  * runs the chunk's own test files against each one. Both checks try a sample of the changed lines'
  * mutants, picked by the HEAD commit (`sampleMutants`, #1486): at most 30 for the chunk check, 3 for
- * `boardsmith mutate`. The chunk check does not judge
- * a test file that loads a changed file but none a sampled mutant is in (#1487). A test that fails
+ * `boardsmith mutate`. The chunk check judges a test that no
+ * mutant failed only by the sampled mutants in code it runs, by V8 coverage of the unmutated run
+ * (`judgeTests`, #1783): one that runs changed code but none the sample holds is not judged. A test that fails
  * under at least one mutant has been shown able to catch a regression; a test that no mutant disturbs is asserting nothing
  * the chunk's code controls (the sotf#29 tautology), and a claim none of whose tests ever fail is
  * a claim with no real test.
@@ -65,6 +66,8 @@ interface Mutant {
   /** Project-relative path of the mutated file. */
   file: string;
   line: number;
+  /** The 0-based column of the start of the code it changes (on `line`). */
+  column: number;
   description: string;
   change: { offset: number; before: string; after: string };
   /** The whole file's text with this one change applied. */
@@ -215,9 +218,10 @@ function mutationSites(file: string, source: string, lines: ReadonlySet<number>)
 }
 
 /** The mutant a site makes: the whole file's text with that one change applied. */
-const mutantAt = (file: string, source: string, { line, description, edit: [from, to, replacement] }: MutantSite): Mutant => ({
+const mutantAt = (file: string, source: string, { line, column, description, edit: [from, to, replacement] }: MutantSite): Mutant => ({
   file,
   line,
+  column,
   description,
   source: source.slice(0, from) + replacement + source.slice(to),
   change: { offset: from, before: source.slice(from, to), after: replacement },
@@ -358,8 +362,10 @@ export const overlay = () => ({
   ],
   test: {
     includeTaskLocation: true,
-    ...(process.env.BOARDSMITH_COVERAGE ? { setupFiles: [${JSON.stringify(join(workDir, COVERAGE_SETUP_NAME))}] } : {}),
-    ...(process.env.BOARDSMITH_REACH ? { setupFiles: [${JSON.stringify(join(workDir, REACH_SETUP_NAME))}] } : {}),
+    setupFiles: [
+      ...(process.env.BOARDSMITH_COVERAGE ? [${JSON.stringify(join(workDir, COVERAGE_SETUP_NAME))}] : []),
+      ...(process.env.BOARDSMITH_REACH ? [${JSON.stringify(join(workDir, REACH_SETUP_NAME))}] : []),
+    ],
   },
 });
 
@@ -951,26 +957,69 @@ export async function collectMutants(projectDir: string, added: ReadonlyMap<stri
 /**
  * The chunk check's sample of mutants of the lines the chunk added (`sampleMutants`), each with the test files it runs against:
  * every file that is not a pin (a pin is tried on the game code it runs, `killPinTests`). A mutant
- * two files share runs once, against both. `left` names the files with mutants none of which was sampled.
+ * two files share runs once, against both. `all` is every mutant the sample was taken from, and
+ * `sampled` those of them in the sample.
  */
-async function chunkMutants(projectDir: string, input: MutationCheckInput, files: Set<string>): Promise<{ mutants: TargetedMutant[]; left: string[] }> {
-  const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
-  if (unpinned.size === 0) return { mutants: [], left: [] };
+async function chunkMutants(
+  projectDir: string,
+  input: MutationCheckInput,
+  unpinned: ReadonlySet<string>,
+  files: Set<string>,
+): Promise<{ mutants: TargetedMutant[]; all: LocatedMutant[]; sampled: Set<LocatedMutant> }> {
+  if (unpinned.size === 0) return { mutants: [], all: [], sampled: new Set() };
   const all = await collectMutants(projectDir, input.added);
-  const mutants = sampleMutants(all, input.seed, CHUNK_SAMPLE_SIZE);
-  for (const mutant of mutants) files.add(mutant.file);
-  const left = [...new Set(all.map((m) => m.file))].filter((file) => !files.has(file));
-  return { mutants: mutants.map((mutant) => ({ ...mutant, targets: unpinned })), left };
+  const sampled = sampleMutants(all, input.seed, CHUNK_SAMPLE_SIZE);
+  for (const mutant of sampled) files.add(mutant.file);
+  return { mutants: sampled.map((mutant) => ({ ...mutant, targets: unpinned })), all, sampled: new Set(sampled) };
 }
 
 /**
- * The chunk test files the sample left out (#1487): each loads a changed file whose mutants were not
- * sampled and no file a sampled mutant is in, so its passing every mutant shows nothing.
+ * What the sample shows of a chunk test no mutant failed (#1783): `sampled` mutants were in code it
+ * runs, or none were though it runs the code of others (so it is not judged), or it runs no mutant's code.
  */
-async function leftOutFiles(reachDir: string, projectDir: string, testFiles: Iterable<string>, mutants: TargetedMutant[], left: string[]): Promise<Set<string>> {
-  const { testsLoading } = await readReach(reachDir, projectDir, testFiles);
-  const reached = new Set(mutants.flatMap((m) => testsLoading(m.file)));
-  return new Set(left.flatMap((file) => testsLoading(file)).filter((abs) => !reached.has(abs)).map((abs) => relative(projectDir, abs).split(sep).join('/')));
+type Judgement = { kind: 'judged'; sampled: number } | { kind: 'not-judged' } | { kind: 'runs-none' };
+
+/** The index of the test `o` in its file's coverage (`FileCoverage.tests`); throws when the coverage run has no record of it. */
+function coveredTest(coverage: FileCoverage, o: Outcome): number {
+  const index = coverage.tests.indexOf(testKeyOf(o.fullName, o.line));
+  if (index < 0) {
+    throw new Error(
+      `The run that records which game code ${o.path} runs has no record of its test "${o.fullName}", so the ` +
+        'mutation check cannot tell what that test runs. This is a BoardSmith bug: file an issue with the test file attached.',
+    );
+  }
+  return index;
+}
+
+/**
+ * Each of `tests`' judgement, by `testKey`, from the code it ran unmutated (`readCoverage`): a
+ * mutant whose place runs only while the file loads counts as run by every test in it. A test file
+ * whose loads could not be told apart from another's (`readReach`'s `unrecorded`) is judged against
+ * the whole sample.
+ */
+async function judgeTests(
+  dirs: { reach: string; coverage: string },
+  projectDir: string,
+  testFiles: ChunkTestFile[],
+  tests: Outcome[],
+  { all, sampled }: { all: LocatedMutant[]; sampled: ReadonlySet<LocatedMutant> },
+): Promise<Map<string, Judgement>> {
+  const { unrecorded } = await readReach(dirs.reach, projectDir, new Set(tests.map((o) => o.path)));
+  const coverage = new Map<string, FileCoverage>();
+  for (const file of testFiles.filter((f) => tests.some((o) => o.path === f.path) && !unrecorded.includes(f.path))) {
+    coverage.set(file.path, await readCoverage(dirs.coverage, projectDir, file.absPath, file.path));
+  }
+  return new Map(tests.map((o): [string, Judgement] => {
+    const fileCoverage = coverage.get(o.path);
+    if (!fileCoverage) return [testKey(o), { kind: 'judged', sampled: sampled.size }];
+    const index = coveredTest(fileCoverage, o);
+    const runs = all.filter((m) => {
+      const { ran, tests: by } = fileCoverage.runs(m.file, m.line, m.column);
+      return ran && (by.length === 0 || by.includes(index));
+    });
+    const inSample = runs.filter((m) => sampled.has(m)).length;
+    return [testKey(o), inSample > 0 ? { kind: 'judged', sampled: inSample } : runs.length > 0 ? { kind: 'not-judged' } : { kind: 'runs-none' }];
+  }));
 }
 
 /** A module under `src/` a mutant can change: a script or component that is not a test. */
@@ -1063,13 +1112,7 @@ function pinQueues(
     tracked
       .filter((o) => o.path === pin.path)
       .map((o) => {
-        const index = coverage.tests.indexOf(testKeyOf(o.fullName, o.line));
-        if (index < 0) {
-          throw new Error(
-            `The run that records which game code ${pin.path} runs has no record of its test "${o.fullName}", so the ` +
-              'mutation check cannot tell what that test pins. This is a BoardSmith bug: file an issue with the test file attached.',
-          );
-        }
+        const index = coveredTest(coverage, o);
         return [testKey(o), sites.filter((s) => s.tests.length === 0 || s.tests.includes(index))] as const;
       }),
   );
@@ -1178,15 +1221,19 @@ async function killTests(
   return killed;
 }
 
-/** Every claim none of whose tests ever failed, then every test that never failed, but for those in `leftOut` files (`leftOutFiles`). */
+/**
+ * Every claim none of whose tests ever failed, then every test that never failed, but for tests the
+ * sample did not judge (`judgeTests`) and claims only such tests cite.
+ */
 function survivorFindings(
   input: MutationCheckInput,
   tracked: Outcome[],
   killed: ReadonlySet<string>,
   mutantCount: number,
   plans: ReadonlyMap<string, PinPlan>,
-  leftOut: ReadonlySet<string>,
+  judgements: ReadonlyMap<string, Judgement>,
 ): TestStepFinding[] {
+  const notJudged = (o: Outcome) => judgements.get(testKey(o))?.kind === 'not-judged';
   const blocksByPath = new Map(input.testFiles.map((f) => [f.path, findTestBlocks(f.source, f.path)]));
   const claimTests = new Map<number, Outcome[]>();
   for (const o of tracked) {
@@ -1196,7 +1243,7 @@ function survivorFindings(
   }
   const claimFindings = input.claims
     .filter((claim) => !claimTests.get(claim)?.some((o) => killed.has(testKey(o))))
-    .filter((claim) => !claimTests.get(claim)?.every((o) => leftOut.has(o.path)))
+    .filter((claim) => !claimTests.get(claim)?.every(notJudged))
     .map((claim) => ({
       kind: 'claim-survives-mutation' as const,
       subject: `claim ${claim}`,
@@ -1209,13 +1256,15 @@ function survivorFindings(
             "of this chunk's code. They do not pin the claim: assert on the outcome the claim describes, reached through the game.",
     }));
   const pins = new Map(input.testFiles.filter(isPin).map((f) => [f.path, f]));
-  const testFindings = tracked
-    .filter((o) => !killed.has(testKey(o)) && !leftOut.has(o.path))
-    .map((o) => ({
+  const testFindings = tracked.flatMap((o) => {
+    const judgement = judgements.get(testKey(o));
+    if (killed.has(testKey(o)) || judgement?.kind === 'not-judged') return [];
+    return [{
       kind: 'test-survives-mutation' as const,
       subject: testKey(o),
-      detail: pins.has(o.path) ? pinSurvivorDetail(pins.get(o.path)!, plans.get(o.path)!, testKey(o)) : CHUNK_SURVIVOR_DETAIL,
-    }));
+      detail: pins.has(o.path) ? pinSurvivorDetail(pins.get(o.path)!, plans.get(o.path)!, testKey(o)) : chunkSurvivorDetail(judgement!),
+    }];
+  });
   return [...claimFindings, ...testFindings];
 }
 
@@ -1244,22 +1293,17 @@ function pinSurvivorDetail(file: ChunkTestFile, plan: PinPlan, key: string): str
     `It pins earlier behaviour: ${fix}`;
 }
 
-const CHUNK_SURVIVOR_DETAIL =
-        "This test passed under every small break of this chunk's code, so it cannot fail when the code is wrong. " +
-        'It asserts something the chunk does not control (a value it set up itself, a mock, a constant). Rewrite it ' +
-        'to assert what the game does, or delete it if another test already pins that. A test that scans source ' +
-        'as text (the a11y floor\'s colour-literal or asset scan) is a guard: move it to tests/guards/ and take it ' +
-        'out of the Spec Manifest (build/test.md "The A11y Floor").';
-
-/** Runs the pins once more, unmutated, recording the game code each of their tests runs (`test-step-coverage.ts`). */
-async function pinCoverage(runner: Runner, projectDir: string, pins: ChunkTestFile[]): Promise<Map<string, FileCoverage>> {
-  const coverage = new Map<string, FileCoverage>();
-  if (pins.length === 0) return coverage;
-  const dir = join(runner.workDir, 'coverage');
-  await fs.mkdir(dir);
-  await runner.run(pins, null, null, { coverage: dir });
-  for (const pin of pins) coverage.set(pin.path, await readCoverage(dir, projectDir, pin.absPath, pin.path));
-  return coverage;
+/** What a surviving chunk test was judged against (`judgeTests`), and what to do. */
+function chunkSurvivorDetail(judgement: Exclude<Judgement, { kind: 'not-judged' }>): string {
+  const what =
+    judgement.kind === 'runs-none'
+      ? "This test runs none of the code this chunk changed that a mutant can change, so no break of the chunk's code can fail it. "
+      : `This test passed under all ${judgement.sampled} sampled small breaks of this chunk's code that it runs, so it cannot fail when the code is wrong. `;
+  return what +
+    'It asserts something the chunk does not control (a value it set up itself, a mock, a constant). Rewrite it ' +
+    'to assert what the game does, or delete it if another test already pins that. A test that scans source ' +
+    'as text (the a11y floor\'s colour-literal or asset scan) is a guard: move it to tests/guards/ and take it ' +
+    'out of the Spec Manifest (build/test.md "The A11y Floor").';
 }
 
 /**
@@ -1276,8 +1320,10 @@ export async function runMutationCheck(
   return withCommandBuildDir(projectDir, 'test-step-check', async (workDir) => {
     runner = await createRunner(projectDir, input.testFiles, workDir);
     const reachDir = join(workDir, 'reach');
+    const coverageDir = join(workDir, 'coverage');
     await fs.mkdir(reachDir);
-    const baseline = await runner.run(input.testFiles, null, null, { reach: reachDir });
+    await fs.mkdir(coverageDir);
+    const baseline = await runner.run(input.testFiles, null, null, { reach: reachDir, coverage: coverageDir });
     const notGreen = baselineFindings(input.testFiles, baseline);
     if (notGreen.length > 0) return { findings: notGreen, summary };
 
@@ -1291,21 +1337,23 @@ export async function runMutationCheck(
       apart: new Map(),
     };
     const files = new Set<string>();
-    const { mutants, left } = await chunkMutants(projectDir, input, files);
     const unpinned = new Set(input.testFiles.filter((f) => !isPin(f)).map((f) => f.path));
-    const leftOut = await leftOutFiles(reachDir, projectDir, unpinned, mutants, left);
-    if (leftOut.size > 0) input.log(`Not judged, as no sampled mutant was in a changed file they load: ${[...leftOut].join(', ')}`);
-    const killed = await killTests(run, input, tracked.filter((o) => unpinned.has(o.path)), mutants, summary);
-    const pins = input.testFiles.filter(isPin);
-    const coverage = await pinCoverage(runner, projectDir, pins);
+    const chunk = await chunkMutants(projectDir, input, unpinned, files);
+    const tests = tracked.filter((o) => unpinned.has(o.path));
+    const killed = await killTests(run, input, tests, chunk.mutants, summary);
+    const survivors = tests.filter((o) => !killed.has(testKey(o)));
+    const judgements = await judgeTests({ reach: reachDir, coverage: coverageDir }, projectDir, input.testFiles, survivors, chunk);
+    const notJudged = survivors.filter((o) => judgements.get(testKey(o))!.kind === 'not-judged').map(testKey);
+    if (notJudged.length > 0) input.log(`Not judged, as no sampled mutant was in code they run: ${notJudged.join(', ')}`);
     const plans = new Map<string, PinPlan>();
-    for (const pin of pins) {
-      const result = await killPinTests(run, input, pin, tracked, coverage.get(pin.path)!, summary, files);
+    for (const pin of input.testFiles.filter(isPin)) {
+      const coverage = await readCoverage(coverageDir, projectDir, pin.absPath, pin.path);
+      const result = await killPinTests(run, input, pin, tracked, coverage, summary, files);
       result.killed.forEach((key) => killed.add(key));
       plans.set(pin.path, result.plan);
     }
     summary.files = files.size;
-    return { findings: survivorFindings(input, tracked, killed, mutants.length, plans, leftOut), summary };
+    return { findings: survivorFindings(input, tracked, killed, chunk.mutants.length, plans, judgements), summary };
   }, () => runner?.stop());
 }
 
