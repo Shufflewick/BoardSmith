@@ -5,7 +5,7 @@
  * or an execute() that can never be satisfied.
  */
 import { describe, it, expect } from 'vitest';
-import { actionNeedsWizardMode, formatActionName, getDisplayFromValue } from './actionControllerHelpers.js';
+import { actionNeedsWizardMode, formatActionName, getDisplayFromValue, refsHighlight } from './actionControllerHelpers.js';
 import { formatChoiceCandidates } from '../../engine/element/pick-candidates.js';
 import type { ChoiceSelection } from '../../engine/action/types.js';
 import type { EnrichedActionMetadata, ChoiceWithRefs, EnrichedPickMetadata } from './useActionControllerTypes.js';
@@ -208,5 +208,15 @@ describe('formatActionName', () => {
     expect(formatActionName('playMP3')).toBe('Play MP3');
     expect(formatActionName('rollD6')).toBe('Roll D6');
     expect(formatActionName('moveP2Piece')).toBe('Move P2 Piece');
+  });
+});
+
+describe('refsHighlight', () => {
+  it('draws source refs on the source side and target and highlight refs on the target side', () => {
+    expect(refsHighlight([
+      { ref: { id: 1 }, role: 'source' },
+      { ref: { id: 2 }, role: 'target' },
+      { ref: { id: 3 }, role: 'highlight' },
+    ])).toEqual({ sourceRefs: [{ id: 1 }], targetRefs: [{ id: 2 }, { id: 3 }] });
   });
 });
