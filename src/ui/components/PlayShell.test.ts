@@ -138,6 +138,56 @@ describe('the layout', () => {
     wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });
 
+  it('sizes the board\'s scroll room to what the bar covers, shrinking it only as the player scrolls out of it (#1755)', async () => {
+    const wrapper = mountShell();
+    await nextTick();
+    const bar = wrapper.get('[data-testid="bs-actionbar"]').element;
+    const observer = PanelResizeObserver.instances.find(o => o.observed.has(bar))!;
+    const viewport = wrapper.get('.board-viewport');
+    const region = wrapper.get('[data-testid="bs-board"]').element as HTMLElement;
+    // A board 740px tall in a 600px region that reserves 50px: its scroll height is the board, the room and the reserve.
+    const computed = window.getComputedStyle;
+    vi.spyOn(window, 'getComputedStyle').mockImplementation((el, pseudo) =>
+      el === region ? ({ paddingBottom: '50px' } as CSSStyleDeclaration) : computed(el, pseudo));
+    let room = () => 0;
+    Object.defineProperty(region, 'clientHeight', { configurable: true, get: () => 600 });
+    Object.defineProperty(region, 'scrollHeight', { configurable: true, get: () => 740 + room() + 50 });
+    // The room is the tail past the reserved row, as the region's ::after draws it.
+    const roomShown = () => String(Math.max(0, Number(viewport.attributes('style')!.match(/--bsg-board-tail: ([\d.]+)px/)![1]) - 50));
+    room = () => Number(roomShown());
+    const barAt = async (height: number) => {
+      vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({ height } as DOMRect);
+      observer.callback([]); await nextTick();
+    };
+    const scrollTo = async (top: number) => {
+      region.scrollTop = top;
+      region.dispatchEvent(new Event('scroll')); await nextTick();
+    };
+
+    await barAt(260);
+    expect(roomShown(), 'the room is what the bar covers past the reserved row').toBe('210');
+    await barAt(80);
+    expect(roomShown(), 'room the player has not scrolled into stayed after the bar shrank').toBe('30');
+    await barAt(260);
+    await scrollTo(400);
+    await barAt(80);
+    expect(roomShown(), 'the room shrank under a board scrolled into it, which clamps the scroll and moves the board').toBe('210');
+    await scrollTo(250);
+    expect(roomShown(), 'the room the player scrolled out of stayed').toBe('60');
+    await scrollTo(0);
+    expect(roomShown()).toBe('30');
+    await wrapper.setProps({ actionBarMinimized: true }); await nextTick();
+    expect(roomShown(), 'the bar put down kept room under the board').toBe('0');
+    // A bar that goes down while the board is scrolled into its room, as one a question brought up does when it ends.
+    await wrapper.setProps({ actionBarMinimized: false });
+    await barAt(260);
+    await scrollTo(400);
+    await wrapper.setProps({ actionBarMinimized: true }); await nextTick();
+    expect(roomShown(), 'the bar going down dropped the room under a scrolled board, which moves the board').toBe('210');
+    await scrollTo(0);
+    expect(roomShown()).toBe('0');
+  });
+
   it('always hosts the modal target a game teleports into', () => {
     expect(mountShell().find('#bs-game-modal').exists()).toBe(true);
   });

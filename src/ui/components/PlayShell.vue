@@ -334,11 +334,12 @@ const barClearance = ref(0);
 /** The bar's content runs past its cap below what is scrolled into view, so its edge says there is more (#1650). */
 const barHasMoreBelow = ref(false);
 const showBarMore = computed(() => barHasMoreBelow.value && !actionBarCollapsed.value);
-// Only the overlays that stop at the bar, and focus scrolling, follow its height; board fitting and scroll layout never read it.
+// Only the overlays that stop at the bar, focus scrolling and the board's scroll room follow its height; board fitting never reads it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
   const measure = () => {
     barClearance.value = bar.getBoundingClientRect().height;
+    fitBoardRoom();
     barHasMoreBelow.value = bar.scrollHeight - bar.scrollTop - bar.clientHeight > 1;
   };
   const observer = new ResizeObserver(measure);
@@ -362,6 +363,33 @@ watch(actionBarEl, (bar, _previous, onCleanup) => {
 }, { flush: 'post' });
 
 const boardRegionEl = ref<HTMLElement | null>(null);
+
+/**
+ * THE BOARD'S SCROLL TAIL (#1755): how far up from the region's bottom the bar covers,
+ * none while it is down. The region ends in it, as its reserved row plus scroll room
+ * for the rest, so the player can scroll what the bar covers into view. It grows with
+ * the bar at once, but shrinks only out of what the player has not scrolled into: a tail
+ * that shrank under a scrolled board would clamp the scroll and move the board under
+ * the cursor (#1514 review F1), when the bar re-wraps or goes down after a question.
+ * Held as one length, so the reserve changing on the player's toggle moves nothing.
+ */
+const boardTail = ref(0);
+function fitBoardRoom(): void {
+  const region = boardRegionEl.value;
+  if (!region) return;
+  const covered = actionBarCollapsed.value ? 0 : barClearance.value;
+  const tail = Math.max(boardTail.value, parseFloat(getComputedStyle(region).paddingBottom));
+  // At the top no shrink can clamp; scrolled, the view reaches this far into the tail.
+  const held = region.scrollTop > 0 ? region.scrollTop + region.clientHeight - (region.scrollHeight - tail) : 0;
+  boardTail.value = Math.max(covered, Math.min(boardTail.value, held));
+}
+watch(boardRegionEl, (region, _previous, onCleanup) => {
+  if (!region) return;
+  region.addEventListener('scroll', fitBoardRoom, { passive: true });
+  onCleanup(() => region.removeEventListener('scroll', fitBoardRoom));
+});
+// A bar put down or brought up need not change the box the observer watches, so the room is refit on the state itself.
+watch(actionBarCollapsed, () => nextTick(fitBoardRoom));
 const sidebarEl = ref<HTMLElement | null>(null);
 const actionBarFrameEl = ref<HTMLElement | null>(null);
 // Hiding the chrome would drop focus inside it to <body>, so it goes to the board the player asked to see (#1538).
@@ -415,7 +443,7 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
+  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
@@ -533,7 +561,7 @@ const mobileToggleLabel = computed(() => {
       <!-- Board region: hero; ~zero chrome padding; container-query-sized.
            It reserves one constant row for the Action Panel; rows beyond it
            float over the board (#1514, #1517). -->
-      <div ref="boardViewportEl" class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
+      <div ref="boardViewportEl" class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px`, '--bsg-board-tail': `${boardTail}px` }">
         <!-- Connection indicator: one dot, two sources. Surfaced only when the
              adapter has something to say — a persistent healthy dot over the
              board reads as a mystery speck (IA-01). The adapter names the tone
@@ -976,17 +1004,11 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Scroll room after the board, so the player can scroll what the rows beyond the
-   reserved one cover into view. The resting bar's cap, not its live height:
-   room that changed as the bar re-wrapped would clamp the scroll and move the board
-   under the cursor. */
+   reserved one cover into view: the tail past the reserved row (boardTail, #1755). */
 .boardregion::after {
   content: '';
   flex: none;
-  height: calc(var(--bsg-panel-menu-max) - var(--bsg-panel-reserved));
-}
-/* Down until the player's own toggle: only the reserved line covers the board, so no room (#1525). */
-.action-bar-stays-down .boardregion::after {
-  height: 0;
+  height: max(0px, var(--bsg-board-tail) - var(--bsg-panel-reserved));
 }
 
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under
