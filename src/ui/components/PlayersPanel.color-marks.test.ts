@@ -86,6 +86,29 @@ describe('playerColorMarks (#1733)', () => {
     expect(nameColor(wrapper, 0)).toBe('');
   });
 
+  it('judges the names when the cards appear, as the collapsed sidebar opens', async () => {
+    const { wrapper } = await mountOn('rgb(255, 255, 255)', { playerColorMarks: ['name'], seatStrip: true });
+    await wrapper.setProps({ seatStrip: false });
+    await nextTick();
+    expect(nameColor(wrapper, 0)).toBe('rgb(26, 35, 126)');
+  });
+
+  it('judges a translucent colour as drawn, over the card', async () => {
+    const { wrapper } = await mountOn('rgb(255, 255, 255)', {
+      players: [{ seat: 0, name: 'Alice', color: 'rgba(26, 35, 126, 0.25)' }],
+      playerColorMarks: ['name'],
+    });
+    expect(nameColor(wrapper, 0)).toBe('');
+  });
+
+  it('cannot judge a name over a background image, so writes it in the normal text colour', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const { wrapper } = await mountOn('rgb(255, 255, 255)', { playerColorMarks: ['name'] });
+    (wrapper.element as HTMLElement).style.backgroundImage = 'linear-gradient(rgb(17, 17, 17), rgb(34, 34, 34))';
+    document.documentElement.setAttribute('data-theme', 'dark');
+    await vi.waitFor(() => expect(nameColor(wrapper, 0)).toBe(''));
+  });
+
   it('writes a colour it cannot read in the normal text colour, and says why', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { wrapper } = await mountOn('rgb(255, 255, 255)', {

@@ -31,10 +31,24 @@ export interface Rgb {
   b: number;
 }
 
+/** A colour with its alpha, 0 (clear) to 1 (opaque). */
+export interface Rgba extends Rgb {
+  a: number;
+}
+
+/** `over` drawn on the opaque `under`, as the browser composites it. */
+export function composite(over: Rgba, under: Rgb): Rgb {
+  return {
+    r: over.r * over.a + under.r * (1 - over.a),
+    g: over.g * over.a + under.g * (1 - over.a),
+    b: over.b * over.a + under.b * (1 - over.a),
+  };
+}
+
 const HEX_SHORT = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
 const HEX_LONG = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
-const RGB_FN = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*[\d.]+\s*)?\)$/i;
-const HSL_FN = /^hsla?\(\s*(-?[\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*[\d.]+\s*)?\)$/i;
+const RGB_FN = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i;
+const HSL_FN = /^hsla?\(\s*(-?[\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/i;
 
 /**
  * The 148 standard CSS Color Module Level 4 named colors (147 legacy names +
@@ -109,14 +123,15 @@ function hslToRgb(h: number, s: number, l: number): Rgb {
 }
 
 /**
- * Parse any colour string the library accepts into 0-255 RGB channels.
+ * Parse any colour string the library accepts into 0-255 RGB channels and its
+ * alpha (1 unless an `rgba()`/`hsla()` gives one).
  *
  * Shared with `./color.ts` so that every colour helper in the library agrees
  * on exactly which formats are legal and fails loud on the same inputs.
  *
  * @throws {Error} on an unsupported format or an out-of-range component.
  */
-export function parseColor(input: string): Rgb {
+export function parseColor(input: string): Rgba {
   const trimmed = input.trim();
 
   const shortHex = trimmed.match(HEX_SHORT);
@@ -125,6 +140,7 @@ export function parseColor(input: string): Rgb {
       r: parseInt(shortHex[1] + shortHex[1], 16),
       g: parseInt(shortHex[2] + shortHex[2], 16),
       b: parseInt(shortHex[3] + shortHex[3], 16),
+      a: 1,
     };
   }
 
@@ -134,6 +150,7 @@ export function parseColor(input: string): Rgb {
       r: parseInt(longHex[1], 16),
       g: parseInt(longHex[2], 16),
       b: parseInt(longHex[3], 16),
+      a: 1,
     };
   }
 
@@ -149,7 +166,7 @@ export function parseColor(input: string): Rgb {
         `BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`
       );
     }
-    return { r, g, b };
+    return { r, g, b, a: alpha(rgbFn[4]) };
   }
 
   const hslFn = trimmed.match(HSL_FN);
@@ -160,7 +177,7 @@ export function parseColor(input: string): Rgb {
         `BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`
       );
     }
-    return hslToRgb(h, s, l);
+    return { ...hslToRgb(h, s, l), a: alpha(hslFn[4]) };
   }
 
   const named = CSS_NAMED_COLORS[trimmed.toLowerCase()];
@@ -172,6 +189,11 @@ export function parseColor(input: string): Rgb {
     `BoardSmith color parser: unsupported color value "${input}". ` +
       'Supported formats: #rgb, #rrggbb, rgb(r,g,b), rgba(r,g,b,a), hsl(h,s%,l%), hsla(h,s%,l%,a), and standard CSS named colors (e.g. "crimson").'
   );
+}
+
+/** An `rgba()`/`hsla()` alpha, clamped to 0..1 as CSS does; 1 when absent. */
+function alpha(value: string | undefined): number {
+  return value === undefined ? 1 : Math.min(1, Number(value));
 }
 
 function srgbChannelToLinear(channel: number): number {
@@ -222,12 +244,14 @@ export function contrastInk(seatColor: string): ContrastInk {
 const TEXT_CONTRAST = 4.5;
 
 /**
- * Whether text in `color` reads on `background` at WCAG AA (4.5:1).
+ * Whether text in `color` reads on `background` at WCAG AA (4.5:1), judged on
+ * the colour as drawn: a translucent one composited over the background.
  *
  * @throws {Error} if `color` is unparseable, as `contrastInk()` does.
  */
 export function readsOn(color: string, background: Rgb): boolean {
-  return contrastRatio(relativeLuminance(parseColor(color)), relativeLuminance(background)) >= TEXT_CONTRAST;
+  const drawn = composite(parseColor(color), background);
+  return contrastRatio(relativeLuminance(drawn), relativeLuminance(background)) >= TEXT_CONTRAST;
 }
 
 /** The ink for a seat with no colour, drawn in the accent colour: white with a dark halo. */

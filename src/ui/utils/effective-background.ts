@@ -5,11 +5,7 @@
  * (#1733), since the theme, a game's theme.css and a host's overrides all decide
  * that background at run time.
  */
-import type { Rgb } from './color-contrast.js';
-
-interface Rgba extends Rgb {
-  a: number;
-}
+import { composite, type Rgb, type Rgba } from './color-contrast.js';
 
 const COMPUTED_RGB = /^rgba?\(([\d.]+), ([\d.]+), ([\d.]+)(?:, ([\d.]+))?\)$/;
 const COMPUTED_SRGB = /^color\(srgb ([\d.e+-]+) ([\d.e+-]+) ([\d.e+-]+)(?: \/ ([\d.]+))?\)$/;
@@ -29,22 +25,24 @@ function parseComputed(value: string): Rgba {
 /**
  * The opaque colour drawn behind `el`.
  *
- * @throws {Error} when nothing behind `el` is opaque, or a layer is in a colour
- *   space this cannot read: either way the contrast cannot be judged.
+ * @throws {Error} when nothing behind `el` is opaque, a layer paints an image or
+ *   gradient, or a layer is in a colour space this cannot read: each way the
+ *   contrast cannot be judged.
  */
 export function effectiveBackground(el: Element): Rgb {
   const layers: Rgba[] = [];
   for (let node: Element | null = el; node; node = node.parentElement) {
-    const layer = parseComputed(getComputedStyle(node).backgroundColor);
+    const style = getComputedStyle(node);
+    if (style.backgroundImage !== 'none') {
+      throw new Error(`A background image (${style.backgroundImage}) is behind this element, so its contrast cannot be judged.`);
+    }
+    const layer = parseComputed(style.backgroundColor);
     if (layer.a === 0) continue;
-    layers.push(layer);
-    if (layer.a < 1) continue;
-    return layers.reduceRight((under, over) => ({
-      r: over.r * over.a + under.r * (1 - over.a),
-      g: over.g * over.a + under.g * (1 - over.a),
-      b: over.b * over.a + under.b * (1 - over.a),
-      a: 1,
-    }));
+    if (layer.a < 1) {
+      layers.push(layer);
+      continue;
+    }
+    return layers.reduceRight<Rgb>((under, over) => composite(over, under), layer);
   }
   throw new Error('Nothing behind this element has an opaque background, so its contrast cannot be judged.');
 }

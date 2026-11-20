@@ -247,7 +247,8 @@ function judgeNames(): void {
   colorNames.value = seats;
 }
 
-watch([() => props.playerColorMarks, visiblePlayers, dueSet, themeTick], judgeNames, { flush: 'post' });
+// panelEl, because the cards mount only when the panel leaves seat-strip mode.
+watch([() => props.playerColorMarks, visiblePlayers, dueSet, themeTick, panelEl], judgeNames, { flush: 'post' });
 
 // The scheme is switched on <html> (data-theme, applyTheme's token overrides) or by the device.
 const themeObserver = typeof MutationObserver === 'function'
