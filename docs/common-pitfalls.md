@@ -1553,35 +1553,16 @@ const equipment = [...game.all(Equipment)];
 
 ### Diagnosis
 
-BoardSmith provides development mode warnings and debug methods:
-
-1. **Automatic warning in development mode**: When element count doubles unexpectedly, you'll see:
-
-```
-[BoardSmith] Element count explosion detected for 'equipment'!
-  Previous count: 200
-  Current count: 15698 (78.5x increase)
-  Element class: Equipment
-  Total elements in game tree: 15700
-  Element sequence counter: 15700
-  ...
-```
-
-2. **Use `debugElementTree()` for detailed diagnostics**:
+Count the elements of each class and watch which one grows between actions:
 
 ```typescript
-const treeInfo = game.debugElementTree();
-console.log(treeInfo.summary);
-// "Total: 15698 elements in tree, 12 in pile, sequence at 15710"
-
-console.log(treeInfo.byClass);
-// { Equipment: 15690, Room: 5, Player: 2, Space: 3 }
-
-if (treeInfo.issues.length > 0) {
-  console.log('Issues:', treeInfo.issues);
-  // Any circular references or duplicate IDs detected
-}
+console.log(game.all(Equipment).length, game.pile.all(Equipment).length);
+// 15690 12
 ```
+
+An element parented in two places is a different bug. In development mode any
+query that reaches an element twice throws `TREE CORRUPTION`, naming the
+element and both containers it was reached under.
 
 ### Common Causes
 
@@ -1621,11 +1602,11 @@ if (!room.first(Equipment, { name: 'Loot1' })) {
 }
 ```
 
-3. **Use `debugElementTree()` in your game to track element growth**:
+3. **Track element growth in the Debug panel**:
 
 ```typescript
 // Add this to your game for debugging
-this.registerDebug('Element Tree', () => this.debugElementTree());
+this.registerDebug('Equipment count', () => this.all(Equipment).length);
 ```
 
 `registerDebug` payloads are dev-only and never part of a seat's state. The
@@ -2101,7 +2082,7 @@ class MyGame extends Game<MyGame, MyPlayer> {
 | **Client-side elements** | `element.attributes.slot` | `element.children?.find(...)` |
 | **Flow restrictions** | Action passes conditions but not in UI | Check flow's `actionStep({ actions: [...] })` |
 | **followUp args in filter** | Bare numeric id in followUp args stays a number | Pass `{ id, className }` (auto-resolved) or call `getElementById()` yourself |
-| **Element count explosion** | Elements mysteriously multiply | `game.debugElementTree()` to diagnose |
+| **Element count explosion** | Elements mysteriously multiply | Count `game.all(Class).length` between actions to find the class that grows |
 | **Loop exit with pending state** | Loop checks only actions remaining | Return `true` from `while` while the pending state is set |
 | **Choice objects in fill()** | `fill(name, choiceObject)` | `fill(name, choiceObject.value)` |
 | **Drag-drop not working** | No drop targets when dragging | Start the action with a `chooseElement`; give `chooseFrom` choices `boardRefs` |
