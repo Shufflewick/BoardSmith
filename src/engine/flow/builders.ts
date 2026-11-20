@@ -3,7 +3,6 @@ import type { GameElement } from '../element/game-element.js';
 import type {
   FlowNode,
   FlowContext,
-  SequenceConfig,
   LoopConfig,
   LoopBound,
   EachPlayerConfig,
@@ -12,7 +11,6 @@ import type {
   SimultaneousActionStepConfig,
   SwitchConfig,
   IfConfig,
-  PhaseConfig,
   TurnScope,
 } from './types.js';
 import { checkDeclaredTimeLimit } from './step-time-limit.js';
@@ -174,13 +172,7 @@ export function repeat<G extends Game = Game>(times: number, body: FlowNode<G>):
  * })
  * ```
  */
-export function eachPlayer<G extends Game = Game>(config: {
-  name?: string;
-  filter?: (player: PlayerOf<G>, context: FlowContext<G>) => boolean;
-  direction?: 'forward' | 'backward';
-  startingPlayer?: (context: FlowContext<G>) => PlayerOf<G>;
-  do: FlowNode<G>;
-}): FlowNode<G> {
+export function eachPlayer<G extends Game = Game>(config: EachPlayerConfig<G>): FlowNode<G> {
   return {
     type: 'each-player',
     config: {
@@ -219,12 +211,7 @@ export function eachPlayer<G extends Game = Game>(config: {
 export function forEach<
   T extends GameElement | string | number | boolean | null,
   G extends Game = Game,
->(config: {
-  name?: string;
-  collection: T[] | ((context: FlowContext<G>) => T[]);
-  as: string;
-  do: FlowNode<G>;
-}): FlowNode<G> {
+>(config: ForEachConfig<T, G>): FlowNode<G> {
   return {
     type: 'for-each',
     config: {
@@ -365,12 +352,7 @@ export function simultaneousActionStep<G extends Game = Game>(config: Simultaneo
  * })
  * ```
  */
-export function switchOn<G extends Game = Game>(config: {
-  name?: string;
-  on: (context: FlowContext<G>) => unknown;
-  cases: Record<string, FlowNode<G>>;
-  default?: FlowNode<G>;
-}): FlowNode<G> {
+export function switchOn<G extends Game = Game>(config: SwitchConfig<G>): FlowNode<G> {
   if (Object.prototype.hasOwnProperty.call(config.cases, SWITCH_DEFAULT_KEY)) {
     const label = config.name ? `switchOn "${config.name}"` : 'switchOn';
     throw new Error(
@@ -401,12 +383,7 @@ export function switchOn<G extends Game = Game>(config: {
  * })
  * ```
  */
-export function ifThen<G extends Game = Game>(config: {
-  name?: string;
-  condition: (context: FlowContext<G>) => boolean;
-  then: FlowNode<G>;
-  else?: FlowNode<G>;
-}): FlowNode<G> {
+export function ifThen<G extends Game = Game>(config: IfConfig<G>): FlowNode<G> {
   return {
     type: 'if',
     config: {
