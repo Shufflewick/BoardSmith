@@ -43,7 +43,6 @@
  * the deletion request. That rule needs the host's own vocabulary for "one
  * person's data", so it composes rather than living here.
  */
-import type { StoredPartition } from "./contract.js";
 import type { WorldGenesis, WorldSerialized } from "./runner.js";
 import { worldRefusal } from "./refusals.js";
 import { NOTICE_SCOPE } from "./notices.js";

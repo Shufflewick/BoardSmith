@@ -1,5 +1,4 @@
 import type { GameElement } from '../element/game-element.js';
-import type { Player } from '../player/player.js';
 import type { Game, PlayerOf } from '../element/game.js';
 // TYPE ONLY, and it must stay type only: `boardsmith/world` imports the engine
 // at runtime, so a value import here would close the cycle. See

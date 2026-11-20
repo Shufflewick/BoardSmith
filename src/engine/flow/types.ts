@@ -1,7 +1,6 @@
 import type { Game, PlayerOf } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
-import type { Player } from '../player/player.js';
-import type { ActionDefinition, ActionResult, FollowUpAction } from '../action/types.js';
+import type { ActionResult, FollowUpAction } from '../action/types.js';
 
 /**
  * Flow node types
