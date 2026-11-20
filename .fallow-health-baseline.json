@@ -496,11 +496,6 @@
         "count": 1
       }
     },
-    "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/ui/components/debug/ActionsTab.vue": {
       "complexity_critical": {
         "count": 1
