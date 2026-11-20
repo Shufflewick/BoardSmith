@@ -295,6 +295,8 @@ interface UndoFlowState {
   turnScopeUndeclared?: string;
   /** Set while the open simultaneous step undoes per seat (#1526). */
   seatUndo?: true;
+  /** Set while the open action step undoes one action at a time (#1759). */
+  undoEachAction?: true;
 }
 
 /**
@@ -459,6 +461,8 @@ function computeUndoEligibility(
     flowState?.moveCount,
   );
   const eligible = flowState?.currentPlayer === seat;
+  // A step that undoes each action restores the point just before the last one (#1759).
+  if (flowState?.undoEachAction && actionsThisTurn > 0) return { eligible, turnStartActionIndex: count - 1, actionsThisTurn };
   return { eligible, turnStartActionIndex, actionsThisTurn };
 }
 

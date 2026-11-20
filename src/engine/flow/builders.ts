@@ -242,6 +242,7 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
       minMoves: config.minMoves,
       maxMoves: config.maxMoves,
       turnScope: config.turnScope,
+      undo: config.undo,
       timeLimitMs: config.timeLimitMs,
     },
   };
