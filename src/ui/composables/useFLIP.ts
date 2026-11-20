@@ -445,57 +445,7 @@ export function createFLIPSnapshot(
   selector: string = '[data-card-id]',
   options: { duration?: number; easing?: string } = {}
 ): { animate: () => Promise<void> } {
-  const { duration = 300, easing = 'ease-out' } = options;
-  const positions = new Map<string, DOMRect>();
-
-  // Capture positions immediately
-  if (containerRef?.value) {
-    const elements = containerRef.value.querySelectorAll(selector);
-    elements.forEach((el) => {
-      const id = getElementId(el);
-      if (id) {
-        positions.set(id, el.getBoundingClientRect());
-      }
-    });
-  }
-
-  return {
-    async animate(): Promise<void> {
-      if (prefersReducedMotion.value || !containerRef?.value || positions.size === 0) {
-        return;
-      }
-
-      const animations: Animation[] = [];
-      const zoom = boardZoomAt(containerRef.value);
-      const elements = containerRef.value.querySelectorAll(selector);
-
-      elements.forEach((el) => {
-        const id = getElementId(el);
-        if (!id) return;
-
-        const oldRect = positions.get(id);
-        if (!oldRect) return;
-
-        const newRect = el.getBoundingClientRect();
-        const deltaX = oldRect.left - newRect.left;
-        const deltaY = oldRect.top - newRect.top;
-
-        if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
-          return;
-        }
-
-        animations.push(
-          (el as HTMLElement).animate(
-            [
-              { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
-              { transform: 'translate(0, 0)' },
-            ],
-            { duration, easing, fill: 'backwards' }
-          )
-        );
-      });
-
-      await Promise.all(animations.map((a) => a.finished));
-    },
-  };
+  const flip = useFLIP({ containerRef, selector, ...options });
+  flip.capture();
+  return { animate: flip.animate };
 }

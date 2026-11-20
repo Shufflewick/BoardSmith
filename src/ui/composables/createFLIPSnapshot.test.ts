@@ -20,6 +20,8 @@ vi.stubGlobal('ResizeObserver', vi.fn(() => ({
 
 const { createFLIPSnapshot } = await import('./useFLIP.js');
 const { prefersReducedMotion } = await import('./reducedMotion.js');
+const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
+  await import('./useAnimationTestMode.js');
 
 const rect = (left: number, top: number): DOMRect => ({
   left, top, right: left, bottom: top, width: 0, height: 0, x: left, y: top,
@@ -67,6 +69,8 @@ afterEach(() => {
   delete (HTMLElement.prototype as unknown as { animate?: unknown }).animate;
   document.body.innerHTML = '';
   prefersReducedMotion.value = false;
+  disableAnimationTestMode();
+  clearAnimationTrace();
 });
 
 describe('createFLIPSnapshot', () => {
@@ -240,5 +244,22 @@ describe('createFLIPSnapshot', () => {
     resolveAnimation();
     await pending;
     expect(settled).toBe(true);
+  });
+
+  it('reports an element it cannot track, as useFLIP does', () => {
+    const element = container(['a']);
+    element.appendChild(document.createElement('div')).className = 'flip-target';
+    expect(() => createFLIPSnapshot(ref(element), '.flip-target')).toThrow(/anchor/);
+  });
+
+  it('records a flip trace instead of animating in animation test mode, as useFLIP does', async () => {
+    const element = container(['a']);
+    const positions = stubPositions({ a: [0, 0] }, { a: [100, 0] });
+    const snapshot = createFLIPSnapshot(ref(element));
+    positions.moveToAfter();
+    enableAnimationTestMode();
+    await snapshot.animate();
+    expect(animateCalls).toEqual([]);
+    expect(getAnimationTrace()).toMatchObject([{ kind: 'flip', element: 'a' }]);
   });
 });

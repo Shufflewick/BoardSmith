@@ -1863,7 +1863,8 @@ isRedSuit('D');      // true
 
 ### createFLIPSnapshot
 
-One-off FLIP animation for a single update cycle.
+One-off FLIP animation for a single update cycle. It is `useFLIP` captured on creation, so it
+animates once, records traces in animation test mode, and reports an element with no anchor attribute.
 
 <!-- typecheck: game src/ui/flip-once.ts -->
 ```typescript
