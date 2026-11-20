@@ -16,7 +16,7 @@
  * reads) and reject everything else loudly rather than returning `NaN`.
  */
 
-import { parseColor, contrastInk, type Rgb } from './color-contrast.js';
+import { parseColor, contrastInk, type Rgba } from './color-contrast.js';
 
 function assertAmount(amount: number, fn: string): void {
   if (!(amount >= 0 && amount <= 1)) {
@@ -27,15 +27,15 @@ function assertAmount(amount: number, fn: string): void {
   }
 }
 
-function toCss({ r, g, b }: Rgb): string {
-  return `rgb(${r}, ${g}, ${b})`;
+function toCss({ r, g, b, a }: Rgba): string {
+  return a < 1 ? `rgba(${r}, ${g}, ${b}, ${a})` : `rgb(${r}, ${g}, ${b})`;
 }
 
-function shift(color: string, amount: number, direction: 1 | -1): Rgb {
-  const { r, g, b } = parseColor(color);
+function shift(color: string, amount: number, direction: 1 | -1): Rgba {
+  const { r, g, b, a } = parseColor(color);
   const delta = direction * Math.round(255 * amount);
   const clamp = (channel: number) => Math.min(255, Math.max(0, channel + delta));
-  return { r: clamp(r), g: clamp(g), b: clamp(b) };
+  return { r: clamp(r), g: clamp(g), b: clamp(b), a };
 }
 
 /**
@@ -63,7 +63,7 @@ export function darkenColor(color: string, amount: number): string {
  * white, per the same WCAG relative-luminance comparison `contrastInk()` uses.
  * Use it to pick an overlay glyph colour for a seat-coloured piece.
  *
- * @throws {Error} if `color` is unparseable.
+ * @throws {Error} if `color` is unparseable or translucent.
  */
 export function isLightColor(color: string): boolean {
   return contrastInk(color).ink === '#000000';

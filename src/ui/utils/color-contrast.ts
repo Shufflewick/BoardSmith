@@ -212,7 +212,7 @@ function hwbToSrgb(h: number, w: number, b: number): Vec3 {
   return hslToSrgb(h, 100, 50).map((c) => c * (1 - white - black) + white) as Vec3;
 }
 
-const NUMBER = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|deg|rad|grad|turn)?$/i;
+const NUMBER = /^([+-]?(?:\d+(?:\.\d+)?|\.\d+)(?:e[+-]?\d+)?)(%|deg|rad|grad|turn)?$/i;
 const TURN: Record<string, number> = { deg: 1, rad: 180 / Math.PI, grad: 0.9, turn: 360 };
 
 type Component = { kind: 'none' } | { kind: 'number' | 'percent' | 'angle'; value: number };
@@ -254,7 +254,7 @@ function splitArgs(body: string, legacyAllowed: boolean): { parts: string[]; alp
  */
 export function parseColor(input: string): Rgba {
   const trimmed = input.trim();
-  const named = CSS_NAMED_COLORS[trimmed.toLowerCase()];
+  const named = Object.hasOwn(CSS_NAMED_COLORS, trimmed.toLowerCase()) ? CSS_NAMED_COLORS[trimmed.toLowerCase()] : undefined;
   const hex = (named ?? trimmed).match(HEX);
   if (hex) return parseHex(hex[1]);
   const fn = trimmed.match(COLOR_FN);
@@ -393,13 +393,19 @@ const WHITE_LUMINANCE = relativeLuminance({ r: 255, g: 255, b: 255 });
  * Compute the ink color (black or white) and derived text-shadow that reads
  * most legibly against `seatColor`, per WCAG 2.1 relative-luminance contrast.
  *
- * @throws {Error} if `seatColor` is not a colour `parseColor()` reads, or if
- *   an rgb()/hsl() colour has an out-of-range channel/component — fails loud
+ * @throws {Error} if `seatColor` is not a colour `parseColor()` reads, is
+ *   translucent, or an rgb()/hsl() colour has an out-of-range channel/component — fails loud
  *   rather than guessing wrong contrast. A render path uses `seatInk()`,
  *   which catches this.
  */
 export function contrastInk(seatColor: string): ContrastInk {
   const rgb = parseColor(seatColor);
+  if (rgb.a < 1) {
+    throw new Error(
+      `BoardSmith color parser: "${seatColor}" is translucent, so the ink that reads on it depends on what shows through. ` +
+        'Give the seat an opaque colour.'
+    );
+  }
   const bgLuminance = relativeLuminance(rgb);
 
   const blackContrast = contrastRatio(bgLuminance, BLACK_LUMINANCE);

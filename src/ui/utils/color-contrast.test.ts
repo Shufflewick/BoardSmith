@@ -163,6 +163,21 @@ describe('contrastInk', () => {
       expect(parseColor(css)).toEqual(want);
     });
 
+    it.each(['constructor', '__proto__'])(
+      'refuses %s with the parser error, not an internal one',
+      (css) => {
+        expect(() => parseColor(css)).toThrow(/unsupported color value/);
+      },
+    );
+
+    // The ink cannot be judged without the surface a translucent fill shows through.
+    it.each(['#ffffff00', 'rgb(255 255 255 / 0.5)', 'rgba(0, 0, 0, 0.5)', 'transparent'])(
+      'refuses to pick ink for the translucent %s',
+      (css) => {
+        expect(() => contrastInk(css)).toThrow(/translucent.*opaque/);
+      },
+    );
+
     it('gives a pale oklch() seat black ink, with no warning', () => {
       _clearShownWarnings();
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -182,6 +197,8 @@ describe('contrastInk', () => {
       'oklch(0.5 0.1)',
       'color(cmyk 0 0 0)',
       'color-mix(in srgb, red, blue)',
+      'rgb(1.,2,3)',
+      'rgb(1 2 3 / 1.)',
     ])('refuses %s, which the browser does not draw or BoardSmith cannot resolve', (css) => {
       expect(() => parseColor(css)).toThrow(css);
     });
