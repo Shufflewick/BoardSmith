@@ -3,7 +3,7 @@
  * checklist line (#1784): a section written twice, or a heading or checklist line inside an HTML
  * comment, where every reader skips it. Either way the edit can land on a copy no reader sees.
  */
-import { blankComments } from '../lib/ledger-entries.js';
+import { lineOf, markdownCitable, markdownComments } from '../lib/ledger-entries.js';
 
 /** The level-2 headings of a CHUNK.md, in order: CHUNK.template.md ships exactly these. */
 export const CHUNK_HEADINGS = [
@@ -27,13 +27,13 @@ export const CHUNK_HEADINGS = [
   '## Rules Staleness',
 ] as const;
 
-const HEADING_OR_CHECKBOX = /^[ \t]*(?:#{1,6}[ \t]|[-*+][ \t]+\[[ xX]\])/;
+const HEADING_OR_CHECKBOX = /^[ \t]*(?:<!--)?[ \t]*(?:#{2,6}[ \t]|[-*+][ \t]+\[[ xX]\])/;
 
 /** One sentence per problem, each naming the line it is on. Empty when the file is unambiguous. */
 export function chunkStructureProblems(chunkText: string): string[] {
   const problems: string[] = [];
 
-  const visibleLines = blankComments(chunkText).split('\n');
+  const visibleLines = markdownCitable(chunkText).text.split('\n');
   for (const heading of CHUNK_HEADINGS) {
     const lines = visibleLines.flatMap((line, i) => (line.trimEnd() === heading ? [i + 1] : []));
     if (lines.length > 1) {
@@ -44,9 +44,9 @@ export function chunkStructureProblems(chunkText: string): string[] {
     }
   }
 
-  for (const comment of chunkText.matchAll(/<!--([\s\S]*?)-->/g)) {
-    const firstLine = chunkText.slice(0, comment.index).split('\n').length;
-    comment[1].split('\n').forEach((line, i) => {
+  for (const comment of markdownComments(chunkText)) {
+    const firstLine = lineOf(chunkText, comment.index);
+    comment.text.split('\n').forEach((line, i) => {
       if (!HEADING_OR_CHECKBOX.test(line)) return;
       problems.push(
         `Line ${firstLine + i} is a heading or checklist line inside an HTML comment, where no reader sees it: ` +

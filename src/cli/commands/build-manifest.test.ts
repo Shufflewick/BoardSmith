@@ -107,6 +107,27 @@ describe('findHeadingIndex / extractSection', () => {
     expect(body).not.toContain('hidden claim');
   });
 
+  it('reads `<!--` in a code span, and a heading in a code fence, as code (#1784)', () => {
+    const text = [
+      '## Interpretation',
+      '',
+      '1. the note goes in a `<!--` comment',
+      '',
+      '```md',
+      '## Build Manifest',
+      '```',
+      '',
+      '## Build Manifest',
+      '',
+      'real body',
+      '',
+      '<!-- end -->',
+      '',
+    ].join('\n');
+    expect(findHeadingIndex(text, '## Build Manifest')).toBe(text.indexOf('## Build Manifest\n\nreal body'));
+    expect(extractSection(text, '## Interpretation')).not.toContain('real body');
+  });
+
   it('absent heading returns -1 / undefined, never a partial body', () => {
     const text = '## Something Else\n\nbody\n';
     expect(findHeadingIndex(text, '## Build Manifest')).toBe(-1);

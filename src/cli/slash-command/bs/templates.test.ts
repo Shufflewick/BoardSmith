@@ -574,7 +574,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       const contract = parseContractBlock(read(path));
       let cursor = -1;
       for (const heading of expected) {
-        const index = contract.indexOf(heading.replace(/^## /, ''), cursor + 1);
+        const index = contract.indexOf(`${heading.replace(/^## /, '')}"`, cursor + 1);
         expect(
           index,
           `PARSE CONTRACT must list "${heading}" (after the previously listed heading)`

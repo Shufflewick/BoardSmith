@@ -613,6 +613,21 @@ describe('chunk-check', () => {
     expect(await fs.readFile(chunkPath, 'utf-8')).toBe(hidden);
   });
 
+  it('accepts a heading in a code fence and `<!--` in a code span (#1784)', async () => {
+    const { project } = await makeCheckProject();
+    const chunkPath = await makeChunk(project, 'jab', JAB_CITES);
+    const text = await fs.readFile(chunkPath, 'utf-8');
+    await fs.writeFile(
+      chunkPath,
+      text.replace(
+        /^Taste check: .*$/m,
+        (line) => `${line}\n\nA note goes in a \`<!--\` comment, shaped like:\n\n\`\`\`md\n## Ceremony\n### Redteam Round 1\n- [ ] build\n\`\`\``,
+      ),
+    );
+
+    await expect(chunkCheckCommand('jab', { project, json: true })).resolves.toBeUndefined();
+  });
+
   it('writes the whole fenced section when none exists, and exits non-zero', async () => {
     const { project } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);

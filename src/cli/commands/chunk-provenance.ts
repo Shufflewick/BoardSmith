@@ -674,9 +674,11 @@ async function planVerifiedAgainst(
   const structureProblems = chunkStructureProblems(chunkText);
   if (structureProblems.length) {
     throw new Error(
-      `${relChunkPath} has a heading or checklist line that an edit could take for the real one. ` +
-        `Fix these, then run \`boardsmith chunk-check ${slug}\` again:\n` +
-        structureProblems.map((p) => `  • ${p}`).join('\n'),
+      `${relChunkPath} has more than one place an edit to a heading or checklist line could land, so ` +
+        `an edit can miss the real one. Fix these, then run \`boardsmith chunk-check\` again:\n` +
+        structureProblems.map((p) => `  • ${p}`).join('\n') +
+        '\nA CHUNK.md made from an older CHUNK.template.md has such lines in its guidance comments; ' +
+        'delete them from the comments, since the template no longer writes them.',
     );
   }
 
