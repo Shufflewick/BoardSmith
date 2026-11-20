@@ -856,9 +856,8 @@ export interface WorldMigrated extends WorldAllocation {
  * handed the ENGINE rather than the game, and only `createWorld` holds both the
  * game and the bundle's declaration.
  */
-export type WorldMigrationHooks = Pick<
-  WorldMigration,
-  "partition" | "derive" | "create" | "finalize" | "survey" | "join"
+export type WorldMigrationHooks = Readonly<
+  Pick<WorldMigration, "partition" | "derive" | "create" | "finalize" | "survey" | "join">
 >;
 
 /**
@@ -1187,13 +1186,6 @@ export function createWorldRunner(
   engine: WorldEngine,
   store: InlinedPartitionStore,
   buildGenesis: () => Record<string, StoredPartition> = () => ({}),
-  /**
-   * The bundle's `world.migration.create`, or a world that adds no roots (#218).
-   *
-   * Supplied the same way `buildGenesis` is, and for the same reason: the
-   * runner is handed the ENGINE rather than the game, and only `createWorld`
-   * holds both the game and the bundle's declaration.
-   */
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
   /** What each player's view named on the last round of the look in
