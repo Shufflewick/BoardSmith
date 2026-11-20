@@ -6,7 +6,8 @@
  * the mutants change, so the same change tries the same ones whichever commit holds it (#1500), and
  * runs the unit tests that import the changed files against each (`runDiffMutationCheck`). A mutant no test notices, and one in a file no
  * test loads, fails the run, naming its file and line, and so does a sample whose mutants only timed
- * out, since none was shown caught (#1499). Sims never run here (#1494).
+ * out, since none was shown caught (#1499). A mutant marked equivalent above its line is left out of the
+ * sample and named with the mark's reason (#1781). Sims never run here (#1494).
  */
 import { styleText } from 'node:util';
 import { gitOutput as git } from '../lib/git-output.js';
@@ -24,9 +25,15 @@ interface MutateVerdict {
   summary: string;
   next?: string;
   findings: Array<{ file: string; line: number; detail: string }>;
+  /** The mutants a mark left out of the sample, as `file:line mutant: marked at line n: reason`. */
+  equivalent?: string[];
 }
 
 type DiffMutationRun = Awaited<ReturnType<typeof runDiffMutationCheck>>;
+
+/** Why a run tried no mutant: the changed lines have none, or marks left out every one. */
+const noneTried = (since: string, marked: number) =>
+  marked > 0 ? `Every mutant of the lines changed since ${since} is marked equivalent, so none was tried.` : `No line changed since ${since} holds code a mutant can change.`;
 
 /** What a finished run says: a red run before any mutant, survivors, mutants no test loads, only timeouts, or every mutant caught. */
 function verdict(since: string, run: DiffMutationRun): MutateVerdict {
@@ -41,13 +48,17 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [],
     };
   }
-  if (summary.mutants === 0) return { passed: true, summary: `No line changed since ${since} holds code a mutant can change.`, findings: [] };
+  if (summary.mutants === 0) return { passed: true, summary: noneTried(since, run.equivalent.length), findings: [] };
   const of = `of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since}`;
   const said: string[] = [];
   const next: string[] = [];
   if (survivors.length > 0) {
     said.push(`${survivors.length} ${of} survived: every test that loads its file still passed with the code changed`);
-    next.push('For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith mutate` again.');
+    next.push(
+      'For each survivor, add or tighten a test so it fails when that line is changed that way, then run `boardsmith mutate` again. ' +
+        'Only when no test could ever tell the change from the code, mark that one mutant on the line above it with ' +
+        '`// boardsmith-mutate-equivalent: <mutant> -- <reason>`, naming it as it is printed here and saying why.',
+    );
   }
   if (unreached.length > 0) {
     said.push(`${unreached.length} ${of} were in a file no test imports, so no test could notice the change`);
@@ -107,7 +118,7 @@ async function runMutate(options: { projectDir: string; base: string; log?: (lin
     log: options.log ?? ((line) => console.error(styleText('dim', line))),
     budget,
   });
-  return verdict(since, run);
+  return { ...verdict(since, run), equivalent: run.equivalent.map((e) => `${e.file}:${e.line} ${e.name}: marked at line ${e.markLine}: ${e.reason}`) };
 }
 
 export async function mutateCommand(options: { base: string; project?: string }): Promise<void> {
@@ -115,6 +126,7 @@ export async function mutateCommand(options: { base: string; project?: string })
   const result = await runMutate({ projectDir, base: options.base });
   console.log(`${result.passed ? styleText('green', 'pass') : styleText('red', 'FAIL')}  ${result.summary}`);
   for (const f of result.findings) console.log(`        ${f.file}:${f.line} ${f.detail}`);
+  if (result.equivalent?.length) console.log(`Left out as equivalent:\n${result.equivalent.map((e) => `        ${e}`).join('\n')}`);
   if (result.next) console.log(`\n${result.next}`);
   if (!result.passed) process.exitCode = 1;
 }

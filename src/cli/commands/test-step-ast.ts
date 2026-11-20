@@ -18,6 +18,7 @@ export interface AstNode {
 }
 
 interface Comment {
+  type: 'Line' | 'Block';
   value: string;
   loc: { start: { line: number }; end: { line: number } };
 }

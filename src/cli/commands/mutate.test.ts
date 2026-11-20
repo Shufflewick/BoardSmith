@@ -69,6 +69,7 @@ describe('boardsmith mutate', () => {
     expect(run.stdout).toContain('3 of 3 mutants of the lines changed since main');
     expect(run.stdout).toContain('src/fee.ts:2 return value replaced with undefined: no test failed');
     expect(run.stdout).toContain('add or tighten a test so it fails when that line is changed that way');
+    expect(run.stdout).toContain('// boardsmith-mutate-equivalent: <mutant> -- <reason>');
   });
 
   it('tries the same sample on the branch tip and on the merge commit that lands it, since the change is the same (#1500)', async () => {
@@ -145,5 +146,64 @@ describe('boardsmith mutate', () => {
     const run = await spawnCli(['mutate', '--base', 'HEAD~1', '--project', dir]);
     expect(run.code).toBe(0);
     expect(run.stdout).toContain('No code under src/ changed since HEAD~1');
+  });
+
+  describe('a mutant marked equivalent (#1781)', () => {
+    /** `n < 0 ? 0 : n` returns 0 at 0 either way, so `< -> <=` changes nothing a test can see. */
+    const clamp = (mark: string) => `export function clamp(n: number): number {\n  ${mark}\n  return n < 0 ? 0 : n;\n}\n`;
+    const CLAMP_TEST = "import { it, expect } from 'vitest';\nimport { clamp } from '../src/clamp';\nit('clamps below 0', () => { expect(clamp(-1)).toBe(0); expect(clamp(5)).toBe(5); expect(clamp(0)).toBe(0); expect(clamp(0.5)).toBe(0.5); });\n";
+    const gameWithClamp = (mark: string, test = CLAMP_TEST, after = '') =>
+      gameWithBranch(KILLS_FEE, { 'src/fee.ts': '', 'src/clamp.ts': clamp(mark) + after, 'tests/clamp.test.ts': test });
+
+    it('leaves that one mutant out, samples the rest of its line, and names it with its reason', async () => {
+      // Text in a string that reads like a mark is not one.
+      const dir = await gameWithClamp('// boardsmith-mutate-equivalent: < -> <= -- at 0 both branches return 0', CLAMP_TEST, 'export const DOC = `\n// boardsmith-mutate-equivalent: x -- y\n`;\n');
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.stdout).toContain('3 killed by tests, 0 timed out; none survived');
+      expect(run.stderr).not.toContain('< -> <=');
+      expect(run.stdout).toContain('Left out as equivalent:\n        src/clamp.ts:3 < -> <=: marked at line 2: at 0 both branches return 0');
+      expect(run.code).toBe(0);
+    });
+
+    it('takes stacked marks as marks of the code line below them, and `#n` as the nth such mutant on it', async () => {
+      const integers = CLAMP_TEST.replace(' expect(clamp(0.5)).toBe(0.5);', '');
+      const dir = await gameWithClamp('// boardsmith-mutate-equivalent: < -> <= -- at 0 both branches return 0\n  // boardsmith-mutate-equivalent: 0 -> 1 #1 -- only integers reach clamp', integers);
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.stdout).toContain('3 killed by tests, 0 timed out; none survived');
+      expect(run.stdout).toContain('src/clamp.ts:4 < -> <=: marked at line 2');
+      expect(run.stdout).toContain('src/clamp.ts:4 0 -> 1 #1: marked at line 3: only integers reach clamp');
+      expect(run.code).toBe(0);
+    });
+
+    it('refuses a mark that could name more than one mutant of its line, naming how to tell them apart', async () => {
+      const dir = await gameWithClamp('// boardsmith-mutate-equivalent: 0 -> 1 -- which one?');
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.code).toBe(1);
+      expect(run.stderr).toContain('src/clamp.ts:2 marks `0 -> 1` equivalent, but line 3 has 2 such mutants');
+      expect(run.stderr).toContain('`0 -> 1 #1`');
+    });
+
+    it('says so when marks leave out every mutant of the change', async () => {
+      const dir = await gameWithBranch(KILLS_FEE, { 'src/fee.ts': '// boardsmith-mutate-equivalent: true -> false -- nothing reads it yet\nexport const on = (): boolean => true;\n' });
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.stdout).toMatch(/Every mutant of the lines changed since main \(\w+\) is marked equivalent, so none was tried\./);
+      expect(run.stdout).toContain('src/fee.ts:2 true -> false: marked at line 1: nothing reads it yet');
+      expect(run.code).toBe(0);
+    });
+
+    it('refuses a mark with no reason, naming its line', async () => {
+      const dir = await gameWithClamp('// boardsmith-mutate-equivalent: < -> <=');
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.code).toBe(1);
+      expect(run.stderr).toContain('src/clamp.ts:2 marks a mutant equivalent without a reason');
+    });
+
+    it('refuses a mark the line below it has no such mutant for, naming the mutants it has', async () => {
+      const dir = await gameWithClamp('// boardsmith-mutate-equivalent: > -> >= -- a stale mark');
+      const run = await spawnCli(['mutate', '--base', 'main', '--project', dir]);
+      expect(run.code).toBe(1);
+      expect(run.stderr).toContain('src/clamp.ts:2 marks `> -> >=` equivalent, but line 3 has no such mutant');
+      expect(run.stderr).toContain('< -> <=');
+    });
   });
 });

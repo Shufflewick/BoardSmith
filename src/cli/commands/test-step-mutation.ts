@@ -1369,6 +1369,64 @@ interface SurvivingMutant {
   description: string;
 }
 
+/** A mutant left out of the sample because a mark above its line says no test can tell it from the code (#1781). */
+interface EquivalentMutant extends SurvivingMutant {
+  /** The 0-based column of the start of the code it changes, which tells apart mutants a line has the same description for. */
+  column: number;
+  /** The mutant as the mark names it: its description, with `#n` when the line has more than one such mutant. */
+  name: string;
+  markLine: number;
+  reason: string;
+}
+
+/** The text of a `//` comment that marks a mutant equivalent: ` <mutant> -- <reason>` follows it. */
+const EQUIVALENT_MARK = /^\s*boardsmith-mutate-equivalent:(.*)$/;
+const MARK_FORM = '`// boardsmith-mutate-equivalent: <mutant> -- <why no test can tell it from the code>`';
+
+/**
+ * The mutants of `source` its equivalent marks name. A mark is a `//` comment naming one mutant of
+ * the code line below it and any marks stacked under it, as `boardsmith mutate` prints it, plus
+ * `#n` for the nth of several such mutants on the line, left to right. Throws on a mark with no
+ * reason, one that names no mutant of its line, and one that could name more than one, so a mark
+ * cannot outlive its code or leave out more than it says.
+ */
+function equivalentMarks(file: string, source: string): Array<Omit<EquivalentMutant, 'file'>> {
+  const marks = codeRegions(file, source).flatMap((region) =>
+    parseSource(region.text, file).comments.flatMap((comment) => {
+      const text = comment.type === 'Line' ? EQUIVALENT_MARK.exec(comment.value)?.[1] : undefined;
+      return text === undefined ? [] : [{ markLine: region.firstLine + comment.loc.start.line - 1, text }];
+    }),
+  );
+  const markLines = new Set(marks.map((m) => m.markLine));
+  const lineBelow = (markLine: number) => {
+    let line = markLine + 1;
+    while (markLines.has(line)) line++;
+    return line;
+  };
+  const sites = mutationSites(file, source, new Set(marks.map((m) => lineBelow(m.markLine))));
+  return marks.map(({ markLine, text }) => {
+    const line = lineBelow(markLine);
+    const split = text.indexOf(' -- ');
+    const name = (split === -1 ? text : text.slice(0, split)).trim();
+    const reason = split === -1 ? '' : text.slice(split + 4).trim();
+    if (!reason) throw new Error(`${file}:${markLine} marks a mutant equivalent without a reason. Write it as ${MARK_FORM}, or remove it.`);
+    const [, description, nth] = /^(.*?)(?: #(\d+))?$/.exec(name)!;
+    const onLine = sites.filter((site) => site.line === line);
+    const same = onLine.filter((site) => site.description === description);
+    const site = nth === undefined ? (same.length === 1 ? same[0] : undefined) : same[Number(nth) - 1];
+    if (!site) {
+      const has = same.length > 1
+        ? `${same.length} such mutants; name one as ${same.map((_, i) => `\`${description} #${i + 1}\``).join(', ')}, counting left to right`
+        : `no such mutant (${onLine.length > 0 ? `its mutants are ${onLine.map((d) => `\`${d.description}\``).join(', ')}` : 'it has none'})`;
+      throw new Error(
+        `${file}:${markLine} marks \`${name}\` equivalent, but line ${line} has ${has}. ` +
+          `A mark names one mutant of the code line below it as \`boardsmith mutate\` prints it, in the form ${MARK_FORM}: fix the mark or remove it.`,
+      );
+    }
+    return { line, column: site.column, description, name, markLine, reason };
+  });
+}
+
 interface DiffMutationInput {
   projectDir: string;
   /** Code files changed since the base, with the lines that changed (`changedSince` in verify.ts). */
@@ -1385,6 +1443,8 @@ interface DiffMutationResult {
   unreached: SurvivingMutant[];
   /** Mutants whose run went past its time limit: not shown caught, since a busy machine looks the same. */
   timedOut: SurvivingMutant[];
+  /** Mutants of the changed lines a mark left out of the sample (`equivalentMarks`). */
+  equivalent: EquivalentMutant[];
   notGreen?: string[];
 }
 
@@ -1520,12 +1580,23 @@ export async function runDiffMutationCheck(
 ): Promise<DiffMutationResult> {
   const projectDir = realpathSync(input.projectDir);
   const summary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, unreached: 0 };
-  const all = await collectMutants(projectDir, input.added);
+  const all: LocatedMutant[] = [];
+  const equivalent: EquivalentMutant[] = [];
+  for (const [file, lines] of input.added) {
+    const absPath = join(projectDir, file);
+    const source = await fs.readFile(absPath, 'utf-8');
+    const marks = equivalentMarks(file, source);
+    for (const mutant of generateMutants(file, source, lines)) {
+      const mark = marks.find((m) => m.line === mutant.line && m.column === mutant.column && m.description === mutant.description);
+      if (mark) equivalent.push({ file, ...mark });
+      else all.push({ ...mutant, absPath });
+    }
+  }
   // Seeded by what the mutants change, not where or in which commit, so the branch tip and the merge commit that lands it try the same ones (#1500).
   const seed = all.map((m) => [m.file, m.description, m.change.before, m.change.after].join('\0')).join('\n');
   const mutants = sampleMutants(all, seed, MUTATE_SAMPLE_SIZE);
   summary.files = new Set(mutants.map((m) => m.file)).size;
-  if (mutants.length === 0) return { summary, survivors: [], unreached: [], timedOut: [] };
+  if (mutants.length === 0) return { summary, survivors: [], unreached: [], timedOut: [], equivalent };
 
   const runners: Runner[] = [];
   return withCommandBuildDir(projectDir, 'mutate', async (workDir) => {
@@ -1538,16 +1609,16 @@ export async function runDiffMutationCheck(
       runners.push(await createRunner(projectDir, [], trialDir));
     }
     const started = await greenRunner(runners[0], projectDir, mutants, trials, input.log, input.budget);
-    if ('notGreen' in started) return { summary, survivors: [], unreached: [], timedOut: [], notGreen: started.notGreen };
+    if ('notGreen' in started) return { summary, survivors: [], unreached: [], timedOut: [], equivalent, notGreen: started.notGreen };
     const share = started.workers === undefined ? '' : `, each with ${started.workers} test worker${started.workers === 1 ? '' : 's'}, of a budget of ${input.budget!.workers}`;
     input.log(`Running ${trials} mutant${trials === 1 ? '' : 's'} at a time${share}.`);
-    return tallyMutants(mutants, await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner }))), summary);
+    return { ...tallyMutants(mutants, await outcomesOf(input, mutants, runners.map((runner) => ({ ...started, runner }))), summary), equivalent };
   }, () => stopAll(runners));
 }
 
 /** Counts each mutant's outcome into `summary`, in the order the mutants were made, and names the survivors, the mutants no test loads and those that timed out. */
-function tallyMutants(mutants: LocatedMutant[], outcomes: DiffOutcome[], summary: DiffMutationResult['summary']): DiffMutationResult {
-  const result: DiffMutationResult = { summary, survivors: [], unreached: [], timedOut: [] };
+function tallyMutants(mutants: LocatedMutant[], outcomes: DiffOutcome[], summary: DiffMutationResult['summary']): Omit<DiffMutationResult, 'equivalent'> {
+  const result: Omit<DiffMutationResult, 'equivalent'> = { summary, survivors: [], unreached: [], timedOut: [] };
   for (const [i, mutant] of mutants.entries()) {
     summary.mutants++;
     summary[COUNTED[outcomes[i]]]++;
