@@ -9,6 +9,7 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import { mount } from '@vue/test-utils';
 import ZoomPreviewOverlay from './ZoomPreviewOverlay.vue';
 import type { PreviewState } from '../../composables/useZoomPreview.js';
+import { getSuitColor } from '../../composables/useCardDisplay.js';
 
 const state = (overrides: Partial<PreviewState> = {}): PreviewState => ({
   visible: true,
@@ -107,9 +108,11 @@ describe('ZoomPreviewOverlay', () => {
     });
 
     it('colours the fallback by its suit', () => {
-      overlay(state({ cardData: { rank: 'A', suit: 'H' } }));
+      overlay(state({ cardData: { rank: 'A', suit: 'S' } }));
       const fallback = rendered()!.querySelector('.preview-fallback') as HTMLElement;
-      expect(fallback.getAttribute('style')).toBeTruthy();
+      const expected = document.createElement('span');
+      expected.style.color = getSuitColor('S');
+      expect(fallback.style.color).toBe(expected.style.color);
     });
   });
 

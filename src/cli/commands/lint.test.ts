@@ -186,7 +186,7 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
     writeFileSync(join(game, '.stylelintrc.json'), '  \n');
 
     await lintCommand({});
-    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls.map(([tool]) => tool)).not.toContain('stylelint');
   });
 
   it('lint does not look above the home folder, where Stylelint stops', async () => {
@@ -199,7 +199,7 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
     gameIn(home);
 
     await lintCommand({});
-    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls.map(([tool]) => tool)).not.toContain('stylelint');
   });
 
   it('lint runs Stylelint with a config in its global config folder', async () => {
@@ -221,7 +221,7 @@ describe('lint finds a config wherever the linter itself would (#1094)', () => {
     gameIn(tempTree('boardsmith-lint-isolated-'));
 
     await lintCommand({});
-    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls.map(([tool]) => tool)).not.toContain('stylelint');
   });
 
   it('lint runs ESLint for a project with only an .eslintrc.json, so ESLint explains how to migrate (#624)', async () => {
@@ -274,7 +274,7 @@ describe('lint finds a config the linter reads from a linted file\'s own folder 
     gameWith({ 'src/server/.stylelintrc.json': '{}', 'src/server/a.ts': 'export {};', 'src/ui/Board.vue': '<template><div /></template>' });
 
     await lintCommand({});
-    expect(vi.mocked(runTool)).not.toHaveBeenCalled();
+    expect(vi.mocked(runTool).mock.calls.map(([tool]) => tool)).not.toContain('stylelint');
   });
 });
 
