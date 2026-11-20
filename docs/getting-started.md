@@ -261,10 +261,11 @@ at its cap.
 
 `boardsmith test --changed <base>` runs the unit tests that import something
 changed since the merge base with `<base>`, never sims. When no unit test
-imports anything the change touched, it fails if the change edited or added a
-file under `src/` that is not a sim, naming those files. Otherwise (only sims,
-deleted or renamed files, and files outside `src/`) it passes and lists each
-file with why it needs no unit test.
+imports anything the change touched, it passes and lists each changed file
+with why no test ran for it, so a change guarded by its types alone or a
+cleanup with no new behaviour needs no filler test. `boardsmith mutate` below
+is what shows the tests of a change can fail, and a mutant it tries in a file no
+test imports fails it. It fails only when nothing changed since `<base>`.
 
 #### Showing the tests of a change can fail: `boardsmith mutate`
 

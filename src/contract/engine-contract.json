@@ -1,5 +1,5 @@
 {
-  "revision": 480,
+  "revision": 481,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3783,6 +3783,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "On a phone the board no longer ends in half a screen of empty scroll room: the room follows what the Action Panel covers, never shrinks under a scrolled board, and is gone while the panel is put down (#1755)."
+    },
+    {
+      "revision": 481,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "No contract change. CLI: boardsmith test --changed passes a change no unit test imports, such as one guarded by its types alone, listing each changed file with why no test ran, and fails only when nothing changed (#1757). Published games need no rebuild."
     }
   ]
 }
