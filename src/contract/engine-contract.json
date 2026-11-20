@@ -1,5 +1,5 @@
 {
-  "revision": 502,
+  "revision": 503,
   "surfaceHash": "8b31596b3aaadef6",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3959,6 +3959,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The bs design review keeps its screenshots out of the game repo and re-renders the cohesion baseline from the previous UI chunk's verified commit"
+    },
+    {
+      "revision": 503,
+      "date": "2026-11-20",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith mutate leaves out a mutant marked equivalent by a // boardsmith-mutate-equivalent comment with a required reason (#1781)"
     }
   ]
 }
