@@ -45,6 +45,13 @@ describe('boardsmith test has no authored-test selection (#986)', () => {
   });
 });
 
+describe('boardsmith test writes no verdict file (#1741)', () => {
+  it('offers no --verdict-file: the merge script that read it is retired, so nothing reads the file', () => {
+    const test = createProgram().commands.find((c) => c.name() === 'test')!;
+    expect(test.options.map((o) => o.long)).not.toContain('--verdict-file');
+  });
+});
+
 describe('boardsmith claude uninstall --local (#348)', () => {
   const skills = installedSkillsTree('bs-cli-claude-uninstall-');
 

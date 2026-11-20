@@ -245,29 +245,24 @@ describe('boardsmith test reports how a run ended when vitest does not finish it
     expect(await logNamedIn(run.stderr)).toContain('Error: Channel closed');
   });
 
-  it('names the failing file of an ordinary failure, and writes the same verdict to --verdict-file', async () => {
+  it('names the failing file of an ordinary failure', async () => {
     const project = await gameProject({
       'tests/fails.test.ts': "import { it, expect } from 'vitest';\nit('fails', () => { expect(1).toBe(2); });\n",
     });
-    const verdictFile = join(project, '..', 'verdict.txt');
 
-    const run = await spawnCli(['test', '--verdict-file', verdictFile], project);
+    const run = await spawnCli(['test'], project);
 
     expect(run.code).toBe(1);
     expect(run.stderr).toContain('Tests failed in 1 file:\n  tests/fails.test.ts');
-    const written = await fs.readFile(verdictFile, 'utf-8');
-    expect(written).toContain('Tests failed in 1 file:\n  tests/fails.test.ts');
-    expect(await logNamedIn(written)).toContain('fails.test.ts');
+    expect(await logNamedIn(run.stderr)).toContain('fails.test.ts');
   });
 
-  it('leaves no record behind and writes no verdict when the run passes', async () => {
+  it('leaves no record behind when the run passes', async () => {
     const project = await gameProject({});
-    const verdictFile = join(project, '..', 'verdict.txt');
 
-    const run = await spawnCli(['test', '--verdict-file', verdictFile], project);
+    const run = await spawnCli(['test'], project);
 
     expect(run.code).toBe(0);
     expect(run.stdout + run.stderr).not.toContain('Full output:');
-    await expect(fs.stat(verdictFile)).rejects.toThrow();
   });
 });

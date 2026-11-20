@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { styleText } from 'node:util';
 import { getProjectContext } from '../lib/project-context.js';
@@ -25,8 +25,6 @@ interface TestOptions {
   coverage?: boolean;
   /** Run only the unit tests related to what changed since the merge base with this ref (#1502). */
   changed?: string;
-  /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
-  verdictFile?: string;
 }
 
 /**
@@ -57,9 +55,8 @@ interface TestOptions {
  * A run that does not pass ends with a verdict that says why (#429): the files
  * that failed, or, when vitest itself stopped before its summary, the signal or
  * exit code that stopped it and the files it left unfinished. It names a log
- * holding the run's whole output, and `--verdict-file` writes the same
- * paragraph to a file for a script to repeat. Watch mode is interactive and has
- * no end to report, so it runs vitest as it is.
+ * holding the run's whole output. Watch mode is interactive and has no end to
+ * report, so it runs vitest as it is.
  */
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
@@ -86,7 +83,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
   const run = await runVitestRecorded(args, cwd);
   const verdict = testRunVerdict(run, run.progress, { cwd, logPath: run.logPath });
   if (verdict !== undefined) {
-    fail(verdict, run.code !== null && run.code !== 0 ? run.code : 1, options);
+    fail(verdict, run.code !== null && run.code !== 0 ? run.code : 1);
   }
 
   discardRecord(run);
@@ -96,7 +93,7 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
 /** Says why a passing run passed: its tests passed, or, under `--changed`, why it had none to run. */
 async function reportPassed(cwd: string, files: string[] | undefined, options: TestOptions): Promise<void> {
   if (files?.length === 0 && options.changed !== undefined) {
-    explainNoRelatedTests(cwd, await changedFiles(cwd, options.changed), options.changed, options);
+    explainNoRelatedTests(cwd, await changedFiles(cwd, options.changed), options.changed);
   } else {
     console.log(styleText('green', '\nAll tests passed!\n'));
   }
@@ -124,7 +121,7 @@ async function changedFiles(cwd: string, base: string): Promise<string[]> {
 }
 
 /** A run under `--changed` that ran no test: fails naming each changed file under src/ that is still there and not a sim, and otherwise passes saying why for each file. */
-function explainNoRelatedTests(cwd: string, changed: string[], base: string, options: TestOptions): void {
+function explainNoRelatedTests(cwd: string, changed: string[], base: string): void {
   const why = (file: string): string | undefined => {
     if (!existsSync(join(cwd, file))) return 'deleted or renamed by this change';
     if (SIM_FILE.test(file)) return 'a sim, which runs only under `boardsmith test --sims`';
@@ -141,7 +138,6 @@ function explainNoRelatedTests(cwd: string, changed: string[], base: string, opt
         'Add a unit test (*.test.ts, not *.sim.test.ts) that imports them.',
       ].join('\n'),
       1,
-      options,
     );
   }
   console.log(
@@ -180,15 +176,13 @@ async function typecheckFirst(cwd: string, options: TestOptions): Promise<void> 
       `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
         "Its errors are above; run 'boardsmith typecheck' to see them again.",
       typecheck,
-      options,
     );
   }
 }
 
-/** Ends a run that did not pass: prints why, hands the same text to `--verdict-file`, and exits. */
-function fail(verdict: string, code: number, options: TestOptions): never {
+/** Ends a run that did not pass: prints why and exits. */
+function fail(verdict: string, code: number): never {
   console.error(styleText('red', `\n${verdict}\n`));
-  if (options.verdictFile !== undefined) writeFileSync(options.verdictFile, `${verdict}\n`);
   process.exit(code);
 }
 
