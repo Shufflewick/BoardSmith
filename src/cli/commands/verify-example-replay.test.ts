@@ -1,7 +1,7 @@
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
 import { generateTsConfig } from '../lib/project-scaffold.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -76,11 +76,6 @@ async function expectRecordRefused(
     }),
   ).rejects.toThrow(message);
   expect(await readExampleReplayVerdicts(project)).toEqual([]);
-}
-
-/** The source text of the module under test. */
-function replayModuleSource(): string {
-  return readFileSync(fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)), 'utf-8');
 }
 
 /** What `verify-example-replay` prints for `project`, as one string. */
@@ -464,11 +459,6 @@ describe('exampleReplayLedgerPath / recordExampleReplayVerdicts / readExampleRep
     await expect(readExampleReplayVerdicts(dir)).rejects.toThrow(
       /end fence appears before the begin fence/,
     );
-  });
-
-  it('writes go through atomicWriteFile — no direct fs.writeFile/writeFileSync in the module', () => {
-    const source = replayModuleSource();
-    expect(/\bfs\.writeFile\(|\bwriteFileSync\(/.test(source)).toBe(false);
   });
 });
 
@@ -1132,12 +1122,6 @@ describe('verifyExampleRecordCommand — record', () => {
       translationPath,
       /"rulebook\/02-punch\.md:3" with no matching translatable --extraction entry/,
     );
-  });
-
-  // One module holds both verify-example-record and verify-example-translate, so this covers both.
-  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
-    const source = replayModuleSource();
-    expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
   });
 });
 

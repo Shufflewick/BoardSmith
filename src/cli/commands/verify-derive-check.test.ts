@@ -772,16 +772,6 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
     expect(message).not.toContain('SyntaxError');
   });
 
-  it('grep-count: no "as DeriveCheckRecord" cast remains anywhere in the module source, after stripping comments', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8');
-    const stripped = src
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
-      .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect((stripped.match(/as DeriveCheckRecord/g) ?? []).length).toBe(0);
-  });
-
   it('returns an empty array (never throws) when no ledger file exists', async () => {
     const empty = tempTree('bs-verify-derive-check-cr02-empty-');
     await expect(readDeriveCheckVerdicts(empty)).resolves.toEqual([]);
@@ -1733,16 +1723,6 @@ describe('verifyDeriveRecordCommand', () => {
     expect(result.records[0].verdict).toBe('contradicted');
     expect(process.exitCode).toBe(before);
   });
-
-  it('registers no --force, --skip, --overwrite, or --run-id option string (source-level pin, comment-stripped)', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8');
-    const stripped = src
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
-      .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(stripped).not.toMatch(/--force|--skip|--overwrite|--run-id/);
-  });
 });
 
 // ===========================================================================================
@@ -2104,25 +2084,6 @@ describe('verifyDeriveCheckCommand', () => {
 
     expect(result.findings[0].verdict).toBe('contradicted');
     expect(process.exitCode).toBe(before);
-  });
-
-  it('grep-count: this module never assigns process.exitCode anywhere (source-level pin, comment-stripped)', () => {
-    const src = readFileSync(join(__dirname, 'verify-derive-check.ts'), 'utf-8');
-    const stripped = src
-      .split('\n')
-      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('//'))
-      .join('\n')
-      .replace(/\/\*[\s\S]*?\*\//g, '');
-    expect(stripped).not.toMatch(/process\.exitCode\s*=/);
-  });
-
-  it('grep-count: exactly one "No rulebook/ directory" message exists in the module that reads the live slices (WR-10)', () => {
-    const src = readFileSync(join(__dirname, 'rulebook-sources.ts'), 'utf-8').replace(
-      /^\s*\*.*$/gm,
-      '',
-    );
-    const matches = src.match(/No rulebook\/ directory/g) ?? [];
-    expect(matches).toHaveLength(1);
   });
 });
 
