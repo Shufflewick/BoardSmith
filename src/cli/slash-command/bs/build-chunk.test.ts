@@ -786,8 +786,9 @@ describe('UIQ-04 — design-review', () => {
   it('re-renders the cohesion baseline from the previous UI chunk\'s Verified Commit Hash, and reports a failed render as incomplete (#1780)', () => {
     const designReview = read('build/design-review.md').replace(/\s+/g, ' ');
     expect(designReview).toMatch(/`## Verified Commit Hash`/);
-    expect(designReview).toContain('git worktree add --detach .boardsmith/worktrees/design-baseline');
-    expect(designReview).toContain('git worktree remove --force .boardsmith/worktrees/design-baseline');
+    expect(designReview).toContain('git worktree add --detach .boardsmith/worktrees/design-baseline-<slug> <hash>');
+    expect(designReview).toContain('../../../node_modules/.bin/boardsmith dev --no-open');
+    expect(designReview).toMatch(/git worktree remove --force \.boardsmith\/worktrees\/design-baseline-<slug>` from the project root, whether the render worked or not/);
     expect(designReview).toMatch(/cohesion comparison incomplete/);
   });
 

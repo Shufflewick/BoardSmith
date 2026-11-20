@@ -170,22 +170,29 @@ Two review passes, both performed fresh (never from `## Interpretation`):
    chunk (the Restyle Rule), so silent drift with no such edit is a defect, not a style
    choice.
 
-   **Re-rendering the baseline.** Read that chunk's `## Verified Commit Hash` from its CHUNK.md,
-   then, from the project root:
+   **Re-rendering the baseline.** Read that chunk's `## Verified Commit Hash` from its CHUNK.md.
+   From the project root (the chunk's own worktree, in a parallel batch), with `<slug>` the chunk
+   under review:
 
-   1. `git worktree add --detach .boardsmith/worktrees/design-baseline <hash>` — a temporary
-      checkout under the gitignored `.boardsmith/`, so it resolves the project's own
-      `node_modules` and never touches the working tree under review.
-   2. Run the same Serve → Capture → Kill sequence from inside that checkout, one dev host at a
-      time, at the same capture widths and themes, the same seat, and a fresh game in both
-      renders, so the two sets differ only by the code between the two commits.
-   3. `git worktree remove --force .boardsmith/worktrees/design-baseline` from the project root,
-      then diff the two sets and delete both.
+   1. `git worktree remove --force .boardsmith/worktrees/design-baseline-<slug>` first if an
+      earlier review left it, then
+      `git worktree add --detach .boardsmith/worktrees/design-baseline-<slug> <hash>`: a
+      temporary checkout under the gitignored `.boardsmith/`, so the game's imports resolve the
+      project's own `node_modules` and the working tree under review is never touched.
+   2. Run the same Serve → Capture → Kill sequence from inside that checkout, starting the host
+      with the project's own binary, `../../../node_modules/.bin/boardsmith dev --no-open` (the
+      checkout has no `node_modules`, so `npx` there would not find it). One dev host at a time,
+      at the same capture widths and themes, the same seat, and a fresh game in both renders.
+      Both renders use the project's installed packages, so drift from a dependency change
+      between the two commits is not compared; only the game's own code differs.
+   3. Kill the baseline dev host by its pid, then
+      `git worktree remove --force .boardsmith/worktrees/design-baseline-<slug>` from the project
+      root, whether the render worked or not. Then diff the two sets and delete both.
 
    Record the baseline chunk's slug and commit in the review's result. When the baseline will not
-   render (the checkout, the dev host or the capture fails), say "cohesion comparison incomplete"
-   with the command and its error, as a finding; never skip the diff silently or compare against
-   anything else.
+   render (the checkout, the dev host or the capture fails), still run step 3, then say
+   "cohesion comparison incomplete" with the command and its error, as a finding; never skip the
+   diff silently or compare against anything else.
 
    **First-UI-chunk branch — no prior UI chunk to diff against.** If no previously-verified UI
    chunk exists (this is the first `ui: touches|major` chunk in the game), the cohesion diff is a
