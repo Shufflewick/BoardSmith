@@ -26,7 +26,6 @@ describe('action step entry (#786)', () => {
     skip = true;
     const state = engine.resume('move', {});
     expect(state.awaitingInput).toBe(true);
-    expect(state.movesRequired).toBe(1);
   });
 
   it('asks player again after each move, so a step can hand over to another seat', () => {

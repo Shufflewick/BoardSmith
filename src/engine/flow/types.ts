@@ -426,7 +426,7 @@ export interface FlowState {
   currentPhase?: string;
   /**
    * Number of actions committed in the CURRENTLY ACTIVE step frame, every link of a
-   * follow-up chain counted (move limits count a chain once; see `movesRemaining`). Published
+   * follow-up chain counted (move limits count a chain once). Published
    * for every action step (not only ones declaring minMoves/maxMoves) --
    * `session/utils.ts`'s `computeUndoInfo` treats this as the sole
    * authoritative undo-boundary signal (UNDO-03): a MISSING value means "not
@@ -458,10 +458,6 @@ export interface FlowState {
    * clock and closes the step.
    */
   timeLimitMs?: number;
-  /** Moves remaining until maxMoves (if configured) */
-  movesRemaining?: number;
-  /** Moves required until minMoves met (if configured) */
-  movesRequired?: number;
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
   /**

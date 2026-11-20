@@ -1610,11 +1610,9 @@ describe('Move Limits', () => {
     // Player 0: 2 actions
     expect(state.awaitingInput).toBe(true);
     expect(state.moveCount).toBe(0);
-    expect(state.movesRemaining).toBe(2);
 
     state = engine.resume('count', {});
     expect(state.moveCount).toBe(1);
-    expect(state.movesRemaining).toBe(1);
 
     state = engine.resume('count', {});
     // Should auto-advance to player 2
@@ -1629,30 +1627,18 @@ describe('Move Limits', () => {
     expect(actionCount).toBe(4);
   });
 
-  it('should track movesRequired until minMoves met', () => {
-    game.registerAction(
-      Action.create('count').execute(() => {})
-    );
+  it('should stay open past minMoves until maxMoves', () => {
+    game.registerAction(Action.create('count').execute(() => {}));
 
-    const flow: FlowDefinition = {
-      root: actionStep({
-        actions: ['count'],
-        minMoves: 2,
-        maxMoves: 3,
-      }),
-    };
+    const engine = new FlowEngine(game, {
+      root: actionStep({ actions: ['count'], minMoves: 2, maxMoves: 3 }),
+    });
+    engine.start();
+    engine.resume('count', {});
+    const afterMin = engine.resume('count', {});
+    expect(afterMin.awaitingInput).toBe(true);
 
-    const engine = new FlowEngine(game, flow);
-    let state = engine.start();
-
-    expect(state.movesRequired).toBe(2);
-    expect(state.movesRemaining).toBe(3);
-
-    state = engine.resume('count', {});
-    expect(state.movesRequired).toBe(1);
-
-    state = engine.resume('count', {});
-    expect(state.movesRequired).toBe(0);
+    expect(engine.resume('count', {}).complete).toBe(true);
   });
 
   it('should not complete with repeatUntil if minMoves not met', () => {

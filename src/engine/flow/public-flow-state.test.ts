@@ -25,8 +25,6 @@ const server: FlowState = {
   ],
   currentPhase: 'deploy',
   moveCount: 5,
-  movesRemaining: 2,
-  movesRequired: 0,
   timeLimitMs: 30000,
   turnScopeUndeclared: 'deploy',
   actionError: "seat 1's error",

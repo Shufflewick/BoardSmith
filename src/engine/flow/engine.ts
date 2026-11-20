@@ -1364,8 +1364,6 @@ export class FlowEngine<G extends Game = Game> {
     // input to computeUndoInfo's undo-boundary computation (session/utils.ts)
     // now that its backward-scan fallback is gone -- a step that never
     // reports moveCount is a step undo can never be offered for.
-    // movesRemaining/movesRequired stay limits-gated below: they're
-    // meaningless without minMoves/maxMoves.
     //
     // 160-02 (D4 step-window bound): also publish for an active simultaneous
     // step (`this.awaitingPlayers.length > 0`) -- `currentActionConfig` is
@@ -1387,17 +1385,6 @@ export class FlowEngine<G extends Game = Game> {
     const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
     if (typeof undeclared === 'string') {
       state.turnScopeUndeclared = undeclared;
-    }
-    this.publishMoveLimits(state);
-  }
-
-  /** Writes what an action step's `maxMoves` and `minMoves` leave of its moves into `state`. */
-  private publishMoveLimits(state: FlowState): void {
-    if (this.currentActionConfig?.maxMoves) {
-      state.movesRemaining = this.currentActionConfig.maxMoves - this.moveCount;
-    }
-    if (this.currentActionConfig?.minMoves) {
-      state.movesRequired = Math.max(0, this.currentActionConfig.minMoves - this.moveCount);
     }
   }
 
