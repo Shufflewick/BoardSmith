@@ -34,6 +34,12 @@ describe('lightenColor', () => {
     expect(lightenColor('rgb(51, 51, 51)', 0.1)).toBe('rgb(77, 77, 77)');
     expect(lightenColor('black', 0.2)).toBe('rgb(51, 51, 51)');
   });
+
+  it('keeps the alpha of a translucent colour', () => {
+    expect(lightenColor('#ff000080', 0.1)).toBe(`rgba(255, 26, 26, ${128 / 255})`);
+    expect(darkenColor('rgb(51 51 51 / 50%)', 0.1)).toBe('rgba(25, 25, 25, 0.5)');
+    expect(lightenColor('transparent', 0.2)).toBe('rgba(51, 51, 51, 0)');
+  });
 });
 
 describe('darkenColor', () => {

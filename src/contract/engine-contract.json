@@ -1,5 +1,5 @@
 {
-  "revision": 478,
+  "revision": 479,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3767,6 +3767,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "CLI pack help text and two source comments corrected; no behavior change"
+    },
+    {
+      "revision": 479,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Seat ink and colour helpers read every CSS Color 4 colour (oklch, lab, lch, hwb, color()), refuse ink for translucent seat colours, and keep alpha when lightening or darkening (#1754)."
     }
   ]
 }
