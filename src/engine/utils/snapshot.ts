@@ -580,8 +580,13 @@ function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw' | 'pl
         `A draw has no winners: return [] from getWinners() for a draw, or false from isDraw() when someone won.`,
     );
   }
+  return { winners, draw, places: placesOf(game, winners) };
+}
+
+/** `game.getPlaces()` as seats, refused unless every seat has one place and first place is exactly `winners` (#1724). */
+function placesOf(game: Game, winners: number[]): number[][] {
   const places = game.getPlaces().map((group) => group.map((p) => p.seat));
-  if (places.length === 0) return { winners, draw, places };
+  if (places.length === 0) return places;
   const problem = placesProblem(places, game.players.map((p) => p.seat));
   if (problem) throw new Error(`getPlaces() returned places ${problem}. ${PLACES_REMEDY}`);
   const first = places[0];
@@ -598,7 +603,7 @@ function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw' | 'pl
         `in first place. The winners are exactly the seats in first place.`,
     );
   }
-  return { winners, draw, places };
+  return places;
 }
 
 /** How many actions a snapshot's game has recorded, those dropped from its history included (#997). */
