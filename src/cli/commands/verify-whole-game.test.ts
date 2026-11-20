@@ -171,4 +171,11 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     );
     expect(await verifiedProblem(dir)).toMatch(/smoke: /);
   });
+
+  it('stops a verify run still going near its test deadline, with what it started, and names the checks that had not reported (#1779)', { timeout: 45_000 }, async () => {
+    const dir = await smokeProject(false, {
+      'tests/hang.test.ts': "import { it } from 'vitest';\nit('never settles', () => new Promise<void>(() => {}), 0);\n",
+    }, { sim: true });
+    await expect(verifyAsAUser(dir)).rejects.toThrow(/was still running .*Checks that had not reported: [^\n]*\btest\b/s);
+  });
 });
