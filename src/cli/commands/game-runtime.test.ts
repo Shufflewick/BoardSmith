@@ -67,6 +67,15 @@ const thisInstall = await bundle(linkedToThisCheckout, [simShard]);
 const thisInstallMiscased = caseInsensitive ? await bundle(linkedToThisCheckoutMiscased, [simShard]) : undefined;
 const otherInstallRefusal = await bundle(linkedToOtherInstall, [simShard]).then(() => undefined, (error: unknown) => error);
 const otherInstallRulesOnly = await bundle(linkedToOtherInstall, []);
+// esbuild's service keeps the directory it started in, so a later build after a chdir must still be checked (#1732).
+const startDir = process.cwd();
+process.chdir(tempTree('boardsmith-elsewhere-'));
+const otherInstallRefusalAfterChdir = await bundle(linkedToOtherInstall, [simShard])
+  .then(
+    () => undefined,
+    (error: unknown) => error,
+  )
+  .finally(() => process.chdir(startDir));
 
 describe('importRuntimeBundle: one boardsmith per bundle (#696)', () => {
   it('builds CLI-side source with rules that use this same install', () => {
@@ -83,6 +92,11 @@ describe('importRuntimeBundle: one boardsmith per bundle (#696)', () => {
       `This game's rules import boardsmith from ${otherInstall}, but this boardsmith command runs from ${REPO}`,
     );
     expect((otherInstallRefusal as Error).message).toContain(`npm install ${REPO}`);
+  });
+
+  it('refuses rules from another install after the process changes directory', () => {
+    expect(otherInstallRefusalAfterChdir).toBeInstanceOf(Error);
+    expect((otherInstallRefusalAfterChdir as Error).message).toContain(`npm install ${REPO}`);
   });
 
   it('still loads rules alone from another install, since nothing of the CLI is in that bundle', () => {

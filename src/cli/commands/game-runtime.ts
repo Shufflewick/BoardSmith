@@ -340,11 +340,14 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
     ),
   );
   // The real path, so Node resolves the map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
-  const bundlePath = join(realpathSync(args.tempDir), `${args.name}-bundle.mjs`);
+  const workingDir = realpathSync(args.tempDir);
+  const bundlePath = join(workingDir, `${args.name}-bundle.mjs`);
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
 
   const { metafile } = await build({
+    // The metafile's inputs are relative to this; esbuild's default is the cwd its service started in (#1732).
+    absWorkingDir: workingDir,
     entryPoints: [entryPath],
     metafile: true,
     bundle: true,
@@ -367,7 +370,7 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
   if (unused.length > 0) throw new UnimportedRedirectError(unused);
   // In monorepo context the resolve plugin points every `boardsmith` import at this checkout already.
   if (args.context === 'standalone') {
-    requireOneBoardsmith(args.rulesPath, Object.keys(metafile.inputs).map((input) => resolve(input)));
+    requireOneBoardsmith(args.rulesPath, Object.keys(metafile.inputs).map((input) => resolve(workingDir, input)));
   }
   return bundlePath;
 }

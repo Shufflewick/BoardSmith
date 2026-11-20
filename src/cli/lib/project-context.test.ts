@@ -31,6 +31,14 @@ describe('requireBoardsmithWorkspace', () => {
     expect(getProjectContext(dir)).toBe(context);
   });
 
+  it('classes a game with a src/engine directory as a game, not the library repo (#1732)', () => {
+    const dir = tempTree('bs-context-');
+    writeFileSync(join(dir, 'boardsmith.json'), '{}');
+    mkdirSync(join(dir, 'src', 'engine'), { recursive: true });
+
+    expect(getProjectContext(dir)).toBe('standalone');
+  });
+
   it('exits 1 with an actionable message anywhere else', () => {
     const dir = tempTree('bs-context-');
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);

@@ -1,5 +1,5 @@
 {
-  "revision": 460,
+  "revision": 461,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3623,6 +3623,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "A finished game reports each seat's finishing place, ties allowed (#1724): Game gains getPlaces() (overridable) and finish({ places }), GameStateSnapshot and ActionCheckpoint gain places: number[][] (best first, tied seats sharing a place, [] while running), and SnapshotSessionHost's PublishMeta gains places, absent for a snapshot from an engine before r460. A game that reports no places has its winners share first and everyone else the next place. No published game needs rebuilding to keep running; rebuild one to publish its places."
+    },
+    {
+      "revision": 461,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "CLI: a game with boardsmith.json is always a game to the CLI, even with a src/engine directory, and the one-install check on rules bundles no longer depends on the process's working directory"
     }
   ]
 }
