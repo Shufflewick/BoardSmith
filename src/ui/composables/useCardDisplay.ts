@@ -148,13 +148,3 @@ export function getCardPointValue(rank: string): number {
 export function isRedSuit(suit: string): boolean {
   return suit === 'H' || suit === 'D';
 }
-
-/**
- * Check if a suit is black (Clubs or Spades).
- *
- * @param suit - Suit abbreviation
- * @returns true if the suit is black
- */
-export function isBlackSuit(suit: string): boolean {
-  return suit === 'C' || suit === 'S';
-}

@@ -197,7 +197,6 @@ A face-down pile's cards reach a seat as placeholders whose ids say nothing abou
 - `getRankName()` - Get rank name
 - `getCardPointValue()` - Get card point value
 - `isRedSuit()` - Check if red suit
-- `isBlackSuit()` - Check if black suit
 
 #### Action Controller
 

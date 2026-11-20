@@ -6,8 +6,8 @@
  * containing a table's Play group (Auto end turn, Undo, zoom magnifier), the
  * game's own commands (#1448) and the player's Preferences. A world's menu has
  * no Play group (#1443).
- * The popover is teleported to <body> with fixed positioning (openUp/align props) so
- * the action bar's overflow:auto can't clip it.
+ * The popover is teleported to <body> with fixed positioning, opening upward from
+ * its trigger's left edge, so the action bar's overflow:auto can't clip it.
  *
  * There is no Leave item: the host page around the game's frame is where a
  * player leaves a game (#515). There is no New game item: a deployed host has
@@ -26,7 +26,7 @@ import { reduceMotionPreference } from '../composables/reducedMotion.js';
 import { actionHelpPreference } from '../composables/actionHelp.js';
 import { ZOOM_MIN, ZOOM_MAX } from '../composables/useBoardZoom';
 
-const props = withDefaults(defineProps<{
+withDefaults(defineProps<{
   /**
    * The Play group's state: a table's turn, undo and zoom. A world has none of
    * them, so it passes no `play` and its menu has no Play group (#1443).
@@ -39,10 +39,6 @@ const props = withDefaults(defineProps<{
     /** Whether the undo action is currently available */
     canUndo: boolean;
   };
-  /** Open the popover upward (for a bottom-anchored trigger, e.g. the action bar). */
-  openUp?: boolean;
-  /** Horizontal edge the popover aligns to. */
-  align?: 'left' | 'right';
   /**
    * When defined (true), renders the Teaching group. When undefined, the
    * Teaching group is hidden entirely (game has no bot / bot not configured).
@@ -97,8 +93,6 @@ const props = withDefaults(defineProps<{
   /** The game's own commands, registered by its board with `useMenuCommands` (#1448). */
   commands?: readonly MenuCommand[];
 }>(), {
-  openUp: false,
-  align: 'right',
   // An absent boolean prop reads false, which would show the Teaching group to a menu that passed no showHint.
   showHint: undefined,
   hasActionHelp: true,
@@ -170,18 +164,14 @@ function computePosition() {
   const el = triggerRef.value;
   if (!el) return;
   const r = el.getBoundingClientRect();
-  const style: Record<string, string> = { position: 'fixed', zIndex: '70' };
-  // Capped to the room on its side, so on a short screen (a phone held sideways) it scrolls rather than running off it (#1710).
-  if (props.openUp) {
-    style.bottom = `${Math.round(window.innerHeight - r.top + 6)}px`;
-    style.maxHeight = `calc(${Math.round(r.top - 12)}px - var(--bsg-safe-top))`;
-  } else {
-    style.top = `${Math.round(r.bottom + 6)}px`;
-    style.maxHeight = `calc(${Math.round(window.innerHeight - r.bottom - 12)}px - var(--bsg-safe-bottom))`;
-  }
-  if (props.align === 'left') style.left = `${Math.round(r.left)}px`;
-  else style.right = `${Math.round(window.innerWidth - r.right)}px`;
-  menuStyle.value = style;
+  menuStyle.value = {
+    position: 'fixed',
+    zIndex: '70',
+    left: `${Math.round(r.left)}px`,
+    bottom: `${Math.round(window.innerHeight - r.top + 6)}px`,
+    // Capped to the room above, so on a short screen (a phone held sideways) it scrolls rather than running off it (#1710).
+    maxHeight: `calc(${Math.round(r.top - 12)}px - var(--bsg-safe-top))`,
+  };
 }
 
 function toggle() {

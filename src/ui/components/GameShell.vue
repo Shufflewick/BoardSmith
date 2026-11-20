@@ -1655,12 +1655,9 @@ defineExpose({
 
       <template #controls>
         <!-- ⋯ controls menu: always available at the far-left of the bar (the sole
-             control surface). Opens
-             upward since the bar is bottom-anchored. -->
+             control surface). -->
         <ControlsMenu
           class="actionbar-controls"
-          open-up
-          align="left"
           :play="{ autoEndTurn, zoom: zoomLevel, canUndo: gatedCanUndo }"
           @update:auto-end-turn="autoEndTurn = $event"
           @update:zoom="setZoom"

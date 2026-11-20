@@ -229,7 +229,7 @@ describe('useFLIP', () => {
       (HTMLElement.prototype as any).animate = animateSpy;
 
       const containerRef = ref<HTMLElement | null>(container);
-      const { capture, animate } = useFLIP({ containerRef, threshold: 1 });
+      const { capture, animate } = useFLIP({ containerRef });
 
       capture(); // consumes beforeRect
       await animate(); // consumes afterRect, computes a real delta
@@ -251,9 +251,7 @@ describe('useFLIP', () => {
         finished: new Promise<void>((resolve) => finishers.push(resolve)),
         cancel: vi.fn(),
       });
-      const onAnimationStart = vi.fn();
-      const onAnimationEnd = vi.fn();
-      const { capture, animate, isAnimating } = useFLIP({ containerRef: ref(container), onAnimationStart, onAnimationEnd });
+      const { capture, animate, isAnimating } = useFLIP({ containerRef: ref(container) });
 
       capture();
       const first = animate();
@@ -264,13 +262,10 @@ describe('useFLIP', () => {
       finishers[0]();
       await first;
       expect(isAnimating.value).toBe(true);
-      expect(onAnimationEnd).not.toHaveBeenCalled();
 
       finishers[1]();
       await second;
       expect(isAnimating.value).toBe(false);
-      expect(onAnimationStart).toHaveBeenCalledTimes(1);
-      expect(onAnimationEnd).toHaveBeenCalledTimes(1);
     });
   });
 

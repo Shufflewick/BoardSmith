@@ -260,9 +260,6 @@ export function createProgram(): Command {
     .command('lint')
     .description('Run every lint check this workspace configures (ESLint, Stylelint, BoardSmith pitfalls)')
     .option('--fix', 'Auto-fix what the underlying linters can fix')
-    .option('--eslint', 'Run only ESLint')
-    .option('--css', 'Run only Stylelint')
-    .option('--pitfalls', 'Run only the BoardSmith pitfall checks')
     .action(lintCommand);
 
   // Code-quality audits

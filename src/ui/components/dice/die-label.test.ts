@@ -22,14 +22,6 @@ describe('dieAriaLabel', () => {
     expect(dieAriaLabel(6, 5, ['ash', 'bone'])).toBe('d6 showing 5');
   });
 
-  it('reads a zero-indexed d10 as the face it is actually showing', () => {
-    // Face 1 of a zero-indexed d10 is painted "0", face 10 is painted "9" -
-    // the same mapping Die3D uses when it draws the face textures.
-    expect(dieAriaLabel(10, 1, undefined, true)).toBe('d10 showing 0');
-    expect(dieAriaLabel(10, 10, undefined, true)).toBe('d10 showing 9');
-    expect(dieAriaLabel(10, 10)).toBe('d10 showing 10');
-  });
-
   it('says a never-rolled die (value 0) has no face yet (#892)', () => {
     expect(dieAriaLabel(6, 0)).toBe('d6 not rolled yet');
     expect(dieAriaLabel(6, 0, ['ash', 'bone'])).toBe('d6 not rolled yet');

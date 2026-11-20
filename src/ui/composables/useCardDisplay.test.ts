@@ -11,7 +11,6 @@ import {
   getCardName,
   getCardPointValue,
   isRedSuit,
-  isBlackSuit,
 } from './useCardDisplay.js';
 
 const SUITS = ['H', 'D', 'C', 'S'] as const;
@@ -132,7 +131,7 @@ describe('getCardPointValue', () => {
   });
 });
 
-describe('isRedSuit / isBlackSuit', () => {
+describe('isRedSuit', () => {
   it('calls hearts and diamonds red', () => {
     expect(isRedSuit('H')).toBe(true);
     expect(isRedSuit('D')).toBe(true);
@@ -140,22 +139,8 @@ describe('isRedSuit / isBlackSuit', () => {
     expect(isRedSuit('S')).toBe(false);
   });
 
-  it('calls clubs and spades black', () => {
-    expect(isBlackSuit('C')).toBe(true);
-    expect(isBlackSuit('S')).toBe(true);
-    expect(isBlackSuit('H')).toBe(false);
-    expect(isBlackSuit('D')).toBe(false);
-  });
-
-  it('partitions the four standard suits exactly', () => {
-    for (const suit of SUITS) {
-      expect(isRedSuit(suit) !== isBlackSuit(suit)).toBe(true);
-    }
-  });
-
-  it('says no to both for an unknown suit', () => {
+  it('says no for an unknown suit', () => {
     expect(isRedSuit('X')).toBe(false);
-    expect(isBlackSuit('X')).toBe(false);
   });
 });
 

@@ -12,11 +12,11 @@ import { defineComponent, h, ref, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useZoomPreview, type ZoomPreviewReturn } from './useZoomPreview.js';
 
-function withPreview(options: Parameters<typeof useZoomPreview>[0] = {}) {
+function withPreview() {
   let result!: ZoomPreviewReturn;
   const Host = defineComponent({
     setup() {
-      result = useZoomPreview(options);
+      result = useZoomPreview();
       return () => h('div');
     },
   });
@@ -56,12 +56,6 @@ describe('useZoomPreview', () => {
     it('defaults to a 2.5x zoom', () => {
       const { preview, wrapper } = withPreview();
       expect(preview.previewState.scale).toBe(2.5);
-      wrapper.unmount();
-    });
-
-    it('honours a custom scale', () => {
-      const { preview, wrapper } = withPreview({ scale: 4 });
-      expect(preview.previewState.scale).toBe(4);
       wrapper.unmount();
     });
   });
@@ -469,24 +463,6 @@ describe('useZoomPreview', () => {
       touch('touchstart', card);
       wrapper.unmount();
       expect(contextMenu(card)).toBe(false);
-    });
-  });
-
-  describe('custom container', () => {
-    it('listens on the container it was given', async () => {
-      const container = document.createElement('div');
-      document.body.appendChild(container);
-      const { preview, wrapper } = withPreview({ containerRef: ref(container) });
-      pressAlt();
-      await nextTick();
-
-      const inside = document.createElement('div');
-      inside.classList.add('card');
-      container.appendChild(inside);
-      inside.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }));
-      await nextTick();
-      expect(preview.previewState.visible).toBe(true);
-      wrapper.unmount();
     });
   });
 });

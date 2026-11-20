@@ -8,15 +8,10 @@ import { SOURCE_EXTENSIONS, collectSourceFiles } from '../lib/source-files.js';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { runTool } from '../lib/run-tool.js';
-import { selectChecks } from '../lib/select-checks.js';
 
 export interface LintOptions {
   /** Auto-fix what the underlying tool can fix. */
   fix?: boolean;
-  /** Selector flags — when any is set, only the selected checks run. */
-  eslint?: boolean;
-  css?: boolean;
-  pitfalls?: boolean;
 }
 
 interface LintIssue {
@@ -529,51 +524,28 @@ async function hasStylelintConfig(cwd: string): Promise<boolean> {
  *
  * One command covers all of them — ESLint, Stylelint, and BoardSmith's own
  * pitfall rules — so nobody has to remember which linters a given repo wired
- * up. Pass a selector flag to run just one; with no selectors, everything
- * applicable runs and the command fails if any check fails.
+ * up. Everything applicable runs and the command fails if any check fails.
  */
 export async function lintCommand(options: LintOptions): Promise<void> {
   const cwd = process.cwd();
 
   requireBoardsmithWorkspace(cwd);
 
-  const wants = selectChecks({
-    eslint: options.eslint,
-    css: options.css,
-    pitfalls: options.pitfalls,
-  });
-
   const checks: LintCheck[] = [];
-  const hasEslint = wants('eslint') && await hasEslintConfig(cwd);
-  const hasCssConfig = wants('css') && await hasStylelintConfig(cwd);
 
-  if (options.eslint && !hasEslint) {
-    console.error(styleText('red', '\nlint --eslint: this project has no ESLint config, so ESLint cannot run.'));
-    console.error(styleText('dim', 'Add an eslint.config.mjs to the project root that uses boardsmith/eslint-plugin, or drop --eslint.'));
-    console.error(styleText('dim', 'How: https://github.com/Shufflewick/BoardSmith/blob/main/docs/api/eslint-plugin.md\n'));
-    process.exit(1);
-  }
-
-  if (options.css && !hasCssConfig) {
-    console.error(styleText('red', '\nlint --css: this project has no Stylelint config, so Stylelint cannot run.'));
-    console.error(styleText('dim', "Add a .stylelintrc.cjs to the project root with customSyntax: 'postcss-html' (so it reads the <style> blocks in .vue files), or drop --css."));
-    console.error(styleText('dim', 'The game also needs both packages installed: npm install -D stylelint postcss-html\n'));
-    process.exit(1);
-  }
-
-  if (hasEslint) {
+  if (await hasEslintConfig(cwd)) {
     const args = ['src/'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'ESLint', run: () => runTool('eslint', args, { cwd }) });
   }
 
-  if (hasCssConfig) {
+  if (await hasStylelintConfig(cwd)) {
     const args = ['src/**/*.vue'];
     if (options.fix) args.push('--fix');
     checks.push({ name: 'Stylelint', run: () => runTool('stylelint', args, { cwd }) });
   }
 
-  if (wants('pitfalls') && existsSync(join(cwd, 'boardsmith.json'))) {
+  if (existsSync(join(cwd, 'boardsmith.json'))) {
     checks.push({ name: 'BoardSmith pitfalls', run: () => runPitfallLint(cwd) });
   }
 

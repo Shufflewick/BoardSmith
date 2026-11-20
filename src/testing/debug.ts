@@ -27,12 +27,8 @@ export function formatSelectionLines(debugInfo: ActionDebugInfo): string {
  * Options for {@link toDebugString}.
  */
 export interface DebugStringOptions {
-  /** Include element IDs (default: true) */
-  showIds?: boolean;
   /** Maximum depth of element tree to show (default: 3) */
   maxDepth?: number;
-  /** Include element attributes (default: true) */
-  showAttributes?: boolean;
 }
 
 /**
@@ -66,7 +62,7 @@ export interface DebugStringOptions {
  * ```
  */
 export function toDebugString(game: Game, options: DebugStringOptions = {}): string {
-  const { showIds = true, maxDepth = 3, showAttributes = true } = options;
+  const { maxDepth = 3 } = options;
 
   const lines: string[] = [];
 
@@ -108,7 +104,7 @@ export function toDebugString(game: Game, options: DebugStringOptions = {}): str
 
   // Element tree
   lines.push('Elements:');
-  printElementTree(game, lines, 1, maxDepth, showIds, showAttributes);
+  printElementTree(game, lines, 1, maxDepth);
 
   return lines.join('\n');
 }
@@ -117,9 +113,7 @@ function printElementTree(
   element: GameElement,
   lines: string[],
   depth: number,
-  maxDepth: number,
-  showIds: boolean,
-  showAttributes: boolean
+  maxDepth: number
 ): void {
   if (depth > maxDepth) {
     const childCount = element.all?.().length || 0;
@@ -130,26 +124,22 @@ function printElementTree(
   }
 
   for (const child of element.children) {
-    const idStr = showIds ? ` (id=${(child as any).id || (child as any)._t?.id || '?'})` : '';
     const name = (child as any).name || child.constructor.name;
     const count = child.children.length;
 
-    let attrStr = '';
-    if (showAttributes) {
-      const attrs: string[] = [];
-      const childAny = child as any;
-      // Common game element attributes
-      if (typeof childAny.value !== 'undefined') attrs.push(`value=${childAny.value}`);
-      if (typeof childAny.suit !== 'undefined') attrs.push(`suit=${childAny.suit}`);
-      if (typeof childAny.rank !== 'undefined') attrs.push(`rank=${childAny.rank}`);
-      if (childAny.isDead) attrs.push('DEAD');
-      if (attrs.length > 0) attrStr = ` [${attrs.join(', ')}]`;
-    }
+    const attrs: string[] = [];
+    const childAny = child as any;
+    // Common game element attributes
+    if (typeof childAny.value !== 'undefined') attrs.push(`value=${childAny.value}`);
+    if (typeof childAny.suit !== 'undefined') attrs.push(`suit=${childAny.suit}`);
+    if (typeof childAny.rank !== 'undefined') attrs.push(`rank=${childAny.rank}`);
+    if (childAny.isDead) attrs.push('DEAD');
+    const attrStr = attrs.length > 0 ? ` [${attrs.join(', ')}]` : '';
 
     const countStr = count > 0 ? `: ${count} children` : '';
-    lines.push(`${'  '.repeat(depth)}${name}${idStr}${attrStr}${countStr}`);
+    lines.push(`${'  '.repeat(depth)}${name} (id=${child.id})${attrStr}${countStr}`);
 
-    printElementTree(child, lines, depth + 1, maxDepth, showIds, showAttributes);
+    printElementTree(child, lines, depth + 1, maxDepth);
   }
 }
 

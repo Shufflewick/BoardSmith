@@ -1049,7 +1049,6 @@ defineProps<TableBoardProps>();
 
 **Props:**
 - `visible` (boolean, default: true) - Whether the message is shown (toggling fades it without reflow)
-- `position` (`'bottom' | 'top' | 'center'`, default: `'bottom'`) - Anchor within the board container
 
 ## Composables
 
@@ -1596,7 +1595,6 @@ const auto = useFLIP({
 | `selector` | `string` | CSS selector for elements (default: '[data-element-id]') |
 | `duration` | `number` | Animation duration in ms (default: 300) |
 | `easing` | `string` | CSS easing (default: 'ease-out') |
-| `threshold` | `number` | Minimum movement in pixels (default: 1) |
 | `auto` | `boolean` | Enable auto-mode with gameView watcher |
 | `gameView` | `() => unknown` | Required when auto: true |
 

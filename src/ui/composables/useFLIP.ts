@@ -96,15 +96,6 @@ export interface UseFLIPOptions {
   /** CSS easing string for Web Animations API (default: 'ease-out') */
   easing?: string;
 
-  /** Minimum movement threshold in pixels (default: 1) */
-  threshold?: number;
-
-  /** Callback when animation starts (once, even if runs overlap) */
-  onAnimationStart?: () => void;
-
-  /** Callback when the last running animation ends */
-  onAnimationEnd?: () => void;
-
   /**
    * Enable automatic mode - automatically capture before and animate after
    * state changes. Requires `gameView` option.
@@ -221,9 +212,6 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
     selector: defaultSelector = DEFAULT_SELECTOR,
     duration: defaultDuration = DEFAULT_DURATION,
     easing: defaultEasing = DEFAULT_EASING,
-    threshold = 1,
-    onAnimationStart,
-    onAnimationEnd,
     auto = false,
     gameView,
   } = options;
@@ -333,8 +321,8 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
         const deltaX = oldRect.left - newRect.left;
         const deltaY = oldRect.top - newRect.top;
 
-        // Only animate if movement exceeds threshold
-        if (Math.abs(deltaX) < threshold && Math.abs(deltaY) < threshold) {
+        // Skip sub-pixel moves
+        if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
           return;
         }
 
@@ -360,18 +348,13 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
     }
 
     if (hasAnyAnimations) {
-      // Runs can overlap: start and end fire once for the whole busy period.
-      if (activeRuns++ === 0) {
-        isAnimating.value = true;
-        onAnimationStart?.();
-      }
+      // Runs can overlap: isAnimating stays true for the whole busy period.
+      activeRuns++;
+      isAnimating.value = true;
       try {
         await Promise.all(allAnimations.map((a) => a.finished));
       } finally {
-        if (--activeRuns === 0) {
-          isAnimating.value = false;
-          onAnimationEnd?.();
-        }
+        if (--activeRuns === 0) isAnimating.value = false;
       }
     }
   }

@@ -47,12 +47,9 @@ const props = withDefaults(defineProps<{
   faceLabels?: string[];
   /** Custom face images (optional) */
   faceImages?: string[];
-  /** For d10: use 0-9 instead of 1-10 */
-  zeroIndexed?: boolean;
 }>(), {
   size: 60,
   rollCount: 0,
-  zeroIndexed: false,
 });
 
 /**
@@ -60,7 +57,7 @@ const props = withDefaults(defineProps<{
  * assistive tech; the canvas and snapshot inside are decoration on top of it.
  */
 const ariaLabel = computed(() =>
-  dieAriaLabel(props.sides, props.value, props.faceLabels, props.zeroIndexed),
+  dieAriaLabel(props.sides, props.value, props.faceLabels),
 );
 
 const emit = defineEmits<{
@@ -838,8 +835,7 @@ async function updateTextures() {
       materials[i].map = texture;
       materials[i].needsUpdate = true;
     } else {
-      const label = props.sides === 10 && props.zeroIndexed ? String(i - 1) : String(i);
-      const texture = createFaceTexture(label, 100, '#ffffff', color, 1);
+      const texture = createFaceTexture(String(i), 100, '#ffffff', color, 1);
       materials[i].map?.dispose();
       materials[i].map = texture;
       materials[i].needsUpdate = true;
@@ -894,7 +890,7 @@ watch(() => props.value, (value) => {
 });
 
 // Watch for color/texture changes
-watch([() => props.color, () => props.faceLabels, () => props.faceImages, () => props.zeroIndexed], () => {
+watch([() => props.color, () => props.faceLabels, () => props.faceImages], () => {
   if (materials.length && !webglDisposed) {
     // WebGL active - update textures directly
     updateTextures();

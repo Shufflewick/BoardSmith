@@ -56,23 +56,6 @@ describe('BoardMessage', () => {
     expect(wrapper.find(CONTENT).exists()).toBe(false);
   });
 
-  it('defaults to bottom position', () => {
-    const wrapper = mount(BoardMessage, { slots: { default: 'x' } });
-    expect(wrapper.get('.bsg-board-message').classes()).toContain(
-      'bsg-board-message--bottom',
-    );
-  });
-
-  it('applies the requested position modifier', () => {
-    const wrapper = mount(BoardMessage, {
-      props: { position: 'top' },
-      slots: { default: 'x' },
-    });
-    expect(wrapper.get('.bsg-board-message').classes()).toContain(
-      'bsg-board-message--top',
-    );
-  });
-
   it('is exported from the UI barrel', () => {
     expect(ui.BoardMessage).toBe(BoardMessage);
   });

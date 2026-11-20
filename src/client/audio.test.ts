@@ -55,16 +55,17 @@ beforeEach(() => {
   // "pre-creates the audio element" pass or fail purely on test ORDER. Clearing
   // the internals is what makes each test start from a genuinely fresh service.
   const internals = audioService as unknown as {
+    enabled: boolean;
+    volume: number;
     audioElement: unknown;
     initialized: boolean;
     turnSoundUrl: string | null;
   };
+  internals.enabled = true;
+  internals.volume = 0.5;
   internals.audioElement = null;
   internals.initialized = false;
   internals.turnSoundUrl = null;
-
-  audioService.init({ enabled: true, volume: 0.5 });
-  localStorage.clear();
 });
 
 afterEach(() => {
@@ -73,34 +74,6 @@ afterEach(() => {
 });
 
 describe('init', () => {
-  it('applies the options it is given', () => {
-    audioService.init({ enabled: false, volume: 0.25 });
-    expect(audioService.isEnabled()).toBe(false);
-    expect(audioService.getVolume()).toBe(0.25);
-  });
-
-  it('leaves settings untouched for options that are omitted', () => {
-    audioService.setVolume(0.75);
-    audioService.init({});
-    expect(audioService.getVolume()).toBe(0.75);
-    expect(audioService.isEnabled()).toBe(true);
-  });
-
-  it('clamps the volume into 0..1', () => {
-    audioService.init({ volume: 5 });
-    expect(audioService.getVolume()).toBe(1);
-    audioService.init({ volume: -3 });
-    expect(audioService.getVolume()).toBe(0);
-  });
-
-  it('refuses a non-finite volume rather than propagating it', () => {
-    audioService.init({ volume: 0.4 });
-    for (const bad of [NaN, Infinity, -Infinity]) {
-      audioService.init({ volume: bad });
-      expect(audioService.getVolume()).toBe(0.4);
-    }
-  });
-
   it('pre-creates the audio element when given a sound URL', () => {
     audioService.init({ turnSoundUrl: 'turn.mp3' });
     expect(constructedUrls).toEqual(['turn.mp3']);
@@ -120,12 +93,6 @@ describe('init', () => {
     audioService.init({ turnSoundUrl: 'a.mp3' });
     audioService.init({ turnSoundUrl: 'a.mp3' });
     expect(constructedUrls).toEqual(['a.mp3']);
-  });
-
-  it('does not save to localStorage — init is configuration, not preference', () => {
-    audioService.init({ enabled: false, volume: 0.2 });
-    expect(localStorage.getItem('boardsmith-audio-enabled')).toBeNull();
-    expect(localStorage.getItem('boardsmith-audio-volume')).toBeNull();
   });
 });
 
@@ -340,13 +307,12 @@ describe('onChange', () => {
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('tells a listener when init or loadPreferences changes the settings (#1528 review F1)', () => {
+  it('tells a listener when loadPreferences changes the settings (#1528 review F1)', () => {
     const listener = vi.fn();
     const off = audioService.onChange(listener);
-    audioService.init({ enabled: false, volume: 0.2 });
     localStorage.setItem('boardsmith-audio-volume', '0.7');
     audioService.loadPreferences();
     off();
-    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 });

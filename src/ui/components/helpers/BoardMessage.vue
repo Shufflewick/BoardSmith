@@ -56,8 +56,6 @@ withDefaults(
      * without ever reflowing the board.
      */
     visible?: boolean;
-    /** Anchor position within the board container. Defaults to 'bottom'. */
-    position?: 'bottom' | 'top' | 'center';
     /**
      * Rendering variant.
      *
@@ -87,7 +85,6 @@ withDefaults(
   }>(),
   {
     visible: true,
-    position: 'bottom',
     variant: 'default',
   },
 );
@@ -101,7 +98,7 @@ withDefaults(
         ? 'bsg-board-message--annotation'
         : variant === 'narration'
           ? 'bsg-board-message--narration'
-          : `bsg-board-message--${position}`
+          : 'bsg-board-message--bottom'
     "
     :style="variant === 'annotation' ? anchorStyle : undefined"
   >
@@ -151,16 +148,6 @@ withDefaults(
 
 .bsg-board-message--bottom {
   bottom: var(--bsg-s3);
-}
-
-.bsg-board-message--top {
-  top: var(--bsg-s3);
-}
-
-.bsg-board-message--center {
-  top: 0;
-  bottom: 0;
-  align-items: center;
 }
 
 /* ── Annotation variant: absolutely positioned card (TutorialOverlay) ──────── */
