@@ -1560,9 +1560,11 @@ console.log(game.all(Equipment).length, game.pile.all(Equipment).length);
 // 15690 12
 ```
 
-An element parented in two places is a different bug. In development mode any
-query that reaches an element twice throws `TREE CORRUPTION`, naming the
-element and both containers it was reached under.
+An element parented in two places is a different bug. In development mode a
+query that reaches the same element twice in its walk throws `TREE CORRUPTION`,
+naming the element and both containers it was reached under. `game.pile` is a
+separate root, so an element left both in the tree and in the pile is not
+caught by a `game.all()` query.
 
 ### Common Causes
 
@@ -1625,17 +1627,6 @@ until `boardsmith dev --debug` forces them on. With `--debug`, every seated
 person can see every face-down card and every other player's hand: the Decks
 tab's `debugDeckView` and `debugDeckViewAt` ops return the table with nothing
 hidden, live and at a past action (#898, #1071).
-
-4. **Check the sequence counter** - if it's much higher than element count, elements are being created and removed (normal but worth investigating)
-
-### Key Diagnostic Values
-
-| Metric | Meaning |
-|--------|---------|
-| `totalInTree` | Current elements in game tree (should be stable) |
-| `sequenceCounter` | Total elements ever created (always increases) |
-| `byClass` | Breakdown by element type (find which class is exploding) |
-| `issues` | Circular references or duplicate IDs (tree corruption) |
 
 ---
 
