@@ -132,7 +132,7 @@ export function hexCoordNames(board: { attributes?: Record<string, unknown> }): 
   if (system !== undefined && system !== 'axial') {
     throw new Error(
       `This hex board sets $coordSystem '${String(system)}', but BoardSmith supports only 'axial'. ` +
-      `Give each cell axial coordinates in the attributes named by $qCoord/$rCoord, and set $coordSystem = 'axial' or leave it out.`,
+      `Give each cell axial coordinates in the attributes named by $qCoord/$rCoord, and remove $coordSystem.`,
     );
   }
   const [q, r] = hexCoordinateNames(attrs);

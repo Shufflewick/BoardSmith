@@ -237,4 +237,15 @@ describe('GameShell in a simultaneous step (#337)', () => {
 
     expect(await said()).toEqual(['Bob and Carol are playing']);
   });
+
+  it('draws a frame whose view carries no flowState as a step nobody is deciding at once', async () => {
+    const wrapper = await mountAsAlice();
+    const errors: unknown[] = [];
+    wrapper.vm.$.appContext.config.errorHandler = (error) => { errors.push(error); };
+    post({ type: 'game_state', view: { state: { view: {}, players: PLAYERS, isMyTurn: false, availableActions: [] } }, winners: [] });
+    await nextTick();
+
+    expect(errors).toEqual([]);
+    expect(wrapper.find('[data-testid="board-due"]').exists()).toBe(true);
+  });
 });

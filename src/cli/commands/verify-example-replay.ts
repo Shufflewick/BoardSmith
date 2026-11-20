@@ -29,6 +29,7 @@ import {
   type WorkedExampleSpec,
 } from './example-derivation.js';
 import { projectDirOption } from '../lib/user-path.js';
+import { isRecord } from '../../utils/is-record.js';
 
 /**
  * `verify-example-replay.ts` — CHECK-06's ledger + read/report command, mirroring the LIVE
@@ -1279,10 +1280,6 @@ async function readSubagentJsonFile(
   return parseSubagentJsonInput(text, flagLabel, filePath);
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /**
  * Reads the extractor's return: exactly the one object `verify/extract-example.md` tells it to
  * return, `{ "examples": [...] }`. A bare array, or anything else, is refused with the shape
@@ -1294,7 +1291,7 @@ async function readExtractorReturn(
 ): Promise<{ examples: RawExtractedExample[]; repairs: string[] }> {
   const parsed = await readSubagentJsonFile(filePath, '--extraction', command);
   const value = parsed.value;
-  if (!isPlainObject(value) || !Array.isArray(value.examples)) {
+  if (!isRecord(value) || !Array.isArray(value.examples)) {
     throw new Error(
       `--extraction at "${filePath}" is not the extractor's return.\n` +
         `verify/extract-example.md has the extractor return one object, { "examples": [ ... ] } ` +
@@ -1303,7 +1300,7 @@ async function readExtractorReturn(
     );
   }
   value.examples.forEach((entry, i) => {
-    if (!isPlainObject(entry) || typeof entry.lineNumber !== 'number' || typeof entry.kind !== 'string') {
+    if (!isRecord(entry) || typeof entry.lineNumber !== 'number' || typeof entry.kind !== 'string') {
       throw new Error(
         `--extraction at "${filePath}": examples[${i}] needs a numeric lineNumber and a kind, as ` +
           `verify/extract-example.md describes. Re-dispatch the extractor; writing nothing.`,
@@ -1466,7 +1463,7 @@ interface TranslatorReturn {
 
 function isTranslatorReturn(value: unknown): value is TranslatorReturn {
   return (
-    isPlainObject(value) &&
+    isRecord(value) &&
     typeof value.testCode === 'string' &&
     Array.isArray(value.imports) &&
     value.imports.every((imp) => typeof imp === 'string') &&
@@ -1504,7 +1501,7 @@ async function readTranslatorReturns(
   filePath: string,
 ): Promise<{ byId: Map<string, unknown>; repairs: string[] }> {
   const parsed = await readSubagentJsonFile(filePath, '--translations', 'verify-example-record');
-  if (!isPlainObject(parsed.value)) {
+  if (!isRecord(parsed.value)) {
     throw new Error(
       `--translations at "${filePath}" must be one JSON object keyed by exampleId: ` +
         `{ "<exampleId>": <that example's translator return, unchanged>, ... }, using the ` +

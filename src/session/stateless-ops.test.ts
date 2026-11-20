@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, actionStep, loop, sequence, execute, simultaneousActionStep, PlayerFacingError, FlowHaltedError, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
-import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
+import { executeOp, type GameDefinitionLike, type StateEnvelope } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { playThenAcknowledgeFixtureDefinition } from './testing/fixtures/play-then-acknowledge-fixture.js';
+import { botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PickHandler } from './pick-handler.js';
 import { succeeded, refused } from './op-result.test-helper.js';
@@ -890,75 +891,16 @@ describe('executeOp', () => {
 
   // ── Teaching ops: hint + heatmapToggle (Plan 110-02) ──────────────────────
   //
-  // Uses an inline BotGame fixture: two-player game where player 1 chooses from
-  // 'direction': ['left', 'right'] — 2+ legal moves so MCTS has a real choice.
-  // MEMORY: MCTS short-circuits when only 1 move is available (skips clone).
-  // 2+ choices guarantee real MCTS branching for hint/heatmap tests.
+  // Uses the shared BotGame fixture: player 1 chooses from
+  // 'direction': ['left', 'right'], 2 legal moves so MCTS has a real choice.
+
+  async function startBotGame() {
+    const res = succeeded(await executeOp(botGameDef, botGameOptions, null, null, { type: 'start' }));
+    if (!res.success) throw new Error('start failed');
+    return res.snapshot;
+  }
 
   describe('hint + heatmapToggle teaching ops', () => {
-
-    // BotGame: player 1 loops choosing from ['left', 'right'] — 2 legal moves.
-    class BotGame extends Game<BotGame, Player> {
-      moveCount = 0;
-
-      constructor(options: GameOptions) {
-        super(options);
-        this.registerAction(
-          Action.create('move')
-            .chooseFrom('direction', { choices: ['left', 'right'] })
-            .execute(() => {
-              this.moveCount++;
-              return { success: true };
-            }),
-        );
-        this.setFlow({
-          root: loop({
-            maxIterations: 100,
-            do: actionStep({
-              actions: ['move'],
-              player: (ctx) => ctx.game.getPlayer(1)!,
-              turnScope: 'restart',
-            }),
-          }),
-        });
-      }
-    }
-
-    interface BotGameDefinitionLike extends GameDefinitionLike {
-      bot?: BotStrategy;
-    }
-
-    const botGameBotDef: BotStrategy = {
-      objectives: (_game, _playerIndex) => ({
-        moves: {
-          checker: (game) => Math.min(1, (game as BotGame).moveCount / 20),
-          weight: 1,
-        },
-      }),
-      // Extract 'direction' arg as notation so heatmap entries have a cell ref.
-      // Without this, DEST_KEYS fallback wouldn't find 'direction' and entries would
-      // be empty (heatmap dedup only aggregates moves that have an extractable target).
-      hintTargetFromMove: (move) => {
-        const dir = (move.args as { direction?: string }).direction;
-        return dir ? { notation: dir } : undefined;
-      },
-    };
-
-    const botGameDef: BotGameDefinitionLike = {
-      gameClass: BotGame,
-      gameType: 'bot-game',
-      minPlayers: 1,
-      maxPlayers: 2,
-      bot: botGameBotDef,
-    };
-
-    const botGameOptions = { playerCount: 2, seed: 'bot-seed' };
-
-    async function startBotGame() {
-      const res = succeeded(await executeOp(botGameDef, botGameOptions, null, null, { type: 'start' }));
-      if (!res.success) throw new Error('start failed');
-      return res.snapshot;
-    }
 
     // ── hint: success path ─────────────────────────────────────────────────
 
@@ -1120,7 +1062,7 @@ describe('executeOp', () => {
       }),
     };
 
-    const lockBotDef: GameDefinitionLike & { bot?: BotStrategy; tutorial?: TutorialDefinition } = {
+    const lockBotDef: GameDefinitionLike = {
       gameClass: LockBotGame,
       gameType: 'lock-bot',
       minPlayers: 1,
@@ -1256,62 +1198,11 @@ describe('executeOp', () => {
 
   describe('botSuggest op', () => {
 
-    // Local BotGame fixture: player 1 chooses direction ['left','right'] with bot.
-    // Re-declared here because botGameDef is scoped to 'hint + heatmapToggle' describe.
-    class BotSuggestGame extends Game<BotSuggestGame, Player> {
-      moveCount = 0;
-      constructor(options: GameOptions) {
-        super(options);
-        this.registerAction(
-          Action.create('move')
-            .chooseFrom('direction', { choices: ['left', 'right'] })
-            .execute(() => { this.moveCount++; return { success: true }; }),
-        );
-        this.setFlow({
-          root: loop({
-            maxIterations: 100,
-            do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! , turnScope: 'restart' }),
-          }),
-        });
-      }
-    }
-
-    interface BotSuggestGameDef extends GameDefinitionLike { bot?: BotStrategy; }
-
-    const botSuggestFn: BotStrategy = {
-      objectives: (_game, _playerIndex) => ({
-        moves: {
-          checker: (game) => Math.min(1, (game as BotSuggestGame).moveCount / 20),
-          weight: 1,
-        },
-      }),
-      hintTargetFromMove: (move) => {
-        const dir = (move.args as { direction?: string }).direction;
-        return dir ? { notation: dir } : undefined;
-      },
-    };
-
-    const botSuggestGameDef: BotSuggestGameDef = {
-      gameClass: BotSuggestGame,
-      gameType: 'bot-suggest-game',
-      minPlayers: 1,
-      maxPlayers: 2,
-      bot: botSuggestFn,
-    };
-
-    const botSuggestOpts = { playerCount: 2, seed: 'bot-suggest-seed' };
-
-    async function startBotSuggestGame() {
-      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, null, null, { type: 'start' }));
-      if (!res.success) throw new Error('start failed');
-      return res.snapshot;
-    }
-
     // ── success path ──────────────────────────────────────────────────────
 
     it('botSuggest answers with the move alone: no snapshot and no seat views (#675)', async () => {
-      const snapshot = await startBotSuggestGame();
-      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const snapshot = await startBotGame();
+      const res = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
@@ -1325,9 +1216,9 @@ describe('executeOp', () => {
     // ── what a search answers besides a move (#29, #421, #635) ───────────
 
     it('botSuggest answers with neither a move nor a stall when no given seat is due', async () => {
-      const snapshot = await startBotSuggestGame();
+      const snapshot = await startBotGame();
       // Seat 2 never acts — only seat 1 does
-      const res = succeeded(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const res = succeeded(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 2 }],
       }));
@@ -1336,9 +1227,9 @@ describe('executeOp', () => {
     });
 
     it('botSuggest searches a game with no bot configuration, as a bot seat plays it', async () => {
-      const { bot: _bot, ...noBotDef } = botSuggestGameDef;
-      const snapshot = await startBotSuggestGame();
-      const res = succeeded(await executeOp(noBotDef, botSuggestOpts, snapshot, null, {
+      const { bot: _bot, ...noBotDef } = botGameDef;
+      const snapshot = await startBotGame();
+      const res = succeeded(await executeOp(noBotDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
@@ -1417,13 +1308,13 @@ describe('executeOp', () => {
     });
 
     it('botSuggest reports the due seat as stalled, with why, when the bot fails while choosing (#29)', async () => {
-      const brokenDef: BotSuggestGameDef = {
-        ...botSuggestGameDef,
-        bot: { ...botSuggestFn, moveOrdering: () => { throw new Error('broken hook'); } },
+      const brokenDef: GameDefinitionLike = {
+        ...botGameDef,
+        bot: { ...botGameDef.bot, moveOrdering: () => { throw new Error('broken hook'); } },
       };
-      const snapshot = await startBotSuggestGame();
+      const snapshot = await startBotGame();
       const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
-      const res = succeeded(await executeOp(brokenDef, botSuggestOpts, snapshot, null, {
+      const res = succeeded(await executeOp(brokenDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
@@ -1434,9 +1325,9 @@ describe('executeOp', () => {
     });
 
     it('botSuggest answers that its seat waits, with no instant, when candidateMoves lists nothing and no step clock was read (#1715)', async () => {
-      const waitingDef: BotSuggestGameDef = { ...botSuggestGameDef, bot: { candidateMoves: () => [] } };
-      const snapshot = await startBotSuggestGame();
-      const res = succeeded(await executeOp(waitingDef, botSuggestOpts, snapshot, null, {
+      const waitingDef: GameDefinitionLike = { ...botGameDef, bot: { candidateMoves: () => [] } };
+      const snapshot = await startBotGame();
+      const res = succeeded(await executeOp(waitingDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }));
@@ -1447,8 +1338,8 @@ describe('executeOp', () => {
     });
 
     it('botSuggest is refused up front in an order-entry session: bot playouts consume randomness', async () => {
-      const snapshot = await startBotSuggestGame();
-      const res = refused(await executeOp(botSuggestGameDef, botSuggestOpts, snapshot, null, {
+      const snapshot = await startBotGame();
+      const res = refused(await executeOp(botGameDef, botGameOptions, snapshot, null, {
         type: 'botSuggest',
         seats: [{ seat: 1 }],
       }, { randomness: 'forbidden' }));
@@ -1485,7 +1376,7 @@ describe('executeOp', () => {
       const moveOrdering = vi.fn((_game, _playerIndex, moves: Array<{ action: string }>) =>
         moves.filter((m) => m.action !== 'concede'),
       );
-      const concedeDef: GameDefinitionLike & { bot?: BotStrategy } = {
+      const concedeDef: GameDefinitionLike = {
         gameClass: ConcedeGame,
         gameType: 'concede-game',
         minPlayers: 1,
@@ -1505,12 +1396,6 @@ describe('executeOp', () => {
       expect(botResult.botPlayer).toBe(1);
       expect(moveOrdering).toHaveBeenCalled();
       expect(botResult.suggestedAction).toBe('advance');
-    });
-
-    // ── read-only classification ──────────────────────────────────────────
-
-    it('botSuggest is in READ_ONLY_OP_TYPES', () => {
-      expect(READ_ONLY_OP_TYPES.has('botSuggest')).toBe(true);
     });
 
   });

@@ -304,6 +304,17 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
     ).toBeUndefined();
   });
 
+  it('a hidden element keeps $coordSystem, so every seat refuses a non-axial hex board alike', () => {
+    const deck = game.create(Deck, 'coord-deck');
+    deck.contentsCountOnly();
+    deck.create(TestCard, 'C', { rank: 'A', suit: 'S', $coordSystem: 'cube' } as any);
+
+    const hiddenCard = findByName(game.toJSONForPlayer(2).children, 'coord-deck')!.children![0];
+
+    expect(hiddenCard.attributes.__hidden).toBe(true);
+    expect((hiddenCard.attributes as any).$coordSystem).toBe('cube');
+  });
+
   // -------------------------------------------------------------------------
   // Regression guard: sweep the WHOLE player-2 view
   // -------------------------------------------------------------------------

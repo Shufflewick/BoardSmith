@@ -524,19 +524,7 @@ function assertWorldVacate(world: WorldDefinition): void {
   }
 }
 
-/**
- * WHICH CLOCK VERB MAY FINALIZE A VACANCY, or null (ShufflewickPub #475).
- *
- * `worldVacateAction`'s counterpart on the clock's road, handed back as a name
- * a host may hold. Null for a world that declares none, which is an ANSWER: no
- * verb in that world may free a chair from the clock, and the call that would
- * is refused by name.
- */
-function worldVacateByClockAction(world: WorldDefinition): string | null {
-  return world.vacateByClock ?? null;
-}
-
-/** `worldVacateByClockAction`'s three rules, raised as refusals at read time. */
+/** The three rules that make `vacateByClock` usable, raised as refusals at read time. */
 function assertWorldVacateByClock(world: WorldDefinition): void {
   if (world.vacateByClock === undefined) return;
 
@@ -954,7 +942,9 @@ export interface WorldRunner {
    * `vacate`'s counterpart, reported for the same reason: a host has to know,
    * before anything is dispatched, whether this world has a clock road to a
    * chair at all -- and the three rules that make the name usable are checked
-   * once, in `worldVacateByClockAction`, rather than by each host.
+   * once, in `assertWorldVacateByClock`, rather than by each host. Null for a
+   * world that declares none, which is an ANSWER: no verb in that world may
+   * free a chair from the clock, and the call that would is refused by name.
    */
   readonly vacateByClock: string | null;
 }
@@ -1105,7 +1095,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     store,
     seatCount,
     vacate: worldVacateAction(world),
-    vacateByClock: worldVacateByClockAction(world),
+    vacateByClock: world.vacateByClock ?? null,
   };
 }
 

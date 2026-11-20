@@ -1,6 +1,6 @@
 {
-  "revision": 496,
-  "surfaceHash": "a51fc3c45daf0de3",
+  "revision": 497,
+  "surfaceHash": "1484bbee9c830c13",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3911,6 +3911,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "Props and options no caller passed are removed (#1777): ControlsMenu openUp/align, useZoomPreview options, ZoomPreviewOverlay getSuitSymbol/getSuitColor, Die3D zeroIndexed, BoardMessage position, useFLIP threshold/onAnimationStart/onAnimationEnd, isBlackSuit, audioService.init enabled/volume, toDebugString showIds/showAttributes, and boardsmith lint --eslint/--css/--pitfalls. Platform: nothing to do; published games need no rebuild."
+    },
+    {
+      "revision": 497,
+      "date": "2026-11-20",
+      "surfaceHash": "1484bbee9c830c13",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Small cleanups (#1778): HexGrid loses $coordSystem and the HexCoordSystem type (axial was the only value; the UI still refuses any other a JavaScript game sets), WorldAction.build() is removed (no caller), and one shared isRecord replaces six identical copies. Platform: nothing to do; published games need no rebuild."
     }
   ]
 }

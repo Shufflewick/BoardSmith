@@ -104,7 +104,7 @@ export const RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
  * The manifest is persisted, untrusted input on every read after the first write, so this is
  * enforced both when a fresh manifest is written and every time an existing one is parsed back.
  */
-export const RANGE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+const RANGE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
 
 /**
  * One range of the dispatch-plan manifest: a page range OF ONE archived document (#311). A verify
@@ -134,8 +134,8 @@ export const RUN_LEDGER_END = '<!-- boardsmith:verify-run:end -->';
  * Fences delimiting the machine-owned dispatch-plan manifest — a distinct section, its own fence
  * pair (never shared with `RUN_LEDGER_BEGIN`/`END`), written once at `verify-run-init` time.
  */
-export const RUN_MANIFEST_BEGIN = '<!-- boardsmith:verify-run:manifest:begin -->';
-export const RUN_MANIFEST_END = '<!-- boardsmith:verify-run:manifest:end -->';
+const RUN_MANIFEST_BEGIN = '<!-- boardsmith:verify-run:manifest:begin -->';
+const RUN_MANIFEST_END = '<!-- boardsmith:verify-run:manifest:end -->';
 
 /** One recorded slice-unit. Each ledger line is exactly one `JSON.stringify(LedgerRecord)`. */
 export interface LedgerRecord {

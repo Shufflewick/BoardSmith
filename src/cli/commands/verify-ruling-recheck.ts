@@ -450,7 +450,7 @@ export async function verifyRulingRecheckCommand(
  * NOT the callable a recording workflow wants per batch; use `recordRulingVerdicts`, which upserts
  * through this one. Exported for the legitimate full-rewrite case and for that upsert's own use.
  */
-export async function replaceRulingVerdicts(
+async function replaceRulingVerdicts(
   projectDir: string,
   runId: string,
   records: RulingVerdictRecord[],

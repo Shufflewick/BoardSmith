@@ -1435,12 +1435,6 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
           : withWorld<G>(context),
       )) as never);
   }
-
-  /** The definition so far, for inspection. Registering one that never reached
-   *  `.execute(fn)` is refused by `registerAction`, exactly as a table's is. */
-  build(): ActionDefinition {
-    return this.definition;
-  }
 }
 
 /**

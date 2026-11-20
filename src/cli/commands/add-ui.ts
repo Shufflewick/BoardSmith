@@ -2,7 +2,8 @@ import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { styleText } from 'node:util';
 
-import { getProjectContext, loadGameDefinition } from './game-runtime.js';
+import { loadGameDefinition } from './game-runtime.js';
+import { getProjectContext } from '../lib/project-context.js';
 import { constructGame } from '../../engine/element/game.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { requireGameProjectManifests, requireRulesIndex, resolveRulesDir, tableUiState } from '../lib/game-project.js';

@@ -299,7 +299,7 @@ function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalet
 }
 
 /** Why this game's seat range holds no seat count to build it at, or undefined when it holds one. */
-export function seatRangeProblem(definition: { minPlayers?: unknown; maxPlayers?: unknown }): string | undefined {
+function seatRangeProblem(definition: { minPlayers?: unknown; maxPlayers?: unknown }): string | undefined {
   const { minPlayers, maxPlayers } = definition;
   if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
     return (

@@ -281,7 +281,7 @@ export interface KeptHistory {
  * structural the same way `seat-activity.ts`'s `SeatActivityState` is, so it
  * names only the fields undo eligibility depends on.
  */
-export interface UndoFlowState {
+interface UndoFlowState {
   currentPlayer?: number;
   moveCount?: number;
   awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions?: string[] }>;

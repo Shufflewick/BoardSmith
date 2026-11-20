@@ -302,7 +302,7 @@ export function generateIndexHtml(config: TableUiConfig): string {
 /**
  * Generate src/main.ts
  */
-export function generateMainTs(): string {
+function generateMainTs(): string {
   return `import { createApp } from 'vue';
 import { App } from './ui/index.js';
 

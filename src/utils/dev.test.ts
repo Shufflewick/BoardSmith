@@ -19,7 +19,7 @@ import { describe, it, expect } from 'vitest';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
-import { isDevMode, isDevThrowEnabled, _resolveDevThrowEnabled } from './dev.js';
+import { _resolveDevThrowEnabled } from './dev.js';
 
 // dev.ts as a rules bundle carries it: an esbuild ESM bundle, where `import.meta.env` is unset
 // and the mode comes from NODE_ENV, as in a `boardsmith simulate` worker.
@@ -89,18 +89,6 @@ describe('_resolveDevThrowEnabled (pure decision logic)', () => {
 
   it('Node NODE_ENV set to an unrecognized custom value returns false', () => {
     expect(_resolveDevThrowEnabled({ nodeEnv: 'staging' })).toBe(false);
-  });
-});
-
-describe('isDevThrowEnabled (live integration sanity check)', () => {
-  it('is a boolean and does not throw when called with the real environment', () => {
-    expect(typeof isDevThrowEnabled()).toBe('boolean');
-  });
-});
-
-describe('isDevMode() semantics are unchanged (CR-04 must not touch existing devWarn consumers)', () => {
-  it('is a boolean and does not throw when called with the real environment', () => {
-    expect(typeof isDevMode()).toBe('boolean');
   });
 });
 

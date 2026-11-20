@@ -65,12 +65,6 @@ export class BotGame extends Game<BotGame, Player> {
   }
 }
 
-// Extended def type — supports bot config (Plans 02/03 will add bot? to GameDefinitionLike;
-// for now this test-local interface allows the fixture to carry the bot config).
-interface BotGameDefinitionLike extends GameDefinitionLike {
-  bot?: BotStrategy;
-}
-
 const botGameBotDef: BotStrategy = {
   objectives: (_game, _playerIndex) => ({
     moves: {
@@ -86,7 +80,7 @@ const botGameBotDef: BotStrategy = {
   },
 };
 
-export const botGameDef: BotGameDefinitionLike = {
+export const botGameDef: GameDefinitionLike = {
   gameClass: BotGame,
   gameType: 'bot-game',
   minPlayers: 1,

@@ -110,10 +110,10 @@ export const CHUNK_MD = 'CHUNK.md';
 export const SKETCH_MD = 'SKETCH.md';
 export const RULINGS_MD = 'RULINGS.md';
 export const DECISIONS_MD = 'DECISIONS.md';
-export const ASSETS_MD = 'ASSETS.md';
-export const DESIGN_MD = 'DESIGN.md';
-export const BRIEF_MD = 'BRIEF.md';
-export const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
+const ASSETS_MD = 'ASSETS.md';
+const DESIGN_MD = 'DESIGN.md';
+const BRIEF_MD = 'BRIEF.md';
+const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
 /** The project's hard constraints and every state structure that grows, with its cap (#288). */
 export const CONSTRAINTS_MD = 'CONSTRAINTS.md';
 /** The filings ledger and the orchestrated-run journal, written by `/bs-build-game`. */

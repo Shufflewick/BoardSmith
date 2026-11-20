@@ -116,7 +116,7 @@ export const EDITION_EMPTY_LEXICON = Object.freeze([
  * adjacent field that nothing parses." Deliberately NOT added to `HEADER_LABELS` — that tuple is
  * the parsed-header contract pinned by tests and by `scripts/ingest-harness/check.mjs`.
  */
-export const EDITION_NOTE_LABEL = 'Edition note:';
+const EDITION_NOTE_LABEL = 'Edition note:';
 
 /**
  * `--edition` normalization for finding F-1 (`170-PROOF-RUN-2.md`, 2026-07-28 human gate): a
