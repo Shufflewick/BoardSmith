@@ -359,11 +359,11 @@ export function presetSeatSetup(
  */
 export function resolveColorOption(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
-  config: { colorPalette?: readonly unknown[] },
+  config: { colorPalette?: unknown },
 ): ColorOptionDefinition {
   const option = createColorOption();
-  if (config.colorPalette) option.choices = paletteChoices(config.colorPalette);
-  const source = config.colorPalette ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
+  if (config.colorPalette !== undefined) option.choices = paletteChoices(config.colorPalette);
+  const source = config.colorPalette !== undefined ? 'boardsmith.json\'s "colorPalette"' : 'the engine\'s default palette';
   for (const [where, palette] of Object.entries(codeColorPalettes(gameDefinition))) {
     if (palette && !samePalette(palette, option.choices)) {
       throw new Error(
@@ -383,7 +383,7 @@ export function resolveColorOption(
  */
 export function resolveDevPlayerOptions(
   gameDefinition: Pick<GameDefinition, 'playerOptions' | 'colorPalette'>,
-  config: { playerOptions?: unknown; colorPalette?: readonly unknown[] },
+  config: { playerOptions?: unknown; colorPalette?: unknown },
 ): Record<string, PlayerOptionDefinition> & { color: ColorOptionDefinition } {
   return {
     ...mergePlayerOptions(gameDefinition.playerOptions, config.playerOptions),
@@ -402,6 +402,7 @@ function codeColorPalettes(gameDefinition: Pick<GameDefinition, 'playerOptions' 
 function samePalette(a: ColorChoice[], b: ColorChoice[]): boolean {
   return (
     a.length === b.length &&
-    a.every((c, i) => c.value.toLowerCase() === b[i]!.value.toLowerCase() && c.label === b[i]!.label)
+    // A code palette in another shape (an untyped game) differs rather than crashing.
+    a.every((c, i) => typeof c.value === 'string' && c.value.toLowerCase() === b[i]!.value.toLowerCase() && c.label === b[i]!.label)
   );
 }

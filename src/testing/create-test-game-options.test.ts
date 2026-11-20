@@ -94,10 +94,10 @@ describe('createTestGame fills the options boardsmith.json declares (#701)', () 
   it('refuses a palette entry that is not { id, hex, label }, naming it (#1739)', () => {
     inProject({ colorPalette: [{ id: 'red', hex: '#E74C3C', label: 'Red' }, { color: '#3498DB', name: 'Sea' }] });
     expect(() => createTestGame(OptionsGame, { playerCount: 2 })).toThrow(
-      /"colorPalette" entry 2, \{"color":"#3498DB","name":"Sea"\}, needs a "hex" and a "label"/,
+      /"colorPalette" entry 2, \{"color":"#3498DB","name":"Sea"\}, needs an "id", a "hex" and a "label"/,
     );
     inProject({ colorPalette: ['#E74C3C'] });
-    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette" entry 1, "#E74C3C", needs a "hex" and a "label"/);
+    expect(() => createTestGame(OptionsGame, { playerCount: 1 })).toThrow(/"colorPalette" entry 1, "#E74C3C", needs an "id", a "hex" and a "label"/);
   });
 
   it('a palette with fewer colours than seats leaves every seat in the engine palette, as the dev host does (#1552)', () => {

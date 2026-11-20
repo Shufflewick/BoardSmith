@@ -380,8 +380,24 @@ describe('resolveColorOption: dev offers exactly the colours production does (#8
 
   it('refuses a boardsmith.json palette entry that is not { id, hex, label }, naming it (#1739)', () => {
     expect(() => resolveColorOption({}, { colorPalette: [{ value: '#111111', label: 'Coal' }] })).toThrow(
-      /"colorPalette" entry 1, \{"value":"#111111","label":"Coal"\}, needs a "hex" and a "label"/,
+      /"colorPalette" entry 1, \{"value":"#111111","label":"Coal"\}, needs an "id", a "hex" and a "label"/,
     );
+  });
+
+  it('refuses a boardsmith.json palette entry with no id, as validate and the platform do (#1739)', () => {
+    expect(() => resolveColorOption({}, { colorPalette: [{ hex: '#111111', label: 'Coal' }] })).toThrow(
+      /"colorPalette" entry 1, \{"hex":"#111111","label":"Coal"\}, needs an "id", a "hex" and a "label"/,
+    );
+  });
+
+  it('refuses a boardsmith.json colorPalette that is not a list, or lists no colours, naming the shape (#1739)', () => {
+    expect(() => resolveColorOption({}, { colorPalette: { red: '#f00' } })).toThrow(/"colorPalette" must be a list of \{ "id", "hex", "label" \}/);
+    expect(() => resolveColorOption({}, { colorPalette: [] })).toThrow(/"colorPalette" lists no colours/);
+  });
+
+  it('refuses a code palette in another shape with the mismatch message, not a crash (#1739)', () => {
+    const loose = { colorPalette: [{ value: '#111111', label: 'Coal' }, { value: '#EEEEEE', label: 'Snow' }] } as unknown as Parameters<typeof resolveColorOption>[0];
+    expect(() => resolveColorOption(loose, configPalette)).toThrow(/declares colorPalette in code/);
   });
 
   it('falls back to the engine palette, named, when boardsmith.json declares none', () => {

@@ -61,20 +61,27 @@ export function createColorOption(): ColorOptionDefinition {
 }
 
 /**
- * boardsmith.json's `colorPalette` entries, each `{ id, hex, label }`, as choices.
+ * boardsmith.json's `colorPalette`, a list of `{ id, hex, label }` entries, as choices.
  *
- * @throws When an entry has no `hex` or `label` string, naming it.
+ * @throws When it is not a non-empty list, or an entry is not `{ id, hex, label }` strings, naming it.
  */
-export function paletteChoices(palette: readonly unknown[]): ColorChoice[] {
-  return palette.map((item, index) => {
+export function paletteChoices(palette: unknown): ColorChoice[] {
+  const shape = 'a list of { "id", "hex", "label" } entries (e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" })';
+  if (!Array.isArray(palette)) {
+    throw new Error(`boardsmith.json's "colorPalette" must be ${shape}, so players cannot be given its colours. Fix the list.`);
+  }
+  if (palette.length === 0) {
+    throw new Error(`boardsmith.json's "colorPalette" lists no colours. Give it ${shape}, or remove it to seat players in the engine palette.`);
+  }
+  return palette.map((item: unknown, index) => {
     const entry = (typeof item === 'object' && item !== null ? item : {}) as Record<string, unknown>;
-    if (typeof entry.hex !== 'string' || !entry.hex || typeof entry.label !== 'string' || !entry.label) {
+    if (!['id', 'hex', 'label'].every((key) => typeof entry[key] === 'string' && entry[key] !== '')) {
       throw new Error(
-        `boardsmith.json's "colorPalette" entry ${index + 1}, ${JSON.stringify(item)}, needs a "hex" and a "label": ` +
-          'each entry is { "id", "hex", "label" } (e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }). Fix that entry.',
+        `boardsmith.json's "colorPalette" entry ${index + 1}, ${JSON.stringify(item)}, needs an "id", a "hex" and a "label": ` +
+          `it must be ${shape}. Fix that entry.`,
       );
     }
-    return { value: entry.hex, label: entry.label };
+    return { value: entry.hex as string, label: entry.label as string };
   });
 }
 
@@ -106,12 +113,6 @@ export function paletteGameOptions(
   playerCount: number,
 ): { colors?: string[]; colorLabels?: Record<string, string> } {
   if (colorPalette === undefined) return {};
-  if (!Array.isArray(colorPalette)) {
-    throw new Error(
-      'boardsmith.json\'s "colorPalette" must be a list of { "id", "hex", "label" } entries ' +
-        '(e.g. { "id": "red", "hex": "#e74c3c", "label": "Red" }), so players cannot be given its colours. Fix the list.',
-    );
-  }
   const choices = paletteChoices(colorPalette);
   // The dev host seats every player in the engine palette when this one cannot colour them all.
   if (choices.length < playerCount) return {};

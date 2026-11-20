@@ -41,7 +41,7 @@ export const presetStartOptions: typeof DeclaredPreset = (gameDefinition, name) 
   // The same player options and palette `boardsmith dev` resolves, so a preset dev refuses is refused here.
   const playerOptions = resolveDevPlayerOptions(gameDefinition, {
     playerOptions: project?.playerOptions,
-    colorPalette: project?.colorPalette as Array<string | Record<string, unknown>> | undefined,
+    colorPalette: project?.colorPalette,
   });
   const palette = playerOptions.color.choices;
   const seats = presetSeatSetup(preset, playerOptions, palette.map((c) => c.value));
