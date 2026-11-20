@@ -108,6 +108,24 @@ vertical room well before the panel's seat limit, so there are two levers:
   state for that seat — every other turn cue stays either way: the indicator
   dot, the active-card highlight, the turn-change pulse, and `aria-current`.
 
+#### Marking each card with its player's colour
+
+`:player-color-marks` turns on colour treatments BoardSmith draws on each seat
+card, so a player's card reads as theirs at a glance:
+
+```vue
+<GameShell :uis="uis" :player-color-marks="['stripe', 'name']" />
+```
+
+- **`'stripe'`** draws a stripe in the player's colour down the card's edge.
+- **`'name'`** writes the player's name in their colour where it reads on the
+  card at WCAG AA (4.5:1) in the current theme, and in the normal text colour
+  where it would not.
+
+A seat with no colour gets neither. These are the only options: the card's
+size, layout, font and background stay BoardSmith's, so every game's panel
+looks alike.
+
 #### The collapsed panel: `#player-strip-extra`
 
 When the sidebar is collapsed to the desktop rail, and on phones, the panel
