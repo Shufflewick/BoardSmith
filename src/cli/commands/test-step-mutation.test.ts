@@ -294,7 +294,7 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
     expect(logged[0]).toMatch(/^mutant 1\/30: src\/values\.ts:/);
   }, 60_000);
 
-  it('leaves out a test, and a claim only it cites, whose changed files no sampled mutant was in, and still reports one loading no changed file (#1487)', async () => {
+  it('leaves out a test, and a claim only it cites, whose changed code no sampled mutant was in, and still reports one running no changed code (#1487, #1783)', async () => {
     // Thirty-one changed files of one mutant each, so the sample of thirty leaves exactly one out.
     const files: Record<string, string> = { 'vitest.config.ts': VITEST_CONFIG };
     for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
@@ -322,11 +322,12 @@ it('claim 1 — every value is its index', () => { for (let i = 0; i < 40; i++) 
       'claim-survives-mutation claim 3',
       'test-survives-mutation tests/none.test.ts > claim 2 and claim 3 — tautology',
     ]);
+    expect(result.findings[2].detail).toContain('runs none of the code this chunk changed');
   }, 180_000);
 
   // #1488: a mutant is served only to the test's own worker, so code the test runs in a child process
-  // loads the file from disk and never sees it; that test is rightly left out as #1487 leaves it out.
-  it('a mutant cannot reach a file a test runs in a child process, so a test loading only an unsampled file that way is left out (#1488)', async () => {
+  // loads the file from disk and never sees it; that test runs no sampled mutant's code in its worker, so it is not judged (#1783).
+  it('a mutant cannot reach a file a test runs in a child process, so a test running only the code of an unsampled file in its worker is not judged (#1488)', async () => {
     const files: Record<string, string> = { 'vitest.config.ts': VITEST_CONFIG };
     for (let i = 0; i < 31; i++) files[`src/m${i}.ts`] = `export const v = ${i};\n`;
     const project = await makeProject(files);
@@ -353,8 +354,93 @@ it('claim 1 — both values', () => {
     // Every sampled mutant ran and none failed the test, the mutant of the file it runs in the child among them.
     expect(result.summary).toMatchObject({ mutants: 30, killed: 0, survived: 30 });
     expect(logged.filter((line) => line.includes(`: ${a}:1 `))).toHaveLength(1);
-    expect(logged).toContain(`Not judged, as no sampled mutant was in a changed file they load: ${path}`);
+    expect(logged).toContain(`Not judged, as no sampled mutant was in code they run: ${path} > claim 1 — both values`);
     expect(result.findings).toEqual([]);
+  }, 180_000);
+
+  it('judges a test only by the sampled mutants in code it runs, so one running only unsampled code is not judged (#1783)', async () => {
+    const source = `export function a(x: number): number {
+  return x;
+}
+export function b(): number[] {
+  return [${Array.from({ length: 100 }, (_, i) => i).join(', ')}];
+}
+`;
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/two.ts': source });
+    const added = new Map([['src/two.ts', lines(2, 5)]]);
+    const all = await collectMutants(project, added);
+    const seed = Array.from({ length: 100 }, (_, i) => `seed-${i}`).find((s) => sampleMutants(all, s, 30).every((m) => m.line !== 2))!;
+    const path = 'tests/two.test.ts';
+    const testSource = `import { it, expect } from 'vitest';
+import { a, b } from '../src/two';
+it('claim 1 — a returns its argument', () => { expect(a(1)).toBe(1); });
+it('claim 2 — b runs', () => { b(); expect(true).toBe(true); });
+`;
+    const absPath = join(project, path);
+    await fs.mkdir(dirname(absPath), { recursive: true });
+    await fs.writeFile(absPath, testSource);
+    const logged: string[] = [];
+    const result = await runMutationCheck({ projectDir: project, testFiles: [{ path, absPath, source: testSource }], added, claims: [1, 2], seed, log: (line) => logged.push(line) });
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual([
+      'claim-survives-mutation claim 2',
+      `test-survives-mutation ${path} > claim 2 — b runs`,
+    ]);
+    expect(result.findings[1].detail).toContain('all 30 sampled small breaks');
+    expect(logged).toContain(`Not judged, as no sampled mutant was in code they run: ${path} > claim 1 — a returns its argument`);
+  }, 180_000);
+
+  it('counts code a test reads but another take ran as code that test runs: load-time code, a module an earlier test loaded, a concurrent test (#1783 review)', async () => {
+    const project = await makeProject({
+      'vitest.config.ts': VITEST_CONFIG,
+      'src/t.ts': 'export function build(): number[] {\n  const n = 1;\n  return [n];\n}\nexport const TABLE = build();\n',
+      'src/u.ts': 'export const V = 1;\n',
+    });
+    const sources: Record<string, string> = {
+      'tests/load.test.ts': `import { it, expect } from 'vitest';
+import { TABLE, build } from '../src/t';
+it('reads the table', () => { expect(TABLE.length).toBe(1); });
+it('calls build', () => { build(); expect(true).toBe(true); });
+`,
+      'tests/dynamic.test.ts': `import { it, expect } from 'vitest';
+it('loads u', async () => {
+  // Dynamic import: the module is first loaded inside this test, and the next test reads it.
+  await import('../src/u');
+});
+it('reads u', async () => {
+  // Dynamic import: cached by the test before, so none of its code runs in this test.
+  const { V } = await import('../src/u');
+  expect(typeof V).toBe('number');
+});
+`,
+      'tests/concurrent.test.ts': `import { describe, it, expect } from 'vitest';
+import { build } from '../src/t';
+let release = () => {};
+const released = new Promise<void>((resolve) => { release = resolve; });
+describe.concurrent('side by side', () => {
+  it('first', async () => { await released; expect(build().length).toBe(1); });
+  it('second', async () => { release(); await released; expect(true).toBe(true); });
+});
+`,
+    };
+    const testFiles = [];
+    for (const [path, source] of Object.entries(sources)) {
+      const absPath = join(project, path);
+      await fs.mkdir(dirname(absPath), { recursive: true });
+      await fs.writeFile(absPath, source);
+      testFiles.push({ path, absPath, source });
+    }
+    const added = new Map([['src/t.ts', lines(2)], ['src/u.ts', lines(1)]]);
+    const result = await runMutationCheck({ projectDir: project, testFiles, added, claims: [], seed: 'fixture', log: () => {} });
+    const judged = (detail: string) => detail.startsWith('This test passed under all 1 sampled small breaks');
+    expect(result.findings.filter((f) => judged(f.detail)).map((f) => f.subject).sort()).toEqual([
+      'tests/concurrent.test.ts > side by side first',
+      'tests/concurrent.test.ts > side by side second',
+      'tests/dynamic.test.ts > loads u',
+      'tests/dynamic.test.ts > reads u',
+      'tests/load.test.ts > calls build',
+      'tests/load.test.ts > reads the table',
+    ]);
+    expect(result.findings).toHaveLength(6);
   }, 180_000);
 
   it('reports a tautological test and the claim it was the only test for', async () => {
