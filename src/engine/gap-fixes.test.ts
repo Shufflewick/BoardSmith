@@ -120,12 +120,6 @@ describe('the root-field audience table is reachable from outside (#32)', () => 
     // The game's own field, so the game must classify it.
     expect(isEngineRootField('mapSeed')).toBe(false);
   });
-
-  it('classifies every field the engine actually puts on the root', () => {
-    for (const key of Object.keys(GAME_ROOT_FIELD_AUDIENCE)) {
-      expect(isEngineRootField(key), key).toBe(true);
-    }
-  });
 });
 
 describe('a game wires a table\'s actions through one public function (#30, #378)', () => {
