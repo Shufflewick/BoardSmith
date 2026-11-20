@@ -9,7 +9,7 @@
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
     "src/engine/element/game-element.ts:1136-1142|src/engine/element/game-element.ts:1197-1203",
     "src/cli/commands/verify-classify.ts:1569-1576|src/cli/commands/verify-classify.ts:784-791",
-    "src/engine/element/game.ts:3983-3987|src/engine/element/game.ts:4015-4019"
+    "src/engine/element/game.ts:4009-4013|src/engine/element/game.ts:4041-4045"
   ],
   "clone_fingerprints": [
     "dup:3551213f:2",

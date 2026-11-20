@@ -1,4 +1,4 @@
-import { serializeForSeat, type Game, type MessageEntry, type SeatViewJSON } from '../element/game.js';
+import { PLACES_REMEDY, placesProblem, seatList, serializeForSeat, type Game, type MessageEntry, type SeatViewJSON } from '../element/game.js';
 import { Player } from '../player/player.js';
 import type { HistoryEntry } from '../action/types.js';
 import type { FlowState } from '../flow/types.js';
@@ -98,6 +98,14 @@ interface SnapshotFields {
    * Recorded for the same hosts as `winners`, and likewise not read back.
    */
   draw: boolean;
+
+  /**
+   * The seats in each finishing place of a finished game (`game.getPlaces()`),
+   * best first, tied seats sharing a place; `places[0]` is `winners` (#1724).
+   * `[]` while the game is running. Recorded for the same hosts as `winners`,
+   * and likewise not read back.
+   */
+  places: number[][];
 
   /**
    * Action history: every action taken and every seat the host closed at a
@@ -383,6 +391,9 @@ export interface ActionCheckpoint {
   /** Whether the game was a declared draw at this checkpoint (see `GameStateSnapshot.draw`). */
   draw: boolean;
 
+  /** The finishing places at this checkpoint (see `GameStateSnapshot.places`). */
+  places: number[][];
+
   /** Element sequence counter (`game._ctx.sequence`) at this checkpoint. */
   sequence: number;
 
@@ -554,8 +565,12 @@ function snapshotRandom(game: Game, seat: { reseed: string } | undefined): Pick<
   return { randomState: new SeededRandom(seat.reseed).getState(), gameOptions: { ...game.getConstructorOptions(), seed: seat.reseed } };
 }
 
-/** The outcome the game declares: its winners, and whether a finished game is a draw (#1625). */
-function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw'> {
+/**
+ * The outcome the game declares: its winners, whether a finished game is a
+ * draw (#1625), and every seat's finishing place, first place being exactly
+ * the winners (#1724).
+ */
+function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw' | 'places'> {
   const winners = game.getWinners().map((p) => p.seat);
   const draw = game.isFinished() && game.isDraw();
   if (draw && winners.length > 0) {
@@ -565,7 +580,30 @@ function outcomeOf(game: Game): Pick<GameStateSnapshot, 'winners' | 'draw'> {
         `A draw has no winners: return [] from getWinners() for a draw, or false from isDraw() when someone won.`,
     );
   }
-  return { winners, draw };
+  return { winners, draw, places: placesOf(game, winners) };
+}
+
+/** `game.getPlaces()` as seats, refused unless every seat has one place and first place is exactly `winners` (#1724). */
+function placesOf(game: Game, winners: number[]): number[][] {
+  const places = game.getPlaces().map((group) => group.map((p) => p.seat));
+  if (places.length === 0) return places;
+  const problem = placesProblem(places, game.players.map((p) => p.seat));
+  if (problem) throw new Error(`getPlaces() returned places ${problem}. ${PLACES_REMEDY}`);
+  const first = places[0];
+  if (winners.length === 0 && places.length > 1) {
+    throw new Error(
+      `getWinners() names no winner, so every seat shares one place, but getPlaces() puts ` +
+        `${seatList(first)} in first place. Name ${first.length === 1 ? 'that seat' : 'those seats'} ` +
+        `as the winners, or put every seat in one place.`,
+    );
+  }
+  if (winners.length > 0 && (first.length !== winners.length || first.some((seat) => !winners.includes(seat)))) {
+    throw new Error(
+      `getWinners() names ${seatList(winners)} as the winners, but getPlaces() puts ${seatList(first)} ` +
+        `in first place. The winners are exactly the seats in first place.`,
+    );
+  }
+  return places;
 }
 
 /** How many actions a snapshot's game has recorded, those dropped from its history included (#997). */
