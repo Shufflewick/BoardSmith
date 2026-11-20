@@ -28,9 +28,6 @@ describe('world budgets', () => {
     // threshold, because a host below it makes the panel's board handoff
     // unreachable for worlds. See `aboveReadingThreshold`.
     expect(worldBudgets({ maxCandidatesPerSelection: 30 }).maxCandidatesPerSelection).toBe(30);
-    expect(() => worldBudgets({ maxCandidatesPerSelection: 0 })).toThrow(
-      /maxCandidatesPerSelection/,
-    );
   });
 
   it('derives the batch cap as everything one owner may hold at once', () => {
@@ -60,10 +57,11 @@ describe('world budgets', () => {
     expect(budgets.maxPendingEvents).toBe(1000);
   });
 
-  it.each([0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY])(
-    'refuses %s as a budget, naming the field',
-    (bad) => {
-      expect(() => worldBudgets({ maxPlayers: bad })).toThrow(/maxPlayers/);
-    },
-  );
+  it.each(
+    Object.keys(worldBudgets()).flatMap((field) =>
+      [0, -1, 2.5, Number.NaN, Number.POSITIVE_INFINITY].map((bad) => [field, bad] as const),
+    ),
+  )('refuses %s set to %s, naming the field', (field, bad) => {
+    expect(() => worldBudgets({ [field]: bad })).toThrow(new RegExp(`\`${field}\``));
+  });
 });

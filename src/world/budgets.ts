@@ -236,7 +236,7 @@ const BASE = {
   noticeMaxBytes: 1024,
   // A large clan's worth of recipients in one command.
   maxNoticesPerCommand: 100,
-} as const;
+} as const satisfies Omit<WorldBudgets, "maxSchedulesPerCommand" | "maxPendingEvents">;
 
 /** What a host may say about its budgets. Everything is optional; the two
  *  derived fields are recomputed from whatever is not named. */
@@ -251,64 +251,25 @@ export type WorldBudgetOverrides = Partial<WorldBudgets>;
  * a host that is misconfigured.
  */
 export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets {
-  const maxPlayers = positive(overrides.maxPlayers ?? BASE.maxPlayers, "maxPlayers");
-  const partitionMaxBytes = positive(
-    overrides.partitionMaxBytes ?? BASE.partitionMaxBytes,
-    "partitionMaxBytes",
-  );
-  const maxUnkeyedPendingPerPlayer = positive(
-    overrides.maxUnkeyedPendingPerPlayer ?? BASE.maxUnkeyedPendingPerPlayer,
-    "maxUnkeyedPendingPerPlayer",
-  );
-  const maxKeyedPendingPerPlayer = positive(
-    overrides.maxKeyedPendingPerPlayer ?? BASE.maxKeyedPendingPerPlayer,
-    "maxKeyedPendingPerPlayer",
-  );
+  const base: Record<keyof typeof BASE, number> = { ...BASE };
+  for (const field of Object.keys(BASE) as (keyof typeof BASE)[]) {
+    base[field] = positive(overrides[field] ?? BASE[field], field);
+  }
   return {
-    maxPlayers,
-    partitionMaxBytes,
-    maxUnkeyedPendingPerPlayer,
-    maxKeyedPendingPerPlayer,
+    ...base,
     // DERIVED FROM WHAT ARRIVED, not from the defaults: a host that raised a
     // holding cap and got the default batch cap would be refused batches its
     // own queue would have admitted whole.
     maxSchedulesPerCommand: positive(
-      overrides.maxSchedulesPerCommand ?? maxUnkeyedPendingPerPlayer + maxKeyedPendingPerPlayer,
+      overrides.maxSchedulesPerCommand ??
+        base.maxUnkeyedPendingPerPlayer + base.maxKeyedPendingPerPlayer,
       "maxSchedulesPerCommand",
     ),
     maxPendingEvents: positive(
-      overrides.maxPendingEvents ?? maxPlayers * maxUnkeyedPendingPerPlayer,
+      overrides.maxPendingEvents ?? base.maxPlayers * base.maxUnkeyedPendingPerPlayer,
       "maxPendingEvents",
     ),
-    maxCandidatesPerSelection: aboveReadingThreshold(
-      positive(
-        overrides.maxCandidatesPerSelection ?? BASE.maxCandidatesPerSelection,
-        "maxCandidatesPerSelection",
-      ),
-    ),
-    catchUpRounds: positive(overrides.catchUpRounds ?? BASE.catchUpRounds, "catchUpRounds"),
-    catchUpMaxRealIterations: positive(
-      overrides.catchUpMaxRealIterations ?? BASE.catchUpMaxRealIterations,
-      "catchUpMaxRealIterations",
-    ),
-    drainBatch: positive(overrides.drainBatch ?? BASE.drainBatch, "drainBatch"),
-    maxResidentPartitions: positive(
-      overrides.maxResidentPartitions ?? BASE.maxResidentPartitions,
-      "maxResidentPartitions",
-    ),
-    receiptRetentionMs: positive(
-      overrides.receiptRetentionMs ?? BASE.receiptRetentionMs,
-      "receiptRetentionMs",
-    ),
-    maxNoticesPerSeat: positive(
-      overrides.maxNoticesPerSeat ?? BASE.maxNoticesPerSeat,
-      "maxNoticesPerSeat",
-    ),
-    noticeMaxBytes: positive(overrides.noticeMaxBytes ?? BASE.noticeMaxBytes, "noticeMaxBytes"),
-    maxNoticesPerCommand: positive(
-      overrides.maxNoticesPerCommand ?? BASE.maxNoticesPerCommand,
-      "maxNoticesPerCommand",
-    ),
+    maxCandidatesPerSelection: aboveReadingThreshold(base.maxCandidatesPerSelection),
   };
 }
 
