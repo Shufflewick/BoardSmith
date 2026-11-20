@@ -1,5 +1,5 @@
 {
-  "revision": 481,
+  "revision": 482,
   "surfaceHash": "91316674f24cf4fb",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3791,6 +3791,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "No contract change. CLI: boardsmith test --changed passes a change no unit test imports, such as one guarded by its types alone, listing each changed file with why no test ran, and fails only when nothing changed (#1757). Published games need no rebuild."
+    },
+    {
+      "revision": 482,
+      "date": "2026-11-20",
+      "surfaceHash": "91316674f24cf4fb",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "AutoUI no longer holds the Action Panel back for 3s on each animation event it has no handler for: it claims no events, and the queue skips them at once while no handler is registered (claimNoEvents, #1758). Published games need no rebuild."
     }
   ]
 }
