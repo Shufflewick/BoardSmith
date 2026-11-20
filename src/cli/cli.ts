@@ -397,7 +397,7 @@ export function createProgram(): Command {
   // belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).
   program
     .command('chunk-check <slug>')
-    .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
+    .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale; refuse a CHUNK.md with a section written twice or a heading or checklist line inside a comment")
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(chunkCheckCommand);

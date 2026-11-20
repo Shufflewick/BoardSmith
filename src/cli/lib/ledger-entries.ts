@@ -89,7 +89,11 @@ const HTML_COMMENT = /<!--(?:[\s\S]*?-->|[\s\S]*)/g;
  * returned unchanged, as one block: `// Ruling @a.1` in a `.ts` file is a citation.
  */
 export function citableText(path: string, text: string): Citable {
-  if (!path.endsWith('.md')) return { text, blocks: [[0, text.length]] };
+  return path.endsWith('.md') ? markdownCitable(text) : { text, blocks: [[0, text.length]] };
+}
+
+/** `citableText` of a Markdown file: its comments, code blocks and code spans blanked to the same shape. */
+export function markdownCitable(text: string): Citable {
   const blocks: Array<[number, number]> = [];
   let citable = '';
   let from = 0;
@@ -107,6 +111,22 @@ export function citableText(path: string, text: string): Citable {
   };
   visit(fromMarkdown(text), false);
   return { text: citable + text.slice(from), blocks };
+}
+
+/** Each HTML comment in Markdown `text` as CommonMark reads it, never one inside code: its offset and text. */
+export function markdownComments(text: string): Array<{ index: number; text: string }> {
+  const comments: Array<{ index: number; text: string }> = [];
+  const visit = (node: MarkdownNode): void => {
+    if (node.type === 'html') {
+      const start = node.position!.start.offset!;
+      for (const match of text.slice(start, node.position!.end.offset!).matchAll(HTML_COMMENT)) {
+        comments.push({ index: start + match.index, text: match[0] });
+      }
+    }
+    if ('children' in node) for (const child of node.children) visit(child);
+  };
+  visit(fromMarkdown(text));
+  return comments;
 }
 
 /** The 1-based line of `text` that `index` is on. */

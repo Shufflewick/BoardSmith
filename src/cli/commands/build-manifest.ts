@@ -15,7 +15,7 @@
  */
 
 import { designRecordPath } from '../lib/project-paths.js';
-import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+import { markdownCitable, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { resolve as pathResolve } from 'node:path';
 import { escapeRegExp } from '../../utils/regexp.js';
 
@@ -53,11 +53,16 @@ export interface Finding {
  * phase should ever write `text.indexOf('## ...')`; this is the only heading-location primitive
  * the module exports, and `extractSection` is built directly on top of it.
  *
+ * A heading line inside an HTML comment (a template example) or code is not a heading (#1784).
+ *
  * Returns the index of the heading LINE (matching `.exec(text).index`), or -1 if absent.
  */
 export function findHeadingIndex(text: string, heading: string): number {
-  const re = new RegExp(`^${escapeRegExp(heading)}[ \\t]*$`, 'm');
-  const match = re.exec(text);
+  return headingIndexIn(markdownCitable(text).text, heading);
+}
+
+function headingIndexIn(visible: string, heading: string): number {
+  const match = new RegExp(`^${escapeRegExp(heading)}[ \\t]*$`, 'm').exec(visible);
   return match ? match.index : -1;
 }
 
@@ -75,17 +80,17 @@ export function stripHtmlComments(text: string): string {
  * Returns `undefined` if the heading is absent — never a partial body.
  */
 export function extractSection(text: string, heading: string): string | undefined {
-  const headingIdx = findHeadingIndex(text, heading);
+  const visible = markdownCitable(text).text;
+  const headingIdx = headingIndexIn(visible, heading);
   if (headingIdx === -1) return undefined;
 
   const headingLineEnd = text.indexOf('\n', headingIdx);
   const bodyStart = headingLineEnd === -1 ? text.length : headingLineEnd + 1;
-  const bodyText = text.slice(bodyStart);
 
-  const nextHeadingMatch = /^## /m.exec(bodyText);
-  const bodyEnd = nextHeadingMatch ? nextHeadingMatch.index : bodyText.length;
+  const nextHeadingMatch = /^## /m.exec(visible.slice(bodyStart));
+  const bodyEnd = nextHeadingMatch ? bodyStart + nextHeadingMatch.index : text.length;
 
-  return bodyText.slice(0, bodyEnd);
+  return text.slice(bodyStart, bodyEnd);
 }
 
 // ---------------------------------------------------------------------------------------------

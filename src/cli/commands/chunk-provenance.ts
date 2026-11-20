@@ -24,6 +24,7 @@ import {
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
+import { chunkStructureProblems } from './chunk-structure.js';
 import { type SharedEdit, assessSignoffs, checkSignoff, readStatus } from './chunk-signoff.js';
 import { projectDirOption } from '../lib/user-path.js';
 
@@ -670,6 +671,16 @@ async function planVerifiedAgainst(
         `Check the slug, or run \`boardsmith chunk-provenance-status\` to list known chunks.`,
     );
   }
+  const structureProblems = chunkStructureProblems(chunkText);
+  if (structureProblems.length) {
+    throw new Error(
+      `${relChunkPath} has more than one place an edit to a heading or checklist line could land, so ` +
+        `an edit can miss the real one. Fix these, then run \`boardsmith chunk-check\` again:\n` +
+        structureProblems.map((p) => `  • ${p}`).join('\n') +
+        '\nA CHUNK.md made from an older CHUNK.template.md has such lines in its guidance comments; ' +
+        'delete them from the comments, since the template no longer writes them.',
+    );
+  }
 
   const projectScope = await computeVerificationScope(projectDir);
 
@@ -679,18 +690,8 @@ async function planVerifiedAgainst(
     (f) => f.endsWith('.md') && f !== 'INDEX.md',
   );
 
-  // The heading position in the file AS READ, before this run writes anything. Computed once and
-  // reused both for scanning citations and for locating where to write below.
-  //
-  // Anchored to a LINE, not to the first substring occurrence. `indexOf(VERIFIED_AGAINST_HEADING)`
-  // also matched prose, and CHUNK.template.md:18 legitimately names "## Verified Against" inside
-  // its required-headings comment — 130 lines above the real section. That made `citableText`
-  // truncate at line 18, before `## Interpretation`, so EVERY citation was silently dropped and
-  // every chunk scaffolded from the template recorded provenance citing nothing. Silent
-  // under-recording is the exact defect class this phase exists to prevent, so the heading is
-  // located structurally rather than by substring.
-  const headingMatch = /^## Verified Against[ \t]*$/m.exec(chunkText);
-  const headingIdx = headingMatch ? headingMatch.index : -1;
+  // Located as read, before this run writes anything, and reused for the citation scan and the write.
+  const headingIdx = findHeadingIndex(chunkText, VERIFIED_AGAINST_HEADING);
 
   // Scan only the content BEFORE any existing "## Verified Against" section. The block's own
   // explanatory comment text legitimately discusses the rulebook index in prose — scanning the
