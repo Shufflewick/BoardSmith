@@ -86,4 +86,12 @@ describe('BUG-004: docs assert the state-authoritative model', () => {
     expect(doc).toMatch(/state-authoritative/i);
     expect(doc).toMatch(/checkpoint/i);
   });
+
+  for (const doc of ['architecture.md', 'agent-control.md']) {
+    it(`${doc} names the historical-view op that exists, debugStateAt`, () => {
+      const text = read(doc);
+      expect(text, 'getStateAtAction was removed with GameSession (#529); the op is debugStateAt in session/stateless-ops.ts').not.toContain('getStateAtAction');
+      expect(text).toContain('`debugStateAt`');
+    });
+  }
 });

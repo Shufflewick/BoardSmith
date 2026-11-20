@@ -182,7 +182,7 @@ in the action history, so replaying an action history loses them and
 mis-positions the flow. That crashed real games, and is why `fromSnapshot`
 deliberately does not call `start()` or re-run `actionHistory`.
 
-Time-travel — undo, rewind, `getStateAtAction` — is likewise restore, not
+Time-travel — undo, rewind, `debugStateAt` — is likewise restore, not
 replay. The runner captures a per-action **checkpoint** (a full tree copy plus
 flow position, sequence and RNG state) into `snapshot.actionCheckpoints`, and
 those calls restore the checkpoint at the target action count directly.
