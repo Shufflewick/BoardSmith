@@ -615,11 +615,6 @@
         "count": 1
       }
     },
-    "src/world/budgets.ts": {
-      "complexity_moderate": {
-        "count": 1
-      }
-    },
     "src/world/definition.ts": {
       "complexity_moderate": {
         "count": 2
