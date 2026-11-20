@@ -1199,7 +1199,7 @@ export function wireSeat(
   const wiring = useTableActionWiring({
     seatState,
     availableActions: computed(() => seatState.value?.availableActions ?? []),
-    isMyTurn: computed(() => seatState.value?.isMyTurn),
+    isMyTurn: computed(() => seatState.value?.isMyTurn ?? false),
     playerSeat: ref(seat),
     boardInteraction: createBoardInteraction(),
     autoEndTurn: ref(true),
