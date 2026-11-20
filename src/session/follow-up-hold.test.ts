@@ -377,7 +377,7 @@ describe('live session host', () => {
     expect((await s.act(1, 'scout')).success).toBe(true);
     expect((await s.pick(1, 'where', 'north', 'loot')).success).toBe(true);
     expect(await s.pick(1, 'what', 'gold')).toMatchObject({ success: true, actionComplete: true });
-    expect(s.table.host.flowState).toMatchObject({ currentPlayer: 1, moveCount: 2, movesRemaining: 1 });
+    expect(s.table.host.flowState).toMatchObject({ currentPlayer: 1, moveCount: 2 });
 
     const undone = await s.undo(1);
 

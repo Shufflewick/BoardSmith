@@ -5,9 +5,8 @@ import type { FlowState } from './types.js';
  *
  * A session hands each seat its flow state on every broadcast, and the whole
  * `FlowState` counts actions: `moveCount` (also inside the position's frame
- * data), `movesRemaining`/`movesRequired`, the position's `turnRun`. In a
- * simultaneous step those counts are the total across every seat, so a seat
- * that knew its own actions could subtract and count another seat's SECRET
+ * data) and the position's `turnRun`. In a simultaneous step those counts
+ * are the total across every seat, so a seat that knew its own actions could subtract and count another seat's SECRET
  * ones (#449). The full state stays on the server, where undo needs it; this
  * is what crosses the wire.
  *
