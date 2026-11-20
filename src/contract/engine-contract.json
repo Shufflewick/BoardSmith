@@ -1,5 +1,5 @@
 {
-  "revision": 490,
+  "revision": 491,
   "surfaceHash": "4d26377baf98b557",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3863,6 +3863,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "WorldMigrationHooks is now derived from WorldMigration and createWorld passes world.migration to the runner directly, with no change to behaviour (#1771)"
+    },
+    {
+      "revision": 491,
+      "date": "2026-11-20",
+      "surfaceHash": "4d26377baf98b557",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "walkFlowNodes recurses over flowChildren, which now lists every FlowNode type and throws on an unknown one; no change for valid flows (#1772)"
     }
   ]
 }
