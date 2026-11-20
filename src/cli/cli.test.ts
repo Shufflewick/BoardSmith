@@ -12,7 +12,7 @@ import { REPO_ROOT, spawnCli } from './spawn-cli.test-helper.js';
 import.meta.glob(['/src/cli/**/*.{ts,mjs}', '!**/*.test.ts']);
 
 /**
- * `cli.test.ts` — registration-level proof that CHECK-04's dual-enumeration read/report and
+ * `cli.test.ts` — end-to-end proof that CHECK-04's dual-enumeration read/report and
  * write commands are actually reachable from the real CLI entry point (177.1-04's own stated
  * purpose: "the exact wave that makes the check reachable"), and that the retired
  * `verify-derive-recheck` name is gone.
@@ -28,7 +28,7 @@ import.meta.glob(['/src/cli/**/*.{ts,mjs}', '!**/*.test.ts']);
 // not a performance budget; spawn-cli.test-helper.ts says why.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-describe('verify-derive-check — registration', () => {
+describe('verify-derive-check — end to end', () => {
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
     const dir = tempTree('bs-cli-verify-derive-check-');
     const project = join(dir, 'project');
@@ -61,7 +61,7 @@ describe('verify-derive-recheck — the retired command is unreachable', () => {
   });
 });
 
-describe('verify-example-replay — registration (CHECK-06)', () => {
+describe('verify-example-replay — end to end (CHECK-06)', () => {
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
     const dir = tempTree('bs-cli-verify-example-replay-');
     const project = join(dir, 'project');
@@ -81,7 +81,7 @@ describe('verify-example-replay — registration (CHECK-06)', () => {
   });
 });
 
-describe('verify-example-record — registration (CHECK-06, the extraction/translation write surface)', () => {
+describe('verify-example-record — required options (CHECK-06, the extraction/translation write surface)', () => {
   it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
     const result = await spawnCli(['verify-example-record', '--project', '/tmp']);
     expect(result.code).not.toBe(0);
@@ -143,7 +143,7 @@ describe('chunk-gate-transition — the one-time transition of chunks verified b
   });
 });
 
-describe('verify-example-translate — registration (CHECK-06, the second dispatch\'s byte source)', () => {
+describe('verify-example-translate — end to end (CHECK-06, the second dispatch\'s byte source)', () => {
   it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
     const result = await spawnCli(['verify-example-translate', '--project', '/tmp']);
     expect(result.code).not.toBe(0);
@@ -204,7 +204,7 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
   });
 });
 
-describe('verify-example-emit — registration (TEST-01, the build-side write surface)', () => {
+describe('verify-example-emit — end to end (TEST-01, the build-side write surface)', () => {
   it('exits non-zero naming --chunk as required when it is not supplied', async () => {
     const result = await spawnCli(['verify-example-emit', '--project', '/tmp']);
     expect(result.code).not.toBe(0);
@@ -244,7 +244,7 @@ describe('verify-example-emit — registration (TEST-01, the build-side write su
   });
 });
 
-describe('verify-example-run — registration (the only source of agrees/disagrees)', () => {
+describe('verify-example-run — required options (the only source of agrees/disagrees)', () => {
   it('exits non-zero naming --chunk as required when it is not supplied', async () => {
     const result = await spawnCli(['verify-example-run', '--project', '/tmp']);
     expect(result.code).not.toBe(0);
