@@ -331,14 +331,25 @@ watch(actionBarCollapsed, async (down) => {
  */
 const actionBarEl = ref<HTMLElement | null>(null);
 const barClearance = ref(0);
+/**
+ * The tallest the bar has been since it last came up or the screen changed width: the
+ * board's scroll room follows it (#1755), and never shrinks under a scrolled board as
+ * the bar re-wraps while it is up (#1514 review F1). The bar spans the screen, so its
+ * width changes only with the screen's.
+ */
+const barPeak = ref(0);
+let barPeakWidth = 0;
 /** The bar's content runs past its cap below what is scrolled into view, so its edge says there is more (#1650). */
 const barHasMoreBelow = ref(false);
 const showBarMore = computed(() => barHasMoreBelow.value && !actionBarCollapsed.value);
-// Only the overlays that stop at the bar, and focus scrolling, follow its height; board fitting and scroll layout never read it.
+// Only the overlays that stop at the bar, focus scrolling and the scroll room's peak follow its height; board fitting never reads it.
 watch(actionBarEl, (bar, _previous, onCleanup) => {
   if (!bar) return;
   const measure = () => {
-    barClearance.value = bar.getBoundingClientRect().height;
+    const { width, height } = bar.getBoundingClientRect();
+    barClearance.value = height;
+    barPeak.value = actionBarCollapsed.value || width !== barPeakWidth ? height : Math.max(barPeak.value, height);
+    barPeakWidth = width;
     barHasMoreBelow.value = bar.scrollHeight - bar.scrollTop - bar.clientHeight > 1;
   };
   const observer = new ResizeObserver(measure);
@@ -415,7 +426,7 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized, 'action-bar-stays-down': actionBarMinimized && !actionBarOpensForActions }">
+  <div class="game-shell__game" :class="{ 'chrome-hidden': chromeHidden, 'action-bar-collapsed': actionBarCollapsed, 'action-bar-minimized': actionBarMinimized }">
     <!-- Stage: sidebar + boardregion side by side (full-width actionbar is a
          sibling, below). -->
     <div class="stage">
@@ -533,7 +544,7 @@ const mobileToggleLabel = computed(() => {
       <!-- Board region: hero; ~zero chrome padding; container-query-sized.
            It reserves one constant row for the Action Panel; rows beyond it
            float over the board (#1514, #1517). -->
-      <div ref="boardViewportEl" class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px` }">
+      <div ref="boardViewportEl" class="board-viewport" :style="{ '--bsg-bar-clearance': `${barClearance}px`, '--bsg-bar-peak': `${barPeak}px` }">
         <!-- Connection indicator: one dot, two sources. Surfaced only when the
              adapter has something to say — a persistent healthy dot over the
              board reads as a mystery speck (IA-01). The adapter names the tone
@@ -976,17 +987,12 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Scroll room after the board, so the player can scroll what the rows beyond the
-   reserved one cover into view. The resting bar's cap, not its live height:
-   room that changed as the bar re-wrapped would clamp the scroll and move the board
-   under the cursor. */
+   reserved one cover into view: what the bar has covered since it came up (#1755),
+   which is none while it is down to the reserved line. */
 .boardregion::after {
   content: '';
   flex: none;
-  height: calc(var(--bsg-panel-menu-max) - var(--bsg-panel-reserved));
-}
-/* Down until the player's own toggle: only the reserved line covers the board, so no room (#1525). */
-.action-bar-stays-down .boardregion::after {
-  height: 0;
+  height: max(0px, var(--bsg-bar-peak) - var(--bsg-panel-reserved));
 }
 
 /* Floating Action Panel: absolutely anchored to the bottom, FULL WIDTH (spans under

@@ -138,6 +138,30 @@ describe('the layout', () => {
     wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });
 
+  it('sizes the board\'s scroll room to the tallest the bar has been since it came up or the screen changed width (#1755)', async () => {
+    const wrapper = mountShell();
+    await nextTick();
+    const bar = wrapper.get('[data-testid="bs-actionbar"]').element;
+    const observer = PanelResizeObserver.instances.find(o => o.observed.has(bar))!;
+    const viewport = wrapper.get('.board-viewport');
+    const measure = async (width: number, height: number) => {
+      vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({ width, height } as DOMRect);
+      observer.callback([]); await nextTick();
+    };
+    await measure(390, 260);
+    expect(viewport.attributes('style')).toContain('--bsg-bar-peak: 260px');
+    await measure(390, 80);
+    expect(viewport.attributes('style'), 'the room shrank as the bar re-wrapped, which clamps a scrolled board').toContain('--bsg-bar-peak: 260px');
+    await measure(844, 80);
+    expect(viewport.attributes('style'), 'a rotated screen kept room for a bar it no longer has').toContain('--bsg-bar-peak: 80px');
+    await wrapper.setProps({ actionBarMinimized: true });
+    await measure(844, 14);
+    expect(viewport.attributes('style'), 'the bar put down kept room for the bar that was up').toContain('--bsg-bar-peak: 14px');
+    await wrapper.setProps({ actionBarMinimized: false });
+    await measure(844, 80);
+    expect(viewport.attributes('style')).toContain('--bsg-bar-peak: 80px');
+  });
+
   it('always hosts the modal target a game teleports into', () => {
     expect(mountShell().find('#bs-game-modal').exists()).toBe(true);
   });

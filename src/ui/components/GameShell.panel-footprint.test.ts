@@ -154,11 +154,11 @@ describe('#1514, #1517: the board region reserves one constant row and the rest 
   });
 
   it('lets the player scroll the board clear of the bar, and keeps focus out from under it', () => {
-    // Scroll room after the board, as tall as what a resting bar's cap adds to
-    // the reserved row: a menu level's, the highest (#1627). A constant: room that followed the bar's live height shrank
-    // as the bar re-wrapped, clamped the scroll and moved the board under the
-    // player's cursor (#1514 review F1).
-    expect(declaration('.boardregion::after', 'height')).toBe('calc(var(--bsg-panel-menu-max) - var(--bsg-panel-reserved))');
+    // Scroll room after the board, as tall as what the bar has covered past the reserved row
+    // since it came up (#1755): none while it is down, since its peak is then the reserved line. A peak,
+    // not the live height: room that followed the bar's live height shrank as the bar re-wrapped,
+    // clamped the scroll and moved the board under the player's cursor (#1514 review F1).
+    expect(declaration('.boardregion::after', 'height')).toBe('max(0px, var(--bsg-bar-peak) - var(--bsg-panel-reserved))');
     expect(declaration('.boardregion::after', 'flex')).toBe('none');
     // WCAG 2.4.11: a focused control scrolled into view lands above the bar, not under it,
     // also while an editor or a multiSelect has grown the bar past its cap (#1573).
