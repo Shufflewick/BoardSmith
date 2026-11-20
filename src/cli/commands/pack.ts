@@ -139,7 +139,6 @@ async function packPackage(
   };
 
   return withCleanupAfter(restore, async () => {
-    // Note: workspace: deps are left as-is; npm overrides in target handle resolution
     pkgJson.version = version;
     writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 

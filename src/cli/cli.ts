@@ -172,7 +172,7 @@ export function createProgram(): Command {
   // Packing for local development
   program
     .command('pack')
-    .description('Create tarballs of all public packages for local installation')
+    .description('Create a tarball of the boardsmith package for local installation')
     .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
     .option(
       '-t, --target <path>',
