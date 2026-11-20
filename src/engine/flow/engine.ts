@@ -1364,6 +1364,7 @@ export class FlowEngine<G extends Game = Game> {
     // input to computeUndoInfo's undo-boundary computation (session/utils.ts)
     // now that its backward-scan fallback is gone -- a step that never
     // reports moveCount is a step undo can never be offered for.
+    //
     // 160-02 (D4 step-window bound): also publish for an active simultaneous
     // step (`this.awaitingPlayers.length > 0`) -- `currentActionConfig` is
     // never set there (it's action-step-only), but the simultaneous step now

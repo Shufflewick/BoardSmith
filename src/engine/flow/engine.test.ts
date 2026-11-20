@@ -1627,6 +1627,20 @@ describe('Move Limits', () => {
     expect(actionCount).toBe(4);
   });
 
+  it('should stay open past minMoves until maxMoves', () => {
+    game.registerAction(Action.create('count').execute(() => {}));
+
+    const engine = new FlowEngine(game, {
+      root: actionStep({ actions: ['count'], minMoves: 2, maxMoves: 3 }),
+    });
+    engine.start();
+    engine.resume('count', {});
+    const afterMin = engine.resume('count', {});
+    expect(afterMin.awaitingInput).toBe(true);
+
+    expect(engine.resume('count', {}).complete).toBe(true);
+  });
+
   it('should not complete with repeatUntil if minMoves not met', () => {
     let shouldEnd = false;
     let actionCount = 0;
