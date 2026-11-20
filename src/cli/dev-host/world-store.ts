@@ -1028,7 +1028,9 @@ const SCHEMA_VERSION = '8';
 const FIRST_KEYED_LAYOUT = 8;
 
 /**
- * Bring the store at `db` to this file's layout, or refuse it whole.
+ * Create the store at `db` under this file's layout, or refuse an existing one
+ * stamped with any other layout whole. No layout before this one can be carried
+ * forward (#482), so there is no upgrade step.
  *
  * READ THE LAYOUT BEFORE WRITING ANY OF IT. The order matters more than it
  * looks: a gate that created the current schema first and asked afterwards left

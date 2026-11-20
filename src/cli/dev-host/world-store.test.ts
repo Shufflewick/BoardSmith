@@ -702,16 +702,13 @@ describe('the local world store', () => {
   });
 
   /**
-   * #225: A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER AN OLDER LAYOUT.
+   * A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER ANOTHER LAYOUT, IS REFUSED WHOLE.
    *
-   * The fixture is a layout-4 store written through the real doors and then
-   * wound back to exactly what layout 3 held, because layout 3 is a layout this
-   * code no longer writes and a hand-built one would be a fixture asserting
-   * against a shape production never produced. The whole of the difference is
-   * the seat activity table and the recording epoch (`36d723d6`); every other
-   * table was already what it is now.
+   * The older fixture is a layout-8 store written through the real doors and
+   * wound back by `rewindToLayout7`, so the refusal is checked against a shape
+   * production really produced, and the file is shown to be left untouched.
    */
-  describe('a world written under an older store layout (#225)', () => {
+  describe('a world written under another store layout', () => {
     /** The store as an occupied world leaves it: bytes, a dirty mark, a seated
      *  player, a queued event, a receipt, an advanced clock and both stamps. */
     async function anOccupiedWorld(): Promise<void> {

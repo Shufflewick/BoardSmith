@@ -95,11 +95,10 @@ saved rows, not a command still running, and it has no write path: anything but
 `GET` is refused with 405, and a request whose `Origin` names another site with
 403.
 
-Updating BoardSmith does not erase it either. The local store stamps the layout
-it was written under, and an open that finds an older layout this BoardSmith
-knows how to carry forward upgrades it in place, in one transaction, before the
-world is read (#225). A layout nothing here can carry forward is refused whole
-rather than half-read, and says which way to move.
+Updating BoardSmith does not silently misread it either. The local store stamps
+the layout it was written under, and an open that finds any other layout refuses
+the store whole rather than half-read, and says which way to move: update
+BoardSmith for a newer layout, or `boardsmith dev --reset` for an older one.
 
 ## A world action is an Action
 
