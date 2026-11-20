@@ -35,10 +35,10 @@ const execFileAsync = promisify(execFile);
 export const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 /** The real entry point, the one `npx boardsmith` runs. */
-const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
+export const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
 
 /** What a spawn reports back: everything the shell would have seen. */
-interface SpawnResult {
+export interface SpawnResult {
   code: number;
   stdout: string;
   stderr: string;
