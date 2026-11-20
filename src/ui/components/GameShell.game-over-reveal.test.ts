@@ -213,6 +213,13 @@ describe('the table ending (#419)', () => {
     expect(shell.wrapper.find('.game-over-title').text()).toBe('Alice wins');
   });
 
+  it('names no winner from winners the host sent that are not seat numbers', async () => {
+    const shell = await mountShell(PlainBoard);
+
+    await after(shell, () => post({ ...completeFrameWinnersOnFrameOnly(), winners: ['0'] }));
+    expect(shell.wrapper.find('.game-over-title').text()).toBe('Game Over');
+  });
+
   it('is announced once, however often the board flips back and forth after showing it', async () => {
     const shown = ref(false);
     const shell = await mountShell(boardHeldBy(shown));

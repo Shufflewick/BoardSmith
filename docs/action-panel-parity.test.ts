@@ -176,7 +176,7 @@ describe('one name for the surface: "Action Panel"', () => {
     // auto-ui/, which is how three comments in a sibling test survived (#233).
     expect(surfaceOwnFiles()).toContain('src/ui/components/auto-ui/ActionPanel.vue');
     expect(surfaceOwnFiles()).toContain('src/ui/components/auto-ui/ActionPanel.focus.test.ts');
-    expect(surfaceOwnFiles()).toContain('src/ui/components/GameShell.action-panel-suppression.test.ts');
+    expect(surfaceOwnFiles()).toContain('src/ui/components/GameShell.action-panel-escape-hatch.test.ts');
   });
 
   it.each(NAMED_SURFACES)('%s does not call it a "dock"', (path) => {

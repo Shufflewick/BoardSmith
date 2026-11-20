@@ -2,8 +2,7 @@
 /**
  * GameShell — players-panel ordering (`playerOrder`).
  *
- * Mirrors GameShell.vue's `panelPlayers` computed exactly, in the same harness
- * style as GameShell.action-panel-suppression.test.ts, rather than mounting the
+ * Mirrors GameShell.vue's `panelPlayers` computed exactly, rather than mounting the
  * full WebSocket-dependent GameShell:
  *
  *   const panelPlayers = computed(() => {
