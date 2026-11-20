@@ -6,12 +6,6 @@ import { pathToFileURL, fileURLToPath } from 'node:url';
 import type { GameDefinition } from '../../session/index.js';
 import { DECLARED_GAME_OPTIONS_KEY, withDeclaredGameOptions } from '../../session/game-option-selection.js';
 
-// Workspace detection lives in lib/ so non-game commands (audit, lint, test)
-// can ask the same question without importing the game runtime's esbuild
-// machinery. Re-exported here because this module's consumers already treat
-// `game-runtime` as the game-loading entry point.
-export { getProjectContext, type ProjectContext } from '../lib/project-context.js';
-
 // The BoardSmith checkout this CLI runs from, whose package.json `exports` the
 // monorepo-context loaders below read. __dirname is <repo>/src/cli/commands
 // (tsx-src) or <repo>/dist/cli/commands (built-dist); three levels up reaches

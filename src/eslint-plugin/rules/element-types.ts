@@ -28,7 +28,7 @@ export const ENGINE_ELEMENT_CLASS_NAMES: readonly string[] = [
 ];
 
 /** The type name a `TSTypeReference` node names (`Card` in `Card` or `Card<G>`), if any. */
-export function typeReferenceName(node: Record<string, unknown> | undefined): string | undefined {
+function typeReferenceName(node: Record<string, unknown> | undefined): string | undefined {
   if (node?.type !== 'TSTypeReference') return undefined;
   const typeName = node.typeName as { type?: string; name?: string } | undefined;
   return typeName?.type === 'Identifier' ? typeName.name : undefined;

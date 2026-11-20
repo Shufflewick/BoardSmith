@@ -56,7 +56,6 @@ export type {
   GameRandom,
   ElementLayout,
   HexOrientation,
-  HexCoordSystem,
   LayoutDirection,
   LayoutAlignment,
   DieSides,

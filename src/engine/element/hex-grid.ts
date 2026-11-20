@@ -13,12 +13,6 @@ import { hexCoordinateNames } from './hex-coordinates.js';
 export type HexOrientation = 'flat' | 'pointy';
 
 /**
- * Hex coordinate system. Axial (q/r) is the only one BoardSmith draws; the UI
- * refuses any other value a JavaScript game sets (#866).
- */
-export type HexCoordSystem = 'axial';
-
-/**
  * Hexagonal grid board container.
  *
  * HexGrid contains HexCell children arranged in a honeycomb pattern.
@@ -44,7 +38,6 @@ export type HexCoordSystem = 'axial';
  * // Define a Catan-style board
  * class CatanBoard extends HexGrid {
  *   $hexOrientation = 'pointy';
- *   $coordSystem = 'axial';
  *   $qCoord = 'q';
  *   $rCoord = 'r';
  * }
@@ -85,12 +78,6 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
    * @default 'pointy'
    */
   $hexOrientation: HexOrientation = 'pointy';
-
-  /**
-   * Coordinate system used for hex cells
-   * @default 'axial'
-   */
-  $coordSystem: HexCoordSystem = 'axial';
 
   /**
    * Name of the Q coordinate attribute on HexCell children

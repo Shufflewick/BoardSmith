@@ -42,6 +42,6 @@ export type {
 export type { GameRootFieldAudience, MessageEntry, MessageOptions, FormattedMessage, PlayerOf } from './game.js';
 export type { GameOptions, GameClass, RandomnessPolicy, GamePhase, PlayerViewFunction, GameRandom, AnimationEvent, AnimationFloor, SeatViewJSON, RestoreOnlyRootField, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
 export type { ElementLayout } from './grid.js';
-export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
+export type { HexOrientation } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';
 export type { DieSides } from './die.js';

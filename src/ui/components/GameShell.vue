@@ -416,8 +416,7 @@ const isActionHelpVisible = actionHelpPreference().use('actionHelp');
 // derived from a single `currentPlayer` (that identity is meaningless when
 // multiple seats are deciding independently).
 const isSimultaneous = computed(() => {
-  const flowState = state.value?.flowState as any;
-  return (flowState?.awaitingPlayers?.length ?? 0) > 0;
+  return (state.value?.flowState.awaitingPlayers?.length ?? 0) > 0;
 });
 
 // The panel draws no open action while history is shown.
@@ -1142,23 +1141,13 @@ if (inHost) {
     }
 
     // Heartbeat: host pings periodically to prove the connection is live (IA-01).
-    // Shape-validated before acting (T-100-04-01, T-100-04-02): origin is already
-    // guarded by isOriginAllowed above; we additionally confirm source + type so
-    // unrelated window messages cannot spoof the health state.
     if (data.type === 'heartbeat') {
-      if (
-        typeof data === 'object' &&
-        data !== null &&
-        data.source === 'shufflewick' &&
-        data.type === 'heartbeat'
-      ) {
-        connectionHealth.value = 'connected';
-        disconnectRefusals.length = 0;
-        if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
-        heartbeatTimer = setTimeout(() => {
-          connectionHealth.value = 'stale';
-        }, 10_000);
-      }
+      connectionHealth.value = 'connected';
+      disconnectRefusals.length = 0;
+      if (heartbeatTimer !== null) clearTimeout(heartbeatTimer);
+      heartbeatTimer = setTimeout(() => {
+        connectionHealth.value = 'stale';
+      }, 10_000);
     }
   };
   window.addEventListener('message', platformMessageHandler);
@@ -1236,7 +1225,7 @@ watch(isMyTurn, (newVal) => {
 // A restart clears `complete` back to false — re-arm the dismissed card and
 // the announcement so the NEXT completion shows and says it again (D10, #419).
 watch(
-  () => (state.value?.flowState as any)?.complete,
+  () => state.value?.flowState.complete,
   (newComplete) => {
     if (!newComplete) {
       gameOverDismissed.value = false;
@@ -1249,7 +1238,7 @@ watch(
 // Winners are captured when the flow completes, and a running bot demo stops.
 // Nothing here is shown or said: that waits for `gameOverRevealed` below.
 watch(
-  () => (state.value?.flowState as any)?.complete,
+  () => state.value?.flowState.complete,
   (newComplete, oldComplete) => {
     if (newComplete && !oldComplete) {
       // Stop any running bot demo when the game completes. isDemoRunning is

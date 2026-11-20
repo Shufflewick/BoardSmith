@@ -39,7 +39,7 @@ function warningsOf(result: OpResult): readonly WarningEntry[] {
 }
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
-export type WireOp =
+type WireOp =
   | 'action'
   | 'resolve_choices'
   | 'selection_step'

@@ -24,6 +24,7 @@ import { GAME_CONTEXT_KEYS } from './useGameContext.js';
 import { readHostReply } from './usePlatformTransport.js';
 import type { ElementDiff } from '../../session/stateless-ops.js';
 import type { PlayerGameState } from '../../session/types.js';
+import { isRecord } from '../../utils/is-record.js';
 
 /** The host bridge GameShell provides. */
 export type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -119,11 +120,6 @@ export type { ElementDiff } from '../../session/stateless-ops.js';
 
 /** Where a transferred card lands in its new container. */
 export type TransferPosition = 'first' | 'last';
-
-/** Is this an object (and not null / an array / a primitive)? */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
 
 /**
  * Validate a host `flowContext` payload against its REQUIRED fields, so a

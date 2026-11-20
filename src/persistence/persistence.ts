@@ -76,6 +76,7 @@
  * additive and independent; the only clobber possible is per-key, and it is
  * one the game asked for by naming that key.
  */
+import { isRecord } from "../utils/is-record.js";
 
 /** Reserved gameOptions key carrying the store INTO a session, and reserved
  *  Game-root attribute carrying a commit OUT of one. Deliberately the same
@@ -294,10 +295,6 @@ export type PersistCommitResult =
   | { kind: "ok"; entries: PersistCommitEntry[] }
   | { kind: "invalid"; reason: string };
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /**
  * Read and serialize the commit a finished game is asking the platform to
  * store, across BOTH channels.
@@ -383,7 +380,7 @@ export function readPersistCommit(commit: PersistCommit): PersistCommitResult {
  */
 function channelEntries(raw: unknown, attributeName: string): unknown[] | string {
   if (raw === undefined || raw === null) return [];
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     return `the game's "${attributeName}" attribute must be an object of the form { entries: [...] }`;
   }
   if (!Array.isArray(raw.entries)) {
@@ -484,7 +481,7 @@ function crossChannelCollision(
 
 /** The reason `raw` is not a well-shaped entry, or `null` if it is one. */
 function commitEntryShapeError(raw: unknown, at: string): string | null {
-  if (!isPlainObject(raw)) return `${at} must be an object with a "key" and a "value"`;
+  if (!isRecord(raw)) return `${at} must be an object with a "key" and a "value"`;
   if (typeof raw.key !== "string") return `${at}.key must be a string`;
   if (raw.schemaTag !== undefined && typeof raw.schemaTag !== "string") {
     return `${at}.schemaTag must be a string when present`;
@@ -560,7 +557,7 @@ export function toStartPayload(
   players: PersistPlayer[],
 ): { payload: PersistStartPayload; dropped: string[] } | null {
   if (value === null || value === undefined) return null;
-  if (!isPlainObject(value) || !Array.isArray(value.entries)) return null;
+  if (!isRecord(value) || !Array.isArray(value.entries)) return null;
   return rowsToStartPayload(value.entries, sessionKey, players);
 }
 
@@ -578,7 +575,7 @@ export function rowsToStartPayload(
       entries.push(entry);
       continue;
     }
-    if (isPlainObject(row) && typeof row.key === "string") dropped.push(row.key);
+    if (isRecord(row) && typeof row.key === "string") dropped.push(row.key);
   }
 
   return { payload: { entries, sessionKey, players }, dropped };
@@ -609,7 +606,7 @@ function parseStored(text: string): { ok: true; value: unknown } | { ok: false }
 }
 
 function toPersistedEntry(row: unknown): PersistedEntry | null {
-  if (!isPlainObject(row)) return null;
+  if (!isRecord(row)) return null;
   if (typeof row.key !== "string" || typeof row.value !== "string") return null;
   if (typeof row.writtenAt !== "number") return null;
   const parsed = parseStored(row.value);

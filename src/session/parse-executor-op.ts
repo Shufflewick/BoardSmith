@@ -16,6 +16,7 @@
  */
 import type { ExecutorOp, OpOfType } from './stateless-ops.js';
 import { DIFFICULTY_PRESETS, MAX_BOT_ITERATIONS, parseBotLevel } from '../bot/index.js';
+import { isRecord } from '../utils/is-record.js';
 
 /** The result of {@link parseExecutorOp}. */
 export type ParsedExecutorOp = { ok: true; op: ExecutorOp } | { ok: false; error: string };
@@ -52,10 +53,6 @@ type OpRules = {
   };
 };
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 const nonEmptyString = {
   must: 'a non-empty string',
   accepts: (value: unknown) => typeof value === 'string' && value.length > 0,
@@ -66,7 +63,7 @@ const seatNumber = {
 };
 const argsObject = {
   must: 'an object of named arguments',
-  accepts: isPlainObject,
+  accepts: isRecord,
 };
 const selectionValue = {
   must: 'present',
@@ -97,7 +94,7 @@ const botSeats = {
     Array.isArray(value) &&
     value.every(
       (entry) =>
-        isPlainObject(entry) &&
+        isRecord(entry) &&
         Object.keys(entry).every((key) => key === 'seat' || key === 'level') &&
         Number.isInteger(entry.seat) &&
         (entry.level === undefined || isBotLevel(entry.level)),
@@ -152,7 +149,7 @@ function isExecutorOpType(type: unknown): type is ExecutorOpType {
  * what is wrong with it. Never throws.
  */
 export function parseExecutorOp(value: unknown): ParsedExecutorOp {
-  if (!isPlainObject(value)) {
+  if (!isRecord(value)) {
     return {
       ok: false,
       error: `An executor op must be an object with a "type", but this one is ${describe(value)}.`,

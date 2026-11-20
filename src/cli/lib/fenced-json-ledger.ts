@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { relative } from 'node:path';
 import { readIfExists } from './read-if-exists.js';
+import { isRecord } from '../../utils/is-record.js';
 
 /**
  * The one reader of a fenced JSON-lines ledger: a markdown file holding one JSON record per line
@@ -63,6 +64,3 @@ export async function readFencedJsonLedger<T>(
     });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}

@@ -8,7 +8,8 @@ import type { BotStrategy } from '../../bot/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
-import { packageSourceFile, getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
+import { packageSourceFile, importRuntimeBundle, toPosix } from './game-runtime.js';
+import { getProjectContext } from '../lib/project-context.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;

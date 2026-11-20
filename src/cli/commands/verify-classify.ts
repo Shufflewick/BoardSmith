@@ -997,8 +997,6 @@ export const CHUNK_ATTRIBUTION_WARNING_KINDS = Object.freeze([
   'unresolved-citation',
 ] as const);
 
-export type ChunkAttributionWarningKind = (typeof CHUNK_ATTRIBUTION_WARNING_KINDS)[number];
-
 /**
  * Long enough that a scrap like `"+1"` cannot match nearly every line in a live slice — measured
  * reality (174-CONTEXT.md decision 19's `<measured_reality>`) shows real quoted anchors are full

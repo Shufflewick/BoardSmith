@@ -128,7 +128,6 @@ the root entry. Import them from `boardsmith/runtime`; see [Runtime](./runtime.m
 - `PlayerViewFunction` - Player view function
 - `ElementLayout` - Layout configuration
 - `HexOrientation` - Hex grid orientation
-- `HexCoordSystem` - Hex coordinate system
 - `LayoutDirection` - Layout direction
 - `LayoutAlignment` - Layout alignment
 - `DieSides` - Die sides configuration

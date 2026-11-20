@@ -50,6 +50,8 @@ import {
 import type { Game, GameElement, GameOptions } from '../../engine/index.js';
 import { ENGINE_CONTRACT } from '../../contract/index.js';
 import { engineChangeHint } from '../lib/engine-changes.js';
+import { isRecord } from '../../utils/is-record.js';
+import { getProjectContext } from '../lib/project-context.js';
 
 interface ValidationResult {
   name: string;
@@ -383,11 +385,6 @@ export function checkTaxonomyShape(config: Record<string, unknown>): string[] {
   return issues;
 }
 
-/** A JSON object — not null, not an array. */
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /**
  * Unknown-key pass for a nested block, phrased like the top-level one so a
  * typo inside `world` reads the same as a typo beside it.
@@ -417,7 +414,7 @@ export function topLevelIdMessage(key: 'gameId' | 'publisherId'): string {
 /** Shape of the per-platform ids `boardsmith publish` keeps (#704). */
 function checkPlatformIdsShape(raw: unknown): string[] {
   if (raw === undefined) return [];
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     return ['"platforms" must be an object of platform ids, e.g. { "prod": { "gameId": "...", "publisherId": "..." } }.'];
   }
   const issues = checkBlockKeys(raw, 'platforms', ALLOWED_PLATFORM_KEYS);
@@ -425,7 +422,7 @@ function checkPlatformIdsShape(raw: unknown): string[] {
     const block = raw[platform];
     if (block === undefined) continue;
     const path = `platforms.${platform}`;
-    if (!isPlainObject(block)) {
+    if (!isRecord(block)) {
       issues.push(`"${path}" must be an object holding this game's "gameId" and "publisherId" on ${platform}.`);
       continue;
     }
@@ -502,7 +499,7 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
  * shape is a platform contract rather than one key's private business.
  */
 function checkNamedActionShape(raw: unknown, path: string, names: string): string[] {
-  if (!isPlainObject(raw)) {
+  if (!isRecord(raw)) {
     return [`"${path}" must be an object naming ${names}, e.g. { "name": "pass" }.`];
   }
 
@@ -511,7 +508,7 @@ function checkNamedActionShape(raw: unknown, path: string, names: string): strin
   if (typeof raw.name !== 'string' || raw.name.length === 0) {
     issues.push(`"${path}.name" must be a non-empty string naming ${names}, exactly as your rules register the action.`);
   }
-  if (raw.args !== undefined && !isPlainObject(raw.args)) {
+  if (raw.args !== undefined && !isRecord(raw.args)) {
     issues.push(`"${path}.args" must be an object of literal action arguments if present (e.g. { "count": 1 }).`);
   }
 
@@ -525,7 +522,7 @@ function checkNamedActionShape(raw: unknown, path: string, names: string): strin
  */
 function checkRoundDeadlineShape(raw: unknown): string[] {
   const example = '"roundDeadline" must be { "defaultHours", "minHours", "maxHours" } integer hours (e.g. { "defaultHours": 24, "minHours": 6, "maxHours": 72 })';
-  if (!isPlainObject(raw)) return [`${example}.`];
+  if (!isRecord(raw)) return [`${example}.`];
 
   const issues = checkBlockKeys(raw, 'roundDeadline', ALLOWED_ROUND_DEADLINE_KEYS);
 
@@ -1367,7 +1364,7 @@ async function withProjectBundle<T>(
 ): Promise<T> {
   const rulesPath = resolveRulesDir(cwd, config);
   return withCommandBuildDir(cwd, 'validate', async (tempDir) => {
-    const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
+    const { importRuntimeBundle, cliSourceFile, toPosix } = await import('./game-runtime.js');
     const bundle = await importRuntimeBundle({
       rulesPath,
       tempDir,
