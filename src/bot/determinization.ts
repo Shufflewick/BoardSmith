@@ -61,7 +61,7 @@ type KnownWorld = Map<number, KnownElement>;
 /** `HandCard#12 "card-11"`: how a refusal names an element. */
 function nameOf(element: GameElement | undefined): string {
   if (!element) return 'no container';
-  const name = element.name ? ` "${element.name}"` : '';
+  const name = !element.isAttributeRedacted('name') && element.name ? ` "${element.name}"` : '';
   return `${element.constructor.name}#${element._t.id}${name}`;
 }
 

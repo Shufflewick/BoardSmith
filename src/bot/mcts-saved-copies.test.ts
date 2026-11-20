@@ -48,7 +48,7 @@ function stoneGame(rules: StoneRules) {
   }
   class Cell extends Space<StoneGame> {
     declare row: number;
-    declare col: number;
+    col!: number;
   }
   class StoneGame extends Game<StoneGame, Player> {
     lastDraw = 0;

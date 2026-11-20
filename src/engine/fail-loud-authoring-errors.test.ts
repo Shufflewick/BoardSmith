@@ -20,7 +20,9 @@ import {
 } from './index.js';
 import { GameRunner } from '../runtime/runner.js';
 
-class Token extends Piece<AnyGame, Player> {}
+class Token extends Piece<AnyGame, Player> {
+  color?: string;
+}
 class Tray extends Space<AnyGame, Player> {}
 type AnyGame = Game<any, Player>;
 
@@ -66,7 +68,7 @@ describe('create() rejects a reserved property (#49)', () => {
   it('still accepts ordinary attributes', () => {
     const G = makeGame((game) => {
       const tray = game.create(Tray, 'tray');
-      tray.createMany(2, Token, 'token', { color: 'red' } as never);
+      tray.createMany(2, Token, 'token', { color: 'red' });
     });
     expect(() => new G({ playerCount: 2, seed: 's' })).not.toThrow();
   });
