@@ -282,6 +282,28 @@ describe('enumerateLegalMoves: duplicate-valued multiSelect choices', () => {
   });
 });
 
+describe('enumerateLegalMoves: multiSelect size range under the budget', () => {
+  it('lists every combination of each size from min to max', () => {
+    class TrioGame extends Game<TrioGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<TrioGame>('pick')
+            .chooseFrom('letters', { choices: ['a', 'b', 'c'], multiSelect: { min: 1, max: 3 } })
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow({ root: actionStep({ actions: ['pick'] }) });
+      }
+    }
+    const game = new TrioGame({ playerCount: 1, playerNames: ['Alice'], seed: 'trio' });
+    game.startFlow();
+
+    expect(enumerateLegalMoves(game, 1).map((move) => move.args.letters)).toEqual([
+      ['a'], ['b'], ['c'], ['a', 'b'], ['a', 'c'], ['b', 'c'], ['a', 'b', 'c'],
+    ]);
+  });
+});
+
 // ============================================================================
 // A required selection whose choices resolve to `undefined` must not produce a
 // "move". This is the 1-2 Punch stall: the second selection's `choices` closure

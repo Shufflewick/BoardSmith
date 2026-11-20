@@ -1,5 +1,5 @@
 {
-  "revision": 494,
+  "revision": 495,
   "surfaceHash": "a51fc3c45daf0de3",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3895,6 +3895,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "The contrast maths is shared between the runtime and its theme tests; seat ink and contrast results are unchanged (#1775)"
+    },
+    {
+      "revision": 495,
+      "date": "2026-11-20",
+      "surfaceHash": "a51fc3c45daf0de3",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Engine build where generateCombinations drops its unreachable limit parameter and export; enumeration output is unchanged (#1776)"
     }
   ]
 }

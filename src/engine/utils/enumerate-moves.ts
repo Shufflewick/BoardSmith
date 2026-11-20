@@ -723,7 +723,7 @@ function tooManyMoves(actionDef: ActionDefinition, selection: Selection): MoveLi
   );
 }
 
-// ─── Pure Combinatorics Helpers (exported for bot import + testability) ──────
+// ─── Pure Combinatorics Helpers ───────────────────────────────────────────────
 
 /**
  * bot-01 / F-08: hard ceiling on how many multiSelect combinations enumeration
@@ -743,30 +743,15 @@ export const MAX_MULTISELECT_COMBINATIONS = 10000;
 const BUDGET_TEXT = MAX_MULTISELECT_COMBINATIONS.toLocaleString('en-US');
 
 /**
- * Generate all combinations of `choices` with count in [min, max].
- *
- * `limit` bounds the number of combinations materialized (F-08 combinatorics
- * guard); generation stops as soon as `limit` is reached, returning a bounded
- * prefix rather than exploding on an unbounded multiSelect.
+ * Generate all combinations of `choices` with count in [min, max]. The caller
+ * has already refused a count over the budget with `combinationCount` (#692).
  */
-export function generateCombinations(
-  choices: unknown[],
-  min: number,
-  max: number,
-  limit: number = MAX_MULTISELECT_COMBINATIONS,
-): unknown[][] {
+function generateCombinations(choices: unknown[], min: number, max: number): unknown[][] {
   const results: unknown[][] = [];
   const { grouped, keys } = groupEqualChoices(choices);
-
-  if (min === max) {
-    combinationsOfSize(grouped, keys, min, [], 0, results, limit);
-  } else {
-    for (let size = min; size <= Math.min(max, choices.length); size++) {
-      if (results.length >= limit) break;
-      combinationsOfSize(grouped, keys, size, [], 0, results, limit);
-    }
+  for (let size = min; size <= Math.min(max, choices.length); size++) {
+    combinationsOfSize(grouped, keys, size, [], 0, results);
   }
-
   return results;
 }
 
@@ -790,14 +775,7 @@ function groupEqualChoices(choices: unknown[]): { grouped: unknown[]; keys: unkn
   };
 }
 
-/**
- * Recursive helper: generate all combinations of exactly `size` items from
- * `choices`, stopping once `results` reaches `limit` (F-08).
- */
-// Module-private. Its docblock used to say "exported for bot import +
-// testability"; nothing outside this file has ever imported it (no bot, no
-// test, only the barrel re-export), so the export was the stale half of that
-// sentence rather than a contract.
+/** Recursive helper: generate all combinations of exactly `size` items from `choices`. */
 function combinationsOfSize(
   choices: unknown[],
   keys: unknown[],
@@ -805,9 +783,7 @@ function combinationsOfSize(
   current: unknown[],
   startIndex: number,
   results: unknown[][],
-  limit: number = MAX_MULTISELECT_COMBINATIONS,
 ): void {
-  if (results.length >= limit) return;
   if (current.length === size) {
     // Keep element objects as-is — no serialization here
     results.push([...current]);
@@ -815,10 +791,9 @@ function combinationsOfSize(
   }
 
   for (let i = startIndex; i < choices.length; i++) {
-    if (results.length >= limit) return;
     if (i > startIndex && keys[i] === keys[i - 1]) continue;
     current.push(choices[i]);
-    combinationsOfSize(choices, keys, size, current, i + 1, results, limit);
+    combinationsOfSize(choices, keys, size, current, i + 1, results);
     current.pop();
   }
 }
