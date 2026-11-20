@@ -221,14 +221,6 @@ export {
   type CountBasedRoute,
 } from './composables/useFlyingElements.js';
 
-// Action-triggered animations (for animating elements during action execution)
-export {
-  useActionAnimations,
-  type ActionAnimationConfig,
-  type UseActionAnimationsOptions,
-  type UseActionAnimationsReturn,
-} from './composables/useActionAnimations.js';
-
 // Animation event playback (sequential handler-based playback)
 export {
   createAnimationEvents,

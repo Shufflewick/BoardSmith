@@ -1906,12 +1906,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @example
    * ```typescript
    * // In the board component's <script setup>
-   * const props = defineProps<{ actionController: UseActionControllerReturn; gameView: GameViewElement | null }>();
-   * const { onBeforeAutoExecute } = useActionAnimations({
-   *   gameView, actionController: props.actionController, animations: [...],
-   * });
+   * const props = defineProps<{ actionController: UseActionControllerReturn }>();
    *
-   * props.actionController.onBeforeAutoExecute(onBeforeAutoExecute);
+   * const startRects = new Map<string, DOMRect>();
+   * props.actionController.onBeforeAutoExecute((actionName) => {
+   *   if (actionName !== 'discard') return;
+   *   // The DOM still shows the state before the action: capture positions here.
+   *   for (const el of document.querySelectorAll<HTMLElement>('[data-bs-el-id]')) {
+   *     startRects.set(el.dataset.bsElId!, el.getBoundingClientRect());
+   *   }
+   * });
    * ```
    *
    * Each call adds a hook; it never replaces an earlier one. Hooks run in

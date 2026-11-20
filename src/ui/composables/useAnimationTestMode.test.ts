@@ -51,7 +51,7 @@ describe('useAnimationTestMode', () => {
 
   it('clearAnimationTrace() empties the buffer', () => {
     enableAnimationTestMode();
-    recordTrace({ kind: 'action', element: null, from: 'a', to: 'b' });
+    recordTrace({ kind: 'fly', element: null, from: 'a', to: 'b' });
     expect(getAnimationTrace().length).toBe(1);
 
     clearAnimationTrace();
