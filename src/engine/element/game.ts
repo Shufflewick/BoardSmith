@@ -446,7 +446,10 @@ export function placesProblem(places: readonly (readonly number[])[], seats: rea
   const twice = placed.find((seat, i) => placed.indexOf(seat) !== i);
   if (twice !== undefined) return `that place seat ${twice} more than once`;
   const missing = seats.filter(seat => !placed.includes(seat));
-  return missing.length > 0 ? `that leave out ${seatList(missing)}` : null;
+  if (missing.length > 0) return `that leave out ${seatList(missing)}`;
+  const foreign = placed.filter(seat => !seats.includes(seat));
+  if (foreign.length === 0) return null;
+  return `that name ${seatList(foreign)}, which ${foreign.length === 1 ? 'is not a seat' : 'are not seats'} of this game`;
 }
 
 /** "seat 3", or "seats 1, 2". */

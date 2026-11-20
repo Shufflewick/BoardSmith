@@ -129,6 +129,14 @@ describe('a finished game reports each seat\'s finishing place (#1724)', () => {
       );
     });
 
+    it('a seat this game does not have', () => {
+      const game = gameOf(3);
+      const stranger = gameOf(4).getPlayer(4)!;
+      expect(() => game.finish({ places: [game.seats(1, 2, 3), [stranger]] })).toThrow(
+        /finish\(\) was given places that name seat 4, which is not a seat of this game/,
+      );
+    });
+
     it('an empty place', () => {
       const game = gameOf(2);
       expect(() => game.finish({ places: [game.seats(1), [], game.seats(2)] })).toThrow(
