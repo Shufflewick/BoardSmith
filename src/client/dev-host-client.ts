@@ -21,7 +21,10 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 export type DevHostSeatInfo = LobbySeat;
 
 /** Reply shape for `getLobby()`: the host's `lobby` message, minus wire framing. */
-export type DevHostLobbyReply = Omit<Extract<HostOutbound, { type: 'lobby' }>, 'type' | 'requestId'>;
+export type DevHostLobbyReply = Omit<Extract<HostOutbound, { type: 'lobby' }>, 'type' | 'requestId' | 'gameOptions'> & {
+  /** The game options the next (re)start uses (#541); unbranded, since JSON from the socket was never checked by `selectGameOptions`. */
+  gameOptions: Record<string, unknown>;
+};
 
 /** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast, whole. */
 export interface DevHostStateReply {
@@ -318,7 +321,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
         seats: msg.seats as DevHostSeatInfo[],
         minPlayers: msg.minPlayers as number,
         playerCount: msg.playerCount as number,
-        gameOptions: msg.gameOptions as DevHostLobbyReply['gameOptions'],
+        gameOptions: msg.gameOptions as Record<string, unknown>,
       };
     },
     async serverRequest(op, payload) {
