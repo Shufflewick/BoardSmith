@@ -774,10 +774,30 @@ describe('BUILD-08 — repair', () => {
 });
 
 describe('UIQ-04 — design-review', () => {
-  it('captures 6 screenshots into chunks/<slug>/shots/', () => {
-    const designReview = read('build/design-review.md');
-    expect(designReview).toContain('chunks/<slug>/shots/');
+  it('captures 6 screenshots outside the project, deletes them after, and never commits them (#1780)', () => {
+    const designReview = read('build/design-review.md').replace(/\s+/g, ' ');
     expect(designReview).toMatch(/6 screenshots/i);
+    expect(designReview).not.toMatch(/shots\//);
+    expect(designReview).toMatch(/session scratchpad, or `\$TMPDIR`/);
+    expect(designReview).toMatch(/Delete every screenshot before returning/);
+    expect(designReview).toMatch(/never committed/);
+  });
+
+  it('re-renders the cohesion baseline from the previous UI chunk\'s Verified Commit Hash, and reports a failed render as incomplete (#1780)', () => {
+    const designReview = read('build/design-review.md').replace(/\s+/g, ' ');
+    expect(designReview).toMatch(/`## Verified Commit Hash`/);
+    expect(designReview).toContain('git worktree add --detach .boardsmith/worktrees/design-baseline');
+    expect(designReview).toContain('git worktree remove --force .boardsmith/worktrees/design-baseline');
+    expect(designReview).toMatch(/cohesion comparison incomplete/);
+  });
+
+  it('never cites a screenshot path in a finding, since ledger-check refuses an uncommitted capture (#1780)', () => {
+    const designReview = read('build/design-review.md').replace(/\s+/g, ' ');
+    expect(designReview).toMatch(/A finding never cites a screenshot path/);
+  });
+
+  it('state-machine.md no longer calls design-review shots committed evidence (#1780)', () => {
+    expect(read('state-machine.md')).not.toMatch(/shots\//);
   });
 
   it('names the 3x2 breakpoint/theme grid by exact value', () => {

@@ -49,11 +49,13 @@ Read fresh: DESIGN.md (its "## Chosen Design", "## Theme File", "## Component Re
 
 Serve → capture → kill: follow this file's "Dev-Host Lifecycle" sequence exactly — start the dev
 host with `npx boardsmith dev --no-open`, wait for `Ready! Press Ctrl+C to stop.` (never
-`networkidle`), run the breakpoint × theme capture loop (6 shots into chunks/{slug}/shots/), then
-kill the dev server before returning.
+`networkidle`), run the breakpoint × theme capture loop (6 screenshots into a temporary directory
+outside the project, never committed), then kill the dev server before returning.
 
 Judgement checks (the only ones you make): (1) token/craft against DESIGN.md; (2) cohesion diff
-against the prior UI chunk's shots/ (or establish the baseline if this is the first UI chunk).
+against the most recently verified UI chunk, re-rendered from its `## Verified Commit Hash` (or
+establish the baseline if this is the first UI chunk). Delete every screenshot before returning,
+and cite no screenshot path in a finding.
 
 Return exactly: a list of { findingId, lens: 'design', description, citation, severity } — one
 entry per defect found (empty array if none). Use the same stable-ID shape (F1, F2, ...) the
@@ -118,11 +120,13 @@ tier, and label each file by the tier NAME that actually renders at that width:
 | `wide`    | ≥1024px | **1440** | ≥ `BREAKPOINTS.medium` (1024); equals `BREAKPOINTS.wide` (1440), also exercising the max-width cap |
 
 For each of the 3 tiers, capture both themes (light and dark), for 6 screenshots total. Save
-each into `chunks/<slug>/shots/` with filenames labelled by tier NAME — `compact-light.png`
-through `wide-dark.png` — so the filename matches the tier that actually rendered at its capture
-width, never the raw `BREAKPOINTS` number. The shots directory is committed — it is both the
-evidence trail for this round's review and the cohesion-diff source for the *next* UI chunk's
-design-review pass.
+them in a temporary directory outside the project (the session scratchpad, or `$TMPDIR` when
+the session has none), with filenames labelled by tier NAME — `compact-light.png` through
+`wide-dark.png` — so the filename matches the tier that actually rendered at its capture width,
+never the raw `BREAKPOINTS` number. Screenshots are verification files: never committed, never
+written into the project, and gone when the review ends. Delete every screenshot before
+returning, the cohesion baseline's included. The next UI chunk's cohesion diff does not read
+them; it re-renders this chunk from its `## Verified Commit Hash` (below).
 
 **Theme injection — no toggle UI exists.** There is no button to click. Set the theme by
 injecting it onto the **GameShell iframe's own document**, not by clicking anything:
@@ -157,23 +161,39 @@ Two review passes, both performed fresh (never from `## Interpretation`):
    and against the chosen mocks in `design/gallery/`: no color literal outside the theme file,
    component recipes followed, the screen matches the signed-off design, the Action Panel is
    beside the board, Do/Don't items honored.
-2. **Cohesion diff** — diff the 6 fresh shots against the previous chunk's stored shots in its
-   own `chunks/<slug>/shots/` directory (a different `<slug>`, the most recently verified UI
-   chunk) for visual drift: does this chunk's UI still look like it belongs to the same game as
+2. **Cohesion diff** — diff the 6 fresh screenshots against a baseline re-rendered from the most
+   recently verified UI chunk (a different `<slug>` whose `ui:` is `touches` or `major`), for
+   visual drift: does this chunk's UI still look like it belongs to the same game as
    the last one, or has something silently drifted (spacing, type scale, accent color) without a
    corresponding `DESIGN.md` edit? A drift with no `DESIGN.md` edit backing it is itself a
    finding — `DESIGN.md`'s own header note states any re-styling edit to that file is itself a
    chunk (the Restyle Rule), so silent drift with no such edit is a defect, not a style
    choice.
 
-   **First-UI-chunk branch — no prior shots to diff against.** If no previously-verified UI
-   chunk exists (this is the first `ui: touches|major` chunk in the game, so no other
-   `chunks/<other-slug>/shots/` directory is present), the cohesion diff is a no-op: do NOT
-   hunt for a nonexistent directory, hallucinate a comparison, or silently skip with no record.
-   Instead, record explicitly — "no prior UI chunk; cohesion baseline established" — and skip
-   the diff. This chunk's own `chunks/<slug>/shots/` becomes the baseline the *next* UI chunk's
-   cohesion diff compares against. The token/craft review in pass 1 still runs in full; only the
-   drift comparison is skipped.
+   **Re-rendering the baseline.** Read that chunk's `## Verified Commit Hash` from its CHUNK.md,
+   then, from the project root:
+
+   1. `git worktree add --detach .boardsmith/worktrees/design-baseline <hash>` — a temporary
+      checkout under the gitignored `.boardsmith/`, so it resolves the project's own
+      `node_modules` and never touches the working tree under review.
+   2. Run the same Serve → Capture → Kill sequence from inside that checkout, one dev host at a
+      time, at the same capture widths and themes, the same seat, and a fresh game in both
+      renders, so the two sets differ only by the code between the two commits.
+   3. `git worktree remove --force .boardsmith/worktrees/design-baseline` from the project root,
+      then diff the two sets and delete both.
+
+   Record the baseline chunk's slug and commit in the review's result. When the baseline will not
+   render (the checkout, the dev host or the capture fails), say "cohesion comparison incomplete"
+   with the command and its error, as a finding; never skip the diff silently or compare against
+   anything else.
+
+   **First-UI-chunk branch — no prior UI chunk to diff against.** If no previously-verified UI
+   chunk exists (this is the first `ui: touches|major` chunk in the game), the cohesion diff is a
+   no-op: do NOT hallucinate a comparison or silently skip with no record. Instead, record
+   explicitly — "no prior UI chunk; cohesion baseline established" — and skip the diff. Once this
+   chunk is verified, its `## Verified Commit Hash` is the baseline the *next* UI chunk
+   re-renders. The token/craft review in pass 1 still runs in full; only the drift comparison is
+   skipped.
 
 ## Findings Destination
 
@@ -182,6 +202,9 @@ Every finding this agent surfaces — token violation, craft defect, or unexplai
 orchestrator, returned in the same flat `{ findingId, lens: 'design', description, citation,
 severity }` shape (see "Dispatch Template" above) and carrying the same stable-ID (`F1`, `F2`,
 ...) and disposition (`fixed` / `deferred` / `refuted`) shape the fidelity/visibility/undo lenses
-already use. This is not a separate ledger
+already use. A finding never cites a screenshot path: the screenshots are deleted, and
+`boardsmith ledger-check` refuses a cited capture that is not committed (`state-machine.md`).
+Cite the `DESIGN.md` section and the code that breaks it, and name the tier and theme the defect
+shows at (`compact`, dark). This is not a separate ledger
 and not a separate repair track — `build/repair.md`'s fix-or-refute-with-citation loop and
 round-bound enforcement apply identically to a design-review finding.
