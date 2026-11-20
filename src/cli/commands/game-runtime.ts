@@ -340,13 +340,13 @@ export async function buildRuntimeBundle(args: RuntimeBundleArgs): Promise<strin
     ),
   );
   // The real path, so Node resolves the map's relative sources from where esbuild wrote them (macOS links /tmp and /var).
-  const bundlePath = join(realpathSync(args.tempDir), `${args.name}-bundle.mjs`);
+  const workingDir = realpathSync(args.tempDir);
+  const bundlePath = join(workingDir, `${args.name}-bundle.mjs`);
   const redirects = args.redirects ?? new Map<string, string>();
   const redirected = new Set<string>();
-  // The metafile's inputs are relative to this; esbuild's own default is the cwd its service started in (#1732).
-  const workingDir = process.cwd();
 
   const { metafile } = await build({
+    // The metafile's inputs are relative to this; esbuild's default is the cwd its service started in (#1732).
     absWorkingDir: workingDir,
     entryPoints: [entryPath],
     metafile: true,
