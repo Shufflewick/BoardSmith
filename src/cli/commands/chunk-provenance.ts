@@ -423,13 +423,6 @@ const [
 ] = VERIFIED_AGAINST_LABELS;
 
 /**
- * One `Additional source hash: <sha256> <path>` line per `## Additional Sources` row the chunk was
- * verified against (#305), rendered right after `Rulebook source hash:`. Hash first because it is
- * fixed-width, so a path containing spaces still parses. Absent for a single-source project, so
- * those blocks are byte-identical to before; a block without the line records no additional
- * source, which `resolveProvenance` reads as "not verified against the current one".
- */
-/**
  * The engine line of a block written before #440. It recorded package.json's version, `0.0.1` for
  * every engine there has been, so it names no engine: such a block is "engine unknown", and
  * `chunk-check` records the installed engine in it without making the chunk stale.
@@ -437,6 +430,13 @@ const [
 const PRE_ENGINE_LINE_RE = /^BoardSmith version:.*$/m;
 const ENGINE_LINE_RE = new RegExp(`^${LABEL_ENGINE} (\\d+)$`, 'm');
 
+/**
+ * One `Additional source hash: <sha256> <path>` line per `## Additional Sources` row the chunk was
+ * verified against (#305), rendered right after `Rulebook source hash:`. Hash first because it is
+ * fixed-width, so a path containing spaces still parses. Absent for a single-source project, so
+ * those blocks are byte-identical to before; a block without the line records no additional
+ * source, which `resolveProvenance` reads as "not verified against the current one".
+ */
 const ADDITIONAL_SOURCE_LINE_RE = new RegExp(
   `^${LABEL_ADDITIONAL_SOURCE}\\s+([0-9a-f]{64})\\s+(\\S.*)$`,
   'gm',
