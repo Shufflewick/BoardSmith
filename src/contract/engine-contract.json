@@ -1,6 +1,6 @@
 {
-  "revision": 491,
-  "surfaceHash": "4d26377baf98b557",
+  "revision": 492,
+  "surfaceHash": "a51fc3c45daf0de3",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3871,6 +3871,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "walkFlowNodes recurses over flowChildren, which now lists every FlowNode type and throws on an unknown one; no change for valid flows (#1772)"
+    },
+    {
+      "revision": 492,
+      "date": "2026-11-20",
+      "surfaceHash": "a51fc3c45daf0de3",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "FlowState no longer carries movesRemaining or movesRequired, which no seat was sent and nothing read; minMoves and maxMoves behave as before (#1773)"
     }
   ]
 }
