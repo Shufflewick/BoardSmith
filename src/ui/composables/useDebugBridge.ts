@@ -23,7 +23,7 @@ import { inject } from 'vue';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
 import { readHostReply } from './usePlatformTransport.js';
 import type { ElementDiff } from '../../session/stateless-ops.js';
-import type { PlayerState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 /** The host bridge GameShell provides. */
 export type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -157,7 +157,7 @@ export interface DebugBridge {
   /** Captured server-side log lines. */
   logs(): Promise<LogEntry[]>;
   /** This seat's view of the state as it stood after action `actionIndex`. */
-  stateAt(actionIndex: number): Promise<PlayerState>;
+  stateAt(actionIndex: number): Promise<PlayerGameState>;
   /** What changed between two actions, or `null` if the host declines to diff them. */
   stateDiff(fromIndex: number, toIndex: number): Promise<ElementDiff | null>;
   /** Permanently discard every action after `actionIndex`. */
@@ -256,7 +256,7 @@ export function createDebugBridge(platformRequest: PlatformRequest | null): Debu
 
     async stateAt(actionIndex) {
       const data = await send('debug:state-at', { actionIndex }, 'Failed to fetch state');
-      return data.state as PlayerState;
+      return data.state as PlayerGameState;
     },
 
     async stateDiff(fromIndex, toIndex) {

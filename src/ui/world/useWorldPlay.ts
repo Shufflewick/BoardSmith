@@ -62,7 +62,7 @@ import type { GameRootView } from '../types.js';
 /** Everything a world hands the shared shell and the shared controller. */
 export interface WorldPlay {
   /** The serialized element tree for this seat -- the same call's output a
-   *  table's `PlayerState.view` carries, which is why AutoUI renders both. */
+   *  table's `PlayerGameState.view` carries, which is why AutoUI renders both. */
   gameView: ComputedRef<GameRootView | null>;
   /** The seat rows the chrome draws. */
   players: ComputedRef<GameContextPlayer[]>;
@@ -141,7 +141,7 @@ export function useWorldPlay(host: WorldSeatHost): WorldPlay {
   /**
    * A world's view is `{state, phase}` and `state` is
    * `game.toJSONForPlayer(seat)` pruned to the seat's partitions -- the SAME
-   * call a table's `PlayerState.view` carries. They differ by a key name, which
+   * call a table's `PlayerGameState.view` carries. They differ by a key name, which
    * is the whole reason AutoUI can be a world's default board with no new
    * renderer and no new archetype.
    *

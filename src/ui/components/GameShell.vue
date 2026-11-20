@@ -46,7 +46,8 @@ import { SETTLE_MS } from './board-settle';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
 import type { PickChoicesResult, PickStepResponse } from '../composables/useActionControllerTypes.js';
-import type { GameState, PlayerState } from '../../client/types.js';
+import type { GameState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 import type { GameRootView } from '../types.js';
 import type { PlayerPreferences } from '../player-preferences.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
@@ -382,7 +383,7 @@ function dismissGameOver(): void {
 }
 
 // Time travel state (for viewing historical game states)
-const timeTravelState = ref<PlayerState | null>(null);
+const timeTravelState = ref<PlayerGameState | null>(null);
 const timeTravelActionIndex = ref<number | null>(null);
 const timeTravelDiff = ref<{ added: number[]; removed: number[]; changed: number[] } | null>(null);
 const isViewingHistory = computed(() => timeTravelState.value !== null);
@@ -434,7 +435,7 @@ const gameView = computed<GameRootView | null>(() => {
 
 // LIBX-04 (D31): single source of truth for the board's displayed state. During
 // time-travel, timeTravelState is a raw PlayerGameState — ONE level shallower
-// than `state.value` (GameState = { flowState, state: PlayerState, ... }), the
+// than `state.value` (GameState = { flowState, state: PlayerGameState, ... }), the
 // exact same shape asymmetry gameView above already normalizes for `.view`.
 // Re-wrap the historical PlayerGameState into a GameState-shaped object here so
 // every :state consumer (board + sidebar-extra) gets a consistent shape whether
@@ -1194,7 +1195,7 @@ function handleRestartGame() {
 
 // Time travel handler - updates the game view to show historical state
 function handleTimeTravel(
-  historicalState: PlayerState | null,
+  historicalState: PlayerGameState | null,
   actionIndex: number | null,
   diff: { added: number[]; removed: number[]; changed: number[] } | null
 ) {

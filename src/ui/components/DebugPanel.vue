@@ -48,7 +48,7 @@ import StateTab from './debug/StateTab.vue';
 import { useDebugBridge, newestWins, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
 import { useDebugTimeline } from '../composables/useDebugTimeline.js';
 import { useStateTree } from '../composables/useStateTree.js';
-import type { PlayerState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,
@@ -70,7 +70,7 @@ const emit = defineEmits<{
   'switch-player': [position: number];
   'restart-game': [];
   'update:expanded': [value: boolean];
-  'time-travel': [state: PlayerState | null, actionIndex: number | null, diff: ElementDiff | null];
+  'time-travel': [state: PlayerGameState | null, actionIndex: number | null, diff: ElementDiff | null];
   'highlight-element': [elementId: number | null];
   'copy-history': [];
   'clear-history': [];

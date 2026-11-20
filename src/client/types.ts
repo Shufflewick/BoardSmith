@@ -17,18 +17,13 @@ import type { PlayerGameState } from '../session/types.js';
  */
 export type { PublicFlowState };
 
-/**
- * A seat's state as the host sends it: the session's `PlayerGameState`, with
- * the host's merged fields (hint, demo, teaching lockout) declared there.
- */
-export type PlayerState = PlayerGameState;
-
+/** `state` is the session's `PlayerGameState`, exported by `boardsmith/session`. */
 export interface GameState {
   /** Flow state (turn info, available actions) */
   flowState: PublicFlowState;
 
   /** Player-specific state */
-  state: PlayerState;
+  state: PlayerGameState;
 
   /** This player's seat */
   playerSeat: number;

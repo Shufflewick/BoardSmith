@@ -15,7 +15,7 @@
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import { newestWins, type DebugBridge, type ElementDiff, type HistoryEntry } from './useDebugBridge.js';
-import type { PlayerState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 export interface DebugTimelineOptions {
   /** How the panel talks to the running game. */
@@ -25,7 +25,7 @@ export interface DebugTimelineOptions {
    * so are `actionIndex` and `diff` — that triple is how the shell is told to
    * go back to rendering the live game.
    */
-  onTimeTravel: (state: PlayerState | null, actionIndex: number | null, diff: ElementDiff | null) => void;
+  onTimeTravel: (state: PlayerGameState | null, actionIndex: number | null, diff: ElementDiff | null) => void;
 }
 
 export interface DebugTimeline {
@@ -42,7 +42,7 @@ export interface DebugTimeline {
 
   /** Which action the panel is pointed at, or `null` at the live head. */
   selectedActionIndex: Ref<number | null>;
-  historicalState: Ref<PlayerState | null>;
+  historicalState: Ref<PlayerGameState | null>;
   historicalStateLoading: Ref<boolean>;
   historicalStateError: Ref<string | null>;
   stateDiff: Ref<ElementDiff | null>;
@@ -103,7 +103,7 @@ export function useDebugTimeline(options: DebugTimelineOptions): DebugTimeline {
   const historyLastFetched = ref(0);
 
   const selectedActionIndex = ref<number | null>(null);
-  const historicalState = ref<PlayerState | null>(null);
+  const historicalState = ref<PlayerGameState | null>(null);
   const historicalStateLoading = ref(false);
   const historicalStateError = ref<string | null>(null);
   const stateDiff = ref<ElementDiff | null>(null);

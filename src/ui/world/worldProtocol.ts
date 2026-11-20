@@ -129,7 +129,7 @@ export interface WorldNarration {
  * ONE SEAT'S IDENTITY, AS THE HOST KNOWS IT (BoardSmith #170).
  *
  * The shared shell draws a seat row per player, and a row needs a name. A
- * TABLE's names come from `PlayerState.players`, which the session composes from
+ * TABLE's names come from `PlayerGameState.players`, which the session composes from
  * the lobby. A world has no lobby: the wire carries a seat number and a presence
  * set, and who seat 7 IS belongs to whoever owns accounts -- ShufflewickPub, or
  * `boardsmith dev`'s seat switcher.
