@@ -16,7 +16,7 @@
  */
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type { EnrichedActionMetadata, StartOptions, UseActionControllerReturn } from './useActionControllerTypes.js';
-import { copyOfChoice } from './actionControllerHelpers.js';
+import { copyOfChoice, refsHighlight } from './actionControllerHelpers.js';
 
 /** What a surface knows about whether the seat may act. Read on every call. */
 export interface ActionMutatorGuards {
@@ -171,9 +171,7 @@ export function createActionMutators(
     board.setHoveredChoice({
       value: selectedValues,
       display: `${selectedValues.length} selected`,
-      sourceRefs: refs.filter(r => r.role === 'source').map(r => r.ref),
-      // 'target' and 'highlight' both draw on the target side.
-      targetRefs: refs.filter(r => r.role !== 'source').map(r => r.ref),
+      ...refsHighlight(refs),
     });
   }
 

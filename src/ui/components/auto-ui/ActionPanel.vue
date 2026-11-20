@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, resolvePickCounts, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
+import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, refsHighlight, resolvePickCounts, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1216,14 +1216,7 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
   if (!currentAction.value) return;
 
   // Set the hovered choice to show on board briefly
-  if (boardInteraction) {
-    boardInteraction.setHoveredChoice({
-      value: choice.value,
-      display: choice.display,
-      sourceRefs: (choice.refs ?? []).filter(r => r.role === 'source').map(r => r.ref),
-      targetRefs: (choice.refs ?? []).filter(r => r.role === 'target' || r.role === 'highlight').map(r => r.ref),
-    });
-  }
+  handleChoiceHover(choice);
 
   // Use setSelectionValue which delegates to controller.fill()
   // This triggers the isReady watcher to detect completion, fire beforeAutoExecuteHook,
@@ -1495,8 +1488,7 @@ function handleChoiceHover(choice: ChoiceWithRefs): boolean {
   boardInteraction?.setHoveredChoice({
     value: choice.value,
     display: choice.display,
-    sourceRefs: (choice.refs ?? []).filter(r => r.role === 'source').map(r => r.ref),
-    targetRefs: (choice.refs ?? []).filter(r => r.role === 'target' || r.role === 'highlight').map(r => r.ref),
+    ...refsHighlight(choice.refs ?? []),
   });
   return !!boardInteraction && !!choice.refs?.length;
 }

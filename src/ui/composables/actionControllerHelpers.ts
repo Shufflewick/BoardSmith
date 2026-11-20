@@ -5,7 +5,7 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { ActionStateSnapshot, EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
+import type { ActionStateSnapshot, EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot, RefWithRole } from './useActionControllerTypes.js';
 import { choiceValueKey, findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
@@ -178,6 +178,14 @@ export function orderedListFullReason(max: number | undefined, count: number): s
 export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefined {
   const refs = choice.refs ?? [];
   return refs.find(r => r.role === 'target')?.ref ?? refs[0]?.ref;
+}
+
+/** A choice's refs split for the board highlight: 'target' and 'highlight' both draw on the target side. */
+export function refsHighlight(refs: readonly RefWithRole[]): { sourceRefs: ElementRef[]; targetRefs: ElementRef[] } {
+  return {
+    sourceRefs: refs.filter(r => r.role === 'source').map(r => r.ref),
+    targetRefs: refs.filter(r => r.role !== 'source').map(r => r.ref),
+  };
 }
 
 /** The board element a choice answer marks, by the rule fill() matches the value with, or undefined. */

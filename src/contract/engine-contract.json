@@ -1,5 +1,5 @@
 {
-  "revision": 462,
+  "revision": 463,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3639,6 +3639,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "GameShell's playerColorMarks lets a game mark each players-panel seat card with a stripe and a readable name in its player's colour (#1733)"
+    },
+    {
+      "revision": 463,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The choice board highlight is built by one shared helper; no behaviour change (#1735)"
     }
   ]
 }
