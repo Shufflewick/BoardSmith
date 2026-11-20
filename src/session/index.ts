@@ -72,7 +72,6 @@ export {
 // place they are declared, boardsmith.json's gameOptions list (#701).
 export {
   selectGameOptions,
-  assertDeclarableGameOptions,
   parseGameOptionList,
   GameOptionSelectionError,
   HOST_OWNED_GAME_OPTION_KEYS,
@@ -80,8 +79,6 @@ export {
 } from './game-option-selection.js';
 
 export { PickHandler } from './pick-handler.js';
-
-export type { PickStepResult } from './pending-action-manager.js';
 
 // Exposed so a host that refuses a debug request says it the way the executor does.
 export { debuggingOffMessage } from './utils.js';
@@ -113,4 +110,4 @@ export {
   resolveCapabilities,
   capabilityContradictions,
 } from './capabilities.js';
-export type { GameBackend, GameCapabilities, CapabilityInputs } from './capabilities.js';
+export type { GameBackend, GameCapabilities } from './capabilities.js';
