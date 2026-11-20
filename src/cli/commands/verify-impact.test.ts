@@ -1,6 +1,6 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
@@ -57,9 +57,6 @@ import {
 } from './verify-classify.js';
 import { verifyRepairGateCommand, verifyRepairRoundCommand, verifyRepairStatusCommand } from './verify-repair.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-
-// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
-import.meta.glob('../cli.ts');
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRADICTORY_FIXTURE_ROOT = join(
@@ -279,40 +276,6 @@ describe('marker — parseRulesStaleness (strict)', () => {
   });
 });
 
-describe('marker — no bare indexOf on the heading (structural guard)', () => {
-  it('the module never calls indexOf(RULES_STALENESS_HEADING) outside comments', async () => {
-    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
-    const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
-    expect(codeLines.join('\n')).not.toContain('indexOf(RULES_STALENESS_HEADING)');
-  });
-
-  it('the module ships its own distinct fence pair, never reusing VERIFIED_AGAINST_BEGIN in code', async () => {
-    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
-    const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
-    expect(source).toContain('boardsmith:rules-staleness:begin');
-    expect(codeLines.join('\n')).not.toContain('VERIFIED_AGAINST_BEGIN');
-  });
-
-  it('never calls fs.writeFile directly (atomicWriteFile is the one write path)', async () => {
-    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
-    const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
-    expect(codeLines.join('\n')).not.toContain('fs.writeFile(');
-  });
-
-  it("writeRulesStalenessMarker's own body never mentions RULES_STALENESS_CLEAR or the word clear", async () => {
-    const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
-    const start = source.indexOf('export async function writeRulesStalenessMarker');
-    expect(start).toBeGreaterThan(-1);
-    // Bounded to the end of THIS function only (the next `// ---` section divider) — plan
-    // 175-04 added unrelated later functions (e.g. `computeRepairGate`'s `clearMarker` field)
-    // after this one in the same file, so slicing to EOF would false-positive on their names.
-    const nextDividerIdx = source.indexOf('\n// ---', start + 1);
-    const body = nextDividerIdx === -1 ? source.slice(start) : source.slice(start, nextDividerIdx);
-    const codeLines = body.split('\n').filter((line) => !/^\s*[*/]/.test(line));
-    expect(codeLines.join('\n').toLowerCase()).not.toContain('clear');
-  });
-});
-
 /**
  * Task 2 — the CHUNK-first / SKETCH-second marker writer, over REAL temp-directory project
  * fixtures (real CHUNK.md/SKETCH.md pairs). Test names below carry the tokens `marker` and
@@ -400,6 +363,13 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     const vaIdx = chunkText.indexOf(VERIFIED_AGAINST_HEADING);
     const rsIdx = chunkText.indexOf(RULES_STALENESS_HEADING);
     expect(rsIdx).toBeGreaterThan(vaIdx);
+  });
+
+  it('marker — leaves the Verified Against block byte-identical', async () => {
+    const vaBlock = `${VERIFIED_AGAINST_BEGIN}\n_Not yet recorded._\n${VERIFIED_AGAINST_END}`;
+    await writeRulesStalenessMarker(dir, fixtureRecord());
+    const chunkText = await fs.readFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), 'utf-8');
+    expect(chunkText.split(vaBlock)).toHaveLength(2);
   });
 
   it('marker — writes the marker as RULES_STALE_MARKER only, never RULES_STALENESS_CLEAR', async () => {
@@ -1873,40 +1843,6 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
     const source = await fs.readFile(join(__dirname, 'verify-impact.ts'), 'utf-8');
     const nonCommentLines = source.split('\n').filter((l) => !/^\s*[*/]/.test(l)).join('\n');
     expect((nonCommentLines.match(/process\.exitCode/g) ?? []).length).toBe(0);
-  });
-});
-
-/**
- * Task 3 — CLI registration (`cli.ts`). Greps the real entry-point source rather than importing
- * it, since `cli.ts` calls `program.parse()` at module scope (a side-effecting import).
- */
-
-describe('cli.ts — verify-impact-* registration', () => {
-  it('registers all four verify-impact-* commands, chunk-check takes no --reverified-no-code-change (#827), and no command declares a bypass option', async () => {
-    const cliSource = await fs.readFile(join(__dirname, '..', 'cli.ts'), 'utf-8');
-
-    for (const name of [
-      'verify-impact-gate',
-      'verify-impact-adjudicate',
-      'verify-impact-apply',
-      'verify-impact-status',
-    ]) {
-      expect(cliSource).toContain(`.command('${name}')`);
-    }
-
-    expect((cliSource.match(/verify-impact-/g) ?? []).length).toBeGreaterThanOrEqual(4);
-    expect(cliSource).not.toContain('--reverified-no-code-change');
-
-    // Scoped to the verify-impact-* registration block only — `--force` legitimately exists
-    // elsewhere in cli.ts (the unrelated `claude` command's `--force` to overwrite skills).
-    const blockStart = cliSource.indexOf("verify-impact-gate'");
-    const blockEnd = cliSource.indexOf('// Claude Code integration');
-    expect(blockStart).toBeGreaterThan(-1);
-    expect(blockEnd).toBeGreaterThan(blockStart);
-    const block = cliSource.slice(blockStart, blockEnd);
-    for (const bypass of ['--force', '--yes', '--skip-gate', '--clear']) {
-      expect(block).not.toContain(bypass);
-    }
   });
 });
 

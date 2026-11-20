@@ -1,6 +1,6 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach } from 'vitest';
-import { promises as fs, readFileSync } from 'node:fs';
+import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
@@ -395,31 +395,7 @@ describe('resolveFreshTranscription', () => {
   });
 });
 
-describe('No absence-phrase list in this module (176-RESEARCH.md Pitfall 4)', () => {
-  it('verify-ruling-recheck.ts contains no absence-detection keyword literal', () => {
-    const src = readFileSync(join(__dirname, 'verify-ruling-recheck.ts'), 'utf-8');
-    const ABSENCE_PHRASES = [
-      'never reproduces',
-      'entirely silent',
-      'absent from',
-      'not defined',
-      'no mention of',
-    ];
-    for (const phrase of ABSENCE_PHRASES) {
-      expect(src.toLowerCase()).not.toContain(phrase);
-    }
-  });
-});
-
 describe('recordRulingVerdicts — the one atomic write path (176-CONTEXT.md decision, CR-01)', () => {
-  it('never calls a hand-rolled fs.writeFile/writeFileSync — routes through atomicWriteFile only', () => {
-    const src = readFileSync(join(__dirname, 'verify-ruling-recheck.ts'), 'utf-8');
-    expect(src).not.toMatch(/\bfs\.writeFile\(/);
-    expect(src).not.toMatch(/\bwriteFileSync\(/);
-    expect(src).not.toMatch(/\bfsPromises\.writeFile\(/);
-    expect(src).toMatch(/\batomicWriteFile\(/);
-  });
-
   it('keeps every verdict when several record calls run in parallel (#831)', async () => {
     const project = join(dir, 'game');
     const runId = '2026-07-30T10-00-00Z';

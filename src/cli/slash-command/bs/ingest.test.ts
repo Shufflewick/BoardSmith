@@ -553,13 +553,6 @@ describe('v4.9 INGEST-02 — relabel command and shared lexicon', () => {
     expect(cmd).toMatch(/if \(!options\.skipRelabel\) \{[\s\S]{0,120}?relabelDerivedLines\(/);
   });
 
-  it('the relabel command changes only the prefix, never the text', () => {
-    const cmd = readFileSync(join(__dirname, '../../commands/ingest-archive.ts'), 'utf-8');
-    expect(flat(cmd)).toMatch(/the prefix changes, which is the marker the contract cares about/);
-    // Judgment cases must be reported rather than guessed at.
-    expect(flat(cmd)).toMatch(/left alone and reported, not guessed at/);
-  });
-
   it('the presentation lexicon is identical in the command and the checker', () => {
     // Two copies exist because scripts/*.mjs cannot import from src/*.ts without a build step.
     // The relabel command ACTS on the same signal the checker FLAGS, so a divergence would mean

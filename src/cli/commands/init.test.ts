@@ -75,9 +75,6 @@ import { WORLD_SCAFFOLD_SEATS } from '../lib/world-scaffold.js';
 import { validateAssetPaths } from './validate.js';
 import { ASSET_PATH_KEYS } from '../lib/config-schema.js';
 
-// Links the files this test reads by path, so `--changed` runs it when one alone changes; nothing loads (#1418).
-import.meta.glob('../cli.ts');
-
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
 describe('generateGameTs — scaffolded game template', () => {
@@ -123,45 +120,6 @@ describe('generateTestTs — scaffolded game test template', () => {
 
   it('does not call setup() — the scaffold game does all setup in its constructor', () => {
     expect(test).not.toContain('game.setup()');
-  });
-});
-
-// PROC-02 regression (F33/CLIX-05): `-t/--template` was a fully silent no-op --
-// it parsed and accepted any string but had zero read sites in initCommand's
-// body, so it could never actually select a template. Per No Backward
-// Compatibility the flag is removed outright (not deprecated). These tests
-// pin the removal at both registration sites so it can't silently reappear.
-describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
-  it('does not register -t/--template on the init command in cli.ts', () => {
-    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
-    const initBlockStart = cliSrc.indexOf(".command('init <name>')");
-    expect(initBlockStart).toBeGreaterThan(-1);
-    const initBlockEnd = cliSrc.indexOf('.action(initCommand)', initBlockStart);
-    expect(initBlockEnd).toBeGreaterThan(initBlockStart);
-    const initBlock = cliSrc.slice(initBlockStart, initBlockEnd);
-    expect(initBlock).not.toContain('--template');
-    expect(initBlock).not.toContain('-t,');
-  });
-
-  it('does not remove the unrelated pack command --target flag', () => {
-    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
-    expect(cliSrc).toContain("-t, --target <path>");
-  });
-
-  it('init.ts has no template surface (CLIX-05 / F33)', () => {
-    // The original assertion also required that the `InitOptions` type not exist at all. That
-    // was a proxy for "no template option", correct while init took no options. It now takes
-    // --rulebook/--edition, so the proxy is retired and the real invariant asserted directly:
-    // no template surface of any kind. `--rulebook` is unrelated to templating.
-    const initSrc = readFileSync(join(__dirname, 'init.ts'), 'utf-8');
-    expect(initSrc).not.toContain('template');
-    const cliSrc = readFileSync(join(__dirname, '..', 'cli.ts'), 'utf-8');
-    const initBlock = cliSrc.slice(
-      cliSrc.indexOf(".command('init <name>')"),
-      cliSrc.indexOf(".command('dev')"),
-    );
-    expect(initBlock).not.toContain('template');
-    expect(initBlock).not.toMatch(/-t\b/);
   });
 });
 

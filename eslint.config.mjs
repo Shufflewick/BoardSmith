@@ -29,4 +29,28 @@ export default [
       '@typescript-eslint/return-await': ['error', 'error-handling-correctness-only'],
     },
   },
+  {
+    files: [
+      'src/cli/commands/verify-*.ts',
+      'src/cli/commands/chunk-signoff.ts',
+      'src/cli/commands/chunk-gate-transition.ts',
+      'src/cli/lib/verify-result.ts',
+    ],
+    ignores: ['**/*.test-helper.ts'],
+    rules: {
+      'no-restricted-properties': ['error',
+        ...['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream'].map((property) => ({
+          property,
+          message: 'Write verify ledger files with atomicWriteFile from src/cli/lib/atomic-write-file.ts, so a crash mid-write cannot leave a truncated ledger.',
+        })),
+      ],
+      'no-restricted-imports': ['error', {
+        paths: ['fs', 'node:fs', 'fs/promises', 'node:fs/promises'].map((name) => ({
+          name,
+          importNames: ['writeFile', 'writeFileSync', 'appendFile', 'appendFileSync', 'createWriteStream'],
+          message: 'Write verify ledger files with atomicWriteFile from src/cli/lib/atomic-write-file.ts, so a crash mid-write cannot leave a truncated ledger.',
+        })),
+      }],
+    },
+  },
 ];

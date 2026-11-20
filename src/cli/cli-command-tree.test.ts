@@ -52,6 +52,43 @@ describe('boardsmith test writes no verdict file (#1741)', () => {
   });
 });
 
+/** The flags of top-level command `name`, as its --help lists them. */
+function flagsOf(name: string): string[] {
+  const command = createProgram().commands.find((c) => c.name() === name);
+  if (!command) throw new Error(`boardsmith has no "${name}" command`);
+  return command.options.map((o) => o.flags);
+}
+
+describe('ledger commands take exactly their own options, so none grows a bypass flag', () => {
+  it.each([
+    ['verify-derive-check', ['--project <dir>', '--json']],
+    ['verify-derive-record', ['--project <dir>', '--slice-path <path>', '--enumerator-a <file>', '--enumerator-b <file>', '--reconciler <file>', '--json']],
+    ['verify-example-replay', ['--project <dir>', '--json', '--chunk <slug>']],
+    ['verify-example-record', ['--project <dir>', '--slice-path <path>', '--extraction <file>', '--translations <file>', '--json']],
+    ['verify-example-translate', ['--project <dir>', '--slice-path <path>', '--extraction <file>', '--json']],
+    ['verify-example-emit', ['--project <dir>', '--chunk <slug>', '--json']],
+    ['verify-example-run', ['--project <dir>', '--chunk <slug>', '--json']],
+    ['chunk-gate-transition', ['--project <dir>', '--by <designer>', '--json']],
+    ['chunk-check', ['--project <dir>', '--json']],
+    ['verify-impact-gate', ['--project <dir>', '--run-id <id>', '--json']],
+    ['verify-impact-adjudicate', ['--project <dir>', '--run-id <id>', '--pair-id <id>', '--outcome <resolved|UNADJUDICATED>', '--decision <text>', '--citation <text>', '--rationale <text>', '--json']],
+    ['verify-impact-apply', ['--project <dir>', '--run-id <id>', '--json']],
+    ['verify-impact-status', ['--project <dir>', '--run-id <id>', '--json']],
+  ])('%s', (name, flags) => {
+    expect(flagsOf(name)).toEqual(flags);
+  });
+});
+
+describe('init has no template option (CLIX-05)', () => {
+  it('offers no --template or -t: the flag was a silent no-op, so it was removed', () => {
+    expect(flagsOf('init').filter((flags) => /--template|-t\b/.test(flags))).toEqual([]);
+  });
+
+  it('leaves pack its own -t, --target', () => {
+    expect(flagsOf('pack')).toContain('-t, --target <path>');
+  });
+});
+
 describe('boardsmith claude uninstall --local (#348)', () => {
   const skills = installedSkillsTree('bs-cli-claude-uninstall-');
 

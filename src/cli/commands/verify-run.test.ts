@@ -506,11 +506,6 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
 // -------------------------------------------------------------------------------------------
 
 describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
-  it('CR-static: fs.writeFile(ledgerFile is never called against the ledger — atomicWriteFile only', async () => {
-    const src = await fs.readFile(new URL('./verify-run.ts', import.meta.url), 'utf-8');
-    expect(src).not.toMatch(/fs\.writeFile\(ledgerFile/);
-  });
-
   it('CR-A: a failure injected between the temp write and the rename leaves the ledger byte-identical to its pre-call state, with earlier records intact, and surfaces the error (never swallowed)', async () => {
     const project = await liveProject();
     const init = await verifyRunInitCommand({ project, json: true });

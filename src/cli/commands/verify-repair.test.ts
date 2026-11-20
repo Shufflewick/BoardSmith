@@ -407,17 +407,6 @@ describe('episode — writeAppendedAuditRound routes through atomicWriteFile onl
     expect(onDisk).toContain(plan.heading);
     expect(onDisk.startsWith(original.trimEnd())).toBe(true);
   });
-
-  it('the module contains no hand-rolled fs.writeFile/writeFileSync and calls atomicWriteFile', async () => {
-    const source = await fs.readFile(join(__dirname, 'verify-repair.ts'), 'utf-8');
-    const nonCommentLines = source
-      .split('\n')
-      .filter((l) => !/^\s*\*/.test(l) && !/^\s*\/\//.test(l))
-      .join('\n');
-    expect(nonCommentLines).not.toMatch(/fs\.writeFile\(/);
-    expect(nonCommentLines).not.toMatch(/writeFileSync/);
-    expect(nonCommentLines).toMatch(/atomicWriteFile\(/);
-  });
 });
 
 // -------------------------------------------------------------------------------------------
