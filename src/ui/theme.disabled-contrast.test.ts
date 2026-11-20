@@ -18,15 +18,14 @@ import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
 import {
-  composite,
-  contrastRatio,
-  parseColor,
+  parseSolidColor,
   resolve,
   ruleBody,
   styleOf,
   ROOT_TOKENS,
   PALETTES,
 } from './theme-contrast.test-helper.js';
+import { composite, contrastRatio } from './utils/color-contrast.js';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
 import.meta.glob('/src/ui/components/{ControlsMenu,GameHistory,GameShell,auto-ui/ActionPanel,auto-ui/DoneButton,debug/DebugButton,debug/DecksTab,debug/HistoryTab,helpers/Button}.vue');
@@ -139,8 +138,8 @@ describe('Disabled controls keep a measurable ground/ink pair (#259)', () => {
   it('the composite maths reproduces the 2.77:1 the ticket measured', () => {
     // Guards the measurement itself: accent ink on accent ground, the whole
     // button at opacity 0.5 over the page background, is what shipped.
-    const ground = composite(parseColor('#d99a2b'), parseColor('#0d0b09'), 0.5);
-    const ink = composite(parseColor('#0d0b09'), parseColor('#0d0b09'), 0.5);
+    const ground = composite({ ...parseSolidColor('#d99a2b'), a: 0.5 }, parseSolidColor('#0d0b09'));
+    const ink = composite({ ...parseSolidColor('#0d0b09'), a: 0.5 }, parseSolidColor('#0d0b09'));
     expect(contrastRatio(ground, ink)).toBeCloseTo(2.77, 2);
   });
 
@@ -157,8 +156,8 @@ describe('Disabled controls keep a measurable ground/ink pair (#259)', () => {
 
   for (const { name, palette } of PALETTES) {
     it(`--bsg-disabled-ink on --bsg-disabled-surface clears 4.5:1 — ${name}`, () => {
-      const ground = parseColor(resolve('var(--bsg-disabled-surface)', palette));
-      const ink = parseColor(resolve('var(--bsg-disabled-ink)', palette));
+      const ground = parseSolidColor(resolve('var(--bsg-disabled-surface)', palette));
+      const ink = parseSolidColor(resolve('var(--bsg-disabled-ink)', palette));
       const ratio = contrastRatio(ground, ink);
       expect(
         ratio,
@@ -203,20 +202,20 @@ describe('Disabled controls keep a measurable ground/ink pair (#259)', () => {
             `${control.label}: neither "${control.base}" nor "${control.disabled}" names an ink. A disabled label needs a defined ink token.`,
           ).toBeDefined();
 
-          const backdrop = parseColor(resolve(control.backdrop, palette));
+          const backdrop = parseSolidColor(resolve(control.backdrop, palette));
           let ground =
             groundValue === 'none'
               ? backdrop
-              : parseColor(resolve(groundValue, palette));
-          let ink = parseColor(resolve(inkValue, palette));
+              : parseSolidColor(resolve(groundValue, palette));
+          let ink = parseSolidColor(resolve(inkValue, palette));
 
           // A browser paints the element, then composites the whole result over
           // the backdrop at `opacity`. Reproduce that before measuring.
           const alphaValue = disabled.opacity ?? base.opacity;
           const alpha = alphaValue ? Number(alphaValue) : 1;
           if (alpha < 1) {
-            ground = composite(ground, backdrop, alpha);
-            ink = composite(ink, backdrop, alpha);
+            ground = composite({ ...ground, a: alpha }, backdrop);
+            ink = composite({ ...ink, a: alpha }, backdrop);
           }
 
           const ratio = contrastRatio(ground, ink);
@@ -251,8 +250,8 @@ describe('Disabled multi-select checkbox (#259)', () => {
 
   for (const { name, palette } of PALETTES) {
     it(`check mark clears 3:1 against the disabled box — ${name}`, () => {
-      const ground = parseColor(resolve(ruleBody(css, BOX).background, palette));
-      const mark = parseColor(resolve(ruleBody(css, CHECK).color, palette));
+      const ground = parseSolidColor(resolve(ruleBody(css, BOX).background, palette));
+      const mark = parseSolidColor(resolve(ruleBody(css, CHECK).color, palette));
       const ratio = contrastRatio(ground, mark);
       expect(
         ratio,
