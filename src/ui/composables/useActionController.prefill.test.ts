@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, type Ref } from 'vue';
 import {
   useActionController,
   type EnrichedActionMetadata,
@@ -51,9 +51,9 @@ function buildMetadata(): Record<string, EnrichedActionMetadata> {
 
 describe('useActionController prefill', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   beforeEach(() => {
     sendAction = createMockSendAction();

@@ -76,7 +76,7 @@ function wireActionToBoard(
   fetchPickChoices: NonNullable<Parameters<typeof useActionController>[0]['fetchPickChoices']>,
   runnerIdentity = ref<RunnerIdentity | undefined>(A_GAME),
 ) {
-  const isMyTurn = ref<boolean | undefined>(true);
+  const isMyTurn = ref(true);
   const availableActions = ref([action.name]);
   const actionMetadata = ref({ [action.name]: action });
   const controller = useActionController({
@@ -163,7 +163,7 @@ describe('Board + controller interaction integration', () => {
   // ── Test A1 ───────────────────────────────────────────────────────────────
 
   it('A1: board-select of Checkers piece populates destination choices on the board and in currentChoices', async () => {
-    const isMyTurn = ref<boolean | undefined>(true);
+    const isMyTurn = ref(true);
     const autoEndTurn = ref(true);
     const availableActions = ref(['move']);
     const actionMetadata = ref({ move: checkersMoveAction });
@@ -303,7 +303,7 @@ describe('Board + controller interaction integration', () => {
   // (`move`) should auto-start, but available actions CHURN across async ticks during
   // a turn transition (availableActions flickers [] → ['endTurn'] → ['move']).
   function setupChurn(initialActions: string[]) {
-    const isMyTurn = ref<boolean | undefined>(true);
+    const isMyTurn = ref(true);
     const autoEndTurn = ref(true);
     const availableActions = ref<string[]>(initialActions);
     const actionMetadata = ref<Record<string, EnrichedActionMetadata>>({
@@ -381,7 +381,7 @@ describe('Board + controller interaction integration', () => {
     // only available action is a no-selection action, it must still auto-execute.
     // Ensures the coalescing / skipNoSelections AND did not accidentally suppress
     // no-selection auto-execute entirely.
-    const isMyTurn = ref<boolean | undefined>(false);
+    const isMyTurn = ref(false);
     const autoEndTurn = ref(true);
     const availableActions = ref<string[]>([]);
     const actionMetadata = ref<Record<string, EnrichedActionMetadata>>({
@@ -418,7 +418,7 @@ describe('Board + controller interaction integration', () => {
   it('A3: Hex single-step placement — one board click selects+auto-executes (regression guard)', async () => {
     // This is the regression guard for the Hex single-click flow that was fixed
     // in Phase 94. It MUST be GREEN before AND after the Task 2 fix for Bug A.
-    const isMyTurn = ref<boolean | undefined>(true);
+    const isMyTurn = ref(true);
     const autoEndTurn = ref(true);
     const availableActions = ref(['place']);
     const actionMetadata = ref({ place: hexPlacementAction });
@@ -488,7 +488,7 @@ describe('Board + controller interaction integration', () => {
     // `availableActions` byte-identical, so the bridge's action-set teardown
     // never fires, and `validElements` is frozen in the pick snapshot taken when
     // the pick opened.
-    const isMyTurn = ref<boolean | undefined>(true);
+    const isMyTurn = ref(true);
     const autoEndTurn = ref(true);
     // Byte-identical across the undo, on purpose — this is what makes the
     // pre-existing teardown watcher blind to it.

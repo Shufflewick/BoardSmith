@@ -493,7 +493,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === The one shared selection (#1641) ===
   const sharedSelection = useSharedSelection({
-    offered: computed(() => (availableActions.value ?? []).flatMap((name) => actionMetadata.value?.[name] ?? [])),
+    offered: computed(() => availableActions.value.flatMap((name) => actionMetadata.value?.[name] ?? [])),
     disabledActions,
   });
   /** The thing the open action was started on, for the pick it narrows or is carried to. */
@@ -1674,12 +1674,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /** True while a board click or drag may start an action. */
   function mayStartFromBoard(): boolean {
-    return !!isMyTurn.value && !currentAction.value && !isExecuting.value && !pendingFollowUp.value && !isViewingHistoryValue();
+    return isMyTurn.value && !currentAction.value && !isExecuting.value && !pendingFollowUp.value && !isViewingHistoryValue();
   }
 
   /** Each available, enabled action that opens with an element pick, and that pick. */
   function elementFirstPicks(): { action: string; pick: EnrichedPickMetadata }[] {
-    return (availableActions.value ?? []).flatMap((action) => {
+    return availableActions.value.flatMap((action) => {
       if (disabledActions?.value?.[action]) return [];
       const pick = getActionMetadata(action)?.selections[0];
       return pick?.type === 'element' ? [{ action, pick }] : [];
@@ -2063,7 +2063,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (isCommitted()) return 'You have already submitted your action for this step';
     const disabledReason = disabledReasonFor(actionName);
     if (disabledReason) return disabledReason;
-    if (!availableActions.value?.includes(actionName)) return `Action "${actionName}" is not available`;
+    if (!availableActions.value.includes(actionName)) return `Action "${actionName}" is not available`;
     return undefined;
   }
 
@@ -2304,7 +2304,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { success: false, error: startDisabledReason };
     }
 
-    if (!availableActions.value?.includes(actionName)) {
+    if (!availableActions.value.includes(actionName)) {
       const error = `Action "${actionName}" is not available`;
       setError(error);
       devWarn(
@@ -3175,7 +3175,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // 1. It's my turn
     // 2. No animations pending
     // 3. No followUp action pending
-    return Boolean(isMyTurn.value) && !animationsPending.value && !pendingFollowUp.value;
+    return isMyTurn.value && !animationsPending.value && !pendingFollowUp.value;
   });
 
   return {

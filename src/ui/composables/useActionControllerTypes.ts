@@ -221,12 +221,12 @@ export interface ChoiceFetch {
 export interface UseActionControllerOptions {
   /** Function to send action to server */
   sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ControllerActionResult>;
-  /** Available actions (from game state). Accepts Ref with potentially undefined value for test compatibility. */
-  availableActions: Ref<string[] | undefined> | Ref<string[]>;
+  /** Available actions (from game state) */
+  availableActions: Ref<string[]>;
   /** Action metadata (from game state) */
   actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>;
-  /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
-  isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
+  /** Is it this player's turn */
+  isMyTurn: Ref<boolean>;
   /**
    * The follow-up the server holds for this seat, read off its published state
    * (`PlayerGameState.followUp`). A follow-up normally arrives in the result of

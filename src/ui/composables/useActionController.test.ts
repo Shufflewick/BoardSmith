@@ -24,9 +24,9 @@ import { _clearShownWarnings } from '../../utils/dev.js';
 
 describe('useActionController', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
-  let availableActions: ReturnType<typeof ref<string[]>>;
+  let availableActions: Ref<string[]>;
   let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
-  let isMyTurn: ReturnType<typeof ref<boolean>>;
+  let isMyTurn: Ref<boolean>;
 
   beforeEach(() => {
     sendAction = createMockSendAction();
@@ -440,7 +440,7 @@ describe('useActionController', () => {
     });
 
     it('start() resolves to a failure ControllerActionResult for an action with no metadata (D26/SPACE-05 defense-in-depth: no-op, not a hard error)', async () => {
-      availableActions.value = [...(availableActions.value ?? []), 'actionWithNoMetadata'];
+      availableActions.value = [...availableActions.value, 'actionWithNoMetadata'];
 
       const controller = useActionController({
         sendAction,
@@ -1075,7 +1075,7 @@ describe('useActionController', () => {
           ],
         },
       };
-      availableActions.value = [...(availableActions.value ?? []), 'collectItems'];
+      availableActions.value = [...availableActions.value, 'collectItems'];
       const controller = buildController();
       await controller.start('collectItems');
 
@@ -1103,7 +1103,7 @@ describe('useActionController', () => {
           ],
         },
       };
-      availableActions.value = [...(availableActions.value ?? []), 'placeToken'];
+      availableActions.value = [...availableActions.value, 'placeToken'];
       const controller = buildController();
       await controller.start('placeToken');
 
@@ -1435,7 +1435,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1469,7 +1469,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1512,7 +1512,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...choiceMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'choiceAction'];
+      availableActions.value = [...availableActions.value, 'choiceAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1559,7 +1559,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...twoStepMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'twoStepAction'];
+      availableActions.value = [...availableActions.value, 'twoStepAction'];
 
       const controller = useActionController({
         sendAction,
@@ -1729,7 +1729,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...disabledMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'selectCard'];
+      availableActions.value = [...availableActions.value, 'selectCard'];
 
       const controller = useActionController({
         sendAction,
@@ -1769,7 +1769,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...disabledMultiMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'selectCards'];
+      availableActions.value = [...availableActions.value, 'selectCards'];
 
       const controller = useActionController({
         sendAction,
@@ -1807,7 +1807,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...disabledAutoFillMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'forcedSelect'];
+      availableActions.value = [...availableActions.value, 'forcedSelect'];
 
       const controller = useActionController({
         sendAction,
@@ -1846,7 +1846,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...allDisabledMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'allDisabled'];
+      availableActions.value = [...availableActions.value, 'allDisabled'];
 
       const controller = useActionController({
         sendAction,
@@ -1886,7 +1886,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...disabledChoicesMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'withDisabled'];
+      availableActions.value = [...availableActions.value, 'withDisabled'];
 
       const controller = useActionController({
         sendAction,
@@ -1927,7 +1927,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...mixedMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'mixedChoices'];
+      availableActions.value = [...availableActions.value, 'mixedChoices'];
 
       const controller = useActionController({
         sendAction,
@@ -1965,7 +1965,7 @@ describe('useActionController', () => {
       };
 
       actionMetadata.value = { ...createTestMetadata(), ...disabledExecMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'execDisabled'];
+      availableActions.value = [...availableActions.value, 'execDisabled'];
 
       const controller = useActionController({
         sendAction,
@@ -2002,7 +2002,7 @@ describe('useActionController', () => {
         };
 
         actionMetadata.value = { ...createTestMetadata(), ...disabledElementMeta };
-        availableActions.value = [...(availableActions.value ?? []), 'moveWithDisabled'];
+        availableActions.value = [...availableActions.value, 'moveWithDisabled'];
 
         const controller = useActionController({
           sendAction,
@@ -2049,7 +2049,7 @@ describe('useActionController', () => {
         };
 
         actionMetadata.value = { ...createTestMetadata(), ...disabledElementMeta };
-        availableActions.value = [...(availableActions.value ?? []), 'moveWithDisabled'];
+        availableActions.value = [...availableActions.value, 'moveWithDisabled'];
 
         const controller = useActionController({
           sendAction,
@@ -2091,7 +2091,7 @@ describe('useActionController', () => {
         };
 
         actionMetadata.value = { ...createTestMetadata(), ...autoFillElementMeta };
-        availableActions.value = [...(availableActions.value ?? []), 'forcedElement'];
+        availableActions.value = [...availableActions.value, 'forcedElement'];
 
         const controller = useActionController({
           sendAction,
@@ -2138,7 +2138,7 @@ describe('useActionController', () => {
         };
 
         actionMetadata.value = { ...createTestMetadata(), ...depElementMeta };
-        availableActions.value = [...(availableActions.value ?? []), 'depElementAction'];
+        availableActions.value = [...availableActions.value, 'depElementAction'];
 
         const controller = useActionController({
           sendAction,
@@ -2307,7 +2307,7 @@ describe('useActionController', () => {
 
     it('sends only the picks when skip triggers auto-execute; the server binds the followUp args (#662)', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'collectEquipment'];
+      availableActions.value = [...availableActions.value, 'collectEquipment'];
 
       const controller = useActionController({
         sendAction,
@@ -2384,7 +2384,7 @@ describe('useActionController', () => {
       // execute() sends an action without metadata on its own branch. That
       // branch used to drop a followUp the other two send paths start.
       actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
-      availableActions.value = [...(availableActions.value ?? []), 'searchRuins'];
+      availableActions.value = [...availableActions.value, 'searchRuins'];
 
       const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
       sendAction.mockResolvedValueOnce({
@@ -2541,7 +2541,7 @@ describe('useActionController', () => {
           ...createTestMetadata(),
           hire: { name: 'hire', prompt: 'Hire', selections: [zeroToThree('picks'), zeroToThree('more')] },
         };
-        availableActions.value = [...(availableActions.value ?? []), 'hire'];
+        availableActions.value = [...availableActions.value, 'hire'];
         const controller = useActionController({
           sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false, autoFill: false,
         });
@@ -2594,7 +2594,7 @@ describe('useActionController', () => {
           ],
         },
       };
-      availableActions.value = [...(availableActions.value ?? []), 'discardExactly2'];
+      availableActions.value = [...availableActions.value, 'discardExactly2'];
 
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: false,
@@ -2633,7 +2633,7 @@ describe('useActionController', () => {
           ],
         },
       };
-      availableActions.value = [...(availableActions.value ?? []), 'discardExactly2'];
+      availableActions.value = [...availableActions.value, 'discardExactly2'];
 
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn, autoExecute: true,
@@ -2758,7 +2758,7 @@ describe('useActionController', () => {
 
     it('is populated for multi-element picks too', async () => {
       const fetchPickChoices = vi.fn(async () => ({ success: true, validElements: [{ id: 1 }, { id: 2 }] }));
-      const extendedAvailable = ref([...(availableActions.value ?? []), 'selectMultiple']);
+      const extendedAvailable = ref([...availableActions.value, 'selectMultiple']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
@@ -2775,7 +2775,7 @@ describe('useActionController', () => {
     });
 
     it('is empty when pick.type is elements but nothing was fetched (vacuous case)', async () => {
-      const extendedAvailable = ref([...(availableActions.value ?? []), 'selectMultiple']);
+      const extendedAvailable = ref([...availableActions.value, 'selectMultiple']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
@@ -2807,7 +2807,7 @@ describe('useActionController', () => {
       // A notation ref makes a choice highlightable on the board, not a board element
       // candidate. splitAnchoredChoices partitions those in the panel; the candidate
       // surface stays empty, so the panel keeps every choice reachable.
-      const extendedAvailable = ref([...(availableActions.value ?? []), 'allAnchored']);
+      const extendedAvailable = ref([...availableActions.value, 'allAnchored']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
@@ -2824,7 +2824,7 @@ describe('useActionController', () => {
     });
 
     it('is empty when choices carry only id refs (highlight hints, not board cells — Go Fish ask)', async () => {
-      const extendedAvailable = ref([...(availableActions.value ?? []), 'idHintAnchored']);
+      const extendedAvailable = ref([...availableActions.value, 'idHintAnchored']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
@@ -2870,7 +2870,7 @@ describe('useActionController', () => {
         },
       };
 
-      const extendedAvailable = ref([...(availableActions.value ?? []), 'twoStepMove']);
+      const extendedAvailable = ref([...availableActions.value, 'twoStepMove']);
       const controller = useActionController({
         sendAction,
         availableActions: extendedAvailable,
