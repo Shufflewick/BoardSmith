@@ -1,5 +1,5 @@
 {
-  "revision": 461,
+  "revision": 462,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3631,6 +3631,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "CLI: a game with boardsmith.json is always a game to the CLI, even with a src/engine directory, and the one-install check on rules bundles no longer depends on the process's working directory"
+    },
+    {
+      "revision": 462,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "GameShell's playerColorMarks lets a game mark each players-panel seat card with a stripe and a readable name in its player's colour (#1733)"
     }
   ]
 }
