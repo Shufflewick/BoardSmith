@@ -1,5 +1,15 @@
 # Migration Guide
 
+## An action step can undo one action at a time: `actionStep({ undo: 'action' })` (#1759)
+
+A step declared `undo: 'action'` makes each Undo take back the seat's last
+action alone, and the seat can keep undoing back to its turn start. Without it,
+one Undo still takes back the whole turn. A game that split a run into one-step
+turns (`turnScope: 'restart'`) only to make each action undoable can go back to
+one step held open by `repeatUntil`, or keep its `loop` with
+`turnScope: 'continue'`, and declare `undo: 'action'`. The flow state carries
+`undoEachAction` while such a step is open.
+
 ## Props and options no caller passed are removed (#1777)
 
 Delete these from your code; each now behaves as its default did, unless noted:

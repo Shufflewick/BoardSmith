@@ -295,6 +295,8 @@ interface UndoFlowState {
   turnScopeUndeclared?: string;
   /** Set while the open simultaneous step undoes per seat (#1526). */
   seatUndo?: true;
+  /** Set while the open action step undoes one action at a time (#1759). */
+  undoEachAction?: true;
 }
 
 /**
@@ -405,9 +407,9 @@ export function simultaneousUndoBoundary(
  * (#449).
  *
  * Branches on whether the flow is CURRENTLY in a simultaneous step
- * (`flowState.awaitingPlayers?.length > 0`): sequential undo keeps its
- * EXACT existing `computeUndoInfo`/`currentPlayer` contract (UNDO-03) --
- * this function does not change sequential behavior at all -- while a
+ * (`flowState.awaitingPlayers?.length > 0`): sequential undo keeps the
+ * `computeUndoInfo`/`currentPlayer` contract (UNDO-03), restoring the point
+ * before the last action alone in a step that undoes each action, while a
  * simultaneous step routes through {@link isSimultaneousParticipant} +
  * {@link simultaneousUndoBoundary} instead of the `currentPlayer` pin.
  *
@@ -450,15 +452,15 @@ function computeUndoEligibility(
     return { eligible: true, ...boundary };
   }
 
-  // Sequential (UNCHANGED contract, UNDO-03): the same computation
-  // `buildPlayerState` has always used, with the seat-identity check kept
-  // separate from `actionsThisTurn` exactly as it always was.
+  // Sequential (UNDO-03): the seat-identity check stays separate from `actionsThisTurn`.
   const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
     history,
     flowState?.currentPlayer,
     flowState?.moveCount,
   );
   const eligible = flowState?.currentPlayer === seat;
+  // A step that undoes each action restores the point just before the last one (#1759).
+  if (flowState?.undoEachAction && actionsThisTurn > 0) return { eligible, turnStartActionIndex: count - 1, actionsThisTurn };
   return { eligible, turnStartActionIndex, actionsThisTurn };
 }
 

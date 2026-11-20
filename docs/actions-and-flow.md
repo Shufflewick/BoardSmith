@@ -2342,6 +2342,29 @@ misleading "No actions to undo".
 On a `'continue'` step, `minMoves`/`maxMoves` bound the whole run rather than
 the single entry -- which is the same thing when the run is one turn.
 
+##### `undo` - take back one action at a time
+
+By default one Undo takes back everything the seat did since its turn began.
+Declare `undo: 'action'` on a step and each Undo takes back only the seat's
+last action. The seat can then undo the action before that, one at a time, back
+to its turn start:
+
+```typescript
+actionStep({
+  name: 'place-militia',
+  actions: ['placeMilitia', 'donePlacing'],
+  repeatUntil: (ctx) => ctx.get('placingDone') === true,
+  undo: 'action',
+})
+```
+
+The same fences still stop it: a `.notUndoable()` action, an irreversible
+`execute()`, and, in a game declared `undo: { fenceRandomRewind: true }`, an
+action that drew a random number. Undo never reaches behind the turn start, so
+pair `undo: 'action'` with `repeatUntil` or `turnScope: 'continue'`. A
+`turnScope: 'restart'` step makes each of its entries a turn of its own, and
+there one action is already the whole turn.
+
 #### `simultaneousActionStep` - All players act at once
 
 ```typescript

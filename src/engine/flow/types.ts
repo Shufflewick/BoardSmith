@@ -203,6 +203,19 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    */
   turnScope?: TurnScope;
   /**
+   * How much one Undo takes back while this step is open.
+   *
+   * - `'turn'` (the default) -- everything the seat did since its turn began
+   *   (see {@link turnScope} for where that is).
+   * - `'action'` -- the seat's last action alone. The seat can then undo the
+   *   action before it, one at a time, back to its turn start, and never past a
+   *   `.notUndoable()` action, an irreversible `execute()` or, under
+   *   `undo: { fenceRandomRewind: true }`, an action that drew a random number.
+   *   Pair it with `repeatUntil` or `turnScope: 'continue'`: each action of a
+   *   `turnScope: 'restart'` step is its own turn already.
+   */
+  undo?: 'turn' | 'action';
+  /**
    * How long this step stays open once it is entered, in milliseconds.
    *
    * A number, or a function of the flow context resolved ONCE when the step is
@@ -450,6 +463,11 @@ export interface FlowState {
    * ({@link SimultaneousActionStepConfig.seatUndo}). Server-side only.
    */
   seatUndo?: true;
+  /**
+   * Present while the open step is an action step whose Undo takes back one
+   * action at a time ({@link ActionStepConfig.undo}). Server-side only.
+   */
+  undoEachAction?: true;
   /**
    * How long the open step stays open, in milliseconds, as the step declared it
    * ({@link ActionStepConfig.timeLimitMs}) and resolved when it was entered.
