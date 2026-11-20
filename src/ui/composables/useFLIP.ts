@@ -432,20 +432,20 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
 }
 
 /**
- * Simplified FLIP animation for a single update cycle.
- * Use this for one-off animations without tracking state.
+ * One-off FLIP animation: `useFLIP` captured on creation. `animate()` plays once,
+ * records traces in animation test mode, and reports an element with no anchor attribute.
  *
  * @param containerRef - Ref to container element
  * @param selector - CSS selector for elements to animate
  * @param options - Animation options
- * @returns A function that captures positions and returns an animate function
+ * @returns The animate function for the positions captured now
  */
 export function createFLIPSnapshot(
   containerRef: Ref<HTMLElement | null>,
   selector: string = '[data-card-id]',
   options: { duration?: number; easing?: string } = {}
 ): { animate: () => Promise<void> } {
-  const flip = useFLIP({ containerRef, selector, ...options });
+  const flip = useFLIP({ containerRef, selector, duration: options.duration, easing: options.easing });
   flip.capture();
   return { animate: flip.animate };
 }
