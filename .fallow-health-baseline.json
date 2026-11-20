@@ -570,9 +570,6 @@
     "src/ui/composables/useAnimationEvents.ts": {
       "complexity_high": {
         "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
       }
     },
     "src/ui/composables/useBoardActionBridge.ts": {

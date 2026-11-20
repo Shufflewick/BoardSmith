@@ -975,6 +975,105 @@ describe('useAnimationEvents', () => {
       consoleWarn.mockRestore();
     });
 
+    it('a board that claims no events skips an unhandled event at once, silently', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+
+      const instance = createAnimationEvents({ events: () => events.value });
+      instance.claimNoEvents();
+
+      events.value = [createEvent(1, 'demo'), createEvent(2, 'demo')];
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(instance.isAnimating.value).toBe(false);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+
+    it('claiming no events ends a wait already under way, silently', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+
+      const instance = createAnimationEvents({ events: () => events.value });
+
+      events.value = [createEvent(1, 'demo')];
+      await nextTick();
+      expect(instance.isAnimating.value).toBe(true);
+
+      instance.claimNoEvents();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(instance.isAnimating.value).toBe(false);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      consoleWarn.mockRestore();
+    });
+
+    it('the claim does not cover a queue some board registers handlers on, so a lazy handler still gets its event', async () => {
+      vi.useFakeTimers();
+      const events = ref<AnimationEvent[]>([]);
+      const handled: number[] = [];
+
+      const instance = createAnimationEvents({ events: () => events.value });
+      instance.registerHandler('known', async () => {}, { skip: 'drop' });
+      instance.claimNoEvents();
+
+      events.value = [createEvent(1, 'lazy')];
+      await vi.advanceTimersByTimeAsync(0);
+      expect(instance.isAnimating.value).toBe(true);
+
+      instance.registerHandler('lazy', async (event) => {
+        handled.push(event.id);
+      }, { skip: 'drop' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(handled).toEqual([1]);
+    });
+
+    it('a claim released before the queue resumes leaves the event waiting for the next board, without a warning', async () => {
+      vi.useFakeTimers();
+      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const events = ref<AnimationEvent[]>([]);
+      const handled: number[] = [];
+
+      const instance = createAnimationEvents({ events: () => events.value });
+
+      events.value = [createEvent(1, 'move')];
+      await nextTick();
+      instance.claimNoEvents()();
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(instance.isAnimating.value).toBe(true);
+      expect(consoleWarn).not.toHaveBeenCalled();
+
+      instance.registerHandler('move', async (event) => {
+        handled.push(event.id);
+      }, { skip: 'drop' });
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(handled).toEqual([1]);
+      consoleWarn.mockRestore();
+    });
+
+    it('releasing the claim waits for a handler again', async () => {
+      vi.useFakeTimers();
+      const events = ref<AnimationEvent[]>([]);
+
+      const instance = createAnimationEvents({ events: () => events.value });
+      const release = instance.claimNoEvents();
+      release();
+
+      events.value = [createEvent(1, 'demo')];
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(instance.isAnimating.value).toBe(true);
+      instance.skipAll();
+    });
+
     it('handler already registered before event -- no wait needed', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];

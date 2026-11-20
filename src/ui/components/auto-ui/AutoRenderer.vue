@@ -7,6 +7,7 @@
  *   1. Side-effect import of builtin-renderers.ts (registers all 8 built-ins once)
  *   2. Provide the full context chain expected by per-element renderers
  *   3. Select the archetype via selectArchetype() and dispatch to the matching template
+ *   4. Claim no animation events, since it registers no handlers (#1758)
  *
  * Interaction state is not provided here: per-element renderers read it from
  * useBoardInteraction() through useElementBoardState(). No dual path for
@@ -29,6 +30,7 @@ import UnsupportedTopologyPanel from './archetypes/UnsupportedTopologyPanel.vue'
 import { GAME_VIEW_KEY, type GameElement } from './auto-ui-helpers.js';
 import { syncReducedMotionClass } from '../../composables/reducedMotion.js';
 import { REQUEST_HOST_STATE_KEY } from '../../composables/requestHostState.js';
+import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 
 syncReducedMotionClass();
 
@@ -57,6 +59,10 @@ provide('playerSeat', props.playerSeat);
 // Presentation overlay — provided as computed so injectors re-render when prop changes (D-04)
 provide('presentation', computed(() => props.presentation));
 provide(GAME_VIEW_KEY, computed(() => props.gameView));
+
+// Without this claim the queue waits 3s per event for a handler, hiding the Action Panel.
+const releaseAnimationClaim = useAnimationEvents()?.claimNoEvents();
+onUnmounted(() => releaseAnimationClaim?.());
 
 // ---------------------------------------------------------------------------
 // findDefaultBackImage — scans element tree for the first card back image
