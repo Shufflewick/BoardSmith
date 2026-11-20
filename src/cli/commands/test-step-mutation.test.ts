@@ -389,6 +389,60 @@ it('claim 2 — b runs', () => { b(); expect(true).toBe(true); });
     expect(logged).toContain(`Not judged, as no sampled mutant was in code they run: ${path} > claim 1 — a returns its argument`);
   }, 180_000);
 
+  it('counts code a test reads but another take ran as code that test runs: load-time code, a module an earlier test loaded, a concurrent test (#1783 review)', async () => {
+    const project = await makeProject({
+      'vitest.config.ts': VITEST_CONFIG,
+      'src/t.ts': 'export function build(): number[] {\n  const n = 1;\n  return [n];\n}\nexport const TABLE = build();\n',
+      'src/u.ts': 'export const V = 1;\n',
+    });
+    const sources: Record<string, string> = {
+      'tests/load.test.ts': `import { it, expect } from 'vitest';
+import { TABLE, build } from '../src/t';
+it('reads the table', () => { expect(TABLE.length).toBe(1); });
+it('calls build', () => { build(); expect(true).toBe(true); });
+`,
+      'tests/dynamic.test.ts': `import { it, expect } from 'vitest';
+it('loads u', async () => {
+  // Dynamic import: the module is first loaded inside this test, and the next test reads it.
+  await import('../src/u');
+});
+it('reads u', async () => {
+  // Dynamic import: cached by the test before, so none of its code runs in this test.
+  const { V } = await import('../src/u');
+  expect(typeof V).toBe('number');
+});
+`,
+      'tests/concurrent.test.ts': `import { describe, it, expect } from 'vitest';
+import { build } from '../src/t';
+let release = () => {};
+const released = new Promise<void>((resolve) => { release = resolve; });
+describe.concurrent('side by side', () => {
+  it('first', async () => { await released; expect(build().length).toBe(1); });
+  it('second', async () => { release(); await released; expect(true).toBe(true); });
+});
+`,
+    };
+    const testFiles = [];
+    for (const [path, source] of Object.entries(sources)) {
+      const absPath = join(project, path);
+      await fs.mkdir(dirname(absPath), { recursive: true });
+      await fs.writeFile(absPath, source);
+      testFiles.push({ path, absPath, source });
+    }
+    const added = new Map([['src/t.ts', lines(2)], ['src/u.ts', lines(1)]]);
+    const result = await runMutationCheck({ projectDir: project, testFiles, added, claims: [], seed: 'fixture', log: () => {} });
+    const judged = (detail: string) => detail.startsWith('This test passed under all 1 sampled small breaks');
+    expect(result.findings.filter((f) => judged(f.detail)).map((f) => f.subject).sort()).toEqual([
+      'tests/concurrent.test.ts > side by side first',
+      'tests/concurrent.test.ts > side by side second',
+      'tests/dynamic.test.ts > loads u',
+      'tests/dynamic.test.ts > reads u',
+      'tests/load.test.ts > calls build',
+      'tests/load.test.ts > reads the table',
+    ]);
+    expect(result.findings).toHaveLength(6);
+  }, 180_000);
+
   it('reports a tautological test and the claim it was the only test for', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     const result = await check(

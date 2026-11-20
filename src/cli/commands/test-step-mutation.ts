@@ -336,7 +336,7 @@ const REPORT_NAME = 'report.json';
 
 /**
  * What every Vite server of the run is extended with: the mutant loader, test locations, and the
- * coverage setup file (`COVERAGE_SETUP`) on a run that records which game code a pin runs. Vitest
+ * coverage setup file (`COVERAGE_SETUP`) on a run that records which game code each test runs. Vitest
  * gives each workspace project its own Vite server from its own config, which inherits nothing from
  * the root config (#937), so the root config and each inline project (`hookProjects`) are extended
  * alike. A project named by a path is left as it is, for the reporter to refuse.
@@ -993,7 +993,7 @@ function coveredTest(coverage: FileCoverage, o: Outcome): number {
 
 /**
  * Each of `tests`' judgement, by `testKey`, from the code it ran unmutated (`readCoverage`): a
- * mutant whose place runs only while the file loads counts as run by every test in it. A test file
+ * mutant whose place runs while the file loads counts as run by every test in it. A test file
  * whose loads could not be told apart from another's (`readReach`'s `unrecorded`) is judged against
  * the whole sample.
  */
@@ -1014,8 +1014,8 @@ async function judgeTests(
     if (!fileCoverage) return [testKey(o), { kind: 'judged', sampled: sampled.size }];
     const index = coveredTest(fileCoverage, o);
     const runs = all.filter((m) => {
-      const { ran, tests: by } = fileCoverage.runs(m.file, m.line, m.column);
-      return ran && (by.length === 0 || by.includes(index));
+      const { loaded, tests: by } = fileCoverage.runs(m.file, m.line, m.column);
+      return loaded || by.includes(index);
     });
     const inSample = runs.filter((m) => sampled.has(m)).length;
     return [testKey(o), inSample > 0 ? { kind: 'judged', sampled: inSample } : runs.length > 0 ? { kind: 'not-judged' } : { kind: 'runs-none' }];
@@ -1026,11 +1026,12 @@ async function judgeTests(
 const isGameModule = (path: string) =>
   path.startsWith('src/') && /\.(ts|mts|cts|js|mjs|vue)$/.test(path) && !/\.(test|spec|d)\.[a-z]+$/.test(path);
 
-/** A place a pin runs that a mutant can change, and the tests that run it (indexes into `FileCoverage.tests`). */
+/** A place a pin runs that a mutant can change, and the tests that run it (`PositionRuns`). */
 interface PinSite {
   path: string;
   text: string;
   site: MutantSite;
+  loaded: boolean;
   tests: number[];
 }
 
@@ -1092,7 +1093,7 @@ function rankPinSites(
     if (!runs.ran) continue;
     const rank = changed.has(site.line) ? 0 : runs.tests.length > 0 ? runs.tests.length : coverage.tests.length + 1;
     const ranked = byRank.get(rank) ?? [];
-    ranked.push({ path, text, site, tests: runs.tests });
+    ranked.push({ path, text, site, loaded: runs.loaded, tests: runs.tests });
     byRank.set(rank, ranked);
   }
   return byRank;
@@ -1100,7 +1101,7 @@ function rankPinSites(
 
 /**
  * For each of `pin`'s tests, by `testKey`, the sites it runs, in `pinSites` order; a site that runs
- * only while the file loads counts as run by every test.
+ * while the file loads counts as run by every test.
  */
 function pinQueues(
   pin: ChunkTestFile,
@@ -1113,7 +1114,7 @@ function pinQueues(
       .filter((o) => o.path === pin.path)
       .map((o) => {
         const index = coveredTest(coverage, o);
-        return [testKey(o), sites.filter((s) => s.tests.length === 0 || s.tests.includes(index))] as const;
+        return [testKey(o), sites.filter((s) => s.loaded || s.tests.includes(index))] as const;
       }),
   );
 }
