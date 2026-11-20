@@ -262,28 +262,6 @@ function passUnexpected(): WorldRefusal {
 }
 
 /**
- * A SURVEY PASS THAT WROTE, CAUGHT BEFORE IT LEAVES (ShufflewickPub #449).
- *
- * The pass is built to write nothing, so this can only fail if THIS FILE stops
- * being true -- which is exactly why it is an assertion and not a filter.
- * Dropping the bytes silently would hand the host a correct-looking answer for
- * a world that had already been half migrated by a pass the host was told does
- * not write.
- */
-function assertSurveyWroteNothing(answer: WorldMigrated): void {
-  const wrote = [...Object.keys(answer.partitions), ...Object.keys(answer.created)];
-  if (wrote.length === 0) return;
-  throw worldRefusal(
-    "world-migration-unavailable",
-    `A survey pass produced bytes for ${wrote.sort().join(", ")}, and a survey pass writes ` +
-      "nothing. This is a fault in the engine rather than in this world's migration: the pass " +
-      "that folds the world into a digest is the one a host runs a page at a time, and it is " +
-      "only safe to re-run because it cannot write. Report it with this world's bundle. The " +
-      "world was not changed.",
-  );
-}
-
-/**
  * THE ROOTS THIS VERSION ADDS, on the one call that adds them (#218, #402).
  *
  * A paged host says which call creates; a whole-world migration is always that
@@ -555,7 +533,7 @@ function surveyPass(
   page: readonly string[],
   ctx: WorldMigrateContext,
 ): WorldMigrated {
-  const answer: WorldMigrated = {
+  return {
     partitions: {},
     created: {},
     digest: serializedDigest(
@@ -565,8 +543,6 @@ function surveyPass(
     ),
     nextElementId: engine.nextElementId(),
   };
-  assertSurveyWroteNothing(answer);
-  return answer;
 }
 
 /**
