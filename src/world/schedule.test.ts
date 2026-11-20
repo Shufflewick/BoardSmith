@@ -408,7 +408,7 @@ describe("unkeyedScheduleRefusal — the one refusal in the design", () => {
   });
 });
 
-describe("scheduleBatchRefusal — the batch cap agrees with the holding caps (#170)", () => {
+describe("scheduleBatchRefusal — admits a mixed batch, refuses past the cap with a way forward (#170)", () => {
   test("admits a MIXED batch every holding cap would admit whole (#205)", () => {
     // A setup command arming 64 named building timers and one unkeyed kickoff.
     // 65 requests, all of them admissible -- 64 under the keyed cap, 1 under
