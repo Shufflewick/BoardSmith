@@ -456,14 +456,19 @@ function knownName(el: GameElement): string | undefined {
   return el.isAttributeRedacted('name') ? undefined : el.name;
 }
 
+/** Does `el` hold `value` at `key`? A name this copy was not told matches none. */
+function attributeMatches(el: GameElement, key: string, value: unknown): boolean {
+  if (key === 'name' && el.isAttributeRedacted('name')) return false;
+  return (el as unknown as Record<string, unknown>)[key] === value;
+}
+
 /**
  * A finder as a predicate. An object finder's entries are read once per query,
  * when it first tests an element, not once per element tested.
  */
 function toPredicate<F extends GameElement>(finder: ElementFinder<F>): (el: F) => boolean {
-  // A name this copy was not told matches no name: the seat cannot say which card it is (#1782).
   if (typeof finder === 'string') {
-    return (el) => !el.isAttributeRedacted('name') && el.name === finder;
+    return (el) => attributeMatches(el, 'name', finder);
   }
   if (typeof finder === 'function') {
     return finder;
@@ -476,10 +481,8 @@ function toPredicate<F extends GameElement>(finder: ElementFinder<F>): (el: F) =
         if (value !== el.isEmpty()) return false;
       } else if (key === 'mine') {
         if (value !== el.isMine()) return false;
-      } else if (key === 'name') {
-        if (el.isAttributeRedacted('name') || el.name !== value) return false;
       } else {
-        if ((el as Record<string, unknown>)[key] !== value) return false;
+        if (!attributeMatches(el, key, value)) return false;
       }
     }
     return true;
