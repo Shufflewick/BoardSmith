@@ -416,7 +416,7 @@ const isActionHelpVisible = actionHelpPreference().use('actionHelp');
 // derived from a single `currentPlayer` (that identity is meaningless when
 // multiple seats are deciding independently).
 const isSimultaneous = computed(() => {
-  return (state.value?.flowState.awaitingPlayers?.length ?? 0) > 0;
+  return (state.value?.flowState?.awaitingPlayers?.length ?? 0) > 0;
 });
 
 // The panel draws no open action while history is shown.
@@ -1225,7 +1225,7 @@ watch(isMyTurn, (newVal) => {
 // A restart clears `complete` back to false — re-arm the dismissed card and
 // the announcement so the NEXT completion shows and says it again (D10, #419).
 watch(
-  () => state.value?.flowState.complete,
+  () => state.value?.flowState?.complete,
   (newComplete) => {
     if (!newComplete) {
       gameOverDismissed.value = false;
@@ -1238,7 +1238,7 @@ watch(
 // Winners are captured when the flow completes, and a running bot demo stops.
 // Nothing here is shown or said: that waits for `gameOverRevealed` below.
 watch(
-  () => state.value?.flowState.complete,
+  () => state.value?.flowState?.complete,
   (newComplete, oldComplete) => {
     if (newComplete && !oldComplete) {
       // Stop any running bot demo when the game completes. isDemoRunning is
