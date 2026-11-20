@@ -1,5 +1,5 @@
 {
-  "revision": 465,
+  "revision": 466,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3663,6 +3663,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "eachPlayer, forEach, switchOn and ifThen take their named config types, a packed-file change with no behaviour change (#1738)"
+    },
+    {
+      "revision": 466,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "colorPalette entries are read only as { id, hex, label }; any other shape, a non-list or an empty palette is refused with a message naming it (#1739)"
     }
   ]
 }
