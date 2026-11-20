@@ -21,10 +21,11 @@ describe('boardsmith verify: the smoke check', () => {
   it('#1659: takes an action still to take before skipping the wait, which would end the moment the game offers it', async () => {
     const { outcome, steps } = await smokeOf(false, { ...playbackGame({ cheer: true }), 'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'cheer', 'ready'], undefined, { steps: 8 }) });
 
+    // Checked first: a walk that failed before taking "cheer" would otherwise report only a missing step (#1730).
+    expect(outcome.passed, outcome.summary).toBe(true);
     const cheered = steps.findIndex((line) => line.endsWith('taking "cheer"'));
     expect(cheered).toBeGreaterThan(0);
     expect(cheered).toBeLessThan(steps.findIndex((line) => line.includes("skipping the step clock's wait")));
-    expect(outcome.passed, outcome.summary).toBe(true);
   });
 
   it('#1593: walks as it would without an `unreachable` declaration, so the action it says to remove one for is still taken once it is removed', async () => {
@@ -33,8 +34,8 @@ describe('boardsmith verify: the smoke check', () => {
       'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], { levelUp: 'Greyed by the step clock for ten minutes, which a walk never waits out.' }, { steps: 8 }),
     });
 
+    expect(outcome.passed, outcome.summary).toBe(true);
     expect(steps.some((line) => line.endsWith('skipping the step clock\'s wait, with "levelUp" still to take and greyed'))).toBe(true);
-    expect(outcome.passed).toBe(true);
     expect(outcome.summary).toMatch(/a seated player took "levelUp", "ready".*The walk took "levelUp", which .* remove it from `unreachable` there/);
   });
 });
