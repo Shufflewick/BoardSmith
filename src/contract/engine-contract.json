@@ -1,5 +1,5 @@
 {
-  "revision": 501,
+  "revision": 502,
   "surfaceHash": "8b31596b3aaadef6",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3951,6 +3951,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "actionStep takes undo: 'action', so each Undo takes back the seat's last action alone and the seat can keep undoing back to its turn start, within the usual notUndoable, irreversible and random-draw fences; the flow state carries undoEachAction while such a step is open. A game must be rebuilt on this revision to declare it (#1759)"
+    },
+    {
+      "revision": 502,
+      "date": "2026-11-20",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "The bs design review keeps its screenshots out of the game repo and re-renders the cohesion baseline from the previous UI chunk's verified commit"
     }
   ]
 }

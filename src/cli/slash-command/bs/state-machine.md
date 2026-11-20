@@ -53,7 +53,8 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
   (`../node_modules/boardsmith/src/engine/element/game.ts`), which is the copy this project runs,
   and every check reads it there. A path in any other repository is written `<repo>:<path>`
   (`other-game:src/rules/duel.ts`) so it is not read as this game's.
-  The design-review screenshots in `chunks/<slug>/shots/` are committed evidence of the same kind.
+  The design review's screenshots are not evidence: they are deleted when the review ends and no
+  ledger entry cites them (`build/design-review.md`).
 - **A repro that proves a fix is a regression test, not evidence.** Scripts are split by purpose
   (designer ruling, 2026-10-03, #485). A repro that proves a fix goes in `tests/` with a Spec
   Manifest row (`build/build.md`), where `boardsmith test-step-check` shows it can fail. `evidence/`
