@@ -1,5 +1,5 @@
 {
-  "revision": 466,
+  "revision": 467,
   "surfaceHash": "20d2691fd60a442e",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3671,6 +3671,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "colorPalette entries are read only as { id, hex, label }; any other shape, a non-list or an empty palette is refused with a message naming it (#1739)"
+    },
+    {
+      "revision": 467,
+      "date": "2026-11-20",
+      "surfaceHash": "20d2691fd60a442e",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "DevHostLobbyReply is now derived from the dev host's lobby message type; declared types only, wire data unchanged (#1740)."
     }
   ]
 }
