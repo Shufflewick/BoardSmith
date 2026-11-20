@@ -66,4 +66,8 @@ describe('world budgets', () => {
       expect(() => worldBudgets({ maxPlayers: bad })).toThrow(/maxPlayers/);
     },
   );
+
+  it.each(Object.keys(worldBudgets()))('refuses a zero %s, naming the field', (field) => {
+    expect(() => worldBudgets({ [field]: 0 })).toThrow(new RegExp(`\`${field}\``));
+  });
 });
