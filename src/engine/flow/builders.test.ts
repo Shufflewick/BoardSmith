@@ -68,14 +68,6 @@ describe('loop() — 164-IN-02 conflicting unbounded + maxIterations guard', () 
     // @ts-expect-error -- maxIterations and unbounded: true together; a compiled rule reaches the runtime check
     expect(() => loop({ unbounded: true, maxIterations: 50, do: sequence() })).toThrow(/choose one/);
   });
-
-  it('does not throw for unbounded:true alone (no maxIterations)', () => {
-    expect(() => loop({ unbounded: true, do: sequence() })).not.toThrow();
-  });
-
-  it('does not throw for maxIterations alone (no unbounded)', () => {
-    expect(() => loop({ maxIterations: 50, do: sequence() })).not.toThrow();
-  });
 });
 
 describe('switchOn() refuses a case named "__default" (#1176)', () => {

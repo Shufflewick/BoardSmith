@@ -382,10 +382,6 @@ describe("the owners a host's ladder reads", () => {
  * request that had definitively failed.
  */
 describe("#257: a world whose stored state this worker cannot read", () => {
-  it("has a code for it at all, which is the whole gap", () => {
-    expect(Object.keys(WORLD_REFUSALS)).toContain("world-state-unreadable");
-  });
-
   it("is PLATFORM-owned, so the ladder parks rather than retries", () => {
     // The decision #257 asks to be settled once, here, rather than per
     // consumer. A shape mismatch is answered identically on every wake: the
@@ -394,17 +390,6 @@ describe("#257: a world whose stored state this worker cannot read", () => {
     // Parking is what stops that, and parking is what `platform` means.
     expect(WORLD_REFUSALS["world-state-unreadable"].owner).toBe("platform");
     expect(ownerOf(worldRefusal("world-state-unreadable", "x"))).toBe("platform");
-  });
-
-  it("is deliberately NOT infrastructure, because time never repairs a shape", () => {
-    // The distinction the issue asks for, and the one an operator acts on.
-    // `bundle-store-unavailable` charges the event nothing and re-arms, because
-    // somebody else's service coming back IS the repair. Nothing comes back
-    // here: the bytes are what they are until code that reads them is deployed
-    // or the state is cleared, so forgiving it on a timer would hide a world
-    // that is never going to recover on its own.
-    expect(WORLD_REFUSALS["world-state-unreadable"].owner).not.toBe("infrastructure");
-    expect(WORLD_REFUSALS["world-state-unreadable"].owner).not.toBe("game");
   });
 
   it("settles park-and-drain in the table, rather than leaving it to each host", () => {

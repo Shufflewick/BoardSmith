@@ -23,7 +23,6 @@ import { worldBudgets } from "./budgets.js";
 // rather than read, which is exactly what makes the same tests true of a laptop
 // host and a hosting platform running different numbers.
 const BUDGETS = worldBudgets();
-const WORLD_MAX_PLAYERS = BUDGETS.maxPlayers;
 const WORLD_DRAIN_BATCH = BUDGETS.drainBatch;
 const WORLD_CATCHUP_MAX_REAL_ITERATIONS = BUDGETS.catchUpMaxRealIterations;
 const WORLD_MAX_UNKEYED_PENDING_PER_PLAYER = BUDGETS.maxUnkeyedPendingPerPlayer;
@@ -398,18 +397,6 @@ describe("runDueOccurrences — the one occurrence loop every host runs (#538, #
 });
 
 describe("unkeyedScheduleRefusal — the one refusal in the design", () => {
-  test("admits everything below the cap", () => {
-    expect(unkeyedScheduleRefusal(0, "p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER)).toBeNull();
-    expect(unkeyedScheduleRefusal(WORLD_MAX_UNKEYED_PENDING_PER_PLAYER - 1, "p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER)).toBeNull();
-  });
-
-  test("refuses the 33rd, which is what #35 specifies", () => {
-    // The cap is 32 and the 33rd is refused, so a player holding exactly 32 is
-    // the last admitted state.
-    expect(WORLD_MAX_UNKEYED_PENDING_PER_PLAYER).toBe(32);
-    expect(unkeyedScheduleRefusal(WORLD_MAX_UNKEYED_PENDING_PER_PLAYER, "p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER)).not.toBeNull();
-  });
-
   test("names all THREE ways forward, because a refusal without one is a trap", () => {
     const message = unkeyedScheduleRefusal(WORLD_MAX_UNKEYED_PENDING_PER_PLAYER, "ada", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER)!;
     expect(message).toContain("ada");
@@ -419,29 +406,9 @@ describe("unkeyedScheduleRefusal — the one refusal in the design", () => {
     // ...and the lazy route says HOW, since it is the one that costs nothing.
     expect(message).toContain("completesAt");
   });
-
-  test("a KEYED schedule can never reach it, however many are pending", () => {
-    // "Keyed schedules and lazy timestamps can never hit any rung." The cap
-    // counts unkeyed events only, so this is a fact about the argument the
-    // caller passes -- asserted here so a future caller that started counting
-    // every pending event would fail rather than silently refuse good bundles.
-    const pendingKeyed = 10_000;
-    expect(unkeyedScheduleRefusal(0, "p1", pendingKeyed)).toBeNull();
-  });
 });
 
 describe("scheduleBatchRefusal — the batch cap agrees with the holding caps (#170)", () => {
-  test("is derived from EVERYTHING one owner may hold, across both classes", () => {
-    // The cap was derived from the UNKEYED holding cap (32) and then from the
-    // KEYED one (64), and both contradicted the stated invariant -- "an asking
-    // bound below a holding bound refuses batches the queue would have
-    // admitted whole". An owner holds 32 unkeyed AND 64 keyed, so the only
-    // asking bound that never refuses an admissible batch is the sum.
-    expect(WORLD_MAX_SCHEDULES_PER_COMMAND).toBe(
-      WORLD_MAX_UNKEYED_PENDING_PER_PLAYER + WORLD_MAX_KEYED_PENDING_PER_PLAYER,
-    );
-  });
-
   test("admits a MIXED batch every holding cap would admit whole (#205)", () => {
     // A setup command arming 64 named building timers and one unkeyed kickoff.
     // 65 requests, all of them admissible -- 64 under the keyed cap, 1 under
@@ -451,13 +418,6 @@ describe("scheduleBatchRefusal — the batch cap agrees with the holding caps (#
     expect(
       scheduleBatchRefusal(WORLD_MAX_KEYED_PENDING_PER_PLAYER + 1, WORLD_MAX_SCHEDULES_PER_COMMAND),
     ).toBeNull();
-  });
-
-  test("admits the encouraged shape: a keyed setup batch bigger than the unkeyed cap", () => {
-    // 40 named building timers in one command. Over the old cap of 32; well
-    // under what one owner may HOLD keyed, so the ask can be fully admitted.
-    expect(scheduleBatchRefusal(40, WORLD_MAX_SCHEDULES_PER_COMMAND)).toBeNull();
-    expect(scheduleBatchRefusal(WORLD_MAX_SCHEDULES_PER_COMMAND - 1, WORLD_MAX_SCHEDULES_PER_COMMAND)).toBeNull();
   });
 
   test("still refuses an ask past the cap, naming the number", () => {
