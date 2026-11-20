@@ -432,70 +432,20 @@ export function useFLIP(options: UseFLIPOptions): UseFLIPReturn {
 }
 
 /**
- * Simplified FLIP animation for a single update cycle.
- * Use this for one-off animations without tracking state.
+ * One-off FLIP animation: `useFLIP` captured on creation. `animate()` plays once,
+ * records traces in animation test mode, and reports an element with no anchor attribute.
  *
  * @param containerRef - Ref to container element
  * @param selector - CSS selector for elements to animate
  * @param options - Animation options
- * @returns A function that captures positions and returns an animate function
+ * @returns The animate function for the positions captured now
  */
 export function createFLIPSnapshot(
   containerRef: Ref<HTMLElement | null>,
   selector: string = '[data-card-id]',
   options: { duration?: number; easing?: string } = {}
 ): { animate: () => Promise<void> } {
-  const { duration = 300, easing = 'ease-out' } = options;
-  const positions = new Map<string, DOMRect>();
-
-  // Capture positions immediately
-  if (containerRef?.value) {
-    const elements = containerRef.value.querySelectorAll(selector);
-    elements.forEach((el) => {
-      const id = getElementId(el);
-      if (id) {
-        positions.set(id, el.getBoundingClientRect());
-      }
-    });
-  }
-
-  return {
-    async animate(): Promise<void> {
-      if (prefersReducedMotion.value || !containerRef?.value || positions.size === 0) {
-        return;
-      }
-
-      const animations: Animation[] = [];
-      const zoom = boardZoomAt(containerRef.value);
-      const elements = containerRef.value.querySelectorAll(selector);
-
-      elements.forEach((el) => {
-        const id = getElementId(el);
-        if (!id) return;
-
-        const oldRect = positions.get(id);
-        if (!oldRect) return;
-
-        const newRect = el.getBoundingClientRect();
-        const deltaX = oldRect.left - newRect.left;
-        const deltaY = oldRect.top - newRect.top;
-
-        if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) {
-          return;
-        }
-
-        animations.push(
-          (el as HTMLElement).animate(
-            [
-              { transform: `translate(${deltaX / zoom}px, ${deltaY / zoom}px)` },
-              { transform: 'translate(0, 0)' },
-            ],
-            { duration, easing, fill: 'backwards' }
-          )
-        );
-      });
-
-      await Promise.all(animations.map((a) => a.finished));
-    },
-  };
+  const flip = useFLIP({ containerRef, selector, duration: options.duration, easing: options.easing });
+  flip.capture();
+  return { animate: flip.animate };
 }
