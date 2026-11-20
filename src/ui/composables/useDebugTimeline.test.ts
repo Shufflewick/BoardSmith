@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { nextTick } from 'vue';
 import { useDebugTimeline } from './useDebugTimeline.js';
 import type { DebugBridge, DebugHistory, SerializedAction } from './useDebugBridge.js';
-import type { PlayerState } from '../../client/types.js';
+import type { PlayerGameState } from '../../client/types.js';
 
 const HISTORY: SerializedAction[] = [
   { name: 'playCard', player: 1, args: {}, timestamp: 1000 },
@@ -16,7 +16,7 @@ function kept(actionHistory: SerializedAction[]): DebugHistory {
 }
 
 /** The seat's state after an action, as the host answers `debug:state-at`. */
-const HISTORICAL: PlayerState = {
+const HISTORICAL: PlayerGameState = {
   phase: 'play',
   players: [],
   availableActions: [],

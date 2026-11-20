@@ -1300,7 +1300,7 @@ function assertCoversWorldOffer(facts: {
  * other backend's whole read path.
  *
  * A world is not a table with different storage: a table holds its tree
- * resident and ships a `PlayerState.view`, while a world keeps only named
+ * resident and ships a `PlayerGameState.view`, while a world keeps only named
  * partitions resident and answers `{ state, phase }` per seat, pruned
  * to what that seat's declaration named. `games/src/world-session.ts` calls
  * this path for every watcher of every world, so a change to what it produces

@@ -182,7 +182,7 @@ export interface ElementMatchOptions {
  * Player information, as GameShell passes it to a game's board slot.
  *
  * `seat`, not `position`: this mirrors the wire shape
- * (`PlayerState.players`, client/types.ts) and what GameShell itself reads
+ * (`PlayerGameState.players`, client/types.ts) and what GameShell itself reads
  * (`players.value.find(p => p.seat === ...)`). The field was declared as
  * `position` here for a long time and nothing caught it, because the ambient
  * `*.vue` shim meant no game template was ever type-checked against it.

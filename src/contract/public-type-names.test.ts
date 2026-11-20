@@ -165,8 +165,9 @@ const SHARED_ACCEPTED: readonly string[] = [
   'src/engine/element/game.ts:AnimationEvent',
   'src/types/protocol.ts:ElementRef',
   'src/world/contract.ts:WorldActionOffer',
-  // The flow state a client renders.
+  // The flow state and seat state a client renders, which the session builds.
   'src/engine/flow/public-flow-state.ts:PublicFlowState',
+  'src/session/types.ts:PlayerGameState',
   // Player colours: the lobby (session) offers them and the UI paints them.
   'src/session/colors.ts:ColorChoice',
   // boardsmith/ui/auto-ui is the auto UI on its own; boardsmith/ui carries it too.

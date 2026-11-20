@@ -24,11 +24,9 @@ import type { ComputedRef } from 'vue';
 import type { Game, ElementJSON, RestoreOnlyRootField, SeatViewJSON } from '../engine/index.js';
 import type { PlayerStateView } from '../engine/utils/index.js';
 import type { PlayerGameState } from '../session/index.js';
-import type { PlayerState } from '../client/types.js';
 import type { SeatProjection, WorldSeatView } from '../testing/index.js';
 import type { GameRootView, GameViewElement } from './types.js';
 // Type imports are erased; these link the test to the files for verify's related-tests check.
-import '../client/types.js';
 import './types.js';
 import type { useTableSeat } from './composables/useTableSeat.js';
 
@@ -37,7 +35,7 @@ type GameRootJSON = ReturnType<Game['toJSON']>;
 /**
  * Ships in a seat's view (its visible events, renumbered for the seat), but a
  * board reads animation events through `useAnimationEvents`, fed from
- * `PlayerState.animationEvents`. Declaring it on `GameRootView` would give a
+ * `PlayerGameState.animationEvents`. Declaring it on `GameRootView` would give a
  * board a second place to read the same events.
  */
 type AnimationEventsRootField = 'animationEvents';
@@ -71,7 +69,6 @@ describe('GameRootView and Game.toJSON (#615)', () => {
     expectTypeOf<ReturnType<Game['toJSONForPlayers']>>().toEqualTypeOf<SeatViewJSON[]>();
     expectTypeOf<PlayerStateView['state']>().toEqualTypeOf<SeatViewJSON>();
     expectTypeOf<PlayerGameState['view']>().toEqualTypeOf<SeatViewJSON>();
-    expectTypeOf<PlayerState['view']>().toEqualTypeOf<SeatViewJSON>();
     expectTypeOf<SeatProjection['state']>().toEqualTypeOf<SeatViewJSON>();
     expectTypeOf<WorldSeatView['state']>().toEqualTypeOf<SeatViewJSON>();
   });

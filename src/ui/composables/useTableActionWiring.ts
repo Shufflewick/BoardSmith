@@ -6,7 +6,7 @@
  * board is given), and so should anything else that mounts a board against a
  * live game without the whole shell: a game's a11y or keyboard test above all
  * (build/test.md, "The A11y Floor" item 1). Hand it this seat's latest published
- * state (`PlayerGameState`, or the client's `PlayerState` for the same seat) and
+ * state (`PlayerGameState`) and
  * the transport, and it reads everything else the controller and the bridge need
  * off that state: action metadata, disabled reasons, the tutorial step, and which
  * game tree the state came from.
@@ -43,9 +43,8 @@ import { useDrawnBoardElements } from './useDrawnBoardElements.js';
 import { ACTION_HOLDS_KEY, createActionHolds, withHolds } from './actionHolds.js';
 
 /**
- * The fields of a seat's published state this wiring reads. Both
- * `PlayerGameState` (what the host publishes to a seat) and the
- * client's `PlayerState` satisfy it.
+ * The fields of a seat's published state this wiring reads.
+ * `PlayerGameState` (what the host publishes to a seat) satisfies it.
  */
 export interface TableSeatState {
   actionMetadata?: Record<string, WireActionMetadata>;

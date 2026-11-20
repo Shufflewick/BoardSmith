@@ -18,17 +18,17 @@ import type { PlayerGameState } from '../session/types.js';
 export type { PublicFlowState };
 
 /**
- * A seat's state as the host sends it: the session's `PlayerGameState`, with
- * the host's merged fields (hint, demo, teaching lockout) declared there.
+ * A seat's state as the host sends it, with the host's merged fields (hint,
+ * demo, teaching lockout) declared there.
  */
-export type PlayerState = PlayerGameState;
+export type { PlayerGameState };
 
 export interface GameState {
   /** Flow state (turn info, available actions) */
   flowState: PublicFlowState;
 
   /** Player-specific state */
-  state: PlayerState;
+  state: PlayerGameState;
 
   /** This player's seat */
   playerSeat: number;

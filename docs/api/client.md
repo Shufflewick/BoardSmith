@@ -13,7 +13,7 @@ Import from `boardsmith/client` when you want to:
 
 - drive a running `boardsmith dev` host from a script (`createDevHostClient`),
 - control the shell's sounds (`audioService`), or
-- type the state a board receives (`GameState`, `PlayerState`, `PublicFlowState`).
+- type the state a board receives (`GameState`, `PlayerGameState`, `PublicFlowState`).
 
 ## Exports
 
@@ -31,7 +31,7 @@ Import from `boardsmith/client` when you want to:
 - `DevHostClient`, `DevHostClientOptions`, `DevHostLobbyReply`, `DevHostStateReply`, `DevHostInboundMessage` - The dev-host client and its replies
 - `DevHostSeatInfo` - One lobby seat, the host's own `LobbySeat`: `seat`, `held`, `mine`, `name`, `color`, `connected`, `bot` and `playerOptions`
 - `GameState` - What a host sends one seat: `{ flowState, state, playerSeat, isSpectator }`
-- `PlayerState` - The seat's own state (`players`, `view`, `isMyTurn`, `actionMetadata`, `messages`, ...)
+- `PlayerGameState` - The seat's own state (`players`, `view`, `isMyTurn`, `actionMetadata`, `messages`, ...)
 - `PublicFlowState` - What a seat is told of the flow
 - `AudioServiceOptions` - Audio service options
 
