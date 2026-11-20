@@ -12,7 +12,7 @@
 
 import { resolveWsCtor } from './ws-ctor.js';
 import { applyViewPatch, type ViewPatch } from '../session/view-patch.js';
-import type { LobbySeat } from '../cli/dev-host/multiplayer-host.js';
+import type { HostOutbound, LobbySeat } from '../cli/dev-host/multiplayer-host.js';
 
 /** Default timeout for requestId-correlated requests. */
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
@@ -20,17 +20,11 @@ const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 /** One seat's lobby info, exactly the host's `LobbySeat`. */
 export type DevHostSeatInfo = LobbySeat;
 
-/** Reply shape for `getLobby()` — same fields as the `lobby` broadcast, minus wire framing. */
-export interface DevHostLobbyReply {
-  /** Whether debugging is on for this table (#481). */
-  debug: boolean;
-  phase: 'lobby' | 'playing';
-  seats: DevHostSeatInfo[];
-  minPlayers: number;
-  playerCount: number;
-  /** The game options the next (re)start uses, as the host applied them (#541). */
+/** Reply shape for `getLobby()`: the host's `lobby` message, minus wire framing. */
+export type DevHostLobbyReply = Omit<Extract<HostOutbound, { type: 'lobby' }>, 'type' | 'requestId' | 'gameOptions'> & {
+  /** The game options the next (re)start uses (#541); unbranded, since JSON from the socket was never checked by `selectGameOptions`. */
   gameOptions: Record<string, unknown>;
-}
+};
 
 /** Reply shape for `getState()` — the caller's own seat view, same as a `game_state` broadcast, whole. */
 export interface DevHostStateReply {
@@ -323,7 +317,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
       expectType(msg, 'lobby');
       return {
         debug: msg.debug === true,
-        phase: msg.phase as 'lobby' | 'playing',
+        phase: msg.phase as DevHostLobbyReply['phase'],
         seats: msg.seats as DevHostSeatInfo[],
         minPlayers: msg.minPlayers as number,
         playerCount: msg.playerCount as number,
