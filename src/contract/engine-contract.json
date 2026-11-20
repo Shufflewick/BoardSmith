@@ -1,5 +1,5 @@
 {
-  "revision": 492,
+  "revision": 493,
   "surfaceHash": "a51fc3c45daf0de3",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3879,6 +3879,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "FlowState no longer carries movesRemaining or movesRequired, which no seat was sent and nothing read; minMoves and maxMoves behave as before (#1773)"
+    },
+    {
+      "revision": 493,
+      "date": "2026-11-20",
+      "surfaceHash": "a51fc3c45daf0de3",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Removed an internal survey-pass assertion that could never fail; migration behaviour is unchanged."
     }
   ]
 }
