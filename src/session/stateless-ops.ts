@@ -38,7 +38,7 @@ import { describeMoveForHint, DEST_KEYS } from './move-summary.js';
 import { PERSIST_KEY, PERSIST_PRIVATE_KEY, type PersistCommit } from '../persistence/persistence.js';
 import { PickHandler } from './pick-handler.js';
 import { picksFromSeat } from '../engine/element/seat-placeholders.js';
-import { missingFieldError } from './parse-executor-op.js';
+import { missingFieldMessage } from './parse-executor-op.js';
 import { restorePolicies, runnerFromSnapshot, withHostState } from './runner-from-snapshot.js';
 import { declaredGameOptionsOf } from './game-option-selection.js';
 import {
@@ -945,7 +945,7 @@ async function handleSelectionStep(
 ): Promise<OpResultFor<'selectionStep'>> {
   // A caller that skipped parseExecutorOp gets its answer: undefined is what a
   // JSON hop turns into a missing value, never a skip (#594).
-  if (op.value === undefined) return errorResult(missingFieldError('selectionStep', 'value'), 'protocol');
+  if (op.value === undefined) return errorResult(missingFieldMessage('selectionStep', 'value'), 'protocol');
   const runner = runnerFromSnapshot(snapshot, def);
 
   const handler = new PickHandler(runner);

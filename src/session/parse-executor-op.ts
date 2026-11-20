@@ -22,6 +22,9 @@ export type ParsedExecutorOp = { ok: true; op: ExecutorOp } | { ok: false; error
 
 type ExecutorOpType = ExecutorOp['type'];
 
+/** A field of the op of type `T`, `type` aside. */
+type OpField<T extends ExecutorOpType> = Exclude<keyof OpOfType<T>, 'type'> & string;
+
 /**
  * How one field is checked. `optional` is computed from the op's own type, so a
  * field made optional (or required) in `ExecutorOp` without the same change
@@ -188,8 +191,8 @@ function undeclaredKeyError(
 }
 
 /** The refusal for the first declared field `value` lacks or holds a wrong value for, or `null`. */
-function fieldError(
-  type: ExecutorOpType,
+function fieldError<T extends ExecutorOpType>(
+  type: T,
   value: Record<string, unknown>,
   rules: Record<string, FieldRule<boolean>>,
 ): string | null {
@@ -198,7 +201,8 @@ function fieldError(
     // and an in-process caller must get the wire's answer (#555, #594).
     if (value[field] === undefined) {
       if (rule.optional) continue;
-      return missingFieldMessage(type, field);
+      // `rules` is RULES[type], so each of its keys is a field of this op.
+      return missingFieldMessage(type, field as OpField<T>);
     }
     if (!rule.accepts(value[field])) {
       return `The "${type}" op's "${field}" must be ${rule.must}, but it is ${describe(value[field])}.`;
@@ -212,14 +216,7 @@ function fieldError(
  * `undefined` in it. `executeOp` gives the same refusal for the fields it
  * checks itself, so a caller that skips this parser is told the same thing.
  */
-export function missingFieldError<T extends ExecutorOpType>(
-  type: T,
-  field: Exclude<keyof OpOfType<T>, 'type'> & string,
-): string {
-  return missingFieldMessage(type, field);
-}
-
-function missingFieldMessage(type: ExecutorOpType, field: string): string {
+export function missingFieldMessage<T extends ExecutorOpType>(type: T, field: OpField<T>): string {
   const rule: FieldRule<boolean> = (RULES[type] as Record<string, FieldRule<boolean>>)[field];
   return `The "${type}" op has no "${field}"${rule.why ? `: ${rule.why}` : `. It must be ${rule.must}`}.`;
 }
