@@ -236,7 +236,7 @@ const BASE = {
   noticeMaxBytes: 1024,
   // A large clan's worth of recipients in one command.
   maxNoticesPerCommand: 100,
-} as const;
+} as const satisfies Omit<WorldBudgets, "maxSchedulesPerCommand" | "maxPendingEvents">;
 
 /** What a host may say about its budgets. Everything is optional; the two
  *  derived fields are recomputed from whatever is not named. */
