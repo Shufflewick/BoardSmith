@@ -1,5 +1,5 @@
 {
-  "revision": 499,
+  "revision": 500,
   "surfaceHash": "1484bbee9c830c13",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3935,6 +3935,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "test-step-check judges each chunk test only by the sampled mutants in code it runs, read from V8 coverage of the unmutated run (#1783)"
+    },
+    {
+      "revision": 500,
+      "date": "2026-11-20",
+      "surfaceHash": "1484bbee9c830c13",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "A hidden placeholder's name is withheld in a seat's copy and matches no name finder, and create() refuses an attribute the element's class has no field for, such as one named with declare (#1782)"
     }
   ]
 }
