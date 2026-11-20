@@ -6,10 +6,9 @@
  * board is given), and so should anything else that mounts a board against a
  * live game without the whole shell: a game's a11y or keyboard test above all
  * (build/test.md, "The A11y Floor" item 1). Hand it this seat's latest published
- * state (`PlayerGameState`) and
- * the transport, and it reads everything else the controller and the bridge need
- * off that state: action metadata, disabled reasons, the tutorial step, and which
- * game tree the state came from.
+ * state (`PlayerGameState`) and the transport, and it reads everything else the
+ * controller and the bridge need off that state: action metadata, disabled
+ * reasons, the tutorial step, and which game tree the state came from.
  *
  * Why it exists (#378): games used to call `useActionController` and
  * `useBoardActionBridge` themselves, so they had to know which state fields the

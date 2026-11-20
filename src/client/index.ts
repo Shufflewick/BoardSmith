@@ -4,7 +4,7 @@
  * - `createDevHostClient` drives a running `boardsmith dev` host from Node or a
  *   browser: take a seat, read state, perform actions (see docs/agent-control.md).
  * - `audioService` plays the shell's sounds.
- * - `GameState`, `PlayerGameState` and `PublicFlowState` are the shape of the state
+ * - `GameState` and `PublicFlowState` are the shape of the state
  *   a host sends one seat.
  *
  * Games do not connect to a server themselves: a host mounts `GameShell` in an
@@ -26,4 +26,4 @@ export type {
 export { audioService, type AudioServiceOptions } from './audio.js';
 
 // Types
-export type { PublicFlowState, PlayerGameState, GameState } from './types.js';
+export type { PublicFlowState, GameState } from './types.js';

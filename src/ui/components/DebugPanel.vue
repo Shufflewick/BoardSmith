@@ -48,7 +48,7 @@ import StateTab from './debug/StateTab.vue';
 import { useDebugBridge, newestWins, type ActionTrace, type FlowContext, type FlowStateInfo, type LogEntry, type ElementDiff } from '../composables/useDebugBridge.js';
 import { useDebugTimeline } from '../composables/useDebugTimeline.js';
 import { useStateTree } from '../composables/useStateTree.js';
-import type { PlayerGameState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 const props = withDefaults(defineProps<DebugPanelProps>(), {
   expanded: false,

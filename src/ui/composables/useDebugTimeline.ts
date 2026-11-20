@@ -15,7 +15,7 @@
  */
 import { ref, computed, type Ref, type ComputedRef } from 'vue';
 import { newestWins, type DebugBridge, type ElementDiff, type HistoryEntry } from './useDebugBridge.js';
-import type { PlayerGameState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 export interface DebugTimelineOptions {
   /** How the panel talks to the running game. */

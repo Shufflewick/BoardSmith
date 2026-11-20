@@ -23,7 +23,7 @@ import { inject } from 'vue';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
 import { readHostReply } from './usePlatformTransport.js';
 import type { ElementDiff } from '../../session/stateless-ops.js';
-import type { PlayerGameState } from '../../client/types.js';
+import type { PlayerGameState } from '../../session/types.js';
 
 /** The host bridge GameShell provides. */
 export type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;

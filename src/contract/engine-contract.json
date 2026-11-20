@@ -3726,7 +3726,7 @@
       "surfaceHash": "91316674f24cf4fb",
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
-      "summary": "boardsmith/client exports PlayerGameState in place of its PlayerState alias, which no game imported (#1748)"
+      "summary": "boardsmith/client no longer exports PlayerState, its alias of the session's PlayerGameState, which no game imported (#1748)"
     }
   ]
 }
