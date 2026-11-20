@@ -1,6 +1,6 @@
 {
-  "revision": 484,
-  "surfaceHash": "673a9c02b059666e",
+  "revision": 485,
+  "surfaceHash": "a91e87d89d56e6da",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -3815,6 +3815,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "turnLoop() and stateAwareLoop() are removed from boardsmith's exports. Use loop({ maxIterations, while, do: actionStep({ actions, turnScope }) }) instead, and put any pending-state check at the top of the loop's while. Games already published on an earlier revision are unaffected; a game rebuilt on this revision that imports either builder no longer builds."
+    },
+    {
+      "revision": 485,
+      "date": "2026-11-20",
+      "surfaceHash": "a91e87d89d56e6da",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "Game.debugElementTree() is removed. Count elements with game.all(Class).length instead; development mode already throws TREE CORRUPTION when a query reaches an element twice. Games already published on an earlier revision are unaffected; a game rebuilt on this revision that calls it no longer builds."
     }
   ]
 }

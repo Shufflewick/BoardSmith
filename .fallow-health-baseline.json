@@ -279,7 +279,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 7
+        "count": 6
       }
     },
     "src/engine/element/typed-array-codec.ts": {
