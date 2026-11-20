@@ -9,10 +9,10 @@
  * Deliberately DOM-free: browser-only color-normalization APIs are not
  * implemented by plain jsdom and would require a native rendering-backed
  * dependency (forbidden without discussion per CLAUDE.md). A small
- * hand-rolled parser covers hex (#rgb/#rrggbb), rgb()/rgba(), hsl()/hsla(),
- * and the standard CSS named colors (`CSS_NAMED_COLORS`) — the shapes
- * the engine's default palette (hex) and boardsmith.json `colorPalette` custom game
- * palettes (any legal CSS color string) can supply. It fails loud (throws) on
+ * hand-rolled parser covers the CSS Color 4 colours that need no page to
+ * resolve: hex, rgb(), hsl(), hwb(), lab(), lch(), oklab(), oklch(), color()
+ * and the named colors (`CSS_NAMED_COLORS`), since boardsmith.json's
+ * `colorPalette` accepts any legal CSS color string. It fails loud (throws) on
  * anything else rather than silently guessing wrong contrast. A render path
  * calls `seatInk()` instead, which degrades to a safe default ink rather than
  * crashing.
@@ -45,14 +45,12 @@ export function composite(over: Rgba, under: Rgb): Rgb {
   };
 }
 
-const HEX_SHORT = /^#([0-9a-f])([0-9a-f])([0-9a-f])$/i;
-const HEX_LONG = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i;
-const RGB_FN = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i;
-const HSL_FN = /^hsla?\(\s*(-?[\d.]+)(?:deg)?\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*(?:,\s*([\d.]+)\s*)?\)$/i;
+const HEX = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
+const COLOR_FN = /^([a-z-]+)\((.*)\)$/i;
 
 /**
  * The 148 standard CSS Color Module Level 4 named colors (147 legacy names +
- * `rebeccapurple`), lowercase name -> `#rrggbb`. Covers the common case of a
+ * `rebeccapurple`), lowercase name -> `#rrggbb`, plus `transparent`. Covers the common case of a
  * custom game author supplying `'crimson'`, `'tomato'`, etc. in
  * boardsmith.json's `colorPalette`, which accepts any CSS color string with no
  * format restriction.
@@ -94,106 +92,280 @@ const CSS_NAMED_COLORS: Record<string, string> = {
   slategray: '#708090', slategrey: '#708090', snow: '#fffafa', springgreen: '#00ff7f',
   steelblue: '#4682b4', tan: '#d2b48c', teal: '#008080', thistle: '#d8bfd8',
   tomato: '#ff6347', turquoise: '#40e0d0', violet: '#ee82ee', wheat: '#f5deb3',
-  white: '#ffffff', whitesmoke: '#f5f5f5', yellow: '#ffff00', yellowgreen: '#9acd32',
+  transparent: '#00000000', white: '#ffffff', whitesmoke: '#f5f5f5', yellow: '#ffff00', yellowgreen: '#9acd32',
 };
 
-/** Convert HSL (h in degrees, s/l in 0-100) to RGB (0-255 per channel). */
-function hslToRgb(h: number, s: number, l: number): Rgb {
-  const hue = ((h % 360) + 360) % 360;
+type Vec3 = [number, number, number];
+type Matrix = [Vec3, Vec3, Vec3];
+
+function multiply(m: Matrix, [x, y, z]: Vec3): Vec3 {
+  return m.map(([a, b, c]) => a * x + b * y + c * z) as Vec3;
+}
+
+/** An sRGB-style transfer function, applied to each channel's magnitude so negatives mirror. */
+function signed(f: (abs: number) => number): (v: Vec3) => Vec3 {
+  return (v) => v.map((c) => Math.sign(c) * f(Math.abs(c))) as Vec3;
+}
+
+// Matrices and transfer curves are the CSS Color 4 sample code's (drafts.csswg.org/css-color-4/conversions.js).
+const linSrgb = signed((c) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4)));
+const gamSrgb = signed((c) => (c > 0.0031308 ? 1.055 * Math.pow(c, 1 / 2.4) - 0.055 : 12.92 * c));
+
+const SRGB_TO_XYZ: Matrix = [
+  [506752 / 1228815, 87881 / 245763, 12673 / 70218],
+  [87098 / 409605, 175762 / 245763, 12673 / 175545],
+  [7918 / 409605, 87881 / 737289, 1001167 / 1053270],
+];
+const XYZ_TO_SRGB: Matrix = [
+  [12831 / 3959, -329 / 214, -1974 / 3959],
+  [-851781 / 878810, 1648619 / 878810, 36519 / 878810],
+  [705 / 12673, -2585 / 12673, 705 / 667],
+];
+const D50_TO_D65: Matrix = [
+  [0.955473421488075, -0.02309845494876471, 0.06325924320057072],
+  [-0.0283697093338637, 1.0099953980813041, 0.021041441191917323],
+  [0.012314014864481998, -0.020507649298898964, 1.330365926242124],
+];
+const D50: Vec3 = [0.3457 / 0.3585, 1, (1 - 0.3457 - 0.3585) / 0.3585];
+
+/** Each `color()` space, to CIE XYZ relative to D65. */
+const COLOR_SPACES: Record<string, (v: Vec3) => Vec3> = {
+  srgb: (v) => multiply(SRGB_TO_XYZ, linSrgb(v)),
+  'srgb-linear': (v) => multiply(SRGB_TO_XYZ, v),
+  'display-p3': (v) => multiply([
+    [608311 / 1250200, 189793 / 714400, 198249 / 1000160],
+    [35783 / 156275, 247089 / 357200, 198249 / 2500400],
+    [0, 32229 / 714400, 5220557 / 5000800],
+  ], linSrgb(v)),
+  'a98-rgb': (v) => multiply([
+    [573536 / 994567, 263643 / 1420810, 187206 / 994567],
+    [591459 / 1989134, 6239551 / 9945670, 374412 / 4972835],
+    [53769 / 1989134, 351524 / 4972835, 4929758 / 4972835],
+  ], signed((c) => Math.pow(c, 563 / 256))(v)),
+  'prophoto-rgb': (v) => multiply(D50_TO_D65, multiply([
+    [0.7977666449006423, 0.13518129740053308, 0.0313477341283922],
+    [0.2880748288194013, 0.711835234241873, 0.00008993693872564],
+    [0, 0, 0.8251046025104602],
+  ], signed((c) => (c <= 16 / 512 ? c / 16 : Math.pow(c, 1.8)))(v))),
+  rec2020: (v) => multiply([
+    [63426534 / 99577255, 20160776 / 139408157, 47086771 / 278816314],
+    [26158966 / 99577255, 472592308 / 697040785, 8267143 / 139408157],
+    [0, 19567812 / 697040785, 295819943 / 278816314],
+  ], signed((c) => Math.pow(c, 2.4))(v)),
+  xyz: (v) => v,
+  'xyz-d65': (v) => v,
+  'xyz-d50': (v) => multiply(D50_TO_D65, v),
+};
+
+function labToXyz([l, a, b]: Vec3): Vec3 {
+  const k = 24389 / 27;
+  const e = 216 / 24389;
+  const fy = (l + 16) / 116;
+  const fx = fy + a / 500;
+  const fz = fy - b / 200;
+  const xyz: Vec3 = [
+    fx ** 3 > e ? fx ** 3 : (116 * fx - 16) / k,
+    l > k * e ? fy ** 3 : l / k,
+    fz ** 3 > e ? fz ** 3 : (116 * fz - 16) / k,
+  ];
+  return multiply(D50_TO_D65, xyz.map((c, i) => c * D50[i]) as Vec3);
+}
+
+function oklabToXyz(lab: Vec3): Vec3 {
+  const lms = multiply([
+    [1, 0.3963377773761749, 0.2158037573099136],
+    [1, -0.1055613458156586, -0.0638541728258133],
+    [1, -0.0894841775298119, -1.2914855480194092],
+  ], lab);
+  return multiply([
+    [1.2268798758459243, -0.5578149944602171, 0.2813910456659647],
+    [-0.0405757452148008, 1.112286803280317, -0.0717110580655164],
+    [-0.0763729366746601, -0.4214933324022432, 1.5869240198367816],
+  ], lms.map((c) => c ** 3) as Vec3);
+}
+
+/** A polar lightness/chroma/hue triple as its rectangular lightness/a/b. */
+function polar([l, c, h]: Vec3): Vec3 {
+  const rad = (h * Math.PI) / 180;
+  return [l, Math.max(0, c) * Math.cos(rad), Math.max(0, c) * Math.sin(rad)];
+}
+
+/** HSL (h in degrees, s/l in 0-100) as sRGB, 0-1 per channel. */
+function hslToSrgb(h: number, s: number, l: number): Vec3 {
   const sat = s / 100;
   const light = l / 100;
-
-  const c = (1 - Math.abs(2 * light - 1)) * sat;
-  const x = c * (1 - Math.abs(((hue / 60) % 2) - 1));
-  const m = light - c / 2;
-
-  let r1 = 0, g1 = 0, b1 = 0;
-  if (hue < 60) { r1 = c; g1 = x; b1 = 0; }
-  else if (hue < 120) { r1 = x; g1 = c; b1 = 0; }
-  else if (hue < 180) { r1 = 0; g1 = c; b1 = x; }
-  else if (hue < 240) { r1 = 0; g1 = x; b1 = c; }
-  else if (hue < 300) { r1 = x; g1 = 0; b1 = c; }
-  else { r1 = c; g1 = 0; b1 = x; }
-
-  return {
-    r: Math.round((r1 + m) * 255),
-    g: Math.round((g1 + m) * 255),
-    b: Math.round((b1 + m) * 255),
+  const f = (n: number) => {
+    const k = (n + ((h % 360) + 360) % 360 / 30) % 12;
+    return light - sat * Math.min(light, 1 - light) * Math.max(-1, Math.min(k - 3, 9 - k, 1));
   };
+  return [f(0), f(8), f(4)];
+}
+
+/** HWB (h in degrees, w/b in 0-100) as sRGB, 0-1 per channel. */
+function hwbToSrgb(h: number, w: number, b: number): Vec3 {
+  const white = w / 100;
+  const black = b / 100;
+  if (white + black >= 1) {
+    const gray = white / (white + black);
+    return [gray, gray, gray];
+  }
+  return hslToSrgb(h, 100, 50).map((c) => c * (1 - white - black) + white) as Vec3;
+}
+
+const NUMBER = /^([+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?)(%|deg|rad|grad|turn)?$/i;
+const TURN: Record<string, number> = { deg: 1, rad: 180 / Math.PI, grad: 0.9, turn: 360 };
+
+type Component = { kind: 'none' } | { kind: 'number' | 'percent' | 'angle'; value: number };
+
+function component(text: string): Component | undefined {
+  if (text.toLowerCase() === 'none') return { kind: 'none' };
+  const m = text.match(NUMBER);
+  if (!m) return undefined;
+  const unit = m[2]?.toLowerCase();
+  if (unit === undefined) return { kind: 'number', value: Number(m[1]) };
+  if (unit === '%') return { kind: 'percent', value: Number(m[1]) };
+  return { kind: 'angle', value: Number(m[1]) * TURN[unit] };
 }
 
 /**
- * Parse any colour string the library accepts into 0-255 RGB channels and its
- * alpha (1 unless an `rgba()`/`hsla()` gives one).
+ * The components and alpha of a colour function's arguments, in the legacy
+ * comma form (`rgb(1, 2, 3, 0.5)`) or the space form (`rgb(1 2 3 / 50%)`).
+ */
+function splitArgs(body: string, legacyAllowed: boolean): { parts: string[]; alpha?: string; legacy: boolean } | undefined {
+  if (body.includes(',')) {
+    if (!legacyAllowed) return undefined;
+    const parts = body.split(',').map((p) => p.trim());
+    if (parts.length !== 3 && parts.length !== 4) return undefined;
+    return { parts: parts.slice(0, 3), alpha: parts[3], legacy: true };
+  }
+  const [channels, alpha, extra] = body.split('/');
+  if (extra !== undefined || alpha?.trim() === '') return undefined;
+  return { parts: channels.trim().split(/\s+/), alpha: alpha?.trim(), legacy: false };
+}
+
+/**
+ * Parse any CSS Color 4 colour the library can resolve without a page into
+ * 0-255 sRGB channels and its alpha. A colour outside sRGB is clipped to it.
  *
  * Shared with `./color.ts` so that every colour helper in the library agrees
  * on exactly which formats are legal and fails loud on the same inputs.
  *
- * @throws {Error} on an unsupported format or an out-of-range component.
+ * @throws {Error} on an unsupported format or an out-of-range rgb()/hsl() component.
  */
 export function parseColor(input: string): Rgba {
   const trimmed = input.trim();
-
-  const shortHex = trimmed.match(HEX_SHORT);
-  if (shortHex) {
-    return {
-      r: parseInt(shortHex[1] + shortHex[1], 16),
-      g: parseInt(shortHex[2] + shortHex[2], 16),
-      b: parseInt(shortHex[3] + shortHex[3], 16),
-      a: 1,
-    };
-  }
-
-  const longHex = trimmed.match(HEX_LONG);
-  if (longHex) {
-    return {
-      r: parseInt(longHex[1], 16),
-      g: parseInt(longHex[2], 16),
-      b: parseInt(longHex[3], 16),
-      a: 1,
-    };
-  }
-
-  const rgbFn = trimmed.match(RGB_FN);
-  if (rgbFn) {
-    const [r, g, b] = [rgbFn[1], rgbFn[2], rgbFn[3]].map(Number);
-    // WR-03: reject out-of-gamut channels rather than silently clamping —
-    // matches this function's "fail loud on anything else" contract. An
-    // out-of-range channel (e.g. a stray extra digit, `rgb(2555,0,0)`) is a
-    // plausible authoring typo, not a value we should guess an answer for.
-    if ([r, g, b].some(c => c > 255)) {
-      throw new Error(
-        `BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`
-      );
-    }
-    return { r, g, b, a: alpha(rgbFn[4]) };
-  }
-
-  const hslFn = trimmed.match(HSL_FN);
-  if (hslFn) {
-    const [h, s, l] = [hslFn[1], hslFn[2], hslFn[3]].map(Number);
-    if (s > 100 || l > 100) {
-      throw new Error(
-        `BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`
-      );
-    }
-    return { ...hslToRgb(h, s, l), a: alpha(hslFn[4]) };
-  }
-
   const named = CSS_NAMED_COLORS[trimmed.toLowerCase()];
-  if (named) {
-    return parseColor(named);
-  }
-
+  const hex = (named ?? trimmed).match(HEX);
+  if (hex) return parseHex(hex[1]);
+  const fn = trimmed.match(COLOR_FN);
+  const parsed = fn ? parseFunction(fn[1].toLowerCase(), fn[2].trim(), input) : undefined;
+  if (parsed) return parsed;
   throw new Error(
     `BoardSmith color parser: unsupported color value "${input}". ` +
-      'Supported formats: #rgb, #rrggbb, rgb(r,g,b), rgba(r,g,b,a), hsl(h,s%,l%), hsla(h,s%,l%,a), and standard CSS named colors (e.g. "crimson").'
+      'Supported formats: #rgb, #rgba, #rrggbb, #rrggbbaa, rgb(), rgba(), hsl(), hsla(), hwb(), lab(), lch(), oklab(), oklch(), ' +
+      'color() in a predefined space (e.g. "color(display-p3 1 0.5 0)"), and standard CSS named colors (e.g. "crimson").'
   );
 }
 
-/** An `rgba()`/`hsla()` alpha, clamped to 0..1 as CSS does; 1 when absent. */
-function alpha(value: string | undefined): number {
-  return value === undefined ? 1 : Math.min(1, Number(value));
+function parseHex(digits: string): Rgba {
+  const long = digits.length <= 4 ? [...digits].map((d) => d + d).join('') : digits;
+  const [r, g, b, a] = (long.match(/../g) ?? []).map((pair) => parseInt(pair, 16));
+  return { r, g, b, a: a === undefined ? 1 : a / 255 };
+}
+
+function parseFunction(name: string, body: string, input: string): Rgba | undefined {
+  const isLegacyName = /^(rgba?|hsla?)$/.test(name);
+  let space: string | undefined;
+  if (name === 'color') {
+    const match = body.match(/^([a-z0-9-]+)\s+(.*)$/i);
+    if (!match) return undefined;
+    space = match[1].toLowerCase();
+    body = match[2];
+  }
+  const args = splitArgs(body, isLegacyName);
+  if (!args || args.parts.length !== 3) return undefined;
+  const parts = args.parts.map(component);
+  const alphaPart = args.alpha === undefined ? undefined : component(args.alpha);
+  if (parts.some((p) => p === undefined) || (args.alpha !== undefined && alphaPart === undefined)) return undefined;
+  const channels = parts as Component[];
+  if (args.legacy && [...channels, alphaPart].some((p) => p?.kind === 'none')) return undefined;
+  const a = alphaPart === undefined ? 1 : resolve(alphaPart, 1);
+  if (a === undefined) return undefined;
+  const srgb = toSrgb(name, space, channels, args.legacy, input);
+  if (!srgb) return undefined;
+  const [r, g, b] = srgb.map((c) => Math.round(Math.min(1, Math.max(0, c)) * 255));
+  return { r, g, b, a: Math.min(1, Math.max(0, a)) };
+}
+
+/** A non-hue component as a number, a percentage scaled so 100% is `ref`; `none` is zero. */
+function resolve(c: Component, ref: number): number | undefined {
+  if (c.kind === 'none') return 0;
+  if (c.kind === 'angle') return undefined;
+  return c.kind === 'percent' ? (c.value / 100) * ref : c.value;
+}
+
+function hue(c: Component): number | undefined {
+  if (c.kind === 'none') return 0;
+  return c.kind === 'percent' ? undefined : c.value;
+}
+
+function triple(values: (number | undefined)[]): Vec3 | undefined {
+  return values.every((v) => v !== undefined) ? (values as Vec3) : undefined;
+}
+
+function toSrgb(name: string, space: string | undefined, [c1, c2, c3]: Component[], legacy: boolean, input: string): Vec3 | undefined {
+  switch (name) {
+    case 'rgb':
+    case 'rgba': {
+      if (legacy && new Set([c1.kind, c2.kind, c3.kind]).size > 1) return undefined;
+      const rgb = triple([c1, c2, c3].map((c) => resolve(c, 255)));
+      if (rgb?.some((c) => c < 0 || c > 255)) {
+        throw new Error(`BoardSmith color parser: rgb()/rgba() channel out of range (0-255) in "${input}".`);
+      }
+      return rgb?.map((c) => c / 255) as Vec3 | undefined;
+    }
+    case 'hsl':
+    case 'hsla': {
+      if (legacy && (c2.kind !== 'percent' || c3.kind !== 'percent')) return undefined;
+      const hsl = triple([hue(c1), resolve(c2, 100), resolve(c3, 100)]);
+      if (hsl && [hsl[1], hsl[2]].some((c) => c < 0 || c > 100)) {
+        throw new Error(`BoardSmith color parser: hsl()/hsla() saturation/lightness out of range (0-100%) in "${input}".`);
+      }
+      return hsl && hslToSrgb(...hsl);
+    }
+    case 'hwb': {
+      const hwb = triple([hue(c1), resolve(c2, 100), resolve(c3, 100)]);
+      return hwb && hwbToSrgb(...hwb);
+    }
+    case 'lab':
+    case 'lch': {
+      const lab = name === 'lab'
+        ? triple([resolve(c1, 100), resolve(c2, 125), resolve(c3, 125)])
+        : triple([resolve(c1, 100), resolve(c2, 150), hue(c3)]);
+      if (!lab) return undefined;
+      lab[0] = Math.min(100, Math.max(0, lab[0]));
+      return xyzToSrgb(labToXyz(name === 'lab' ? lab : polar(lab)));
+    }
+    case 'oklab':
+    case 'oklch': {
+      const lab = name === 'oklab'
+        ? triple([resolve(c1, 1), resolve(c2, 0.4), resolve(c3, 0.4)])
+        : triple([resolve(c1, 1), resolve(c2, 0.4), hue(c3)]);
+      if (!lab) return undefined;
+      lab[0] = Math.min(1, Math.max(0, lab[0]));
+      return xyzToSrgb(oklabToXyz(name === 'oklab' ? lab : polar(lab)));
+    }
+    case 'color': {
+      const toXyz = space === undefined ? undefined : COLOR_SPACES[space];
+      const v = triple([c1, c2, c3].map((c) => resolve(c, 1)));
+      return toXyz && v && xyzToSrgb(toXyz(v));
+    }
+  }
+  return undefined;
+}
+
+function xyzToSrgb(xyz: Vec3): Vec3 {
+  return gamSrgb(multiply(XYZ_TO_SRGB, xyz));
 }
 
 function srgbChannelToLinear(channel: number): number {
@@ -221,9 +393,8 @@ const WHITE_LUMINANCE = relativeLuminance({ r: 255, g: 255, b: 255 });
  * Compute the ink color (black or white) and derived text-shadow that reads
  * most legibly against `seatColor`, per WCAG 2.1 relative-luminance contrast.
  *
- * @throws {Error} if `seatColor` is not a `#rgb`, `#rrggbb`, `rgb()`,
- *   `rgba()`, `hsl()`/`hsla()`, or standard CSS named color string, or if a
- *   recognized format has an out-of-range channel/component — fails loud
+ * @throws {Error} if `seatColor` is not a colour `parseColor()` reads, or if
+ *   an rgb()/hsl() colour has an out-of-range channel/component — fails loud
  *   rather than guessing wrong contrast. A render path uses `seatInk()`,
  *   which catches this.
  */

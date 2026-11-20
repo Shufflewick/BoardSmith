@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest';
-import { contrastInk } from './color-contrast';
+import { describe, it, expect, vi } from 'vitest';
+import { contrastInk, parseColor, seatInk } from './color-contrast';
+import { _clearShownWarnings } from '../../utils/dev.js';
 import { createColorOption } from '../../session/colors.js';
 
 describe('contrastInk', () => {
@@ -113,5 +114,76 @@ describe('contrastInk', () => {
 
   it('throws (not silently guesses) for a genuinely unparseable color', () => {
     expect(() => contrastInk('not-a-real-color-name')).toThrow(/not-a-real-color-name/);
+  });
+  // #1754: colorPalette accepts any CSS colour, so every CSS Color 4 format
+  // must read as the colour the browser draws, or a pale seat gets white ink.
+  describe('CSS Color 4 formats (#1754)', () => {
+    // Expected channels are what Chromium draws for each colour on an sRGB canvas, except
+    // rec2020, where Chromium still uses the transfer curve CSS Color 4 replaced; that row is the spec's.
+    it.each([
+      ['oklch(0.95 0.05 100)', [246, 240, 202]],
+      ['oklch(0.3 0.1 260)', [11, 43, 95]],
+      ['oklch(62.8% 0.2577 29.23)', [255, 0, 0]],
+      ['oklab(0.7 -0.1 0.05)', [99, 179, 125]],
+      ['lab(54.29 80.82 69.89)', [255, 0, 0]],
+      ['lch(60 40 200)', [0, 163, 167]],
+      ['hwb(200 20% 30%)', [51, 136, 179]],
+      ['hwb(0 60% 60%)', [128, 128, 128]],
+      ['color(display-p3 0.8 0.5 0.3)', [217, 123, 64]],
+      ['color(srgb 0.2 0.4 0.6)', [51, 102, 153]],
+      ['color(srgb-linear 0.2 0.4 0.6)', [124, 170, 203]],
+      ['color(a98-rgb 0.5 0.6 0.4)', [116, 154, 99]],
+      ['color(prophoto-rgb 0.5 0.4 0.4)', [167, 115, 121]],
+      ['color(rec2020 0.5 0.5 0.3)', [123, 121, 56]],
+      ['color(xyz 0.3 0.3 0.3)', [162, 145, 143]],
+      ['color(xyz-d50 0.3 0.3 0.25)', [156, 147, 150]],
+      ['color(xyz-d65 0.2 0.25 0.3)', [95, 146, 144]],
+      ['rgb(50% 20% 10%)', [128, 51, 26]],
+      ['hsl(200 60% 50%)', [51, 153, 204]],
+      ['hsl(3.14rad 60% 50%)', [51, 204, 204]],
+      ['hsl(200grad 50% 50%)', [64, 191, 191]],
+      ['oklch(0.7 none 100)', [158, 158, 158]],
+      ['rgb(none 100 200)', [0, 100, 200]],
+      ['color(display-p3 1 0 0)', [255, 0, 0]],
+    ])('reads %s as the colour the browser draws', (css, [r, g, b]) => {
+      const drawn = parseColor(css);
+      for (const [got, want] of [[drawn.r, r], [drawn.g, g], [drawn.b, b]]) {
+        expect(Math.abs(got - want), `${css} -> ${JSON.stringify(drawn)}`).toBeLessThanOrEqual(1);
+      }
+      expect(drawn.a).toBe(1);
+    });
+
+    it.each([
+      ['rgb(10 20 30 / 50%)', { r: 10, g: 20, b: 30, a: 0.5 }],
+      ['hsl(0.5turn 60 50 / 0.5)', { r: 51, g: 204, b: 204, a: 0.5 }],
+      ['#abcd', { r: 170, g: 187, b: 204, a: 221 / 255 }],
+      ['#11223344', { r: 17, g: 34, b: 51, a: 68 / 255 }],
+      ['transparent', { r: 0, g: 0, b: 0, a: 0 }],
+    ])('reads the alpha of %s', (css, want) => {
+      expect(parseColor(css)).toEqual(want);
+    });
+
+    it('gives a pale oklch() seat black ink, with no warning', () => {
+      _clearShownWarnings();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect(seatInk('oklch(0.95 0.05 100)', 'PlayerToken').ink).toBe('#000000');
+        expect(warn).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it.each([
+      'rgb(255, 50%, 0)',
+      'hsl(200, 60, 50)',
+      'rgb(none, 0, 0)',
+      'lab(50, 20, 30)',
+      'oklch(0.5 0.1)',
+      'color(cmyk 0 0 0)',
+      'color-mix(in srgb, red, blue)',
+    ])('refuses %s, which the browser does not draw or BoardSmith cannot resolve', (css) => {
+      expect(() => parseColor(css)).toThrow(css);
+    });
   });
 });

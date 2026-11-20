@@ -112,10 +112,10 @@ describe('playerColorMarks (#1733)', () => {
   it('writes a colour it cannot read in the normal text colour, and says why', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const { wrapper } = await mountOn('rgb(255, 255, 255)', {
-      players: [{ seat: 0, name: 'Alice', color: 'oklch(0.3 0.1 260)' }],
+      players: [{ seat: 0, name: 'Alice', color: 'color-mix(in srgb, navy, black)' }],
       playerColorMarks: ['name'],
     });
     expect(nameColor(wrapper, 0)).toBe('');
-    expect(warn.mock.calls.flat().join(' ')).toContain('oklch(0.3 0.1 260)');
+    expect(warn.mock.calls.flat().join(' ')).toContain('color-mix(in srgb, navy, black)');
   });
 });

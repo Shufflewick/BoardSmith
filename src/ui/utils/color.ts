@@ -12,8 +12,8 @@
  * ```
  *
  * Colour parsing is shared with `./color-contrast.ts`, so these accept every
- * format `contrastInk()` accepts (hex, rgb()/rgba(), hsl()/hsla(), CSS named
- * colours) and reject everything else loudly rather than returning `NaN`.
+ * format `contrastInk()` accepts (the CSS Color 4 colours `parseColor()`
+ * reads) and reject everything else loudly rather than returning `NaN`.
  */
 
 import { parseColor, contrastInk, type Rgb } from './color-contrast.js';
