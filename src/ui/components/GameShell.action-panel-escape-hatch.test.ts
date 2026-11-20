@@ -4,9 +4,19 @@
  * keeps the prompt and drops the panel. A game cannot reach it; every action a game offers is in the panel.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { nextTick } from 'vue';
+import { defineComponent, h, nextTick } from 'vue';
 import { flushPromises } from '@vue/test-utils';
+import { usePlayContext } from '../composables/useGameContext.js';
 import { enterIframe, leaveIframe, mountPlatformShell } from './GameShell.platform-mount.test-helper.js';
+
+/** The platform's own board, which asks the question the Action Panel would have asked. */
+const AskingBoard = defineComponent({
+  name: 'AskingBoard',
+  setup() {
+    const { actionController } = usePlayContext();
+    return () => h('button', { 'data-testid': 'ask', onClick: () => actionController.start('go') }, 'Go');
+  },
+});
 
 const mounted: Array<{ unmount(): void }> = [];
 
@@ -15,9 +25,9 @@ afterEach(() => {
   leaveIframe();
 });
 
-async function shellOnMove(platformActionPanelEscapeHatch: boolean) {
+async function shellOnMove(props?: { platformActionPanelEscapeHatch: boolean }) {
   enterIframe();
-  const wrapper = mountPlatformShell({ props: { platformActionPanelEscapeHatch } });
+  const wrapper = mountPlatformShell({ board: AskingBoard, props });
   mounted.push(wrapper);
   await nextTick();
   const fromHost = (data: Record<string, unknown>) =>
@@ -32,8 +42,12 @@ async function shellOnMove(platformActionPanelEscapeHatch: boolean) {
         players: [{ name: 'P1', seat: 1 }, { name: 'P2', seat: 2 }],
         currentPlayer: 1,
         isMyTurn: true,
+        // Two actions, so the shell starts neither by itself.
         availableActions: ['go', 'pass'],
-        actionMetadata: { go: { name: 'go', prompt: 'Go now', selections: [] }, pass: { name: 'pass', prompt: 'Pass', selections: [] } },
+        actionMetadata: {
+          go: { name: 'go', prompt: 'Go', selections: [{ name: 'to', type: 'choice', prompt: 'Where to?', choices: [{ value: 1, display: 'North' }] }] },
+          pass: { name: 'pass', prompt: 'Pass', selections: [] },
+        },
       },
     },
     winners: [],
@@ -43,14 +57,16 @@ async function shellOnMove(platformActionPanelEscapeHatch: boolean) {
 }
 
 describe('the platform Action Panel escape hatch', () => {
-  it('shows the Action Panel by default', async () => {
-    const wrapper = await shellOnMove(false);
+  it('leaves the Action Panel in place by default', async () => {
+    const wrapper = await shellOnMove();
     expect(wrapper.find('#bs-actionbar .action-panel-root').exists()).toBe(true);
   });
 
-  it('replaces the Action Panel with the prompt when the platform sets it', async () => {
-    const wrapper = await shellOnMove(true);
+  it('replaces the Action Panel with the open question when the platform sets it', async () => {
+    const wrapper = await shellOnMove({ platformActionPanelEscapeHatch: true });
+    await wrapper.get('[data-testid="ask"]').trigger('click');
+    await flushPromises();
     expect(wrapper.find('#bs-actionbar .action-panel-root').exists()).toBe(false);
-    expect(wrapper.find('#bs-actionbar .turn .pr').exists()).toBe(true);
+    expect(wrapper.get('#bs-actionbar .turn .pr').text()).toBe('Where to?');
   });
 });
