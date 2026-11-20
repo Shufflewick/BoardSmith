@@ -1021,42 +1021,8 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
 /**
  * What this file's layout is called, so a store written by a different one is
  * refused rather than half-read.
- *
- * A LOCAL WORLD IS SOMEBODY'S SAVE, so a layout this code understands how to
- * upgrade is upgraded rather than refused (#225): `boardsmith dev --reset` is
- * an honest answer only when there is nothing else to offer, and offering it to
- * an author whose world is five hundred seats deep is offering to delete it.
- * Silently READING a store this code does not understand stays forbidden -- an
- * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
 const SCHEMA_VERSION = '8';
-
-/**
- * THE LAYOUTS THIS CODE CAN CARRY A WORLD FORWARD FROM, and the step each one
- * takes.
- *
- * A CHAIN AND NOT A SINGLE SOURCE LAYOUT, because a world sitting two layouts
- * back has to be able to reach the current layout: the alternative is telling
- * an author whose store is two upgrades old to reset it, which is offering to
- * delete a world five hundred seats deep. Each step is applied in order until
- * the stamp is current.
- *
- * EMPTY SINCE LAYOUT 8 (#482). Every layout before 8 holds a world whose
- * element ids are its bare creation counter, and layout 8's world reads every
- * id back with a key: no step can carry those ids forward, so those layouts
- * are refused with the reset, by name, rather than read. The next layout that
- * only adds to this one gets a step here.
- */
-interface LayoutUpgrade {
-  /** The stamp a store must carry for this step to be the next one. */
-  readonly from: string;
-  /** The stamp the store must carry once `apply` has committed. */
-  readonly to: string;
-  /** Rewrite the store, stamping `to` in the SAME transaction as the tables. */
-  readonly apply: (db: SqliteDatabase) => void;
-}
-
-const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [];
 
 /** The first layout whose world's element ids are keyed (#482). */
 const FIRST_KEYED_LAYOUT = 8;
@@ -1068,18 +1034,8 @@ const FIRST_KEYED_LAYOUT = 8;
  * looks: a gate that created the current schema first and asked afterwards left
  * its new tables inside a store it then refused, so being told "no" had already
  * changed the world it was protecting.
- *
- * `upgrades` is a parameter, and this is exported, for one reason: the stamp check
- * below guards against a step that rewrites a store without moving its layout
- * stamp, and no step in {@link LAYOUT_UPGRADES} does that. A guard that cannot
- * be run is a guard nobody knows is broken, so the tests hand this the step
- * that forgets. Every caller in this file uses the real chain.
  */
-export function prepareSchema(
-  db: SqliteDatabase,
-  path: string,
-  upgrades: readonly LayoutUpgrade[] = LAYOUT_UPGRADES,
-): void {
+function prepareSchema(db: SqliteDatabase, path: string): void {
   const stored = storedLayout(db);
   if (stored === undefined) {
     // A world this open is creating. The tables and the layout stamp commit
@@ -1101,23 +1057,7 @@ export function prepareSchema(
     });
     return;
   }
-  let at = stored;
-  for (;;) {
-    if (at === SCHEMA_VERSION) return;
-    const step = upgrades.find((one) => one.from === at);
-    if (step === undefined) throw unreadableLayout(stored, path);
-    step.apply(db);
-    // WHAT THE STEP SAID IT WOULD LEAVE, CHECKED AGAINST WHAT IT LEFT.
-    //
-    // The stamp is what every later open reads the store's tables through, so
-    // a step that rewrote the tables without moving it has produced a file no
-    // BoardSmith writes -- and carrying on would run the same upgrade over a
-    // store that has already had it, or spin here forever on a stamp that
-    // never advances. Both are silent; this is not.
-    const stamped = storedLayout(db);
-    if (stamped !== step.to) throw upgradeLeftWrongStamp(step, stamped, path);
-    at = step.to;
-  }
+  if (stored !== SCHEMA_VERSION) throw unreadableLayout(stored, path);
 }
 
 /** SQLite's "database is locked". */
@@ -1170,30 +1110,6 @@ function storedLayout(db: SqliteDatabase): string | undefined {
   return row?.value;
 }
 
-/**
- * An upgrade that did not leave the stamp it promised, said so that the author
- * keeps their world and we get told about it.
- *
- * Deliberately NOT recoverable here. The one thing this file will not do is
- * read a store whose tables and stamp disagree, because every later decision --
- * which columns exist, which upgrade runs next -- is taken off the stamp.
- */
-function upgradeLeftWrongStamp(
-  step: LayoutUpgrade,
-  stamped: string | undefined,
-  path: string,
-): Error {
-  return new Error(
-    `The local world store at ${path} was upgraded from layout ${step.from} to layout ${step.to}, but it now ` +
-      `reads as ${stamped === undefined ? 'carrying no layout stamp at all' : `layout ${stamped}`}. ` +
-      `A store whose tables and stamp disagree is one no BoardSmith writes, so it is refused rather than read. ` +
-      `This is a fault in BoardSmith's layout ${step.from} upgrade, not in your world: leave ${path} exactly as ` +
-      `it is and report it at https://github.com/Shufflewick/BoardSmith/issues with this message, so the world ` +
-      `can be recovered. To carry on in the meantime, move that file aside and run \`boardsmith dev\` again to ` +
-      `start a world from genesis.`,
-  );
-}
-
 /** A store this BoardSmith cannot read, said in the direction the author has to
  *  move: forward to a newer BoardSmith, or aside because nothing here can carry
  *  that layout's world across. */
@@ -1243,7 +1159,7 @@ interface SqliteStatement {
   get(...params: Array<string | number | null>): unknown;
   all(...params: Array<string | number | null>): unknown[];
 }
-export interface SqliteDatabase {
+interface SqliteDatabase {
   exec(sql: string): void;
   prepare(sql: string): SqliteStatement;
   close(): void;
