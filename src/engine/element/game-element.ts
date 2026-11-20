@@ -466,6 +466,26 @@ function engineOwnedAttributes(element: GameElement): ReadonlySet<string> {
   return engineOwnedAttributeNames((element as Partial<Pick<Player, '$type'>>).$type);
 }
 
+/** An element's name, or undefined when this copy was not told it (#1782). */
+export function knownName(element: GameElement): string | undefined {
+  return element.isAttributeRedacted('name') ? undefined : element.name;
+}
+
+/**
+ * Why `create` refuses an attribute a new element of its class does not have
+ * (#1782): a seat's copy rebuilds a hidden element from a new one, so it
+ * cannot withhold that attribute, and a bot's search reads `undefined`.
+ */
+function notAFieldMessage(className: string, name: string, key: string): string {
+  return (
+    `Cannot create ${className} "${name}": "${key}" is not a field of ${className}, so a new ${className} has no "${key}".\n` +
+    `  A seat's copy of the game rebuilds an element it cannot see from a new ${className}, so it could not tell that ` +
+    `"${key}" is unknown, and a bot's search would read undefined instead.\n` +
+    `  Naming an attribute with \`declare\` gives the class no field, because TypeScript erases \`declare\`.\n` +
+    `  Fix: make it a field of ${className}: \`${key}!: <type>;\` or \`${key} = <default>;\`, not \`declare ${key}: <type>;\`.`
+  );
+}
+
 /**
  * The attributes `toJSON` saves and `resolveElementReferences` decodes: own
  * keys that are not `_`-prefixed engine state or one of the class's
@@ -793,6 +813,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
     // Apply attributes with validation
     if (attributes) {
+      const unknownKey = Object.keys(attributes).find((key) => !(key in element));
+      if (unknownKey !== undefined) throw new Error(notAFieldMessage(elementClass.name, name, unknownKey));
       try {
         for (const [key, value] of Object.entries(attributes)) {
           if (RESERVED_ELEMENT_KEYS.has(key)) {
@@ -1490,7 +1512,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * on the game root, whose audience the engine settles for itself.
    *
    * Engine-owned structure is never withheld: it holds no secret, and taking it
-   * away would take the tree apart.
+   * away would take the tree apart. The one exception is a hidden placeholder's
+   * `name`, which no tree operation reads and which names the card (#1782).
    *
    * @internal Engine-internal. Called by `fromJSON` and `Game.loadSerializedState`.
    */
@@ -1510,6 +1533,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       !isKnown(key) &&
       !(key in json.attributes)
     ));
+    if (reason === 'hidden-element' && json.name === undefined) withheld.push('name');
     element._redactAttributes(withheld, reason);
   }
 
@@ -1602,9 +1626,8 @@ export class GameElement<G extends Game = any, P extends Player = any> {
       attributes,
     };
 
-    if (this.name) {
-      json.name = this.name;
-    }
+    const name = knownName(this);
+    if (name) json.name = name;
 
     // #19: carry the redaction forward. An MCTS descendant clone re-serializes
     // an ALREADY redacted sandbox with plain `toJSON()` — without this flag the

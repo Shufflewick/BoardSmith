@@ -26,7 +26,7 @@ import type { GameElement } from '../engine/index.js';
 import type { DeterminizeSampler } from './types.js';
 import { changing } from '../engine/element/state-version.js';
 import { outermostConcealer } from '../engine/element/concealed-refs.js';
-import { hasZoneVisibility, hidesContents, isZoneVisibilityRestorer, readDynamicAttribute } from '../engine/element/game-element.js';
+import { hasZoneVisibility, hidesContents, isZoneVisibilityRestorer, knownName, readDynamicAttribute } from '../engine/element/game-element.js';
 import { canPlayerSee } from '../engine/element/visibility.js';
 import { HIDDEN_PLACEHOLDER_ATTRIBUTE, isPlaceholderId } from '../engine/element/hidden-placeholder.js';
 
@@ -61,7 +61,8 @@ type KnownWorld = Map<number, KnownElement>;
 /** `HandCard#12 "card-11"`: how a refusal names an element. */
 function nameOf(element: GameElement | undefined): string {
   if (!element) return 'no container';
-  const name = element.name ? ` "${element.name}"` : '';
+  const known = knownName(element);
+  const name = known ? ` "${known}"` : '';
   return `${element.constructor.name}#${element._t.id}${name}`;
 }
 

@@ -7,7 +7,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import {
-  Game, Player, Space, Card, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, RedactedAttributeError,
+  Game, Player, Space, Card, Deck, Action, loop, eachPlayer, actionStep, sequence, simultaneousActionStep, execute, RedactedAttributeError,
   type GameOptions,
 } from '../engine/index.js';
 import { SeededRandom } from '../utils/random.js';
@@ -138,6 +138,94 @@ describe('a sampler and a hidden card\'s own color (#1433)', () => {
     const copy = searchCopyForSeat(truth, 1, 'search');
 
     expect(() => copy.first(TintedCard, (card) => card.seat === 2)).toThrow(RedactedAttributeError);
+  });
+});
+
+/** MERC's equipment (#1782): a deck of named cards dealt face down, which a move draws onto a table. */
+class Kit extends Card<KitGame> {
+  training = 0;
+}
+
+class KitGame extends Game<KitGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Kit]);
+    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
+    this.setFlow({ root: loop({ maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }) }) });
+    const deck = this.create(Deck, 'kit');
+    deck.contentsCountOnly();
+    deck.create(Kit, 'sword', { training: 2 });
+    this.create(Space, 'table');
+    this.create(Space, 'rack').create(Kit, 'shield', { training: 1 });
+  }
+}
+
+/** Seat 2's copy, with the face-down card it cannot tell apart drawn onto the table. */
+function copyWithTheDrawnCard(): KitGame {
+  const truth = new KitGame({ playerCount: 2, seed: 'truth' });
+  truth.startFlow();
+  const copy = searchCopyForSeat(truth, 2, 'search');
+  copy.first(Deck, 'kit')!.drawTo(copy.first(Space, 'table')!);
+  return copy;
+}
+
+describe('a hidden card\'s name in a search copy (#1782)', () => {
+  it('is withheld once the card is drawn into view', () => {
+    const card = copyWithTheDrawnCard().first(Space, 'table')!.first(Kit)!;
+
+    expect(card.isAttributeRedacted('name')).toBe(true);
+    expect(() => card.name).toThrow(RedactedAttributeError);
+  });
+
+  it('matches no lookup by name, which still finds the cards the seat can name', () => {
+    const copy = copyWithTheDrawnCard();
+
+    expect(copy.first(Kit, 'sword')).toBeUndefined();
+    expect(copy.first(Kit, { name: 'sword' })).toBeUndefined();
+    expect(copy.first(Kit, 'shield')?.training).toBe(1);
+  });
+
+  it('stays withheld in a copy made from that copy', () => {
+    const copy = searchCopyForSeat(copyWithTheDrawnCard(), 2, 'deeper');
+
+    expect(copy.first(Space, 'table')!.first(Kit)!.isAttributeRedacted('name')).toBe(true);
+  });
+
+  it('becomes known when a sampler names the card', () => {
+    const truth = new KitGame({ playerCount: 2, seed: 'truth' });
+    truth.startFlow();
+    const copy = searchCopyForSeat(truth, 2, 'search', {
+      determinize: (game) => {
+        const card = game.first(Deck, 'kit')!.first(Kit)!;
+        card.name = 'sword';
+        Object.assign(card, { training: 2 });
+      },
+      rng: () => 0.5,
+    });
+    copy.first(Deck, 'kit')!.drawTo(copy.first(Space, 'table')!);
+
+    expect(copy.first(Kit, 'sword')?.training).toBe(2);
+  });
+});
+
+/** An attribute named with `declare` is no field: TypeScript erases it, so a new Gadget has no `charge`. */
+class Gadget extends Card<GadgetGame> {
+  declare charge: number;
+}
+
+class GadgetGame extends Game<GadgetGame, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Gadget]);
+    this.create(Gadget, 'lamp', { charge: 3 });
+  }
+}
+
+describe('an attribute an element class names with `declare` (#1782)', () => {
+  it('is refused when an element is created with it, naming the class field to write instead', () => {
+    expect(() => new GadgetGame({ playerCount: 2, seed: 'truth' })).toThrow(
+      /Cannot create Gadget "lamp": "charge" is not a field of Gadget[\s\S]*charge!: <type>/,
+    );
   });
 });
 

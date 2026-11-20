@@ -759,7 +759,8 @@ class PeekGame extends Game<PeekGame, Player> {
   }
 
   get covered(): HandCard {
-    return this.first(Space<PeekGame>, 'table')!.first(HandCard, (card) => card.parent!.name === 'table')!;
+    const table = this.first(Space<PeekGame>, 'table')!;
+    return table.first(HandCard, (card) => card.parent!.id === table.id)!;
   }
 }
 

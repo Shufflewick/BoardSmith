@@ -35,6 +35,13 @@ class TestCard extends Card<TestGame> {
   suit!: string;
 }
 
+/** A card carrying layout keys of every kind, safe, identity-bearing and unknown. */
+class LayoutCard extends TestCard {
+  $direction?: string;
+  $coordSystem?: string;
+  $secretValue?: string;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -265,13 +272,13 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
     //   • $direction (safe layout descriptor from the allowlist)
     //   • $image (identity-bearing single-sided — must be DROPPED, Pitfall 3)
     //   • $secretValue (unknown future $-key — must be DROPPED, fail-safe)
-    deck.create(TestCard, 'SECRET', {
+    deck.create(LayoutCard, 'SECRET', {
       rank: 'A',
       suit: 'S',
       $image: '/cards/AS.svg',
       $direction: 'horizontal',
       $secretValue: 'leak-me',
-    } as any);
+    });
 
     const view = game.toJSONForPlayer(2);
     const deckJson = findByName(view.children, 'mixed-deck')!;
@@ -307,7 +314,7 @@ describe('SEC-02: unknown $-keys and $image must be fail-safe dropped on hidden 
   it('a hidden element keeps $coordSystem, so every seat refuses a non-axial hex board alike', () => {
     const deck = game.create(Deck, 'coord-deck');
     deck.contentsCountOnly();
-    deck.create(TestCard, 'C', { rank: 'A', suit: 'S', $coordSystem: 'cube' } as any);
+    deck.create(LayoutCard, 'C', { rank: 'A', suit: 'S', $coordSystem: 'cube' });
 
     const hiddenCard = findByName(game.toJSONForPlayer(2).children, 'coord-deck')!.children![0];
 

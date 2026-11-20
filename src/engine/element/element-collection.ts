@@ -430,7 +430,7 @@ function isRepeatVisit(query: Query, el: GameElement, depth: number, under: Game
     }
     firstUnder = firstSeenUnder!.get(el);
   }
-  query.duplicates.push({ id: el.id, name: el.name ?? el.constructor.name, depth, firstUnder, under });
+  query.duplicates.push({ id: el.id, name: knownName(el) ?? el.constructor.name, depth, firstUnder, under });
   return true;
 }
 
@@ -448,7 +448,18 @@ function treeCorruption(duplicates: Query['duplicates']): Error {
 
 /** How a corruption report names the container an element was reached under. */
 function containerLabel(under: GameElement | undefined): string {
-  return under ? `${under.name ?? under.constructor.name}#${under.id}` : '<root>';
+  return under ? `${knownName(under) ?? under.constructor.name}#${under.id}` : '<root>';
+}
+
+/** An element's name, or undefined when this copy was not told it. */
+function knownName(el: GameElement): string | undefined {
+  return el.isAttributeRedacted('name') ? undefined : el.name;
+}
+
+/** Does `el` hold `value` at `key`? A name this copy was not told matches none. */
+function attributeMatches(el: GameElement, key: string, value: unknown): boolean {
+  if (key === 'name' && el.isAttributeRedacted('name')) return false;
+  return (el as unknown as Record<string, unknown>)[key] === value;
 }
 
 /**
@@ -457,7 +468,7 @@ function containerLabel(under: GameElement | undefined): string {
  */
 function toPredicate<F extends GameElement>(finder: ElementFinder<F>): (el: F) => boolean {
   if (typeof finder === 'string') {
-    return (el) => el.name === finder;
+    return (el) => attributeMatches(el, 'name', finder);
   }
   if (typeof finder === 'function') {
     return finder;
@@ -471,7 +482,7 @@ function toPredicate<F extends GameElement>(finder: ElementFinder<F>): (el: F) =
       } else if (key === 'mine') {
         if (value !== el.isMine()) return false;
       } else {
-        if ((el as Record<string, unknown>)[key] !== value) return false;
+        if (!attributeMatches(el, key, value)) return false;
       }
     }
     return true;

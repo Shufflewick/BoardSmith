@@ -29,7 +29,8 @@ export const PLAYER_IDENTITY_ATTRIBUTES: ReadonlySet<string> = new Set([
  * These are structure, not game data: identity, ownership and layout, read by
  * the engine itself (`getEffectiveOwner`, the renderers). Turning one into a
  * throwing accessor would not withhold a secret, it would take the tree apart.
- * A game's own secrets are never in this list.
+ * A game's own secrets are never in this list. A hidden placeholder's `name`
+ * is the one exception the restore withholds, since it names the card (#1782).
  *
  * This is NOT the list a game's whitelist cannot touch: on an ordinary element
  * `visibleAttributes` may still keep the owner, position or artwork from other

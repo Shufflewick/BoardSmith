@@ -111,7 +111,7 @@ describe('#147: a hidden element restores as unknown, not as its class defaults'
     const restored = restoreForSeat(game, 1);
     const hidden = restored.first(Table, 'table')!.first(PlayingCard)!;
 
-    expect([...hidden.redactedAttributes].sort()).toEqual(['faceUp', 'rank', 'suit', 'wager']);
+    expect([...hidden.redactedAttributes].sort()).toEqual(['faceUp', 'name', 'rank', 'suit', 'wager']);
     expect(() => hidden.rank).toThrow(RedactedAttributeError);
   });
 
@@ -138,7 +138,7 @@ describe('#147: a hidden element restores as unknown, not as its class defaults'
     expect(opponentCard.isAttributeRedacted('__hidden')).toBe(false);
     // Structure is never withheld: taking the tree apart withholds no secret.
     expect(opponentCard.parent?.name).toBe('hand-2');
-    expect(opponentCard.isAttributeRedacted('name')).toBe(false);
+    expect(opponentCard.isAttributeRedacted('$type')).toBe(false);
   });
 
   it('does not touch the owner\'s own cards, nor a fully visible view', () => {

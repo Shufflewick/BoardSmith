@@ -1,6 +1,6 @@
 import { rulesErrorSentence, withDevDetail } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
-import { forEachInSubtree, isElement } from '../element/game-element.js';
+import { forEachInSubtree, isElement, knownName } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { Game } from '../element/game.js';
 import type {
@@ -936,6 +936,7 @@ export class ActionExecutor {
     const formatted = choices.slice(0, maxShow).map(choice => {
       if (choice.label !== undefined) return choice.label;
       const actual = choice.value;
+      if (isElement(actual)) return knownName(actual) ?? `(id: ${actual.id})`;
       if (actual && typeof actual === 'object') {
         const obj = actual as Record<string, unknown>;
         // Try to get a readable representation
@@ -1239,7 +1240,7 @@ export class ActionExecutor {
 
   /** An element submission, for the dev log: its name and id, or what was sent. */
   private describeSubmittedElement(value: unknown): string {
-    if (isElement(value)) return `${value.name} (id: ${value.id})`;
+    if (isElement(value)) return `${knownName(value) ?? value.constructor.name} (id: ${value.id})`;
     return JSON.stringify(value);
   }
 
@@ -1651,7 +1652,7 @@ export class ActionExecutor {
 
   /** An element is named by its id in an error, not dumped whole. */
   private describeSubmittedValue(value: unknown): unknown {
-    return isElement(value) ? { id: value.id, name: value.name } : value;
+    return isElement(value) ? { id: value.id, name: knownName(value) } : value;
   }
 
   /**
