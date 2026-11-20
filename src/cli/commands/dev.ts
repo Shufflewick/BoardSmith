@@ -248,8 +248,8 @@ interface BoardSmithConfig {
   gameOptions?: unknown;
   /** Per-player options (array format for JSON config) */
   playerOptions?: ConfigOptionDefinition[];
-  /** Custom color palette (hex strings or objects with hex/value + label) */
-  colorPalette?: Array<string | Record<string, unknown>>;
+  /** The seats' colours, as `{ id, hex, label }` entries; `paletteChoices` checks the shape. */
+  colorPalette?: unknown;
   /**
    * WHICH BACKEND RUNS THIS GAME (#171). `"world"` is what makes this project a
    * persistent world; anything else is a table. What this CLI does with it --

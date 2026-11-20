@@ -20,9 +20,9 @@ vi.setConfig({ testTimeout: 120_000 });
 
 const ROLE = { id: 'role', type: 'exclusive', label: 'Sheriff', default: 'last', choices: [{ value: 'sheriff', label: 'Sheriff' }] };
 const PALETTE = [
-  { hex: '#e74c3c', label: 'Red' },
-  { hex: '#3498db', label: 'Blue' },
-  { hex: '#95a5a6', label: 'Grey' },
+  { id: 'red', hex: '#e74c3c', label: 'Red' },
+  { id: 'blue', hex: '#3498db', label: 'Blue' },
+  { id: 'grey', hex: '#95a5a6', label: 'Grey' },
 ];
 
 /** A scaffolded table project with an exclusive `role` option, a palette and `presets` in its gameDefinition. */
