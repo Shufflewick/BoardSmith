@@ -160,7 +160,8 @@ crashes mid-build: whatever decisions were already made are already recorded.
 
 Fill CHUNK.md's existing `## Build Manifest` table row-by-row as each file is written — never
 invent a new section, never restructure the `| File | Status |` header. Add a row (`written` or
-`pending`) for each file this chunk's build touches, and flip a row from `pending` to `written`
+`pending`) for each file this chunk touches, at build or any other step (a spec step's extension of
+the shared guard `tests/guards/a11y-floor.test.ts` too, build/test.md "The A11y Floor"), and flip a row from `pending` to `written`
 the moment that file is actually saved to disk, not in a batch at the end. A session that crashes
 mid-build resumes by reading this table: any row still `pending` is unfinished work, any row
 `written` is done and must not be redone or clobbered. This is the file-by-file resume signal

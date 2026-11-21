@@ -1322,8 +1322,9 @@ export async function chunkProvenanceStatusCommand(
     console.log(
       styleText('red',
         `VERIFIED WITHOUT SIGN-OFF: these chunks' Status claims verification that no valid ` +
-          `designer sign-off backs. Set each back to built and have the designer sign it off ` +
-          `with \`boardsmith chunk-signoff <slug>\`:`,
+          `designer sign-off backs. Where another chunk's commit made the edit that voided it, that ` +
+          `chunk names the file and signs off again; otherwise set it back to built and have the ` +
+          `designer sign it off with \`boardsmith chunk-signoff <slug>\`:`,
       ),
     );
     for (const { slug, problems } of verifiedWithoutSignoff) {

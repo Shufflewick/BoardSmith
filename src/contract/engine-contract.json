@@ -1,5 +1,5 @@
 {
-  "revision": 504,
+  "revision": 505,
   "surfaceHash": "8b31596b3aaadef6",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3975,6 +3975,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "An installed engine keeps its own element attributes: every element field has an initializer or is declare, so create() no longer refuses a player's seat when Vite compiles the package without define semantics"
+    },
+    {
+      "revision": 505,
+      "date": "2026-11-21",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "chunk-signoff refuses a chunk whose commit edited a file an earlier sign-off names without naming it in its Build Manifest, and a voided sign-off's remedy names the chunk whose commit made the edit (#1785)"
     }
   ]
 }

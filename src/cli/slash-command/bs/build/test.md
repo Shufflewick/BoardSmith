@@ -395,7 +395,9 @@ grep and contrast assertion, and the asset-reachability scan, sequence item 5 ab
 text, so no change to the code can make them fail, and in a manifest file the mutation check reports
 every one. They live in one guard file for the whole game, `tests/guards/a11y-floor.test.ts`: the
 first UI chunk writes it, a later chunk extends it when it adds a token pair, and never list it in
-the Spec Manifest. A chunk's fast checks run it when the chunk added or changed it; the full suite,
+the Spec Manifest. A chunk that writes or extends it names it in its Build Manifest, whichever step
+made the edit: an earlier chunk's sign-off names the guard, and `chunk-signoff` refuses a chunk whose
+commits changed it unnamed, since that edit would void the earlier sign-off. A chunk's fast checks run it when the chunk added or changed it; the full suite,
 at every `chunk-merge` and at publish, runs it always. A guard holds
 scans only; a test that mounts a component or cites a claim belongs in the chunk's test file. A guard
 reads the game's source with `readFileSync`, an import ending `?raw`, or `import.meta.glob` with
