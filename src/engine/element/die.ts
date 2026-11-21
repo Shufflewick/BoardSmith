@@ -1,5 +1,4 @@
 import { Piece } from './piece.js';
-import type { ElementContext } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
@@ -49,12 +48,12 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'die';
+  $type = 'die' as const;
 
   /**
    * Number of sides on the die (4, 6, 8, 10, 12, or 20)
    */
-  sides!: DieSides;
+  sides: DieSides = undefined!;
 
   /**
    * Current face value (1 to sides, or 0 if not yet rolled)
@@ -71,19 +70,13 @@ export class Die<G extends Game = any, P extends Player = any> extends Piece<G, 
    * If provided, must have exactly `sides` entries.
    * Used for custom dice like Fudge dice or dice with symbols.
    */
-  faceLabels?: string[];
+  faceLabels?: string[] = undefined;
 
   /**
    * Roll counter - increments each time the die is rolled.
    * UI can watch this to trigger animations on actual rolls.
    */
   rollCount: number = 0;
-
-  constructor(ctx: Partial<ElementContext>) {
-    super(ctx);
-    // Explicitly set as instance property for serialization
-    this.$type = 'die';
-  }
 
   private assertSides(): void {
     if (!Number.isInteger(this.sides) || this.sides < 1) {

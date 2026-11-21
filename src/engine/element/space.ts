@@ -1,7 +1,7 @@
 import { GameElement, forEachInSubtree, reissuePlaceholders } from './game-element.js';
 import { childrenChanged } from './cell-index.js';
 import { changing } from './state-version.js';
-import type { ElementClass, ElementAttributes, ElementContext, ElementJSON } from './types.js';
+import type { ElementClass, ElementAttributes, ElementJSON } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 import type { VisibilityMode, VisibilityState } from './visibility.js';
@@ -65,7 +65,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * System property that marks a space for AutoUI, so an empty one is not
    * drawn as a piece (#1667). Deck, Hand, HexCell and DicePool set their own.
    */
-  $type!: string;
+  $type: string = 'space';
 
   // ============================================
   // Layout Properties (for AutoUI rendering)
@@ -75,36 +75,36 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
    * Layout direction for children
    * @default 'horizontal'
    */
-  $direction?: LayoutDirection;
+  $direction?: LayoutDirection = undefined;
 
   /**
    * Gap between children (CSS value like '8px' or '0.5rem')
    */
-  $gap?: string;
+  $gap?: string = undefined;
 
   /**
    * Overlap ratio for stacked elements (0-1)
    * 0 = no overlap, 0.5 = 50% overlap, 0.9 = 90% overlap (deck-like)
    */
-  $overlap?: number;
+  $overlap?: number = undefined;
 
   /**
    * Whether to fan children (like a hand of cards)
    * When true, children are rotated around a central point
    */
-  $fan?: boolean;
+  $fan?: boolean = undefined;
 
   /**
    * Fan angle in degrees for the entire spread
    * @default 30
    */
-  $fanAngle?: number;
+  $fanAngle?: number = undefined;
 
   /**
    * Alignment of children within the space
    * @default 'center'
    */
-  $align?: LayoutAlignment;
+  $align?: LayoutAlignment = undefined;
 
   // ============================================
   // Sealing (SPACE-01/D22)
@@ -177,7 +177,7 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
   } = { enter: [], exit: [] };
 
   /** Visibility mode for contents (not the space itself) */
-  private _zoneVisibility?: VisibilityState;
+  private _zoneVisibility?: VisibilityState = undefined;
 
   static override unserializableAttributes = [
     ...GameElement.unserializableAttributes,
@@ -190,11 +190,6 @@ export class Space<G extends Game = any, P extends Player = any> extends GameEle
     // below is the actual serialize/restore mechanism, mirroring how
     // `_visibility` is handled on GameElement.
   ];
-
-  constructor(ctx: Partial<ElementContext>) {
-    super(ctx);
-    this.$type = 'space';
-  }
 
   // ============================================
   // Serialization (SEC-01/F1/F7)

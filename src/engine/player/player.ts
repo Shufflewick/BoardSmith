@@ -120,7 +120,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * const nextSeat = (current.seat % playerCount) + 1;
    * ```
    */
-  seat!: number;
+  seat: number = undefined!;
 
   /**
    * Player color for UI display (hex code like '#FF0000' or color name).
@@ -135,7 +135,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * }
    * ```
    */
-  color?: string;
+  color?: string = undefined;
 
   /**
    * Human-readable name for {@link color} (e.g. "Red", "Blue").
@@ -150,7 +150,7 @@ export class Player<G extends Game = any, P extends Player = any> extends GameEl
    * this.message(`${player.name} plays ${player.colorLabel ?? player.color}`);
    * ```
    */
-  colorLabel?: string;
+  colorLabel?: string = undefined;
 
   /**
    * Seat liveness — `'active'` (default), `'dormant'`, or `'eliminated'`.
