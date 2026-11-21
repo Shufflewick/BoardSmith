@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
 import { appendMergeSignoffs } from '../lib/merge-signoffs.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { commitAll, recordPassingVerify } from '../lib/verify-result.test-helper.js';
+import { commitAll, initRepo, recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import {
   SIGNOFF_HEADING,
   SIGNOFF_BEGIN,
@@ -670,6 +670,46 @@ describe('a chunk that edits a file an earlier sign-off names must name it in it
     await fs.writeFile(shopMd, text.replace('| src/shop.ts | written |', `| src/shop.ts | written |\n| \`${GUARD}\` | written |`));
     await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
     expect(await checkSignoff(project, 'deal')).toEqual([]);
+  });
+
+  it('a chunk is not refused for a void its own commit did not make', async () => {
+    const project = await makeProject([
+      { slug: 'deal', manifest: { 'src/deal.ts': 'deal v1', [GUARD]: 'guard v1' } },
+      { slug: 'shop', manifest: { 'src/shop.ts': 'shop v1' } },
+    ]);
+    initRepo(project);
+    commitAll(project, 'fixture: the project before its chunks');
+    await fs.writeFile(join(project, GUARD), 'guard v2, from shop');
+    commitAll(project, 'chunk-shop/step-spec');
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await fs.writeFile(join(project, GUARD), 'guard v3, edited by hand');
+    commitAll(project, 'fix the guard by hand');
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain(GUARD);
+  });
+
+  it('accepts the Build Manifest naming the file in another spelling', async () => {
+    const project = await guardProject();
+    const shopMd = join(project, DESIGN_DIR, 'chunks', 'shop', 'CHUNK.md');
+    const text = await readChunk(project, 'shop');
+    await fs.writeFile(shopMd, text.replace('| src/shop.ts | written |', `| src/shop.ts | written |\n| \`./${GUARD}\` | written |`));
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+  });
+
+  it('asks a verified editing chunk that already names the file to reopen and sign off, not to add the row again', async () => {
+    const project = await makeProject([
+      { slug: 'deal', manifest: { [GUARD]: 'guard v1' } },
+      { slug: 'shop', manifest: { [GUARD]: 'guard v1' } },
+    ]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await fs.writeFile(join(project, GUARD), 'guard v2, after both sign-offs');
+    commitAll(project, 'chunk-shop/step-build');
+    const problems = (await checkSignoff(project, 'deal')).join('\n');
+    expect(problems).toContain('chunk-shop/step-build');
+    expect(problems).toContain('boardsmith chunk-reopen shop');
+    expect(problems).not.toMatch(/add the row/i);
   });
 
   it('chunk-provenance-status names the chunk whose commit made the edit before asking the earlier designer to re-sign', async () => {

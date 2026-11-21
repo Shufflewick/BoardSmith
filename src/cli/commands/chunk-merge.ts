@@ -525,7 +525,7 @@ interface SharedFile {
 async function manifestPaths(projectDir: string, slug: string): Promise<Set<string>> {
   const text = await readIfExists(chunkMdPath(projectDir, slug), (path) => fs.readFile(path, 'utf-8'));
   if (text === undefined) return new Set();
-  return new Set(Object.keys(await chunkCodeFiles(projectDir, text)).map((p) => posix.normalize(p)));
+  return new Set(Object.keys(await chunkCodeFiles(projectDir, text)));
 }
 
 /**

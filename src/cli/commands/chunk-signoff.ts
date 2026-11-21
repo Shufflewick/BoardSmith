@@ -29,7 +29,7 @@ import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../../utils/regexp.js';
 import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
-import { type ChunkCommit, chunkChangedFiles, commitName } from '../lib/chunk-commits.js';
+import { type ChunkCommit, commitName } from '../lib/chunk-commits.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { bodyField } from '../lib/ledger-entries.js';
 import { projectDirOption } from '../lib/user-path.js';
@@ -270,7 +270,7 @@ const OUTSIDE_PROJECT = 'outside-project';
 export async function chunkCodeFiles(projectDir: string, chunkText: string): Promise<CodeFiles> {
   const design = designDir(projectDir);
   const files: CodeFiles = {};
-  const paths = [...new Set(parseBuildManifest(chunkText).entries.map((e) => e.path))].sort();
+  const paths = [...new Set(parseBuildManifest(chunkText).entries.map((e) => posix.normalize(e.path)))].sort();
   for (const path of paths) {
     const abs = resolveManifestPath(projectDir, path);
     if (abs === 'escapes') {
@@ -369,7 +369,7 @@ function readCode(body: string): CodeFiles | 'whole-file' | undefined {
   for (const value of values) {
     const match = /^(.+)[ \t]+(\S+)$/.exec(value);
     if (!match) return undefined;
-    code[match[1]] = match[2];
+    code[posix.normalize(match[1])] = match[2];
   }
   return code;
 }
@@ -743,17 +743,24 @@ export async function unaccountedEdits(projectDir: string): Promise<Map<string, 
 }
 
 /**
- * The chunk other than `self` whose `chunk-<slug>/` commit last changed `path`, when the file is
- * committed as that commit left it (#1785); undefined when git names no such chunk.
+ * The chunk whose `chunk-<slug>/` commit last changed `path`, when the file is committed as that
+ * commit left it (#1785); undefined when git names no chunk.
  */
-async function editingChunk(dir: string, path: string, self: ChunkState, project: ProjectState): Promise<{ chunk: ChunkState; commit: ChunkCommit } | undefined> {
-  const abs = resolveManifestPath(dir, path);
-  if (abs === 'escapes' || !(await gitSucceeds(dir, ['rev-parse', '--verify', 'HEAD^{commit}']))) return undefined;
-  if ((await git(dir, ['status', '--porcelain', '--', abs])).trim() !== '') return undefined;
-  const [hash, label = ''] = (await git(dir, ['log', '-1', '--format=%H%x09%s', '--', abs])).trim().split('\t');
+async function lastChunkEdit(dir: string, path: string): Promise<{ slug: string; commit: ChunkCommit } | undefined> {
+  if (resolveManifestPath(dir, path) === 'escapes' || !(await gitSucceeds(dir, ['rev-parse', '--verify', 'HEAD^{commit}']))) {
+    return undefined;
+  }
+  if ((await git(dir, ['--literal-pathspecs', 'status', '--porcelain', '--', path])).trim() !== '') return undefined;
+  const [hash, label = ''] = (await git(dir, ['--literal-pathspecs', 'log', '-1', '--format=%H%x09%s', '--', path])).trim().split('\t');
   const slug = /^chunk-([^/]+)\//.exec(label)?.[1];
-  const chunk = project.chunks.find((c) => c.slug === slug && c.slug !== self.slug);
-  return chunk ? { chunk, commit: { hash, label } } : undefined;
+  return slug ? { slug, commit: { hash, label } } : undefined;
+}
+
+/** The chunk other than `self` whose commit made `path` as it is now (`lastChunkEdit`). */
+async function editingChunk(dir: string, path: string, self: ChunkState, project: ProjectState): Promise<{ chunk: ChunkState; commit: ChunkCommit } | undefined> {
+  const edit = await lastChunkEdit(dir, path);
+  const chunk = project.chunks.find((c) => c.slug === edit?.slug && c.slug !== self.slug);
+  return chunk && edit ? { chunk, commit: edit.commit } : undefined;
 }
 
 /** The Build Manifest row that names `path`. */
@@ -761,12 +768,15 @@ const manifestRow = (path: string) => `| \`${path}\` | written |`;
 
 /** The remedy for an edit another chunk's commit made: that chunk names the file and signs off again. */
 function editorRemedy(path: string, editor: { chunk: ChunkState; commit: ChunkCommit }): string {
-  const { slug, status } = editor.chunk;
-  const reopen = status.startsWith(VERIFIED) ? ` (it is ${status}, so \`boardsmith chunk-reopen ${slug} --reason "<why>"\` first)` : '';
+  const { slug, status, code } = editor.chunk;
+  const name =
+    path in code
+      ? `${relChunkMdPath(slug)}'s Build Manifest names ${path}, but no sign-off of ${slug} saw the edit. `
+      : `${relChunkMdPath(slug)}'s Build Manifest does not name ${path}: add the row "${manifestRow(path)}" to its "## Build Manifest". `;
+  const reopen = status.startsWith(VERIFIED) ? `Reopen ${slug} with \`boardsmith chunk-reopen ${slug} --reason "<why>"\`, then s` : 'S';
   return (
-    `${commitName(editor.commit)} made that edit, and ${relChunkMdPath(slug)}'s Build Manifest does not name ` +
-    `${path}. Add the row "${manifestRow(path)}" to ${slug}'s "## Build Manifest" and sign ${slug} off again with ` +
-    `\`boardsmith chunk-signoff ${slug} ...\`${reopen}: that sign-off accounts for the edit, and this one stands.`
+    `${commitName(editor.commit)} made that edit. ${name}${reopen}ign ${slug} off with ` +
+    `\`boardsmith chunk-signoff ${slug} ...\`: that sign-off accounts for the edit, and this one stands.`
   );
 }
 
@@ -1058,27 +1068,27 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
 }
 
 /**
- * Each file this chunk's own commits changed that a verified chunk's sign-off names, where nothing
- * accounts for the change (#1785): this chunk's Build Manifest must name it, so its sign-off covers
+ * Each file a verified chunk's sign-off names whose edit nothing accounts for, where this chunk's
+ * commit made the edit (#1785): this chunk's Build Manifest must name it, so its sign-off covers
  * the edit instead of voiding the earlier chunk's.
  */
 async function unnamedSharedEdits(dir: string, slug: string): Promise<string[]> {
-  const voided = await unaccountedEdits(dir);
-  if (voided.size === 0) return [];
-  const changed = new Set([...(await chunkChangedFiles(dir, slug))].map((f) => posix.normalize(f)));
   const signedBy = new Map<string, string[]>();
-  for (const [other, edits] of voided) {
-    for (const { path } of edits.filter((e) => changed.has(posix.normalize(e.path)))) {
-      signedBy.set(path, [...(signedBy.get(path) ?? []), other]);
-    }
+  for (const [other, edits] of await unaccountedEdits(dir)) {
+    for (const { path } of edits) signedBy.set(path, [...(signedBy.get(path) ?? []), other]);
   }
-  return [...signedBy].map(
-    ([path, others]) =>
-      `${slug}'s commits changed ${path}, which ${others.join(' and ')}'s sign-off names, but ` +
-      `${relChunkMdPath(slug)}'s Build Manifest does not, so nothing accounts for the edit and it voids ` +
-      `${others.join(' and ')}'s sign-off. Add the row "${manifestRow(path)}" to ${slug}'s "## Build Manifest", ` +
-      `commit, run \`boardsmith verify --chunk ${slug}\`, then sign off again.`,
-  );
+  const problems: string[] = [];
+  for (const [path, others] of signedBy) {
+    const edit = await lastChunkEdit(dir, path);
+    if (edit?.slug !== slug) continue;
+    problems.push(
+      `${commitName(edit.commit)} changed ${path}, which ${others.join(' and ')}'s sign-off names, but ` +
+        `${relChunkMdPath(slug)}'s Build Manifest does not, so nothing accounts for the edit and it voids ` +
+        `${others.join(' and ')}'s sign-off. Add the row "${manifestRow(path)}" to ${slug}'s "## Build Manifest", ` +
+        `commit, run \`boardsmith verify --chunk ${slug}\`, then sign off again.`,
+    );
+  }
+  return problems;
 }
 
 /** A chunk made before this section existed gets it inserted ahead of `## Verified Commit Hash`. */

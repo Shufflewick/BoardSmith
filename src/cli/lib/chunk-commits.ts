@@ -100,22 +100,12 @@ export async function preSpecCodeChanges(projectDir: string, slug: string): Prom
   const found: { commit: ChunkCommit; files: string[] }[] = [];
   for (const c of (await readChunkLog(projectDir, slug, true)).reverse()) {
     if (!isBeforeSpec(slug, c.subject)) continue;
-    const files = (await commitFiles(projectDir, c.hash)).filter((f) => !f.startsWith(`${DESIGN_DIR}/`));
+    // --cc: a merge commit's own changes, the files it left unlike every parent.
+    const changed = await gitNames(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '--relative', c.hash]);
+    const files = changed.filter((f) => !f.startsWith(`${DESIGN_DIR}/`));
     if (files.length > 0) found.push({ commit: { hash: c.hash, label: c.subject }, files });
   }
   return found;
-}
-
-/** The files `hash` changed, project-relative; for a merge commit (--cc), the files it left unlike every parent. */
-function commitFiles(projectDir: string, hash: string): Promise<string[]> {
-  return gitNames(projectDir, ['diff-tree', '--root', '--cc', '--no-commit-id', '--name-only', '-r', '--relative', hash]);
-}
-
-/** Every file the chunk's own commits changed, project-relative; empty when it has no commit yet. */
-export async function chunkChangedFiles(projectDir: string, slug: string): Promise<Set<string>> {
-  const files = new Set<string>();
-  for (const c of await readChunkLog(projectDir, slug)) for (const f of await commitFiles(projectDir, c.hash)) files.add(f);
-  return files;
 }
 
 /** The first parent of the oldest of `commits` (newest first): the code as it stood before the chunk. */
