@@ -7,7 +7,7 @@
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
     "src/session/testing/fixtures/collect-fixture.ts:65-82|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
-    "src/engine/element/game-element.ts:1158-1164|src/engine/element/game-element.ts:1219-1225",
+    "src/engine/element/game-element.ts:1159-1165|src/engine/element/game-element.ts:1220-1226",
     "src/cli/commands/verify-classify.ts:1567-1574|src/cli/commands/verify-classify.ts:784-791",
     "src/engine/element/game.ts:3891-3895|src/engine/element/game.ts:3923-3927"
   ],

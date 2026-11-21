@@ -37,7 +37,7 @@ export default [
         message:
           'A class field with no initializer exists on a new element only when its compiler defines class fields, and Vite compiles ' +
           'BoardSmith without that when a game installs it, so create() would refuse the attribute there (#1786). ' +
-          'Give it an initializer (`= undefined` for an optional field), or write `declare` when the constructor assigns it.',
+          'Give it an initializer in place: `= undefined` for an optional field, `= undefined!` for one assigned later.',
       }],
     },
   },

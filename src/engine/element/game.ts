@@ -1125,13 +1125,13 @@ export class Game<
   static PlayerClass?: ElementClass<Player> = undefined;
 
   /** Container for removed elements */
-  declare pile: GameElement;
+  pile: GameElement = undefined!;
 
   /** Current game phase */
   phase: GamePhase = 'setup';
 
   /** Seeded random number generator */
-  declare random: GameRandom;
+  random: GameRandom = undefined!;
 
   /**
    * Message log.
@@ -1165,7 +1165,7 @@ export class Game<
   private _actions: Map<string, ActionDefinition> = new Map();
 
   /** Action executor for validation and execution */
-  declare private _actionExecutor: ActionExecutor;
+  private _actionExecutor: ActionExecutor = undefined!;
 
   /** Flow definition for this game */
   private _flowDefinition?: FlowDefinition<G> = undefined;

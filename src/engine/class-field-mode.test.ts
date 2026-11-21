@@ -15,7 +15,8 @@ import { tempTree } from '../testing/temp-tree.test-helper.js';
 // Links the source the bundle reads, so `vitest run --changed` runs this when one changes; nothing loads.
 import.meta.glob(['/src/**/*.ts', '!**/*.test.ts', '!**/*.test-helper.ts']);
 
-const bundle = join(tempTree('bs-class-field-mode-'), 'engine.mjs');
+const tree = tempTree('bs-class-field-mode-');
+const bundle = join(tree, 'engine.mjs');
 writeFileSync(bundle, (await build({
   entryPoints: [join(import.meta.dirname, 'index.ts')],
   bundle: true,

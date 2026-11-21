@@ -529,13 +529,13 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   $images?: Record<string, ImageRef> = undefined;
 
   /** Reference to the root game */
-  declare game: G;
+  game: G = undefined!;
 
   /** Shared context for all elements in the tree */
-  declare _ctx: ElementContext;
+  _ctx: ElementContext = undefined!;
 
   /** Internal tree structure */
-  declare _t: ElementTree<GameElement>;
+  _t: ElementTree<GameElement> = undefined!;
 
   /** Visibility state for this element */
   _visibility?: VisibilityState = undefined;
