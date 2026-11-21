@@ -908,6 +908,7 @@ describe('UIQ-03 — a11y floor', () => {
     const floor = test.split('## The A11y Floor')[1].split('## Failures Loop Back')[0];
     expect(floor).toContain('tests/guards/a11y-floor.test.ts');
     expect(floor).toMatch(/never list it in the Spec Manifest/);
+    expect(floor).toMatch(/chunk that writes or extends it names it in its Build Manifest[^]*chunk-signoff/);
     expect(floor).toMatch(/no-color-literal grep[^]*tests\/guards\//i);
     expect(floor).toMatch(/reduced-motion[^]*behaviour[^]*never by scanning the source/i);
     const assetGate = test.split('**Asset-reachability gate')[1].split('**A11y floor')[0];

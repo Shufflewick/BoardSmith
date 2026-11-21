@@ -639,6 +639,57 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
   });
 });
 
+describe('a chunk that edits a file an earlier sign-off names must name it in its own Build Manifest (#1785)', () => {
+  const LATER = new Date('2026-09-24T12:00:00Z');
+  const GUARD = 'tests/guards/g.test.ts';
+
+  /** `deal` signed off naming the guard; then `shop`'s spec step extends the guard without naming it. */
+  async function guardProject(): Promise<string> {
+    const project = await makeProject([
+      { slug: 'deal', manifest: { 'src/deal.ts': 'deal v1', [GUARD]: 'guard v1' } },
+      { slug: 'shop', manifest: { 'src/shop.ts': 'shop v1' } },
+    ]);
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await fs.writeFile(join(project, GUARD), 'guard v2, with the shop contrast pair');
+    commitAll(project, 'chunk-shop/step-spec');
+    return project;
+  }
+
+  it('chunk-signoff refuses the chunk, naming the file, the earlier sign-off and the row to add', async () => {
+    const project = await guardProject();
+    await expect(signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER })).rejects.toThrow(
+      /tests\/guards\/g\.test\.ts[^]*deal[^]*\| `tests\/guards\/g\.test\.ts` \| written \|/,
+    );
+    expect(await readChunk(project, 'shop')).toMatch(/^Status: built$/m);
+  });
+
+  it('signs the chunk off once its Build Manifest names the file, and the earlier sign-off stands', async () => {
+    const project = await guardProject();
+    const shopMd = join(project, DESIGN_DIR, 'chunks', 'shop', 'CHUNK.md');
+    const text = await readChunk(project, 'shop');
+    await fs.writeFile(shopMd, text.replace('| src/shop.ts | written |', `| src/shop.ts | written |\n| \`${GUARD}\` | written |`));
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+  });
+
+  it('chunk-provenance-status names the chunk whose commit made the edit before asking the earlier designer to re-sign', async () => {
+    const project = await guardProject();
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    let out: string;
+    try {
+      await chunkProvenanceStatusCommand({ project });
+      out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+    } finally {
+      log.mockRestore();
+    }
+    expect(out).toContain('chunk-shop/step-spec');
+    const nameTheFile = out.indexOf(`| \`${GUARD}\` | written |`);
+    expect(nameTheFile).toBeGreaterThan(-1);
+    expect(out.indexOf('chunk-signoff shop')).toBeGreaterThan(-1);
+    expect(nameTheFile).toBeLessThan(out.indexOf('Set Status back to built'));
+  });
+});
+
 describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsmith verify for HEAD (#452)', () => {
   it('refuses a chunk whose project has no verify result for the commit checked out, touching nothing', async () => {
     const project = await makeProject([{ slug: 'deal' }]);

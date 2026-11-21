@@ -28,7 +28,8 @@ import { withLedgerLock } from '../lib/ledger-lock.js';
 import { checkConstraints } from './constraint-check.js';
 import { verifiedProblem } from '../lib/verify-result.js';
 import { escapeRegExp } from '../../utils/regexp.js';
-import { gitOutput as git } from '../lib/git-output.js';
+import { gitOutput as git, gitSucceeds } from '../lib/git-output.js';
+import { type ChunkCommit, chunkChangedFiles, commitName } from '../lib/chunk-commits.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { bodyField } from '../lib/ledger-entries.js';
 import { projectDirOption } from '../lib/user-path.js';
@@ -66,7 +67,10 @@ import { projectDirOption } from '../lib/user-path.js';
  *     `design/MERGE-SIGNOFFS.md`), or because it is a test-runner config and the signed chunks' own
  *     checks still passed with it (#479). Accounted edits are reported as `sharedEdits`, which is
  *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
- *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
+ *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file, and
+ *     when a `chunk-<slug>/` commit made it, the refusal asks that chunk to name the file and sign
+ *     off again before asking the voided chunk's designer to re-sign (#1785). `chunk-signoff`
+ *     refuses a chunk whose own commits made such an edit to a file its Build Manifest omits.
  *   - A sign-off is a done claim, so it is refused unless the commit checked out, on a clean
  *     tree, passed the chunk's fast checks (#452, #985, `verifiedProblem`): the result
  *     `boardsmith verify --chunk <slug>` made, its tests and typecheck. Commit the chunk's work,
@@ -738,8 +742,36 @@ export async function unaccountedEdits(projectDir: string): Promise<Map<string, 
   return result;
 }
 
+/**
+ * The chunk other than `self` whose `chunk-<slug>/` commit last changed `path`, when the file is
+ * committed as that commit left it (#1785); undefined when git names no such chunk.
+ */
+async function editingChunk(dir: string, path: string, self: ChunkState, project: ProjectState): Promise<{ chunk: ChunkState; commit: ChunkCommit } | undefined> {
+  const abs = resolveManifestPath(dir, path);
+  if (abs === 'escapes' || !(await gitSucceeds(dir, ['rev-parse', '--verify', 'HEAD^{commit}']))) return undefined;
+  if ((await git(dir, ['status', '--porcelain', '--', abs])).trim() !== '') return undefined;
+  const [hash, label = ''] = (await git(dir, ['log', '-1', '--format=%H%x09%s', '--', abs])).trim().split('\t');
+  const slug = /^chunk-([^/]+)\//.exec(label)?.[1];
+  const chunk = project.chunks.find((c) => c.slug === slug && c.slug !== self.slug);
+  return chunk ? { chunk, commit: { hash, label } } : undefined;
+}
+
+/** The Build Manifest row that names `path`. */
+const manifestRow = (path: string) => `| \`${path}\` | written |`;
+
+/** The remedy for an edit another chunk's commit made: that chunk names the file and signs off again. */
+function editorRemedy(path: string, editor: { chunk: ChunkState; commit: ChunkCommit }): string {
+  const { slug, status } = editor.chunk;
+  const reopen = status.startsWith(VERIFIED) ? ` (it is ${status}, so \`boardsmith chunk-reopen ${slug} --reason "<why>"\` first)` : '';
+  return (
+    `${commitName(editor.commit)} made that edit, and ${relChunkMdPath(slug)}'s Build Manifest does not name ` +
+    `${path}. Add the row "${manifestRow(path)}" to ${slug}'s "## Build Manifest" and sign ${slug} off again with ` +
+    `\`boardsmith chunk-signoff ${slug} ...\`${reopen}: that sign-off accounts for the edit, and this one stands.`
+  );
+}
+
 /** Compares the sign-off's files with the chunk's files now, applying the rule in the header. */
-function codeAssessment(self: ChunkState, record: SignoffRecord, project: ProjectState, resign: string): SignoffAssessment {
+async function codeAssessment(dir: string, self: ChunkState, record: SignoffRecord, project: ProjectState, resign: string): Promise<SignoffAssessment> {
   const rel = relChunkMdPath(self.slug);
   const problems: string[] = [];
   const signedPaths = Object.keys(record.code);
@@ -757,9 +789,21 @@ function codeAssessment(self: ChunkState, record: SignoffRecord, project: Projec
   }
 
   const { sharedEdits, unaccounted } = signedFileEdits(self, record, project);
-  if (unaccounted.length) {
+  const unattributed: string[] = [];
+  for (const path of unaccounted) {
+    const editor = await editingChunk(dir, path, self, project);
+    if (!editor) {
+      unattributed.push(path);
+      continue;
+    }
     problems.push(
-      `${rel}'s sign-off (${record.when}) was for different code: ${listFiles(unaccounted)} ` +
+      `${rel}'s sign-off (${record.when}) is void: ${path} changed after it, and nothing accounts ` +
+        `for that change. ${editorRemedy(path, editor)} Only if ${self.slug}'s own code was reworked: ${resign}`,
+    );
+  }
+  if (unattributed.length) {
+    problems.push(
+      `${rel}'s sign-off (${record.when}) was for different code: ${listFiles(unattributed)} ` +
         `changed after it, and no later sign-off or merge saw that change and no chunk being built ` +
         `names the file. A sign-off applies only to the chunk as it was signed. ${resign}`,
     );
@@ -826,7 +870,7 @@ async function assessChunk(dir: string, self: ChunkState, project: ProjectState)
   }
 
   const record = parsed.record;
-  const code = codeAssessment(self, record, project, resign);
+  const code = await codeAssessment(dir, self, record, project, resign);
   const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems];
   const expected = derivedStatus(record);
   if (status !== expected) {
@@ -991,7 +1035,12 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   // #452: nobody says a chunk is done on a word. HEAD, on a clean tree, must have passed the
   // chunk's fast checks, `boardsmith verify --chunk <slug>`: its tests and typecheck (#985).
   const unverified = await verifiedProblem(dir, slug);
-  const problems = [...signoffProblems(record, ctx), ...constraints.refusals, ...(unverified ? [unverified] : [])];
+  const problems = [
+    ...signoffProblems(record, ctx),
+    ...constraints.refusals,
+    ...(unverified ? [unverified] : []),
+    ...(await unnamedSharedEdits(dir, slug)),
+  ];
   if (problems.length) {
     throw new Error(`${slug} was not signed off:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   }
@@ -1006,6 +1055,30 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   await atomicWriteFile(chunkMdPath(dir, slug), updatedChunk);
   await atomicWriteFile(sketchPath, updatedSketch);
   return record;
+}
+
+/**
+ * Each file this chunk's own commits changed that a verified chunk's sign-off names, where nothing
+ * accounts for the change (#1785): this chunk's Build Manifest must name it, so its sign-off covers
+ * the edit instead of voiding the earlier chunk's.
+ */
+async function unnamedSharedEdits(dir: string, slug: string): Promise<string[]> {
+  const voided = await unaccountedEdits(dir);
+  if (voided.size === 0) return [];
+  const changed = new Set([...(await chunkChangedFiles(dir, slug))].map((f) => posix.normalize(f)));
+  const signedBy = new Map<string, string[]>();
+  for (const [other, edits] of voided) {
+    for (const { path } of edits.filter((e) => changed.has(posix.normalize(e.path)))) {
+      signedBy.set(path, [...(signedBy.get(path) ?? []), other]);
+    }
+  }
+  return [...signedBy].map(
+    ([path, others]) =>
+      `${slug}'s commits changed ${path}, which ${others.join(' and ')}'s sign-off names, but ` +
+      `${relChunkMdPath(slug)}'s Build Manifest does not, so nothing accounts for the edit and it voids ` +
+      `${others.join(' and ')}'s sign-off. Add the row "${manifestRow(path)}" to ${slug}'s "## Build Manifest", ` +
+      `commit, run \`boardsmith verify --chunk ${slug}\`, then sign off again.`,
+  );
 }
 
 /** A chunk made before this section existed gets it inserted ahead of `## Verified Commit Hash`. */
