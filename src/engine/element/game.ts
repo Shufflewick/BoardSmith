@@ -1108,7 +1108,7 @@ export class Game<
    * Optional function to transform state for each player's view.
    * Override in subclass for custom attribute-level filtering.
    */
-  static playerView?: PlayerViewFunction;
+  static playerView?: PlayerViewFunction = undefined;
 
   /**
    * Optional custom Player class to use when creating players.
@@ -1122,16 +1122,16 @@ export class Game<
    * }
    * ```
    */
-  static PlayerClass?: ElementClass<Player>;
+  static PlayerClass?: ElementClass<Player> = undefined;
 
   /** Container for removed elements */
-  pile!: GameElement;
+  pile: GameElement = undefined!;
 
   /** Current game phase */
   phase: GamePhase = 'setup';
 
   /** Seeded random number generator */
-  random: GameRandom;
+  random: GameRandom = undefined!;
 
   /**
    * Message log.
@@ -1165,13 +1165,13 @@ export class Game<
   private _actions: Map<string, ActionDefinition> = new Map();
 
   /** Action executor for validation and execution */
-  private _actionExecutor!: ActionExecutor;
+  private _actionExecutor: ActionExecutor = undefined!;
 
   /** Flow definition for this game */
-  private _flowDefinition?: FlowDefinition<G>;
+  private _flowDefinition?: FlowDefinition<G> = undefined;
 
   /** Flow engine instance */
-  private _flowEngine?: FlowEngine<G>;
+  private _flowEngine?: FlowEngine<G> = undefined;
 
   /**
    * The host's instant for the op being run, epoch ms (#1532), read by
@@ -1179,7 +1179,7 @@ export class Game<
    * snapshot, never in the tree.
    * @internal
    */
-  _hostNow?: number;
+  _hostNow?: number = undefined;
 
   /**
    * The earliest host instant at which a {@link stepOpenFor} read since the
@@ -1187,7 +1187,7 @@ export class Game<
    * `GameRunner.reofferAt`.
    * @internal
    */
-  _reofferAt?: number;
+  _reofferAt?: number = undefined;
 
   /** Debug registry for custom debug data (dev mode only) */
   private _debugRegistry: Map<string, () => unknown> = new Map();
@@ -1262,7 +1262,7 @@ export class Game<
    * it — the definition is re-supplied each time a runner is constructed,
    * mirroring how `_actions` and flow definitions live on the instance.
    */
-  tutorialDefinition?: TutorialDefinition;
+  tutorialDefinition?: TutorialDefinition = undefined;
 
   static override unserializableAttributes = [
     ...Space.unserializableAttributes,
@@ -1519,7 +1519,7 @@ export class Game<
    * Stored initialization error from checkForVolatileState (for testing).
    * @internal
    */
-  _initError?: Error;
+  _initError?: Error = undefined;
 
   /**
    * Wait for initialization to complete. Throws if there was an error during setup.

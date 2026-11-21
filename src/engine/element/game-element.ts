@@ -482,7 +482,8 @@ function notAFieldMessage(className: string, name: string, key: string): string 
     `  A seat's copy of the game rebuilds an element it cannot see from a new ${className}, so it could not tell that ` +
     `"${key}" is unknown, and a bot's search would read undefined instead.\n` +
     `  Naming an attribute with \`declare\` gives the class no field, because TypeScript erases \`declare\`.\n` +
-    `  Fix: make it a field of ${className}: \`${key}!: <type>;\` or \`${key} = <default>;\`, not \`declare ${key}: <type>;\`.`
+    `  Fix: give ${className} the field with an initializer, \`${key} = <default>;\`, which is a field under every compiler setting, ` +
+    `not \`declare ${key}: <type>;\`.`
   );
 }
 
@@ -502,42 +503,42 @@ export function savedAttributeKeys(element: GameElement): string[] {
 
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
-  name?: string;
+  name?: string = undefined;
 
   /** Player who owns this element (affects "mine" queries and visibility) */
-  player?: P;
+  player?: P = undefined;
 
   /** Row position in grid layout */
-  row?: number;
+  row?: number = undefined;
 
   /** Column position in grid layout */
-  column?: number;
+  column?: number = undefined;
 
   /**
    * Image for single-sided elements (boards, mats, tokens).
    * For multi-sided elements (cards, dice), use $images instead.
    * System property - $ prefix indicates this is for the rendering system.
    */
-  $image?: ImageRef;
+  $image?: ImageRef = undefined;
 
   /**
    * Images for multi-sided elements, keyed by side name.
    * Common keys: 'face', 'back' for cards; 'side1'-'side6' for dice.
    * System property - $ prefix indicates this is for the rendering system.
    */
-  $images?: Record<string, ImageRef>;
+  $images?: Record<string, ImageRef> = undefined;
 
   /** Reference to the root game */
-  game!: G;
+  game: G = undefined!;
 
   /** Shared context for all elements in the tree */
-  _ctx!: ElementContext;
+  _ctx: ElementContext = undefined!;
 
   /** Internal tree structure */
-  _t: ElementTree<GameElement>;
+  _t: ElementTree<GameElement> = undefined!;
 
   /** Visibility state for this element */
-  _visibility?: VisibilityState;
+  _visibility?: VisibilityState = undefined;
 
   /**
    * Attributes this copy of the element was never told (#19).
@@ -550,7 +551,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * `toJSON` and `resolveElementReferences` (both walk `savedAttributeKeys`,
    * an `Object.keys` filter) from reading it back.
    */
-  _redactedAttributes?: Set<string>;
+  _redactedAttributes?: Set<string> = undefined;
 
   /**
    * How many children the per-seat view this element was restored from said it
@@ -559,7 +560,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * count survives. Read once, when a sampler fills the restored sandbox; not
    * written back by `toJSON`, since moves made in the sandbox would leave it stale.
    */
-  _viewChildCount?: number;
+  _viewChildCount?: number = undefined;
 
   /** Static flag to identify GameElement classes */
   static isGameElement = true;
@@ -571,7 +572,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   static MAX_SERIALIZE_DEPTH = 100;
 
   /** Attributes visible to all players (undefined = all visible) */
-  static visibleAttributes: string[] | undefined;
+  static visibleAttributes: string[] | undefined = undefined;
 
   /**
    * Attributes COMPUTED for the seat receiving this element (#269).
@@ -607,7 +608,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
    * - The value is the seat's own, so `visibleAttributes` does not filter it --
    *   the derivation is the gate, and it already knew the seat.
    */
-  static seatAttributes: Record<string, SeatAttributeDerivation> | undefined;
+  static seatAttributes: Record<string, SeatAttributeDerivation> | undefined = undefined;
 
   constructor(ctx: Partial<ElementContext>) {
     this._ctx = ctx as ElementContext;

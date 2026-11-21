@@ -1,5 +1,5 @@
 {
-  "revision": 503,
+  "revision": 504,
   "surfaceHash": "8b31596b3aaadef6",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3967,6 +3967,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith mutate leaves out a mutant marked equivalent by a // boardsmith-mutate-equivalent comment with a required reason (#1781)"
+    },
+    {
+      "revision": 504,
+      "date": "2026-11-21",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "An installed engine keeps its own element attributes: every element field has an initializer or is declare, so create() no longer refuses a player's seat when Vite compiles the package without define semantics"
     }
   ]
 }

@@ -1,5 +1,4 @@
 import { Piece } from './piece.js';
-import type { ElementContext } from './types.js';
 import type { Player } from '../player/player.js';
 import type { Game } from './game.js';
 
@@ -42,16 +41,10 @@ export class Card<G extends Game = any, P extends Player = any> extends Piece<G,
    * System property to identify this element type for AutoUI
    * $ prefix indicates this is a system property
    */
-  $type!: 'card';
+  $type = 'card' as const;
 
   /** Whether the card is face-up (true) or face-down (false) */
   faceUp: boolean = true;
-
-  constructor(ctx: Partial<ElementContext>) {
-    super(ctx);
-    // Explicitly set as instance property for serialization
-    this.$type = 'card';
-  }
 
   /**
    * Flip the card to show the other face

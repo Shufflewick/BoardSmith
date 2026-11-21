@@ -83,19 +83,19 @@ export class HexGrid<G extends Game = any, P extends Player = any> extends Space
    * Name of the Q coordinate attribute on HexCell children
    * @default 'q'
    */
-  $qCoord?: string;
+  $qCoord?: string = undefined;
 
   /**
    * Name of the R coordinate attribute on HexCell children
    * @default 'r'
    */
-  $rCoord?: string;
+  $rCoord?: string = undefined;
 
   /**
    * Size of hexes in pixels (width for flat, height for pointy)
    * @default 50
    */
-  $hexSize?: number;
+  $hexSize?: number = undefined;
 
   /**
    * The first matching descendant, as {@link GameElement.first}. The cell at a

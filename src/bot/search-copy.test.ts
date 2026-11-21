@@ -222,9 +222,9 @@ class GadgetGame extends Game<GadgetGame, Player> {
 }
 
 describe('an attribute an element class names with `declare` (#1782)', () => {
-  it('is refused when an element is created with it, naming the class field to write instead', () => {
+  it('is refused when an element is created with it, naming the initialized class field to write instead', () => {
     expect(() => new GadgetGame({ playerCount: 2, seed: 'truth' })).toThrow(
-      /Cannot create Gadget "lamp": "charge" is not a field of Gadget[\s\S]*charge!: <type>/,
+      /Cannot create Gadget "lamp": "charge" is not a field of Gadget[\s\S]*Fix: give Gadget the field with an initializer, `charge = <default>;`, which is a field under every compiler setting, not `declare charge: <type>;`/,
     );
   });
 });

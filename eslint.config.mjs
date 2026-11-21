@@ -30,6 +30,18 @@ export default [
     },
   },
   {
+    files: ['src/engine/element/**/*.ts', 'src/engine/player/**/*.ts'],
+    rules: {
+      'no-restricted-syntax': ['error', {
+        selector: 'PropertyDefinition[value=null][declare=false]:not([key.type="PrivateIdentifier"])',
+        message:
+          'A class field with no initializer exists on a new element only when its compiler defines class fields, and Vite compiles ' +
+          'BoardSmith without that when a game installs it, so create() would refuse the attribute there (#1786). ' +
+          'Give it an initializer in place: `= undefined` for an optional field, `= undefined!` for one assigned later.',
+      }],
+    },
+  },
+  {
     files: [
       'src/cli/commands/verify-*.ts',
       'src/cli/commands/chunk-signoff.ts',

@@ -78,28 +78,28 @@ export class Grid<G extends Game = any, P extends Player = any> extends Space<G,
    * Example: ['1', '2', '3', '4', '5', '6', '7', '8'] for chess ranks 1-8
    * If not provided, AutoUI will use numeric indices
    */
-  $rowLabels?: string[];
+  $rowLabels?: string[] = undefined;
 
   /**
    * Labels for columns (optional - game designer provides these)
    * Example: ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'] for chess
    * If not provided, AutoUI will use numeric indices
    */
-  $columnLabels?: string[];
+  $columnLabels?: string[] = undefined;
 
   /**
    * Name of the attribute on GridCell children that represents the row coordinate
    * Example: 'row', 'rank', 'y'
    * AutoUI uses this to position grid cells correctly
    */
-  $rowCoord?: string;
+  $rowCoord?: string = undefined;
 
   /**
    * Name of the attribute on GridCell children that represents the column coordinate
    * Example: 'col', 'column', 'file', 'x'
    * AutoUI uses this to position grid cells correctly
    */
-  $colCoord?: string;
+  $colCoord?: string = undefined;
 
   /**
    * The first matching descendant, as {@link GameElement.first}. The cell at a
