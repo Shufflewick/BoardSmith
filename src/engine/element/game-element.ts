@@ -481,9 +481,9 @@ function notAFieldMessage(className: string, name: string, key: string): string 
     `Cannot create ${className} "${name}": "${key}" is not a field of ${className}, so a new ${className} has no "${key}".\n` +
     `  A seat's copy of the game rebuilds an element it cannot see from a new ${className}, so it could not tell that ` +
     `"${key}" is unknown, and a bot's search would read undefined instead.\n` +
-    `  Naming an attribute with \`declare\` gives the class no field, because TypeScript erases \`declare\`, and \`${key}!: <type>;\` ` +
-    `gives none where class fields compile without define semantics, as Vite compiles an installed package.\n` +
-    `  Fix: give ${className} the field with an initializer, \`${key} = <default>;\`, not \`declare ${key}: <type>;\`.`
+    `  Naming an attribute with \`declare\` gives the class no field, because TypeScript erases \`declare\`.\n` +
+    `  Fix: give ${className} the field with an initializer, \`${key} = <default>;\`, which is a field under every compiler setting, ` +
+    `not \`declare ${key}: <type>;\`.`
   );
 }
 
