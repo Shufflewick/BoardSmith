@@ -2977,7 +2977,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   async function appendListEntry(selectionName: string, value: unknown): Promise<void> {
     const selection = selectionForDraft(selectionName, 'appendListEntry');
-    if (!selection) return;
+    if (!selection || draftHeld()) return;
 
     const cfg = resolveOrderedListConfig(selection);
     if (!cfg) {
@@ -3009,6 +3009,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     multiSelectDraft.value = listDraft(selectionName, [...current, offered]);
   }
 
+  /** True, with the reason set, while the server is answering a pick: a draft changed now would not be what it holds (#1789). */
+  function draftHeld(): boolean {
+    if (stepOutstanding()) setError(STEP_OUTSTANDING);
+    return stepOutstanding();
+  }
+
   /** An ordered-list draft, each entry numbered as which repeat of its value it is. */
   function listDraft(selectionName: string, values: unknown[]): NonNullable<typeof multiSelectDraft.value> {
     const copies = values.map((value, i) => values.slice(0, i).filter(v => valuesEqual(v, value)).length);
@@ -3019,7 +3025,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *  value does not name an entry. */
   function removeListEntry(selectionName: string, index: number): void {
     const draft = multiSelectDraft.value;
-    if (!draft || draft.selectionName !== selectionName) return;
+    if (!draft || draft.selectionName !== selectionName || draftHeld()) return;
     if (index < 0 || index >= draft.values.length) {
       devWarn(
         `ordered-list-bad-index:${selectionName}`,
@@ -3061,6 +3067,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       );
       return;
     }
+
+    if (draftHeld()) return;
 
     // Start a fresh draft for this selection if needed
     const draft = multiSelectDraft.value?.selectionName === selectionName ? multiSelectDraft.value : null;
@@ -3106,7 +3114,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       if (sendsOnLastTick(cfg) && newValues.length === cfg.max) {
         multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
-        await confirmMultiSelect(selectionName);
+        const result = await confirmMultiSelect(selectionName);
+        // A refused last tick is taken back, so the next tick sends again (#1789).
+        if (result?.valid === false && multiSelectDraft.value?.selectionName === selectionName) {
+          multiSelectDraft.value = { selectionName, values: current, copies: currentCopies };
+        }
         return;
       }
     }
@@ -3126,7 +3138,8 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (draft?.selectionName === selectionName) {
       const result = await fill(selectionName, [...draft.values]);
       // A refusal that leaves the pick open keeps the ticks for the player to fix (#1789).
-      if (result.valid && multiSelectDraft.value?.selectionName === selectionName) multiSelectDraft.value = null;
+      const keep = !result.valid && currentPick.value?.name === selectionName;
+      if (!keep && multiSelectDraft.value?.selectionName === selectionName) multiSelectDraft.value = null;
       return result;
     }
     const pick = currentPick.value;

@@ -89,5 +89,13 @@ export function resolveMultiSelect(
   const resolved = typeof multiSelect === 'function' ? multiSelect(ctx) : multiSelect;
 
   const bounds = boundsOf(resolved, selection, 'multiSelect');
-  return (resolved as { confirm?: boolean }).confirm === true ? { ...bounds, confirm: true } : bounds;
+  if ((resolved as { confirm?: boolean }).confirm !== true) return bounds;
+  if (bounds.min !== bounds.max || bounds.max === 0) {
+    throw new Error(
+      `Selection "${selection.name}": multiSelect confirm: true only applies to a fixed count above 0 ` +
+      `({ min: N, max: N }), the one count whose last tick sends the pick; any other count already waits for Done. ` +
+      `Remove confirm, or make min and max equal.`
+    );
+  }
+  return { ...bounds, confirm: true };
 }

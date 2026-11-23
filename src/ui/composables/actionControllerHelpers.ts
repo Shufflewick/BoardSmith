@@ -42,6 +42,11 @@ export function choiceCopies(choices: readonly { value: unknown; disabled?: stri
   return copies;
 }
 
+/** Whether a multiSelect's last tick sends it, with no Done drawn: a fixed count above 0 that does not ask to confirm (#1568, #1789). */
+export function sendsOnLastTick(bounds: MultiSelectBounds): boolean {
+  return bounds.min === bounds.max && bounds.max !== 0 && bounds.confirm !== true;
+}
+
 /**
  * Resolve the EFFECTIVE multiSelect config for a selection — the one shared
  * helper `useActionController` (fill/toggleMultiSelect), `ActionPanel.vue`,
@@ -66,11 +71,6 @@ export function choiceCopies(choices: readonly { value: unknown; disabled?: stri
  *    no snapshot has been fetched yet (e.g. `execute()` / tests that skip
  *    the fetch round-trip).
  */
-/** Whether a multiSelect's last tick sends it, with no Done drawn: a fixed count above 0 that does not ask to confirm (#1568, #1789). */
-export function sendsOnLastTick(bounds: MultiSelectBounds): boolean {
-  return bounds.min === bounds.max && bounds.max !== 0 && bounds.confirm !== true;
-}
-
 export function resolveMultiSelectConfig(
   selection: EnrichedPickMetadata,
   currentArgs: Record<string, unknown>,
