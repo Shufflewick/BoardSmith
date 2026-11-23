@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, refsHighlight, resolvePickCounts, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
+import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, refsHighlight, resolvePickCounts, sendsOnLastTick, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1407,15 +1407,8 @@ const isMultiSelectReady = computed(() => {
   return !isDisabled(multiSelectDoneDisabledReason.value);
 });
 
-/**
- * Check if Done button should be shown: hidden when min === max, since reaching
- * that count auto-confirms, unless the count is 0, which no tick ever reaches (#1568).
- */
-const showMultiSelectDoneButton = computed(() => {
-  if (!currentMultiSelect.value) return false;
-  const { min, max } = currentMultiSelect.value;
-  return min !== max || max === 0;
-});
+/** Done is drawn unless the last tick sends the pick. */
+const showMultiSelectDoneButton = computed(() => !!currentMultiSelect.value && !sendsOnLastTick(currentMultiSelect.value));
 
 /**
  * Get display text for multi-select count (e.g., "Selected: 1/2")

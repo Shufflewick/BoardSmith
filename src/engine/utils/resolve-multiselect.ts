@@ -28,6 +28,7 @@
  *    boundary should let it surface.
  */
 import type { ActionContext, Selection } from '../index.js';
+import type { MultiSelectBounds } from '../../types/protocol.js';
 
 /**
  * A resolved count config (`number | { min?, max? }`) as `{ min, max? }`, with
@@ -76,7 +77,7 @@ export function resolveOrderedList(
 export function resolveMultiSelect(
   selection: Selection,
   ctx: ActionContext,
-): { min: number; max?: number } | undefined {
+): MultiSelectBounds | undefined {
   const multiSelect = (selection as { multiSelect?: unknown }).multiSelect;
 
   if (multiSelect === undefined) {
@@ -87,5 +88,6 @@ export function resolveMultiSelect(
   // try/catch — a thrown error must propagate to the caller (fail loud).
   const resolved = typeof multiSelect === 'function' ? multiSelect(ctx) : multiSelect;
 
-  return boundsOf(resolved, selection, 'multiSelect');
+  const bounds = boundsOf(resolved, selection, 'multiSelect');
+  return (resolved as { confirm?: boolean }).confirm === true ? { ...bounds, confirm: true } : bounds;
 }

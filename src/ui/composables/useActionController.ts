@@ -92,7 +92,7 @@
 import { ref, readonly, computed, watch, nextTick, getCurrentScope, onScopeDispose } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 import { sameThing, useSharedSelection, type ThingRun } from './sharedSelection.js';
-import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, multiSelectFullReason, orderedListFullReason, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal, snapshotMetadata } from './actionControllerHelpers.js';
+import { copyOfChoice, getDisplayFromValue, labelOfPick, actionNeedsWizardMode, multiSelectFullReason, orderedListFullReason, resolveMultiSelectConfig as resolveEffectiveMultiSelect, sendsOnLastTick, resolveOrderedListConfig as resolveEffectiveOrderedList, editorRuleRefusal, snapshotMetadata } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { findMatchingChoice, oneChoiceListRefusal, oneElementListRefusal, valuesEqual } from '../../engine/action/choice-matching.js';
 
@@ -143,7 +143,7 @@ import type {
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
 } from './useActionControllerTypes.js';
-import type { PickSubject, SubjectRef } from '../../types/protocol.js';
+import type { MultiSelectBounds, PickSubject, SubjectRef } from '../../types/protocol.js';
 
 /**
  * Create an action controller for handling game actions.
@@ -2925,7 +2925,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   function resolveMultiSelectConfig(
     selection: EnrichedPickMetadata
-  ): { min?: number; max?: number } | undefined {
+  ): MultiSelectBounds | undefined {
     const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
     return resolveEffectiveMultiSelect(selection, currentArgs.value, pickSnapshot);
   }
@@ -3037,7 +3037,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * in parity. currentArgs is NOT touched until confirmMultiSelect() (which uses
    * the fill() path with the complete array).
    *
-   * When min === max, reaching the exact count auto-confirms (no Done button, unless the count is 0).
+   * When min === max, reaching the exact count auto-confirms (no Done button), unless the count is 0 or the pick asks to confirm.
    * A value the choices list offers N times is N slots; `copy` (0 to N-1) names one,
    * counting the enabled entries first. With no `copy`, a held copy is removed, else copy 0 is added.
    */
@@ -3104,8 +3104,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       newValues = [...current, offered];
       newCopies = [...currentCopies, taken];
 
-      // Auto-confirm when exact count required (min === max) and reached.
-      if (cfg.min === cfg.max && newValues.length === cfg.min) {
+      if (sendsOnLastTick(cfg) && newValues.length === cfg.max) {
         multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
         await confirmMultiSelect(selectionName);
         return;

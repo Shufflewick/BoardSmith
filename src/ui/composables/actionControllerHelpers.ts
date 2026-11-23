@@ -9,6 +9,7 @@ import type { ActionStateSnapshot, EnrichedActionMetadata, ChoiceWithRefs, Eleme
 import { choiceValueKey, findMatchingChoice, labelOfValue, valuesEqual } from '../../engine/action/choice-matching.js';
 import { numberRuleErrors } from '../../engine/action/number-rules.js';
 import { textPickRefusal } from '../../engine/action/text-rules.js';
+import type { MultiSelectBounds } from '../../types/protocol.js';
 
 // ============================================
 // MultiSelect Resolution (Pit of Success — single source of truth)
@@ -65,11 +66,16 @@ export function choiceCopies(choices: readonly { value: unknown; disabled?: stri
  *    no snapshot has been fetched yet (e.g. `execute()` / tests that skip
  *    the fetch round-trip).
  */
+/** Whether a multiSelect's last tick sends it, with no Done drawn: a fixed count above 0 that does not ask to confirm (#1568, #1789). */
+export function sendsOnLastTick(bounds: MultiSelectBounds): boolean {
+  return bounds.min === bounds.max && bounds.max !== 0 && bounds.confirm !== true;
+}
+
 export function resolveMultiSelectConfig(
   selection: EnrichedPickMetadata,
   currentArgs: Record<string, unknown>,
   pickSnapshot?: PickSnapshot
-): { min?: number; max?: number } | undefined {
+): MultiSelectBounds | undefined {
   if (selection.dependsOn && selection.multiSelectByDependentValue) {
     const depValue = currentArgs[selection.dependsOn];
     if (depValue !== undefined) {
@@ -125,7 +131,7 @@ export function resolvePickCounts(
   currentArgs: Record<string, unknown>,
   pickSnapshots?: Map<string, PickSnapshot>
 ): {
-  multiSelect?: { min?: number; max?: number };
+  multiSelect?: MultiSelectBounds;
   orderedList?: { min: number; max?: number };
 } {
   if (!selection) return {};

@@ -115,6 +115,12 @@ is a set or a sequence:
 | `min`/`max` count | distinct choices | **entries** |
 | The Action Panel draws | checkboxes plus Done | Add buttons over a numbered, removable list, plus Done |
 
+A `multiSelect` with `min === max` (above 0) has no Done: the tick that reaches
+the count sends the pick. Add `confirm: true` (`{ min: 2, max: 2, confirm: true }`)
+to draw Done instead, so the player can still change the pick before sending it.
+When the game refuses a pick that stays open (a selection step's `validate`), the
+ticks are kept for the player to fix.
+
 Both take a number (`3` means "up to 3"), a `{ min, max }` config, or a function
 of the context when the bound is itself a fact about an earlier answer. Declaring
 both on one selection is refused by the builder. Either one makes the arg an
