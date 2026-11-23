@@ -80,7 +80,9 @@ function sanitizeCallbackError(error: unknown, source: string): string {
  * Format a `choice` selection's candidates.
  *
  * Each candidate is already the value it delivers: the executor read any
- * `{ value, label }` choice where the choices were built (#509). Its label is
+ * `{ value, label }` choice where the choices were built (#509). An element
+ * goes as `{ id, className }`, the reference a pick sends back, never its
+ * contents (#1789). Its label is
  * the one it brought, else the selection's `display()`, else one read off the
  * value.
  */
@@ -100,7 +102,7 @@ export function formatChoiceCandidates(
       ? engineLabel
       : seatText(authored, engineLabel, hidesFrom(ctx.player.seat, value), `display or label for selection '${selection.name}'`);
     const choice: ChoiceWithRefs = {
-      value: neutral === undefined ? value : { id: sight.idOf(value as GameElement), className: (value as GameElement).constructor.name },
+      value: isElement(value) ? { id: sight.idOf(value), className: value.constructor.name } : value,
       display,
     };
 
