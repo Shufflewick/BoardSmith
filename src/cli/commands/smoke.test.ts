@@ -37,7 +37,7 @@ onMounted(() => console.error('the table lost its deck'));
 </template>
 `;
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('walks the table scaffold: a seated player takes both of its actions, with no error, and nothing is left running', async () => {
     const { dir, outcome, pids } = await smokeOf(false);
 

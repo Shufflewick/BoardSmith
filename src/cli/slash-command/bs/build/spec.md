@@ -68,8 +68,8 @@ and it fails the chunk on each of these, so write the tests to meet them now:
 
 **Required output: the smoke test, for any chunk that adds an action or a UI control.** Such a
 chunk adds each new action's name to `actions` in the game's `tests/browser/smoke.spec.ts` (which
-`boardsmith init` writes), in the same change that adds the action. `boardsmith verify` serves the
-game with `boardsmith dev` and walks it in Chromium: a seated player takes every action the panel
+`boardsmith init` writes), in the same change that adds the action. `npx boardsmith smoke`, which
+runs only on request because it plays whole seeded games, serves the game with `boardsmith dev` and walks it in Chromium: a seated player takes every action the panel
 offers and presses every control on the board, and the check fails on any page or console error,
 any offered action that fails, an offered action the spec does not list, and a listed one the walk
 never takes. At a table the walk acts for every seat in turn, and starts a new game when one ends

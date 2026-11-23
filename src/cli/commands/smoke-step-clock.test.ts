@@ -9,7 +9,7 @@ import { playbackGame, smokeSpec } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#1547: skips the wait for an action the step clock greys, as a player would wait, so it takes it however fast it walks', async () => {
     const { outcome, steps } = await smokeOf(false, { ...playbackGame(), 'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], undefined, { steps: 8 }) });
 

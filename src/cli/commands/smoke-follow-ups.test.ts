@@ -9,7 +9,7 @@ import { smokeSpec, stashGame } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#1596: skips a follow-up that re-opens an action it has taken, and goes on to the actions still to take', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...stashGame(),

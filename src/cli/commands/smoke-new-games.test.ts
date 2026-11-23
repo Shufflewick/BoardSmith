@@ -20,7 +20,7 @@ import uis from './uis.js';
 </template>
 `;
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it(
     '#458, #459: takes a game-ending action once and starts a new game for the rest, then stops taking it so a game can go ' +
       'on, acts for the other seat to accept an offer, ' +

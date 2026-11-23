@@ -1,6 +1,6 @@
 /**
  * What the in-browser smoke walk reports once it has walked (#453). The walk itself runs in
- * Chromium under `boardsmith verify`; its verdict is decided here, from what it saw.
+ * Chromium under `boardsmith smoke`; its verdict is decided here, from what it saw.
  */
 import { describe, expect, it } from 'vitest';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';

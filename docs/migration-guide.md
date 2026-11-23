@@ -1,5 +1,13 @@
 # Migration Guide
 
+## `boardsmith verify` no longer runs the smoke playthrough (#1790)
+
+The smoke walk plays seeded games for hundreds of steps, which made it most of
+a long verify. It is a sim, so it now runs only on request, as `boardsmith smoke`.
+`boardsmith verify` runs test, typecheck, build, validate and verbs, and publish
+no longer waits on the walk. Keep `tests/browser/smoke.spec.ts` and run
+`boardsmith smoke` when you want the game walked in a browser.
+
 ## An action step can undo one action at a time: `actionStep({ undo: 'action' })` (#1759)
 
 A step declared `undo: 'action'` makes each Undo take back the seat's last

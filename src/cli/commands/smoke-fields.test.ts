@@ -23,7 +23,7 @@ function walkGreetings(inputs: string) {
   return smokeOf(false, { ...greetingsGame(), 'tests/browser/smoke.spec.ts': greetingsSpec(inputs) });
 }
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it(
     '#465 to #467: enters a number its field accepts, and the next one up when the game refuses it, and gives up on an ' +
       'action it cannot finish once, reporting it, without taking it again while the panel offers anything else',

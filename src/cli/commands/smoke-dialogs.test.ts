@@ -9,7 +9,7 @@ import { ACE_SEEDS, boardThatReplacesItsFrame, boardWithDialogs, frameReplacedBe
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it(
     '#461: while a modal dialog is open presses only what is in it, each control once, closing it again with the control ' +
       'that closed it before, and closes one with nothing to press by Escape',

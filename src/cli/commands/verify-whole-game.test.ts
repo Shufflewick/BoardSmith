@@ -1,15 +1,13 @@
 /**
- * `boardsmith verify` on a whole game, as a user runs it (#453): a table and a world as
- * `boardsmith init` scaffolds them, through all six real checks, the smoke check against
- * `boardsmith dev` in Chromium included.
+ * `boardsmith verify` on a whole game, as a user runs it (#453): the table `boardsmith init`
+ * scaffolds, through all five real checks.
  *
- * These are the slowest verify runs, each serving the game and walking it in a browser, so they
- * live in their own file: vitest runs it alongside the `verify*.test.ts` files rather than after them.
+ * These are the slowest verify runs, each building the game, so they live in their own file: vitest
+ * runs it alongside the `verify*.test.ts` files rather than after them.
  */
 import { describe, expect, it, vi } from 'vitest';
 
 import { join } from 'node:path';
-import { verifiedProblem } from '../lib/verify-result.js';
 import { bundleDigest, readDistDir } from '../lib/zip.js';
 import { commitAll, git, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -19,9 +17,8 @@ import { check, verifyAsAUser } from './verify-cli.test-helper.js';
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
 
 /**
- * The table `boardsmith init` scaffolds, smoke test and all, built on a branch that adds `fee`:
- * a whole game every one of the six real checks can run, the smoke check against `boardsmith dev`
- * in Chromium included.
+ * The table `boardsmith init` scaffolds, built on a branch that adds `fee`: a whole game every one
+ * of the five real checks can run.
  */
 async function scaffoldedTableOnBranch(init: { sim?: boolean } = {}): Promise<string> {
   const dir = await smokeProject(false, {}, init);
@@ -36,63 +33,8 @@ async function scaffoldedTableOnBranch(init: { sim?: boolean } = {}): Promise<st
   return dir;
 }
 
-/**
- * THE ACCEPTANCE FIXTURE (#453): the world `boardsmith init --world` scaffolds, whose board reads a
- * table's whole game context with `useGameContext()`. A world's shell never provides a table's
- * `gameState`, `dueSeats`, `timeTravelDiff`, `platformRequest` or `turnDeadline`, so the board
- * throws the moment it renders in a real world. Its unit test mounts the board with a context built by hand, table keys
- * and all, the way a board test once passed while its board crashed in play.
- */
-const TABLE_KEY_WORLD_BOARD = `<script setup lang="ts">
-import { useGameContext } from 'boardsmith/ui';
-
-const { gameState, availableActions } = useGameContext();
-</script>
-
-<template>
-  <div class="world-board">Round {{ gameState ? 1 : 0 }}: {{ availableActions.join(', ') }}</div>
-</template>
-`;
-
-/** The fixture test's jsdom pragma, built so vitest does not read it as this file's own. */
-const JSDOM_PRAGMA = ['// @vitest', 'environment jsdom'].join('-');
-
-const HAND_BUILT_STUB_TEST = `${JSDOM_PRAGMA}
-import { it, expect } from 'vitest';
-import { computed, ref } from 'vue';
-import { mount } from '@vue/test-utils';
-import { GAME_CONTEXT_KEYS } from 'boardsmith/ui';
-import WorldBoard from '../src/ui/components/WorldBoard.vue';
-
-it('draws the board with the actions it is offered', () => {
-  const k = GAME_CONTEXT_KEYS;
-  const wrapper = mount(WorldBoard, {
-    global: {
-      provide: {
-        [k.gameState as symbol]: ref(null),
-        [k.dueSeats as symbol]: computed(() => [1]),
-        [k.timeTravelDiff as symbol]: ref(null),
-        [k.turnDeadline as symbol]: computed(() => null),
-        [k.gameView as symbol]: computed(() => ({})),
-        [k.players as symbol]: computed(() => []),
-        [k.myPlayer as symbol]: computed(() => undefined),
-        [k.playerSeat as symbol]: ref(1),
-        [k.isMyTurn as symbol]: ref(true),
-        [k.isViewingHistory as symbol]: ref(false),
-        [k.availableActions as symbol]: computed(() => ['tend']),
-        [k.actionController as symbol]: {},
-        [k.platformRequest as symbol]: async () => ({}),
-        [k.presentation as symbol]: ref(undefined),
-        [k.debugHighlight as symbol]: ref(null),
-      },
-    },
-  });
-  expect(wrapper.text()).toContain('tend');
-});
-`;
-
 describe('boardsmith verify on a whole game, as a user runs it', () => {
-  it('passes all six real checks on the scaffolded table, the smoke test in Chromium included, and --check then accepts the commit', async () => {
+  it('passes all five real checks on the scaffolded table, and --check then accepts the commit', async () => {
     const dir = await scaffoldedTableOnBranch();
     const { run, result } = await verifyAsAUser(dir);
     expect(result.checks.map((c) => [c.name, c.passed, c.summary])).toEqual([
@@ -100,8 +42,6 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['typecheck', true, 'No type errors.'],
       ['build', true, '`boardsmith build` passed.'],
       ['validate', true, '`boardsmith validate` passed.'],
-      // #460: the verify result records the seed the walk dealt from, so the walk can be repeated exactly.
-      ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/)],
       ['verbs', true, 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.'],
     ]);
     // Publish uploads dist/ only while it is this bundle (#1495).
@@ -113,7 +53,7 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
     expect((await spawnCli(['verify', '--check', '--project', dir])).code).toBe(0);
   });
 
-  it('runs test, typecheck, validate and verbs on a game with no UI yet, skipping build and smoke and saying so (#556)', async () => {
+  it('runs test, typecheck, validate and verbs on a game with no UI yet, skipping build and saying so (#556)', async () => {
     const dir = await scaffoldedTableOnBranch({ sim: true });
     const { run, result } = await verifyAsAUser(dir);
     const skip = 'Skipped: this project has no UI yet (no index.html); run `boardsmith add-ui`.';
@@ -122,19 +62,18 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['typecheck', true, undefined, 'No type errors.'],
       ['build', true, true, skip],
       ['validate', true, undefined, '`boardsmith validate` passed.'],
-      ['smoke', true, true, skip],
       ['verbs', true, undefined, 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.'],
     ]);
     expect(result.passed).toBe(true);
     expect(run.stdout).not.toMatch(/Every check passed/);
-    expect(run.stdout).toMatch(/Passed for \w+, except build and smoke, skipped because this project has no UI yet\./);
+    expect(run.stdout).toMatch(/Passed for \w+, except build, skipped because this project has no UI yet\./);
     expect(run.code).toBe(0);
     const checked = await spawnCli(['verify', '--check', '--project', dir]);
-    expect(checked.stdout).toMatch(/except build and smoke, skipped because this project has no UI yet/);
+    expect(checked.stdout).toMatch(/except build, skipped because this project has no UI yet/);
     expect(checked.code).toBe(0);
   });
 
-  it('fails build and smoke, never skipping them, on a table that lost index.html but kept its other UI files (#556)', async () => {
+  it('fails build, never skipping it, on a table that lost index.html but kept its other UI files (#556)', async () => {
     const dir = await scaffoldedTableOnBranch();
     git(dir, 'rm', '-q', 'index.html');
     commitAll(dir, 'lose the page');
@@ -143,33 +82,11 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       'index.html is missing, but this project has UI files (src/main.ts, src/ui/index.ts, src/ui/uis.ts, ' +
       'src/ui/App.vue, src/ui/components/GameTable.vue, tests/a11y.example.test.ts, tests/browser/smoke.spec.ts); ' +
       'restore index.html, or remove them and run `boardsmith add-ui`.';
-    for (const name of ['build', 'smoke']) {
-      expect(check(result, name)).toMatchObject({ passed: false, summary: broken });
-      expect(check(result, name).skipped).toBeUndefined();
-    }
+    expect(check(result, 'build')).toMatchObject({ passed: false, summary: broken });
+    expect(check(result, 'build').skipped).toBeUndefined();
     expect(result.passed).toBe(false);
     expect(run.stdout).not.toMatch(/skipped because this project has no UI yet/);
     expect(run.code).toBe(1);
-  });
-
-  it('fails a world whose board reads a table-only context key, though its unit test with a hand-built stub passes (#453)', async () => {
-    const dir = await smokeProject(true, {
-      'src/ui/components/WorldBoard.vue': TABLE_KEY_WORLD_BOARD,
-      'tests/board.test.ts': HAND_BUILT_STUB_TEST,
-    });
-    // The stub is this board's only test: the scaffold's a11y example mounts it with no context and would fail too.
-    git(dir, 'rm', '-q', 'tests/a11y.example.test.ts');
-    commitAll(dir, 'the stub replaces the a11y example');
-
-    const { run, result } = await verifyAsAUser(dir, ['--base', 'HEAD']);
-
-    expect(run.code).toBe(1);
-    expect(result.checks.filter((c) => !c.passed).map((c) => c.name)).toEqual(['smoke']);
-    expect(check(result, 'test').counts).toMatchObject({ failed: 0 });
-    expect(check(result, 'smoke').summary).toMatch(
-      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, platformRequest, turnDeadline/s,
-    );
-    expect(await verifiedProblem(dir)).toMatch(/smoke: /);
   });
 
   it('stops a verify run whose checks stall, with what it started, and names the checks that had not reported (#1779)', async () => {

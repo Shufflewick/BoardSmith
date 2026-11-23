@@ -28,7 +28,7 @@ import {
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#1659: takes a panel action it still has to take before pressing the board\'s untried controls, so one enabled briefly is taken', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...aceGame(),

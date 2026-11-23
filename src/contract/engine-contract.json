@@ -1,5 +1,5 @@
 {
-  "revision": 505,
+  "revision": 506,
   "surfaceHash": "8b31596b3aaadef6",
   "payloadHash": "ca033501593c2cda",
   "formatHash": "e7644203601ae348",
@@ -3983,6 +3983,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "chunk-signoff refuses a chunk whose commit edited a file an earlier sign-off names without naming it in its Build Manifest, and a voided sign-off's remedy names the chunk whose commit made the edit (#1785)"
+    },
+    {
+      "revision": 506,
+      "date": "2026-11-23",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "ca033501593c2cda",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith verify no longer runs the smoke playthrough, which plays whole seeded games; it runs only on request as boardsmith smoke, so verify and publish no longer wait on it (#1790)"
     }
   ]
 }

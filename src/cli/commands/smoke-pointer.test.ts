@@ -21,7 +21,7 @@ import {
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   describe('#468: pressing a candidate that is hard to point at', () => {
     const claimed = /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/;
     const spec = { 'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']) };

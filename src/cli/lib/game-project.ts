@@ -183,8 +183,8 @@ export function projectUiProblem(
 
 /**
  * THE ONE PLACE A COMMAND REFUSES A PROJECT WITH NO UI (`dev`, `build`, `smoke`, `publish`).
- * `boardsmith verify` skips its build and smoke checks for a table with none yet instead, and
- * fails them for a broken one (`projectUiProblem`).
+ * `boardsmith verify` skips its build check for a table with none yet instead, and fails it for a
+ * broken one (`projectUiProblem`).
  */
 export function requireTableUi(cwd: string, config: { backend?: unknown }): void {
   const ui = projectUiProblem(cwd, config);

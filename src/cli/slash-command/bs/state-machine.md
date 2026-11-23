@@ -405,8 +405,8 @@ even in a file the branch renamed, does not.
   `step-investigate`, `step-redteam` or `step-ask` commit that changes any other file fails the
   fast checks and chunk-merge, naming the commit and file (#1201). Only commits not yet pushed to
   any remote are checked, since those are the ones still safe to rewrite; in a repository with no
-  remote every commit is checked. The full checks (the whole suite, build, validate,
-  the smoke test and the verbs check) run once, before the game is published
+  remote every commit is checked. The full checks (the whole suite, build, validate
+  and the verbs check) run once, before the game is published
   (`boardsmith publish` refuses without a full `boardsmith verify` for the commit), not per chunk.
 
   Never run a bare `boardsmith verify` for chunk work. It runs the full checks, which no chunk

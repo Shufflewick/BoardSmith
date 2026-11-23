@@ -321,7 +321,7 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
   it('refuses a failed result, and a result made on a dirty tree', async () => {
     const { dir, head } = await game();
     await verified(dir, head, {
-      checks: VERIFY_CHECK_NAMES.map((name): VerifyCheckResult => (name === 'smoke' ? { name, passed: false, summary: 'a press threw' } : passed(dir)(name))),
+      checks: VERIFY_CHECK_NAMES.map((name): VerifyCheckResult => (name === 'verbs' ? { name, passed: false, summary: 'a verb no test dispatches' } : passed(dir)(name))),
     });
     expect(await problemOf(dir)).toMatch(/did not pass/);
     await verified(dir, head, { cleanTree: false });
@@ -332,9 +332,9 @@ describe('publish requires a full, passing boardsmith verify for the commit on a
     const { dir, head } = await game();
     await verified(dir, head, {
       checks: VERIFY_CHECK_NAMES.map((name) =>
-        name === 'smoke' ? { name, passed: true, skipped: true, summary: 'no UI yet' } : passed(dir)(name)),
+        name === 'build' ? { name, passed: true, skipped: true, summary: 'no UI yet' } : passed(dir)(name)),
     });
-    expect(await problemOf(dir)).toMatch(/skipped its smoke check/);
+    expect(await problemOf(dir)).toMatch(/skipped its build check/);
   });
 
   it('accepts a passing full result on a clean tree, handing over the bundle verify built in dist/ (#1495)', async () => {

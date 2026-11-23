@@ -14,7 +14,7 @@ vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
 afterEach(() => vi.unstubAllEnvs());
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it(
     '#460: deals each game from the seeds the spec lists, walking each in turn, reaches an action only one deal offers, ' +
       'and takes the same steps on a second run',

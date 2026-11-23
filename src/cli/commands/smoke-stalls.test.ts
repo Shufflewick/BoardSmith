@@ -20,7 +20,7 @@ import uis from './uis.js';
 </template>
 `;
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#1482: opens an action bar the game starts collapsed, as a player does, rather than reporting a stall', async () => {
     const { outcome } = await smokeOf(false, {
       ...truceGame(),

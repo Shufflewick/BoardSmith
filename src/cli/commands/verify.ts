@@ -15,12 +15,11 @@
  *   4. validate   `boardsmith validate`, in this process once build is done, since it measures the
  *                 bundle, reporting the typecheck's own run rather than compiling the project a
  *                 second time (#532)
- *   5. smoke      `tests/browser/smoke.spec.ts` in Chromium against `boardsmith dev`, served from a
- *                 fresh copy of the project (`smoke.ts`): a seated player takes every offered action
- *                 and presses every board control, and any page error, console error, failed
- *                 request or failed action fails it
- *   6. verbs      every verb the game defines is dispatched through the engine by some test file
+ *   5. verbs      every verb the game defines is dispatched through the engine by some test file
  *                 (`undispatchedVerbs`, #1486): the chunk check's verb rule, asked of the whole game
+ *
+ * The in-browser playthrough (`boardsmith smoke`) is not one of them: it plays seeded games for
+ * hundreds of steps, a sim that can take most of an hour, so it runs only on request (#1790).
  *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * A failing test is named as in a file the change touched or one it did not.
@@ -71,7 +70,6 @@ import {
 } from '../lib/verify-result.js';
 import { isChunkCode, isSimFile, isTestFile, parseSpecManifest, undispatchedVerbs } from './test-step-check.js';
 import { DISPATCH_FORMS } from './test-step-ast.js';
-import { runSmoke } from './smoke.js';
 import { type TypeCheckRun, typeCheckProject, validateProject } from './validate.js';
 import { readIfExists } from '../lib/read-if-exists.js';
 import { bundleDigest, readDistDir } from '../lib/zip.js';
@@ -416,7 +414,7 @@ async function validateCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   }
 }
 
-/** 6. Every verb the game defines is dispatched through the engine by some test (`undispatchedVerbs`, #1486). */
+/** 5. Every verb the game defines is dispatched through the engine by some test (`undispatchedVerbs`, #1486). */
 async function verbsCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   const { defined, undispatched } = await undispatchedVerbs(ctx.projectDir);
   if (undispatched.length === 0) {
@@ -433,15 +431,10 @@ async function verbsCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
   };
 }
 
-/** 5. The game in Chromium, served by `boardsmith dev` from a fresh copy (`smoke.ts`). */
-async function smokeCheck(ctx: VerifyContext): Promise<VerifyCheckOutcome> {
-  return noUiOutcome(ctx.projectDir) ?? (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
-}
-
 /**
- * `build` and `smoke` need a UI, so in a project with none yet (`boardsmith init --sim`) they are
- * skipped rather than failed, and the result says so. A table that lost `index.html` but kept its
- * other UI files fails them. Undefined when the project has a UI.
+ * `build` needs a UI, so in a project with none yet (`boardsmith init --sim`) it is skipped rather
+ * than failed, and the result says so. A table that lost `index.html` but kept its other UI files
+ * fails it. Undefined when the project has a UI.
  */
 function noUiOutcome(projectDir: string): VerifyCheckOutcome | undefined {
   const config = JSON.parse(readFileSync(join(projectDir, 'boardsmith.json'), 'utf-8')) as { backend?: unknown };
@@ -467,7 +460,6 @@ export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Obj
   typecheck: typecheckCheck,
   build: buildCheck,
   validate: validateCheck,
-  smoke: smokeCheck,
   verbs: verbsCheck,
 });
 
@@ -623,7 +615,7 @@ function printVerdict(result: VerifyResult): void {
     console.log(
       styleText('green',
         `\nFast checks passed for ${short(result.commit)}: chunk "${result.chunk}"'s tests and typecheck. ` +
-          'The full suite, build, validate, smoke and verbs checks run at publish (`boardsmith verify`).',
+          'The full suite, build, validate and verbs checks run at publish (`boardsmith verify`).',
       ),
     );
   } else if (result.passed && skippedClause(result) !== '') {

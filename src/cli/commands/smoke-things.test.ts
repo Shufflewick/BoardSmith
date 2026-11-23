@@ -11,7 +11,7 @@ vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
 const selections = (steps: readonly string[], mark: string) => steps.filter((line) => line.endsWith(`: opening the panel's thing "${mark}"`)).length;
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#1651: selects each thing in the panel, takes the verbs listed under it, and selects one again once an action was taken since', async () => {
     const { outcome, steps } = await smokeOf(false, pastureGame({ bare: false }));
 

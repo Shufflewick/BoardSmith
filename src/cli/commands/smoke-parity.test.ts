@@ -8,7 +8,7 @@ import { boardThatSelectsACard } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check holds the board to the Action Panel (#1642)', () => {
+describe('boardsmith smoke holds the board to the Action Panel (#1642)', () => {
   it('fails a board that shows a thing selected while the panel has nothing selected', async () => {
     const { outcome } = await smokeOf(false, boardThatSelectsACard({ shared: false }));
 

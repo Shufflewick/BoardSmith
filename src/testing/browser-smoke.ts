@@ -2,8 +2,8 @@
 /**
  * THE IN-BROWSER SMOKE TEST (#453), `boardsmith/testing/browser`.
  *
- * A game's `tests/browser/smoke.spec.ts` calls {@link defineSmokeTest} once. `boardsmith verify`
- * (and `boardsmith smoke`) serves the game with `boardsmith dev` from a fresh state and runs that
+ * A game's `tests/browser/smoke.spec.ts` calls {@link defineSmokeTest} once. `boardsmith smoke`
+ * serves the game with `boardsmith dev` from a fresh state and runs that
  * file in Chromium, where the walk:
  *
  *   1. opens the dev host and takes a seat, at a table or in a world, as a player's browser does. At
@@ -33,7 +33,7 @@
  * only when a player is dealt the right cards) is reached by choosing a `seed` whose deal offers it;
  * one no walk from a fresh game can reach whatever the deal is named in `unreachable`, with the reason.
  *
- * This file runs under Playwright, never under vitest. `boardsmith verify` bundles the spec with
+ * This file runs under Playwright, never under vitest. `boardsmith smoke` bundles the spec with
  * this module, so the game needs no Playwright of its own: it imports only this module.
  *
  * @module
