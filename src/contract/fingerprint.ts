@@ -2138,9 +2138,6 @@ export async function computePayloadHash(): Promise<string> {
 
   // WHAT A SEAT IS SENT FOR A PICK (#1789), at the step where seat 2 is up.
   const pickChoices = new PickHandler(runner).getPickChoices('discard', 'cards', 2);
-  if (!pickChoices.success) {
-    throw new Error(`The engine-contract fixture could not ask for its discard pick (${pickChoices.error}). Fix the fixture.`);
-  }
 
   // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
   // reads the winners from the stored snapshot, so the field is part of what

@@ -142,6 +142,7 @@ import type {
   StartOptions,
   AfterAutoExecuteListener,
   BeforeAutoExecuteHook,
+  MultiSelectDraft,
 } from './useActionControllerTypes.js';
 import type { MultiSelectBounds, PickSubject, SubjectRef } from '../../types/protocol.js';
 
@@ -429,7 +430,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // UIs so they stay in parity. This is SEPARATE from currentArgs — currentArgs[name]
   // stays undefined until confirmMultiSelect() runs the fill() path with the COMPLETE
   // array (a game composable relies on currentArgs[name] === undefined mid-selection).
-  const multiSelectDraft = ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>(null);
+  const multiSelectDraft = ref<MultiSelectDraft | null>(null);
 
   // === Editor draft (shared source of truth) ===
   // What the player has entered into the current number or text editor and not
@@ -1614,7 +1615,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }, { flush: 'sync' });
 
   /** The draft held against `choices`: each entry matched to its offered value, and the indexes of those it no longer offers enabled. */
-  function judgeDraft(draft: NonNullable<typeof multiSelectDraft.value>, choices: ChoiceWithRefs[], ordered: boolean) {
+  function judgeDraft(draft: MultiSelectDraft, choices: ChoiceWithRefs[], ordered: boolean) {
     // An entry added while nothing was on offer is held as the player named it, so match it to the new list first.
     const offered = draft.values.map((value) => findMatchingChoice(value, choices)?.value ?? value);
     // An ordered list repeats a value without an offered entry per repeat, so it needs one enabled entry per value.
@@ -3016,7 +3017,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** An ordered-list draft, each entry numbered as which repeat of its value it is. */
-  function listDraft(selectionName: string, values: unknown[]): NonNullable<typeof multiSelectDraft.value> {
+  function listDraft(selectionName: string, values: unknown[]): MultiSelectDraft {
     const copies = values.map((value, i) => values.slice(0, i).filter(v => valuesEqual(v, value)).length);
     return { selectionName, values, copies };
   }
@@ -3111,20 +3112,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
       newValues = [...current, offered];
       newCopies = [...currentCopies, taken];
-
-      if (sendsOnLastTick(cfg) && newValues.length === cfg.max) {
-        multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
-        const result = await confirmMultiSelect(selectionName);
-        // A refused last tick is taken back, so the next tick sends again (#1789).
-        if (result?.valid === false && multiSelectDraft.value?.selectionName === selectionName) {
-          multiSelectDraft.value = { selectionName, values: current, copies: currentCopies };
-        }
-        return;
-      }
     }
 
+    const next = { selectionName, values: newValues, copies: newCopies };
+    if (sendsOnLastTick(cfg) && newValues.length === cfg.max) return sendLastTick(next, { selectionName, values: current, copies: currentCopies });
     // Reassign so Vue reactivity fires
-    multiSelectDraft.value = { selectionName, values: newValues, copies: newCopies };
+    multiSelectDraft.value = next;
+  }
+
+  /** Send the draft its last tick filled; a refused one goes back to `before`, so the next tick sends again (#1789). */
+  async function sendLastTick(filled: MultiSelectDraft, before: MultiSelectDraft): Promise<void> {
+    multiSelectDraft.value = filled;
+    const result = await confirmMultiSelect(filled.selectionName);
+    if (result?.valid === false && multiSelectDraft.value?.selectionName === filled.selectionName) multiSelectDraft.value = before;
   }
 
   /**

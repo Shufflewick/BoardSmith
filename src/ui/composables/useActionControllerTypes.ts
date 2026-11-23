@@ -155,6 +155,13 @@ export interface ActionQuoteResult {
 // Action State Snapshot Types (Pit of Success)
 // ============================================
 
+/** A multiSelect or ordered-list pick's in-progress answer: see `multiSelectDraft`. */
+export interface MultiSelectDraft {
+  selectionName: string;
+  values: unknown[];
+  copies: number[];
+}
+
 /**
  * Snapshot of a pick's available choices.
  * Frozen when fetched, not affected by server broadcasts.
@@ -558,7 +565,7 @@ export interface UseActionControllerReturn {
    * `copies[i]` is which copy of its value `values[i]` is (#1574): for a multiSelect,
    * which offered entry it holds; for an orderedList, which repeat of the value it is.
    */
-  multiSelectDraft: Ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>;
+  multiSelectDraft: Ref<MultiSelectDraft | null>;
 
   // === Editor draft (shared in-progress typed value) ===
   /**
