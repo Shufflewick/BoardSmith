@@ -1893,6 +1893,7 @@ export async function computePayloadHash(): Promise<string> {
   const { GameRunner } = await import('../runtime/index.js');
   const { buildSpectatorView } = await import('../session/utils.js');
   const { buildViews } = await import('../session/stateless-ops.js');
+  const { PickHandler } = await import('../session/pick-handler.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     actionStep, simultaneousActionStep, sequence, eachPlayer, setVar,
@@ -1927,6 +1928,17 @@ export async function computePayloadHash(): Promise<string> {
       this.registerAction(
         Action.create('draw').execute(() => ({ success: true })),
       );
+      // A pick of the seat's own cards (#1789): the answer a seat is sent
+      // offers each card as `{ id, className }`, never its contents, and carries
+      // the multiSelect bounds with `confirm`.
+      this.registerAction(
+        Action.create('discard')
+          .chooseFrom('cards', {
+            choices: (ctx: any) => ctx.game.first(Hand, `hand-${ctx.player.seat}`).all(FixtureCard),
+            multiSelect: { min: 2, max: 2, confirm: true },
+          })
+          .execute(() => ({ success: true })),
+      );
 
       // BOTH turn shapes, because they serialize differently and the platform
       // reads both. A simultaneous step populates `flowState.awaitingPlayers`
@@ -1956,7 +1968,7 @@ export async function computePayloadHash(): Promise<string> {
           setVar('dealer', (ctx: any) => ctx.game.getPlayer(1)),
           eachPlayer({
             do: actionStep({
-              actions: ['draw'],
+              actions: ['draw', 'discard'],
               player: (ctx: any) => ctx.game.getPlayer(2),
               // A declared window (#300) is resolved at entry and kept on the
               // step's frame, so it lands in the fingerprinted
@@ -2124,6 +2136,12 @@ export async function computePayloadHash(): Promise<string> {
   assertSeatThatCannotAct(sequentialViews);
   const sequentialSeatViews = seatViews();
 
+  // WHAT A SEAT IS SENT FOR A PICK (#1789), at the step where seat 2 is up.
+  const pickChoices = new PickHandler(runner).getPickChoices('discard', 'cards', 2);
+  if (!pickChoices.success) {
+    throw new Error(`The engine-contract fixture could not ask for its discard pick (${pickChoices.error}). Fix the fixture.`);
+  }
+
   // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
   // reads the winners from the stored snapshot, so the field is part of what
   // the platform stores, even while it is empty mid-game.
@@ -2176,6 +2194,7 @@ export async function computePayloadHash(): Promise<string> {
       openingFlowState,
       openingSeatViews,
       sequentialSeatViews,
+      pickChoices,
       publishedStateFields,
       flowPosition,
       sequentialViews,
