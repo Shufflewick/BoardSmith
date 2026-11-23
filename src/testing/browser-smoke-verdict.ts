@@ -9,11 +9,11 @@ import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { PageFrozen } from './browser-smoke-clock.js';
 import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
 
-/** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
+/** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith smoke` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
 
 /**
- * The annotation a passing walk leaves on its test, which `boardsmith verify` reads to say what it
+ * The annotation a passing walk leaves on its test, which `boardsmith smoke` reads to say what it
  * did: a {@link SmokeRecord}, as JSON.
  */
 export const SMOKE_ANNOTATION = 'boardsmith-smoke';
@@ -879,7 +879,7 @@ export function smokeFailure(walk: SmokeWalk, problems: readonly string[]): stri
   return `The smoke walk${dealt} found ${found}:\n${problems.map((p) => `  - ${p}`).join('\n')}`;
 }
 
-/** What a passing walk did, as `boardsmith verify` reports it. */
+/** What a passing walk did, as `boardsmith smoke` reports it. */
 export interface SmokeRecord {
   /** The spec's deals, in order; none in a world. */
   readonly seeds: SmokeDeal[];
@@ -913,7 +913,7 @@ export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: 
   };
 }
 
-/** What `boardsmith verify` says a passing walk did. */
+/** What `boardsmith smoke` says a passing walk did. */
 export function smokeSummary(record: SmokeRecord): string {
   const took = record.taken.length === 0 ? 'no action' : quoted(record.taken);
   const pressed = `${record.controls} board control${record.controls === 1 ? '' : 's'}`;

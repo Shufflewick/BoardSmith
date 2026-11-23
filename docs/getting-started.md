@@ -400,8 +400,7 @@ boardsmith verify --check --chunk deal   # ...or chunk deal's fast checks?
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
-build`, `boardsmith validate`, the in-browser smoke test and a verbs check side
-by side, and keeps going after a failure so you see every problem at once.
+build`, `boardsmith validate` and a verbs check side by side, and keeps going after a failure so you see every problem at once.
 Validate starts once build is done, since it measures the bundle build wrote in
 `dist/`. The result lists the checks in that order, whichever finished first.
 The verbs check asks that every verb the game defines
@@ -511,7 +510,7 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 `boardsmith review-gate <slug>` refuses unless the current commit passed
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries: that only the chunk's tests and typecheck ran, and that
-the full suite, build, validate, the smoke test and the verbs check run at
+the full suite, build, validate and the verbs check run at
 publish, so no reviewer spends its time running checks. It reads what is under
 review from the chunk's run log: the change since the last review round, sized
 as mechanical only when every dispatch logged since was. That round's commit must
