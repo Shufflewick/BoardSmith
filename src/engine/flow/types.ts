@@ -216,6 +216,19 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    */
   undo?: 'turn' | 'action';
   /**
+   * While this step waits on a seat that has not yet picked or acted in it,
+   * the seat that took the last action may undo that action (#1788). The undo
+   * restores the game from just before it and puts the flow back in the step
+   * it was taken in. The usual fences still apply: a `.notUndoable()` action,
+   * an irreversible `execute()`, `undo: { fenceRandomRewind: true }`.
+   *
+   * The window closes at the waiting seat's first accepted pick or action,
+   * a bot's move or an expired step deadline included. Opt-in because the
+   * waiting seat may already have seen its new view and offer when the undo
+   * takes them away.
+   */
+  handoffUndo?: boolean;
+  /**
    * How long this step stays open once it is entered, in milliseconds.
    *
    * A number, or a function of the flow context resolved ONCE when the step is
@@ -468,6 +481,12 @@ export interface FlowState {
    * action at a time ({@link ActionStepConfig.undo}). Server-side only.
    */
   undoEachAction?: true;
+  /**
+   * Present while the open action step is declared
+   * {@link ActionStepConfig.handoffUndo} and its seat has neither picked nor
+   * acted in it yet. Server-side only.
+   */
+  handoffUndo?: true;
   /**
    * How long the open step stays open, in milliseconds, as the step declared it
    * ({@link ActionStepConfig.timeLimitMs}) and resolved when it was entered.

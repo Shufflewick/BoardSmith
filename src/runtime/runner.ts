@@ -655,7 +655,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   private undoReach(): number | undefined {
     if (this.checkpointPolicy_.history === 'full') return undefined;
     const flow = this.getFlowState();
-    return flow?.seatUndo ? this.actionCount : this.undoFloor(this.actionCount - (flow?.moveCount ?? 0));
+    if (flow?.seatUndo) return this.actionCount;
+    // A step open to a handoff undo keeps the checkpoint before the last action (#1788).
+    return this.undoFloor(this.actionCount - (flow?.handoffUndo ? 1 : flow?.moveCount ?? 0));
   }
 
   /**

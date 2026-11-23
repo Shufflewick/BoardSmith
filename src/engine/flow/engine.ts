@@ -1355,6 +1355,7 @@ export class FlowEngine<G extends Game = Game> {
     this.publishOpenStep(state);
     if (this.openStepUndoesPerSeat()) state.seatUndo = true;
     if (this.openStepUndoesEachAction()) state.undoEachAction = true;
+    if (this.openStepAwaitsHandoffUndo()) state.handoffUndo = true;
     return state;
   }
 
@@ -1425,6 +1426,20 @@ export class FlowEngine<G extends Game = Game> {
     const top = this.stack[this.stack.length - 1];
     return this.awaitingInput && top?.node.type === 'action-step'
       && (top.node.config as ActionStepConfig).undo === 'action';
+  }
+
+  /** Whether the open action step is declared `handoffUndo` and its seat has neither picked nor acted in it yet (#1788). */
+  private openStepAwaitsHandoffUndo(): boolean {
+    const top = this.stack[this.stack.length - 1];
+    return this.awaitingInput && top?.node.type === 'action-step'
+      && (top.node.config as ActionStepConfig).handoffUndo === true
+      && !top.data?.actionCount && !top.data?.picked;
+  }
+
+  /** The open step's seat made a pick, which closes a `handoffUndo` window as an action does (#1788). */
+  notePick(): void {
+    const top = this.stack[this.stack.length - 1];
+    if (top?.node.type === 'action-step') top.data = { ...top.data, picked: true };
   }
 
   /** Writes the open step's window, the last action's error and the held follow-ups into `state`. */
