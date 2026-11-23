@@ -3135,18 +3135,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    */
   async function confirmMultiSelect(selectionName: string): Promise<PickValidationResult | void> {
     const draft = multiSelectDraft.value;
-    if (draft?.selectionName === selectionName) {
-      const result = await fill(selectionName, [...draft.values]);
-      // A refusal that leaves the pick open keeps the ticks for the player to fix (#1789).
-      const keep = !result.valid && currentPick.value?.name === selectionName;
-      if (!keep && multiSelectDraft.value?.selectionName === selectionName) multiSelectDraft.value = null;
-      return result;
-    }
+    if (draft?.selectionName === selectionName) return sendDraft(draft);
     const pick = currentPick.value;
     if (pick?.name !== selectionName) return;
     if (!resolveMultiSelectConfig(pick) && !resolveOrderedListConfig(pick)) return;
     // Nothing ticked yet is the empty answer, the same as ticking and unticking first (#1555).
     return await fill(selectionName, []);
+  }
+
+  /** Fill the pick with its draft; a refusal that leaves the pick open keeps the draft for the player to fix (#1789). */
+  async function sendDraft(draft: MultiSelectDraft): Promise<PickValidationResult> {
+    const { selectionName } = draft;
+    const result = await fill(selectionName, [...draft.values]);
+    const keep = !result.valid && currentPick.value?.name === selectionName;
+    if (!keep && multiSelectDraft.value?.selectionName === selectionName) multiSelectDraft.value = null;
+    return result;
   }
 
   /** Whether the draft for the given selection holds that copy of a value, or with no `copy`, any copy. */
