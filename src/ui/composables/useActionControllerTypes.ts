@@ -11,7 +11,7 @@ import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 import type { FollowUpOffer } from '../../engine/action/types.js';
 import type { SubjectEntry, SubjectIndex } from '../../engine/action/subject-index.js';
-import type { SubjectRef } from '../../types/protocol.js';
+import type { MultiSelectBounds, SubjectRef } from '../../types/protocol.js';
 
 
 // THE PICK SHAPE IS OWNED BY ../../types/protocol.js (#251).
@@ -155,6 +155,13 @@ export interface ActionQuoteResult {
 // Action State Snapshot Types (Pit of Success)
 // ============================================
 
+/** A multiSelect or ordered-list pick's in-progress answer: see `multiSelectDraft`. */
+export interface MultiSelectDraft {
+  selectionName: string;
+  values: unknown[];
+  copies: number[];
+}
+
 /**
  * Snapshot of a pick's available choices.
  * Frozen when fetched, not affected by server broadcasts.
@@ -165,7 +172,7 @@ export interface PickSnapshot {
   /** Valid elements for element picks */
   validElements?: EnrichedValidElement[];
   /** MultiSelect config (evaluated when fetched) */
-  multiSelect?: { min: number; max?: number };
+  multiSelect?: MultiSelectBounds;
   /** Ordered-list entry bounds (#249), evaluated when fetched */
   orderedList?: { min: number; max?: number };
   /** The pick's prompt, evaluated when fetched, for one the metadata could not word yet (#1350) */
@@ -558,7 +565,7 @@ export interface UseActionControllerReturn {
    * `copies[i]` is which copy of its value `values[i]` is (#1574): for a multiSelect,
    * which offered entry it holds; for an orderedList, which repeat of the value it is.
    */
-  multiSelectDraft: Ref<{ selectionName: string; values: unknown[]; copies: number[] } | null>;
+  multiSelectDraft: Ref<MultiSelectDraft | null>;
 
   // === Editor draft (shared in-progress typed value) ===
   /**
@@ -651,7 +658,7 @@ export interface UseActionControllerReturn {
   /**
    * Toggle a value in the in-progress multiSelect draft for a selection.
    * Respects the selection's max; auto-confirms when min === max and the exact count
-   * is reached (running fill → auto-execute). No-op (with devWarn) if the selection
+   * is reached (running fill → auto-execute), unless the pick declares `confirm: true`. No-op (with devWarn) if the selection
    * isn't active or isn't a multiSelect.
    *
    * A value the choices list offers more than once is one slot per entry: `copy`

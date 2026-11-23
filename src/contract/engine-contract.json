@@ -1,7 +1,7 @@
 {
-  "revision": 506,
+  "revision": 507,
   "surfaceHash": "8b31596b3aaadef6",
-  "payloadHash": "ca033501593c2cda",
+  "payloadHash": "1dd7fac7bfd0bbcf",
   "formatHash": "e7644203601ae348",
   "history": [
     {
@@ -3991,6 +3991,14 @@
       "payloadHash": "ca033501593c2cda",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith verify no longer runs the smoke playthrough, which plays whole seeded games; it runs only on request as boardsmith smoke, so verify and publish no longer wait on it (#1790)"
+    },
+    {
+      "revision": 507,
+      "date": "2026-11-23",
+      "surfaceHash": "8b31596b3aaadef6",
+      "payloadHash": "1dd7fac7bfd0bbcf",
+      "formatHash": "e7644203601ae348",
+      "summary": "A chooseFrom candidate that is a game element is offered as { id, className } instead of the element's whole serialized subtree, so a refused pick answers with its own message and an element's contents never reach the seat; a multiSelect may declare confirm: true, which makes a fixed count wait for Done and is refused on any other count; the payload fixture now fingerprints a pick's answer (#1789)"
     }
   ]
 }

@@ -138,6 +138,11 @@ export interface MultiSelectConfig {
   min?: number;
   /** Maximum selections allowed (default: unlimited) */
   max?: number;
+  /**
+   * With `min === max`, wait for the player to press Done after the last tick
+   * instead of sending the pick on it, so the pick can still be changed.
+   */
+  confirm?: boolean;
 }
 
 /**

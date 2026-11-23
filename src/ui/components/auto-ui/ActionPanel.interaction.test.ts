@@ -422,4 +422,40 @@ describe('ActionPanel interaction tests', () => {
     expect(controller.currentArgs.value.picks).toEqual([]);
     expect(controller.currentPick.value?.name).toBe('message');
   });
+
+  it('a fixed-count multiSelect with confirm waits for Done after the last tick (#1789)', async () => {
+    const discard: EnrichedActionMetadata = {
+      name: 'discard',
+      prompt: 'Discard',
+      selections: [{
+        name: 'picks',
+        type: 'choice',
+        prompt: 'Discard 2',
+        multiSelect: { min: 2, max: 2, confirm: true },
+        choices: ['a', 'b', 'c'].map((v) => ({ value: v, display: v })),
+      }],
+    };
+    const controller = useActionController({
+      sendAction,
+      availableActions: ref(['discard']),
+      actionMetadata: ref({ discard }),
+      isMyTurn: ref(true),
+      autoFill: false,
+    });
+    await controller.start('discard');
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+      props: { availableActions: ['discard'], isMyTurn: true },
+    });
+    await nextTick();
+
+    const boxes = wrapper.findAll('.multi-select-choice input');
+    await boxes[0]!.trigger('click');
+    await boxes[1]!.trigger('click');
+    await nextTick();
+    expect(sendAction).not.toHaveBeenCalled();
+
+    await wrapper.find('button.done-button').trigger('click');
+    await vi.waitFor(() => expect(sendAction).toHaveBeenCalledWith('discard', { picks: ['a', 'b'] }));
+  });
 });

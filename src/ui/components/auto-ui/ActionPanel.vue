@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId, onMounted, onBeforeUnmount } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, refsHighlight, resolvePickCounts, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
+import { availableActionMetadata, choiceBoardTarget, choiceCopies as choiceCopiesOf, editorRuleRefusal, formatActionName, getDisplayFromValue, labelOfPick, multiSelectFullReason, orderedListFullReason, refsHighlight, resolvePickCounts, sendsOnLastTick, snapshotMetadata } from '../../composables/actionControllerHelpers.js';
 import { createActionMutators } from '../../composables/actionMutators.js';
 import { escapeRegExp } from '../../../utils/regexp.js';
 import { handleEscape } from '../../utils/escape.js';
@@ -1367,18 +1367,20 @@ const orderedListCountDisplay = computed(() => {
 
 /**
  * Why an Add button cannot be pressed: the choice's own reason if it has one,
- * otherwise a FULL list -- which, unlike a full multiSelect, blocks every option
+ * a pick in flight, otherwise a FULL list -- which, unlike a full multiSelect, blocks every option
  * including ones already in the list, because adding is never a deselect here.
  */
 function orderedListAddDisabledReason(own: DisabledReason): DisabledReason {
   if (isDisabled(own)) return own;
+  if (isSubmitting.value) return submissionInFlightReason.value;
   return orderedListFullReason(currentOrderedList.value?.max, orderedListEntries.value.length);
 }
 
-/** Why the ordered list's Done cannot be pressed yet: too few entries. */
+/** Why the ordered list's Done cannot be pressed yet: a pick in flight, or too few entries. */
 const orderedListDoneDisabledReason = computed<DisabledReason>(() => {
   const config = currentOrderedList.value;
   if (!config) return false;
+  if (isSubmitting.value) return submissionInFlightReason.value;
   const short = (config.min ?? 0) - orderedListEntries.value.length;
   if (short <= 0) return false;
   return `Add ${short} more to continue (at least ${config.min} required).`;
@@ -1407,15 +1409,8 @@ const isMultiSelectReady = computed(() => {
   return !isDisabled(multiSelectDoneDisabledReason.value);
 });
 
-/**
- * Check if Done button should be shown: hidden when min === max, since reaching
- * that count auto-confirms, unless the count is 0, which no tick ever reaches (#1568).
- */
-const showMultiSelectDoneButton = computed(() => {
-  if (!currentMultiSelect.value) return false;
-  const { min, max } = currentMultiSelect.value;
-  return min !== max || max === 0;
-});
+/** Done is drawn unless the last tick sends the pick. */
+const showMultiSelectDoneButton = computed(() => !!currentMultiSelect.value && !sendsOnLastTick(currentMultiSelect.value));
 
 /**
  * Get display text for multi-select count (e.g., "Selected: 1/2")
@@ -1567,22 +1562,24 @@ const submissionInFlightReason = computed<DisabledReason>(() =>
 
 /**
  * Why a multi-select option cannot be toggled: its own disabled reason if it
- * has one, otherwise the max-selections cap (which blocks only options that
+ * has one, a pick in flight, otherwise the max-selections cap (which blocks only options that
  * are not already selected — deselecting is always allowed).
  */
 function multiSelectDisabledReason(own: DisabledReason, value: unknown, copy?: number): DisabledReason {
   if (isDisabled(own)) return own;
+  if (isSubmitting.value) return submissionInFlightReason.value;
   return multiSelectFullReason(currentMultiSelect.value?.max, multiSelectValues.value.length, isMultiSelectValueSelected(value, copy));
 }
 
 /**
- * Why the multi-select Done button cannot be pressed yet: too few selected.
+ * Why the multi-select Done button cannot be pressed yet: a pick in flight, or too few selected.
  * Mirrors `isMultiSelectReady`, which is derived from this so the enabled
  * state and the explanation can never disagree.
  */
 const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   const config = currentMultiSelect.value;
   if (!config) return false;
+  if (isSubmitting.value) return submissionInFlightReason.value;
   const min = config.min ?? 0;
   const short = min - multiSelectValues.value.length;
   if (short <= 0) return false;

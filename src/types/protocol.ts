@@ -219,6 +219,16 @@ export interface PickSubjectType {
   onBoard: boolean;
 }
 
+/** A multiSelect pick's resolved bounds, as the seat is sent them. */
+export interface MultiSelectBounds {
+  /** Minimum selections required (default: 1) */
+  min: number;
+  /** Maximum selections allowed (undefined = unlimited) */
+  max?: number;
+  /** A fixed count waits for Done instead of sending on the last tick (#1789). */
+  confirm?: true;
+}
+
 /**
  * Choice with optional board references for highlighting.
  */
@@ -321,18 +331,13 @@ export interface PickMetadata<TElement extends ValidElement = ValidElement> {
    */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
   /** For multi-select choice picks: min/max selection configuration */
-  multiSelect?: {
-    /** Minimum selections required (default: 1) */
-    min: number;
-    /** Maximum selections allowed (undefined = unlimited) */
-    max?: number;
-  };
+  multiSelect?: MultiSelectBounds;
   /**
    * For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value.
    * Key is the string representation of the dependent value (element ID, player seat, etc.)
    * Value is the multiSelect config for that dependent value, or undefined if single-select.
    */
-  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  multiSelectByDependentValue?: Record<string, MultiSelectBounds | undefined>;
   /**
    * For ORDERED, REPEATABLE choice picks: how many ENTRIES the list may carry
    * (#249).
@@ -502,7 +507,7 @@ export interface PickChoicesResponse {
   /** For element/elements picks: valid elements the user can select */
   validElements?: ValidElement[];
   /** Multi-select configuration (evaluated at request time for function-based configs) */
-  multiSelect?: { min: number; max?: number };
+  multiSelect?: MultiSelectBounds;
   /**
    * Ordered-list ENTRY bounds (#249), evaluated at request time for the same
    * reason multiSelect's are: a bound that reads an earlier pick's value is only

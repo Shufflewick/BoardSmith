@@ -12,7 +12,7 @@
 import type { Game, GameClass, TutorialDefinition, Annotation, ElementRef, FlowState, FollowUpOffer } from '../engine/index.js';
 import type { BotMove, BotStrategy } from '../bot/types.js';
 import type { HistoryEntry } from '../engine/action/types.js';
-import { ErrorCode, type ChoiceWithRefs, type ValidElement } from '../types/protocol.js';
+import { ErrorCode, type ChoiceWithRefs, type MultiSelectBounds, type ValidElement } from '../types/protocol.js';
 import { canSeatAct, availableActionsForSeat, flowBoundaryKey, PlayerFacingError, toPublicFlowState } from '../engine/index.js';
 import { withDevDetail } from '../engine/action/rules-error.js';
 import { dueSeatOffers, describeRefused } from '../engine/flow/seat-activity.js';
@@ -443,7 +443,7 @@ export interface OpSuccessFields {
   resolveChoices: {
     choices?: ChoiceWithRefs[];
     validElements?: ValidElement[];
-    multiSelect?: { min: number; max?: number };
+    multiSelect?: MultiSelectBounds;
     /**
      * The ordered-list bounds of the step this answered (#249, #480), resolved
      * against the selections already made. Absent on a step that is not an
