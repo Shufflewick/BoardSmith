@@ -3125,8 +3125,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function confirmMultiSelect(selectionName: string): Promise<PickValidationResult | void> {
     const draft = multiSelectDraft.value;
     if (draft?.selectionName === selectionName) {
-      multiSelectDraft.value = null;
-      return await fill(selectionName, [...draft.values]);
+      const result = await fill(selectionName, [...draft.values]);
+      // A refusal that leaves the pick open keeps the ticks for the player to fix (#1789).
+      if (result.valid && multiSelectDraft.value?.selectionName === selectionName) multiSelectDraft.value = null;
+      return result;
     }
     const pick = currentPick.value;
     if (pick?.name !== selectionName) return;
