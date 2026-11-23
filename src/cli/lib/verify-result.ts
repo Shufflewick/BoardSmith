@@ -23,7 +23,7 @@ import { atomicWriteFile } from './atomic-write-file.js';
  * tests and typecheck. Every other question (`verify --check`, `chunk-gate-transition`, publish)
  * takes only the full verify, so a chunk's fast checks never stand in for it (#985).
  *
- * ADDING A CHECK (the in-browser smoke test, #453, was added this way): add its name to
+ * ADDING A CHECK (the verbs check, #1486, was added this way): add its name to
  * `VERIFY_CHECK_NAMES` and its runner to `VERIFY_CHECKS` in `commands/verify.ts`, which the compiler
  * then requires. Every check result has the same shape (`VerifyCheckResult`), with optional counts,
  * so nothing here changes. A result written before the check existed
@@ -34,7 +34,7 @@ import { atomicWriteFile } from './atomic-write-file.js';
 export const VERIFY_RESULT_FORMAT = 3;
 
 /** Every full check, in reporting order; they run side by side. A chunk's result holds `CHUNK_VERIFY_CHECK_NAMES`. */
-export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'verbs'] as const;
+export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'verbs'] as const;
 /** `verify --chunk`: the chunk's own tests and typecheck. The full checks run at publish (#985). */
 export const CHUNK_VERIFY_CHECK_NAMES = ['test', 'typecheck'] as const;
 
@@ -54,7 +54,7 @@ export type VerifyCheckOutcome = {
 } & (
   | { passed: boolean; skipped?: never }
   /**
-   * The check did not run, and `summary` says why: `build` and `smoke` in a project with no UI yet.
+   * The check did not run, and `summary` says why: `build` in a project with no UI yet.
    * Every report of the result names it.
    */
   | { passed: true; skipped: true }

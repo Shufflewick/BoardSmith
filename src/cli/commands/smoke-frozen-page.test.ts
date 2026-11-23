@@ -9,7 +9,7 @@ import { boardThatStarvesThePage } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#609: fails a page that stops answering altogether, saying so, rather than waiting on it for good', async () => {
     const { outcome } = await smokeOf(false, boardThatStarvesThePage({ forGood: true }));
 

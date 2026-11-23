@@ -172,7 +172,6 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['typecheck', true],
       ['build', true],
       ['validate', true],
-      ['smoke', true],
       ['verbs', true],
     ]);
     const test = check(result, 'test');

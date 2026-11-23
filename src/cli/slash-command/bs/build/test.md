@@ -13,7 +13,7 @@ Run the following as ONE numbered sequence immediately after `build` completes. 
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
 one. The type check is not a step of its own: it is part of the last step, `boardsmith verify
 --chunk <slug>`, which runs it with the chunk's tests and records the result. The whole suite, the
-build, `boardsmith validate`, the in-browser smoke test and `boardsmith verify`'s verbs check
+build, `boardsmith validate` and `boardsmith verify`'s verbs check
 run once, at publish, not per chunk. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
 error, what to fix) — never proceed past a failing step assuming a later step will "catch it
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
@@ -368,15 +368,15 @@ here.
    `.boardsmith/verify/<commit>.json`. A chunk that added or changed no test file fails it,
    unless its Spec Manifest marks it exempt (`build/spec.md` "Exemptions"), which passes on
    typecheck alone. The
-   full suite, build, validate, the smoke test and the verbs check run once, at publish, as
+   full suite, build, validate and the verbs check run once, at publish, as
    `boardsmith verify`; the full suite is the regression check that a chunk did not break an
    earlier chunk's tests. `boardsmith chunk-merge` runs only the merged chunk's fast checks on the
    combined tree, not the full suite. The smoke
-   test is the game's `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an
-   action or a UI control, `build/spec.md`), run in Chromium against `boardsmith dev` served from
-   a fresh copy of the project; `npx boardsmith smoke` runs it alone while you work, and a machine
-   without the browser gets a failed check telling it to run `npx boardsmith install-browser`
-   once. This step is not done until it exits zero on a
+   test, the game's `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an
+   action or a UI control, `build/spec.md`), is not part of verify: it plays whole seeded games, so
+   it runs only on request, as `npx boardsmith smoke`, in Chromium against `boardsmith dev` served
+   from a fresh copy of the project; a machine without the browser gets a failed run telling it to
+   run `npx boardsmith install-browser` once. This step is not done until it exits zero on a
    clean tree; a failure routes the chunk back per "Failures Loop Back to `build`",
    using what each failed check names, and the gate runs again on the new commit. Never report
    this step, the chunk, or the suite as done or green without it: `chunk-signoff` refuses a chunk

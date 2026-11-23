@@ -606,13 +606,13 @@ dist/
 }
 
 /**
- * The game's in-browser smoke test (#453), which `boardsmith verify` runs in Chromium against
- * `boardsmith dev`, listing the actions a player of the scaffolded game can take.
+ * The game's in-browser smoke test (#453), which `boardsmith smoke` runs in Chromium against
+ * `boardsmith dev` on request, listing the actions a player of the scaffolded game can take.
  */
 export function generateSmokeSpecTs(actions: readonly string[]): string {
   return `import { defineSmokeTest } from 'boardsmith/testing/browser';
 
-// The in-browser smoke test. \`boardsmith verify\` (and \`boardsmith smoke\`) serves this game with
+// The in-browser smoke test, which runs on request. \`boardsmith smoke\` serves this game with
 // \`boardsmith dev\` from a fresh start and walks it in Chromium: a player takes a seat, takes every
 // action the action panel offers and presses every control on the board, and any page error,
 // console error, failed request or failed action fails it. At a table the walk acts for every seat

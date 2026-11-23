@@ -19,7 +19,7 @@ vi.mock('../lib/started-processes.js', async (original) => ({
   },
 }));
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('starts `boardsmith dev` on its copy with --no-watch', async () => {
     const dir = await smokeProject(false);
     const { outcome } = await runSmoke({ projectDir: dir, log: quiet });

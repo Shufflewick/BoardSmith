@@ -412,8 +412,9 @@ a real Android phone:
 
 ## The smoke test every game has: `tests/browser/smoke.spec.ts`
 
-`boardsmith init` writes it, `boardsmith verify` runs it as its `smoke` check,
-and `boardsmith smoke` runs it alone (#453). The spec is one call:
+`boardsmith init` writes it, and `boardsmith smoke` runs it on request (#453).
+It plays seeded games for many steps, a sim rather than a fast check, so
+`boardsmith verify` and publish do not run it (#1790). The spec is one call:
 
 ```ts
 // defineSmokeTest comes from 'boardsmith/testing/browser'
@@ -671,8 +672,8 @@ markers this page documents, so it keeps up with any game without knowing it:
 
 At a table, the walk deals every game from a seed: `"smoke"` unless the spec's
 `seed` names another. The seed is printed in the check's summary, pass or fail,
-and recorded with it in the verify result, so a failure is walked again exactly
-by running `boardsmith smoke` on the same spec. `seed` takes one seed or a list,
+so a failure is walked again exactly by running `boardsmith smoke` on the same
+spec. `seed` takes one seed or a list,
 each walked in turn, as its own deal with its own `steps`:
 
 ```ts

@@ -9,7 +9,7 @@ import { aceGameDealtSlowly, boardThatStarvesThePage, boardThatHoldsItsFrames, S
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#609: waits out a page kept too busy to answer for longer than a press is given, as a loaded machine does, and walks on', async () => {
     const { outcome } = await smokeOf(false, boardThatStarvesThePage());
 

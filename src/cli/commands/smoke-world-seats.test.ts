@@ -9,7 +9,24 @@ import { ALONE_REASON, gladeSpec, gladeWorld } from './smoke-fixtures.test-helpe
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+/**
+ * The world `boardsmith init --world` scaffolds, with a board that reads a table's whole game
+ * context with `useGameContext()` (#453). A world's shell never provides a table's `gameState`,
+ * `dueSeats`, `timeTravelDiff`, `platformRequest` or `turnDeadline`, so the board throws the moment it
+ * renders in a real world, though a unit test that mounts it with a hand-built context passes.
+ */
+const TABLE_KEY_WORLD_BOARD = `<script setup lang="ts">
+import { useGameContext } from 'boardsmith/ui';
+
+const { gameState, availableActions } = useGameContext();
+</script>
+
+<template>
+  <div class="world-board">Round {{ gameState ? 1 : 0 }}: {{ availableActions.join(', ') }}</div>
+</template>
+`;
+
+describe('boardsmith smoke', () => {
   it(
     '#472, #474: in a world walked from one seat, says why an action the panel only greyed out was never taken, and waits ' +
       'out a slow command within its step rather than spending the next one waiting for a turn',
@@ -132,6 +149,15 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toBe(
       'The smoke walk, dealt from seed "smoke", found a problem: - This game is played at a table, where the walk acts for ' +
         'every seat in turn, so `seats` in tests/browser/smoke.spec.ts has nothing to choose. Remove `seats` there.',
+    );
+  });
+
+  it('#453: fails a world whose board reads a table-only context key', async () => {
+    const { outcome } = await smokeOf(true, { 'src/ui/components/WorldBoard.vue': TABLE_KEY_WORLD_BOARD });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /useGameContext\(\) reads a table's whole game context, and this component is inside a world's shell.*gameState, dueSeats, timeTravelDiff, platformRequest, turnDeadline/s,
     );
   });
 });

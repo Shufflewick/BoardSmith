@@ -10,7 +10,7 @@ import { boardThatHangsWhenPressed } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-describe('boardsmith verify: the smoke check', () => {
+describe('boardsmith smoke', () => {
   it('#618: fails a board that hangs the page for good after a press, at the step that met the hang, on the page clock rather than the whole-run limit', async () => {
     const { outcome, steps } = await smokeOf(false, boardThatHangsWhenPressed());
 

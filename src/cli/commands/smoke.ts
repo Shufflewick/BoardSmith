@@ -1,6 +1,7 @@
 /**
- * The in-browser smoke check (#453): `boardsmith verify`'s `smoke` check, `boardsmith smoke`, and
- * `boardsmith install-browser`.
+ * The in-browser smoke check (#453), `boardsmith smoke`, and `boardsmith install-browser`. It plays
+ * seeded games for many steps, a sim rather than a fast check, so it runs only on request and
+ * `boardsmith verify` does not run it (#1790).
  *
  * Unit tests mount a board with whatever context the test hands it, so a board can pass every one
  * and still throw the moment it renders in the real shell. This check opens the game the way a
@@ -106,7 +107,7 @@ export async function installBrowserCommand(): Promise<void> {
         `fix that (usually the network), then run ${INSTALL_BROWSER} again.`,
     );
   }
-  console.log(styleText('green', 'Chromium is installed. `boardsmith verify` can run the smoke test now.'));
+  console.log(styleText('green', 'Chromium is installed. `boardsmith smoke` can run now.'));
 }
 
 // -------------------------------------------------------------------------------------------
@@ -283,7 +284,7 @@ function failedWalk(said: string[], code: number | null, output: string): Verify
   return {
     passed: false,
     summary: said.length > 0 ? said.join(' ').replace(/\s*\n\s*/g, ' ') : `Playwright exited with code ${code}: ${tail(plainText(output), 6)}`,
-    next: 'Run `boardsmith smoke` to watch the walk and see every problem, fix what it names, then run `boardsmith verify` again.',
+    next: 'Fix what it names, then run `boardsmith smoke` again.',
   };
 }
 
@@ -342,7 +343,7 @@ function specMissing(projectDir: string): VerifyCheckOutcome | undefined {
     summary: `This project has no ${SMOKE_SPEC_PATH}, so nothing opens the game in a browser.`,
     next:
       `Write it (a new \`boardsmith init\` project has one): \`import { defineSmokeTest } from 'boardsmith/testing/browser'; ` +
-      `defineSmokeTest({ actions: [/* every action a player can take */] });\`, commit it, then run \`boardsmith verify\` again.`,
+      `defineSmokeTest({ actions: [/* every action a player can take */] });\`, then run \`boardsmith smoke\` again.`,
   };
 }
 

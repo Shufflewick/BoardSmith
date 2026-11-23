@@ -70,7 +70,7 @@ my-game/
     ├── game.test.ts         # Game tests
     ├── greedy.sim.test.ts   # A sim: plays seeded games with the greedy policy
     ├── a11y.example.test.ts # An axe-core scan of GameTable.vue
-    └── browser/smoke.spec.ts # The in-browser smoke test `boardsmith verify` runs
+    └── browser/smoke.spec.ts # The in-browser smoke test `boardsmith smoke` runs
 ```
 
 Every game starts as a simulator: `boardsmith simulate --policy greedy` plays
@@ -107,10 +107,10 @@ That writes the same project without its UI: no `index.html`, `src/main.ts`,
 usual (validate's Required Files check asks only for the rules). `dev`, `build`,
 `smoke` and `publish` stop with "This project has no UI yet. Run
 `boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
-verbs, and records build and smoke as skipped for that reason; its closing
+verbs, and records build as skipped for that reason; its closing
 line and `verify --check` name the skipped checks. A table that loses
 `index.html` but keeps any other UI file is broken, not a simulator: those
-commands stop and name the files, and `verify` fails build and smoke. `--sim`
+commands stop and name the files, and `verify` fails build. `--sim`
 cannot be combined with `--world`.
 
 When you want to play it, run `boardsmith add-ui` in the project. It writes
@@ -239,7 +239,7 @@ A test file's name sets its class, and the class sets where it runs:
 |---|---|---|---|---|---|
 | Unit | `*.test.ts` | Yes: the tests the change touches, then a slice of the suite | Yes | Yes (publish needs a passing verify) | `boardsmith test` |
 | Sim | `*.sim.test.ts` | No | No | No | `boardsmith test --sims` |
-| Browser | `tests/browser/*.spec.ts` | No | Yes, as the smoke test | Yes (publish needs a passing verify) | `boardsmith smoke` |
+| Browser | `tests/browser/*.spec.ts` | No | No | No | `boardsmith smoke` |
 
 A sim is any test that plays whole games: random-game sims, whole matches, bot
 games, and pace or budget runs. Sims never run automatically. The game's
@@ -424,7 +424,7 @@ import { defineSmokeTest } from 'boardsmith/testing/browser';
 defineSmokeTest({ actions: ['draw', 'play'] });
 ```
 
-`boardsmith verify` copies the project's files into `.boardsmith/smoke/`, starts
+`boardsmith smoke` copies the project's files into `.boardsmith/smoke/`, starts
 `boardsmith dev` there on a free port (a fresh game, or a world from genesis,
 leaving your own dev world alone), and runs the spec in Chromium. A player takes
 a seat, takes every action the action panel offers, answering each choice (on

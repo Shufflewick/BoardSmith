@@ -1,5 +1,5 @@
 /**
- * A GAME `boardsmith verify` CAN RUN WHOLE, smoke check included (#453): a table or a world as
+ * A GAME `boardsmith verify` AND `boardsmith smoke` CAN RUN WHOLE (#453): a table or a world as
  * `boardsmith init` scaffolds it, installed the way a real game is (`devProject`), with the tools
  * the test and typecheck checks run through linked from this checkout's install.
  *

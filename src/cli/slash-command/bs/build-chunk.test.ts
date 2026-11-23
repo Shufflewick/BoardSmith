@@ -2251,7 +2251,7 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     const test = flatRead('build/test.md');
     // #985: the chunk's gate is its fast checks; the full checks run at publish.
     expect(test).toMatch(/npx boardsmith verify --chunk <slug>`.{0,160} It runs the chunk's fast checks: the test files the chunk added or changed since it began, and typecheck/);
-    expect(test).toMatch(/full suite, build, validate, the smoke test and the verbs check run once, at publish/);
+    expect(test).toMatch(/full suite, build, validate and the verbs check run once, at publish/);
     expect(test).toMatch(/not done until it exits zero/);
     expect(test).not.toContain('npx vue-tsc --noEmit');
   });
@@ -2383,10 +2383,10 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(spec).toMatch(/`seed: \['smoke', '17'\]`/);
   });
 
-  it("puts the smoke test in the full verify's list of checks, with the commands to run it alone and to install its browser", () => {
+  it('keeps the smoke test out of the full verify, naming the commands that run it on request and install its browser (#1790)', () => {
     const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
-    // #985: the smoke test is part of the full verify, which runs at publish, not per chunk.
-    expect(gate).toMatch(/full suite, build, validate, the smoke test and the verbs check run once, at publish, as `boardsmith verify`/);
+    expect(gate).toMatch(/full suite, build, validate and the verbs check run once, at publish, as `boardsmith verify`/);
+    expect(gate).toMatch(/is not part of verify: it plays whole seeded games, so it runs only on request, as `npx boardsmith smoke`/);
     expect(gate).toContain('`npx boardsmith smoke`');
     expect(gate).toContain('`npx boardsmith install-browser`');
     expect(cliSource).toContain(".command('smoke')");
