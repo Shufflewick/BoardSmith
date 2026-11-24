@@ -134,7 +134,9 @@ function misses(seen, i) {
 /**
  * What is drawn on top at the middle of the modal annotation's bubble, of a bubble
  * about the board (the right edge's), and of the action bar; at the upper half of
- * the bar's edge toggle, which overhangs the board; and how many rings show.
+ * the bar's edge toggle, which overhangs the board; how many rings show; and the
+ * right edge's bubble's and the test modal's boxes, with whether that bubble's
+ * middle is inside the modal's box (#1799).
  */
 function topmost(frame) {
   return frame.locator('body').evaluate((body) => {
@@ -148,6 +150,16 @@ function topmost(frame) {
       const top = doc.elementFromPoint(r.left + r.width / 2, r.top + r.height * down);
       return top && el.contains(top) ? 'itself' : `${top?.tagName}.${top?.className}`;
     };
+    const placement = (bubble, modal) => {
+      const box = (el) => {
+        if (!el) return null;
+        const r = el.getBoundingClientRect();
+        return { left: r.left, right: r.right, top: r.top, bottom: r.bottom };
+      };
+      const [b, m] = [box(bubble), box(modal)];
+      const [x, y] = b ? [(b.left + b.right) / 2, (b.top + b.bottom) / 2] : [];
+      return { boxes: { board: b, modal: m }, boardInModal: Boolean(b && m && x >= m.left && x < m.right && y >= m.top && y < m.bottom) };
+    };
     const bubbles = doc.querySelectorAll('.bsg-annotation-layer .bsg-board-message__content--annotation');
     const seen = {
       bubble: onTop(bubbles[3]),
@@ -155,10 +167,18 @@ function topmost(frame) {
       bar: onTop(doc.querySelector('[data-testid="bs-actionbar"]')),
       toggle: onTop(doc.querySelector('.bar-edge'), 0.25),
       rings: doc.querySelectorAll('.bsg-tutorial-ring').length,
+      ...placement(bubbles[1], doc.querySelector('.test-modal')),
     };
     for (const el of inert) el.setAttribute('inert', '');
     return seen;
   });
+}
+
+/** The right edge's bubble sits inside the test modal's box and the modal is drawn over its middle; a miss names both boxes. */
+function assertUnderModal(seen) {
+  const boxes = `the bubble's box is ${JSON.stringify(seen.boxes.board)}, the modal's ${JSON.stringify(seen.boxes.modal)}`;
+  assert(seen.boardInModal, `the middle of the right edge's bubble never came inside the modal's box: ${boxes}`);
+  assert(seen.board === 'DIV.test-modal', `the middle of the right edge's bubble shows ${seen.board}, not the modal, though it is inside the modal's box: ${boxes}`);
 }
 
 /** Re-place the bubbles, as the board region scrolling would. */
@@ -217,12 +237,14 @@ await runBrowserRegression(
         host.append(modal);
       });
       // The bar is waited for too: after the resize the closed debug drawer slides from its phone spot to its desktop spot across the toggle (#1360).
+      // The modal grows into its desktop box after the resize too, so it is waited for until it spans the right edge's bubble (#1799).
       const underModal = await waitUntil(
         () => topmost(frame),
-        (now) => now.bubble === 'DIV.test-modal' && now.bar === 'itself' && now.toggle === 'itself',
+        (now) => now.bubble === 'DIV.test-modal' && now.bar === 'itself' && now.toggle === 'itself' && now.boardInModal,
       );
       await check('a bubble about the board is drawn under an open game modal (#1346)', async () => {
         assert(underModal.bubble === 'DIV.test-modal', `the middle of the bubble shows ${underModal.bubble}, not the modal`);
+        assertUnderModal(underModal);
       });
       await check('the action bar and its edge toggle are drawn above an open game modal (#1346)', async () => {
         assert(underModal.bar === 'itself', `the middle of the action bar shows ${underModal.bar}`);
@@ -233,13 +255,13 @@ await runBrowserRegression(
         modal.innerHTML = '<div data-bs-el-name="in-modal" style="position: absolute; left: 40%; top: 30%; width: 60px; height: 40px; background: gold"></div>';
       });
       await remeasure(frame);
-      const inModal = await waitUntil(() => topmost(frame), (now) => now.bubble === 'itself' && now.rings === 4);
+      const inModal = await waitUntil(() => topmost(frame), (now) => now.bubble === 'itself' && now.rings === 4 && now.boardInModal);
       await check('a target inside an open game modal gets its ring and a bubble drawn above the modal (#1346)', async () => {
         assert(inModal.rings === 4, `${inModal.rings} rings show, not one for each of the 4 targets`);
         assert(inModal.bubble === 'itself', `the middle of the bubble shows ${inModal.bubble}`);
       });
       await check('a bubble about the board stays under the modal while another target is inside it (#1346)', async () => {
-        assert(inModal.board === 'DIV.test-modal', `the middle of the right edge's bubble shows ${inModal.board}, not the modal`);
+        assertUnderModal(inModal);
       });
 
       await frame.locator('.test-modal').evaluate((modal) => modal.remove());
