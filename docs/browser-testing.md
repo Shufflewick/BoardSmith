@@ -631,6 +631,23 @@ markers this page documents, so it keeps up with any game without knowing it:
   cannot catch a board that collects picks in state of its own and sends them
   in one call (a two-card plan, a dice draft), since the panel still offers
   that action, nor a board that keeps a selection of its own and never marks it.
+- At the start of every step it lays the game out on a phone, held upright
+  (390x844) and on its side (844x390), with touch on, so `(pointer: coarse)`
+  and `(hover: none)` styles apply, then puts the desktop size back (#1797).
+  It first moves the pointer off the game, so a board the resize moves under
+  a resting pointer is not hovered by it. It waits for the transitions the resize sets off to end before it measures,
+  and again before it goes on. It fails when the game's page scrolls sideways,
+  or when any box in the game's frame whose `overflow-x` is `auto` or `scroll`
+  holds content wider than itself, the shell's board region
+  (`[data-testid="bs-board"]`) included, so a board wider than the phone fails.
+  The report names the box (its test id, else its tag and classes after the
+  nearest test id), its content and box widths, the phone, and the step it was
+  first seen, once for each box and phone. A box clipped on purpose
+  (`overflow-x: hidden` or `clip`) is not checked. Content meant to pan
+  sideways, such as a large map, is marked `data-bs-scrolls="x"`: a marked box
+  is not reported, nor is a box holding a marked element wider than itself,
+  as the board region panning a marked map is. A board fits by sizing from the
+  board region's width (`100cqw`), as the auto-UI's renderers do.
 - Actions it took are read from `boardsmith:action-resolved`, which also reports
   one that failed. An action that failed is reported once and not tried again
   while anything else is offered, so the walk goes on to the rest of the game. It fails on `pageerror`, console errors, responses of 400 and

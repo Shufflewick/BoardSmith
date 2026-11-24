@@ -780,12 +780,16 @@ const props = defineProps<WorldBoardProps>();
   flex-direction: column;
   gap: 1rem;
   padding: 1rem;
+  /* The board region's width, so nothing here scrolls sideways on a phone. */
+  max-width: 100cqw;
+  box-sizing: border-box;
 }
 .world-board__placeholder {
   color: var(--bsg-ink-2);
 }
 .world-board__view {
-  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 12px;
 }
 </style>

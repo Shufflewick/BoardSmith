@@ -25,8 +25,9 @@
  *   5. fails on any uncaught error in the page, any console error, any failed request to the dev
  *      host, and any offered action that then fails, on an action the game offers that the spec
  *      does not list, or one it lists that the walk never took (with the panel's reason, for one it
- *      only ever showed greyed out, #472), and on a table game that offers no seat anything while
- *      it is not over (#473).
+ *      only ever showed greyed out, #472), on a table game that offers no seat anything while
+ *      it is not over (#473), and on anything that scrolls sideways on a phone, which it lays the
+ *      game out on at every step (#1797).
  *
  * A game with no actions yet lists none, and its walk still loads, seats a player and fails on
  * any error. Each chunk that adds an action adds its name to `actions`. One the deal decides (offered
@@ -2365,11 +2366,13 @@ async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
   const page = frame.page();
   const before = page.viewportSize();
   if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
+  // Off the game, so a board the resize moves under a resting pointer is not hovered by it.
+  await inPageTime(page, 'moving the pointer off the game', () => page.mouse.move(0, 0));
   await inPageTime(page, 'switching on touch', () => setTouch(page, true));
   try {
     for (const phone of PHONE_VIEWPORTS) {
       await inPageTime(page, `laying the game out at ${phone.width}x${phone.height}`, () => page.setViewportSize({ width: phone.width, height: phone.height }));
-      await framesPass(frame);
+      await layoutSettles(frame);
       for (const scroll of await inPageTime(page, 'reading what scrolls sideways', () => frame.evaluate(sidewaysScrolls))) {
         const key = sidewaysKey(phone, scroll);
         if (walk.sideways.has(key)) continue;
@@ -2381,6 +2384,26 @@ async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
     await inPageTime(page, 'laying the game out as before', () => page.setViewportSize(before));
     await inPageTime(page, 'switching off touch', () => setTouch(page, false));
   }
+  await layoutSettles(frame);
+}
+
+/**
+ * Waits for `frame` to lay itself out at a new size: for the transitions the change set off (a
+ * sidebar sliding shut) to end, so the walk measures, and then presses, the layout a player sees
+ * once it stops moving rather than one on its way there. A looping animation never ends, so it is not waited for.
+ */
+async function layoutSettles(frame: Frame): Promise<void> {
+  await framesPass(frame);
+  await inPageTime(frame.page(), 'waiting for the layout to stop moving', () =>
+    frame.evaluate(() =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
+          .map((animation) => animation.finished.catch(() => undefined)),
+      ),
+    ),
+  );
   await framesPass(frame);
 }
 

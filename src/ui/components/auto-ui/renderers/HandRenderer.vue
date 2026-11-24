@@ -151,6 +151,12 @@ const frontRowCards = computed(() => {
   return cards.slice(halfPoint);
 });
 
+// The most cards in one row, cards shown or their backs alone, which sizes the overlap and a fan's natural width.
+const widestRow = computed(() => {
+  const count = visibleChildren.value.length || props.element.childCount || 0;
+  return handNeedsTwoRows.value ? Math.ceil(count / 2) : count;
+});
+
 // ---------------------------------------------------------------------------
 // useSelectable — whole-hand action-selectable (A11Y-01)
 // Provides click + keyboard (Enter/Space) activation for the hand container.
@@ -202,7 +208,7 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
         'has-overlap': hasOverlap,
         'two-rows': handNeedsTwoRows,
       }"
-      :style="isFan ? { '--layout-fan-angle': `${fanAngle}deg` } : {}"
+      :style="isFan ? { '--layout-fan-angle': `${fanAngle}deg`, '--row-count': widestRow } : { '--row-count': widestRow }"
     >
       <!-- Back row (first half of cards when split) -->
       <div v-if="handNeedsTwoRows" class="hand-cards hand-cards-back">
@@ -259,6 +265,10 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   /* A fifth of the board region's width, between the tap floor and the natural width (issue 1608). */
   --card-w: clamp(max(24px, var(--bsg-tap-min)), 20cqw, var(--bsg-card-w));
   --card-h: calc(var(--card-w) * 1.4);
+  /* How far each card's slot is pulled under the next: none unless the hand overlaps. */
+  --overlap-step: 0px;
+  /* A flex item would otherwise keep a fan's whole row, and stick out of a narrow board (#1797). */
+  min-width: 0;
   background: var(--bsg-surface);
   border-radius: var(--bsg-r-md);
   padding: var(--bsg-s4);
@@ -369,25 +379,21 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   flex-wrap: wrap;
 }
 
-/* Fan mode: add padding to contain rotated cards.
-   Narrow widths: scroll horizontally with snap so cards never clip off-screen. */
-.hand-cards-wrapper.has-fan .hand-cards {
-  padding: 20px 30px 10px 30px;
-  gap: 0;
-  flex-wrap: nowrap;
+/* Fan mode: its natural width, set rather than read from the cards, whose overlap
+   depends on it; never wider than the hand's room. */
+.hand-cards-wrapper.has-fan {
+  width: calc(var(--row-count, 1) * var(--card-w) - (var(--row-count, 1) - 1) * var(--overlap-step) + 2 * var(--bsg-s2));
   max-width: 100%;
-  overflow-x: auto;
-  scroll-snap-type: x proximity;
-  -webkit-overflow-scrolling: touch;
 }
 
-.hand-cards-wrapper.has-fan .hand-card {
-  scroll-snap-align: center;
-}
-
-/* A sideways swipe scrolls the fan; a drag that sets off up or down picks the card up (#1605). */
-.hand-cards-wrapper.has-fan .hand-card.is-draggable {
-  touch-action: pan-x;
+/* Room above for the rotated cards; their corners may lean into the hand's own padding.
+   On a narrow board the cards overlap further to fit, and wrap only past the tap floor,
+   so no fan scrolls sideways (#1797). */
+.hand-cards-wrapper.has-fan .hand-cards {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20px var(--bsg-s2) 10px;
+  gap: 0;
 }
 
 /* Overlap mode */
@@ -416,13 +422,25 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 
 /* Overlap layout — overlap grows with card count, but the negative margin is
    capped so every card always exposes a strip as wide as the tap floor. */
+.hand-cards-wrapper.has-overlap {
+  --overlap-step: min((var(--row-count, 1) - 1) * 4px, max(var(--card-w) - max(24px, var(--bsg-tap-min)), 0px));
+}
+
 .hand-cards-wrapper.has-overlap .hand-card {
-  margin-right: calc(
-    -1 * min((var(--card-count, 1) - 1) * 4px, max(var(--card-w) - max(24px, var(--bsg-tap-min)), 0px))
+  margin-right: calc(-1 * var(--overlap-step));
+}
+
+/* A fan wider than its row overlaps further until it fits (100% is the row's width), still
+   leaving every card a strip as wide as the tap floor, rather than scrolling sideways (#1797). */
+.hand-cards-wrapper.has-fan .hand-card {
+  margin-right: max(
+    -1 * max(var(--card-w) - max(24px, var(--bsg-tap-min)), 0px),
+    min((100% - var(--card-count, 1) * var(--card-w)) / (var(--card-count, 1) - 1), -1 * var(--overlap-step))
   );
 }
 
-.hand-cards-wrapper.has-overlap .hand-card:last-child {
+.hand-cards-wrapper.has-overlap .hand-card:last-child,
+.hand-cards-wrapper.has-fan .hand-card:last-child {
   margin-right: 0;
 }
 

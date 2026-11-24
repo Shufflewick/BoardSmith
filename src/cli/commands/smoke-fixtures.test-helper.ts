@@ -654,7 +654,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.board { position: relative; width: 420px; height: 260px; }
+.board { position: relative; width: 360px; height: 260px; }
 .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; }
 </style>
 `,
@@ -1008,14 +1008,14 @@ const POINTER_AIMED_SHAPES = {
   plain: { opensOnRow: 2, elements: undefined, style: '' },
   clipped: { opensOnRow: 5, elements: undefined, style: `
 .board { overflow: clip; }
-.field { position: relative; top: -200px; height: 800px; }` },
+.field { position: relative; top: -180px; height: 720px; }` },
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
 const TOP_LEFT_QUARTER = "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')";
 
 const NO_COVER = { setup: '', aim: '', template: '', style: '' };
-const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }';
+const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 180px; height: 180px; background: #888; }';
 
 /** The cover each `accepts` lays over the top-left quarter, where the game accepts the cells: from the second accepted aim on, or from the start. */
 const POINTER_COVERS: Partial<Record<string, typeof NO_COVER>> = {
@@ -1117,9 +1117,9 @@ function hover() {
 </template>
 
 <style scoped>
-.board { position: relative; width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${cover.style}${toast ? `
-.toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
+.board { position: relative; width: 360px; height: 360px; }
+.field { width: 360px; height: 360px; background: #ddd; }${shape.style}${cover.style}${toast ? `
+.toast { position: absolute; left: 0; top: 0; width: 198px; height: 198px; background: #36c; color: #fff; }` : ''}
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
@@ -1342,7 +1342,7 @@ function warn() {${kind === 'toastAfterPointing' ? '\n  if (!choosing.value) ret
 </template>
 
 <style scoped>
-.board { position: relative; width: 420px; height: 420px; }
+.board { position: relative; width: 360px; height: 420px; }
 ${style}
 </style>
 `,
