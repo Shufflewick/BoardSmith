@@ -926,7 +926,7 @@ function handleExpireSeat(
   const runner = runnerFromSnapshot(snapshot, def);
   const expired = runner.closeExpiredHeldSeat(op.player, op.idleAction);
   if (!expired) {
-    const actionResult = runner.performAction(op.idleAction, op.player, op.args);
+    const actionResult = runner.performIdleAction(op.idleAction, op.player, op.args);
     if (!actionResult.success) {
       return errorResult(actionResult.error ?? 'Idle action failed', 'bundle', actionResult.errorCode);
     }

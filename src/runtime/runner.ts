@@ -1341,6 +1341,25 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   }
 
   /**
+   * The host running the idle action `actionName` as `seat`'s own action because
+   * the seat's time ran out. Recorded as never undoable, as a seat expiry is: the
+   * seat did not choose it, and undoing it would hand back a step whose time is up.
+   */
+  performIdleAction(actionName: string, seat: number, args: Record<string, unknown>): ActionExecutionResult {
+    // Marked inside the watched op, so a step that undoes per seat fences it too.
+    return this.asSeatOp(seat, () => {
+      const recorded = this.actionCount;
+      const result = this.performActionUnwatched(actionName, seat, args);
+      const entry = this.actionHistory.at(-1);
+      if (this.actionCount > recorded && entry && 'name' in entry) {
+        entry.undoable = false;
+        entry.timedOut = true;
+      }
+      return result;
+    });
+  }
+
+  /**
    * Drop `seat`'s held follow-up, end its part in the open step, and record
    * that in `actionHistory` as a seat expiry. No action ran, but the flow
    * moved, so the history has to say so: `replay` re-applies the entry through

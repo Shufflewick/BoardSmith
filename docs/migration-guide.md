@@ -5,7 +5,12 @@
 A step declared `handoffUndo: true` lets the seat that took the last action
 undo it while the step waits on another seat that has neither picked nor acted
 there yet. Without it, undo stays the current seat's. The flow state carries
-`handoffUndo` while such a step is in that window.
+`handoffUndo` while such a step is in that window, and the Action Panel shows
+Undo to a seat that may undo off its turn.
+
+The idle action a host runs for a seat whose time ran out (`expireSeat`) is now
+recorded as not undoable (`timedOut: true` on its history entry), so no undo
+hands the seat back a step whose time is up.
 
 ## `boardsmith verify` no longer runs the smoke playthrough (#1790)
 

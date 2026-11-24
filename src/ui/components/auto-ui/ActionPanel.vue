@@ -2383,6 +2383,15 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     <template v-else>
       It is <span v-if="currentPlayerName" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}</span><span v-else>the other player</span>'s turn
     </template>
+    <!-- A seat may undo off its turn: its last action in a simultaneous step, or one it handed off (#1788). -->
+    <button
+      v-if="canUndo"
+      class="action-btn undo-btn"
+      v-disabled-reason="submissionInFlightReason"
+      @click="emit('undo')"
+    >
+      Undo
+    </button>
   </div>
   </div>
 </template>
@@ -2971,6 +2980,10 @@ button {
   text-align: left;
   color: var(--bsg-ink-2);
   font-size: 0.9rem;
+}
+
+.waiting-message .undo-btn {
+  margin-left: 12px;
 }
 
 .player-name-prefix {

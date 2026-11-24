@@ -964,6 +964,8 @@ export interface SerializedAction {
   args: Record<string, unknown>;
   /** Whether this action was undoable (false if action.undoable was false) */
   undoable?: boolean;
+  /** Set when the host took this action for the seat because its time ran out. Never undoable. */
+  timedOut?: true;
 }
 
 /**

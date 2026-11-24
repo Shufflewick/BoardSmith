@@ -1439,7 +1439,7 @@ export class FlowEngine<G extends Game = Game> {
   /** The open step's seat made a pick, which closes a `handoffUndo` window as an action does (#1788). */
   notePick(): void {
     const top = this.stack[this.stack.length - 1];
-    if (top?.node.type === 'action-step') top.data = { ...top.data, picked: true };
+    if (this.openStepAwaitsHandoffUndo()) top.data = { ...top.data, picked: true };
   }
 
   /** Writes the open step's window, the last action's error and the held follow-ups into `state`. */

@@ -2396,8 +2396,12 @@ move or an expired step deadline included. The usual fences still apply: a
 `.notUndoable()` action, an irreversible `execute()`, and
 `undo: { fenceRandomRewind: true }`. It is opt-in because the waiting seat may
 already have seen its new view and its actions when the undo takes them away.
-The seat that may undo is not the one whose turn it is, so it reaches Undo from
-the game menu rather than the action panel.
+The Action Panel offers the Undo to the seat that may take it, though it is
+not that seat's turn.
+
+An action the host takes for a seat whose time ran out (the idle action of an
+`expireSeat`) is never undoable, here or anywhere else: the seat did not choose
+it, and undoing it would hand back a step whose time is up.
 
 #### `simultaneousActionStep` - All players act at once
 
