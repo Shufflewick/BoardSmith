@@ -655,7 +655,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   private undoReach(): number | undefined {
     if (this.checkpointPolicy_.history === 'full') return undefined;
     const flow = this.getFlowState();
-    return flow?.seatUndo ? this.actionCount : this.undoFloor(this.actionCount - (flow?.moveCount ?? 0));
+    if (flow?.seatUndo) return this.actionCount;
+    // A step open to a handoff undo keeps the checkpoint before the last action (#1788).
+    return this.undoFloor(this.actionCount - (flow?.handoffUndo ? 1 : flow?.moveCount ?? 0));
   }
 
   /**
@@ -1336,6 +1338,25 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     if (!followUpForSeat(this.getFlowState(), seat)) return undefined;
     if (this.refusalToAct(actionName, seat) === undefined) return undefined;
     return this.expireHeldSeat(seat);
+  }
+
+  /**
+   * The host running the idle action `actionName` as `seat`'s own action because
+   * the seat's time ran out. Recorded as never undoable, as a seat expiry is: the
+   * seat did not choose it, and undoing it would hand back a step whose time is up.
+   */
+  performIdleAction(actionName: string, seat: number, args: Record<string, unknown>): ActionExecutionResult {
+    // Marked inside the watched op, so a step that undoes per seat fences it too.
+    return this.asSeatOp(seat, () => {
+      const recorded = this.actionCount;
+      const result = this.performActionUnwatched(actionName, seat, args);
+      const entry = this.actionHistory.at(-1);
+      if (this.actionCount > recorded && entry && 'name' in entry) {
+        entry.undoable = false;
+        entry.timedOut = true;
+      }
+      return result;
+    });
   }
 
   /**

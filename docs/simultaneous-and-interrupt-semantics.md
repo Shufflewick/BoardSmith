@@ -196,7 +196,8 @@ Which means, precisely:
   it, and otherwise its follow-up is dropped and its part ends
   (`GameRunner.closeExpiredHeldSeat`), which the action history records as a
   seat expiry (`SerializedSeatExpiry`) so a replay closes the seat again and
-  undo never reaches behind it. `boardsmith build` stamps
+  undo never reaches behind it. The idle action is recorded the same way for
+  undo: not undoable, marked `timedOut` (#1788). `boardsmith build` stamps
   `capabilities.timedSteps` from the compiled flow, and `boardsmith validate`
   and `build` refuse a timed game that declares no `idleAction`. A window is at
   least `MIN_STEP_TIME_LIMIT_MS` (ten seconds, #307): closing a step takes the

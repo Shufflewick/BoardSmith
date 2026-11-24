@@ -655,9 +655,9 @@ const mobileToggleLabel = computed(() => {
              the player's only control surface with it would be a trap. -->
         <slot name="controls"></slot>
 
-        <!-- The bar is up when the viewer may act, or when a simultaneous step is
-             still waiting on somebody. -->
-        <template v-if="!actionBarCollapsed && (mayAct || (awaitingPlayers?.length ?? 0) > 0)">
+        <!-- The bar is up when the viewer may act or undo, or when a simultaneous
+             step is still waiting on somebody. -->
+        <template v-if="!actionBarCollapsed && (mayAct || canUndo || (awaitingPlayers?.length ?? 0) > 0)">
           <!-- Identity token at the head of the bar, so it always carries WHO
                (IA-02) regardless of whether the panel or the prompt strip renders
                the WHAT. -->

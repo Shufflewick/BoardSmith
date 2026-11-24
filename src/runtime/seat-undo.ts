@@ -61,6 +61,9 @@ export function notUndoableMessage(entry: HistoryEntry): string {
   if (isSeatExpiry(entry)) {
     return `Cannot undo: seat ${entry.player}'s time ran out and the host closed its part of the step, which cannot be taken back.`;
   }
+  if ('timedOut' in entry && entry.timedOut) {
+    return `Cannot undo: seat ${entry.player}'s time ran out and the host took ${entry.name} for it, which cannot be taken back.`;
+  }
   return `Cannot undo: ${'name' in entry ? entry.name : 'that action'} is marked notUndoable.`;
 }
 

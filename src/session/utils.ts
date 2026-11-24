@@ -297,6 +297,8 @@ interface UndoFlowState {
   seatUndo?: true;
   /** Set while the open action step undoes one action at a time (#1759). */
   undoEachAction?: true;
+  /** Set while the open action step lets the seat that acted last undo it (#1788). */
+  handoffUndo?: true;
 }
 
 /**
@@ -459,6 +461,10 @@ function computeUndoEligibility(
     flowState?.moveCount,
   );
   const eligible = flowState?.currentPlayer === seat;
+  // A step waiting on a seat that has not picked or acted lets the seat that acted last take that action back (#1788).
+  if (!eligible && flowState?.handoffUndo && history.actionHistory.at(-1)?.player === seat) {
+    return { eligible: true, turnStartActionIndex: count - 1, actionsThisTurn: 1 };
+  }
   // A step that undoes each action restores the point just before the last one (#1759).
   if (flowState?.undoEachAction && actionsThisTurn > 0) return { eligible, turnStartActionIndex: count - 1, actionsThisTurn };
   return { eligible, turnStartActionIndex, actionsThisTurn };

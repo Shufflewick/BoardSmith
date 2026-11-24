@@ -3312,6 +3312,15 @@ export class Game<
   }
 
   /**
+   * The open step's seat made a pick: see `FlowEngine.notePick`. The session's
+   * `PendingActionManager` is the caller.
+   * @internal
+   */
+  notePick(): void {
+    this._flowEngine?.notePick();
+  }
+
+  /**
    * Settle `seat` again in the open simultaneous step once its own state is
    * restored by an undo of its last action (#1526). See
    * `FlowEngine.reopenSimultaneousSeat`; `GameRunner.undoSeatAction` is the caller.

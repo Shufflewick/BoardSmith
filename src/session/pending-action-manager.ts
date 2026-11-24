@@ -162,6 +162,7 @@ export class PendingActionManager<G extends Game = Game> {
     }
 
     if (taken.complete) return this.#completePendingAction(pendingState, playerPosition);
+    this.#runner.game.notePick();
     this.#runner.captureCheckpoint();
 
     return {

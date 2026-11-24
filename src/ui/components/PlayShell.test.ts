@@ -259,6 +259,11 @@ describe('the action panel', () => {
     expect(mountShell({ mayAct: false }).find('[data-testid="bs-action-panel"]').exists()).toBe(false);
   });
 
+  it('is up with its Undo when they may not act but may undo, as after handing the turn off (#1788)', () => {
+    const panel = mountShell({ mayAct: false, canUndo: true }).find('[data-testid="bs-action-panel"]');
+    expect(panel.find('.undo-btn').exists()).toBe(true);
+  });
+
   it('offers the actions it was handed', () => {
     expect(mountShell().find('[data-testid="bs-action-panel"]').text()).toMatch(/look/i);
   });

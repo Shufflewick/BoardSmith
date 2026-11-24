@@ -2372,6 +2372,37 @@ pair `undo: 'action'` with `repeatUntil` or `turnScope: 'continue'`. A
 `turnScope: 'restart'` step makes each of its entries a turn of its own, and
 there one action is already the whole turn.
 
+##### `handoffUndo` - undo after the turn passes to another seat
+
+Undo is normally the current seat's. Once the flow moves to another seat's
+step, the seat that just acted cannot take its action back, even while the
+other seat has done nothing yet. Declare `handoffUndo: true` on the receiving
+step to allow that:
+
+```typescript
+actionStep({
+  name: 'fire',
+  player: (ctx) => ctx.game.firingSeat(),
+  actions: ['attack'],
+  handoffUndo: true,
+})
+```
+
+While that step waits on a seat that has neither picked nor acted in it, the
+seat that took the last action may undo it. The undo restores the game from
+just before that action and puts the flow back in the step it was taken in.
+The window closes at the waiting seat's first accepted pick or action, a bot's
+move or an expired step deadline included. The usual fences still apply: a
+`.notUndoable()` action, an irreversible `execute()`, and
+`undo: { fenceRandomRewind: true }`. It is opt-in because the waiting seat may
+already have seen its new view and its actions when the undo takes them away.
+The Action Panel offers the Undo to the seat that may take it, though it is
+not that seat's turn.
+
+An action the host takes for a seat whose time ran out (the idle action of an
+`expireSeat`) is never undoable, here or anywhere else: the seat did not choose
+it, and undoing it would hand back a step whose time is up.
+
 #### `simultaneousActionStep` - All players act at once
 
 ```typescript
