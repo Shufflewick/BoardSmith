@@ -6,7 +6,7 @@
  * rules file defines, which verbs a test file dispatches through the engine, and which lines call
  * a guard unreachable. Kept apart from the command so the mutation runner can share the parser.
  */
-import { parse } from '@typescript-eslint/parser';
+import { parse, parseForESLint } from '@typescript-eslint/parser';
 import { scanTestCitations } from './trace-check.js';
 
 /** The part of an ESTree node these readers look at. */
@@ -29,7 +29,6 @@ export interface ParsedSource {
   tokens: Array<{ type: string; value: string; range: [number, number] }>;
 }
 
-/** Parses TypeScript with locations, comments and tokens. Throws a readable error naming `file`. */
 /**
  * A file this check cannot read: nested too deeply for the parser, or not parseable. The message
  * says what to do; a caller that can carry on without the file catches this and names it instead.
@@ -45,17 +44,19 @@ export class UnreadableSourceError extends Error {
   }
 }
 
-export function parseSource(source: string, file = 'this file'): ParsedSource {
-  let program: ReturnType<typeof parse>;
+const PARSE_OPTIONS = Object.freeze({
+  comment: true,
+  tokens: true,
+  loc: true,
+  range: true,
+  ecmaVersion: 'latest',
+  sourceType: 'module',
+} as const);
+
+/** Runs a parse, turning a failure into an `UnreadableSourceError` that says what to do about `file`. */
+function parseOrExplain<T>(run: () => T, file: string): T {
   try {
-    program = parse(source, {
-      comment: true,
-      tokens: true,
-      loc: true,
-      range: true,
-      ecmaVersion: 'latest',
-      sourceType: 'module',
-    });
+    return run();
   } catch (err) {
     if (err instanceof RangeError) {
       throw new UnreadableSourceError(
@@ -71,6 +72,11 @@ export function parseSource(source: string, file = 'this file'): ParsedSource {
       'not parseable as TypeScript',
     );
   }
+}
+
+/** Parses TypeScript with locations, comments and tokens. Throws a readable error naming `file`. */
+export function parseSource(source: string, file = 'this file'): ParsedSource {
+  const program = parseOrExplain(() => parse(source, PARSE_OPTIONS), file);
   return {
     ast: program as unknown as AstNode,
     comments: (program.comments ?? []) as unknown as Comment[],
@@ -251,102 +257,9 @@ export function findTestBlocks(source: string, file?: string): TestBlock[] {
 // Verbs
 // -------------------------------------------------------------------------------------------
 
-/**
- * Project wrappers: a function that passes one of its own parameters on as the verb's name (to a
- * verb factory, or to an engine entry point), keyed by function name to that parameter's index.
- * Games build both — `standingVerb('bidOnItem', ...)` around `worldAction(name)`, a test harness's
- * `world.run('bidOnItem', seat)` around the world engine's `applyCommand` — so a reader that knew
- * only the library's own names would miss every verb such a game has. A name keeps every index
- * any function by that name uses, since a game's test files declare many local `run` helpers.
- */
-export type Wrappers = ReadonlyMap<string, ReadonlySet<number>>;
-
-/**
- * A project's dispatch helpers: those that take the verb's name, and those that take a whole
- * command `{ name, args }` and hand it on (`apply(command, player)` around the world runner).
- */
-export interface DispatchWrappers {
-  names: Wrappers;
-  commands: Wrappers;
-}
-
-/** A file's project-relative path and text. */
-export interface SourceFile {
-  path: string;
-  text: string;
-}
-
-/** The object literal an identifier is bound to where a call reads it, or the node itself. */
-type Resolve = (node: AstNode | undefined) => AstNode | undefined;
-
-/** What a call may pass a verb in: expressions that are its name, and command objects holding it. */
-interface Carried {
-  names: AstNode[];
-  commands: AstNode[];
-}
-
-/** Given the wrappers known so far, what a call may pass a verb in. */
-type VerbArgument = (call: AstNode, wrappers: DispatchWrappers, resolve: Resolve) => Carried;
-
 const argAt = (call: AstNode, index: number) => (call.arguments as AstNode[])[index];
 
-/** The arguments a call to a wrapper passes at the wrapper's verb positions. */
-const wrapperArguments = (call: AstNode, name: string | undefined, wrappers: Wrappers): AstNode[] =>
-  [...(wrappers.get(name ?? '') ?? [])].map((index) => argAt(call, index)).filter(isNode);
-
-/** A function's or the file's locals: the object literal each is bound to, or undefined for anything else. */
-type Scopes = Map<AstNode, Map<string, AstNode | undefined>>;
-
-/**
- * Every local and parameter, by the function declaring it, with the object literal it is bound to
- * (`const request = { name, args }`); a local or parameter bound to anything else shadows one outside.
- */
-function objectBindings(ast: AstNode): Scopes {
-  const scopes: Scopes = new Map();
-  const bind = (scope: AstNode, name: string | undefined, value: AstNode | undefined) => {
-    if (name === undefined) return;
-    if (!scopes.has(scope)) scopes.set(scope, new Map());
-    scopes.get(scope)!.set(name, value);
-  };
-  walk(ast, (node, ancestors) => {
-    if (isFunction(node)) paramNames(node).forEach((name) => bind(node, name, undefined));
-    if (node.type !== 'VariableDeclarator') return;
-    const init = isNode(node.init) && node.init.type === 'ObjectExpression' ? node.init : undefined;
-    bind([...ancestors].reverse().find(isFunction) ?? ast, identifierName(node.id), init);
-  });
-  return scopes;
-}
-
-/** Looks an identifier up from the innermost function around the call out to the file. */
-function resolver(scopes: Scopes, ancestors: AstNode[], ast: AstNode): Resolve {
-  return (node) => {
-    const name = identifierName(node);
-    if (name === undefined) return node;
-    for (const scope of [...ancestors.filter(isFunction).reverse(), ast]) {
-      const locals = scopes.get(scope);
-      if (locals?.has(name)) return locals.get(name) ?? node;
-    }
-    return node;
-  };
-}
-
-/** The value of an object literal's `name` property: `{ name: command, args }`. */
-function nameProperty(node: AstNode | undefined, key = 'name'): AstNode | undefined {
-  if (!isNode(node) || node.type !== 'ObjectExpression') return undefined;
-  const property = (node.properties as AstNode[]).find(
-    (p) => p.type === 'Property' && isNode(p.key) && (p.key as AstNode).name === key,
-  );
-  return property?.value as AstNode | undefined;
-}
-
-/**
- * The `actionName` of an `action` op, `{ type: 'action', actionName, ... }`, as
- * a test sends it to the live session host (`session.send(seat, op)`), or
- * undefined for any other op.
- */
-function actionOpName(node: AstNode | undefined): AstNode | undefined {
-  return literalText(nameProperty(node, 'type')) === 'action' ? nameProperty(node, 'actionName') : undefined;
-}
+const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
 
 const isFunction = (n: unknown): n is AstNode => isNode(n) && FUNCTION_TYPES.has(n.type);
 
@@ -371,15 +284,364 @@ function namedFunction(node: AstNode): { name: string; fn: AstNode } | undefined
   return name !== undefined && isFunction(fn) ? { name, fn } : undefined;
 }
 
-const FUNCTION_TYPES = new Set(['FunctionDeclaration', 'FunctionExpression', 'ArrowFunctionExpression']);
-
-function paramNames(fn: AstNode): Array<string | undefined> {
-  return (fn.params as AstNode[]).map((p) => {
-    if (p.type === 'Identifier') return p.name as string;
-    if (p.type === 'AssignmentPattern' && (p.left as AstNode).type === 'Identifier') return (p.left as AstNode).name as string;
-    return undefined;
-  });
+/** A file's project-relative path and text. */
+export interface SourceFile {
+  path: string;
+  text: string;
 }
+
+type ScopeManager = ReturnType<typeof parseForESLint>['scopeManager'];
+type Reference = ScopeManager['scopes'][number]['references'][number];
+type Variable = NonNullable<Reference['resolved']>;
+
+/** A file parsed with its scopes, which reading a value back from where it is used needs. */
+interface ScopedSource extends ParsedSource {
+  file: string;
+  parents: Map<AstNode, AstNode>;
+  /** Each identifier a file reads or writes, with the variable it names. */
+  references: Map<unknown, Reference>;
+}
+
+function parseScoped(source: string, file = 'this file'): ScopedSource {
+  const { ast, scopeManager } = parseOrExplain(() => parseForESLint(source, PARSE_OPTIONS), file);
+  const program = ast as unknown as AstNode;
+  const parents = new Map<AstNode, AstNode>();
+  walk(program, (node, ancestors) => {
+    const parent = ancestors[ancestors.length - 1];
+    if (parent) parents.set(node, parent);
+  });
+  const references = new Map<unknown, Reference>();
+  for (const scope of scopeManager.scopes) for (const reference of scope.references) references.set(reference.identifier, reference);
+  return {
+    ast: program,
+    comments: ast.comments as unknown as Comment[],
+    tokens: ast.tokens as unknown as ParsedSource['tokens'],
+    file,
+    parents,
+    references,
+  };
+}
+
+/** Any element of an array, as a step of a value path. */
+const EACH = Symbol('each');
+type PathStep = string | typeof EACH;
+
+/** Bounds how deep a value is read, so a helper that recurses into its own parameter still ends. */
+const MAX_PATH = 4;
+
+const pathText = (path: readonly PathStep[]) =>
+  path.map((step) => (step === EACH ? '[]' : /^[A-Za-z_$][\w$]*$/.test(step) ? `.${step}` : `[${JSON.stringify(step)}]`)).join('');
+
+/** A named function's parameter a value is read from, at `path` inside it. */
+interface ParameterValue {
+  fn: AstNode;
+  name: string;
+  index: number;
+  path: PathStep[];
+}
+
+/** What an expression may hold: the expressions it was last bound to, or a parameter of the function it is in. */
+type Value = AstNode | ParameterValue;
+
+type Read = (node: unknown, path: PathStep[]) => Value[];
+
+/** The static key of a property or member: `a.name`, `a['name']`, `{ name: ... }`. */
+function staticKey(key: unknown, computed: unknown): string | undefined {
+  if (!isNode(key)) return undefined;
+  if (key.type === 'Literal' && (typeof key.value === 'string' || typeof key.value === 'number')) return String(key.value);
+  return computed ? undefined : identifierName(key);
+}
+
+const isObjectLiteral = (value: Value): value is AstNode => isNode(value) && value.type === 'ObjectExpression';
+
+/** Whether an object literal may give `key` a value: it names it, or spreads something that may. */
+const mayDefine = (object: AstNode, key: string) =>
+  (object.properties as AstNode[]).some((p) => p.type === 'SpreadElement' || staticKey(p.key, p.computed) === key);
+
+/**
+ * What an object literal gives `key`, read at `rest`: the last property naming it, or what a
+ * spread of object literals after that property gives it. A spread this check cannot read is
+ * taken not to name the key, as `{ command, ...answered }` handed to the runner does not.
+ */
+function propertyValues(object: AstNode, key: string, rest: PathStep[], read: Read): Value[] {
+  const found: Value[] = [];
+  for (const property of [...(object.properties as AstNode[])].reverse()) {
+    if (property.type === 'Property') {
+      if (property.kind === 'init' && staticKey(property.key, property.computed) === key) return [...found, ...read(property.value, rest)];
+      continue;
+    }
+    const spread = read(property.argument, []).filter(isObjectLiteral);
+    const defining = spread.filter((source) => mayDefine(source, key));
+    found.push(...defining.flatMap((source) => read(source, [key, ...rest])));
+    if (spread.length > 0 && defining.length === spread.length) return found;
+  }
+  return found;
+}
+
+/** The element at `index` of an array literal, unless a spread before it moves it. */
+function elementAt(array: AstNode, index: string): AstNode | undefined {
+  const elements = (array.elements as Array<AstNode | null>).slice(0, Number(index) + 1);
+  return /^\d+$/.test(index) && !elements.some((e) => e?.type === 'SpreadElement') ? (elements[Number(index)] ?? undefined) : undefined;
+}
+
+/** The truth of a condition that is a literal, or undefined when the condition can go either way. */
+const constantTruth = (test: AstNode): boolean | undefined => (test.type === 'Literal' ? Boolean(test.value) : undefined);
+
+const ARRAY_BUILDERS = new Set(['map', 'flatMap']);
+const ITERATORS = new Set([...ARRAY_BUILDERS, 'forEach']);
+
+const memberMethod = (call: AstNode): string | undefined =>
+  (call.callee as AstNode).type === 'MemberExpression' ? calleeName(call.callee as AstNode) : undefined;
+
+/** The expressions a function returns: an arrow's body, or each `return` not inside a nested function. */
+function returnedExpressions(fn: AstNode): AstNode[] {
+  const body = fn.body as AstNode;
+  if (body.type !== 'BlockStatement') return [body];
+  const returned: AstNode[] = [];
+  walk(body, (node, ancestors) => {
+    if (node.type === 'ReturnStatement' && isNode(node.argument) && !ancestors.some(isFunction)) returned.push(node.argument);
+  });
+  return returned;
+}
+
+/** The elements of `list.map(fn)` or `list.flatMap(fn)`, read at the rest of `path`. */
+function builtElements(call: AstNode, path: PathStep[], read: Read): Value[] {
+  const method = memberMethod(call);
+  const fn = argAt(call, 0);
+  if (method === undefined || !ARRAY_BUILDERS.has(method) || !isFunction(fn)) return [];
+  const rest = path.slice(1);
+  if (method === 'map') return returnedExpressions(fn).flatMap((returned) => read(returned, rest));
+  const producesArray = (v: Value) => isNode(v) && (v.type === 'ArrayExpression' || (v.type === 'CallExpression' && ARRAY_BUILDERS.has(memberMethod(v) ?? '')));
+  return returnedExpressions(fn).flatMap((returned) => read(returned, []).flatMap((v) => (producesArray(v) ? read(v, path) : reread(v, rest, read))));
+}
+
+/** Reads a value already found at `[]` again at `path`. */
+const reread = (value: Value, path: PathStep[], read: Read): Value[] => (path.length === 0 ? [value] : isNode(value) ? read(value, path) : []);
+
+const unwrapped = (node: AstNode, path: PathStep[], read: Read) => read(node.expression, path);
+
+/** How each kind of expression is read at a path; any other kind holds only itself. */
+const VALUE_READERS: Readonly<Record<string, (node: AstNode, path: PathStep[], read: Read) => Value[]>> = Object.freeze({
+  TSAsExpression: unwrapped,
+  TSSatisfiesExpression: unwrapped,
+  TSNonNullExpression: unwrapped,
+  TSTypeAssertion: unwrapped,
+  ChainExpression: unwrapped,
+  ConditionalExpression: (node, path, read) => {
+    const truth = constantTruth(node.test as AstNode);
+    if (truth !== undefined) return read(truth ? node.consequent : node.alternate, path);
+    return [...read(node.consequent, path), ...read(node.alternate, path)];
+  },
+  MemberExpression: (node, path, read) => {
+    const key = staticKey(node.property, node.computed);
+    return key === undefined ? [] : read(node.object, [key, ...path]);
+  },
+  ObjectExpression: (node, [first, ...rest], read) => {
+    if (first === undefined) return [node];
+    return typeof first === 'string' ? propertyValues(node, first, rest, read) : [];
+  },
+  ArrayExpression: (node, path, read) => {
+    if (path.length === 0) return [node];
+    if (path[0] !== EACH) return read(elementAt(node, path[0]), path.slice(1));
+    return (node.elements as Array<AstNode | null>).flatMap((element) =>
+      element?.type === 'SpreadElement' ? read(element.argument, path) : read(element, path.slice(1)),
+    );
+  },
+  CallExpression: (node, path, read) => (path.length === 0 ? [node] : path[0] === EACH ? builtElements(node, path, read) : []),
+});
+
+/** The path from a binding pattern to the identifier it binds, or undefined when the pattern reads it some other way. */
+function patternPath(pattern: unknown, id: unknown): PathStep[] | undefined {
+  if (pattern === id) return [];
+  if (!isNode(pattern)) return undefined;
+  if (pattern.type === 'AssignmentPattern') return patternPath(pattern.left, id);
+  if (pattern.type === 'ArrayPattern') {
+    const elements = pattern.elements as unknown[];
+    const index = elements.findIndex((element) => patternPath(element, id) !== undefined);
+    return index === -1 ? undefined : [String(index), ...patternPath(elements[index], id)!];
+  }
+  if (pattern.type !== 'ObjectPattern') return undefined;
+  for (const property of pattern.properties as AstNode[]) {
+    const inner = property.type === 'Property' ? patternPath(property.value, id) : undefined;
+    if (inner === undefined) continue;
+    const key = staticKey(property.key, property.computed);
+    return key === undefined ? undefined : [key, ...inner];
+  }
+  return undefined;
+}
+
+/** Whether `id` is the root of a member that is assigned, updated or deleted: `order.kind = ...`. */
+function changesMember(source: ScopedSource, id: AstNode): boolean {
+  let node = id;
+  let parent = source.parents.get(node);
+  if (parent?.type !== 'MemberExpression') return false;
+  while (parent?.type === 'MemberExpression' && parent.object === node) {
+    node = parent;
+    parent = source.parents.get(node);
+  }
+  return (
+    (parent?.type === 'AssignmentExpression' && parent.left === node) ||
+    parent?.type === 'UpdateExpression' ||
+    (parent?.type === 'UnaryExpression' && parent.operator === 'delete')
+  );
+}
+
+const isChanged = (source: ScopedSource, variable: Variable) =>
+  variable.references.some((r) => (r.isWrite() && !r.init) || changesMember(source, r.identifier as unknown as AstNode));
+
+/** The table of `it.each(table)(title, fn)`, `test.each` or `describe.each`, when `call` is one. */
+function eachTable(call: AstNode): AstNode | undefined {
+  const inner = call.callee as AstNode;
+  if (inner.type !== 'CallExpression' || (inner.callee as AstNode).type !== 'MemberExpression') return undefined;
+  if (calleeName(inner.callee as AstNode) !== 'each') return undefined;
+  const { root } = calleeChain(inner);
+  return root !== undefined && (TEST_NAMES.has(root) || SUITE_NAMES.has(root)) ? argAt(inner, 0) : undefined;
+}
+
+/** A callback's parameter: a table test's row, or an element of the list `map`, `flatMap` or `forEach` runs over. */
+function callbackValues(call: AstNode, fn: AstNode, index: number, path: PathStep[], read: Read): Value[] {
+  const table = eachTable(call);
+  if (table !== undefined) {
+    return read(table, [EACH]).flatMap((row) => {
+      if (isNode(row) && row.type === 'ArrayExpression') return read(row, [String(index), ...path]);
+      return index === 0 ? reread(row, path, read) : [];
+    });
+  }
+  const method = memberMethod(call);
+  if (method === undefined || !ITERATORS.has(method) || argAt(call, 0) !== fn || index !== 0) return [];
+  return read((call.callee as AstNode).object, [EACH, ...path]);
+}
+
+/** The name a function is declared or bound by, if any. */
+function functionName(source: ScopedSource, fn: AstNode): string | undefined {
+  for (const node of [fn, source.parents.get(fn)]) {
+    const named = node && namedFunction(node);
+    if (named?.fn === fn) return named.name;
+  }
+  return undefined;
+}
+
+function parameterValues(source: ScopedSource, fn: AstNode, id: unknown, path: PathStep[], read: Read): Value[] {
+  const params = fn.params as AstNode[];
+  const index = params.findIndex((param) => patternPath(param, id) !== undefined);
+  if (index === -1) return [];
+  const inner = [...patternPath(params[index], id)!, ...path];
+  const call = source.parents.get(fn);
+  if (call?.type === 'CallExpression' && (call.arguments as AstNode[]).includes(fn)) return callbackValues(call, fn, index, inner, read);
+  const name = functionName(source, fn);
+  return name === undefined ? [] : [{ fn, name, index, path: inner }];
+}
+
+function variableValues(source: ScopedSource, declarator: AstNode, id: unknown, path: PathStep[], read: Read): Value[] {
+  const inner = patternPath(declarator.id, id);
+  if (inner === undefined) return [];
+  const declaration = source.parents.get(declarator);
+  const loop = declaration && source.parents.get(declaration);
+  if (loop?.type === 'ForOfStatement' && loop.left === declaration) return read(loop.right, [EACH, ...inner, ...path]);
+  return read(declarator.init, [...inner, ...path]);
+}
+
+/** The one variable an identifier names, unless it is declared twice or changed after it is bound. */
+function stableVariable(source: ScopedSource, id: AstNode): Variable | undefined {
+  const variable = source.references.get(id)?.resolved;
+  return variable && variable.defs.length === 1 && !isChanged(source, variable) ? variable : undefined;
+}
+
+function identifierValues(source: ScopedSource, id: AstNode, path: PathStep[], read: Read): Value[] {
+  const def = stableVariable(source, id)?.defs[0];
+  if (def?.type === 'Variable') return variableValues(source, def.node as unknown as AstNode, def.name, path, read);
+  if (def?.type === 'Parameter') return parameterValues(source, def.node as unknown as AstNode, def.name, path, read);
+  return [];
+}
+
+/**
+ * What `node` may hold at `path`, read back through the bindings around it: a local's value, a
+ * destructured or `for...of` binding, a table test's row, a callback's element, an object
+ * literal's field, either branch of a conditional. A value shadowing, a change or anything else
+ * makes uncertain is left out, so a verb it would name is not counted.
+ */
+function valuesOf(source: ScopedSource, start: unknown, startPath: PathStep[]): Value[] {
+  const reading = new Map<AstNode, Set<string>>();
+  const read: Read = (node, path) => {
+    if (!isNode(node) || path.length > MAX_PATH) return [];
+    const key = pathText(path);
+    const active = reading.get(node) ?? new Set<string>();
+    if (active.has(key)) return [];
+    reading.set(node, active.add(key));
+    try {
+      if (node.type === 'Identifier') return identifierValues(source, node, path, read);
+      const reader = VALUE_READERS[node.type];
+      return reader ? reader(node, path, read) : path.length === 0 ? [node] : [];
+    } finally {
+      active.delete(key);
+    }
+  };
+  return read(start, startPath);
+}
+
+/** Where a helper takes the verb's name: one of its parameters, at a path inside it. */
+interface Slot {
+  index: number;
+  path: PathStep[];
+}
+
+/** Slots keyed by their text, `0`, `1.name` or `0[].kind`. */
+type Slots = ReadonlyMap<string, Slot>;
+
+const slotText = (slot: Slot) => `${slot.index}${pathText(slot.path)}`;
+
+/**
+ * A project's own helpers that pass a verb's name on, from one of their parameters, to a verb
+ * factory or an engine entry point: `standingVerb('bidOnItem', ...)` around `worldAction(name)`, a
+ * harness's `world.run('bidOnItem', seat)` around `applyCommand`, `apply({ name, args })` around
+ * the world runner, `startOrCancel({ kind, ...fields })` around `apply`. A reader that knew only
+ * the library's own names would miss every verb such a game has.
+ */
+export interface DispatchWrappers {
+  /** Every slot of every function by each bare name: what a member call, or a call to an import, reaches. */
+  byName: ReadonlyMap<string, Slots>;
+  /** One function's own slots, by `<file>:<offset>`: what a call to a function its own file declares reaches. */
+  byFunction: ReadonlyMap<string, Slots>;
+}
+
+/** A project with no dispatch helpers of its own. */
+export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ byName: new Map(), byFunction: new Map() });
+
+const NO_SLOTS: Slots = new Map();
+
+const functionKey = (file: string, fn: AstNode) => `${file}:${fn.range[0]}`;
+
+/** The function an identifier names when its own file declares it as one. */
+function localFunction(source: ScopedSource, id: AstNode): AstNode | undefined {
+  const def = stableVariable(source, id)?.defs[0];
+  if (def?.type === 'FunctionName') return def.node as unknown as AstNode;
+  const declarator = def?.type === 'Variable' ? (def.node as unknown as AstNode) : undefined;
+  return declarator && declarator.id === def?.name && isFunction(declarator.init) ? declarator.init : undefined;
+}
+
+/** Where an expression of a call carries a verb's name: the expression, and the path inside it. */
+interface Carrier {
+  node: unknown;
+  path: PathStep[];
+}
+
+type Carriers = (source: ScopedSource, call: AstNode, wrappers: DispatchWrappers) => Carrier[];
+
+/** The arguments a call hands a project helper's slots. */
+function helperCarriers(source: ScopedSource, call: AstNode, wrappers: DispatchWrappers): Carrier[] {
+  const callee = call.callee as AstNode;
+  const local = callee.type === 'Identifier' ? localFunction(source, callee) : undefined;
+  const name = calleeName(callee) ?? '';
+  let slots = local ? (wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS) : (wrappers.byName.get(name) ?? NO_SLOTS);
+  // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
+  if (!local && callee.type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name)) {
+    slots = new Map([...slots].filter(([, slot]) => slot.path.length === 0));
+  }
+  return [...slots.values()].map((slot) => ({ node: argAt(call, slot.index), path: slot.path }));
+}
+
+const carriedValues = (source: ScopedSource, call: AstNode, carriers: Carriers, wrappers: DispatchWrappers): Value[] =>
+  carriers(source, call, wrappers).flatMap((carrier) => valuesOf(source, carrier.node, carrier.path));
 
 /** Whether `text` mentions any of `names`: a file that names none of them cannot involve one. */
 export function mentionsAny(text: string, names: Iterable<string>): boolean {
@@ -387,53 +649,34 @@ export function mentionsAny(text: string, names: Iterable<string>): boolean {
   return false;
 }
 
-/** Each enclosing named function, and the position, of a parameter a call passes a verb or command in. */
-function parameterPositions(carried: Carried, ancestors: AstNode[]): Array<[keyof Carried, string, number]> {
-  const positions: Array<[keyof Carried, string, number]> = [];
-  const passed = (['names', 'commands'] as const).flatMap((kind) => carried[kind].map((n) => [kind, identifierName(n)] as const));
-  for (const named of ancestors.map(namedFunction)) {
-    if (!named) continue;
-    const params = paramNames(named.fn);
-    for (const [kind, name] of passed) {
-      const index = name === undefined ? -1 : params.indexOf(name);
-      if (index !== -1) positions.push([kind, named.name, index]);
-    }
-  }
-  return positions;
-}
-
 /**
- * Finds wrappers to a fixed point, so a wrapper around a wrapper is found too. Only files that
- * mention a name already known (`seedNames` or a wrapper found so far) are parsed at all, which
- * also keeps a huge data file that names nothing from ever reaching the parser.
+ * Finds helpers to a fixed point, so a helper around a helper is found too. Only files that
+ * mention a name already known (`seedNames` or a helper found so far) are parsed at all, which
+ * also keeps a huge data file that names nothing from ever reaching the parser. A name keeps every
+ * slot any function by that name has, since a game's test files declare many local `run` helpers.
  */
-function findWrappers(
-  sources: readonly SourceFile[],
-  verbArgument: VerbArgument,
-  seedNames: readonly string[],
-): { names: Map<string, Set<number>>; commands: Map<string, Set<number>> } {
-  const parsed = new Map<SourceFile, { ast: AstNode; scopes: Scopes }>();
-  const wrappers = { names: new Map<string, Set<number>>(), commands: new Map<string, Set<number>>() };
-  const add = (kind: keyof Carried, name: string, index: number): boolean => {
-    const indexes = wrappers[kind].get(name) ?? new Set<number>();
-    if (indexes.has(index)) return false;
-    wrappers[kind].set(name, indexes.add(index));
+function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNames: readonly string[]): DispatchWrappers {
+  const parsed = new Map<SourceFile, ScopedSource>();
+  const wrappers = { byName: new Map<string, Map<string, Slot>>(), byFunction: new Map<string, Map<string, Slot>>() };
+  const add = (map: Map<string, Map<string, Slot>>, key: string, slot: Slot): boolean => {
+    const slots = map.get(key) ?? new Map<string, Slot>();
+    if (slots.has(slotText(slot))) return false;
+    map.set(key, slots.set(slotText(slot), slot));
     return true;
   };
   for (let changed = true; changed; ) {
     changed = false;
     for (const file of sources) {
-      if (!mentionsAny(file.text, [...seedNames, ...wrappers.names.keys(), ...wrappers.commands.keys()])) continue;
-      if (!parsed.has(file)) {
-        const { ast } = parseSource(file.text, file.path);
-        parsed.set(file, { ast, scopes: objectBindings(ast) });
-      }
-      const { ast, scopes } = parsed.get(file)!;
-      walk(ast, (node, ancestors) => {
+      if (!mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()])) continue;
+      const source = parsed.get(file) ?? parseScoped(file.text, file.path);
+      parsed.set(file, source);
+      walk(source.ast, (node) => {
         if (node.type !== 'CallExpression') return;
-        const carried = verbArgument(node, wrappers, resolver(scopes, ancestors, ast));
-        for (const [kind, name, index] of parameterPositions(carried, ancestors)) {
-          if (add(kind, name, index)) changed = true;
+        for (const value of carriedValues(source, node, carriers, wrappers)) {
+          if (isNode(value)) continue;
+          const slot = { index: value.index, path: value.path };
+          const named = add(wrappers.byName, value.name, slot);
+          if (add(wrappers.byFunction, functionKey(source.file, value.fn), slot) || named) changed = true;
         }
       });
     }
@@ -441,31 +684,29 @@ function findWrappers(
   return wrappers;
 }
 
-/** `Action.create`, the classic engine's verb factory. */
-function isActionCreate(callee: AstNode): boolean {
-  return (
-    callee.type === 'MemberExpression' &&
-    calleeName(callee) === 'create' &&
-    identifierName(callee.object) === 'Action'
-  );
+/** `Action.create`, the classic engine's verb factory, or `worldAction`, the world engine's. */
+function isVerbFactory(callee: AstNode): boolean {
+  if (identifierName(callee) === 'worldAction') return true;
+  return callee.type === 'MemberExpression' && calleeName(callee) === 'create' && identifierName(callee.object) === 'Action';
 }
 
-/** The verb factories: `Action.create(name)`, `worldAction(name)`, and their wrappers. */
-const verbFactoryArgument: VerbArgument = (call, wrappers) => {
-  const callee = call.callee as AstNode;
-  const names =
-    isActionCreate(callee) || identifierName(callee) === 'worldAction'
-      ? [argAt(call, 0)].filter(isNode)
-      : wrapperArguments(call, identifierName(callee), wrappers.names);
-  return { names, commands: [] };
-};
+const verbFactoryCarriers: Carriers = (source, call, wrappers) =>
+  isVerbFactory(call.callee as AstNode) ? [{ node: argAt(call, 0), path: [] }] : helperCarriers(source, call, wrappers);
 
 /** The names a file must mention to define a verb itself. */
 export const VERB_FACTORY_NAMES = Object.freeze(['Action.create', 'worldAction']);
 
+/** A project's verb factory wrappers, by name, to the index of the parameter that names the verb. */
+export type Wrappers = ReadonlyMap<string, ReadonlySet<number>>;
+
 /** Every project function that defines a verb named by one of its parameters. */
 export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
-  return findWrappers(sources, verbFactoryArgument, VERB_FACTORY_NAMES).names;
+  const wrappers = new Map<string, Set<number>>();
+  for (const [name, slots] of findWrappers(sources, verbFactoryCarriers, VERB_FACTORY_NAMES).byName) {
+    const indexes = [...slots.values()].filter((slot) => slot.path.length === 0).map((slot) => slot.index);
+    if (indexes.length > 0) wrappers.set(name, new Set(indexes));
+  }
+  return wrappers;
 }
 
 /** Every verb name the file defines (only on `onLines`, when given), in source order. */
@@ -479,8 +720,10 @@ export function findDefinedVerbs(
   walk(parseSource(source, file).ast, (node) => {
     if (node.type !== 'CallExpression') return;
     if (onLines && !onLines.has(node.loc.start.line)) return;
-    for (const arg of verbFactoryArgument(node, { ...NO_DISPATCH_WRAPPERS, names: wrappers }, (n) => n).names) {
-      const name = literalText(arg);
+    const callee = node.callee as AstNode;
+    const indexes = isVerbFactory(callee) ? [0] : [...(wrappers.get(identifierName(callee) ?? '') ?? [])];
+    for (const index of indexes) {
+      const name = literalText(argAt(node, index));
       if (name !== undefined && !verbs.includes(name)) verbs.push(name);
     }
   });
@@ -510,61 +753,49 @@ export const DISPATCH_FORMS =
   "world.take(seat, 'verb'), " +
   "runner.apply({ command: { name: 'verb', ... }, ... }) on the world runner, " +
   'or a helper of the project\'s own ' +
-  'under tests/ that passes the verb name, or the whole command, it is given to one of these (or to the world engine\'s applyCommand)';
+  'under tests/ that passes the verb name, or the whole command, it is given to one of these (or to the world engine\'s applyCommand). ' +
+  'The name may be written at the call, or come from an it.each row, a for...of, map or flatMap over a literal list, ' +
+  'a field of an object literal, or either branch of a conditional';
 
 /** Every name a built-in entry point is called by. */
-const ENTRY_POINT_NAMES = Object.freeze([...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'apply', 'send']);
+const ENTRY_POINT_NAMES = Object.freeze([...Object.keys(DISPATCH_ENTRY_POINTS), 'applyCommand', 'apply', 'send', 'execute']);
 
-/** What a built-in entry point's call carries the verb in, if the call is one. */
-function entryPointArgument(call: AstNode, name: string, resolve: Resolve): { name?: AstNode; command?: AstNode } {
-  if (name in DISPATCH_ENTRY_POINTS) return { name: argAt(call, DISPATCH_ENTRY_POINTS[name]) };
-  if (name === 'applyCommand') return { command: argAt(call, 1) };
-  if (name === 'apply') return { command: nameProperty(argAt(call, 0), 'command') };
-  if (name === 'send') return { name: actionOpName(resolve(argAt(call, 1))) };
-  return {};
-}
-
-const dispatchArgument: VerbArgument = (call, wrappers, resolve) => {
-  const name = calleeName(call.callee as AstNode);
-  if (name === undefined) return { names: [], commands: [] };
-  const entry = entryPointArgument(call, name, resolve);
-  // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
-  const isEntryPointMember = (call.callee as AstNode).type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name);
-  const helpers = isEntryPointMember ? [] : wrapperArguments(call, name, wrappers.commands);
-  const commands = [entry.command, ...helpers].filter(isNode);
-  const names = [
-    entry.name,
-    ...wrapperArguments(call, name, wrappers.names),
-    ...commands.map((command) => nameProperty(resolve(command))),
-  ].filter(isNode);
-  return { names, commands };
-};
-
-/** Every project function (a test harness, usually) that dispatches a verb named by a parameter, or a command it is given. */
-export function findDispatchWrappers(sources: readonly SourceFile[]): DispatchWrappers {
-  return findWrappers(sources, dispatchArgument, ENTRY_POINT_NAMES);
-}
-
-/** A project with no dispatch helpers of its own. */
-export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ names: new Map(), commands: new Map() });
-
-/** The verb of `x.action('verb', seat).select(...).execute()`, found by walking back the chain. */
-function executedBuilderVerb(executeCallee: AstNode): string | undefined {
+/** The `action('verb', seat)` call an `execute()` chain starts from, found by walking back the chain. */
+function executedBuilder(executeCallee: AstNode): AstNode | undefined {
   let link = executeCallee.object as AstNode;
   while (link.type === 'CallExpression') {
     const linkCallee = link.callee as AstNode;
     if (linkCallee.type !== 'MemberExpression') return undefined;
-    if (calleeName(linkCallee) === 'action') return literalText(argAt(link, 0));
+    if (calleeName(linkCallee) === 'action') return link;
     link = linkCallee.object as AstNode;
   }
   return undefined;
 }
 
-/** The verbs one call dispatches through the engine. */
-function callVerbs(call: AstNode, wrappers: DispatchWrappers, resolve: Resolve): Array<string | undefined> {
+/** What a built-in entry point's call carries the verb in, if the call is one. */
+function entryPointCarriers(source: ScopedSource, call: AstNode, name: string): Carrier[] {
   const callee = call.callee as AstNode;
-  const builder = calleeName(callee) === 'execute' && callee.type === 'MemberExpression' ? [executedBuilderVerb(callee)] : [];
-  return [...builder, ...dispatchArgument(call, wrappers, resolve).names.map(literalText)];
+  if (name in DISPATCH_ENTRY_POINTS) return [{ node: argAt(call, DISPATCH_ENTRY_POINTS[name]), path: [] }];
+  if (name === 'applyCommand') return [{ node: argAt(call, 1), path: ['name'] }];
+  if (name === 'apply') return [{ node: argAt(call, 0), path: ['command', 'name'] }];
+  if (name === 'execute' && callee.type === 'MemberExpression') {
+    const builder = executedBuilder(callee);
+    return builder ? [{ node: argAt(builder, 0), path: [] }] : [];
+  }
+  if (name !== 'send') return [];
+  const isActionOp = (op: Value) =>
+    isNode(op) && op.type === 'ObjectExpression' && valuesOf(source, op, ['type']).some((t) => isNode(t) && literalText(t) === 'action');
+  return valuesOf(source, argAt(call, 1), []).filter(isActionOp).map((op) => ({ node: op, path: ['actionName'] }));
+}
+
+const dispatchCarriers: Carriers = (source, call, wrappers) => {
+  const name = calleeName(call.callee as AstNode);
+  return name === undefined ? [] : [...entryPointCarriers(source, call, name), ...helperCarriers(source, call, wrappers)];
+};
+
+/** Every project function (a test harness, usually) that dispatches a verb named by a parameter, or a command it is given. */
+export function findDispatchWrappers(sources: readonly SourceFile[]): DispatchWrappers {
+  return findWrappers(sources, dispatchCarriers, ENTRY_POINT_NAMES);
 }
 
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
@@ -573,18 +804,18 @@ export function findDispatches(
   file?: string,
   wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS,
 ): Array<{ verb: string; line: number }> {
-  const parsed = parseSource(source, file);
-  const skippedRanges = collectBlocks(parsed)
+  const scoped = parseScoped(source, file);
+  const skippedRanges = collectBlocks(scoped)
     .filter((b) => b.skipped)
     .map((b) => b.range);
   const inSkipped = (node: AstNode) =>
     skippedRanges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
 
-  const scopes = objectBindings(parsed.ast);
   const dispatches: Array<{ verb: string; line: number }> = [];
-  walk(parsed.ast, (node, ancestors) => {
+  walk(scoped.ast, (node) => {
     if (node.type !== 'CallExpression' || inSkipped(node)) return;
-    for (const verb of callVerbs(node, wrappers, resolver(scopes, ancestors, parsed.ast))) {
+    for (const value of carriedValues(scoped, node, dispatchCarriers, wrappers)) {
+      const verb = isNode(value) ? literalText(value) : undefined;
       if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
     }
   });

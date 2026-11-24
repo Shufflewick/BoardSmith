@@ -409,8 +409,10 @@ project's own) is dispatched through the engine by some test file, such as
 `testGame.doAction(seat, '<verb>')` or, for a world game, the world runner's
 `runner.apply({ command: { name: '<verb>' }, ... })`. A helper of your own under
 `tests/` counts too, whether it takes the verb's name or the whole command
-(`apply({ name: '<verb>', args }, player)`). A test that calls the rules function
-directly does not count. A failing test is named as in a file the change
+(`apply({ name: '<verb>', args }, player)`). The name can come from data the
+test wrote: an `it.each` row, a `for...of`, `map` or `flatMap` over a literal
+list, a field of an object literal, or either branch of a conditional. A test that
+calls the rules function directly does not count. A failing test is named as in a file the change
 touched since the main branch (or since `--base`), or in one it did not.
 
 The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith

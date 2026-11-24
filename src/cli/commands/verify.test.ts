@@ -228,4 +228,29 @@ describe('the verbs check: every verb the game defines is dispatched through the
     await write(dir, { 'src/pass.test.ts': "it('passes', () => { testGame.doAction(0, 'pass'); });\n" });
     expect(await verbs(dir)).toEqual({ passed: true, summary: 'Every one of the 2 verbs the game defines is dispatched through the engine by a test.' });
   });
+
+  it('counts a verb a test dispatches from data: a table row, a loop, a conditional or an order object (#1792)', async () => {
+    const dir = await repo({
+      'src/rules/game.ts': [
+        "import { worldAction } from 'boardsmith/world';",
+        'export const actions = [',
+        ...['literal', 'eachRow', 'forOf', 'ternaryA', 'ternaryB', 'fromOrder'].map((verb) => `  worldAction('${verb}'),`),
+        '];',
+        '',
+      ].join('\n'),
+      'tests/game.test.ts': `import { it } from 'vitest';
+declare const world: { take(seat: number, name: string, args?: object): Promise<unknown> };
+it('literal', async () => { await world.take(1, 'literal'); });
+it.each([{ name: 'eachRow' }] as const)('$name', async ({ name }) => { await world.take(1, name); });
+it('for-of', async () => { for (const name of ['forOf'] as const) await world.take(1, name); });
+it.each([true, false])('ternary %s', async (a) => { await world.take(1, a ? 'ternaryA' : 'ternaryB'); });
+it('from an order', async () => {
+  const order = { kind: 'fromOrder', planet: 'p' } as const;
+  const { kind, ...args } = order;
+  await world.take(1, kind, args);
+});
+`,
+    });
+    expect(await verbs(dir)).toEqual({ passed: true, summary: 'Every one of the 6 verbs the game defines is dispatched through the engine by a test.' });
+  });
 });
