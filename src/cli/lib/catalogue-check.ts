@@ -38,7 +38,8 @@
  * which the report reminds the reader to do. A merge validating its detached merge commit pairs the
  * one branch at that commit's second parent; any other detached tree checks every game's `main`.
  * The export still links the shared checkout's install, so a game branch's new dependencies must
- * be installed there. ShufflewickPub is not touched: it checks the commits it
+ * be installed there. Before any game runs, each one's install must hold the vitest its checked
+ * commit's lockfile pins, or the run is refused naming the game (#1795). ShufflewickPub is not touched: it checks the commits it
  * pins against the engine it vendors, so it moves both once the game branch is on `main`.
  *
  * A pass is cached (`catalogueCachePath`) under the game's commit and install record, those
@@ -49,7 +50,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, promises as fs, realpathSync } from 'node:fs';
 import { cpus, homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import { uncommittedContentHash } from './execution-context.js';
@@ -202,6 +203,57 @@ async function packageNames(modules: string): Promise<string[]> {
 async function installRecord(dir: string): Promise<string> {
   const record = await readIfExists(join(dir, 'node_modules', '.package-lock.json'), fs.readFile);
   return record === undefined ? 'absent' : sha256Hex(record);
+}
+
+/**
+ * Why the shared install of `game` cannot load its tests the way its commit does, or undefined when
+ * it holds the vitest that commit's lockfile pins and `.bin/vitest` leads to it. Only vitest is
+ * compared: a whole lockfile differs by platform, and a stale vitest fails inside vitest, looking
+ * like a broken game (#1795).
+ */
+async function installMismatch(game: CatalogueRepo): Promise<string | undefined> {
+  const at = `${game.slug} at ${game.ref} (${game.commit.slice(0, 8)})`;
+  const locked = await lockedVitest(game);
+  if (locked === undefined) return `${at} pins no vitest in its package-lock.json, and the check runs the game's own vitest.`;
+  const modules = join(game.dir, 'node_modules');
+  const installed = await installedVersion(join(modules, 'vitest', 'package.json'));
+  if (installed === 'unreadable') return `${at}: ${modules}/vitest/package.json is not valid JSON.`;
+  if (installed !== locked) return `${at} pins vitest ${locked} in its package-lock.json, but ${modules} holds ${installed === undefined ? 'no vitest' : `vitest ${installed}`}.`;
+  const bin = readIfExistsSync(join(modules, '.bin', 'vitest'), (p) => realpathSync(p));
+  if (bin?.startsWith(`${realpathSync(join(modules, 'vitest'))}${sep}`)) return undefined;
+  return `${at}: ${modules}/.bin/vitest does not lead into ${modules}/vitest.`;
+}
+
+/** The vitest version `game`'s lockfile pins at its commit, or undefined when it has none or no lockfile. */
+async function lockedVitest(game: CatalogueRepo): Promise<string | undefined> {
+  try {
+    const lock = JSON.parse(await git(game.dir, ['show', `${game.commit}:package-lock.json`])) as { packages?: Record<string, { version?: string }> };
+    return lock.packages?.['node_modules/vitest']?.version;
+  } catch {
+    return undefined;
+  }
+}
+
+/** The version the package.json at `path` declares, undefined when there is none, or `unreadable` when it is not JSON. */
+async function installedVersion(path: string): Promise<string | undefined> {
+  const text = await readIfExists(path, (p) => fs.readFile(p, 'utf-8'));
+  try {
+    return text === undefined ? undefined : (JSON.parse(text) as { version?: string }).version;
+  } catch {
+    return 'unreadable';
+  }
+}
+
+/** Refuses the run when any of `games` has an install that does not match its commit's lockfile. */
+async function requireLockedInstalls(games: CatalogueRepo[]): Promise<void> {
+  const mismatches = (await Promise.all(games.map(installMismatch))).filter((m) => m !== undefined);
+  if (mismatches.length === 0) return;
+  throw new Error(
+    `No game was checked: these installs do not match the commit the check reads, so their tests would run on the wrong vitest.\n`
+      + `${mismatches.map((m) => `  ${m}`).join('\n')}\n`
+      + 'Run npm ci in each game\'s checkout with the branch named above checked out (save any uncommitted work there first), '
+      + 'or leave a game out with --skip \'<game>=<reason>\', then run boardsmith catalogue again.',
+  );
 }
 
 /** The catalogue repositories `repo`'s install links a package to, by package name. */
@@ -520,6 +572,7 @@ export async function checkCatalogue(options: CatalogueOptions): Promise<Catalog
   const catalogue = await readCatalogue(options.catalogueRoot, await pairedBranch(tree));
   const { repos } = catalogue;
   const { games, notChecked } = applySkips(catalogue.games, catalogue.notChecked, options.skip ?? {});
+  await requireLockedInstalls(games);
   const byDir = new Map(repos.map((r) => [r.dir, r]));
   const linkCache = new Map<string, Promise<Map<string, CatalogueRepo>>>();
   const linksOf = (r: CatalogueRepo) => {
