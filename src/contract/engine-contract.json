@@ -1,5 +1,5 @@
 {
-  "revision": 517,
+  "revision": 518,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4079,6 +4079,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "Docs: how a custom board reads the open action's .about() subjects."
+    },
+    {
+      "revision": 518,
+      "date": "2026-11-24",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The smoke walk now fails a game whose layout scrolls sideways on a phone, and the auto-UI's fanned hands overlap to fit a narrow board instead of scrolling"
     }
   ]
 }
