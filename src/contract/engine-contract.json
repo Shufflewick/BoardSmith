@@ -1,6 +1,6 @@
 {
-  "revision": 515,
-  "surfaceHash": "83e166e346b3d797",
+  "revision": 516,
+  "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4063,6 +4063,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith catalogue refuses to run when a game's install does not hold the vitest its checked commit's lockfile pins"
+    },
+    {
+      "revision": 516,
+      "date": "2026-11-24",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "With no selections, a world action's .needs() after .condition() is its execute round, which an offer never walks (#1798)"
     }
   ]
 }

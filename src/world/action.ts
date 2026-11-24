@@ -49,6 +49,8 @@
  * mentioned, which is the case sotf's navigate roll makes real: a declaration
  * may not roll, so a move that can miss must declare every sector it could
  * land in even though the player only ever aimed at one.
+ * An action with no selections has no last selection, so its execute round is
+ * the `.needs()` written after `.condition()`, which an offer never walks.
  *
  * The walk cannot fail the way the fixpoint could. Its length is the number of
  * `needs` steps the author wrote, which is bounded by the selection count,
@@ -571,12 +573,17 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
  */
 export type WorldNeedsRound = WorldPartitionsRound | WorldActivityRound | WorldNoticeBoxRound;
 
+/**
+ * WHERE A ROUND IS ASKED: before the selection at this index, or before
+ * `execute`. An action with no selections has one numbered place, 0, which is
+ * what its offer reads; its `execute` place is never walked by an offer (#1798).
+ */
+export type WorldRoundPosition = number | "execute";
+
 /** A round that names partitions. The original shape, and the common one. */
 export interface WorldPartitionsRound {
   readonly kind: "partitions";
-  /** The index of the selection this round precedes; `selections.length` for
-   *  the round before `execute`. */
-  readonly before: number;
+  readonly before: WorldRoundPosition;
   readonly declare: WorldNeeds;
   /** Named by `.reads()`: loaded but never saved, and a write to it refuses
    *  the command (#1334). A name some writable round also gives stays writable. */
@@ -596,7 +603,7 @@ export interface WorldPartitionsRound {
  */
 export interface WorldActivityRound {
   readonly kind: "activity";
-  readonly before: number;
+  readonly before: WorldRoundPosition;
   /** The chair this round is about, or null for a phase that has nobody to ask
    *  about -- the last occurrence of a sweep that ran off the end of its
    *  roster. */
@@ -616,7 +623,7 @@ export interface WorldActivityRound {
  */
 export interface WorldNoticeBoxRound {
   readonly kind: "notices";
-  readonly before: number;
+  readonly before: WorldRoundPosition;
   /** The seat whose box this round names, or null for nobody. */
   readonly box: WorldNoticeSeatNeeds;
 }
@@ -674,11 +681,11 @@ export interface WorldActionBlock {
    *
    * A ROUND is one declaration: a function answered read-only, whose names are
    * made resident before the next thing happens. `before` says which selection
-   * this round must precede, and `selections.length` means "before execute".
+   * this round must precede, or `"execute"`.
    *
    * The array is in source order and `before` never decreases, so the walk is
    * simply: run the rounds in order, and run selection `i` once every round
-   * whose `before` is `i` has been hydrated.
+   * whose `before` is `i` has been hydrated, then the `"execute"` rounds.
    *
    * SEVERAL ROUNDS MAY SHARE A `before`, and that is the shape a chain needs.
    * `.needs(a).needs(b)` on an action with no selections is two rounds: `a` is
@@ -923,6 +930,8 @@ function forwardCount<G extends Game, C>(
  */
 export class WorldAction<G extends Game = Game, A extends Record<string, unknown> = NoArgs> {
   private readonly definition: ActionDefinition;
+  /** How many rounds were declared before `.condition()`, or all of them without one. */
+  private roundsBeforeCondition = Infinity;
 
   private constructor(
     private readonly inner: Action<G, Record<string, unknown>>,
@@ -944,16 +953,15 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * WHAT THIS STEP NEEDS RESIDENT, evaluated before the step runs.
    *
    * Called before any selection it is round one, answered with nothing loaded.
-   * Called after the last selection it is the execute round. A command missing
+   * Called after the last selection it is the execute round. With no
+   * selections, a call after `.condition()` is the execute round, which an
+   * offer never walks (#1798), so declare what the condition, `disabled` and
+   * the prompt read before it. A command missing
    * a required pick is refused before any round runs (#1328), and so is a
    * re-asked pick missing a required pick before it (#1338), but a quote's walk
    * runs on the draft, where any pick may be absent. Between them, put
    * the declaration ON the selection it belongs to (`needs:` in its options),
    * so the order in the source is the order the engine walks.
-   *
-   * Twice at the same position is refused: two declarations for one step is two
-   * answers to one question, and which one wins would be a fact about
-   * evaluation order rather than about the game.
    */
   needs(declare: (context: WorldNeedsContext<G>) => readonly string[]): this {
     // BEFORE THE FIRST SELECTION it is round one; AFTER THE LAST it is the
@@ -1053,6 +1061,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       forwarded[label] = (context: AnyContext) => predicate(withWorld<G>(context));
     }
     this.inner.condition(forwarded as ConditionConfig<G>);
+    this.roundsBeforeCondition = this.definition.world!.needs.length;
     return this;
   }
 
@@ -1060,6 +1069,21 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   disabled(fn: (context: WorldActionContext<G>) => string | false): this {
     this.inner.disabled((context) => fn(withWorld<G>(context as AnyContext)));
     return this;
+  }
+
+  /**
+   * Move the rounds written after the last selection to `"execute"`, or with no
+   * selections, those written after `.condition()`. Only `.execute()` knows no
+   * selection follows.
+   */
+  private placeExecuteRounds(): void {
+    const rounds = this.definition.world!.needs as WorldNeedsRound[];
+    const selections = this.definition.selections.length;
+    rounds.forEach((round, index) => {
+      if (round.before !== selections) return;
+      if (selections === 0 && index < this.roundsBeforeCondition) return;
+      rounds[index] = { ...round, before: "execute" };
+    });
   }
 
   /** The whole-action gate, checked at submit with every selection resolved. */
@@ -1419,6 +1443,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   execute(
     fn: (args: A, context: WorldActionContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
+    this.placeExecuteRounds();
     const handler = fn as unknown as (
       args: A,
       context: WorldActionContext<G> | WorldClockContext<G>,
@@ -1529,6 +1554,21 @@ export class WorldClockAction<G extends Game = Game> {
   }
 }
 
+/** The numbered places of an action's walk: one per selection, and 0 when it has none. */
+function numberedPositions(definition: ActionDefinition): readonly number[] {
+  return [...Array(Math.max(1, definition.selections.length)).keys()];
+}
+
+/**
+ * The places a walk visits, in order, through selection `through`; a `through`
+ * of `selections.length` reaches `"execute"` as well, so a quote and a command
+ * walk it and an offer or a re-asked pick does not.
+ */
+export function positionsThrough(definition: ActionDefinition, through: number): readonly WorldRoundPosition[] {
+  const numbered = numberedPositions(definition).filter((position) => position <= through);
+  return through >= definition.selections.length ? [...numbered, "execute"] : numbered;
+}
+
 /**
  * Start a world action a seat may take.
  *
@@ -1625,12 +1665,12 @@ export function assertWorldAction(definition: ActionDefinition): void {
           "`worldClockAction()` and let a scheduled event run it.",
       );
     }
-    if (round.before >= 0 && round.before <= definition.selections.length) continue;
+    if (round.before === "execute" || numberedPositions(definition).includes(round.before)) continue;
     throw worldRefusal(
       "invalid-world-action",
       `The "${definition.name}" action declares what it needs before a step it does not have. ` +
         `It has ${definition.selections.length} selection(s), so a round comes before one of ` +
-        `them or before execute.`,
+        `them (0 when it has none) or before "execute".`,
     );
   }
 
