@@ -4002,11 +4002,11 @@
     },
     {
       "revision": 508,
-      "date": "2026-11-23",
+      "date": "2026-11-24",
       "surfaceHash": "fcaf42d27a990262",
       "payloadHash": "1dd7fac7bfd0bbcf",
       "formatHash": "e7644203601ae348",
-      "summary": "actionStep takes handoffUndo: true, so while that step waits on a seat that has neither picked nor acted in it, the seat that took the last action may undo it back into the step it was taken in, within the usual notUndoable, irreversible and random-draw fences; the flow state carries handoffUndo while that window is open, and the step's frame records the waiting seat's first pick. A game must be rebuilt on this revision to declare it (#1788)"
+      "summary": "actionStep takes handoffUndo: true, so while that step waits on a seat that has neither picked nor acted in it, the seat that took the last action may undo it back into the step it was taken in, within the usual notUndoable, irreversible and random-draw fences; the flow state carries handoffUndo while that window is open, and the step's frame records the waiting seat's first pick. The idle action an expireSeat op runs for a seat is now recorded as not undoable, with timedOut: true on its history entry. A game must be rebuilt on this revision to declare handoffUndo (#1788)"
     }
   ]
 }
