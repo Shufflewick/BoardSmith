@@ -5,7 +5,7 @@
  * Layout hierarchy (RENDER-03, D-02):
  *   chrome row  — auto height; colllapses when no peripheral elements (decks, scores, etc.)
  *   board area  — 1fr; DOMINANT; grid/hex board renders here
- *   hand strip  — auto height (max 30vh); absent when no hand elements
+ *   hand strip  — auto height (96px to 180px), wraps its hands and scrolls down; absent when no hand elements
  *
  * C6 anti-pattern explicitly avoided: non-board elements (decks, discards) go in
  * the chrome slot — they are NEVER given equal grid area alongside the focal board.
@@ -68,7 +68,7 @@ const chromeElements = computed(() =>
       />
     </div>
 
-    <!-- Docked hand strip: auto height (max 30vh), absent when no hands exist -->
+    <!-- Docked hand strip: wraps its hands, absent when no hands exist -->
     <div v-if="handElements.length > 0" class="grid-board-template__hand">
       <ElementRenderer
         v-for="el in handElements"
@@ -118,7 +118,7 @@ const chromeElements = computed(() =>
   justify-content: safe center;
 }
 
-/* Hand strip: docked at bottom — fluid clamp replaces fixed 30vh viewport unit */
+/* Hand strip: docked at bottom, its hands wrapped and scrolled down past the clamp */
 .grid-board-template__hand {
   grid-area: hand;
   max-height: clamp(96px, 22vh, 180px);

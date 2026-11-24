@@ -172,8 +172,9 @@ await runBrowserRegression(
           assert(seen.page.sideways <= 0, `the page scrolls ${seen.page.sideways}px sideways`);
         });
         await check(`${size}: the hand strip wraps its six hands at the board region's width, and does not scroll sideways`, async () => {
-          const strip = await frame.locator('.grid-board-template__hand').evaluate((el) => ({ sideways: el.scrollWidth - el.clientWidth, hands: el.children.length }));
+          const strip = await frame.locator('.grid-board-template__hand').evaluate((el) => ({ sideways: el.scrollWidth - el.clientWidth, hands: el.children.length, rows: new Set([...el.children].map((hand) => hand.offsetTop)).size }));
           assert(strip.hands === 6, `the hand strip holds ${strip.hands} hands, not 6`);
+          assert(strip.rows > 1, 'the six hands sit in one row, squeezed rather than wrapped');
           assert(strip.sideways <= 0, `the hand strip scrolls ${strip.sideways}px sideways`);
         });
         if (size !== '390x844') return;
