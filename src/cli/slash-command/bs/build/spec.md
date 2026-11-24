@@ -56,8 +56,9 @@ and it fails the chunk on each of these, so write the tests to meet them now:
   file really covers.
 - **Every verb this chunk adds is dispatched through the engine** in at least one test —
   `testGame.doAction(seat, 'verb', args)` or one of the other engine entry points `build/test.md`
-  names, with the verb's name written literally. A test that calls the rules function directly
-  never exercises the engine's selections, conditions or flow.
+  names, with the verb's name a literal the check can trace to the call (`build/test.md` says
+  how far it traces). A test that calls the rules function directly never exercises the
+  engine's selections, conditions or flow.
 - **Each test must be able to fail.** A test that asserts a value it just set up, a mock's own
   return, or a constant passes whatever the implementation does. The mutation check breaks the
   implementation in small ways and requires every test, and at least one test per claim, to fail

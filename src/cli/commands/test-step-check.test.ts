@@ -17,6 +17,7 @@ import {
   findVerbWrappers,
   NO_DISPATCH_WRAPPERS,
   parseSource,
+  type DispatchWrappers,
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { scriptRegions } from './test-step-sfc.js';
@@ -227,6 +228,10 @@ describe('findVerbWrappers on a file that names no verb', () => {
   });
 });
 
+/** Each helper's slots by name: the parameter that carries the verb, and the path inside it (`1.name`). */
+const slotsByName = (wrappers: DispatchWrappers) =>
+  Object.fromEntries([...wrappers.byName].map(([name, slots]) => [name, [...slots.keys()]]));
+
 describe('findDispatchedVerbs through a project harness', () => {
   it('counts a harness method that hands its parameter to the world engine as the command name', () => {
     const harness = `
@@ -240,7 +245,7 @@ export function launch() {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/world.ts', text: harness }]);
-    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
+    expect(slotsByName(wrappers)).toEqual({ run: ['0'] });
     expect(
       findDispatchedVerbs(
         "await world.run('bidOnItem', 2, {});\nawait world.offers(2);\nlistAuction(almanac, seller);\n",
@@ -281,7 +286,7 @@ export function act(session: Session, seat: number, verb: string) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/support/table.ts', text: harness }]);
-    expect([...wrappers.names.entries()]).toEqual([['act', new Set([2])]]);
+    expect(slotsByName(wrappers)).toEqual({ act: ['2'] });
     expect(findDispatchedVerbs("await act(session, 1, 'k');\n", 'tests/a.test.ts', wrappers)).toEqual(['k']);
   });
 
@@ -301,7 +306,7 @@ async function run(name: string, args: object) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
-    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
+    expect(slotsByName(wrappers)).toEqual({ run: ['0'] });
     expect(findDispatchedVerbs("await run('m', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['m']);
   });
 
@@ -315,7 +320,7 @@ async function run(name: string, args: object, player = 'p1') {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
-    expect([...wrappers.names.entries()]).toEqual([['run', new Set([0])]]);
+    expect(slotsByName(wrappers)).toEqual({ run: ['0'] });
     expect(findDispatchedVerbs("await w.run('n', {});\n", 'tests/a.test.ts', wrappers)).toEqual(['n']);
   });
 
@@ -342,7 +347,7 @@ it('b', async () => {
       { path: 'tests/b.test.ts', text: "async function run(name: string) { return runner.apply({ command: { name }, player: 'p1' }); }\n" },
     ];
     const wrappers = findDispatchWrappers(helpers);
-    expect([...wrappers.names.entries()]).toEqual([['run', new Set([1, 0])]]);
+    expect(slotsByName(wrappers)).toEqual({ run: ['1', '0'] });
     expect(findDispatchedVerbs("await run('q');\nawait run('p1', 'r');\n", 'tests/c.test.ts', wrappers)).toEqual(['q', 'r', 'p1']);
   });
 
@@ -356,8 +361,7 @@ async function order(player: string, name: string, args: object) {
 }
 `;
     const wrappers = findDispatchWrappers([{ path: 'tests/world.test.ts', text: harness }]);
-    expect([...wrappers.commands.entries()]).toEqual([['apply', new Set([0])]]);
-    expect([...wrappers.names.entries()]).toEqual([['order', new Set([1])]]);
+    expect(slotsByName(wrappers)).toEqual({ apply: ['0.name'], order: ['1'] });
     expect(
       findDispatchedVerbs("await w.order('p1', 'recycle', {});\nawait apply({ name: 't', args: {} }, 'p1');\n", 'tests/a.test.ts', wrappers),
     ).toEqual(['recycle', 't']);
@@ -366,7 +370,7 @@ async function order(player: string, name: string, args: object) {
   it("counts a helper that hands the whole command it is given to the world engine's applyCommand, bound to a local or not (#1588)", () => {
     const harness = "export function act(player: string, command: object) { return engine.applyCommand(player, command, {}); }\n";
     const wrappers = findDispatchWrappers([{ path: 'tests/helpers/world.ts', text: harness }]);
-    expect([...wrappers.commands.entries()]).toEqual([['act', new Set([1])]]);
+    expect(slotsByName(wrappers)).toEqual({ act: ['1.name'] });
     expect(
       findDispatchedVerbs(`
 act('p1', { name: 'u', args: {} });
@@ -428,6 +432,202 @@ assertActionFails(testGame, 1, 'failing');
 it.skip('x', () => { testGame.doAction(1, 'skipped'); });
 `),
     ).toEqual([]);
+  });
+});
+
+describe('findDispatchedVerbs with the verb named from data (#1792)', () => {
+  it('counts a verb read from an it.each row, whole, by property or destructured, and an array row spread into the parameters', () => {
+    expect(
+      findDispatchedVerbs(`
+it.each(['whole'] as const)('%s', async (name) => { await world.take(1, name); });
+it.each([{ name: 'destructured' }])('$name', async ({ name }) => { await world.take(1, name); });
+test.each([{ verb: 'byProperty' }])('$verb', (row) => { testGame.doAction(1, row.verb); });
+it.each([[1, 'spread']])('%s', (seat, name) => { testGame.doAction(seat, name); });
+describe.each([{ name: 'suiteRow' }])('$name', ({ name }) => { it('x', () => world.take(1, name)); });
+`),
+    ).toEqual(['whole', 'destructured', 'byProperty', 'spread', 'suiteRow']);
+  });
+
+  it('counts a verb read from a for...of or forEach over a literal list, and from a table built with map and flatMap', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  for (const name of ['forOf'] as const) await world.take(1, name);
+  const rows = [{ kind: 'rowKind' }];
+  for (const { kind } of rows) await world.take(1, kind);
+  ['forEach'].forEach((verb) => testGame.doAction(1, verb));
+});
+it.each(
+  [false, true].flatMap((paged) =>
+    (['completeMission', 'skipMission'] as const).map((name) => ({ paged, name })),
+  ),
+)('$name', async ({ name }) => { await world.take(1, name); });
+`),
+    ).toEqual(['forOf', 'rowKind', 'forEach', 'completeMission', 'skipMission']);
+  });
+
+  it('counts a verb read through array destructuring, and through a spread of rows the test wrote', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  for (const [name, field] of [['setNotes', 'notes'], ['setStatus', 'status']] as const) await world.take(1, name, { [field]: 'x' });
+});
+const scenarios = [{ name: 'launchSurvey', hulls: 2 }, { hulls: 1 }] as const;
+it.each([false, true].flatMap((paged) => scenarios.map((scenario) => ({ name: 'overridden', ...scenario, paged }))))(
+  '$name',
+  async ({ name }) => { await world.take(1, name); },
+);
+`),
+    ).toEqual(['setNotes', 'setStatus', 'launchSurvey', 'overridden']);
+  });
+
+  it('counts each branch of a conditional, stored in a local first or not, but only the branch a constant condition takes', () => {
+    expect(
+      findDispatchedVerbs(`
+it.each([true, false])('%s', async (a) => {
+  await world.take(1, a ? 'ternaryA' : 'ternaryB');
+  const name = a ? 'storedA' : 'storedB';
+  await world.take(1, name);
+  await world.take(1, false ? 'constantNever' : 'constantTaken');
+});
+`),
+    ).toEqual(['ternaryA', 'ternaryB', 'storedA', 'storedB', 'constantTaken']);
+  });
+
+  it('counts a field of an object literal bound to a local, read by property or destructured', () => {
+    expect(
+      findDispatchedVerbs(`
+it('from an order', async () => {
+  const order = { kind: 'fromOrder', planet: 'p' } as const;
+  const { kind, ...args } = order;
+  await world.take(1, kind, args);
+  const step = { name: 'byField' };
+  testGame.doAction(1, step.name);
+  const command = { name: 'pastUnreadSpread' };
+  await runner.apply({ command, player: 'p1', ...(await answered()) });
+});
+`),
+    ).toEqual(['fromOrder', 'byField', 'pastUnreadSpread']);
+  });
+
+  it('counts the name inside a whole command built from data and passed to apply or applyCommand', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  for (const name of ['applied']) await runner.apply({ command: { name, args: {} }, player: 'p1', arrivedAt: 0 });
+  const kind = Math.random() > 0.5 ? 'commandA' : 'commandB';
+  await engine.applyCommand('p1', { name: kind, args: {} }, {});
+});
+`),
+    ).toEqual(['applied', 'commandA', 'commandB']);
+  });
+
+  it('counts an object literal passed to a local helper that forwards a field of its parameter', () => {
+    const file = `
+async function apply(command: { name: string; args: object }) {
+  return runner.apply({ command, player: 'p1', arrivedAt: 0 });
+}
+it('a', async () => {
+  async function startOrCancel(order: { kind: string; planet: string }) {
+    const { kind, ...args } = order;
+    await apply({ name: kind, args });
+  }
+  await startOrCancel({ kind: 'queueBuild', planet: 'p' });
+  for (let i = 0; i < 2; i++) await startOrCancel({ kind: 'cancelBuild', planet: 'p' });
+});
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/a.test.ts', text: file }]);
+    expect(findDispatchedVerbs(file, 'tests/a.test.ts', wrappers)).toEqual(['queueBuild', 'cancelBuild']);
+  });
+
+  it('does not count a verb whose value shadowing or a change makes uncertain', () => {
+    expect(
+      findDispatchedVerbs(`
+const name = 'shadowed';
+it('a', async () => {
+  const name = makeName();
+  await world.take(1, name);
+  let changed = 'reassigned';
+  changed = other();
+  await world.take(1, changed);
+  const order = { kind: 'mutated' };
+  order.kind = other();
+  await world.take(1, order.kind);
+});
+`),
+    ).toEqual([]);
+  });
+
+  it('does not count a verb from a skipped table test, or one that appears only in an assertion', () => {
+    expect(
+      findDispatchedVerbs(`
+it.skip.each([{ name: 'skipped' }])('$name', async ({ name }) => { await world.take(1, name); });
+it('a', async () => {
+  const names = ['asserted'];
+  expect(names).toContain('onlyAsserted');
+  expect(await world.offers(1)).toEqual(names);
+});
+`),
+    ).toEqual([]);
+  });
+
+  it('keeps a helper that reassigns its own parameter, or takes a this parameter, or is a class field (#1792 review F1, F4, F5)', () => {
+    const harness = `
+export function run(name: string) { name = name.trim(); return world.take(1, name); }
+export function apply(command: { name: string }) { command = { ...command }; return runner.apply({ command }); }
+export class W {
+  act(this: W, name: string) { return world.take(1, name); }
+  field = (name: string) => world.take(1, name);
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/support/w.ts', text: harness }]);
+    expect(
+      findDispatchedVerbs("run('a');\napply({ name: 'b' });\nw.act('c');\nw.field('d');\n", 'tests/a.test.ts', wrappers),
+    ).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('does not count a literal a test changes through Object.assign or an array method (#1792 review F2)', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  const cmd = { name: 'stale' };
+  Object.assign(cmd, { name: other() });
+  await runner.apply({ command: cmd });
+  const ns = ['popped'];
+  ns.pop();
+  for (const n of ns) await world.take(1, n);
+});
+`),
+    ).toEqual([]);
+  });
+
+  it('reads a value several fields deep (#1792 review F6)', () => {
+    expect(
+      findDispatchedVerbs(`
+for (const [seat, { order }] of [[1, { order: { cmd: { name: 'deep' } } }]]) await runner.apply({ command: order.cmd, player: seat });
+`),
+    ).toEqual(['deep']);
+  });
+
+  it("counts a local helper of a file the helpers were not read from by its bare name (#1792 review F3)", () => {
+    const harness = 'export function run(name: string) { return world.take(1, name); }\n';
+    const wrappers = findDispatchWrappers([{ path: 'tests/support/world.ts', text: harness }]);
+    const test = "function run(n: string) { return world.take(1, n); }\nit('a', () => run('viaLocal'));\n";
+    expect(findDispatchedVerbs(test, 'src/a.test.ts', wrappers)).toEqual(['viaLocal']);
+  });
+
+  it("does not count a call to a file's own function that shares a helper's bare name", () => {
+    const harness = 'export function run(name: string) { return world.take(1, name); }\n';
+    const test = `
+function run(label: string) { console.log(label); }
+it('a', () => { run('notDispatched'); });
+`;
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/world.ts', text: harness },
+      { path: 'tests/a.test.ts', text: test },
+    ]);
+    expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual([]);
+    expect(findDispatchedVerbs("it('b', () => run('imported'));\n", 'tests/b.test.ts', wrappers)).toEqual(['imported']);
   });
 });
 
