@@ -54,26 +54,24 @@ export function sidewaysScrolls(): SidewaysScroll[] {
     if (parent === null) return element.tagName.toLowerCase();
     return `${place(parent)}>${[...parent.children].indexOf(element)}`;
   };
-  // Widths round to whole pixels, so content a fraction of a pixel inside its box can read 1px over.
-  const wider = (box: Element) => box.scrollWidth > box.clientWidth + 1;
   const panned = [...document.querySelectorAll('[data-bs-scrolls="x"]')];
   const meantToPan = (box: Element) =>
     box.getAttribute('data-bs-scrolls') === 'x' || panned.some((wide) => wide !== box && box.contains(wide) && wide.getBoundingClientRect().width > box.clientWidth);
+  // Widths round to whole pixels, so content a fraction of a pixel inside its box can read 1px over.
+  const scrollsSideways = (box: Element, overflow: string) => scrolls(overflow) && box.scrollWidth > box.clientWidth + 1 && !meantToPan(box);
   const root = document.documentElement;
   const rootOverflow = getComputedStyle(root).overflowX;
   // The body's overflow is the page's when the root's is visible, and the body is then no scroll box of its own.
   const pageOverflow = rootOverflow === 'visible' ? getComputedStyle(document.body).overflowX : rootOverflow;
-  const found: SidewaysScroll[] = [];
-  if (pageOverflow !== 'hidden' && pageOverflow !== 'clip' && wider(root) && !meantToPan(root)) {
-    found.push({ what: "the game's page", where: 'page', content: root.scrollWidth, box: root.clientWidth });
-  }
-  const boxes = rootOverflow === 'visible' ? document.body.querySelectorAll('*') : [document.body, ...document.body.querySelectorAll('*')];
-  for (const box of boxes) {
-    if (scrolls(getComputedStyle(box).overflowX) && wider(box) && !meantToPan(box)) {
-      found.push({ what: name(box), where: place(box), content: box.scrollWidth, box: box.clientWidth });
-    }
-  }
-  return found;
+  // A page whose overflow is visible still scrolls; only hidden and clip stop it.
+  const page = scrollsSideways(root, pageOverflow === 'visible' ? 'auto' : pageOverflow) ? [{ what: "the game's page", where: 'page', content: root.scrollWidth, box: root.clientWidth }] : [];
+  const boxes = rootOverflow === 'visible' ? [...document.body.querySelectorAll('*')] : [document.body, ...document.body.querySelectorAll('*')];
+  return [
+    ...page,
+    ...boxes
+      .filter((box) => scrollsSideways(box, getComputedStyle(box).overflowX))
+      .map((box) => ({ what: name(box), where: place(box), content: box.scrollWidth, box: box.clientWidth })),
+  ];
 }
 
 /** The phone and the box, as {@link sidewaysProblem} names them, so the walk reports each once. */

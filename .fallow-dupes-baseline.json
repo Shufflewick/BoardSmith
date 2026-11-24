@@ -3,7 +3,7 @@
   "clone_groups": [
     "src/session/testing/fixtures/bookkeeping-execute-fixture.ts:34-51|src/session/testing/fixtures/execute-barrier-fixture.ts:62-82",
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue:97-111|src/ui/composables/useHexGrid.ts:268-283",
-    "src/ui/components/auto-ui/renderers/HandRenderer.vue:430-436|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:259-265",
+    "src/ui/components/auto-ui/renderers/HandRenderer.vue:450-456|src/ui/components/auto-ui/renderers/SpaceRenderer.vue:259-265",
     "src/cli/commands/verify-enumerate.ts:1295-1302|src/cli/commands/verify-enumerate.ts:1418-1425",
     "src/session/testing/fixtures/collect-fixture.ts:65-82|src/session/testing/fixtures/collect-turns-fixture.ts:68-81",
     "src/session/testing/fixtures/simultaneous-fixture.ts:56-71|src/session/testing/fixtures/simultaneous-fixture.ts:83-93",
