@@ -1,5 +1,5 @@
 {
-  "revision": 509,
+  "revision": 510,
   "surfaceHash": "65379812100a37e1",
   "payloadHash": "1dd7fac7bfd0bbcf",
   "formatHash": "e7644203601ae348",
@@ -4015,6 +4015,14 @@
       "payloadHash": "1dd7fac7bfd0bbcf",
       "formatHash": "e7644203601ae348",
       "summary": "An action declared .seatUndoable() in a seatUndo step can be taken back by its seat although it changed the shared board, until another seat's action changes or picks an element it changed; SeatUndoEntry gains an optional board field (#1787)."
+    },
+    {
+      "revision": 510,
+      "date": "2026-11-24",
+      "surfaceHash": "65379812100a37e1",
+      "payloadHash": "1dd7fac7bfd0bbcf",
+      "formatHash": "e7644203601ae348",
+      "summary": "Undo restores the state before a pick-by-pick action's first pick, so what its onSelect callbacks changed is taken back too; the snapshot's checkpoint window gains an optional openPicks entry (the seats with picks open at its newest action count, and the state before the first of them), which becomes that count's undo point once an action is recorded (#1796)."
     }
   ]
 }

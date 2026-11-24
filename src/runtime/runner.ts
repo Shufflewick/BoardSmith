@@ -47,7 +47,7 @@ import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 import { withHeldFollowUp } from '../engine/flow/engine.js';
-import type { SeatUndoStack, SeatUndoState } from '../engine/utils/snapshot.js';
+import type { OpenPicks, SeatUndoStack, SeatUndoState } from '../engine/utils/snapshot.js';
 import { seatUndoStepStart, treeWithSeatRestored, watchSeatOp, type SeatOp } from './seat-undo.js';
 
 /**
@@ -313,6 +313,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private checkpointBaseIndex = 0;
 
+  /** The seats with picks open at the head's action count: see `ActionCheckpointWindow.openPicks`. */
+  private openPicks: OpenPicks | undefined;
+
   /** This game's checkpoint retention policy. Default: back to the turn start. */
   private readonly checkpointPolicy_: Required<RunnerCheckpointPolicy>;
 
@@ -384,6 +387,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   runCancelOp(seat: number, actionName: string | undefined, run: () => void): void {
     this.asSeatOp(seat, { action: actionName, cancel: true }, run);
+    // With no seat's picks left open, the game after the cancel is what undo restores here.
+    const seats = this.openPicks?.seats.filter((s) => s !== seat) ?? [];
+    this.openPicks = seats.length > 0 ? { ...this.openPicks!, seats } : undefined;
   }
 
   /** Run one op `seat` takes, checking it for the open step's per-seat undo when there is one. */
@@ -592,7 +598,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * pending/selection mutation — makes the head capture the complete
    * turn-boundary state, which undo restores authoritatively. The executor
    * calls it via `getSnapshot`, and `PendingActionManager` calls it after
-   * every pick that changes the game. Build a seat's state only after it
+   * every pick that changes the game. A pick is not part of that state: once
+   * the count moves on, the entry it leaves is the state before the first
+   * pick taken at it (`openPicks`, #1796). Build a seat's state only after it
    * has run for the op: `canUndo` reads the window it leaves (#385).
    *
    * Then the window is trimmed oldest first: back to the turn start unless
@@ -621,7 +629,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // counts the runner no longer has.
       this.checkpointBaseIndex = len;
       this.actionCheckpoints = [createActionCheckpoint(this.game)];
+      this.openPicks = undefined;
       return;
+    }
+    // Once an action is recorded, the state before its first pick is what its count's undo restores.
+    const lastOffset = this.actionCheckpoints.length - 1;
+    if (this.openPicks && headOffset !== lastOffset) {
+      if (headOffset > lastOffset) this.actionCheckpoints[lastOffset] = this.openPicks.before;
+      this.openPicks = undefined;
     }
     // Drop anything AHEAD of the head (redo state left by an undo), then
     // overwrite the head entry itself with the current state.
@@ -739,7 +754,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * captured because checkpointing is off — rather than assert a cause.
    */
   checkpointWindow(): ActionCheckpointWindow {
-    return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
+    return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints], ...(this.openPicks && { openPicks: structuredClone(this.openPicks) }) };
   }
 
   /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
@@ -821,12 +836,16 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     pick: SeatOp,
     run: () => R,
   ): { result: R; undone: boolean } {
-    return this.asSeatOp(seat, pick, () => this.runPickOpUnwatched(run));
+    const openPicks = this.openPicks;
+    const done = this.asSeatOp(seat, pick, () => this.runPickOpUnwatched(seat, run));
+    if (done.undone) this.openPicks = openPicks;
+    return done;
   }
 
-  private runPickOpUnwatched<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
+  private runPickOpUnwatched<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(seat: number, run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
     this.captureCheckpoint();
+    this.notePicksOpen(seat);
     const version = this.game._ctx._stateVersion;
     this.versionBeforeExecute = undefined;
     const result = run();
@@ -839,9 +858,15 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     return { result: told, undone: restored };
   }
 
+  /** Note `seat`'s picks open at the head's count, keeping the state before the first seat's. */
+  private notePicksOpen(seat: number): void {
+    const before = this.openPicks?.before ?? this.actionCheckpoints[this.headOffset];
+    if (!before) return;
+    const seats = this.openPicks?.seats ?? [];
+    this.openPicks = { before, seats: seats.includes(seat) ? seats : [...seats, seat] };
+  }
+
   /**
-   * Perform an action and record it in history
-   */  /**
    * Perform an action and record it in history
    */
   performAction(
@@ -1460,7 +1485,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * trailing pending/selection mutations (e.g. `Piece.putInto`, recorded in
    * neither command nor action history) that ran AFTER the k-th action but
    * before the (k+1)-th, so undoing a later turn restores the true turn-start
-   * state. Entries ahead of the head are dropped (e.g. after an undo rewinds
+   * state, less any pick made since (`ActionCheckpointWindow.openPicks`). Entries ahead of the head are dropped (e.g. after an undo rewinds
    * the history), and entries older than `checkpoints.max` are dropped from the
    * front.
    */
@@ -1643,6 +1668,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const usable = runner.checkpointPolicy_.enabled && window !== undefined;
     runner.checkpointBaseIndex = usable ? window.baseIndex : runner.actionCount;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
+    runner.openPicks = usable ? window.openPicks : undefined;
 
     // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
     // (older snapshot predating this field, or no execute() has run yet):
