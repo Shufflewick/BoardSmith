@@ -1,5 +1,5 @@
 {
-  "revision": 514,
+  "revision": 515,
   "surfaceHash": "83e166e346b3d797",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4055,6 +4055,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The smoke walk tells a group under a selected thing from the top-level group of the same path (#1794)"
+    },
+    {
+      "revision": 515,
+      "date": "2026-11-24",
+      "surfaceHash": "83e166e346b3d797",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith catalogue refuses to run when a game's install does not hold the vitest its checked commit's lockfile pins"
     }
   ]
 }
