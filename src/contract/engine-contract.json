@@ -4022,7 +4022,7 @@
       "surfaceHash": "65379812100a37e1",
       "payloadHash": "1dd7fac7bfd0bbcf",
       "formatHash": "e7644203601ae348",
-      "summary": "Undo restores the state before a pick-by-pick action's first pick, so what its onSelect callbacks changed is taken back too; the snapshot's checkpoint window gains an optional beforePicks entry, the undo point for its newest action count while a pick is open there (#1796)."
+      "summary": "Undo restores the state before a pick-by-pick action's first pick, so what its onSelect callbacks changed is taken back too; the snapshot's checkpoint window gains an optional openPicks entry (the seats with picks open at its newest action count, and the state before the first of them), which becomes that count's undo point once an action is recorded (#1796)."
     }
   ]
 }
