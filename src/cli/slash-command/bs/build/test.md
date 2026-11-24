@@ -81,12 +81,12 @@ here.
          `runner.performAction`, an `action` op sent to the live session host
          (`session.send(seat, { type: 'action', actionName: 'verb', ... })`), or a world's `take`,
          with the verb's name a literal the check can trace to the call: written there, or read
-         from an `it.each` row, a `for...of`, `map` or `flatMap` over a literal list, a field of an
-         object literal (one handed to a helper too), or either branch of a conditional. A name
-         that shadowing, a reassignment or any other computation hides does not count. Calling
-         the rules function directly skips the
-         engine's selections, conditions and flow, so it does not count, and neither does a verb
-         only ever dispatched through `assertActionFails`.
+         from an `it.each` row, a `for...of`, `forEach`, `map` or `flatMap` over a literal list,
+         a field of an object literal (one handed to a helper too), or either branch of a
+         conditional. A name that shadowing, a reassignment or any other computation hides does
+         not count. Calling the rules function directly skips the engine's selections,
+         conditions and flow, so it does not count, and neither does a verb only ever dispatched
+         through `assertActionFails`.
        - **No guard is called unreachable.** A line the chunk added that calls a guard unreachable
          ("unreachable", "should never happen", "can't happen") is a finding. Either the compiler
          proves it (an exhaustive check assigning to a `never`-typed variable, with no such

@@ -273,6 +273,7 @@ const NAMED_FUNCTION_READERS: Readonly<Record<string, (node: AstNode) => [unknow
   VariableDeclarator: (node) => [node.id, node.init],
   Property: (node) => [node.key, node.value],
   MethodDefinition: (node) => [node.key, node.value],
+  PropertyDefinition: (node) => [node.key, node.value],
 });
 
 /** A function-like node with a name: declaration, `const f = () => {}`, or a method. */
@@ -327,7 +328,7 @@ const EACH = Symbol('each');
 type PathStep = string | typeof EACH;
 
 /** Bounds how deep a value is read, so a helper that recurses into its own parameter still ends. */
-const MAX_PATH = 4;
+const MAX_PATH = 8;
 
 const pathText = (path: readonly PathStep[]) =>
   path.map((step) => (step === EACH ? '[]' : /^[A-Za-z_$][\w$]*$/.test(step) ? `.${step}` : `[${JSON.stringify(step)}]`)).join('');
@@ -470,10 +471,23 @@ function patternPath(pattern: unknown, id: unknown): PathStep[] | undefined {
   return undefined;
 }
 
-/** Whether `id` is the root of a member that is assigned, updated or deleted: `order.kind = ...`. */
+const MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
+
+/** Whether a call changes `id` in place: `list.pop()`, `Object.assign(order, ...)`. */
+function changedByCall(source: ScopedSource, id: AstNode, parent: AstNode | undefined): boolean {
+  if (parent?.type === 'CallExpression') {
+    const callee = parent.callee as AstNode;
+    return argAt(parent, 0) === id && callee.type === 'MemberExpression' && identifierName(callee.object) === 'Object' && calleeName(callee) === 'assign';
+  }
+  const call = parent && source.parents.get(parent);
+  return parent?.type === 'MemberExpression' && call?.type === 'CallExpression' && call.callee === parent && MUTATORS.has(calleeName(parent) ?? '');
+}
+
+/** Whether `id` is changed in place: a member of it assigned, updated or deleted (`order.kind = ...`), or a call that changes it. */
 function changesMember(source: ScopedSource, id: AstNode): boolean {
   let node = id;
   let parent = source.parents.get(node);
+  if (changedByCall(source, id, parent)) return true;
   if (parent?.type !== 'MemberExpression') return false;
   while (parent?.type === 'MemberExpression' && parent.object === node) {
     node = parent;
@@ -521,13 +535,20 @@ function functionName(source: ScopedSource, fn: AstNode): string | undefined {
   return undefined;
 }
 
-function parameterValues(source: ScopedSource, fn: AstNode, id: unknown, path: PathStep[], read: Read): Value[] {
-  const params = fn.params as AstNode[];
+/**
+ * A parameter's values: a callback's from what it is called with, unless the callback changes it;
+ * a named function's as one of its slots, which a change inside it (`name = name.trim()`) keeps.
+ */
+function parameterValues(source: ScopedSource, fn: AstNode, id: unknown, path: PathStep[], read: Read, changed: boolean): Value[] {
+  // A TypeScript `this` parameter is never passed at a call.
+  const params = (fn.params as AstNode[]).filter((param) => identifierName(param) !== 'this');
   const index = params.findIndex((param) => patternPath(param, id) !== undefined);
   if (index === -1) return [];
   const inner = [...patternPath(params[index], id)!, ...path];
   const call = source.parents.get(fn);
-  if (call?.type === 'CallExpression' && (call.arguments as AstNode[]).includes(fn)) return callbackValues(call, fn, index, inner, read);
+  if (call?.type === 'CallExpression' && (call.arguments as AstNode[]).includes(fn)) {
+    return changed ? [] : callbackValues(call, fn, index, inner, read);
+  }
   const name = functionName(source, fn);
   return name === undefined ? [] : [{ fn, name, index, path: inner }];
 }
@@ -548,9 +569,12 @@ function stableVariable(source: ScopedSource, id: AstNode): Variable | undefined
 }
 
 function identifierValues(source: ScopedSource, id: AstNode, path: PathStep[], read: Read): Value[] {
-  const def = stableVariable(source, id)?.defs[0];
-  if (def?.type === 'Variable') return variableValues(source, def.node as unknown as AstNode, def.name, path, read);
-  if (def?.type === 'Parameter') return parameterValues(source, def.node as unknown as AstNode, def.name, path, read);
+  const variable = source.references.get(id)?.resolved;
+  const def = variable?.defs.length === 1 ? variable.defs[0] : undefined;
+  if (def === undefined) return [];
+  const changed = isChanged(source, variable!);
+  if (def.type === 'Variable' && !changed) return variableValues(source, def.node as unknown as AstNode, def.name, path, read);
+  if (def.type === 'Parameter') return parameterValues(source, def.node as unknown as AstNode, def.name, path, read, changed);
   return [];
 }
 
@@ -602,10 +626,12 @@ export interface DispatchWrappers {
   byName: ReadonlyMap<string, Slots>;
   /** One function's own slots, by `<file>:<offset>`: what a call to a function its own file declares reaches. */
   byFunction: ReadonlyMap<string, Slots>;
+  /** The files `byFunction` was read from; a call to a function another file declares falls back to `byName`. */
+  files: ReadonlySet<string>;
 }
 
 /** A project with no dispatch helpers of its own. */
-export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ byName: new Map(), byFunction: new Map() });
+export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ byName: new Map(), byFunction: new Map(), files: new Set<string>() });
 
 const NO_SLOTS: Slots = new Map();
 
@@ -630,7 +656,7 @@ type Carriers = (source: ScopedSource, call: AstNode, wrappers: DispatchWrappers
 /** The arguments a call hands a project helper's slots. */
 function helperCarriers(source: ScopedSource, call: AstNode, wrappers: DispatchWrappers): Carrier[] {
   const callee = call.callee as AstNode;
-  const local = callee.type === 'Identifier' ? localFunction(source, callee) : undefined;
+  const local = callee.type === 'Identifier' && wrappers.files.has(source.file) ? localFunction(source, callee) : undefined;
   const name = calleeName(callee) ?? '';
   let slots = local ? (wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS) : (wrappers.byName.get(name) ?? NO_SLOTS);
   // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
@@ -657,7 +683,11 @@ export function mentionsAny(text: string, names: Iterable<string>): boolean {
  */
 function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNames: readonly string[]): DispatchWrappers {
   const parsed = new Map<SourceFile, ScopedSource>();
-  const wrappers = { byName: new Map<string, Map<string, Slot>>(), byFunction: new Map<string, Map<string, Slot>>() };
+  const wrappers = {
+    byName: new Map<string, Map<string, Slot>>(),
+    byFunction: new Map<string, Map<string, Slot>>(),
+    files: new Set(sources.map((file) => file.path)),
+  };
   const add = (map: Map<string, Map<string, Slot>>, key: string, slot: Slot): boolean => {
     const slots = map.get(key) ?? new Map<string, Slot>();
     if (slots.has(slotText(slot))) return false;
@@ -754,7 +784,7 @@ export const DISPATCH_FORMS =
   "runner.apply({ command: { name: 'verb', ... }, ... }) on the world runner, " +
   'or a helper of the project\'s own ' +
   'under tests/ that passes the verb name, or the whole command, it is given to one of these (or to the world engine\'s applyCommand). ' +
-  'The name may be written at the call, or come from an it.each row, a for...of, map or flatMap over a literal list, ' +
+  'The name may be written at the call, or come from an it.each row, a for...of, forEach, map or flatMap over a literal list, ' +
   'a field of an object literal, or either branch of a conditional';
 
 /** Every name a built-in entry point is called by. */

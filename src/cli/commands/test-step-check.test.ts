@@ -571,6 +571,51 @@ it('a', async () => {
     ).toEqual([]);
   });
 
+  it('keeps a helper that reassigns its own parameter, or takes a this parameter, or is a class field (#1792 review F1, F4, F5)', () => {
+    const harness = `
+export function run(name: string) { name = name.trim(); return world.take(1, name); }
+export function apply(command: { name: string }) { command = { ...command }; return runner.apply({ command }); }
+export class W {
+  act(this: W, name: string) { return world.take(1, name); }
+  field = (name: string) => world.take(1, name);
+}
+`;
+    const wrappers = findDispatchWrappers([{ path: 'tests/support/w.ts', text: harness }]);
+    expect(
+      findDispatchedVerbs("run('a');\napply({ name: 'b' });\nw.act('c');\nw.field('d');\n", 'tests/a.test.ts', wrappers),
+    ).toEqual(['a', 'b', 'c', 'd']);
+  });
+
+  it('does not count a literal a test changes through Object.assign or an array method (#1792 review F2)', () => {
+    expect(
+      findDispatchedVerbs(`
+it('a', async () => {
+  const cmd = { name: 'stale' };
+  Object.assign(cmd, { name: other() });
+  await runner.apply({ command: cmd });
+  const ns = ['popped'];
+  ns.pop();
+  for (const n of ns) await world.take(1, n);
+});
+`),
+    ).toEqual([]);
+  });
+
+  it('reads a value several fields deep (#1792 review F6)', () => {
+    expect(
+      findDispatchedVerbs(`
+for (const [seat, { order }] of [[1, { order: { cmd: { name: 'deep' } } }]]) await runner.apply({ command: order.cmd, player: seat });
+`),
+    ).toEqual(['deep']);
+  });
+
+  it("counts a local helper of a file the helpers were not read from by its bare name (#1792 review F3)", () => {
+    const harness = 'export function run(name: string) { return world.take(1, name); }\n';
+    const wrappers = findDispatchWrappers([{ path: 'tests/support/world.ts', text: harness }]);
+    const test = "function run(n: string) { return world.take(1, n); }\nit('a', () => run('viaLocal'));\n";
+    expect(findDispatchedVerbs(test, 'src/a.test.ts', wrappers)).toEqual(['viaLocal']);
+  });
+
   it("does not count a call to a file's own function that shares a helper's bare name", () => {
     const harness = 'export function run(name: string) { return world.take(1, name); }\n';
     const test = `
