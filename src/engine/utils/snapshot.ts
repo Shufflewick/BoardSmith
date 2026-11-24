@@ -32,7 +32,7 @@ export type GameStateSnapshot = SnapshotFields & (
      *  while `k` actions were recorded — refreshed on every op so trailing
      *  pending/selection mutations (e.g. `Piece.putInto` inside a completed pending
      *  action, recorded in neither command nor action history) are captured at the
-     *  right action-count boundary, though never a pick's (`beforePicks`). Undo/rewind restore that entry directly (via
+     *  right action-count boundary, though never a pick's (`openPicks`). Undo/rewind restore that entry directly (via
      *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
      *  pending mutations and mis-positions the flow.
      *
@@ -458,12 +458,19 @@ export interface ActionCheckpointWindow {
   /** Checkpoints for action counts `baseIndex` .. `baseIndex + entries.length - 1`. */
   entries: ActionCheckpoint[];
   /**
-   * The state just before the first pick taken at the newest entry's action
-   * count, while that entry is still the live state: what undo restores
-   * there, since a pick's `onSelect` may have changed the game and undo drops
-   * the open action without its `onCancel` (#1796).
+   * Set while seats have picks open at the newest entry's action count:
+   * those seats, and the state just before the first of those picks. It
+   * replaces that entry once an action is recorded, since a pick's
+   * `onSelect` may have changed the game and undo drops an open action
+   * without its `onCancel` (#1796).
    */
-  beforePicks?: ActionCheckpoint;
+  openPicks?: OpenPicks;
+}
+
+/** The seats with picks open at an action count, and the state before the first of them (`ActionCheckpointWindow.openPicks`). */
+export interface OpenPicks {
+  seats: number[];
+  before: ActionCheckpoint;
 }
 
 /** Why a checkpoint lookup found nothing — the two cases need different errors. */
@@ -491,8 +498,7 @@ export function checkpointAt(
   if (index < window.baseIndex) {
     return { checkpoint: null, absence: 'pruned' };
   }
-  const offset = index - window.baseIndex;
-  const entry = offset === window.entries.length - 1 ? window.beforePicks ?? window.entries[offset] : window.entries[offset];
+  const entry = window.entries[index - window.baseIndex];
   if (!entry) {
     return { checkpoint: null, absence: 'uncaptured' };
   }
