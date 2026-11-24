@@ -16,10 +16,9 @@ import { stubActionController } from './auto-ui/action-panel-controller.test-hel
 import { executeOp, type StateEnvelope } from '../../session/stateless-ops.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
-import { handoffDefinition } from '../../session/testing/fixtures/handoff-undo-fixture.js';
+import { handoffUndoDefinition as definition } from '../../session/testing/fixtures/handoff-undo-fixture.js';
 import { succeeded } from '../../session/op-result.test-helper.js';
 
-const definition = handoffDefinition({ handoffUndo: true });
 const gameOptions = { playerCount: 2, seed: 'handoff-undo-offer' };
 
 async function seatOneAfterHandoff(): Promise<PlayerGameState> {

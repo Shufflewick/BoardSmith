@@ -55,3 +55,5 @@ export function handoffDefinition(options: HandoffOptions = {}): GameDefinitionL
     undo: { fenceRandomRewind: options.fenceRandomRewind ?? false },
   };
 }
+
+export const handoffUndoDefinition = handoffDefinition({ handoffUndo: true });
