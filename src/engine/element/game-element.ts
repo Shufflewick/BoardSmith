@@ -537,6 +537,14 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   /** Internal tree structure */
   _t: ElementTree<GameElement> = undefined!;
 
+  /** A proxy over an element answers every property but carries no private field, so this tells the element from a world's read-only projection of it (#1791). */
+  readonly #live = true;
+
+  /** Internal: whether `value` is the element itself, which a walk may write its dev-mode visit stamp onto, rather than a proxy over one. */
+  static _isLive(value: GameElement): boolean {
+    return #live in value;
+  }
+
   /** Visibility state for this element */
   _visibility?: VisibilityState = undefined;
 

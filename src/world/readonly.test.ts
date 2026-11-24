@@ -7,8 +7,8 @@
 // without one of these cases -- assignment is the obvious one, and a mutating
 // METHOD writing through its own `this` is the one a `set` trap alone misses.
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Game, PersistentMap, Piece, Player, Space } from "../engine/index.js";
-import type { GameOptions } from "../engine/index.js";
+import { Game, Grid, GridCell, HexCell, HexGrid, PersistentMap, Piece, Player, Space } from "../engine/index.js";
+import type { ElementClass, ElementFinder, GameElement, GameOptions } from "../engine/index.js";
 import { plainCopy, readOnlyScope } from "./readonly.js";
 import { WorldRefusal } from "./refusals.js";
 import { TEST_WORLD_ELEMENT_ID_KEY } from "../engine/element/world-element-id-key.test-helper.js";
@@ -18,10 +18,34 @@ class Room extends Space<ProjectionGame> {
   visits = 0;
   tags: string[] = [];
 }
+class Board extends Grid<ProjectionGame> {
+  $rowCoord = "row";
+  $colCoord = "col";
+}
+class Square extends GridCell<ProjectionGame> {
+  row = 0;
+  col = 0;
+}
+class HexBoard extends HexGrid<ProjectionGame> {
+  $qCoord = "q";
+  $rCoord = "r";
+}
+class Hex extends HexCell<ProjectionGame> {
+  q = 0;
+  r = 0;
+}
+class Hall extends Space<ProjectionGame> {
+  override first<F extends GameElement>(
+    classNameOrFinder?: ElementClass<F> | ElementFinder<F>,
+    ...finders: ElementFinder<F>[]
+  ): F | undefined {
+    return super.first(classNameOrFinder as ElementClass<F>, ...finders);
+  }
+}
 class ProjectionGame extends Game<ProjectionGame, Player> {
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Room, Token]);
+    this.registerElements([Room, Token, Board, Square, HexBoard, Hex, Hall]);
   }
 }
 
@@ -270,6 +294,36 @@ describe("readOnlyProjection", () => {
 // The fix cannot be "games stop freezing" -- that trades their immutability for
 // ours -- and it cannot be "hand the raw value over", because a frozen object
 // is free to point AT a live mutable one and that road ends in the #219 hole.
+describe("readOnlyProjection through a class's own override of a finder (#1791)", () => {
+  // An override is not one of the engine's read doors, so it runs with the
+  // projection as its receiver and its super call walks projected elements.
+  // The walk is still a read, and dev mode must answer it as production does.
+  function board() {
+    const game = new ProjectionGame({ playerCount: 2, seed: "override", worldMode: true, elementIdKey: TEST_WORLD_ELEMENT_ID_KEY });
+    const grid = game.create(Board, "grid");
+    grid.create(Square, "a", { row: 0, col: 0 }).create(Token, "on-grid");
+    grid.create(Square, "b", { row: 0, col: 1 });
+    const hexes = game.create(HexBoard, "hexes");
+    hexes.create(Hex, "h", { q: 0, r: 0 }).create(Token, "on-hex");
+    hexes.create(Hex, "i", { q: 1, r: 0 });
+    const hall = game.create(Hall, "hall");
+    hall.create(Room, "side").create(Token, "in-hall");
+    return { grid, hexes, hall };
+  }
+
+  it("Grid.first finds a piece through a read-only projection", () => {
+    expect(readOnlyProjection(board().grid).first(Token)?.name).toBe("on-grid");
+  });
+
+  it("HexGrid.first finds a piece through a read-only projection", () => {
+    expect(readOnlyProjection(board().hexes).first(Token)?.name).toBe("on-hex");
+  });
+
+  it("a game class's own first finds a piece through a read-only projection", () => {
+    expect(readOnlyProjection(board().hall).first(Token)?.name).toBe("in-hall");
+  });
+});
+
 describe("readOnlyProjection over frozen values (#247)", () => {
   it("reads a nested object off a frozen value a callback returned", () => {
     // The reported shape, reduced: a stored array is read through the

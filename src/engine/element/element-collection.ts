@@ -364,7 +364,7 @@ type Query = {
   result: GameElement[];
   /** Dev mode, outermost query: the stamp it marks each element it visits with (0: it marks none). */
   stamp: number;
-  /** Dev mode, a query inside another: the container each visited element was first seen under (undefined: the roots). */
+  /** Dev mode, a query inside another or an element a stamp cannot be written on: the container each visited element was first seen under (undefined: the roots). */
   firstSeenUnder: Map<GameElement, GameElement | undefined> | null;
   duplicates: Array<{ id: number; name: string; depth: number; firstUnder: GameElement | undefined; under: GameElement | undefined }>;
 };
@@ -414,9 +414,10 @@ function matches({ className, predicates }: Query, el: GameElement): boolean {
 
 /** Whether `el` was visited before in this query, recording the duplicate if so and the visit if not. */
 function isRepeatVisit(query: Query, el: GameElement, depth: number, under: GameElement | undefined): boolean {
-  const { stamp, firstSeenUnder } = query;
+  const { stamp } = query;
   let firstUnder: GameElement | undefined;
-  if (stamp !== 0) {
+  // A read-only projection refuses the stamp as a write, so a walk over one keeps the Map (#1791).
+  if (stamp !== 0 && (el.constructor as typeof GameElement)._isLive(el)) {
     if (el._t.visit !== stamp) {
       el._t.visit = stamp;
       el._t.visitedUnder = under;
@@ -424,11 +425,12 @@ function isRepeatVisit(query: Query, el: GameElement, depth: number, under: Game
     }
     firstUnder = el._t.visitedUnder;
   } else {
-    if (!firstSeenUnder!.has(el)) {
-      firstSeenUnder!.set(el, under);
+    const firstSeenUnder = (query.firstSeenUnder ??= new Map());
+    if (!firstSeenUnder.has(el)) {
+      firstSeenUnder.set(el, under);
       return false;
     }
-    firstUnder = firstSeenUnder!.get(el);
+    firstUnder = firstSeenUnder.get(el);
   }
   query.duplicates.push({ id: el.id, name: knownName(el) ?? el.constructor.name, depth, firstUnder, under });
   return true;
