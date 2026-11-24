@@ -80,9 +80,9 @@ function sanitizeCallbackError(error: unknown, source: string): string {
  * Format a `choice` selection's candidates.
  *
  * Each candidate is already the value it delivers: the executor read any
- * `{ value, label }` choice where the choices were built (#509). An element
- * goes as `{ id, className }`, the reference a pick sends back, never its
- * contents (#1789). Its label is
+ * `{ value, label }` choice where the choices were built (#509). An element,
+ * also one inside an array or plain object, goes as `{ id, className }`, the
+ * reference a pick sends back, never its contents (#1789, #1793). Its label is
  * the one it brought, else the selection's `display()`, else one read off the
  * value.
  */
@@ -94,15 +94,15 @@ export function formatChoiceCandidates(
 ): ChoiceWithRefs[] {
   const sight = seatSight(candidates.map((c) => c.value), ctx);
   return candidates.map(({ value, label, disabled }) => {
-    const neutral = sight.neutralLabel(value);
-    const engineLabel = neutral ?? labelOfValue(value);
+    const sent = asElementRefs(value, (element) => seatIdOf(element, ctx.player.seat));
+    const engineLabel = sight.neutralLabel(value) ?? labelOfValue(isElement(value) ? value : sent);
     const authored = label ?? selection.display?.(value);
     // Only the choice itself: `display` is handed nothing else, and a label is part of what `choices` returned.
     const display = authored === undefined
       ? engineLabel
       : seatText(authored, engineLabel, hidesFrom(ctx.player.seat, value), `display or label for selection '${selection.name}'`);
     const choice: ChoiceWithRefs = {
-      value: isElement(value) ? { id: sight.idOf(value), className: value.constructor.name } : value,
+      value: sent,
       display,
     };
 
@@ -224,6 +224,33 @@ function setSubject(
   if (described) candidate.subject = described;
 }
 
+/**
+ * `value` with every element in it, at any depth of arrays and plain objects,
+ * as the `{ id, className }` it is named by, `idOf` giving the id. The same
+ * value when it holds no element.
+ */
+export function asElementRefs(value: unknown, idOf: (element: GameElement) => number): unknown {
+  if (isElement(value)) return { id: idOf(value), className: value.constructor.name };
+  if (Array.isArray(value)) {
+    const items = value.map((one) => asElementRefs(one, idOf));
+    return items.every((one, i) => one === value[i]) ? value : items;
+  }
+  if (!isPlainRecord(value)) return value;
+  const entries = Object.entries(value).map(([key, one]) => [key, asElementRefs(one, idOf)] as const);
+  return entries.every(([key, one]) => one === value[key]) ? value : Object.fromEntries(entries);
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype;
+}
+
+/** Every element in `value`, at any depth of arrays and plain objects. */
+function elementsIn(value: unknown): GameElement[] {
+  if (isElement(value)) return [value];
+  if (Array.isArray(value)) return value.flatMap(elementsIn);
+  return isPlainRecord(value) ? Object.values(value).flatMap(elementsIn) : [];
+}
+
 /** The little of an element these formatters read. */
 type ElementLike = { id: number; name?: string; notation?: string };
 
@@ -231,7 +258,7 @@ type ElementLike = { id: number; name?: string; notation?: string };
 interface SeatSight {
   /** The id the seat's board carries for this element. */
   idOf(element: ElementLike): number;
-  /** "Card #1" for an element the seat cannot see, else undefined. */
+  /** "Card #1" for an element the seat cannot see, "Choice #1" for a value holding one, else undefined. */
   neutralLabel(value: unknown): string | undefined;
   /**
    * A game's ref as the seat may be sent it (#1293): an element the seat
@@ -248,7 +275,7 @@ interface SeatSight {
  * name never leave the server.
  */
 function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight {
-  const hidden = values.filter((v): v is GameElement => isElement(v) && !v.isVisibleTo(ctx.player.seat));
+  const hidden = values.flatMap(elementsIn).filter((element) => !element.isVisibleTo(ctx.player.seat));
   const hiddenByName = new Map(hidden.filter((element) => element.name).map((element) => [element.name, element]));
   const safeRef = (ref: ElementRef): ElementRef => {
     const element = ref.id !== undefined ? ctx.game.getElementById(ref.id) : ref.name !== undefined ? hiddenByName.get(ref.name) : undefined;
@@ -259,11 +286,12 @@ function seatSight(values: readonly unknown[], ctx: CandidateContext): SeatSight
 
   const labels = new Map<unknown, string>();
   const perClass = new Map<string, number>();
-  for (const element of hidden) {
-    const className = element.constructor.name;
+  for (const value of values) {
+    if (!hidesFrom(seat, value)) continue;
+    const className = isElement(value) ? value.constructor.name : 'Choice';
     const index = (perClass.get(className) ?? 0) + 1;
     perClass.set(className, index);
-    labels.set(element, `${className} #${index}`);
+    labels.set(value, `${className} #${index}`);
   }
   return {
     idOf: (element) => (isElement(element) ? seatIdOf(element, seat) : element.id),

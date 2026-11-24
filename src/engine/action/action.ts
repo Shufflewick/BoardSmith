@@ -34,7 +34,7 @@ import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, isSerializedElement, oneChoiceListRefusal, oneElementListRefusal, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
-import { formatRepeatCandidates } from '../element/pick-candidates.js';
+import { asElementRefs, formatRepeatCandidates } from '../element/pick-candidates.js';
 import { namesNothing, seatIdOf } from '../element/seat-placeholders.js';
 import { hidesFrom, NEUTRAL_DISABLED, seatText } from './seat-text.js';
 import type { ChoiceWithRefs, WarningEntry } from '../../types/protocol.js';
@@ -457,7 +457,14 @@ function choiceItemResolver(
   game: Game,
 ): (item: unknown) => unknown {
   const named = nameableBy(candidates, player);
+  // A value holding elements was sent with each as `{ id, className }` (#1793).
+  const holding = candidates.flatMap((c) => {
+    const refs = isElement(c.value) ? c.value : asElementRefs(c.value, (element) => element.id);
+    return refs === c.value ? [] : [{ refs, value: c.value }];
+  });
   return (item) => {
+    const held = holding.find((c) => valuesEqual(c.refs, item));
+    if (held) return held.value;
     if (isSerializedElement(item)) {
       // A plain data choice may carry `id` and `className` too: one equal to it is that choice, not an element (#774).
       const data = named.find((c) => !isElement(c.value) && valuesEqual(c.value, item));
@@ -646,11 +653,11 @@ export class ActionExecutor {
     known: readonly Candidate[] | undefined,
   ): unknown {
     if (!player) return isSerializedElement(value) ? game.getElementById((value as { id: number }).id) ?? value : value;
+    const resolveItem = choiceItemResolver(known ?? this.candidatesOf(selection, { game, player, args }), player, game);
     // Only a multiSelect or an orderedList is resolved per item, so a single
     // choice whose VALUE is itself an array is never taken apart.
-    if (Array.isArray(value) && selection.multiSelect === undefined && selection.orderedList === undefined) return value;
-    const resolveItem = choiceItemResolver(known ?? this.candidatesOf(selection, { game, player, args }), player, game);
-    return Array.isArray(value) ? value.map(resolveItem) : resolveItem(value);
+    const perItem = Array.isArray(value) && (selection.multiSelect !== undefined || selection.orderedList !== undefined);
+    return perItem ? value.map(resolveItem) : resolveItem(value);
   }
 
   /**

@@ -133,7 +133,7 @@ export function seatIdOf(element: GameElement, seat: number): number {
  * real id the seat may know stays as it is; any other id becomes one no element
  * has, so it is refused exactly as a card that is not there. A `chooseFrom`
  * value is read as a reference only in the `{ id, className }` form an element
- * choice is sent in. An action the game does not have is left for its own
+ * choice is sent in, at any depth of the value. An action the game does not have is left for its own
  * refusal.
  */
 export function picksFromSeat(
@@ -148,7 +148,9 @@ export function picksFromSeat(
   const read = seatReader(game, seat);
   for (const selection of action.selections) {
     const value = picks[selection.name];
-    if (value !== undefined) out[selection.name] = Array.isArray(value) ? value.map((one) => itemFromSeat(selection, one, read)) : itemFromSeat(selection, value, read);
+    if (value === undefined) continue;
+    if (selection.type === 'choice') out[selection.name] = choiceFromSeat(value, read);
+    else out[selection.name] = Array.isArray(value) ? value.map((one) => itemFromSeat(selection, one, read)) : itemFromSeat(selection, value, read);
   }
   return out;
 }
@@ -157,8 +159,15 @@ function itemFromSeat(selection: Selection, item: unknown, read: (id: number) =>
   const isElementPick = selection.type === 'element' || selection.type === 'elements';
   if (isElementPick && typeof item === 'number') return read(item);
   const ref = item as { id?: unknown } | null;
-  const isRef = selection.type === 'choice' ? isSerializedElement(item) : isElementPick && typeof ref?.id === 'number';
-  return isRef ? { ...ref, id: read(ref!.id as number) } : item;
+  return isElementPick && typeof ref?.id === 'number' ? { ...ref, id: read(ref.id) } : item;
+}
+
+/** A `chooseFrom` value with each `{ id, className }` in it, at any depth of arrays and plain objects, read (#1793). */
+function choiceFromSeat(value: unknown, read: (id: number) => number): unknown {
+  if (isSerializedElement(value)) return { ...(value as object), id: read((value as { id: number }).id) };
+  if (Array.isArray(value)) return value.map((one) => choiceFromSeat(one, read));
+  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
+  return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, choiceFromSeat(one, read)]));
 }
 
 /** No element has this id: what a reference the seat may not make becomes. */

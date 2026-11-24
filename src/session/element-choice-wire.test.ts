@@ -3,6 +3,7 @@
  * `{ id, className }` (#1789): what the seat sends back is then a reference the
  * engine resolves and the state codec encodes, so a refused pick answers with
  * the game's own message, and an element's contents never ride along with it.
+ * An element inside an object or array choice goes the same way (#1793).
  */
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Space, Card, Piece, Action, loop, eachPlayer, actionStep, type GameOptions } from '../engine/index.js';
@@ -33,8 +34,27 @@ class StoneGame extends Game<StoneGame, Player> {
       Action.create<StoneGame>('peek')
         .chooseFrom<'hand', Space>('hand', { choices: (ctx) => ctx.game.all(Space) })
         .execute(() => ({ success: true })),
+      Action.create<StoneGame>('zone')
+        .chooseFrom<'spot', { zone: Space; label: string }>('spot', {
+          choices: (ctx) => ctx.game.all(Space).map((zone) => ({ zone, label: zone.name! })),
+          validate: (spot) => (spot.zone instanceof Space && spot.zone.name === 'hand-1') || 'That zone is not yours.',
+        })
+        .execute(() => ({ success: true })),
+      Action.create<StoneGame>('mark')
+        .chooseFrom<'target', { card: Card }>('target', {
+          choices: (ctx) => ctx.game.all(Card).map((card) => ({ card })),
+          boardRefs: (target) => ({ refs: [{ ref: { name: target.card.name }, role: 'highlight' }] }),
+          validate: (target) => target.card instanceof Card || 'Pick a card.',
+        })
+        .execute(() => ({ success: true })),
+      Action.create<StoneGame>('pair')
+        .chooseFrom<'both', Stone[]>('both', {
+          choices: (ctx) => [ctx.game.all(Stone)],
+          validate: (both) => both.every((stone) => stone instanceof Stone) || 'Pick the stones.',
+        })
+        .execute(() => ({ success: true })),
     );
-    this.setFlow({ root: loop({ maxIterations: 3, do: eachPlayer({ do: actionStep({ actions: ['place', 'peek'] }) }) }) });
+    this.setFlow({ root: loop({ maxIterations: 3, do: eachPlayer({ do: actionStep({ actions: ['place', 'peek', 'zone', 'mark', 'pair'] }) }) }) });
   }
 }
 
@@ -81,5 +101,56 @@ describe('a chooseFrom of game elements on the wire (#1789)', () => {
     ]);
     expect(choices.map((c) => c.display)).toEqual(['hand-1', 'hand-2']);
     expect(JSON.stringify(choices)).not.toContain('AS');
+  });
+});
+
+describe('a chooseFrom choice holding game elements on the wire (#1793)', () => {
+  async function submit(start: { snapshot: Parameters<typeof boundaryKeyOf>[0] }, actionName: string, selectionName: string, value: unknown) {
+    return executeOp(definition, options, start.snapshot, null, {
+      type: 'action', actionName, player: 1, args: { [selectionName]: value }, boundaryKey: boundaryKeyOf(start.snapshot),
+    });
+  }
+
+  it('offers an element inside an object by reference, never carrying what is inside it', async () => {
+    const { choices } = await offered('zone', 'spot');
+
+    expect(choices.map((c) => c.value)).toEqual([
+      { zone: { id: expect.any(Number), className: 'Space' }, label: 'hand-1' },
+      { zone: { id: expect.any(Number), className: 'Space' }, label: 'hand-2' },
+    ]);
+    expect(choices.map((c) => c.display)).toEqual(['hand-1', 'hand-2']);
+    expect(JSON.stringify(choices)).not.toContain('AS');
+  });
+
+  it('takes an offered object back as the element it holds', async () => {
+    const { start, choices } = await offered('zone', 'spot');
+
+    succeeded(await submit(start, 'zone', 'spot', choices[0]!.value));
+  });
+
+  it("answers a refused object holding a player's element with the pick's own message", async () => {
+    const { start, choices } = await offered('zone', 'spot');
+
+    expect(refused(await submit(start, 'zone', 'spot', choices[1]!.value)).error).toContain('That zone is not yours.');
+  });
+
+  it('names a card the seat cannot see, inside an object, by its placeholder alone', async () => {
+    const { start, choices } = await offered('mark', 'target');
+
+    expect(choices).toHaveLength(1);
+    expect(JSON.stringify(choices)).not.toContain('AS');
+    const { card } = choices[0]!.value as { card: { id: number } };
+    expect(card.id).toBeLessThan(0);
+    succeeded(await submit(start, 'mark', 'target', choices[0]!.value));
+  });
+
+  it('offers a single choice that is a list of elements by reference, and takes it back', async () => {
+    const { start, choices } = await offered('pair', 'both');
+
+    expect(choices.map((c) => c.value)).toEqual([[
+      { id: expect.any(Number), className: 'Stone' },
+      { id: expect.any(Number), className: 'Stone' },
+    ]]);
+    succeeded(await submit(start, 'pair', 'both', choices[0]!.value));
   });
 });
