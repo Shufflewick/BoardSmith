@@ -319,6 +319,16 @@ describe("readOnlyProjection through a class's own override of a finder (#1791)"
     expect(readOnlyProjection(board().hexes).first(Token)?.name).toBe("on-hex");
   });
 
+  it("Grid.first finds a cell by its coordinates through a projection after the grid's cells change", () => {
+    const { grid } = board();
+    const projection = readOnlyProjection(grid);
+    expect(projection.first(Square, { row: 0, col: 1 })?.name).toBe("b");
+
+    grid.first(Square, "b")!.remove();
+
+    expect(projection.first(Square, { row: 0, col: 1 })).toBeUndefined();
+  });
+
   it("a game class's own first finds a piece through a read-only projection", () => {
     expect(readOnlyProjection(board().hall).first(Token)?.name).toBe("in-hall");
   });
