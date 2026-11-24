@@ -1,7 +1,7 @@
 {
-  "revision": 510,
+  "revision": 511,
   "surfaceHash": "65379812100a37e1",
-  "payloadHash": "1dd7fac7bfd0bbcf",
+  "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
   "history": [
     {
@@ -4023,6 +4023,14 @@
       "payloadHash": "1dd7fac7bfd0bbcf",
       "formatHash": "e7644203601ae348",
       "summary": "Undo restores the state before a pick-by-pick action's first pick, so what its onSelect callbacks changed is taken back too; the snapshot's checkpoint window gains an optional openPicks entry (the seats with picks open at its newest action count, and the state before the first of them), which becomes that count's undo point once an action is recorded (#1796)."
+    },
+    {
+      "revision": 511,
+      "date": "2026-11-24",
+      "surfaceHash": "65379812100a37e1",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "A chooseFrom choice that holds game elements inside an array or plain object offers each as { id, className } with the seat's id for it, labels a choice holding a card the seat cannot see neutrally, and takes the offered value back as the choice it names (#1793)."
     }
   ]
 }

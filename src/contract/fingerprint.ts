@@ -1939,6 +1939,13 @@ export async function computePayloadHash(): Promise<string> {
           })
           .execute(() => ({ success: true })),
       );
+      // A pick whose choices hold a card inside an object (#1793): each card
+      // goes as `{ id, className }` there too, a hidden one by its placeholder.
+      this.registerAction(
+        Action.create('pass')
+          .chooseFrom('gift', { choices: (ctx: any) => ctx.game.all(FixtureCard).map((card: any) => ({ card })) })
+          .execute(() => ({ success: true })),
+      );
 
       // BOTH turn shapes, because they serialize differently and the platform
       // reads both. A simultaneous step populates `flowState.awaitingPlayers`
@@ -1968,7 +1975,7 @@ export async function computePayloadHash(): Promise<string> {
           setVar('dealer', (ctx: any) => ctx.game.getPlayer(1)),
           eachPlayer({
             do: actionStep({
-              actions: ['draw', 'discard'],
+              actions: ['draw', 'discard', 'pass'],
               player: (ctx: any) => ctx.game.getPlayer(2),
               // A declared window (#300) is resolved at entry and kept on the
               // step's frame, so it lands in the fingerprinted
@@ -2138,6 +2145,7 @@ export async function computePayloadHash(): Promise<string> {
 
   // WHAT A SEAT IS SENT FOR A PICK (#1789), at the step where seat 2 is up.
   const pickChoices = new PickHandler(runner).getPickChoices('discard', 'cards', 2);
+  const heldPickChoices = new PickHandler(runner).getPickChoices('pass', 'gift', 2);
 
   // THE OUTCOME THE SNAPSHOT RECORDS (#536). A host that cannot run the game
   // reads the winners from the stored snapshot, so the field is part of what
@@ -2192,6 +2200,7 @@ export async function computePayloadHash(): Promise<string> {
       openingSeatViews,
       sequentialSeatViews,
       pickChoices,
+      heldPickChoices,
       publishedStateFields,
       flowPosition,
       sequentialViews,
