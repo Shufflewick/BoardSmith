@@ -1,5 +1,5 @@
 {
-  "revision": 518,
+  "revision": 519,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4087,6 +4087,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The smoke walk now fails a game whose layout scrolls sideways on a phone, and the auto-UI's fanned hands overlap to fit a narrow board instead of scrolling"
+    },
+    {
+      "revision": 519,
+      "date": "2026-11-24",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The auto-UI grid template's hand strip wraps its hands at the board region's width instead of scrolling sideways on a phone (#1801)"
     }
   ]
 }

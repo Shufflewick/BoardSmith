@@ -554,7 +554,10 @@ async function runGames(
     await pooled(games, concurrency, async (game) => {
       let dir: string;
       try {
-        [dir] = await Promise.all((await linkClosure(game, linksOf)).map(exported));
+        // Settled, not all: a failed export must not let the work folder be removed under one still being written (#1801).
+        const exporting = (await linkClosure(game, linksOf)).map(exported);
+        await Promise.allSettled(exporting);
+        [dir] = await Promise.all(exporting);
       } catch (error) {
         ran.set(game.slug, { ...named(game), status: 'failed', output: error instanceof Error ? error.message : String(error) });
         return;

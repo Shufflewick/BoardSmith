@@ -5,7 +5,7 @@
  * Layout hierarchy (RENDER-03, D-02):
  *   chrome row  — auto height; colllapses when no peripheral elements (decks, scores, etc.)
  *   board area  — 1fr; DOMINANT; grid/hex board renders here
- *   hand strip  — auto height (max 30vh); absent when no hand elements
+ *   hand strip  — auto height (96px to 180px), wraps its hands and scrolls down; absent when no hand elements
  *
  * C6 anti-pattern explicitly avoided: non-board elements (decks, discards) go in
  * the chrome slot — they are NEVER given equal grid area alongside the focal board.
@@ -68,7 +68,7 @@ const chromeElements = computed(() =>
       />
     </div>
 
-    <!-- Docked hand strip: auto height (max 30vh), absent when no hands exist -->
+    <!-- Docked hand strip: wraps its hands, absent when no hands exist -->
     <div v-if="handElements.length > 0" class="grid-board-template__hand">
       <ElementRenderer
         v-for="el in handElements"
@@ -90,9 +90,9 @@ const chromeElements = computed(() =>
   height: 100%;
 }
 
-/* Chrome slot: peripheral zones (decks, scores) — auto height, collapses when empty */
-.grid-board-template__chrome {
-  grid-area: chrome;
+/* Chrome slot (decks, scores) and hand strip: each a row that wraps at the region's width */
+.grid-board-template__chrome,
+.grid-board-template__hand {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -100,6 +100,11 @@ const chromeElements = computed(() =>
   /* The board region's width, so the row wraps there (issue 1608). */
   max-width: 100cqw;
   box-sizing: border-box;
+}
+
+/* Chrome slot: peripheral zones — auto height, collapses when empty */
+.grid-board-template__chrome {
+  grid-area: chrome;
 }
 
 /* Board slot: DOMINANT area — the focal grid/hex board, its cells sized from the
@@ -118,16 +123,10 @@ const chromeElements = computed(() =>
   justify-content: safe center;
 }
 
-/* Hand strip: docked at bottom — fluid clamp replaces fixed 30vh viewport unit */
+/* Hand strip: docked at bottom, its hands wrapped and scrolled down past the clamp */
 .grid-board-template__hand {
   grid-area: hand;
   max-height: clamp(96px, 22vh, 180px);
-  overflow-x: auto;
-  display: flex;
-  gap: 8px;
-  padding: 8px;
-  /* The board region's width, so the row wraps there (issue 1608). */
-  max-width: 100cqw;
-  box-sizing: border-box;
+  overflow-y: auto;
 }
 </style>
