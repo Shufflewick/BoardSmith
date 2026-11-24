@@ -1,5 +1,5 @@
 {
-  "revision": 516,
+  "revision": 517,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4071,6 +4071,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "With no selections, a world action's .needs() after .condition() is its execute round, which an offer never walks (#1798)"
+    },
+    {
+      "revision": 517,
+      "date": "2026-11-24",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "Docs: how a custom board reads the open action's .about() subjects."
     }
   ]
 }
