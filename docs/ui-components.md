@@ -2257,7 +2257,7 @@ A game that declares no subject type has no things and no selection, and its boa
 |----------|------|-------------|
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
 | `currentArgs` | `Readonly<Ref<Readonly<Record<string, unknown>>>>` | Args collected so far for the current action. Read-only; change them with `start`, `fill`, `skip` or `clear` |
-| `currentActionMeta` | `ComputedRef<EnrichedActionMetadata \| undefined>` | Metadata of the open action (prompt, help, picks), including a followUp's that is not in `availableActions`. `undefined` with no action open |
+| `currentActionMeta` | `ComputedRef<EnrichedActionMetadata \| undefined>` | Metadata of the open action (prompt, help, picks, and `about`: the things its `.about()` names, each a `PickSubject` whose `element` is the board element's id when it is one), including a followUp's that is not in `availableActions`. `undefined` with no action open |
 | `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
 | `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `currentChoices` | `ComputedRef<ChoiceWithRefs[]>` | **Reactive** choices for the current pick; updates when fetched choices arrive |

@@ -829,6 +829,29 @@ const actionContextRoomId = computed(() => {
 });
 ```
 
+### Showing what the open action is about
+
+An action declared with `.about(TYPE, (ctx) => [thing])`
+([Subject types](./actions-and-flow.md#subject-types-the-things-a-games-verbs-are-about))
+is about things it never picks, such as the sector a squad pick will attack.
+While it is open, `actionController.currentActionMeta.value?.about` lists those
+things as they were when it opened, and `element` is the board element's id for
+a thing that is one. A thing the seat cannot see is left out. A world action's
+`.about()`, which names a seat, is not listed here. Mark them with an attribute
+or class of your own:
+
+```typescript
+// computed comes from 'vue'
+const aboutIds = computed(() => new Set(
+  (actionController.currentActionMeta.value?.about ?? []).flatMap((subject) => subject.element ?? []),
+));
+const aboutAttrs = (sector: { id: number }) => (aboutIds.value.has(sector.id) ? { 'data-attack-target': '' } : {});
+```
+
+Do not mark them with `data-bs-candidate` (`candidateAttrs`): that names what the
+open pick accepts, and `boardsmith smoke` presses every board node that carries
+it.
+
 ### Showing the price of a draft (world actions)
 
 A world action can declare [`.quote()`](./persistent-worlds.md#quote-what-the-draft-will-cost-before-the-player-pays-it),

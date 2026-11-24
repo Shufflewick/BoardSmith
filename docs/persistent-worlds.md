@@ -517,6 +517,7 @@ order, with hydration in between:
 | `.needs()` before any selection | round one | nothing, or whatever an earlier `.needs()` loaded |
 | a selection's own `needs:` option | that selection's round | round one, and every earlier selection's round |
 | `.needs()` after the last selection | the execute round | everything above |
+| with no selections, `.needs()` after `.condition()` | the execute round | everything above |
 
 **Round one is a pure function of the seat.** Nothing is loaded when it is asked,
 so it can only be arithmetic on the acting seat and constants from your source.
@@ -1606,7 +1607,12 @@ the selection is what actually needs it.
 The later rounds are the honest extra cost of enumerating. In the village,
 `tend`'s selection round names the two neighbouring holdings, which the view does
 not: two reads, and two however large the village gets. The execute round is
-deliberately not walked, because an offer executes nothing.
+deliberately not walked, because an offer executes nothing. An action with no
+selections has no last selection to mark where its execute round starts, so a
+`.needs()` written after its `.condition()` is that round (#1798). Declare what
+the condition, `disabled` or a prompt function reads before `.condition()`; one
+that reads an execute-round partition is refused for reading a partition it did
+not declare.
 
 Hosts drive this the same way they drive the write path:
 `runner.declareOffers(player, supplied)` names what is still missing,
