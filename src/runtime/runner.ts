@@ -397,7 +397,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Take back `seat`'s last action in the open step that undoes per seat
    * (#1526): put the seat's own `Player` and follow-up back as they were before
-   * it, withdraw the log lines it wrote to the seat, and leave everything else
+   * it, and the board elements a `.seatUndoable()` action changed (#1787),
+   * withdraw the log lines it wrote to the seat, and leave everything else
    * as it is. Recorded as a history entry, and told to `seat` alone through
    * its restore epoch. `decideUndo` (session) is what allows it; throws when
    * the seat has nothing to take back.

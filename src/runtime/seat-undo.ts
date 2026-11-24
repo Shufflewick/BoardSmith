@@ -9,6 +9,11 @@
  * in the step is checked: an action that changed anything outside the seat's
  * own `Player`, drew a random number, or wrote a log line or animation another
  * seat receives is where that seat's undo stops. Still restore, never replay.
+ *
+ * An action declared `.seatUndoable()` may also change the shared board
+ * (#1787): its seat keeps, per element it changed, how that element stood
+ * before, and its undo puts those back too, until another seat's op changes
+ * one of them or its action picks one.
  */
 import type { Game } from '../engine/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
@@ -18,8 +23,10 @@ import type { SeatUndoEntry, SeatUndoFence, SeatUndoStack, SeatUndoState } from 
 
 /** The game split into each seat's own `Player` and everything else, as JSON text, for comparing. */
 interface SeatParts {
+  root: ReturnType<Game['toJSON']>;
   players: Map<number, string>;
-  rest: string;
+  /** Everything outside every `Player`, one record per element: see {@link boardRecords}. */
+  board: Map<string, string>;
   random: string;
   animationSeats: Record<string, number>;
   messageCount: number;
@@ -29,21 +36,77 @@ function seatParts(game: Game): SeatParts {
   const root = game.toJSON();
   const seatById = new Map(game.players.map((player) => [player.id, player.seat]));
   const players = new Map<number, string>();
-  const others = [];
   for (const child of root.children ?? []) {
     const seat = seatById.get(child.id);
-    if (seat === undefined) others.push(child);
-    else players.set(seat, JSON.stringify(child));
+    if (seat !== undefined) players.set(seat, JSON.stringify(child));
   }
-  // The animation buffer is cleared as every action starts, and its counters are checked per seat below.
-  const { animationEvents: _events, animationEventSeq: _seq, animationSeqBySeat, ...shared } = root;
   return {
+    root,
     players,
-    rest: JSON.stringify({ ...shared, children: others }),
+    board: boardRecords(root, new Set(seatById.keys())),
     random: game.getRandomState(),
-    animationSeats: animationSeqBySeat ?? {},
+    animationSeats: root.animationSeqBySeat ?? {},
     messageCount: game.messageCount,
   };
+}
+
+type ElementJSON = NonNullable<ReturnType<Game['toJSON']>['children']>[number];
+
+/** Key of the root's own record, and of the pile's, among the element ids. */
+const ROOT = 'root';
+const PILE = 'pile';
+
+/**
+ * Every element outside every `Player` as one record, keyed by id: its JSON
+ * with its container's key and its children's ids in place of the children,
+ * so a move changes the moved element and both containers, and no other
+ * record. The root's record names every child, the players too.
+ */
+function boardRecords(root: ReturnType<Game['toJSON']>, playerIds: ReadonlySet<number>): Map<string, string> {
+  const records = new Map<string, string>();
+  const add = (key: string, record: object, children: readonly ElementJSON[] | undefined) => {
+    records.set(key, JSON.stringify({ ...record, ...(children && { children: children.map((child) => child.id) }) }));
+    for (const { children: grandchildren, ...child } of children ?? []) {
+      if (!playerIds.has(child.id)) add(String(child.id), { ...child, parent: key }, grandchildren);
+    }
+  };
+  // The animation buffer is cleared as every action starts, and its counters are checked per seat.
+  const { children, pile, animationEvents: _events, animationEventSeq: _seq, animationSeqBySeat: _bySeat, ...own } = root;
+  add(ROOT, own, children);
+  if (pile) add(PILE, {}, pile);
+  return records;
+}
+
+/** How each board record `after` changed stood in `before`, `null` for one that did not exist. */
+function boardChanges(before: Map<string, string>, after: Map<string, string>): Record<string, string | null> {
+  const changed: Record<string, string | null> = {};
+  for (const [key, record] of before) if (after.get(key) !== record) changed[key] = record;
+  for (const key of after.keys()) if (!before.has(key)) changed[key] = null;
+  return changed;
+}
+
+/** The records of the elements an action's recorded args name, found in the tree the action began from. */
+function elementsNamed(value: unknown, root: ReturnType<Game['toJSON']>, into: Set<string>): void {
+  if (typeof value !== 'object' || value === null) return;
+  if ('__elementId' in value) into.add(String(value.__elementId));
+  else if ('__elementRef' in value && typeof value.__elementRef === 'string') {
+    const key = recordAtBranch(root, value.__elementRef);
+    if (key) into.add(key);
+  } else for (const item of Object.values(value)) elementsNamed(item, root, into);
+}
+
+/** The record key of the element at `branch` (`GameElement.branch()`) in `root`. */
+function recordAtBranch(root: ReturnType<Game['toJSON']>, branch: string): string | undefined {
+  if (branch === '') return ROOT;
+  const [head, ...rest] = branch.split('/');
+  const fromPile = head === PILE;
+  let siblings = fromPile ? root.pile : root.children;
+  let node: ElementJSON | undefined;
+  for (const index of fromPile ? rest : [head, ...rest]) {
+    node = siblings?.[Number(index)];
+    siblings = node?.children;
+  }
+  return node && String(node.id);
 }
 
 /** The refusal a seat reads once `name` ended its undo's reach for `fence`. */
@@ -100,13 +163,19 @@ export function watchSeatOp(host: SeatUndoHost, seat: number, cancel = false): (
     const state = openState(host, stepStart);
     if (!state) return;
     const after = seatParts(host.game);
+    const recorded = host.actionCount > countBefore ? host.actionHistory.at(-1) : undefined;
+    const board = boardChanges(before.board, after.board);
+    const touched = new Set(Object.keys(board));
+    if (recorded && 'args' in recorded) elementsNamed(recorded.args, before.root, touched);
+    fenceBoardDependents(state, touched, seat);
     const othersChanged = fenceOtherSeats(state, before, after, seat);
     const lines = linesFor(host.game, before.messageCount, seat);
     const stack = (state.seats[seat] ??= { entries: [] });
-    const fence = othersChanged ? 'outside' : fenceOf(before, after, seat, lines);
+    const declared = recorded !== undefined && 'name' in recorded && host.game.getAction(recorded.name)?.seatUndoable === true;
+    const boardChanged = Object.keys(board).length > 0;
+    const fence = othersChanged ? 'outside' : fenceOf(before, after, seat, lines, boardChanged && !declared);
     const taken = takenSoFar(stack.opening ?? { player: before.players.get(seat)!, followUp, lines: [] }, lines, fence);
-    const recorded = host.actionCount > countBefore ? host.actionHistory.at(-1) : undefined;
-    if (recorded) settleAction(stack, recorded, taken, host.checkpointPolicy.max);
+    if (recorded) settleAction(stack, recorded, { ...taken, ...(boardChanged && { board }) }, host.checkpointPolicy.max);
     else settlePick(stack, taken, after.players.get(seat) !== before.players.get(seat));
     if (cancel && stack.opening) settleCancel(stack, after.players.get(seat)!);
   };
@@ -125,6 +194,22 @@ function openState(host: SeatUndoHost, stepStart: number): SeatUndoState | undef
 /** How the seat stood before the action now being taken, with what this op added to it. */
 function takenSoFar(opening: Opening, lines: number[] | undefined, fence: SeatUndoFence | undefined): Opening {
   return { ...opening, lines: [...opening.lines, ...(lines ?? [])], fence: opening.fence ?? fence };
+}
+
+/**
+ * Cut every other seat's undo back past its newest action whose board changes
+ * `touched` (the elements `seat`'s op changed or picked) reaches: undoing that
+ * one would take back what this op relied on or changed.
+ */
+function fenceBoardDependents(state: SeatUndoState, touched: ReadonlySet<string>, seat: number): void {
+  if (touched.size === 0) return;
+  for (const [other, stack] of Object.entries(state.seats)) {
+    if (Number(other) === seat) continue;
+    const reached = stack.entries.map((entry) => Object.keys(entry.board ?? {}).some((key) => touched.has(key))).lastIndexOf(true);
+    if (reached < 0) continue;
+    stack.entries = stack.entries.slice(reached + 1);
+    stack.fence = "Cannot undo: another seat's action since changed or used part of the board your earlier action changed, so it cannot be taken back on its own.";
+  }
 }
 
 /** End the undo of every seat but `seat` whose own `Player` the op changed; says whether there was one. */
@@ -167,14 +252,14 @@ function settleCancel(stack: SeatUndoStack, player: string): void {
 }
 
 /** An action the seat took: one more its undo can take back, or where its undo now stops. */
-function settleAction(stack: SeatUndoStack, recorded: HistoryEntry, taken: Opening, max: number): void {
+function settleAction(stack: SeatUndoStack, recorded: HistoryEntry, taken: Opening & Pick<SeatUndoEntry, 'board'>, max: number): void {
   delete stack.opening;
   if (recorded.undoable === false || taken.fence) {
     stack.entries = [];
     stack.fence = taken.fence ? fenceMessage('name' in recorded ? recorded.name : 'that action', taken.fence) : notUndoableMessage(recorded);
     return;
   }
-  stack.entries.push({ player: taken.player, followUp: taken.followUp, lines: taken.lines });
+  stack.entries.push({ player: taken.player, followUp: taken.followUp, lines: taken.lines, ...(taken.board && { board: taken.board }) });
   if (stack.entries.length <= max) return;
   stack.entries.shift();
   stack.fence = `Cannot undo further back: this game keeps at most ${max} undo steps (checkpoints: { max: ${max} }).`;
@@ -192,8 +277,8 @@ function linesFor(game: Game, from: number, seat: number): number[] | undefined 
 }
 
 /** Why the op cannot be taken back on its own, if it cannot. */
-function fenceOf(before: SeatParts, after: SeatParts, seat: number, lines: number[] | undefined): SeatUndoFence | undefined {
-  if (after.rest !== before.rest) return 'outside';
+function fenceOf(before: SeatParts, after: SeatParts, seat: number, lines: number[] | undefined, undeclaredBoard: boolean): SeatUndoFence | undefined {
+  if (undeclaredBoard) return 'outside';
   if (after.random !== before.random) return 'random';
   if (lines === undefined) return 'log';
   const recipients = new Set([...Object.keys(before.animationSeats), ...Object.keys(after.animationSeats)]);
@@ -204,11 +289,28 @@ function fenceOf(before: SeatParts, after: SeatParts, seat: number, lines: numbe
 }
 
 /**
- * The game's tree as `toJSON()` writes it, with `seat`'s `Player` put back as
- * `entry` saved it: the state an undo of that seat's last action restores.
+ * The game's tree as `toJSON()` writes it, with `seat`'s `Player`, and each
+ * board element its action changed, put back as `entry` saved them: the state
+ * an undo of that seat's last action restores.
  */
 export function treeWithSeatRestored(game: Game, seat: number, entry: SeatUndoEntry): ReturnType<Game['toJSON']> {
   const root = game.toJSON();
   const id = game.getPlayer(seat)!.id;
-  return { ...root, children: root.children!.map((child) => (child.id === id ? JSON.parse(entry.player) : child)) };
+  const children = root.children!.map((child) => (child.id === id ? JSON.parse(entry.player) as ElementJSON : child));
+  if (!entry.board) return { ...root, children };
+
+  const playerIds = new Set(game.players.map((player) => player.id));
+  const players = new Map(children.filter((child) => playerIds.has(child.id)).map((child) => [child.id, child]));
+  const records = boardRecords(root, playerIds);
+  for (const [key, record] of Object.entries(entry.board)) {
+    if (record === null) records.delete(key);
+    else records.set(key, record);
+  }
+  const build = (key: string): ElementJSON => {
+    const { children: ids, parent: _parent, ...own } = JSON.parse(records.get(key)!) as Omit<ElementJSON, 'children'> & { children?: number[]; parent?: string };
+    return { ...own, ...(ids && { children: ids.map((child) => players.get(child) ?? build(String(child))) }) };
+  };
+  const { pile: _pile, ...kept } = root;
+  const pile = records.has(PILE) ? build(PILE).children : undefined;
+  return { ...kept, ...build(ROOT), ...(pile && { pile }) };
 }

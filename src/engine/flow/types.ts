@@ -324,6 +324,11 @@ export interface SimultaneousActionStepConfig<G extends Game = Game> extends Bas
    * that seat alone. Any other action, and a `.notUndoable()` one, is where
    * that seat's undo stops. The other seats' undo is never affected, and no
    * seat is sent anything when another seat acts in secret or undoes.
+   *
+   * An action declared `.seatUndoable()` may also change the shared board: its
+   * undo puts back the board elements it changed, until another seat's action
+   * changes or picks one of them (#1787): the one way another seat's action
+   * ends a seat's undo.
    */
   seatUndo?: boolean;
 }

@@ -251,6 +251,13 @@ export interface SeatUndoEntry {
   followUp?: unknown;
   /** The absolute log positions of the lines the action wrote to the seat alone. */
   lines: number[];
+  /**
+   * How each board element a `.seatUndoable()` action changed stood before it
+   * (#1787), keyed by element id (`root` for the game's own record, `pile`
+   * for the removed elements' list): its JSON with its children's ids in place
+   * of its children, or `null` for one the action created.
+   */
+  board?: Record<string, string | null>;
 }
 
 /** One seat's undo in a step that undoes per seat (#1526). */

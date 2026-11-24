@@ -2502,6 +2502,26 @@ names the action and why. So keep a round's choices on the `Player`, with
 `messageTo` and `animateTo` for what the seat is told, and apply them to the
 shared board in an `execute()` after the step.
 
+An action that has to change the shared board during the step, such as
+splitting a squad on the map, can be declared `.seatUndoable()` (#1787):
+
+```typescript
+Action.create<MyGame>('split')
+  .seatUndoable()
+  .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
+  .execute(({ merc }) => { /* move it into a new squad */ });
+```
+
+Its seat may then take it back on its own: the undo also puts back every
+element on the board the action changed (a moved element and both its
+containers, a created or removed one), and leaves the other seats' changes as
+they are. Its reach ends when another seat's action changes one of those
+elements or picks one, so a seat that moved into the squad the MERC left, or
+attacked with the MERC, keeps what it did. A random draw, or a log line or
+animation another seat receives, still ends it. The engine sees only what
+another seat's action changed or picked, not what its rules read, so declare
+it only on an action no other seat's action can depend on in any other way.
+
 A seat's undo is not a checkpoint restore, so the step keeps no checkpoint
 behind the newest one. Each seat keeps one copy of its `Player` per action it
 can still take back, which `checkpoints: { max }` caps.
