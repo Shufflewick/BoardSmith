@@ -213,29 +213,35 @@ async function installRecord(dir: string): Promise<string> {
  */
 async function installMismatch(game: CatalogueRepo): Promise<string | undefined> {
   const at = `${game.slug} at ${game.ref} (${game.commit.slice(0, 8)})`;
-  let locked: string | undefined;
-  try {
-    const lock = JSON.parse(await git(game.dir, ['show', `${game.commit}:package-lock.json`])) as { packages?: Record<string, { version?: string }> };
-    locked = lock.packages?.['node_modules/vitest']?.version;
-  } catch {
-    // No readable lockfile: refused below, as one that pins no vitest is.
-  }
+  const locked = await lockedVitest(game);
   if (locked === undefined) return `${at} pins no vitest in its package-lock.json, and the check runs the game's own vitest.`;
   const modules = join(game.dir, 'node_modules');
-  const pkgPath = join(modules, 'vitest', 'package.json');
-  const pkg = await readIfExists(pkgPath, (p) => fs.readFile(p, 'utf-8'));
-  let installed: string | undefined;
-  try {
-    installed = pkg === undefined ? undefined : (JSON.parse(pkg) as { version?: string }).version;
-  } catch {
-    return `${at}: ${pkgPath} is not valid JSON.`;
-  }
+  const installed = await installedVersion(join(modules, 'vitest', 'package.json'));
+  if (installed === 'unreadable') return `${at}: ${modules}/vitest/package.json is not valid JSON.`;
   if (installed !== locked) return `${at} pins vitest ${locked} in its package-lock.json, but ${modules} holds ${installed === undefined ? 'no vitest' : `vitest ${installed}`}.`;
   const bin = readIfExistsSync(join(modules, '.bin', 'vitest'), (p) => realpathSync(p));
-  if (bin === undefined || !bin.startsWith(`${realpathSync(join(modules, 'vitest'))}${sep}`)) {
-    return `${at}: ${modules}/.bin/vitest does not lead into ${modules}/vitest.`;
+  if (bin?.startsWith(`${realpathSync(join(modules, 'vitest'))}${sep}`)) return undefined;
+  return `${at}: ${modules}/.bin/vitest does not lead into ${modules}/vitest.`;
+}
+
+/** The vitest version `game`'s lockfile pins at its commit, or undefined when it has none or no lockfile. */
+async function lockedVitest(game: CatalogueRepo): Promise<string | undefined> {
+  try {
+    const lock = JSON.parse(await git(game.dir, ['show', `${game.commit}:package-lock.json`])) as { packages?: Record<string, { version?: string }> };
+    return lock.packages?.['node_modules/vitest']?.version;
+  } catch {
+    return undefined;
   }
-  return undefined;
+}
+
+/** The version the package.json at `path` declares, undefined when there is none, or `unreadable` when it is not JSON. */
+async function installedVersion(path: string): Promise<string | undefined> {
+  const text = await readIfExists(path, (p) => fs.readFile(p, 'utf-8'));
+  try {
+    return text === undefined ? undefined : (JSON.parse(text) as { version?: string }).version;
+  } catch {
+    return 'unreadable';
+  }
 }
 
 /** Refuses the run when any of `games` has an install that does not match its commit's lockfile. */
