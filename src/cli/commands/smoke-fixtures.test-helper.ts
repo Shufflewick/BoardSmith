@@ -2683,10 +2683,21 @@ function choose() {
  * type Pastures, so the panel lists both under each pasture (#1640) and never as a start button. A
  * walk reaches them only by selecting a pasture. `harvest` is greyed until three actions have been
  * taken, by when a walk has selected both pastures, so it is taken only by selecting one again.
- * `bare` leaves out `draw`, so the panel offers nothing but the pastures.
+ * `bare` leaves out `draw`, so the panel offers nothing but the pastures. `town` puts `tend` and
+ * `fence`, which picks a pasture too, in a "Town" group drawn under each pasture, and adds `chat`
+ * and `gossip`, which pick none, in the top-level "Town" group of the same path, greyed until three
+ * actions have been taken (#1794). Each group holds two actions, so the panel draws it as a group.
  */
-export function pastureGame({ bare }: { bare: boolean }): Record<string, string> {
-  const actions = bare ? ['tend', 'harvest'] : ['draw', 'tend', 'harvest'];
+export function pastureGame({ bare, town = false }: { bare: boolean; town?: boolean }): Record<string, string> {
+  const actions = [...(bare ? [] : ['draw']), ...(town ? ['chat', 'gossip', 'fence'] : []), 'tend', 'harvest'];
+  const inTown = town ? ".group('Town')" : '';
+  const townActions = town ? `
+    Action.create('chat').prompt('Chat').group('Town').condition(threeTaken).execute((_args, ctx) => draw(ctx.player)),
+    Action.create('gossip').prompt('Gossip').group('Town').condition(threeTaken).execute((_args, ctx) => draw(ctx.player)),
+    Action.create('fence')
+      .prompt('Fence').group('Town')
+      .chooseFrom('pasture', { prompt: 'Which pasture?', choices: ['north', 'south'], subject: PASTURES })
+      .execute((_args, ctx) => draw(ctx.player)),` : '';
   return {
     ...aceGame(),
     'src/rules/actions.ts': `import { Action, subjectType, type ActionDefinition } from 'boardsmith';
@@ -2701,16 +2712,17 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
     game.deck.first(Card)?.putInto((player as DevGamePlayer).hand);
     return { success: true };
   };
+  const threeTaken = { 'three actions taken': () => game.deck.count(Card) <= 52 - 10 - 3 };
   return [
-    Action.create('draw').prompt('Draw a card').execute((_args, ctx) => draw(ctx.player)),
+    Action.create('draw').prompt('Draw a card').execute((_args, ctx) => draw(ctx.player)),${townActions}
     Action.create('tend')
-      .prompt('Tend')
+      .prompt('Tend')${inTown}
       .chooseFrom('pasture', { prompt: 'Which pasture?', choices: ['north', 'south'], subject: PASTURES })
       .execute((_args, ctx) => draw(ctx.player)),
     Action.create('harvest')
       .prompt('Harvest')
       .chooseFrom('pasture', { prompt: 'Which pasture?', choices: ['north', 'south'], subject: PASTURES })
-      .condition({ 'three actions taken': () => game.deck.count(Card) <= 52 - 10 - 3 })
+      .condition(threeTaken)
       .execute(() => ({ success: true })),
   ];
 }

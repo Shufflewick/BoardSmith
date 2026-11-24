@@ -27,4 +27,11 @@ describe('boardsmith smoke', () => {
     expect(outcome.summary).toContain('a seated player took "harvest", "tend"');
     expect(steps.filter((line) => line.includes('waiting for a turn')), steps.join('\n')).toEqual([]);
   });
+
+  it('#1794: tells a group under a selected thing from the top-level group of the same path, and takes what only the top-level one holds', async () => {
+    const { outcome, steps } = await smokeOf(false, pastureGame({ bare: false, town: true }));
+
+    expect(outcome.passed, `${outcome.summary}\n${steps.join('\n')}`).toBe(true);
+    expect(outcome.summary).toContain('a seated player took "chat", "draw", "fence", "gossip", "harvest", "tend"');
+  });
 });

@@ -763,7 +763,12 @@ async function settle(frame: Frame): Promise<void> {
   await framesPass(frame);
 }
 
-/** A panel button that opens a level of its menu: a group, by path, since two may share a label (#1639), or a thing, by mark. */
+/**
+ * A panel button that opens a level of its menu: a group, by path, since two may share a label
+ * (#1639), and by the menu it is drawn in, since a selected thing's menu may hold a group of the same
+ * path as the top level's (#1794), or a thing, by mark. `press` is both the button's selector and the
+ * key the walk remembers it by (`SeatPlay.opened`).
+ */
 interface Way {
   readonly press: string;
   readonly what: string;
@@ -801,6 +806,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
       pending: document.querySelector('[data-testid="bs-actions-pending"]') !== null,
       groups: [...document.querySelectorAll<HTMLElement>('[data-bs-group-path]')].map((g) => g.dataset.bsGroupPath ?? ''),
       things: [...document.querySelectorAll<HTMLElement>('[data-bs-thing]')].map((t) => t.dataset.bsThing ?? ''),
+      thingLevel: document.querySelector<HTMLElement>('[data-bs-thing-level]')?.dataset.bsThingLevel,
       inGroup: document.querySelector('[data-bs-menu-back]') !== null,
       open: document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction ?? null,
     };
@@ -811,10 +817,17 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   // An action in flight greys every button for itself, which is no reason of the action's own.
   if (!offers.submitting) recordGreyed(walk, offers.greyed);
   const ways = [
-    ...offers.groups.map((path) => ({ press: `[data-bs-group-path=${JSON.stringify(path)}]`, what: `group "${path}"` })),
+    ...offers.groups.map((path) => groupWay(path, offers.thingLevel)),
     ...offers.things.map((mark) => ({ press: `[data-bs-thing=${JSON.stringify(mark)}]`, what: `thing "${mark}"` })),
   ];
   return { enabled: offers.enabled, greyed: offers.submitting ? [] : offers.greyed.map(([name]) => name), ways, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
+}
+
+/** The way into the group at `path` of the menu of the thing marked `thing`, or of the top-level menu when there is none. */
+function groupWay(path: string, thing: string | undefined): Way {
+  const group = `[data-bs-group-path=${JSON.stringify(path)}]`;
+  if (thing === undefined) return { press: `[data-bs-menu-level]:not(:has([data-bs-thing-level])) ${group}`, what: `group "${path}"` };
+  return { press: `[data-bs-menu-level]:has([data-bs-thing-level=${JSON.stringify(thing)}]) ${group}`, what: `group "${path}" of thing "${thing}"` };
 }
 
 /** How many times the walk settles a panel that was unsettled again by the time it was read. */
