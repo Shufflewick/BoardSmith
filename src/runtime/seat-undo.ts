@@ -201,15 +201,18 @@ export function watchSeatOp(host: SeatUndoHost, seat: number, op: SeatOp): (() =
     const othersChanged = fenceOtherSeats(state, before, after, seat);
     const lines = linesFor(host.game, before.messageCount, seat);
     const stack = (state.seats[seat] ??= { entries: [] });
-    const declared = op.action !== undefined && host.game.getAction(op.action)?.seatUndoable === true;
-    const undeclaredBoard = Object.keys(board).length > 0 && !declared;
-    const fence = othersChanged ? 'outside' : fenceOf(before, after, seat, lines, undeclaredBoard);
+    const fence = othersChanged ? 'outside' : fenceOf(before, after, seat, lines, undeclaredBoardChange(host.game, op, board));
     const taken = takenSoFar(stack.opening ?? { player: before.players.get(seat)!, followUp, lines: [] }, lines, fence, board);
     const recorded = host.actionCount > countBefore ? host.actionHistory.at(-1) : undefined;
     if (recorded) settleAction(stack, recorded, taken, host.checkpointPolicy.max);
     else settlePick(stack, taken, after.players.get(seat) !== before.players.get(seat), fence);
     if (op.cancel && stack.opening) settleCancel(stack, after.players.get(seat)!, after.board);
   };
+}
+
+/** Whether the op changed the board for an action not declared `.seatUndoable()`. */
+function undeclaredBoardChange(game: Game, op: SeatOp, board: Record<string, string | null>): boolean {
+  return Object.keys(board).length > 0 && (op.action === undefined || game.getAction(op.action)?.seatUndoable !== true);
 }
 
 /** The per-seat undo of the step that opened at `stepStart`, or none (dropping it) once that step is over. */
