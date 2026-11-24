@@ -2749,3 +2749,39 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
     'tests/browser/smoke.spec.ts': smokeSpec(actions, undefined, { seed: ACE_SEEDS.WITHOUT, steps: 30 }),
   };
 }
+
+/**
+ * A BOARD WITH A LOG (#1797), as Survival of the Fittest's is: a board as wide as the shell's board
+ * region (`100cqw`), with a table of messages in a box that scrolls sideways (`overflow-x: auto`) when
+ * the table is wider than the box. A `tooWide` table has a fixed `min-width` wider than a phone held
+ * upright, so on one the log scrolls sideways; one that `fits` has none; one that `pans` is as wide
+ * as `tooWide`, in a box marked as meant to scroll sideways (`data-bs-scrolls="x"`). A `map` board
+ * has no width of its own and holds a map wider than a phone, marked as meant to pan, so the shell's
+ * board region pans it.
+ */
+export function boardWithALog(table: 'tooWide' | 'fits' | 'pans' | 'map'): Record<string, string> {
+  const pans = table === 'pans' ? ' data-bs-scrolls="x"' : '';
+  const width = table === 'tooWide' || table === 'pans' ? ' min-width: 520px;' : '';
+  const board = table === 'map' ? '' : ' width: 100cqw;';
+  const map = table === 'map' ? '\n    <div class="map" data-bs-scrolls="x">The whole valley</div>' : '';
+  return {
+    'src/ui/components/GameTable.vue': `<template>
+  <div class="board">${map}
+    <div class="log" data-testid="game-log"${pans}>
+      <table>
+        <tr><td>Round 1</td><td>The first player drew a card.</td></tr>
+      </table>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board {${board} }
+.map { width: 900px; height: 40px; }
+.log { overflow-x: auto; }
+table {${width} }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}

@@ -38,7 +38,7 @@
  *
  * @module
  */
-import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
+import { test, type Browser, type BrowserContext, type CDPSession, type Frame, type Locator, type Page } from '@playwright/test';
 import {
   actWithinPageTime,
   anyWithinPageTime,
@@ -51,6 +51,7 @@ import {
   TRY_MS,
   withinPageTime,
 } from './browser-smoke-clock.js';
+import { PHONE_VIEWPORTS, sidewaysKey, sidewaysProblem, sidewaysScrolls } from './browser-smoke-layout.js';
 import { chooseFromMenu, reopening, type DevHostMenu, type PressWithin } from './browser-smoke-menu.js';
 import {
   clickArrived,
@@ -295,6 +296,7 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     fieldsMet: new Map(),
     greyed: new Map(),
     seats: [],
+    sideways: new Set(),
   };
 }
 
@@ -2324,6 +2326,7 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
  */
 async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   await settle(frame);
+  await checkOnPhones(frame, walk, memory);
   acting.now = play.seat;
   await drainThePage(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
@@ -2338,6 +2341,47 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
+}
+
+/** The DevTools session each page's touch is switched on and off through (`setTouch`), opened the first time it is needed. */
+const touchSessions = new WeakMap<Page, Promise<CDPSession>>();
+
+/** Switches touch on or off in `page`, as a phone has it: `(pointer: coarse)` and `(hover: none)` match while it is on. */
+async function setTouch(page: Page, enabled: boolean): Promise<void> {
+  let session = touchSessions.get(page);
+  if (session === undefined) {
+    session = page.context().newCDPSession(page);
+    touchSessions.set(page, session);
+  }
+  await (await session).send('Emulation.setTouchEmulationEnabled', { enabled, maxTouchPoints: enabled ? 5 : undefined });
+}
+
+/**
+ * Lays the game out on each phone of {@link PHONE_VIEWPORTS}, with touch, and reports each box that
+ * scrolls sideways there, once (#1797), then lays it out again as the walk found it. A step's board
+ * state is measured before the walk reads it, so what the walk then presses is laid out as before.
+ */
+async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+  const page = frame.page();
+  const before = page.viewportSize();
+  if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
+  await inPageTime(page, 'switching on touch', () => setTouch(page, true));
+  try {
+    for (const phone of PHONE_VIEWPORTS) {
+      await inPageTime(page, `laying the game out at ${phone.width}x${phone.height}`, () => page.setViewportSize({ width: phone.width, height: phone.height }));
+      await framesPass(frame);
+      for (const scroll of await inPageTime(page, 'reading what scrolls sideways', () => frame.evaluate(sidewaysScrolls))) {
+        const key = sidewaysKey(phone, scroll);
+        if (walk.sideways.has(key)) continue;
+        walk.sideways.add(key);
+        noteIn(page, walk, sidewaysProblem(phone, scroll, stepWhere(memory)));
+      }
+    }
+  } finally {
+    await inPageTime(page, 'laying the game out as before', () => page.setViewportSize(before));
+    await inPageTime(page, 'switching off touch', () => setTouch(page, false));
+  }
+  await framesPass(frame);
 }
 
 /**
