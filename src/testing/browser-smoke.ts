@@ -763,7 +763,12 @@ async function settle(frame: Frame): Promise<void> {
   await framesPass(frame);
 }
 
-/** A panel button that opens a level of its menu: a group, by path, since two may share a label (#1639), or a thing, by mark. */
+/**
+ * A panel button that opens a level of its menu: a group, by path, since two may share a label
+ * (#1639), and by the menu it is drawn in, since a selected thing's menu may hold a group of the same
+ * path as the top level's (#1794), or a thing, by mark. `press` is both the button's selector and the
+ * key the walk remembers it by (`SeatPlay.opened`).
+ */
 interface Way {
   readonly press: string;
   readonly what: string;
@@ -801,6 +806,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
       pending: document.querySelector('[data-testid="bs-actions-pending"]') !== null,
       groups: [...document.querySelectorAll<HTMLElement>('[data-bs-group-path]')].map((g) => g.dataset.bsGroupPath ?? ''),
       things: [...document.querySelectorAll<HTMLElement>('[data-bs-thing]')].map((t) => t.dataset.bsThing ?? ''),
+      thingLevel: document.querySelector<HTMLElement>('[data-bs-thing-level]')?.dataset.bsThingLevel,
       inGroup: document.querySelector('[data-bs-menu-back]') !== null,
       open: document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction ?? null,
     };
@@ -811,10 +817,23 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   // An action in flight greys every button for itself, which is no reason of the action's own.
   if (!offers.submitting) recordGreyed(walk, offers.greyed);
   const ways = [
-    ...offers.groups.map((path) => ({ press: `[data-bs-group-path=${JSON.stringify(path)}]`, what: `group "${path}"` })),
-    ...offers.things.map((mark) => ({ press: `[data-bs-thing=${JSON.stringify(mark)}]`, what: `thing "${mark}"` })),
+    ...offers.groups.map((path) => groupWay(path, offers.thingLevel)),
+    ...offers.things.map((mark) => ({ press: attributeIs('data-bs-thing', mark), what: `thing "${mark}"` })),
   ];
   return { enabled: offers.enabled, greyed: offers.submitting ? [] : offers.greyed.map(([name]) => name), ways, inGroup: offers.inGroup, open: offers.open, settled: !offers.submitting && !offers.pending };
+}
+
+/** A selector for `name` set to `value`, quoted as a CSS string: JSON's quoting reads a newline in a game's key as another string. */
+function attributeIs(name: string, value: string): string {
+  const quoted = value.replace(/["\\]/g, '\\$&').replace(/[\n\r\f]/g, (end) => `\\${end.charCodeAt(0).toString(16)} `);
+  return `[${name}="${quoted}"]`;
+}
+
+/** The way into the group at `path` of the menu of the thing marked `thing`, or of the top-level menu when there is none. */
+function groupWay(path: string, thing: string | undefined): Way {
+  const group = attributeIs('data-bs-group-path', path);
+  if (thing === undefined) return { press: `[data-bs-menu-level]:not(:has([data-bs-thing-level])) ${group}`, what: `group "${path}"` };
+  return { press: `[data-bs-menu-level]:has(${attributeIs('data-bs-thing-level', thing)}) ${group}`, what: `group "${path}" of thing "${thing}"` };
 }
 
 /** How many times the walk settles a panel that was unsettled again by the time it was read. */
@@ -1953,7 +1972,7 @@ function freshAction(names: readonly string[], walk: SmokeWalk, memory: WalkMemo
 }
 
 /** The panel's button for the action `name`. */
-const actionButton = (name: string): string => `[data-bs-action=${JSON.stringify(name)}]`;
+const actionButton = (name: string): string => attributeIs('data-bs-action', name);
 
 /** Whether `name` was put off for want of an input (#470) and no action has been taken since. */
 function puttingOff(name: string, memory: WalkMemory): boolean {

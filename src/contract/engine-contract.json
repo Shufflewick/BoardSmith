@@ -1,5 +1,5 @@
 {
-  "revision": 513,
+  "revision": 514,
   "surfaceHash": "83e166e346b3d797",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4047,6 +4047,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The verbs check counts a verb a test dispatches from data (table rows, loops, conditionals, order objects), not only one named by a literal at the call (#1792)"
+    },
+    {
+      "revision": 514,
+      "date": "2026-11-24",
+      "surfaceHash": "83e166e346b3d797",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The smoke walk tells a group under a selected thing from the top-level group of the same path (#1794)"
     }
   ]
 }
