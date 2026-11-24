@@ -192,7 +192,9 @@ restore too, of a part of the game rather than the whole: the seat's own
 `Player`, saved before each of its actions, is put back in the live tree, and
 every other seat's state stays as it is. The engine checks each action as it is
 taken and lets the seat take back only one that changed nothing outside its own
-`Player`, so the other seats' later actions are never re-run, and the undo is
+`Player`, or, for an action declared `.seatUndoable()` (#1787), the board
+elements it changed, saved one by one and put back until another seat's action
+changes or picks one. So the other seats' later actions are never re-run, and the undo is
 appended to the history (`kind: 'seatUndo'`) rather than cutting it back. Such
 a step keeps no checkpoint behind the newest one.
 

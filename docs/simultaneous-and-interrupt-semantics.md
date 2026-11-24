@@ -79,7 +79,10 @@ Concretely:
   that seat's `restoreEpoch`. A seat's undo stops at its own last action that
   changed anything outside its own `Player`, drew a random number, or wrote a
   log line or animation another seat receives, and at the host closing its part
-  at a deadline (a seat expiry). Another seat's actions never move it.
+  at a deadline (a seat expiry). Another seat's actions never move it, except
+  that the undo of a `.seatUndoable()` action, which may change the shared
+  board, ends once another seat's action changes or picks an element it
+  changed (#1787).
 
 The refusal is graceful and per-seat, matching the contract
 `resumeSimultaneousAction` already keeps for double-submits and stale clients

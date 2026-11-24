@@ -473,7 +473,8 @@ element tree, not a log of operations that produced it.
   states, not by reversing a command log. In a simultaneous step declared
   `seatUndo: true`, a seat's undo puts back only its own `Player`, as it was
   saved before the action, and leaves every other seat's state as it is: still
-  a restore, of the part of the game that seat alone owns.
+  a restore, of the part of the game that seat alone owns, and of the board
+  elements a `.seatUndoable()` action changed (#1787).
 - **What a restore cannot carry**: saved state is plain data, so anything that
   is not (a frozen object, for one) comes back without it. An element class
   re-applies such a thing in `protected override afterRestore()`, which runs on
@@ -750,7 +751,9 @@ log lines and animations to that seat alone (`messageTo`, `animateTo`). An
 undo withdraws the log lines the action wrote. Any other action, and a
 `.notUndoable()` one, is where that seat's undo stops, and the refusal names
 it. So keep a secret round's choices on the `Player` and apply them to the
-shared board in an `execute()` after the step.
+shared board in an `execute()` after the step. An action declared
+`.seatUndoable()` may also change the shared board and still be taken back,
+until another seat's action changes or picks an element it changed (#1787).
 
 Without `seatUndo`, only the seat that acted last may undo, and its undo
 replaces the whole game: seat 2's Undo control goes away once seat 1 acts after

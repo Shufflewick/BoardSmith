@@ -51,6 +51,11 @@ export interface PickStepResult {
   warnings?: WarningEntry[];
 }
 
+/** A pick as the runner's per-seat undo is told it: the action it is for, and every element its action has been handed so far. */
+function pickOp(pending: PendingActionState | undefined, value: unknown, actionName: string | undefined, initialArgs: Record<string, unknown> | undefined) {
+  return { action: actionName ?? pending?.actionName, named: [value, pending?.collectedArgs, initialArgs] };
+}
+
 /**
  * Manages pending actions for players.
  *
@@ -121,6 +126,7 @@ export class PendingActionManager<G extends Game = Game> {
     const before = pendingState && serializePendingActionState(pendingState);
     const { result, undone } = this.#runner.runPickOp(
       playerPosition,
+      pickOp(pendingState, value, actionName, initialArgs),
       () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
     );
     if (undone && before) this.#pendingActions.set(playerPosition, deserializePendingState(before));
@@ -196,7 +202,7 @@ export class PendingActionManager<G extends Game = Game> {
    * fails rolls back to the cancel, not to before it (#1253).
    */
   cancelPendingAction(playerPosition: number): void {
-    this.#runner.runCancelOp(playerPosition, () => {
+    this.#runner.runCancelOp(playerPosition, this.#pendingActions.get(playerPosition)?.actionName, () => {
       if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
     });
   }

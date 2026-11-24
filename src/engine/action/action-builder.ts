@@ -560,6 +560,22 @@ export class Action<
   }
 
   /**
+   * In a simultaneous step declared `seatUndo: true`, let the seat take this
+   * action back on its own although it changes the shared board (#1787): the
+   * undo puts back every element it changed, and leaves the other seats'
+   * changes as they are. Its undo stops once another seat's action changes an
+   * element this one changed, or picks one. Declare it only when no other
+   * seat's action can rely on this one's changes without changing or picking
+   * those elements, such as moving pieces between a seat's own squads. A random
+   * draw, or a log line or animation another seat receives, still ends the
+   * seat's undo.
+   */
+  seatUndoable(): this {
+    this.definition.seatUndoable = true;
+    return this;
+  }
+
+  /**
    * Mark this action as manual: the shell will NOT play it for the player.
    * The player takes the beat themselves — by tapping the action's button in
    * the default Action Panel, or a control the game wires up in a custom board

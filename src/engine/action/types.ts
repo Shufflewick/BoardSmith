@@ -769,6 +769,12 @@ export interface ActionDefinition {
    */
   undoable?: boolean;
   /**
+   * In a step declared `seatUndo: true`, its seat may take it back on its own
+   * although it changed the shared board, until another seat's action changes
+   * or picks an element it changed (#1787). Set via `.seatUndoable()`.
+   */
+  seatUndoable?: true;
+  /**
    * When true, a sole no-selection action is still auto-STARTED (surfaced to the
    * player) but is never auto-EXECUTED for them — the player must take the beat
    * themselves (e.g. a draw). Default false preserves the roadmap-locked

@@ -48,7 +48,7 @@ import type { RandomState } from '../utils/random.js';
 import type { MessageEntry } from '../engine/index.js';
 import { withHeldFollowUp } from '../engine/flow/engine.js';
 import type { SeatUndoStack, SeatUndoState } from '../engine/utils/snapshot.js';
-import { seatUndoStepStart, treeWithSeatRestored, watchSeatOp } from './seat-undo.js';
+import { seatUndoStepStart, treeWithSeatRestored, watchSeatOp, type SeatOp } from './seat-undo.js';
 
 /**
  * Re-exported so `boardsmith/runtime` keeps naming these policy types alongside
@@ -382,13 +382,13 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * per-seat undo like its picks are.
    * @internal The session's PendingActionManager is its only caller.
    */
-  runCancelOp(seat: number, run: () => void): void {
-    this.asSeatOp(seat, run, true);
+  runCancelOp(seat: number, actionName: string | undefined, run: () => void): void {
+    this.asSeatOp(seat, { action: actionName, cancel: true }, run);
   }
 
   /** Run one op `seat` takes, checking it for the open step's per-seat undo when there is one. */
-  private asSeatOp<R>(seat: number, run: () => R, cancel = false): R {
-    const settle = this.checkpointPolicy_.enabled ? watchSeatOp(this, seat, cancel) : undefined;
+  private asSeatOp<R>(seat: number, op: SeatOp, run: () => R): R {
+    const settle = this.checkpointPolicy_.enabled ? watchSeatOp(this, seat, op) : undefined;
     const result = run();
     settle?.();
     return result;
@@ -397,7 +397,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   /**
    * Take back `seat`'s last action in the open step that undoes per seat
    * (#1526): put the seat's own `Player` and follow-up back as they were before
-   * it, withdraw the log lines it wrote to the seat, and leave everything else
+   * it, and the board elements a `.seatUndoable()` action changed (#1787),
+   * withdraw the log lines it wrote to the seat, and leave everything else
    * as it is. Recorded as a history entry, and told to `seat` alone through
    * its restore epoch. `decideUndo` (session) is what allows it; throws when
    * the seat has nothing to take back.
@@ -815,8 +816,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * the caller then puts the seat's pending action back as it was.
    * @internal The pick-by-pick state machine's runner half: the session's PendingActionManager is its only caller (#1231).
    */
-  runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(seat: number, run: () => R): { result: R; undone: boolean } {
-    return this.asSeatOp(seat, () => this.runPickOpUnwatched(run));
+  runPickOp<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(
+    seat: number,
+    pick: SeatOp,
+    run: () => R,
+  ): { result: R; undone: boolean } {
+    return this.asSeatOp(seat, pick, () => this.runPickOpUnwatched(run));
   }
 
   private runPickOpUnwatched<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
@@ -845,7 +850,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     args: Record<string, unknown>
   ): ActionExecutionResult {
     const seat = typeof player === 'number' ? player : player.seat;
-    return this.asSeatOp(seat, () => this.performActionUnwatched(actionName, player, args));
+    return this.asSeatOp(seat, { action: actionName, named: args }, () => this.performActionUnwatched(actionName, player, args));
   }
 
   private performActionUnwatched(
@@ -1347,7 +1352,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   performIdleAction(actionName: string, seat: number, args: Record<string, unknown>): ActionExecutionResult {
     // Marked inside the watched op, so a step that undoes per seat fences it too.
-    return this.asSeatOp(seat, () => {
+    return this.asSeatOp(seat, { action: actionName, named: args }, () => {
       const recorded = this.actionCount;
       const result = this.performActionUnwatched(actionName, seat, args);
       const entry = this.actionHistory.at(-1);
@@ -1368,7 +1373,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * one fails loudly.
    */
   private expireHeldSeat(seat: number): FlowState {
-    return this.asSeatOp(seat, () => {
+    return this.asSeatOp(seat, {}, () => {
       this.ensureHeadCheckpoint();
       const state = this.game.expireHeldSeat(seat);
       this.actionHistory.push({ kind: 'seatExpiry', player: seat, undoable: false });

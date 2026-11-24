@@ -251,6 +251,13 @@ export interface SeatUndoEntry {
   followUp?: unknown;
   /** The absolute log positions of the lines the action wrote to the seat alone. */
   lines: number[];
+  /**
+   * How each board element a `.seatUndoable()` action changed stood before it
+   * (#1787), keyed by element id (`root` for the game's own record, `pile`
+   * for the removed elements' list): its JSON with its children's ids in place
+   * of its children, or `null` for one the action created.
+   */
+  board?: Record<string, string | null>;
 }
 
 /** One seat's undo in a step that undoes per seat (#1526). */
@@ -263,8 +270,12 @@ export interface SeatUndoStack {
   opening?: SeatUndoEntry & { fence?: SeatUndoFence };
 }
 
-/** Why an action cannot be taken back on its own: it changed what another seat can see. */
-export type SeatUndoFence = 'outside' | 'random' | 'log' | 'animation';
+/**
+ * Why an action cannot be taken back on its own: it changed what another seat
+ * can see, or (`board`) another seat's action since changed or picked an
+ * element its picks changed.
+ */
+export type SeatUndoFence = 'outside' | 'random' | 'log' | 'animation' | 'board';
 
 /** Every seat's undo in the open step that undoes per seat (#1526). */
 export interface SeatUndoState {
