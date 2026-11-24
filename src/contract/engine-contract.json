@@ -1,6 +1,6 @@
 {
-  "revision": 508,
-  "surfaceHash": "fcaf42d27a990262",
+  "revision": 509,
+  "surfaceHash": "65379812100a37e1",
   "payloadHash": "1dd7fac7bfd0bbcf",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4007,6 +4007,14 @@
       "payloadHash": "1dd7fac7bfd0bbcf",
       "formatHash": "e7644203601ae348",
       "summary": "actionStep takes handoffUndo: true, so while that step waits on a seat that has neither picked nor acted in it, the seat that took the last action may undo it back into the step it was taken in, within the usual notUndoable, irreversible and random-draw fences; the flow state carries handoffUndo while that window is open, and the step's frame records the waiting seat's first pick. The idle action an expireSeat op runs for a seat is now recorded as not undoable, with timedOut: true on its history entry. A game must be rebuilt on this revision to declare handoffUndo (#1788)"
+    },
+    {
+      "revision": 509,
+      "date": "2026-11-24",
+      "surfaceHash": "65379812100a37e1",
+      "payloadHash": "1dd7fac7bfd0bbcf",
+      "formatHash": "e7644203601ae348",
+      "summary": "An action declared .seatUndoable() in a seatUndo step can be taken back by its seat although it changed the shared board, until another seat's action changes or picks an element it changed; SeatUndoEntry gains an optional board field (#1787)."
     }
   ]
 }
