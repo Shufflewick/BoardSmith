@@ -32,7 +32,7 @@ export type GameStateSnapshot = SnapshotFields & (
      *  while `k` actions were recorded — refreshed on every op so trailing
      *  pending/selection mutations (e.g. `Piece.putInto` inside a completed pending
      *  action, recorded in neither command nor action history) are captured at the
-     *  right action-count boundary. Undo/rewind restore that entry directly (via
+     *  right action-count boundary, though never a pick's (`beforePicks`). Undo/rewind restore that entry directly (via
      *  `GameRunner.fromCheckpoint`) instead of replaying history — replay loses those
      *  pending mutations and mis-positions the flow.
      *
@@ -457,6 +457,13 @@ export interface ActionCheckpointWindow {
   baseIndex: number;
   /** Checkpoints for action counts `baseIndex` .. `baseIndex + entries.length - 1`. */
   entries: ActionCheckpoint[];
+  /**
+   * The state just before the first pick taken at the newest entry's action
+   * count, while that entry is still the live state: what undo restores
+   * there, since a pick's `onSelect` may have changed the game and undo drops
+   * the open action without its `onCancel` (#1796).
+   */
+  beforePicks?: ActionCheckpoint;
 }
 
 /** Why a checkpoint lookup found nothing — the two cases need different errors. */
@@ -484,7 +491,8 @@ export function checkpointAt(
   if (index < window.baseIndex) {
     return { checkpoint: null, absence: 'pruned' };
   }
-  const entry = window.entries[index - window.baseIndex];
+  const offset = index - window.baseIndex;
+  const entry = offset === window.entries.length - 1 ? window.beforePicks ?? window.entries[offset] : window.entries[offset];
   if (!entry) {
     return { checkpoint: null, absence: 'uncaptured' };
   }

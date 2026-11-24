@@ -313,6 +313,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    */
   private checkpointBaseIndex = 0;
 
+  /** The state before the first pick taken at the head's action count: see `ActionCheckpointWindow.beforePicks`. */
+  private beforePicks: ActionCheckpoint | undefined;
+
   /** This game's checkpoint retention policy. Default: back to the turn start. */
   private readonly checkpointPolicy_: Required<RunnerCheckpointPolicy>;
 
@@ -592,7 +595,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * pending/selection mutation — makes the head capture the complete
    * turn-boundary state, which undo restores authoritatively. The executor
    * calls it via `getSnapshot`, and `PendingActionManager` calls it after
-   * every pick that changes the game. Build a seat's state only after it
+   * every pick that changes the game. A pick is not part of that state: once
+   * the count moves on, the entry it leaves is the state before the first
+   * pick taken at it (`beforePicks`, #1796). Build a seat's state only after it
    * has run for the op: `canUndo` reads the window it leaves (#385).
    *
    * Then the window is trimmed oldest first: back to the turn start unless
@@ -621,7 +626,14 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       // counts the runner no longer has.
       this.checkpointBaseIndex = len;
       this.actionCheckpoints = [createActionCheckpoint(this.game)];
+      this.beforePicks = undefined;
       return;
+    }
+    // Once an action is recorded, the state before its first pick is what its count's undo restores.
+    const lastOffset = this.actionCheckpoints.length - 1;
+    if (this.beforePicks && headOffset !== lastOffset) {
+      if (headOffset > lastOffset) this.actionCheckpoints[lastOffset] = this.beforePicks;
+      this.beforePicks = undefined;
     }
     // Drop anything AHEAD of the head (redo state left by an undo), then
     // overwrite the head entry itself with the current state.
@@ -739,7 +751,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * captured because checkpointing is off — rather than assert a cause.
    */
   checkpointWindow(): ActionCheckpointWindow {
-    return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints] };
+    return { baseIndex: this.checkpointBaseIndex, entries: [...this.actionCheckpoints], ...(this.beforePicks && { beforePicks: this.beforePicks }) };
   }
 
   /** Index in `actionCheckpoints` of the checkpoint for the current action count. */
@@ -827,6 +839,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
   private runPickOpUnwatched<R extends { success: boolean; error?: string; partiallyApplied?: boolean }>(run: () => R): { result: R; undone: boolean } {
     const recorded = this.actionCount;
     this.captureCheckpoint();
+    this.beforePicks ??= this.actionCheckpoints[this.headOffset];
     const version = this.game._ctx._stateVersion;
     this.versionBeforeExecute = undefined;
     const result = run();
@@ -1460,7 +1473,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * trailing pending/selection mutations (e.g. `Piece.putInto`, recorded in
    * neither command nor action history) that ran AFTER the k-th action but
    * before the (k+1)-th, so undoing a later turn restores the true turn-start
-   * state. Entries ahead of the head are dropped (e.g. after an undo rewinds
+   * state, less any pick made since (`ActionCheckpointWindow.beforePicks`). Entries ahead of the head are dropped (e.g. after an undo rewinds
    * the history), and entries older than `checkpoints.max` are dropped from the
    * front.
    */
@@ -1643,6 +1656,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     const usable = runner.checkpointPolicy_.enabled && window !== undefined;
     runner.checkpointBaseIndex = usable ? window.baseIndex : runner.actionCount;
     runner.actionCheckpoints = usable ? [...window.entries] : [];
+    runner.beforePicks = usable ? window.beforePicks : undefined;
 
     // UNDO-02: adopt the durable execute()-barrier from the snapshot. Absent
     // (older snapshot predating this field, or no execute() has run yet):

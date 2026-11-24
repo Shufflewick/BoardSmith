@@ -231,6 +231,12 @@ then `onEach` runs for it, and `until` is tested.
   whose callbacks did not run, refused by the action's `validate` or by an
   `execute()` that returns `{ success: false }`, changed nothing, so it is
   undone there too and the player is told only the refusal.
+- **Undo takes back a pick-by-pick action whole** (#1796): it restores the
+  game as it was before the action's first pick, so what its `onSelect`
+  callbacks changed goes too, and `onCancel` does not run. In a simultaneous
+  step, an action whose first pick came before another seat's recorded action
+  keeps the changes of the picks made before that action, since undo cannot
+  take back one without the other.
 - **Bots and the simulator find repeats by making the picks** on a scratch copy
   of the game, shortest sequences first, within enumeration's budget of 10,000
   values for one action (see [agent control](./agent-control.md)). The game
