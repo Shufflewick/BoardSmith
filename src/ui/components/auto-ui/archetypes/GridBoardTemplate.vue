@@ -90,9 +90,9 @@ const chromeElements = computed(() =>
   height: 100%;
 }
 
-/* Chrome slot: peripheral zones (decks, scores) — auto height, collapses when empty */
-.grid-board-template__chrome {
-  grid-area: chrome;
+/* Chrome slot (decks, scores) and hand strip: each a row that wraps at the region's width */
+.grid-board-template__chrome,
+.grid-board-template__hand {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
@@ -100,6 +100,11 @@ const chromeElements = computed(() =>
   /* The board region's width, so the row wraps there (issue 1608). */
   max-width: 100cqw;
   box-sizing: border-box;
+}
+
+/* Chrome slot: peripheral zones — auto height, collapses when empty */
+.grid-board-template__chrome {
+  grid-area: chrome;
 }
 
 /* Board slot: DOMINANT area — the focal grid/hex board, its cells sized from the
@@ -123,12 +128,5 @@ const chromeElements = computed(() =>
   grid-area: hand;
   max-height: clamp(96px, 22vh, 180px);
   overflow-y: auto;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px;
-  /* The board region's width, so the row wraps there (issue 1608). */
-  max-width: 100cqw;
-  box-sizing: border-box;
 }
 </style>
