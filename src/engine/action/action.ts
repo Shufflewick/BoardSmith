@@ -457,9 +457,9 @@ function choiceItemResolver(
   game: Game,
 ): (item: unknown) => unknown {
   const named = nameableBy(candidates, player);
-  // A value holding elements was sent with each as `{ id, className }` (#1793).
+  // A value holding elements was sent with each as `{ id, className }`, in the seat's ids (#1793).
   const holding = candidates.flatMap((c) => {
-    const refs = isElement(c.value) ? c.value : asElementRefs(c.value, (element) => element.id);
+    const refs = isElement(c.value) ? c.value : asElementRefs(c.value, (element) => seatIdOf(element, player.seat));
     return refs === c.value ? [] : [{ refs, value: c.value }];
   });
   return (item) => {
@@ -475,18 +475,18 @@ function choiceItemResolver(
   };
 }
 
-/** The candidates a player may name by shorthand: all but those it cannot see (#715). */
+/** The candidates a player may name by shorthand: all but those that are or hold one it cannot see (#715, #1793). */
 function nameableBy<C extends { value: unknown }>(candidates: readonly C[], player: Player): C[] {
-  return candidates.filter((c) => !isElement(c.value) || c.value.isVisibleTo(player.seat));
+  return candidates.filter((c) => !hidesFrom(player.seat, c.value));
 }
 
 /**
  * The offered `chooseFrom` choice a resolved value names. A hidden candidate
- * arrives only as the element its placeholder id resolved to, so it matches
- * that element and never a name or partial object (#715).
+ * arrives only as the value its refs resolved to, so it matches that value
+ * and never a name or partial object (#715, #1793).
  */
 function offeredChoice<C extends { value: unknown }>(value: unknown, choices: readonly C[], player: Player): C | undefined {
-  return findMatchingChoice(value, isElement(value) ? choices : nameableBy(choices, player));
+  return findMatchingChoice(value, hidesFrom(player.seat, value) ? choices : nameableBy(choices, player));
 }
 
 export class ActionExecutor {

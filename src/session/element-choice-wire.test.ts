@@ -41,10 +41,15 @@ class StoneGame extends Game<StoneGame, Player> {
         })
         .execute(() => ({ success: true })),
       Action.create<StoneGame>('mark')
-        .chooseFrom<'target', { card: Card }>('target', {
-          choices: (ctx) => ctx.game.all(Card).map((card) => ({ card })),
+        .chooseFrom<'target', { card: Card; kind: string }>('target', {
+          choices: (ctx) => ctx.game.all(Card).map((card) => ({ card, kind: 'mark' })),
           boardRefs: (target) => ({ refs: [{ ref: { name: target.card.name }, role: 'highlight' }] }),
           validate: (target) => target.card instanceof Card || 'Pick a card.',
+        })
+        .execute(() => ({ success: true })),
+      Action.create<StoneGame>('slot')
+        .chooseFrom<'slot', { slot: { id: number; className: string }; cost: number }>('slot', {
+          choices: (ctx) => [{ slot: { id: ctx.game.first(Card, 'AS')!.id, className: 'Slot' }, cost: 2 }],
         })
         .execute(() => ({ success: true })),
       Action.create<StoneGame>('pair')
@@ -54,7 +59,7 @@ class StoneGame extends Game<StoneGame, Player> {
         })
         .execute(() => ({ success: true })),
     );
-    this.setFlow({ root: loop({ maxIterations: 3, do: eachPlayer({ do: actionStep({ actions: ['place', 'peek', 'zone', 'mark', 'pair'] }) }) }) });
+    this.setFlow({ root: loop({ maxIterations: 3, do: eachPlayer({ do: actionStep({ actions: ['place', 'peek', 'zone', 'mark', 'slot', 'pair'] }) }) }) });
   }
 }
 
@@ -142,6 +147,18 @@ describe('a chooseFrom choice holding game elements on the wire (#1793)', () => 
     const { card } = choices[0]!.value as { card: { id: number } };
     expect(card.id).toBeLessThan(0);
     succeeded(await submit(start, 'mark', 'target', choices[0]!.value));
+  });
+
+  it('refuses a partial object naming a choice that holds a card the seat cannot see', async () => {
+    const { start } = await offered('mark', 'target');
+
+    refused(await submit(start, 'mark', 'target', { kind: 'mark' }));
+  });
+
+  it("takes back a data choice whose nested id and className match a hidden card's id", async () => {
+    const { start, choices } = await offered('slot', 'slot');
+
+    succeeded(await submit(start, 'slot', 'slot', choices[0]!.value));
   });
 
   it('offers a single choice that is a list of elements by reference, and takes it back', async () => {

@@ -29,6 +29,7 @@ import type { ElementJSON } from './types.js';
 import type { Selection } from '../action/types.js';
 import { outermostConcealer } from './concealed-refs.js';
 import { isSerializedElement } from '../action/choice-matching.js';
+import { answersWithList } from '../action/action-builder.js';
 
 /** Whether `seat` knows `element` only by a placeholder: it is hidden from the seat by something it sits in. */
 function namedByPlaceholder(element: GameElement, seat: number): boolean {
@@ -133,8 +134,9 @@ export function seatIdOf(element: GameElement, seat: number): number {
  * real id the seat may know stays as it is; any other id becomes one no element
  * has, so it is refused exactly as a card that is not there. A `chooseFrom`
  * value is read as a reference only in the `{ id, className }` form an element
- * choice is sent in, at any depth of the value. An action the game does not have is left for its own
- * refusal.
+ * choice is sent in; one inside an array or object choice stays in the seat's
+ * ids, which its pick matches against what that seat was offered (#1793). An
+ * action the game does not have is left for its own refusal.
  */
 export function picksFromSeat(
   game: Game,
@@ -149,8 +151,10 @@ export function picksFromSeat(
   for (const selection of action.selections) {
     const value = picks[selection.name];
     if (value === undefined) continue;
-    if (selection.type === 'choice') out[selection.name] = choiceFromSeat(value, read);
-    else out[selection.name] = Array.isArray(value) ? value.map((one) => itemFromSeat(selection, one, read)) : itemFromSeat(selection, value, read);
+    // One chooseFrom choice may be an array; its pick resolves it whole (#1793).
+    out[selection.name] = Array.isArray(value) && (selection.type !== 'choice' || answersWithList(selection))
+      ? value.map((one) => itemFromSeat(selection, one, read))
+      : itemFromSeat(selection, value, read);
   }
   return out;
 }
@@ -159,15 +163,8 @@ function itemFromSeat(selection: Selection, item: unknown, read: (id: number) =>
   const isElementPick = selection.type === 'element' || selection.type === 'elements';
   if (isElementPick && typeof item === 'number') return read(item);
   const ref = item as { id?: unknown } | null;
-  return isElementPick && typeof ref?.id === 'number' ? { ...ref, id: read(ref.id) } : item;
-}
-
-/** A `chooseFrom` value with each `{ id, className }` in it, at any depth of arrays and plain objects, read (#1793). */
-function choiceFromSeat(value: unknown, read: (id: number) => number): unknown {
-  if (isSerializedElement(value)) return { ...(value as object), id: read((value as { id: number }).id) };
-  if (Array.isArray(value)) return value.map((one) => choiceFromSeat(one, read));
-  if (value === null || typeof value !== 'object' || Object.getPrototypeOf(value) !== Object.prototype) return value;
-  return Object.fromEntries(Object.entries(value).map(([key, one]) => [key, choiceFromSeat(one, read)]));
+  const isRef = selection.type === 'choice' ? isSerializedElement(item) : isElementPick && typeof ref?.id === 'number';
+  return isRef ? { ...ref, id: read(ref!.id as number) } : item;
 }
 
 /** No element has this id: what a reference the seat may not make becomes. */
