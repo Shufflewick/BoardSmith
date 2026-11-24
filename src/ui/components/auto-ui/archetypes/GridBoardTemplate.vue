@@ -122,8 +122,9 @@ const chromeElements = computed(() =>
 .grid-board-template__hand {
   grid-area: hand;
   max-height: clamp(96px, 22vh, 180px);
-  overflow-x: auto;
+  overflow-y: auto;
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   padding: 8px;
   /* The board region's width, so the row wraps there (issue 1608). */

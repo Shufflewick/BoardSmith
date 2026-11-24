@@ -8,7 +8,8 @@
  *
  * The fixture is a grid-board game with all of the built-in renderers: a 20x20
  * square grid, which cannot fit a phone at 44px a square, with pawns on it, a
- * hex board, a deck and a play area of pawns above it and a hand below it. At
+ * hex board, a deck and a play area of pawns above it and six hands below it,
+ * more than fit side by side, so the hand strip wraps them (#1801). At
  * 390x844 and 844x390, in Chromium and WebKit, every one of them is at least
  * 44px on its shorter side and the board region, not the page, scrolls. At 200%
  * the player's magnifier doubles them, and a tap still lands on the square
@@ -98,6 +99,10 @@ export class TableFixtureGame extends Game<TableFixtureGame, TableFixturePlayer>
       for (let i = 0; i < 5; i++) deck.first(Card)?.putInto(hand);
       this.board.first(Square, { row: player.seat - 1, col: 0 })!.create(Pawn, \`pawn-\${player.seat}\`, { player });
     }
+    for (let h = 0; h < 4; h++) {
+      const spare = this.create(Hand, \`spare-hand-\${h}\`);
+      for (let i = 0; i < 2; i++) deck.first(Card)?.putInto(spare);
+    }
     this.registerAction(createMoveAction());
     this.setFlow(createGameFlow());
   }
@@ -165,6 +170,11 @@ await runBrowserRegression(
         await check(`${size}: the board region scrolls sideways for the 20x20 grid, and the page does not`, () => {
           assert(seen.region.sideways > 0, `the board region does not scroll sideways (${JSON.stringify(seen.region)}), so the grid was shrunk to fit it`);
           assert(seen.page.sideways <= 0, `the page scrolls ${seen.page.sideways}px sideways`);
+        });
+        await check(`${size}: the hand strip wraps its six hands at the board region's width, and does not scroll sideways`, async () => {
+          const strip = await frame.locator('.grid-board-template__hand').evaluate((el) => ({ sideways: el.scrollWidth - el.clientWidth, hands: el.children.length }));
+          assert(strip.hands === 6, `the hand strip holds ${strip.hands} hands, not 6`);
+          assert(strip.sideways <= 0, `the hand strip scrolls ${strip.sideways}px sideways`);
         });
         if (size !== '390x844') return;
         await check(`${size}: at 200% the squares are twice the size, and a tap on one far down the board moves my pawn there`, async () => {
