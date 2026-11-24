@@ -299,7 +299,7 @@ defineSlots<{
   <!-- ── Seat Strip: compact one-line for phone compact tier (IA-06) ───────── -->
   <div v-if="seatStrip" class="players-panel seat-strip" role="group" aria-label="Players">
     <!-- All player tokens inline, each with the game's #player-strip-extra content -->
-    <div class="strip-tokens" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
+    <div class="strip-tokens" data-bs-scrolls="x" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
       <!-- Content under a token sits at one height whether its seat acts or not (#431). -->
       <span
         v-for="player in visiblePlayers"

@@ -654,7 +654,7 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-.board { position: relative; width: 420px; height: 260px; }
+.board { position: relative; width: 360px; height: 260px; }
 .scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; }
 </style>
 `,
@@ -1008,14 +1008,14 @@ const POINTER_AIMED_SHAPES = {
   plain: { opensOnRow: 2, elements: undefined, style: '' },
   clipped: { opensOnRow: 5, elements: undefined, style: `
 .board { overflow: clip; }
-.field { position: relative; top: -200px; height: 800px; }` },
+.field { position: relative; top: -180px; height: 720px; }` },
   twoRows: { opensOnRow: 5, elements: 'game.cells().filter((cell) => cell.row === 4 || cell.row === 5)', style: '' },
 };
 
 const TOP_LEFT_QUARTER = "(cell) => ((cell as Cell).row < 5 && (cell as Cell).col < 5 ? false : 'Only the top-left quarter may be claimed.')";
 
 const NO_COVER = { setup: '', aim: '', template: '', style: '' };
-const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 200px; height: 200px; background: #888; }';
+const COVER_STYLE = '\n.cover { position: absolute; left: 0; top: 0; width: 180px; height: 180px; background: #888; }';
 
 /** The cover each `accepts` lays over the top-left quarter, where the game accepts the cells: from the second accepted aim on, or from the start. */
 const POINTER_COVERS: Partial<Record<string, typeof NO_COVER>> = {
@@ -1117,9 +1117,9 @@ function hover() {
 </template>
 
 <style scoped>
-.board { position: relative; width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }${shape.style}${cover.style}${toast ? `
-.toast { position: absolute; left: 0; top: 0; width: 220px; height: 220px; background: #36c; color: #fff; }` : ''}
+.board { position: relative; width: 360px; height: 360px; }
+.field { width: 360px; height: 360px; background: #ddd; }${shape.style}${cover.style}${toast ? `
+.toast { position: absolute; left: 0; top: 0; width: 198px; height: 198px; background: #36c; color: #fff; }` : ''}
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
@@ -1342,7 +1342,7 @@ function warn() {${kind === 'toastAfterPointing' ? '\n  if (!choosing.value) ret
 </template>
 
 <style scoped>
-.board { position: relative; width: 420px; height: 420px; }
+.board { position: relative; width: 360px; height: 420px; }
 ${style}
 </style>
 `,
@@ -2747,5 +2747,41 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
 }
 `,
     'tests/browser/smoke.spec.ts': smokeSpec(actions, undefined, { seed: ACE_SEEDS.WITHOUT, steps: 30 }),
+  };
+}
+
+/**
+ * A BOARD WITH A LOG (#1797), as Survival of the Fittest's is: a board as wide as the shell's board
+ * region (`100cqw`), with a table of messages in a box that scrolls sideways (`overflow-x: auto`) when
+ * the table is wider than the box. A `tooWide` table has a fixed `min-width` wider than a phone held
+ * upright, so on one the log scrolls sideways; one that `fits` has none; one that `pans` is as wide
+ * as `tooWide`, in a box marked as meant to scroll sideways (`data-bs-scrolls="x"`). A `map` board
+ * has no width of its own and holds a map wider than a phone, marked as meant to pan, so the shell's
+ * board region pans it.
+ */
+export function boardWithALog(table: 'tooWide' | 'fits' | 'pans' | 'map'): Record<string, string> {
+  const pans = table === 'pans' ? ' data-bs-scrolls="x"' : '';
+  const width = table === 'tooWide' || table === 'pans' ? ' min-width: 520px;' : '';
+  const board = table === 'map' ? '' : ' width: 100cqw;';
+  const map = table === 'map' ? '\n    <div class="map" data-bs-scrolls="x">The whole valley</div>' : '';
+  return {
+    'src/ui/components/GameTable.vue': `<template>
+  <div class="board">${map}
+    <div class="log" data-testid="game-log"${pans}>
+      <table>
+        <tr><td>Round 1</td><td>The first player drew a card.</td></tr>
+      </table>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board {${board} }
+.map { width: 900px; height: 40px; }
+.log { overflow-x: auto; }
+table {${width} }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }

@@ -518,6 +518,8 @@ export interface SmokeWalk {
   readonly greyed: Map<string, string[]>;
   /** The world seats the walk played, when the spec named them (#471); none at a table. */
   readonly seats: number[];
+  /** Each box already reported scrolling sideways on a phone (`sidewaysKey`, #1797), so it is reported once. */
+  readonly sideways: Set<string>;
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');

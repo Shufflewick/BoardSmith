@@ -55,6 +55,7 @@ function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
     fieldsMet: new Map(),
     greyed: new Map(),
     seats: [],
+    sideways: new Set(),
     ...overrides,
   };
 }

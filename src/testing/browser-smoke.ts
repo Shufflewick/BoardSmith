@@ -25,8 +25,9 @@
  *   5. fails on any uncaught error in the page, any console error, any failed request to the dev
  *      host, and any offered action that then fails, on an action the game offers that the spec
  *      does not list, or one it lists that the walk never took (with the panel's reason, for one it
- *      only ever showed greyed out, #472), and on a table game that offers no seat anything while
- *      it is not over (#473).
+ *      only ever showed greyed out, #472), on a table game that offers no seat anything while
+ *      it is not over (#473), and on anything that scrolls sideways on a phone, which it lays the
+ *      game out on at every step (#1797).
  *
  * A game with no actions yet lists none, and its walk still loads, seats a player and fails on
  * any error. Each chunk that adds an action adds its name to `actions`. One the deal decides (offered
@@ -38,7 +39,7 @@
  *
  * @module
  */
-import { test, type Browser, type BrowserContext, type Frame, type Locator, type Page } from '@playwright/test';
+import { test, type Browser, type BrowserContext, type CDPSession, type Frame, type Locator, type Page } from '@playwright/test';
 import {
   actWithinPageTime,
   anyWithinPageTime,
@@ -51,6 +52,7 @@ import {
   TRY_MS,
   withinPageTime,
 } from './browser-smoke-clock.js';
+import { PHONE_VIEWPORTS, sidewaysKey, sidewaysProblem, sidewaysScrolls } from './browser-smoke-layout.js';
 import { chooseFromMenu, reopening, type DevHostMenu, type PressWithin } from './browser-smoke-menu.js';
 import {
   clickArrived,
@@ -295,6 +297,7 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     fieldsMet: new Map(),
     greyed: new Map(),
     seats: [],
+    sideways: new Set(),
   };
 }
 
@@ -2324,6 +2327,7 @@ async function stepIn(play: SeatPlay, plays: readonly SeatPlay[], walk: SmokeWal
  */
 async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   await settle(frame);
+  await checkOnPhones(frame, walk, memory);
   acting.now = play.seat;
   await drainThePage(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
@@ -2338,6 +2342,73 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
+}
+
+/** The DevTools session each page's touch is switched on and off through (`setTouch`), opened the first time it is needed. */
+const touchSessions = new WeakMap<Page, Promise<CDPSession>>();
+
+/** Switches touch on or off in `page`, as a phone has it: `(pointer: coarse)` and `(hover: none)` match while it is on. */
+async function setTouch(page: Page, enabled: boolean): Promise<void> {
+  let session = touchSessions.get(page);
+  if (session === undefined) {
+    session = page.context().newCDPSession(page);
+    touchSessions.set(page, session);
+  }
+  await (await session).send('Emulation.setTouchEmulationEnabled', { enabled, maxTouchPoints: enabled ? 5 : undefined });
+}
+
+/**
+ * Lays the game out on each phone of {@link PHONE_VIEWPORTS}, with touch, and reports each box that
+ * scrolls sideways there, once (#1797), then lays it out again as the walk found it. A step's board
+ * state is measured before the walk reads it, so what the walk then presses is laid out as before.
+ */
+async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+  const page = frame.page();
+  const before = page.viewportSize();
+  if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
+  // Off the game, so a board the resize moves under a resting pointer is not hovered by it.
+  await inPageTime(page, 'moving the pointer off the game', () => page.mouse.move(0, 0));
+  const hadTouch = await inPageTime(page, 'reading whether the page has touch', () => frame.evaluate(() => navigator.maxTouchPoints > 0));
+  await inPageTime(page, 'switching on touch', () => setTouch(page, true));
+  try {
+    for (const phone of PHONE_VIEWPORTS) {
+      await resize(frame, { width: phone.width, height: phone.height });
+      for (const scroll of await inPageTime(page, 'reading what scrolls sideways', () => frame.evaluate(sidewaysScrolls))) {
+        const key = sidewaysKey(phone, scroll);
+        if (walk.sideways.has(key)) continue;
+        walk.sideways.add(key);
+        noteIn(page, walk, sidewaysProblem(phone, scroll, stepWhere(memory)));
+      }
+    }
+  } finally {
+    await inPageTime(page, 'putting touch back as it was', () => setTouch(page, hadTouch));
+    await resize(frame, before);
+  }
+}
+
+/**
+ * Resizes `frame`'s page to `size` and waits for the game to lay itself out there: for the
+ * transitions the resize set off (a sidebar sliding shut) to end, so the walk measures, and then
+ * presses, the layout a player sees once it stops moving rather than one on its way there. A
+ * transition or animation that was already running (a turn timer's bar) is the game's own, and is
+ * not waited for.
+ */
+async function resize(frame: Frame, size: { width: number; height: number }): Promise<void> {
+  const page = frame.page();
+  const from = await inPageTime(page, 'reading the page\'s time', () => frame.evaluate(() => document.timeline.currentTime));
+  await inPageTime(page, `laying the game out at ${size.width}x${size.height}`, () => page.setViewportSize(size));
+  await framesPass(frame);
+  await inPageTime(page, 'waiting for the layout to stop moving', () => frame.evaluate(
+    (since) =>
+      Promise.all(
+        document
+          .getAnimations()
+          .filter((moving) => moving instanceof CSSTransition && moving.playState === 'running' && (moving.startTime === null || Number(moving.startTime) >= Number(since)))
+          .map((moving) => moving.finished.catch(() => undefined)),
+      ),
+    from,
+  ));
+  await framesPass(frame);
 }
 
 /**
