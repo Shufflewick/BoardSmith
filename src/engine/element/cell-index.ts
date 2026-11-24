@@ -17,7 +17,7 @@
  * the rule.
  */
 import { isDevMode } from '../../utils/dev.js';
-import { reachPartition, type GameElement } from './game-element.js';
+import { GameElement, reachPartition } from './game-element.js';
 import { stateChanged } from './state-version.js';
 import type { ElementClass, ElementFinder } from './types.js';
 
@@ -103,7 +103,8 @@ function cellsOf(grid: GameElement, cellClass: ElementClass, [first, second]: re
     if (layers) layers.push(child);
     else row.set(attributes[second], [child]);
   }
-  cellMaps.set(grid, cells);
+  // A projection's index would outlive the tree changes that drop the grid's own (#1791).
+  if (GameElement._isLive(grid)) cellMaps.set(grid, cells);
   return cells;
 }
 
