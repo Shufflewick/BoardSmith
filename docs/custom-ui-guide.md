@@ -835,13 +835,15 @@ An action declared with `.about(TYPE, (ctx) => [thing])`
 ([Subject types](./actions-and-flow.md#subject-types-the-things-a-games-verbs-are-about))
 is about things it never picks, such as the sector a squad pick will attack.
 While it is open, `actionController.currentActionMeta.value?.about` lists those
-things, and `element` is the board element's id for a thing that is one. A thing
-the seat cannot see is left out. Mark them with an attribute or class of your own:
+things as they were when it opened, and `element` is the board element's id for
+a thing that is one. A thing the seat cannot see is left out. A world action's
+`.about()`, which names a seat, is not listed here. Mark them with an attribute
+or class of your own:
 
 ```typescript
 // computed comes from 'vue'
 const aboutIds = computed(() => new Set(
-  (actionController.currentActionMeta.value?.about ?? []).map((subject) => subject.element),
+  (actionController.currentActionMeta.value?.about ?? []).flatMap((subject) => subject.element ?? []),
 ));
 const aboutAttrs = (sector: { id: number }) => (aboutIds.value.has(sector.id) ? { 'data-attack-target': '' } : {});
 ```
