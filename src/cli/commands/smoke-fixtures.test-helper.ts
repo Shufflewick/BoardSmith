@@ -2687,10 +2687,12 @@ function choose() {
  * `fence`, which picks a pasture too, in a "Town" group drawn under each pasture, and adds `chat`
  * and `gossip`, which pick none, in the top-level "Town" group of the same path, greyed until three
  * actions have been taken (#1794). Each group holds two actions, so the panel draws it as a group.
+ * Its pastures' keys hold a newline, which a selector must quote as CSS does, not as JSON does.
  */
 export function pastureGame({ bare, town = false }: { bare: boolean; town?: boolean }): Record<string, string> {
   const actions = [...(bare ? [] : ['draw']), ...(town ? ['chat', 'gossip', 'fence'] : []), 'tend', 'harvest'];
   const inTown = town ? ".group('Town')" : '';
+  const key = town ? "pasture + '\\nfield'" : 'pasture';
   const townActions = town ? `
     Action.create('chat').prompt('Chat').group('Town').condition(threeTaken).execute((_args, ctx) => draw(ctx.player)),
     Action.create('gossip').prompt('Gossip').group('Town').condition(threeTaken).execute((_args, ctx) => draw(ctx.player)),
@@ -2704,7 +2706,7 @@ export function pastureGame({ bare, town = false }: { bare: boolean; town?: bool
 import type { DevGameGame, DevGamePlayer } from './game.js';
 import { Card } from './elements.js';
 
-const PASTURES = subjectType<string>({ name: 'Pastures', onBoard: true, key: (pasture) => pasture, label: (pasture) => pasture });
+const PASTURES = subjectType<string>({ name: 'Pastures', onBoard: true, key: (pasture) => ${key}, label: (pasture) => pasture });
 
 export function createTurnActions(game: DevGameGame): ActionDefinition[] {
   // Each action draws a card, so the deck counts the actions taken: the game is restored whole, never replayed.
