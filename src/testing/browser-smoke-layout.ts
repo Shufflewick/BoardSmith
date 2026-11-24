@@ -23,6 +23,8 @@ export const PHONE_VIEWPORTS: readonly PhoneViewport[] = [
 export interface SidewaysScroll {
   /** Its test id, else its tag and classes after the nearest test id around it; "the game's page" for the page itself. */
   readonly what: string;
+  /** Where it is, by its place under the nearest test id, which a state class coming and going does not change. */
+  readonly where: string;
   /** How wide its content is (`scrollWidth`), in CSS pixels. */
   readonly content: number;
   /** How wide its box is (`clientWidth`), in CSS pixels. */
@@ -45,6 +47,15 @@ export function sidewaysScrolls(): SidewaysScroll[] {
     const around = element.parentElement?.closest('[data-testid]');
     return around ? `${name(around)} ${own}` : own;
   };
+  const place = (element: Element): string => {
+    const id = element.getAttribute('data-testid');
+    const parent = element.parentElement;
+    if (id !== null) return `[data-testid="${id}"]`;
+    if (parent === null) return element.tagName.toLowerCase();
+    return `${place(parent)}>${[...parent.children].indexOf(element)}`;
+  };
+  // Widths round to whole pixels, so content a fraction of a pixel inside its box can read 1px over.
+  const wider = (box: Element) => box.scrollWidth > box.clientWidth + 1;
   const panned = [...document.querySelectorAll('[data-bs-scrolls="x"]')];
   const meantToPan = (box: Element) =>
     box.getAttribute('data-bs-scrolls') === 'x' || panned.some((wide) => wide !== box && box.contains(wide) && wide.getBoundingClientRect().width > box.clientWidth);
@@ -53,19 +64,21 @@ export function sidewaysScrolls(): SidewaysScroll[] {
   // The body's overflow is the page's when the root's is visible, and the body is then no scroll box of its own.
   const pageOverflow = rootOverflow === 'visible' ? getComputedStyle(document.body).overflowX : rootOverflow;
   const found: SidewaysScroll[] = [];
-  if (pageOverflow !== 'hidden' && pageOverflow !== 'clip' && root.scrollWidth > root.clientWidth && !meantToPan(root)) {
-    found.push({ what: "the game's page", content: root.scrollWidth, box: root.clientWidth });
+  if (pageOverflow !== 'hidden' && pageOverflow !== 'clip' && wider(root) && !meantToPan(root)) {
+    found.push({ what: "the game's page", where: 'page', content: root.scrollWidth, box: root.clientWidth });
   }
   const boxes = rootOverflow === 'visible' ? document.body.querySelectorAll('*') : [document.body, ...document.body.querySelectorAll('*')];
   for (const box of boxes) {
-    if (scrolls(getComputedStyle(box).overflowX) && box.scrollWidth > box.clientWidth && !meantToPan(box)) found.push({ what: name(box), content: box.scrollWidth, box: box.clientWidth });
+    if (scrolls(getComputedStyle(box).overflowX) && wider(box) && !meantToPan(box)) {
+      found.push({ what: name(box), where: place(box), content: box.scrollWidth, box: box.clientWidth });
+    }
   }
   return found;
 }
 
 /** The phone and the box, as {@link sidewaysProblem} names them, so the walk reports each once. */
 export function sidewaysKey(phone: PhoneViewport, scroll: SidewaysScroll): string {
-  return `${phone.width}x${phone.height} ${scroll.what}`;
+  return `${phone.width}x${phone.height} ${scroll.where}`;
 }
 
 /** The problem `scroll` is on `phone`, first seen `where` ("at step 3 of the game dealt from seed "smoke""). */

@@ -2368,11 +2368,11 @@ async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
   if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
   // Off the game, so a board the resize moves under a resting pointer is not hovered by it.
   await inPageTime(page, 'moving the pointer off the game', () => page.mouse.move(0, 0));
+  const hadTouch = await inPageTime(page, 'reading whether the page has touch', () => frame.evaluate(() => navigator.maxTouchPoints > 0));
   await inPageTime(page, 'switching on touch', () => setTouch(page, true));
   try {
     for (const phone of PHONE_VIEWPORTS) {
-      await inPageTime(page, `laying the game out at ${phone.width}x${phone.height}`, () => page.setViewportSize({ width: phone.width, height: phone.height }));
-      await layoutSettles(frame);
+      await resize(frame, { width: phone.width, height: phone.height });
       for (const scroll of await inPageTime(page, 'reading what scrolls sideways', () => frame.evaluate(sidewaysScrolls))) {
         const key = sidewaysKey(phone, scroll);
         if (walk.sideways.has(key)) continue;
@@ -2381,29 +2381,33 @@ async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
       }
     }
   } finally {
-    await inPageTime(page, 'laying the game out as before', () => page.setViewportSize(before));
-    await inPageTime(page, 'switching off touch', () => setTouch(page, false));
+    await inPageTime(page, 'putting touch back as it was', () => setTouch(page, hadTouch));
+    await resize(frame, before);
   }
-  await layoutSettles(frame);
 }
 
 /**
- * Waits for `frame` to lay itself out at a new size: for the transitions the change set off (a
- * sidebar sliding shut) to end, so the walk measures, and then presses, the layout a player sees
- * once it stops moving rather than one on its way there. A looping animation never ends, so it is not waited for.
+ * Resizes `frame`'s page to `size` and waits for the game to lay itself out there: for the
+ * transitions the resize set off (a sidebar sliding shut) to end, so the walk measures, and then
+ * presses, the layout a player sees once it stops moving rather than one on its way there. A
+ * transition or animation that was already running (a turn timer's bar) is the game's own, and is
+ * not waited for.
  */
-async function layoutSettles(frame: Frame): Promise<void> {
+async function resize(frame: Frame, size: { width: number; height: number }): Promise<void> {
+  const page = frame.page();
+  const from = await inPageTime(page, 'reading the page\'s time', () => frame.evaluate(() => document.timeline.currentTime));
+  await inPageTime(page, `laying the game out at ${size.width}x${size.height}`, () => page.setViewportSize(size));
   await framesPass(frame);
-  await inPageTime(frame.page(), 'waiting for the layout to stop moving', () =>
-    frame.evaluate(() =>
+  await inPageTime(page, 'waiting for the layout to stop moving', () => frame.evaluate(
+    (since) =>
       Promise.all(
         document
           .getAnimations()
-          .filter((animation) => animation.effect?.getComputedTiming().endTime !== Infinity)
-          .map((animation) => animation.finished.catch(() => undefined)),
+          .filter((moving) => moving instanceof CSSTransition && moving.playState === 'running' && (moving.startTime === null || Number(moving.startTime) >= Number(since)))
+          .map((moving) => moving.finished.catch(() => undefined)),
       ),
-    ),
-  );
+    from,
+  ));
   await framesPass(frame);
 }
 

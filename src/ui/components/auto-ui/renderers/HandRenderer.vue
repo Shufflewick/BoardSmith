@@ -380,19 +380,20 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
 }
 
 /* Fan mode: its natural width, set rather than read from the cards, whose overlap
-   depends on it; never wider than the hand's room. */
+   depends on it; never wider than the hand's room. The sides leave room for an outer
+   card's rotated corner, less the hand's own padding it may lean into. */
 .hand-cards-wrapper.has-fan {
-  width: calc(var(--row-count, 1) * var(--card-w) - (var(--row-count, 1) - 1) * var(--overlap-step) + 2 * var(--bsg-s2));
+  --fan-side: max(var(--bsg-s2), calc(var(--card-h) * sin(var(--layout-fan-angle, 30deg) / 2) - var(--bsg-s4)));
+  width: calc(var(--row-count, 1) * var(--card-w) - (var(--row-count, 1) - 1) * var(--overlap-step) + 2 * var(--fan-side));
   max-width: 100%;
 }
 
-/* Room above for the rotated cards; their corners may lean into the hand's own padding.
-   On a narrow board the cards overlap further to fit, and wrap only past the tap floor,
-   so no fan scrolls sideways (#1797). */
+/* Room above for the rotated cards. On a narrow board the cards overlap further to fit,
+   and wrap only past the tap floor, so no fan scrolls sideways (#1797). */
 .hand-cards-wrapper.has-fan .hand-cards {
   width: 100%;
   box-sizing: border-box;
-  padding: 20px var(--bsg-s2) 10px;
+  padding: 20px var(--fan-side) 10px;
   gap: 0;
 }
 
@@ -430,12 +431,13 @@ const { onActivate: handleSelect, onKeydown, attrs: selectableAttrs } = useSelec
   margin-right: calc(-1 * var(--overlap-step));
 }
 
-/* A fan wider than its row overlaps further until it fits (100% is the row's width), still
-   leaving every card a strip as wide as the tap floor, rather than scrolling sideways (#1797). */
+/* A fan wider than its row overlaps further until it fits (100% is the row's width, less a
+   pixel so rounding cannot push the last card onto a new line), still leaving every card a
+   strip as wide as the tap floor, rather than scrolling sideways (#1797). */
 .hand-cards-wrapper.has-fan .hand-card {
   margin-right: max(
     -1 * max(var(--card-w) - max(24px, var(--bsg-tap-min)), 0px),
-    min((100% - var(--card-count, 1) * var(--card-w)) / (var(--card-count, 1) - 1), -1 * var(--overlap-step))
+    min((100% - 1px - var(--card-count, 1) * var(--card-w)) / (var(--card-count, 1) - 1), -1 * var(--overlap-step))
   );
 }
 
