@@ -158,7 +158,7 @@ function topmost(frame) {
       };
       const [b, m] = [box(bubble), box(modal)];
       const [x, y] = b ? [(b.left + b.right) / 2, (b.top + b.bottom) / 2] : [];
-      return { boxes: { board: b, modal: m }, boardInModal: Boolean(b && m && x >= m.left && x <= m.right && y >= m.top && y <= m.bottom) };
+      return { boxes: { board: b, modal: m }, boardInModal: Boolean(b && m && x >= m.left && x < m.right && y >= m.top && y < m.bottom) };
     };
     const bubbles = doc.querySelectorAll('.bsg-annotation-layer .bsg-board-message__content--annotation');
     const seen = {
