@@ -68,6 +68,14 @@ if (existsSync('TESTS_DO_NOT_LOAD')) { console.error(readFileSync('TESTS_DO_NOT_
 if (!existsSync('TESTS_UNLISTED')) writeFileSync(process.argv.find((a) => a.startsWith('--json=')).slice(7), '[]');
 `;
 
+/** The vitest each game's lockfile pins and its install holds. */
+export const FIXTURE_VITEST = '3.2.7';
+
+/** A `package-lock.json` whose only package is vitest at `version`. */
+export function lockfilePinning(version: string): string {
+  return JSON.stringify({ lockfileVersion: 3, packages: { 'node_modules/vitest': { version } } });
+}
+
 export interface Fixture {
   tree: string;
   /** The checkout the shared games' installs link to, standing in for the root `~/BoardSmith`. */
@@ -100,7 +108,7 @@ export async function makeTree(dir: string): Promise<void> {
 export interface GameSpec {
   /** The boardsmith dependency main's package.json declares. */
   boardsmith?: string;
-  /** Files committed on main besides package.json. */
+  /** Files committed on main besides package.json and package-lock.json. */
   files?: Record<string, string>;
   /** Catalogue games this one's install links to, as `file:../<slug>` dependencies. */
   links?: string[];
@@ -115,6 +123,7 @@ export async function makeGame(fx: Fixture, slug: string, spec: GameSpec = {}): 
   for (const link of spec.links ?? []) deps[link] = `file:../${link}`;
   await writeFiles(dir, {
     'package.json': JSON.stringify({ name: slug, type: 'module', dependencies: deps }),
+    'package-lock.json': lockfilePinning(FIXTURE_VITEST),
     '.gitignore': 'node_modules/\n.boardsmith/\n',
     ...(spec.links ? { 'deps.txt': spec.links.join('\n') } : {}),
     ...spec.files,
@@ -125,7 +134,7 @@ export async function makeGame(fx: Fixture, slug: string, spec: GameSpec = {}): 
       '.package-lock.json': JSON.stringify({ name: slug, packages: {} }),
       'tool/package.json': JSON.stringify({ name: 'tool', bin: 'run.js' }),
       'tool/run.js': '',
-      'vitest/package.json': JSON.stringify({ name: 'vitest', type: 'module', bin: 'vitest.mjs' }),
+      'vitest/package.json': JSON.stringify({ name: 'vitest', version: FIXTURE_VITEST, type: 'module', bin: 'vitest.mjs' }),
       'vitest/vitest.mjs': STUB_VITEST,
       '.vite/deps/cache.json': '{}',
     });

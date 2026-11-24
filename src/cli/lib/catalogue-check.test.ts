@@ -4,7 +4,7 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -12,7 +12,7 @@ import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, git, initRepo, writeFiles } from './verify-result.test-helper.js';
 import { CATALOGUE_CLONE_COMMAND, catalogueCachePath, checkCatalogue } from './catalogue-check.js';
-import { checkoutState, fixture, makeGame, makeTree, runningIn, statusOf, workFolders, type Fixture } from './catalogue-fixture.test-helper.js';
+import { FIXTURE_VITEST, checkoutState, fixture, lockfilePinning, makeGame, makeTree, runningIn, statusOf, workFolders, type Fixture } from './catalogue-fixture.test-helper.js';
 
 const CATALOGUE_CHECK = fileURLToPath(new URL('./catalogue-check.ts', import.meta.url));
 
@@ -178,15 +178,46 @@ describe('what each game is checked against (#591)', () => {
     expect(statusOf(run)).toEqual({ legacy: 'passed', 'legacy-world': 'passed' });
   });
 
-  it('fails a game with no install, saying how to install it', async () => {
+  it('fails a game that links a catalogue game with no install, saying how to install it', async () => {
     const fx = fixture();
     await makeTree(fx.tree);
-    const hex = await makeGame(fx, 'hex', { installed: false });
+    const legacy = await makeGame(fx, 'legacy', { installed: false });
+    await makeGame(fx, 'legacy-world', { links: ['legacy'] });
 
-    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+    const run = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, skip: { legacy: 'not installed' } });
 
-    expect(run.results).toEqual([expect.objectContaining({ slug: 'hex', status: 'failed' })]);
-    expect(run.results[0].output).toContain(`cd ${hex} && npm install`);
+    expect(run.results).toEqual([expect.objectContaining({ slug: 'legacy-world', status: 'failed' })]);
+    expect(run.results[0].output).toContain(`cd ${legacy} && npm install`);
+  });
+});
+
+describe("a game's install must hold the vitest its commit's lockfile pins (#1795)", () => {
+  it('refuses the run, naming each game whose install does not, before checking any game', async () => {
+    const fx = fixture();
+    await makeTree(fx.tree);
+    const hex = await makeGame(fx, 'hex');
+    const chess = await makeGame(fx, 'chess');
+    const seven = await makeGame(fx, 'seven', { installed: false });
+    const go = await makeGame(fx, 'go', { files: { 'package-lock.json': '{"lockfileVersion":3,"packages":{}}' } });
+    await makeGame(fx, 'fine');
+    // main moves to a lockfile pinning a newer vitest, and nothing reinstalls.
+    await writeFiles(hex, { 'package-lock.json': lockfilePinning('4.0.0') });
+    commitAll(hex, 'vitest 4');
+    rmSync(join(chess, 'node_modules', '.bin', 'vitest'));
+    symlinkSync('../tool/run.js', join(chess, 'node_modules', '.bin', 'vitest'));
+    const commit = (dir: string) => git(dir, 'rev-parse', 'main').trim().slice(0, 8);
+
+    const refused = checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
+
+    await expect(refused).rejects.toThrow(
+      `hex at main (${commit(hex)}) pins vitest 4.0.0 in its package-lock.json, but ${hex}/node_modules holds vitest ${FIXTURE_VITEST}.`,
+    );
+    await expect(refused).rejects.toThrow(`chess at main (${commit(chess)}): ${chess}/node_modules/.bin/vitest does not lead into ${chess}/node_modules/vitest.`);
+    await expect(refused).rejects.toThrow(`seven at main (${commit(seven)}) pins vitest ${FIXTURE_VITEST} in its package-lock.json, but ${seven}/node_modules holds no vitest.`);
+    await expect(refused).rejects.toThrow(`go at main (${commit(go)}) pins no vitest in its package-lock.json`);
+    await expect(refused).rejects.toThrow('npm ci');
+    await expect(refused).rejects.not.toThrow(/fine at/);
+    expect(existsSync(await catalogueCachePath(fx.tree))).toBe(false);
   });
 });
 
@@ -241,7 +272,10 @@ const [loadsBefore, loadsAfter] = await (async () => {
   });
   // The game's own vitest, as an install has it: BoardSmith's copy stands in.
   rmSync(join(game, 'node_modules', 'vitest'), { recursive: true, force: true });
-  symlinkSync(dirname(createRequire(import.meta.url).resolve('vitest/package.json')), join(game, 'node_modules', 'vitest'));
+  const vitest = dirname(createRequire(import.meta.url).resolve('vitest/package.json'));
+  symlinkSync(vitest, join(game, 'node_modules', 'vitest'));
+  await writeFiles(game, { 'package-lock.json': lockfilePinning(JSON.parse(readFileSync(join(vitest, 'package.json'), 'utf-8')).version) });
+  commitAll(game, 'lock the vitest it installs');
   const before = await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue });
 
   // A BoardSmith change that a game's test file fails to load against, as #1494's sim check was.
@@ -514,16 +548,20 @@ describe('the processes a game\'s steps leave behind (#1657)', () => {
 
 describe('the work folder (#591)', () => {
   it.each([
-    ['a pass', {}],
-    ['a failed game', { files: { BROKEN: 'broken' } }],
-    ['a game that could not be exported and linked', { installed: false }],
-  ])('is removed after %s', async (_, spec) => {
+    ['a pass', async (fx: Fixture) => void (await makeGame(fx, 'hex'))],
+    ['a failed game', async (fx: Fixture) => void (await makeGame(fx, 'hex', { files: { BROKEN: 'broken' } }))],
+    ['a game that could not be exported and linked', async (fx: Fixture) => {
+      await makeGame(fx, 'legacy', { installed: false });
+      await makeGame(fx, 'hex', { links: ['legacy'] });
+      return { legacy: 'not installed' };
+    }],
+  ])('is removed after %s', async (_, makeGames) => {
     const fx = fixture();
     const workRoot = tempTree('bs-catalogue-work-');
     await makeTree(fx.tree);
-    await makeGame(fx, 'hex', spec);
+    const skip = (await makeGames(fx)) ?? {};
 
-    await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, workRoot });
+    await checkCatalogue({ tree: fx.tree, catalogueRoot: fx.catalogue, workRoot, skip });
 
     expect(workFolders(workRoot)).toEqual([]);
   });
