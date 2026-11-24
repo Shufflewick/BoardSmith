@@ -87,12 +87,14 @@ import {
   assertCandidateBudget,
   assertWorldAction,
   bindWorldFacilities,
+  positionsThrough,
   type WorldActionBlock,
   type WorldActivityRound,
   type WorldClockFacilities,
   type WorldNeedsRound,
   type WorldNoticeBoxRound,
   type WorldPartitionsRound,
+  type WorldRoundPosition,
 } from "./action.js";
 import type {
   DeclaredSeatActivity,
@@ -1445,8 +1447,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * under different ones.
    *
    * `through` is the last step to hydrate -- a selection's own index for a pick,
-   * and `selections.length` (the execute round) for a quote, which reads the state
-   * the purchase writes to.
+   * and `selections.length` (through the execute round) for a quote, which reads
+   * the state the purchase writes to.
    *
    * `boundBefore` is how many leading picks must be bound when required (#1338):
    * a pick's own index, so its rounds see the picks before it, and 0 for a quote,
@@ -1474,7 +1476,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const namedSeats: number[] = [];
     bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp, project));
     try {
-      for (let step = 0; step <= through; step++) {
+      for (const step of positionsThrough(definition, through)) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now), project);
         // AFTER ROUND ZERO, as offerOf: a read answers only what the offer shows (#798).
         if (step === 0 && !this.conditionHolds(definition, acting, project)) {
@@ -1688,7 +1690,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.refuseArgs(definition, args, boundBefore);
     const seat = this.seatFor(player);
     const project = readOnlyScope();
-    for (let step = 0; step <= through; step++) {
+    for (const step of positionsThrough(definition, through)) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
         const unmet = this.unmetOnASeatsRead(round, seat, args, now, definition.name, project);
@@ -2079,7 +2081,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   private async hydrateRounds(
     definition: ActionDefinition,
-    step: number,
+    step: WorldRoundPosition,
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
     named: string[],
@@ -2610,7 +2612,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // AND WHICH OF `named` IT MAY WRITE: the rest came only from `.reads()` (#1334).
     const writable = new Set<string>();
     const project = readOnlyScope();
-    for (let step = 0; step <= definition.selections.length; step++) {
+    for (const step of positionsThrough(definition, definition.selections.length)) {
       await this.hydrateRounds(
         definition,
         step,
