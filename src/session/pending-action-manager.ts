@@ -121,6 +121,7 @@ export class PendingActionManager<G extends Game = Game> {
     const before = pendingState && serializePendingActionState(pendingState);
     const { result, undone } = this.#runner.runPickOp(
       playerPosition,
+      { action: actionName ?? pendingState?.actionName, named: [value, pendingState?.collectedArgs, initialArgs] },
       () => this.#takeStep(playerPosition, pendingState, selectionName, value, actionName, initialArgs),
     );
     if (undone && before) this.#pendingActions.set(playerPosition, deserializePendingState(before));
@@ -196,7 +197,7 @@ export class PendingActionManager<G extends Game = Game> {
    * fails rolls back to the cancel, not to before it (#1253).
    */
   cancelPendingAction(playerPosition: number): void {
-    this.#runner.runCancelOp(playerPosition, () => {
+    this.#runner.runCancelOp(playerPosition, this.#pendingActions.get(playerPosition)?.actionName, () => {
       if (this.#dropPendingAction(playerPosition)) this.#runner.captureCheckpoint();
     });
   }

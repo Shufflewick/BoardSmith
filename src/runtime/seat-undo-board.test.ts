@@ -6,6 +6,7 @@ import { decideUndo } from '../session/utils.js';
 import { createHeadlessSession } from '../testing/headless-session.js';
 import { succeeded } from '../session/op-result.test-helper.js';
 import type { PlayerGameState } from '../session/types.js';
+import { PendingActionManager } from '../session/pending-action-manager.js';
 
 // #1787: in a step declared `seatUndo: true`, an action declared
 // `.seatUndoable()` may change the shared board and still be taken back by its
@@ -13,7 +14,9 @@ import type { PlayerGameState } from '../session/types.js';
 
 class Sector extends Space<MapGame> {}
 class Squad extends Space<MapGame> {}
-class Merc extends Piece<MapGame> {}
+class Merc extends Piece<MapGame> {
+  target?: Merc;
+}
 
 class Rebel extends Player<MapGame, Rebel> {
   inspected = 0;
@@ -32,7 +35,7 @@ class MapGame extends Game<MapGame, Rebel> {
     alpha.create(Merc, 'ann');
     alpha.create(Merc, 'bob');
     const bravo = south.create(Squad, 'bravo');
-    bravo.create(Merc, 'cal');
+    bravo.create(Merc, 'cal').target = alpha.first(Merc, 'bob');
     bravo.create(Merc, 'dee');
     for (const player of this.players) player.create(Merc, `reserve-${player.seat}`);
 
@@ -50,7 +53,6 @@ class MapGame extends Game<MapGame, Rebel> {
         .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
         .chooseElement<'squad', Squad>('squad', { elementClass: Squad })
         .execute(({ merc, squad }) => merc.putInto(squad)),
-      // Changes only the seat's own player, but reads the MERC it names.
       Action.create<MapGame>('deploy')
         .seatUndoable()
         .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
@@ -59,6 +61,17 @@ class MapGame extends Game<MapGame, Rebel> {
         .seatUndoable()
         .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
         .execute(({ merc }) => merc.remove()),
+      // Moves the MERC as it is picked.
+      Action.create<MapGame>('advance')
+        .seatUndoable()
+        .chooseElement<'merc', Merc>('merc', { elementClass: Merc, onSelect: (merc) => merc.putInto(this.first(Squad, 'bravo')!) })
+        .chooseFrom('side', { choices: ['left', 'right'] })
+        .execute(() => {}),
+      Action.create<MapGame>('reinforce')
+        .chooseElement<'squad', Squad>('squad', { elementClass: Squad })
+        .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
+        .execute(({ merc, squad }) => merc.putInto(squad)),
+      // Changes only the seat's own player, but reads the MERC it names.
       Action.create<MapGame>('inspect')
         .chooseElement<'merc', Merc>('merc', { elementClass: Merc })
         .execute((_args, ctx) => { ctx.player.inspected += 1; }),
@@ -71,7 +84,7 @@ class MapGame extends Game<MapGame, Rebel> {
         .execute(({ merc }) => merc.putInto(this.first(Squad, 'bravo')!)),
     );
     this.setFlow({
-      root: simultaneousActionStep<MapGame>({ name: 'rebels', actions: ['split', 'join', 'deploy', 'dismiss', 'inspect', 'scout', 'regroup'], playerDone: () => false, seatUndo: true }),
+      root: simultaneousActionStep<MapGame>({ name: 'rebels', actions: ['split', 'join', 'deploy', 'dismiss', 'advance', 'reinforce', 'inspect', 'scout', 'regroup'], playerDone: () => false, seatUndo: true }),
     });
   }
 }
@@ -172,6 +185,34 @@ describe("a seat's undo of its own shared-board action (#1787)", () => {
     expect(squad(r, 'alpha')!.all(Merc).map((m) => m.name)).toEqual(['ann', 'bob']);
     expect(r.game.getPlayer(1)!.all(Merc).map((m) => m.name)).toEqual(['reserve-1']);
     expect(merc(r, 'dee').parent!.name).toBe('bravo-dee');
+  });
+
+  it('keeps every element reference on the board pointing where it pointed', () => {
+    const r = runner();
+    act(r, 1, 'split', { merc: merc(r, 'ann') });
+    r.undoSeatAction(1);
+    expect(merc(r, 'cal').target).toBe(merc(r, 'bob'));
+  });
+
+  it('takes back what the picks of the action moved', async () => {
+    const r = runner();
+    const picks = new PendingActionManager(r);
+    succeeded(await picks.processSelectionStep(1, 'merc', merc(r, 'ann').id, 'advance'));
+    succeeded(await picks.processSelectionStep(1, 'side', 'left'));
+    expect(merc(r, 'ann').parent!.name).toBe('bravo');
+
+    expect(decideUndo(r, 1).allowed).toBe(true);
+    r.undoSeatAction(1);
+    expect(squad(r, 'alpha')!.all(Merc).map((m) => m.name)).toEqual(['ann', 'bob']);
+  });
+
+  it("refuses the undo once another seat picked what it changed, before finishing its action", async () => {
+    const r = runner();
+    act(r, 1, 'split', { merc: merc(r, 'ann') });
+    const picks = new PendingActionManager(r);
+    succeeded(await picks.processSelectionStep(2, 'squad', squad(r, 'alpha-ann')!.id, 'reinforce'));
+
+    expect(decideUndo(r, 1)).toMatchObject({ allowed: false, error: expect.stringMatching(/another seat's action .* changed or used/) });
   });
 
   it('carries the undo across a snapshot', () => {

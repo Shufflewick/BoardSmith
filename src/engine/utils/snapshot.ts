@@ -270,8 +270,12 @@ export interface SeatUndoStack {
   opening?: SeatUndoEntry & { fence?: SeatUndoFence };
 }
 
-/** Why an action cannot be taken back on its own: it changed what another seat can see. */
-export type SeatUndoFence = 'outside' | 'random' | 'log' | 'animation';
+/**
+ * Why an action cannot be taken back on its own: it changed what another seat
+ * can see, or (`board`) another seat's action since changed or picked an
+ * element its picks changed.
+ */
+export type SeatUndoFence = 'outside' | 'random' | 'log' | 'animation' | 'board';
 
 /** Every seat's undo in the open step that undoes per seat (#1526). */
 export interface SeatUndoState {
