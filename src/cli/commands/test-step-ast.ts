@@ -451,53 +451,72 @@ const VALUE_READERS: Readonly<Record<string, (node: AstNode, path: PathStep[], r
   CallExpression: (node, path, read) => (path.length === 0 ? [node] : path[0] === EACH ? builtElements(node, path, read) : []),
 });
 
-/** The path from a binding pattern to the identifier it binds, or undefined when the pattern reads it some other way. */
-function patternPath(pattern: unknown, id: unknown): PathStep[] | undefined {
-  if (pattern === id) return [];
-  if (!isNode(pattern)) return undefined;
-  if (pattern.type === 'AssignmentPattern') return patternPath(pattern.left, id);
-  if (pattern.type === 'ArrayPattern') {
+/** How each kind of binding pattern reaches the identifier it binds, as a path. */
+const PATTERN_READERS: Readonly<Record<string, (pattern: AstNode, id: unknown) => PathStep[] | undefined>> = Object.freeze({
+  AssignmentPattern: (pattern, id) => patternPath(pattern.left, id),
+  ArrayPattern: (pattern, id) => {
     const elements = pattern.elements as unknown[];
     const index = elements.findIndex((element) => patternPath(element, id) !== undefined);
     return index === -1 ? undefined : [String(index), ...patternPath(elements[index], id)!];
-  }
-  if (pattern.type !== 'ObjectPattern') return undefined;
-  for (const property of pattern.properties as AstNode[]) {
-    const inner = property.type === 'Property' ? patternPath(property.value, id) : undefined;
-    if (inner === undefined) continue;
-    const key = staticKey(property.key, property.computed);
-    return key === undefined ? undefined : [key, ...inner];
-  }
-  return undefined;
+  },
+  ObjectPattern: (pattern, id) => {
+    for (const property of pattern.properties as AstNode[]) {
+      const inner = property.type === 'Property' ? patternPath(property.value, id) : undefined;
+      if (inner === undefined) continue;
+      const key = staticKey(property.key, property.computed);
+      return key === undefined ? undefined : [key, ...inner];
+    }
+    return undefined;
+  },
+});
+
+/** The path from a binding pattern to the identifier it binds, or undefined when the pattern reads it some other way. */
+function patternPath(pattern: unknown, id: unknown): PathStep[] | undefined {
+  if (pattern === id) return [];
+  const reader = isNode(pattern) ? PATTERN_READERS[pattern.type] : undefined;
+  return reader?.(pattern as AstNode, id);
 }
 
 const MUTATORS = new Set(['push', 'pop', 'shift', 'unshift', 'splice', 'sort', 'reverse', 'fill', 'copyWithin']);
 
-/** Whether a call changes `id` in place: `list.pop()`, `Object.assign(order, ...)`. */
-function changedByCall(source: ScopedSource, id: AstNode, parent: AstNode | undefined): boolean {
-  if (parent?.type === 'CallExpression') {
-    const callee = parent.callee as AstNode;
-    return argAt(parent, 0) === id && callee.type === 'MemberExpression' && identifierName(callee.object) === 'Object' && calleeName(callee) === 'assign';
-  }
-  const call = parent && source.parents.get(parent);
-  return parent?.type === 'MemberExpression' && call?.type === 'CallExpression' && call.callee === parent && MUTATORS.has(calleeName(parent) ?? '');
+/** `Object.assign(id, ...)`. */
+function assignsInto(id: AstNode, parent: AstNode | undefined): boolean {
+  if (parent?.type !== 'CallExpression' || argAt(parent, 0) !== id) return false;
+  const callee = parent.callee as AstNode;
+  return callee.type === 'MemberExpression' && identifierName(callee.object) === 'Object' && calleeName(callee) === 'assign';
 }
 
-/** Whether `id` is changed in place: a member of it assigned, updated or deleted (`order.kind = ...`), or a call that changes it. */
-function changesMember(source: ScopedSource, id: AstNode): boolean {
+/** `id.pop()`, `id.push(...)` and the other array methods that change the array they are called on. */
+function callsMutator(source: ScopedSource, parent: AstNode | undefined): boolean {
+  if (parent?.type !== 'MemberExpression') return false;
+  const call = source.parents.get(parent);
+  return call?.type === 'CallExpression' && call.callee === parent && MUTATORS.has(calleeName(parent) ?? '');
+}
+
+/** The outermost member expression rooted at `id` (`id.a.b`), and what holds it. */
+function outermostMember(source: ScopedSource, id: AstNode): { node: AstNode; parent: AstNode | undefined } {
   let node = id;
   let parent = source.parents.get(node);
-  if (changedByCall(source, id, parent)) return true;
-  if (parent?.type !== 'MemberExpression') return false;
   while (parent?.type === 'MemberExpression' && parent.object === node) {
     node = parent;
     parent = source.parents.get(node);
   }
-  return (
-    (parent?.type === 'AssignmentExpression' && parent.left === node) ||
-    parent?.type === 'UpdateExpression' ||
-    (parent?.type === 'UnaryExpression' && parent.operator === 'delete')
-  );
+  return { node, parent };
+}
+
+/** Whether `node` is the target of an assignment, an update or a delete. */
+const isWrittenTo = (node: AstNode, parent: AstNode | undefined) =>
+  (parent?.type === 'AssignmentExpression' && parent.left === node) ||
+  parent?.type === 'UpdateExpression' ||
+  (parent?.type === 'UnaryExpression' && parent.operator === 'delete');
+
+/** Whether `id` is changed in place: a member of it assigned, updated or deleted (`order.kind = ...`), or a call that changes it. */
+function changesMember(source: ScopedSource, id: AstNode): boolean {
+  const parent = source.parents.get(id);
+  if (assignsInto(id, parent) || callsMutator(source, parent)) return true;
+  if (parent?.type !== 'MemberExpression') return false;
+  const member = outermostMember(source, id);
+  return isWrittenTo(member.node, member.parent);
 }
 
 const isChanged = (source: ScopedSource, variable: Variable) =>
@@ -653,18 +672,20 @@ interface Carrier {
 
 type Carriers = (source: ScopedSource, call: AstNode, wrappers: DispatchWrappers) => Carrier[];
 
-/** The arguments a call hands a project helper's slots. */
-function helperCarriers(source: ScopedSource, call: AstNode, wrappers: DispatchWrappers): Carrier[] {
-  const callee = call.callee as AstNode;
+/** The slots a callee reaches: a function its own (read) file declares, else every helper by its bare name. */
+function calleeSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slot[] {
   const local = callee.type === 'Identifier' && wrappers.files.has(source.file) ? localFunction(source, callee) : undefined;
+  if (local) return [...(wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS).values()];
   const name = calleeName(callee) ?? '';
-  let slots = local ? (wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS) : (wrappers.byName.get(name) ?? NO_SLOTS);
+  const slots = [...(wrappers.byName.get(name) ?? NO_SLOTS).values()];
   // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
-  if (!local && callee.type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name)) {
-    slots = new Map([...slots].filter(([, slot]) => slot.path.length === 0));
-  }
-  return [...slots.values()].map((slot) => ({ node: argAt(call, slot.index), path: slot.path }));
+  const isEntryPoint = callee.type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name);
+  return isEntryPoint ? slots.filter((slot) => slot.path.length === 0) : slots;
 }
+
+/** The arguments a call hands a project helper's slots. */
+const helperCarriers = (source: ScopedSource, call: AstNode, wrappers: DispatchWrappers): Carrier[] =>
+  calleeSlots(source, call.callee as AstNode, wrappers).map((slot) => ({ node: argAt(call, slot.index), path: slot.path }));
 
 const carriedValues = (source: ScopedSource, call: AstNode, carriers: Carriers, wrappers: DispatchWrappers): Value[] =>
   carriers(source, call, wrappers).flatMap((carrier) => valuesOf(source, carrier.node, carrier.path));
@@ -739,6 +760,10 @@ export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, Se
   return wrappers;
 }
 
+/** The arguments of a call that name the verb it defines: a factory's first, or a wrapper's. */
+const factoryIndexes = (callee: AstNode, wrappers: Wrappers): Iterable<number> =>
+  isVerbFactory(callee) ? [0] : (wrappers.get(identifierName(callee) ?? '') ?? []);
+
 /** Every verb name the file defines (only on `onLines`, when given), in source order. */
 export function findDefinedVerbs(
   source: string,
@@ -750,9 +775,7 @@ export function findDefinedVerbs(
   walk(parseSource(source, file).ast, (node) => {
     if (node.type !== 'CallExpression') return;
     if (onLines && !onLines.has(node.loc.start.line)) return;
-    const callee = node.callee as AstNode;
-    const indexes = isVerbFactory(callee) ? [0] : [...(wrappers.get(identifierName(callee) ?? '') ?? [])];
-    for (const index of indexes) {
+    for (const index of factoryIndexes(node.callee as AstNode, wrappers)) {
       const name = literalText(argAt(node, index));
       if (name !== undefined && !verbs.includes(name)) verbs.push(name);
     }
