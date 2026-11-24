@@ -199,7 +199,10 @@ describe("a game's install must hold the vitest its commit's lockfile pins (#179
     const chess = await makeGame(fx, 'chess');
     const seven = await makeGame(fx, 'seven', { installed: false });
     const go = await makeGame(fx, 'go', { files: { 'package-lock.json': '{"lockfileVersion":3,"packages":{}}' } });
+    const torn = await makeGame(fx, 'torn');
     await makeGame(fx, 'fine');
+    // An interrupted install can leave a package.json empty.
+    await writeFiles(torn, { 'node_modules/vitest/package.json': '' });
     // main moves to a lockfile pinning a newer vitest, and nothing reinstalls.
     await writeFiles(hex, { 'package-lock.json': lockfilePinning('4.0.0') });
     commitAll(hex, 'vitest 4');
@@ -215,7 +218,9 @@ describe("a game's install must hold the vitest its commit's lockfile pins (#179
     await expect(refused).rejects.toThrow(`chess at main (${commit(chess)}): ${chess}/node_modules/.bin/vitest does not lead into ${chess}/node_modules/vitest.`);
     await expect(refused).rejects.toThrow(`seven at main (${commit(seven)}) pins vitest ${FIXTURE_VITEST} in its package-lock.json, but ${seven}/node_modules holds no vitest.`);
     await expect(refused).rejects.toThrow(`go at main (${commit(go)}) pins no vitest in its package-lock.json`);
+    await expect(refused).rejects.toThrow(`torn at main (${commit(torn)}): ${torn}/node_modules/vitest/package.json is not valid JSON.`);
     await expect(refused).rejects.toThrow('npm ci');
+    await expect(refused).rejects.toThrow('--skip');
     await expect(refused).rejects.not.toThrow(/fine at/);
     expect(existsSync(await catalogueCachePath(fx.tree))).toBe(false);
   });

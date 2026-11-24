@@ -50,7 +50,7 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync, mkdtempSync, promises as fs, realpathSync } from 'node:fs';
 import { cpus, homedir, tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 import { gitOutput as git, gitSucceeds } from './git-output.js';
 import { sha256Hex } from './hash.js';
 import { uncommittedContentHash } from './execution-context.js';
@@ -222,11 +222,17 @@ async function installMismatch(game: CatalogueRepo): Promise<string | undefined>
   }
   if (locked === undefined) return `${at} pins no vitest in its package-lock.json, and the check runs the game's own vitest.`;
   const modules = join(game.dir, 'node_modules');
-  const pkg = await readIfExists(join(modules, 'vitest', 'package.json'), (p) => fs.readFile(p, 'utf-8'));
-  const installed = pkg === undefined ? undefined : (JSON.parse(pkg) as { version?: string }).version;
+  const pkgPath = join(modules, 'vitest', 'package.json');
+  const pkg = await readIfExists(pkgPath, (p) => fs.readFile(p, 'utf-8'));
+  let installed: string | undefined;
+  try {
+    installed = pkg === undefined ? undefined : (JSON.parse(pkg) as { version?: string }).version;
+  } catch {
+    return `${at}: ${pkgPath} is not valid JSON.`;
+  }
   if (installed !== locked) return `${at} pins vitest ${locked} in its package-lock.json, but ${modules} holds ${installed === undefined ? 'no vitest' : `vitest ${installed}`}.`;
   const bin = readIfExistsSync(join(modules, '.bin', 'vitest'), (p) => realpathSync(p));
-  if (bin === undefined || !bin.startsWith(`${realpathSync(join(modules, 'vitest'))}/`)) {
+  if (bin === undefined || !bin.startsWith(`${realpathSync(join(modules, 'vitest'))}${sep}`)) {
     return `${at}: ${modules}/.bin/vitest does not lead into ${modules}/vitest.`;
   }
   return undefined;
@@ -239,7 +245,8 @@ async function requireLockedInstalls(games: CatalogueRepo[]): Promise<void> {
   throw new Error(
     `No game was checked: these installs do not match the commit the check reads, so their tests would run on the wrong vitest.\n`
       + `${mismatches.map((m) => `  ${m}`).join('\n')}\n`
-      + 'In each game\'s checkout, check out the branch named above and run npm ci, then run boardsmith catalogue again.',
+      + 'Run npm ci in each game\'s checkout with the branch named above checked out (save any uncommitted work there first), '
+      + 'or leave a game out with --skip \'<game>=<reason>\', then run boardsmith catalogue again.',
   );
 }
 
