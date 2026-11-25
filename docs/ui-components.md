@@ -2108,6 +2108,7 @@ onUnmounted(() => unregister?.());
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
 | `useAnimationEvents()` | Inject animation events from ancestor |
+| `animationTimeline(state)` | The timeline a seat's `PlayerGameState` belongs to (game, restore count, seat), or `undefined` when the state does not name all three. It changes on an undo, a restore or a change of seat, when event ids start again |
 
 **Instance API:**
 

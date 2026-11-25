@@ -4142,7 +4142,7 @@
       "surfaceHash": "6b5c18ddd6ddafb3",
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
-      "summary": "The custom UI guide shows how a board draws each queued animation event over the view it arrived with (#1807)"
+      "summary": "boardsmith/ui exports animationTimeline, and the custom UI guide shows how a board draws each queued animation event over the view it arrived with (#1807)"
     }
   ]
 }

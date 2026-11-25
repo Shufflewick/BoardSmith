@@ -1244,7 +1244,8 @@ the player skips:
 <script setup lang="ts">
 import { computed, shallowRef, watch } from 'vue';
 import {
-  anchorAttrs, findElements, useAnimationEvents, useGameContext, type GameRootView, type TableBoardProps,
+  anchorAttrs, animationTimeline, findElements, useAnimationEvents, useGameContext,
+  type GameRootView, type TableBoardProps,
 } from 'boardsmith/ui';
 
 const props = defineProps<TableBoardProps>();
@@ -1253,9 +1254,13 @@ const animations = useAnimationEvents();
 
 // The view each event arrived with. 'sync': the queue starts an idle handler as the frame lands, before a default watcher runs.
 const viewOfEvent = new Map<number, GameRootView>();
+let timeline: string | undefined;
 watch(() => gameState.value?.state, (frame) => {
-  for (const event of frame?.animationEvents ?? []) {
-    if (frame && !viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
+  if (!frame) return;
+  if (animationTimeline(frame) !== timeline) viewOfEvent.clear();
+  timeline = animationTimeline(frame);
+  for (const event of frame.animationEvents ?? []) {
+    if (!viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
   }
 }, { immediate: true, flush: 'sync' });
 
@@ -1280,6 +1285,7 @@ watch(() => animations?.isAnimating.value, (animating) => {
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
     const timer = setTimeout(resolve, ms);
     signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
   });
@@ -1290,8 +1296,15 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 - **Record frames with `flush: 'sync'`.** The queue runs the first handler of
   an idle queue as soon as the frame lands, before a default (`'pre'`) watcher
   in your board has seen that frame, so a default watcher has no view for it.
-- **Keep the first view an event arrived with.** The queue plays an event once,
-  however many frames carry it.
+- **Keep the first view an event arrived with, and forget them all when the
+  timeline changes.** The queue plays an event once, however many frames carry
+  it, and frames go on carrying a move's events until the next action. An undo,
+  a restore or a change of seat starts the numbers again (`animationTimeline`
+  names the timeline, as the queue reads it), so an old entry would hand a
+  replayed event a view from before the undo.
+- **Every handler sets `playing` first.** A board with more event types than
+  `hit` does in each handler what this one does, or the next event plays over
+  the view the last one left.
 - **Go back to the latest view when `isAnimating` turns false.** It turns false
   when the queue runs dry and the moment the player presses Skip, which drops
   the queued `'drop'` events and aborts the playing one. A `'run'` handler is

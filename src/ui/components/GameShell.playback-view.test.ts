@@ -11,7 +11,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
 import { computed, defineComponent, h, nextTick, shallowRef, watch, type PropType } from 'vue';
-import { useAnimationEvents } from '../composables/useAnimationEvents.js';
+import { animationTimeline, useAnimationEvents } from '../composables/useAnimationEvents.js';
 import { useGameContext } from '../composables/useGameContext.js';
 import { findElements } from '../composables/useGameViewHelpers.js';
 import type { GameRootView } from '../types.js';
@@ -30,11 +30,15 @@ const PlaybackBoard = defineComponent({
     const animations = useAnimationEvents();
 
     const viewOfEvent = new Map<number, GameRootView>();
+    let timeline: string | undefined;
     watch(
       () => gameState.value?.state,
       (frame) => {
-        for (const event of frame?.animationEvents ?? []) {
-          if (frame && !viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
+        if (!frame) return;
+        if (animationTimeline(frame) !== timeline) viewOfEvent.clear();
+        timeline = animationTimeline(frame);
+        for (const event of frame.animationEvents ?? []) {
+          if (!viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
         }
       },
       { immediate: true, flush: 'sync' },
@@ -63,78 +67,95 @@ const PlaybackBoard = defineComponent({
   },
 });
 
-function frame(hp: number | null, events: Array<{ id: number; shot: number }>) {
+function frame(hp: number | null, events: Array<{ id: number; shot: number }>, { restoreEpoch = 0, round = 1 } = {}) {
   postFromHost({
     type: 'game_state',
     view: {
       flowState: { currentPlayer: 1, awaitingInput: true, availableActions: ['pass'] },
       state: {
         view: {
-          id: 0, className: 'Game', attributes: {},
+          id: 0, className: 'Game', attributes: { round },
           children: hp === null ? [] : [{ id: 7, className: 'Unit', name: 'scout', attributes: { hp } }],
         },
         players: [{ name: 'P1', seat: 1 }], currentPlayer: 1, isMyTurn: true,
         availableActions: ['pass'], actionMetadata: { pass: { name: 'pass', prompt: 'Pass', selections: [] } },
         animationEvents: events.map(({ id, shot }) => ({ id, type: 'hit', data: { shot }, timestamp: id })),
+        gameInstanceId: 'battle', restoreEpoch, viewerSeat: 1,
       },
     },
     winners: [],
   });
 }
 
-const units = (wrapper: ReturnType<typeof mountPlatformShell>) => wrapper.get('[data-testid="units"]').text();
+let wrapper: ReturnType<typeof mountPlatformShell> | undefined;
+const units = () => wrapper!.get('[data-testid="units"]').text();
 
-async function mountAtTwoHp() {
+async function mountAtThreeHp() {
   enterIframe();
-  const wrapper = mountPlatformShell({ board: PlaybackBoard, attachTo: document.body });
+  wrapper = mountPlatformShell({ board: PlaybackBoard, attachTo: document.body });
   await nextTick();
   postFromHost({ type: 'init', seat: 1 });
-  frame(2, []);
-  await nextTick();
-  await nextTick();
-  return wrapper;
+  frame(3, []);
+  await flushPromises();
 }
 
-/** The first hit takes the scout to 1hp; the second, arriving while the first still plays, removes it. */
-async function twoHitsArrive() {
-  frame(1, [{ id: 1, shot: 1 }]);
+/** Three hits take the scout from 3hp to gone, each frame landing while the first hit still plays. */
+async function threeHitsArrive() {
+  frame(2, [{ id: 1, shot: 1 }]);
   await nextTick();
-  frame(null, [{ id: 2, shot: 2 }]);
+  frame(1, [{ id: 2, shot: 2 }]);
   await nextTick();
-  await nextTick();
+  frame(null, [{ id: 3, shot: 3 }]);
+  await flushPromises();
 }
 
 afterEach(() => {
+  wrapper?.unmount();
+  wrapper = undefined;
   drawnWhilePlaying.length = 0;
   leaveIframe();
   document.body.innerHTML = '';
 });
 
 describe('a board plays each queued event over the view it arrived with (#1807)', () => {
-  it('shows the first hit over its own frame while the next frame has already removed the unit', async () => {
-    const wrapper = await mountAtTwoHp();
-    await twoHitsArrive();
+  it('draws each hit over its own frame while later frames have already arrived', async () => {
+    await mountAtThreeHp();
+    await threeHitsArrive();
 
-    expect(drawnWhilePlaying).toEqual(['scout 1hp']);
-    expect(units(wrapper)).toBe('scout 1hp');
+    expect(drawnWhilePlaying).toEqual(['scout 2hp']);
+    expect(units()).toBe('scout 2hp');
 
     releaseFirstHit();
     await flushPromises();
 
-    expect(drawnWhilePlaying).toEqual(['scout 1hp', '']);
-    expect(units(wrapper)).toBe('');
-    wrapper.unmount();
+    expect(drawnWhilePlaying).toEqual(['scout 2hp', 'scout 1hp', '']);
+    expect(units()).toBe('');
   });
 
   it('goes back to the latest view when the player skips the animations', async () => {
-    const wrapper = await mountAtTwoHp();
-    await twoHitsArrive();
-    expect(units(wrapper)).toBe('scout 1hp');
+    await mountAtThreeHp();
+    await threeHitsArrive();
+    expect(units()).toBe('scout 2hp');
 
-    await wrapper.get('.action-panel-pending .skip-btn').trigger('click');
+    await wrapper!.get('.action-panel-pending .skip-btn').trigger('click');
     await nextTick();
 
-    expect(units(wrapper)).toBe('');
-    wrapper.unmount();
+    expect(units()).toBe('');
+  });
+
+  it('draws a replayed event over its new frame after a restore, not a frame of the old timeline', async () => {
+    await mountAtThreeHp();
+    frame(2, [{ id: 1, shot: 1 }]);
+    await flushPromises();
+    releaseFirstHit();
+    await flushPromises();
+    // The next frame, before any new action, carries the played event again.
+    frame(2, [{ id: 1, shot: 1 }], { round: 2 });
+    await flushPromises();
+
+    frame(3, [{ id: 1, shot: 9 }], { restoreEpoch: 1 });
+    await flushPromises();
+
+    expect(drawnWhilePlaying).toEqual(['scout 2hp', 'scout 3hp']);
   });
 });
