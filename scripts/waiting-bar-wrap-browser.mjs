@@ -64,7 +64,7 @@ const SCENES = [
   { width: 390, height: 844, colorScheme: 'dark' },
 ];
 
-/** The waiting bar's box, its content's width, the long word's unwrapped width and how many lines its text takes. */
+/** The waiting bar's box, its content box's width, the long word's unwrapped width and how many lines the word itself takes. */
 function measureBar(frame) {
   return frame.locator('.waiting-message').evaluate((bar, word) => {
     const probe = document.createElement('span');
@@ -74,9 +74,17 @@ function measureBar(frame) {
     bar.append(probe);
     const wordWidth = probe.getBoundingClientRect().width;
     probe.remove();
-    const range = document.createRange();
-    range.selectNodeContents(bar);
-    const lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
+    const walker = document.createTreeWalker(bar, NodeFilter.SHOW_TEXT);
+    let lines = 0;
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = node.data.indexOf(word);
+      if (at < 0) continue;
+      const range = document.createRange();
+      range.setStart(node, at);
+      range.setEnd(node, at + word.length);
+      lines = new Set([...range.getClientRects()].filter((r) => r.width > 0).map((r) => Math.round(r.top))).size;
+    }
+    const style = getComputedStyle(bar);
     const { left, right } = bar.getBoundingClientRect();
     return {
       text: bar.textContent,
@@ -84,6 +92,7 @@ function measureBar(frame) {
       lines,
       content: bar.scrollWidth,
       box: bar.clientWidth,
+      contentBox: bar.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight),
       right,
       left,
       viewport: document.documentElement.clientWidth,
@@ -124,8 +133,8 @@ await runBrowserRegression(
         await check(`the waiting bar wraps a long word inside itself at ${width}px ${colorScheme}`, async () => {
           const bar = await measureBar(frame);
           assert(bar.text.includes(LONG_WORD), `the waiting bar reads ${JSON.stringify(bar.text)}, not the long word`);
-          assert(bar.wordWidth > bar.box, `the long word is ${bar.wordWidth}px wide in a ${bar.box}px bar, so it fits without wrapping; lengthen LONG_WORD`);
-          assert(bar.lines > 1, `the waiting bar's text takes ${bar.lines} line, so the long word did not wrap`);
+          assert(bar.wordWidth > bar.contentBox, `the long word is ${bar.wordWidth}px wide in a bar with ${bar.contentBox}px for text, so it fits without wrapping; lengthen LONG_WORD`);
+          assert(bar.lines > 1, `the long word takes ${bar.lines} line in the waiting bar, so it did not wrap`);
           assert(bar.content <= bar.box, `the waiting bar's content is ${bar.content}px wide in a box ${bar.box}px wide`);
           assert(bar.left >= 0 && bar.right <= bar.viewport, `the waiting bar spans ${bar.left}px to ${bar.right}px in a ${bar.viewport}px viewport`);
           assert(bar.pageContent <= bar.viewport, `the game page scrolls sideways: ${bar.pageContent}px of content in a ${bar.viewport}px viewport`);
