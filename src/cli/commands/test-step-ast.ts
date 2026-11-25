@@ -733,25 +733,39 @@ function bindingExport(source: ScopedSource, id: unknown, files: ReadonlySet<str
   return imported && { from: resolveImport(source.file, imported.specifier, files), name: imported.name };
 }
 
-function moduleExports(source: ScopedSource, files: ReadonlySet<string>): ModuleExports {
-  const module: ModuleExports = { named: new Map(), star: [] };
-  const from = (node: AstNode) => resolveImport(source.file, (node.source as AstNode | null)?.value, files);
-  for (const node of source.ast.body as AstNode[]) {
-    if (node.type === 'ExportAllDeclaration' && node.exported === null) module.star.push(from(node));
-    if (node.type === 'ExportDefaultDeclaration') {
-      const declared = isFunction(node.declaration) ? { fn: node.declaration } : bindingExport(source, node.declaration, files);
-      if (declared) module.named.set('default', declared);
-    }
-    if (node.type !== 'ExportNamedDeclaration') continue;
-    const declaration = node.declaration as AstNode | null;
-    const declared = declaration?.type === 'VariableDeclaration' ? (declaration.declarations as AstNode[]) : declaration ? [declaration] : [];
-    for (const named of declared.map(namedFunction)) if (named) module.named.set(named.name, { fn: named.fn });
+type ExportReader = (node: AstNode, module: ModuleExports, source: ScopedSource, files: ReadonlySet<string>) => void;
+
+const exportedFrom = (node: AstNode, source: ScopedSource, files: ReadonlySet<string>) =>
+  resolveImport(source.file, (node.source as AstNode | null)?.value, files);
+
+/** The functions an `export const` or `export function` declares. */
+function declaredFunctions(declaration: AstNode | null): Array<{ name: string; fn: AstNode }> {
+  if (declaration === null) return [];
+  const declarators = declaration.type === 'VariableDeclaration' ? (declaration.declarations as AstNode[]) : [declaration];
+  return declarators.flatMap((node) => namedFunction(node) ?? []);
+}
+
+const EXPORT_READERS: Readonly<Record<string, ExportReader>> = Object.freeze({
+  ExportAllDeclaration: (node, module, source, files) => {
+    if (node.exported === null) module.star.push(exportedFrom(node, source, files));
+  },
+  ExportDefaultDeclaration: (node, module, source, files) => {
+    const declared = isFunction(node.declaration) ? { fn: node.declaration } : bindingExport(source, node.declaration, files);
+    if (declared) module.named.set('default', declared);
+  },
+  ExportNamedDeclaration: (node, module, source, files) => {
+    for (const { name, fn } of declaredFunctions(node.declaration as AstNode | null)) module.named.set(name, { fn });
     for (const specifier of node.specifiers as AstNode[]) {
       const local = specifier.local as AstNode;
-      const target = node.source ? { from: from(node), name: moduleName(local) } : bindingExport(source, local, files);
+      const target = node.source ? { from: exportedFrom(node, source, files), name: moduleName(local) } : bindingExport(source, local, files);
       if (target) module.named.set(moduleName(specifier.exported), target);
     }
-  }
+  },
+});
+
+function moduleExports(source: ScopedSource, files: ReadonlySet<string>): ModuleExports {
+  const module: ModuleExports = { named: new Map(), star: [] };
+  for (const node of source.ast.body as AstNode[]) EXPORT_READERS[node.type]?.(node, module, source, files);
   return module;
 }
 
@@ -780,21 +794,29 @@ function importedSlots(file: string, imported: Import, wrappers: DispatchWrapper
   return from === undefined ? undefined : wrappers.exported(from, imported.name);
 }
 
-/**
- * The slots a callee reaches: an import's, read from the file it comes from; a function its own
- * (read) file declares; else every helper by its bare name (an import's own, not its alias).
- */
-function calleeSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slot[] {
-  const imported = callee.type === 'Identifier' ? importOf(source, callee) : undefined;
-  const exported = imported && importedSlots(source.file, imported, wrappers);
-  if (exported) return [...exported.values()];
+/** The slots of the function a callee names when its own (read) file declares it. */
+function localSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slots | undefined {
   const local = callee.type === 'Identifier' && wrappers.files.has(source.file) ? localFunction(source, callee) : undefined;
-  if (local) return [...(wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS).values()];
-  const name = (imported && imported.name !== 'default' ? imported.name : calleeName(callee)) ?? '';
+  return local && (wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS);
+}
+
+/** Every slot of every helper by the callee's bare name (an import's own name, not its alias). */
+function namedSlots(callee: AstNode, imported: Import | undefined, wrappers: DispatchWrappers): Slot[] {
+  const name = (imported?.name === 'default' ? undefined : imported?.name) ?? calleeName(callee) ?? '';
   const slots = [...(wrappers.byName.get(name) ?? NO_SLOTS).values()];
   // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
   const isEntryPoint = callee.type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name);
   return isEntryPoint ? slots.filter((slot) => slot.path.length === 0) : slots;
+}
+
+/**
+ * The slots a callee reaches: an import's, read from the file it comes from; a function its own
+ * (read) file declares; else every helper by its bare name.
+ */
+function calleeSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slot[] {
+  const imported = callee.type === 'Identifier' ? importOf(source, callee) : undefined;
+  const bound = imported ? importedSlots(source.file, imported, wrappers) : localSlots(source, callee, wrappers);
+  return bound ? [...bound.values()] : namedSlots(callee, imported, wrappers);
 }
 
 /** The arguments a call hands a project helper's slots. */
