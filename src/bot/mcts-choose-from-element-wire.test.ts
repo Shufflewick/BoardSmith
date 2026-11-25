@@ -42,10 +42,32 @@ class SkirmishGame extends Game<SkirmishGame, Player> {
 }
 
 describe('a bot move that picks an element with chooseFrom', () => {
-  it('is accepted by the live game when the element holds a card the bot cannot see', async () => {
+  it.each([
+    { from: 'play', parallel: 1, search: (bot: MCTSBot) => bot.play() },
+    { from: 'a parallel play', parallel: 2, search: (bot: MCTSBot) => bot.play() },
+    { from: 'playWithStats', parallel: 1, search: async (bot: MCTSBot) => (await bot.playWithStats()).stats[0]?.move ?? null },
+  ])('from $from is accepted by the live game when the element holds a card the bot cannot see', async ({ parallel, search }) => {
     const runner = new GameRunner({ GameClass: SkirmishGame, gameType: 'skirmish', gameOptions: { playerCount: 2, seed: 'bs1808' } });
     runner.start();
-    const bot = new MCTSBot(runner.game, SkirmishGame, 'skirmish', 1, { async: false, timeout: Infinity, seed: 'bs1808', iterations: 20 });
+    const bot = new MCTSBot(runner.game, SkirmishGame, 'skirmish', 1, { async: false, timeout: Infinity, seed: 'bs1808', iterations: 20, parallel });
+
+    const move = (await search(bot))!;
+
+    expect(runner.performAction(move.action, 1, move.args)).toMatchObject({ success: true });
+  });
+});
+
+/** Every attack, built by the game itself with the unit as the target. */
+const ownAttacks = (game: Game) => [...game.all(Unit)].map((unit) => ({ action: 'attack', args: { target: unit } }));
+
+describe('a chooseFrom element in a move a bot hook builds itself', () => {
+  it.each([
+    { hook: 'candidateMoves', strategy: { candidateMoves: ownAttacks } },
+    { hook: 'threatResponseMoves', strategy: { threatResponseMoves: (game: Game) => ({ moves: ownAttacks(game), urgent: true }) } },
+  ])('is sent from $hook so the live game accepts it, as a listed move is', async ({ strategy }) => {
+    const runner = new GameRunner({ GameClass: SkirmishGame, gameType: 'skirmish', gameOptions: { playerCount: 2, seed: 'bs1813' } });
+    runner.start();
+    const bot = new MCTSBot(runner.game, SkirmishGame, 'skirmish', 1, { async: false, timeout: Infinity, seed: 'bs1813', iterations: 20 }, strategy);
 
     const move = (await bot.play())!;
 
@@ -112,5 +134,63 @@ describe('a searched opponent move whose chooseFrom value holds an element', () 
     const { root } = await bot.runSearch();
 
     expect(refusedMoves(root)).toEqual([]);
+  });
+});
+
+/** Seats take turns attacking a unit by strength, until four attacks are made. */
+class DuelGame extends Game<DuelGame, Player> {
+  attacks = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([StrongUnit, Space]);
+    const field = this.create(Space<DuelGame>, 'field');
+    for (const [name, strength] of [['scout', 1], ['knight', 3]] as const) {
+      field.create(StrongUnit, name, { strength });
+    }
+    this.registerAction(
+      Action.create<DuelGame>('attack')
+        .chooseFrom('target', {
+          choices: (ctx) => [...ctx.game.all(StrongUnit)].map((unit) => ({ value: unit, label: unit.name })),
+        })
+        .execute((_args, ctx) => {
+          if (++this.attacks === 4) this.finish([ctx.player]);
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({ while: () => !this.isFinished(), maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['attack'] }) }) }),
+    });
+  }
+}
+
+class StrongUnit extends Piece<DuelGame> {
+  strength = 0;
+}
+
+describe('a bot hook handed a move whose chooseFrom pick is an element', () => {
+  it('reads the element itself, so a field such as its strength is there', async () => {
+    const game = new DuelGame({ playerCount: 2, seed: 'bs1813' });
+    game.startFlow();
+    const seen = { ordering: [] as unknown[], playout: [] as unknown[] };
+    const bot = new MCTSBot(game, DuelGame, 'duel', 1, { async: false, timeout: Infinity, seed: 'bs1813', iterations: 20 }, {
+      moveOrdering: (_game, _seat, moves) => {
+        seen.ordering.push(...moves.map((move) => move.args.target));
+        return moves;
+      },
+      playoutPolicy: (_game, _seat, moves) => {
+        seen.playout.push(...moves.map((move) => move.args.target));
+        return moves[0];
+      },
+    });
+
+    await bot.play();
+
+    expect(seen.ordering.length).toBeGreaterThan(0);
+    expect(seen.playout.length).toBeGreaterThan(0);
+    for (const target of [...seen.ordering, ...seen.playout]) {
+      expect(target).toBeInstanceOf(StrongUnit);
+      expect([1, 3]).toContain((target as StrongUnit).strength);
+    }
   });
 });

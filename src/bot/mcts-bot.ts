@@ -33,8 +33,13 @@ type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
  */
 const MAX_SAMPLED_ARGS = 20;
 
-/** A seat's moves, and whether they are a random sample of them rather than every one (#1680). */
-type SeatMoves = { moves: BotMove[]; sampled: boolean };
+/**
+ * A seat's moves in wire form, whether they are a random sample of them rather
+ * than every one (#1680), and each move as the game's bot hooks read it, with
+ * its `chooseFrom` elements the listing's own (#1813). The search keeps only
+ * the wire form, so a tree never holds a game copy's elements.
+ */
+type SeatMoves = { moves: BotMove[]; sampled: boolean; views: Map<BotMove, BotMove> };
 
 /**
  * The most memory one search's saved copies may hold (#633): 32 MiB, a quarter
@@ -72,6 +77,27 @@ function addSearchSteps(total: SearchSteps, sub: SearchSteps): void {
   total.firstFailure ??= sub.firstFailure;
   total.firstRefusal ??= sub.firstRefusal;
   total.choseAtRandom &&= sub.choseAtRandom;
+}
+
+/**
+ * A `chooseFrom` value in wire form, never naming the search copy's element,
+ * whose contents the live game does not match (#1808): each element as
+ * `{ id, className }`. An element that is the whole value keeps its id; one
+ * inside an array or object is in the ids `seat` knows it by, which is how the
+ * engine matches it (#1793).
+ */
+function wireChoice(choice: unknown, seat: number): unknown {
+  if (isElement(choice)) return asElementRefs(choice, (element) => element.id);
+  return asElementRefs(choice, (element) => seatIdOf(element, seat));
+}
+
+/** `moves` as the game's bot hooks read them; see {@link SeatMoves}. */
+function hookViews(moves: BotMove[], views: Map<BotMove, BotMove>): BotMove[] {
+  return moves.map((move) => {
+    const view = views.get(move);
+    if (!view) throw new Error(`The bot lost track of how to show the move ${move.action} to the game's bot hooks. This is a BoardSmith bug; please report it with the game that triggered it.`);
+    return view;
+  });
 }
 
 /** An object literal, not a class instance: the only objects whose fields a move's args are walked through. */
@@ -424,7 +450,7 @@ export class MCTSBot<G extends Game = Game> {
     // #73: under determinization one world offering a single move says nothing
     // about the others, so the fast path is only sound without a sampler.
     if (allMoves.length === 1 && !this.determinize) {
-      const root = this.createNode(flowState, null, null, allMoves, this.playerIndex, listing.sampled);
+      const root = this.createNode(flowState, null, null, allMoves, this.playerIndex, listing.sampled, listing.views);
       return { move: allMoves[0], root };
     }
 
@@ -434,11 +460,11 @@ export class MCTSBot<G extends Game = Game> {
     this.forcedRootMoves = undefined;
 
     if (this.threatResponseMoves) {
-      const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, allMoves);
+      const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, hookViews(allMoves, listing.views));
       if (threatResponse.moves.length > 0) {
         // FORCE blocking when threat is detected - no half measures!
         // If threat response finds blocking moves, the bot MUST use them
-        moves = threatResponse.moves;
+        moves = this.fromHook(threatResponse.moves, listing.views, this.searchGame, this.playerIndex);
         // #73: a forced block stays forced under determinization. Without this
         // the per-world root refresh would widen the root straight back to
         // every move, quietly undoing the game's "you MUST block" ruling.
@@ -454,7 +480,7 @@ export class MCTSBot<G extends Game = Game> {
     this.raveTable.clear();
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
-    const root = this.createNode(flowState, null, null, moves, this.playerIndex, listing.sampled || (!this.forcedRootMoves && moves.length < allMoves.length));
+    const root = this.createNode(flowState, null, null, moves, this.playerIndex, listing.sampled || (!this.forcedRootMoves && moves.length < allMoves.length), listing.views);
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -893,7 +919,7 @@ export class MCTSBot<G extends Game = Game> {
 
     // Create child node (no snapshot needed: every step restores the search
     // game whole, from the root or a saved copy, before it walks the tree)
-    const child = this.createNode(flowState, node, move, next.moves, next.seat, next.sampled);
+    const child = this.createNode(flowState, node, move, next.moves, next.seat, next.sampled, next.views);
     node.children.push(child);
 
     return child;
@@ -927,7 +953,7 @@ export class MCTSBot<G extends Game = Game> {
     while (!flowState.complete && depth < this.config.playoutDepth) {
       // One seat lists the moves and makes the one chosen (#522). With no seat
       // to move, the step is held open from outside: score the position as it stands.
-      const { seat: currentPlayer, moves } = this.seatToMove(flowState);
+      const { seat: currentPlayer, moves, views } = this.seatToMove(flowState);
       if (moves.length === 0) {
         break;
       }
@@ -937,7 +963,8 @@ export class MCTSBot<G extends Game = Game> {
 
       if (this.playoutPolicy) {
         // Use game-specific playout policy for smarter move selection
-        move = this.playoutPolicy(this.searchGame, currentPlayer, moves, () => this.rng.next());
+        const picked = this.playoutPolicy(this.searchGame, currentPlayer, hookViews(moves, views), () => this.rng.next());
+        [move] = this.fromHook([picked], views, this.searchGame, currentPlayer);
       } else {
         // Default to random move selection
         move = this.rng.pick(moves);
@@ -1220,13 +1247,13 @@ export class MCTSBot<G extends Game = Game> {
       const listing = this.movesFor(this.searchGame!, flowState, seat, { sample: true });
       if (listing.moves.length > 0) return { seat, ...listing };
     }
-    return { seat: this.playerIndex, moves: [], sampled: false };
+    return { seat: this.playerIndex, moves: [], sampled: false, views: new Map() };
   }
 
   /**
    * Every move `seat` may make in `flowState`: its listed actions with every
    * legal set of args, then the follow-up it holds, if any. Args are in wire
-   * form (see {@link serializeChoice}). With `sample`, each action contributes at most 20 arg
+   * form (see {@link wireChoice}). With `sample`, each action contributes at most 20 arg
    * sets, drawn from the bot's own random source, to bound the branching. An
    * action with more moves than enumeration lists contributes 20 drawn at
    * random, with or without `sample` (#691).
@@ -1258,8 +1285,9 @@ export class MCTSBot<G extends Game = Game> {
 
     // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
     // An empty list says the seat waits here (#1537): it has no move at this position.
-    const moves = this.candidateMoves(enumerationGame, seat, () => list().moves);
-    return { moves, sampled: listed?.sampled ?? false };
+    const picked = this.candidateMoves(enumerationGame, seat, () => hookViews(list().moves, list().views));
+    const views = listed?.views ?? new Map<BotMove, BotMove>();
+    return { moves: this.fromHook(picked, views, enumerationGame, seat), sampled: listed?.sampled ?? false, views };
   }
 
   /** Every move `seat` may make in `flowState`, listed against `enumerationGame`; see {@link movesFor}. */
@@ -1275,17 +1303,21 @@ export class MCTSBot<G extends Game = Game> {
     }
 
     const moves: BotMove[] = [];
+    const views = new Map<BotMove, BotMove>();
     let sampled = false;
     const add = (actionDef: ActionDefinition, followUp?: FollowUpAction) => {
       // An action with more moves than enumeration lists gives a random
       // sample of them, drawn from the bot's own seeded source (#691).
       const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng, onSampled: () => { sampled = true; } };
-      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
-        .map((args) => this.serializeArgs(args, actionDef.selections, seat));
-      const cut = options.sample && serialized.length > MAX_SAMPLED_ARGS;
+      const listed = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
+        .map((args) => {
+          const move = { action: actionDef.name, args: this.serializeArgs(args, actionDef.selections, (choice) => wireChoice(choice, seat)) };
+          views.set(move, { action: actionDef.name, args: this.serializeArgs(args, actionDef.selections, (choice) => choice) });
+          return move;
+        });
+      const cut = options.sample && listed.length > MAX_SAMPLED_ARGS;
       sampled ||= cut;
-      const kept = cut ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS) : serialized;
-      for (const args of kept) moves.push({ action: actionDef.name, args });
+      moves.push(...(cut ? this.rng.shuffle(listed).slice(0, MAX_SAMPLED_ARGS) : listed));
     };
 
     for (const actionName of availableActionsForSeat(flowState, seat)) {
@@ -1298,7 +1330,7 @@ export class MCTSBot<G extends Game = Game> {
     const followUpDef = followUp && enumerationGame.getAction(followUp.action);
     if (followUp && followUpDef) add(followUpDef, followUp);
 
-    return { moves, sampled };
+    return { moves, sampled, views };
   }
 
   /**
@@ -1384,27 +1416,38 @@ export class MCTSBot<G extends Game = Game> {
 
 
   /**
-   * A choice in wire form, never the search copy's element, whose contents the
-   * live game does not match (#1808): a `chooseElement(s)` pick as its id, and
-   * each element in a `chooseFrom` value as `{ id, className }`. An element that
-   * is the whole value keeps its id; one inside an array or object is in the ids
-   * `seat` knows it by, which is how the engine matches it (#1793).
+   * The moves a bot hook returned, in wire form: a move it was shown as the
+   * move it stands for, and one it built itself encoded from `game`'s elements
+   * for `seat`, which is then shown to later hooks as the hook wrote it (#1813).
    */
-  private serializeChoice(choice: unknown, selection: Selection, seat: number): unknown {
+  private fromHook(picked: BotMove[], views: Map<BotMove, BotMove>, game: Game, seat: number): BotMove[] {
+    const shownAs = new Map([...views].map(([move, view]) => [view, move]));
+    return picked.map((view) => {
+      const known = shownAs.get(view);
+      if (known) return known;
+      const selections = game.getAction(view.action)?.selections ?? [];
+      const move = { action: view.action, args: this.serializeArgs(view.args, selections, (choice) => wireChoice(choice, seat)) };
+      views.set(move, view);
+      return move;
+    });
+  }
+
+  /** A choice with a `chooseElement(s)` pick as its id, and a `chooseFrom` value as `chooseFromValue` makes it. */
+  private serializeChoice(choice: unknown, selection: Selection, chooseFromValue: (choice: unknown) => unknown): unknown {
     if (selection.type === 'element' || selection.type === 'elements') {
-      return (choice as { id: number }).id;
+      return isElement(choice) ? choice.id : choice;
     }
-    if (isElement(choice)) return asElementRefs(choice, (element) => element.id);
-    return asElementRefs(choice, (element) => seatIdOf(element, seat));
+    return chooseFromValue(choice);
   }
 
   /**
-   * Serialize all args at once after enumeration is complete.
-   * This ensures element objects are available during recursion for dependent filters,
-   * and only converted to IDs when returning final results.
+   * Serialize all args at once after enumeration is complete, once in wire form
+   * and once as the game's bot hooks read them, which differ only in each
+   * `chooseFrom` value (see {@link SeatMoves}).
+   * This ensures element objects are available during recursion for dependent filters.
    *
    * A `chooseElement(s)` pick becomes a bare numeric id, not the `{ id, className }` a
-   * `chooseFrom` element becomes, on purpose (#685): `BotMove.args` is public, and game bot hooks
+   * `chooseFrom` element becomes in wire form, on purpose (#685): `BotMove.args` is public, and game bot hooks
    * (`playoutPolicy`, `moveOrdering`, `threatResponseMoves`,
    * `hintTargetFromMove`) and the hint and heatmap fallbacks in
    * session/stateless-ops.ts read element args as numbers. Do not merge the two.
@@ -1412,7 +1455,7 @@ export class MCTSBot<G extends Game = Game> {
   private serializeArgs(
     args: Record<string, unknown>,
     selections: Selection[],
-    seat: number,
+    chooseFromValue: (choice: unknown) => unknown,
   ): Record<string, unknown> {
     const serialized: Record<string, unknown> = {};
 
@@ -1424,9 +1467,9 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       if (Array.isArray(value)) {
-        serialized[key] = value.map(v => this.serializeChoice(v, selection, seat));
+        serialized[key] = value.map(v => this.serializeChoice(v, selection, chooseFromValue));
       } else {
-        serialized[key] = this.serializeChoice(value, selection, seat);
+        serialized[key] = this.serializeChoice(value, selection, chooseFromValue);
       }
     }
 
@@ -1469,12 +1512,14 @@ export class MCTSBot<G extends Game = Game> {
     allMoves: BotMove[],
     currentPlayer: number,
     sampled: boolean,
+    views: Map<BotMove, BotMove>,
   ): MCTSNode {
     // Order moves if moveOrdering hook is available
     // This determines exploration order: first moves are tried first
     let untriedMoves: BotMove[];
     if (this.moveOrdering && this.searchGame) {
-      untriedMoves = this.moveOrdering(this.searchGame, this.playerIndex, [...allMoves]);
+      const ordered = this.moveOrdering(this.searchGame, this.playerIndex, hookViews(allMoves, views));
+      untriedMoves = this.fromHook(ordered, views, this.searchGame, currentPlayer);
     } else {
       untriedMoves = [...allMoves];
     }

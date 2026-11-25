@@ -1,5 +1,5 @@
 {
-  "revision": 530,
+  "revision": 531,
   "surfaceHash": "9f2dbf6bd7713de5",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4183,6 +4183,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith test-step-check reads a verb wrapper from the file it is imported from, and finds a helper called through a default import under another name."
+    },
+    {
+      "revision": 531,
+      "date": "2026-11-25",
+      "surfaceHash": "9f2dbf6bd7713de5",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "MCTS bot hooks (moveOrdering, playoutPolicy, threatResponseMoves, candidateMoves) see a chooseFrom element as the search copy's element again, not { id, className }; the bot still sends its move with that element as { id, className }, and a move one of those hooks builds itself with the element is sent that way too (#1813)"
     }
   ]
 }
