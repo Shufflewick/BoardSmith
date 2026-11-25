@@ -498,6 +498,8 @@ markers this page documents, so it keeps up with any game without knowing it:
   [Values the game checks](#values-the-game-checks-inputs) (#470). Otherwise an
   empty text field is filled with "smoke test" and an empty number field with a
   value its own `min`, `max` and `step` accept: its least value, else 1 (#465).
+  A field that opens filled, as a number field with an `initial` does, keeps its
+  value unless `inputs` give one, which the walk types over it (#1802).
   When the game refuses a number the walk chose with its own words (a
   `validate` message, or a refusal it throws for the player to read), the walk
   takes the action again with the next number up, three numbers in all, and
@@ -994,7 +996,9 @@ The walk fails on everything it would fail on without them:
 - An input naming a field the walk never met in its action fails the walk once
   the walk has met any of that action's fields or taken it, naming the fields
   it met: a misspelt pick name would otherwise leave the walk typing its own
-  value there.
+  value there. A field the selected thing answers, when the walk takes a verb
+  from that thing's menu, counts as met: the panel marks the verb's button
+  with the pick it answers (`data-bs-answers`) and never draws the field (#1802).
 
 It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
 `devUI`. Board tests stand in for the shell with `renderAsSeat`,

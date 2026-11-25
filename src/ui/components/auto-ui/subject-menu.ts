@@ -15,7 +15,7 @@
 import type { SubjectEntry, SubjectIndex } from '../../../engine/action/subject-index.js';
 import type { SubjectRef } from '../../../types/protocol.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
-import { sameThing, usableVerbs } from '../../composables/sharedSelection.js';
+import { pickTheThingAnswers, sameThing, usableVerbs } from '../../composables/sharedSelection.js';
 
 /** A button of the panel's menu: an action, a thing to select, or a verb of the selected thing. */
 export type PanelMenuItem = EnrichedActionMetadata & {
@@ -23,6 +23,8 @@ export type PanelMenuItem = EnrichedActionMetadata & {
   thing?: SubjectEntry;
   /** Pressing it starts the action on this thing. */
   verbOf?: SubjectRef;
+  /** The pick the thing it starts on answers, which the panel never draws. */
+  answers?: string;
 };
 
 /** A verb the open level cannot start now, with why. */
@@ -57,17 +59,19 @@ interface SelectionMenu {
 interface Building extends SelectionMenu {
   seen: Set<string>;
   metadataOf: (action: string) => EnrichedActionMetadata | undefined;
+  subjects: SubjectIndex;
   /** The selected thing's type, which its heading already names. */
   type: string;
 }
 
-function offer(menu: Building, action: string, of: SubjectRef, reason: string | undefined, label?: string): void {
+function offer(menu: Building, action: string, of: SubjectEntry, reason: string | undefined, label?: string): void {
   const meta = menu.metadataOf(action);
   if (!meta || menu.seen.has(action)) return;
   menu.seen.add(action);
   // A group named as the type the heading names would only add a press (#1653).
   const group = meta.group?.[0] === menu.type ? { group: meta.group.slice(1) } : {};
-  const item = { ...meta, ...group, ...(label ? { prompt: label } : {}), verbOf: of };
+  const answers = pickTheThingAnswers(meta, of, menu.subjects);
+  const item = { ...meta, ...group, ...(label ? { prompt: label } : {}), verbOf: of, ...(answers ? { answers } : {}) };
   if (reason) menu.folded.push({ ...item, reason });
   else menu.items.push(item);
 }
@@ -88,7 +92,7 @@ export function selectionMenuItems(
   metadataOf: (action: string) => EnrichedActionMetadata | undefined,
   disabledReason: (action: string) => string | undefined,
 ): SelectionMenu {
-  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf, type: selection.type };
+  const menu: Building = { items: [], folded: [], seen: new Set(), metadataOf, subjects, type: selection.type };
   offerVerbsOf(menu, selection);
   for (const later of subjects.laterVerbs.filter((verb) => verb.type === selection.type)) offer(menu, later.action, selection, disabledReason(later.action));
   const parts = subjects.things.filter((thing) => sameThing(thing.within, selection));

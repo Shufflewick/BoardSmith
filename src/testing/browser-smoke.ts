@@ -1444,7 +1444,7 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   const { frame } = answering;
   const skip = answering.reopened ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
   if (skip !== undefined) return pressAnswer(skip, answering);
-  await fillAnEmptyField(answering);
+  await fillAField(answering);
   const given = await pressGivenChoice(answering);
   if (given !== NOT_GIVEN) return given;
   const shown = (selector: string) => inPageTime(frame.page(), 'looking for a list pick', () => frame.locator(selector).count());
@@ -1591,41 +1591,45 @@ function inputView(frame: Frame, otherSeats: readonly number[], seed: string | n
 }
 
 /**
- * Fills the open action's text or number field when it is empty, as a player types before pressing
- * Done: the value the spec's `inputs` give that field (`data-bs-pick` names it, #470), else "smoke
- * test" in a text field, and in a number field a value its own min, max and step accept, moved up
- * past each one the game refused before (#465, #466, `numberToEnter`). An input that gives no value
- * yet, or fails, stops the answering (`Answering.stop`) with the field left empty.
+ * Fills the open action's text or number field, as a player types before pressing Done, recording
+ * the field as met (`SmokeWalk.fieldsMet`): the value the spec's `inputs` give that field
+ * (`data-bs-pick` names it, #470), typed over one it opens filled with (#1802), else, in an empty
+ * field, "smoke test" in a text field, and in a number field a value its own min, max and step
+ * accept, moved up past each one the game refused before (#465, #466, `numberToEnter`). An input
+ * that gives no value yet, or fails, stops the answering (`Answering.stop`) with the field left as it was.
  */
-async function fillAnEmptyField(answering: Answering): Promise<void> {
-  const { frame, memory, name, step } = answering;
+async function fillAField(answering: Answering): Promise<void> {
+  const { frame, walk, memory, name, step } = answering;
   const field = await firstPressable(frame, [
     '.action-config .text-input input',
     '.action-config .text-input textarea',
     '.action-config .number-input input[type="number"]',
   ]);
-  if (field === undefined || (await withinPageTime(frame.page(), PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }))) !== '') return;
-  const typed = await valueToType(answering, field);
+  if (field === undefined) return;
+  const page = frame.page();
+  const shown = await withinPageTime(page, PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }));
+  const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
+    field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
+  );
+  const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
+  walk.fieldsMet.get(name)?.set(pick, kind);
+  const attempts = attemptsIn(memory, page);
+  if (shown !== '' && (attempts.typed.get(name)?.some((t) => t.field === pick) || !Object.hasOwn(walk.inputs[name] ?? {}, pick))) return;
+  const typed = await valueToType(answering, field, pick, kind);
   if (typed === undefined) return;
-  const attempts = attemptsIn(memory, frame.page());
   attempts.typed.set(name, [...(attempts.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
   narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
   await withinPageTime(frame.page(), PRESS_MS, 'typing into the field', (timeout) => field.target.fill(typed.value, { timeout }));
 }
 
 /**
- * The value to type in the open action's empty `field`: the spec's input for its pick (#470), else
- * the walk's own, recording the field as met (`SmokeWalk.fieldsMet`). Undefined, with the answering
- * stopped (`Answering.stop`), when the spec's input gives no value yet or fails.
+ * The value to type in the open action's `field`, which answers `pick`: the spec's input for it
+ * (#470), else the walk's own. Undefined, with the answering stopped (`Answering.stop`), when the
+ * spec's input gives no value yet or fails.
  */
-async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
+async function valueToType(answering: Answering, field: Control, pick: string, kind: 'text' | 'number'): Promise<TypedValue | undefined> {
   const { frame, walk, memory, name, otherSeats } = answering;
   const page = frame.page();
-  const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
-    field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
-  );
-  const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
-  walk.fieldsMet.get(name)?.set(pick, kind);
   const attempts = attemptsIn(memory, page);
   const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), attempts.refused.get(name) ?? 0);
   if (given !== undefined) {
@@ -2197,7 +2201,27 @@ async function takeAction(
   narrate(step, said);
   const selector = actionButton(name);
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
-  if (await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself)) memory.wentAway.delete(selector);
+  const answered = await fieldTheThingAnswers(frame, selector);
+  if (!(await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself))) return;
+  memory.wentAway.delete(selector);
+  if (answered === undefined) return;
+  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
+  walk.fieldsMet.get(name)?.set(answered.pick, answered.kind);
+}
+
+/**
+ * The field of the action whose panel button is `selector` that the selected thing answers, when
+ * the button starts it on a thing (`data-bs-answers`, #1802): the panel fills that field and never
+ * draws it, so pressing the button is how the walk meets it.
+ */
+async function fieldTheThingAnswers(frame: Frame, selector: string): Promise<{ readonly pick: string; readonly kind: 'text' | 'number' | 'choice' } | undefined> {
+  const [answered] = await inPageTime(frame.page(), 'reading which field the selected thing answers', () =>
+    visibleMatches(frame, `${selector}[data-bs-answers]`).evaluateAll((buttons) =>
+      buttons.map((button) => ({ pick: button.getAttribute('data-bs-answers') ?? '', type: button.getAttribute('data-bs-answers-type') })),
+    ),
+  );
+  if (answered === undefined) return undefined;
+  return { pick: answered.pick, kind: answered.type === 'text' || answered.type === 'number' ? answered.type : 'choice' };
 }
 
 /**

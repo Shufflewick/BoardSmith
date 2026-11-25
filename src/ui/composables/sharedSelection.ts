@@ -48,6 +48,26 @@ interface SharedSelectionOptions {
   disabledActions?: Ref<Record<string, string> | undefined>;
 }
 
+/** How a start reaches `thing` for this action, or undefined when the action does not take it. */
+function thingStart(meta: ActionMetadata, thing: SubjectEntry, subjects: SubjectIndex): ThingStart | undefined {
+  const first = meta.selections[0];
+  const verbs = thing.verbs.filter((verb) => verb.action === meta.name);
+  const rows = verbs.filter((verb) => verb.pick);
+  if (rows.length === 1) return { kind: 'fill', pick: rows[0]!.pick!, value: rows[0]!.value };
+  const holds = rows.length > 1 || subjects.things.some((part) => sameThing(part.within, thing)
+    && part.verbs.some((verb) => verb.action === meta.name && verb.pick === first?.name));
+  if (holds && first) return { kind: 'within', pick: first.name };
+  const later = subjects.laterVerbs.find((verb) => verb.action === meta.name && verb.type === thing.type);
+  if (later) return { kind: 'carry', pick: later.pick };
+  return verbs.length > 0 ? { kind: 'about' } : undefined;
+}
+
+/** The pick a start on `thing` answers with it, so the panel never draws that pick, or undefined when it answers none. */
+export function pickTheThingAnswers(meta: ActionMetadata, thing: SubjectEntry, subjects: SubjectIndex): string | undefined {
+  const reached = thingStart(meta, thing, subjects);
+  return reached?.kind === 'fill' || reached?.kind === 'carry' ? reached.pick : undefined;
+}
+
 export function useSharedSelection({ offered, disabledActions }: SharedSelectionOptions) {
   /** The offered actions' things, each verb carrying its action's disabled reason when the action has one. */
   const subjects = computed<SubjectIndex>(() => {
@@ -92,20 +112,6 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
     written.value = null;
   }
 
-  /** How `start` reaches `thing` for this action, or undefined when the action does not take it. */
-  function thingStart(meta: ActionMetadata, thing: SubjectRef): ThingStart | undefined {
-    const first = meta.selections[0];
-    const verbs = entryOf(thing).verbs.filter((verb) => verb.action === meta.name);
-    const rows = verbs.filter((verb) => verb.pick);
-    if (rows.length === 1) return { kind: 'fill', pick: rows[0]!.pick!, value: rows[0]!.value };
-    const holds = rows.length > 1 || subjects.value.things.some((part) => sameThing(part.within, thing)
-      && part.verbs.some((verb) => verb.action === meta.name && verb.pick === first?.name));
-    if (holds && first) return { kind: 'within', pick: first.name };
-    const later = subjects.value.laterVerbs.find((verb) => verb.action === meta.name && verb.type === thing.type);
-    if (later) return { kind: 'carry', pick: later.pick };
-    return verbs.length > 0 ? { kind: 'about' } : undefined;
-  }
-
   /** The thing a start names: the `subject` it was given, else the thing its first-pick value is. */
   function namedThing(meta: ActionMetadata, args: Record<string, unknown>, subject?: SubjectRef): SubjectEntry | undefined {
     if (subject) return entryOf(subject);
@@ -126,7 +132,7 @@ export function useSharedSelection({ offered, disabledActions }: SharedSelection
   /** The args a start on `subject` opens with and the pick it narrows or is carried to, or why the action does not take it. */
   function argsOn(meta: ActionMetadata, args: Record<string, unknown>, subject: SubjectRef | undefined): SubjectArgs {
     if (!subject) return { args };
-    const reached = thingStart(meta, subject);
+    const reached = thingStart(meta, entryOf(subject), subjects.value);
     if (!reached) {
       const thing = entryOf(subject);
       return { error: `${meta.prompt || formatActionName(meta.name)} does not take ${thing.type} "${thing.label}".` };

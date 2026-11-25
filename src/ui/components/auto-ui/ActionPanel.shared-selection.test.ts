@@ -131,6 +131,26 @@ describe('the panel on a selected thing (#1641)', () => {
     expect(game().log).toEqual(['draft red']);
   });
 
+  it('marks each verb with the pick the thing answers and its type, so the smoke walk meets a field it never draws (#1802)', async () => {
+    const { wrapper, controller, die, tower } = await panel(WorkshopGame);
+    const answers = () =>
+      wrapper.findAll('.action-buttons > .action-btn-group > button').map((button) => [button.text(), button.attributes('data-bs-answers'), button.attributes('data-bs-answers-type')]);
+    controller.select(die('red'));
+    await settle();
+    expect(answers()).toEqual([
+      ['Reroll', 'die', 'element'],
+      ['Draft', 'die', 'choice'],
+      ['Place a die', 'die', 'element'],
+      ['Paint: red', 'color', 'choice'],
+    ]);
+    controller.select(tower('Chemical Works'));
+    await settle();
+    expect(answers()).toEqual([
+      ['Upgrade', 'tower', 'element'],
+      ['Buy a blueprint', undefined, undefined],
+    ]);
+  });
+
   it('draws the contents of the one group all its verbs sit in, not a button to open it (#1652)', async () => {
     const { wrapper, controller, die } = await panel(DiceTrayGame);
     controller.select(die('red'));

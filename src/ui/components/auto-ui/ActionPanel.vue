@@ -1721,6 +1721,8 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             class="action-btn"
             :class="{ destructive: node.item.destructive }"
             :data-bs-action="node.item.name"
+            :data-bs-answers="node.item.answers"
+            :data-bs-answers-type="node.item.selections.find((pick) => pick.name === node.item.answers)?.type"
             v-disabled-reason="submissionInFlightReason"
             @click="startAction(node.item.name, node.item.verbOf && { subject: node.item.verbOf })"
           >
