@@ -656,6 +656,26 @@ play(game, 'played');
     const test = "import { move } from './support/moves';\nmove('p1', 'moved');\n";
     expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual(['moved']);
   });
+
+  it('still counts a helper imported in a way this cannot follow to its function, by its bare name (#1804 review F1-F4, F7)', () => {
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/index.ts', text: 'export function act(game: G, name: string) { return game.doAction(1, name); }\n' },
+      { path: 'tests/support/late.ts', text: 'let hop = (game: G, name: string) => game.doAction(1, name);\nhop = hop;\nexport { hop };\n' },
+    ]);
+    const test = `
+import { act as aliased } from '@/support/index';
+import { act as dot } from '.';
+import { act as slash } from './';
+import { hop } from './late';
+import act = require('./index');
+aliased(game, 'viaAlias');
+dot(game, 'viaDot');
+slash(game, 'viaSlash');
+hop(game, 'viaLet');
+act(game, 'viaRequire');
+`;
+    expect(findDispatchedVerbs(test, 'tests/support/a.test.ts', wrappers)).toEqual(['viaAlias', 'viaDot', 'viaSlash', 'viaLet', 'viaRequire']);
+  });
 });
 
 // -------------------------------------------------------------------------------------------
