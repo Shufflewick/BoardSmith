@@ -173,10 +173,11 @@ It is handed the search's copy of the game, the seat whose moves are listed
 would otherwise consider. Filter that listing to leave moves out, or return the
 game's own short list without calling `listMoves`, which spares the full
 enumeration of an action with a large or open-ended set of args. In the moves
-every hook sees, a `chooseElement` or `chooseElements` pick is the element's id,
-and a `chooseFrom` value holds the search copy's element itself, so a hook reads
-its fields; build a move the same way. The bot hands its chosen move out with
-that element as `{ id, className }`. Return only legal moves: the bot can choose any move
+this hook, `moveOrdering`, `playoutPolicy` and `threatResponseMoves` see, a
+`chooseElement` or `chooseElements` pick is the element's id, and a `chooseFrom`
+value holds the search copy's element itself, so a hook reads its fields; build
+a move the same way. The bot hands its chosen move out, to `hintTargetFromMove`
+too, with that element as `{ id, className }`. Return only legal moves: the bot can choose any move
 it is given, so an illegal one can reach the engine as the bot's move.
 
 In a simultaneous step, once the search has made a move in it, the copy a seat's

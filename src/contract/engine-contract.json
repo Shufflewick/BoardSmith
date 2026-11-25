@@ -4190,7 +4190,7 @@
       "surfaceHash": "9f2dbf6bd7713de5",
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
-      "summary": "MCTS bot hooks (moveOrdering, playoutPolicy, threatResponseMoves, candidateMoves) see a chooseFrom element as the search copy's element again, not { id, className }; the bot still sends its move with that element as { id, className }, and a move candidateMoves builds with the element is sent that way too (#1813)"
+      "summary": "MCTS bot hooks (moveOrdering, playoutPolicy, threatResponseMoves, candidateMoves) see a chooseFrom element as the search copy's element again, not { id, className }; the bot still sends its move with that element as { id, className }, and a move one of those hooks builds itself with the element is sent that way too (#1813)"
     }
   ]
 }

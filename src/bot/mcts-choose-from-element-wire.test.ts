@@ -57,13 +57,17 @@ describe('a bot move that picks an element with chooseFrom', () => {
   });
 });
 
-describe('a chooseFrom element in a move a candidateMoves hook builds itself', () => {
-  it('is sent so the live game accepts it, as a listed move is', async () => {
+/** Every attack, built by the game itself with the unit as the target. */
+const ownAttacks = (game: Game) => [...game.all(Unit)].map((unit) => ({ action: 'attack', args: { target: unit } }));
+
+describe('a chooseFrom element in a move a bot hook builds itself', () => {
+  it.each([
+    { hook: 'candidateMoves', strategy: { candidateMoves: ownAttacks } },
+    { hook: 'threatResponseMoves', strategy: { threatResponseMoves: (game: Game) => ({ moves: ownAttacks(game), urgent: true }) } },
+  ])('is sent from $hook so the live game accepts it, as a listed move is', async ({ strategy }) => {
     const runner = new GameRunner({ GameClass: SkirmishGame, gameType: 'skirmish', gameOptions: { playerCount: 2, seed: 'bs1813' } });
     runner.start();
-    const bot = new MCTSBot(runner.game, SkirmishGame, 'skirmish', 1, { async: false, timeout: Infinity, seed: 'bs1813', iterations: 20 }, {
-      candidateMoves: (game) => [...game.all(Unit)].map((unit) => ({ action: 'attack', args: { target: unit } })),
-    });
+    const bot = new MCTSBot(runner.game, SkirmishGame, 'skirmish', 1, { async: false, timeout: Infinity, seed: 'bs1813', iterations: 20 }, strategy);
 
     const move = (await bot.play())!;
 

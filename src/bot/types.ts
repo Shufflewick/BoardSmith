@@ -271,10 +271,12 @@ export interface BotStrategy {
    * Narrow the listing (`listMoves().filter(...)`) to leave a move out of the
    * search entirely, or return the game's own short list of sensible moves
    * without calling `listMoves`, which spares the full enumeration of an
-   * action with a large or open-ended set of args. In the moves every hook sees,
-   * a `chooseElement(s)` pick is the element's id, and a `chooseFrom` value
-   * holds the search copy's element itself; build a move the same way. The bot
-   * hands its chosen move out with that element as `{ id, className }`. Return only legal moves: the bot can choose any move it
+   * action with a large or open-ended set of args. In the moves this hook,
+   * `moveOrdering`, `playoutPolicy` and `threatResponseMoves` see, a
+   * `chooseElement(s)` pick is the element's id, and a `chooseFrom` value holds
+   * the search copy's element itself; build a move the same way. The bot hands
+   * its chosen move out, to `hintTargetFromMove` too, with that element as
+   * `{ id, className }`. Return only legal moves: the bot can choose any move it
    * is given, so an illegal one can reach the engine as the bot's move.
    *
    * Return no moves to say the seat waits (#1537): at the root the bot makes
@@ -299,7 +301,7 @@ export interface BotStrategy {
    * (tries `to`, `destination`, `target`, `square`, `cell`, `position` in order).
    * Provide this override when the game uses non-standard arg names.
    *
-   * @param move - The chosen move from the MCTS search
+   * @param move - The chosen move from the MCTS search, in wire form: a `chooseFrom` element is `{ id, className }`
    * @returns The target element reference, or `undefined` when the move has no target
    */
   hintTargetFromMove?: (move: BotMove) => ElementRef | undefined;
