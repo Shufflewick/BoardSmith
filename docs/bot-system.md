@@ -186,7 +186,8 @@ The copy makes each move with the world's randomness and element ids, but a
 draw from state another seat already changed in the step (a shared deck) can
 come out differently there, since the copy hides that seat's pick; the world
 then refuses the seat's later moves that name what the copy drew. That costs
-search effort below the root, never the legality of the move the bot plays (#1570).
+search effort below the root, never the legality of the move the bot plays (#1570),
+and logs no refused-pick warning, which is kept for a live pick (#1809).
 
 Return an empty list to say the seat waits (#1537). For the bot's own seat the
 bot makes no move now, and is not reported as stalled. The host asks it again

@@ -1202,7 +1202,8 @@ export class ActionExecutor {
    * acted first -- so it is not the engine's text, which names raw values and
    * lists the valid ones. It is the selection's own `unavailable` sentence when
    * the game wrote one, and a plain one that says what to do otherwise. The
-   * engine's `detail` goes to the dev log, where the author reads it.
+   * engine's `detail` goes to the dev log, where the author reads it, except
+   * on the bot's search copy, whose picks are speculative (#1809).
    */
   private unavailableRefusal(
     selection: Pick<Selection, 'name'> & UnavailableRule,
@@ -1214,7 +1215,7 @@ export class ActionExecutor {
     const message = selection.unavailable
       ? this.gameUnavailableSentence(selection, value, context, actionName)
       : NO_LONGER_AVAILABLE;
-    if (isDevThrowEnabled()) {
+    if (isDevThrowEnabled() && !this.game._ctx._searchCopy) {
       console.warn(`[BoardSmith] ${detail} The player was told: "${message}"`);
     }
     return message;
