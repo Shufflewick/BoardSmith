@@ -4206,7 +4206,7 @@
       "surfaceHash": "3fdad2d7c1e7f5c6",
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
-      "summary": "boardsmith/ui adds useAnimatedView and the animation queue's playingView, so a board draws each queued event over the frame it arrived with; animationTimeline is no longer exported (#1815)"
+      "summary": "boardsmith/ui adds useAnimatedView and the animation queue's playingView, so a board draws each queued event over the frame it arrived with (#1815)"
     }
   ]
 }
