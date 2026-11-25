@@ -1,5 +1,5 @@
 {
-  "revision": 521,
+  "revision": 522,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4111,6 +4111,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The shell's message log wraps a long word inside its line instead of scrolling sideways on a phone (#1803)"
+    },
+    {
+      "revision": 522,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith test-step-check reads an imported dispatch helper from the file it comes from, so a package import sharing a helper's name is not counted as a dispatch (#1804)"
     }
   ]
 }
