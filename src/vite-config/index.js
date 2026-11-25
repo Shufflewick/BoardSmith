@@ -15,7 +15,9 @@ import { GAME_EXCLUDES, SIM_FILE, SIM_FILES, TEST_FILE } from './test-files.js';
  * an exclude a game adds sits beside the shipped ones rather than replacing them.
  *
  * What it sets:
- * - The Vue plugin.
+ * - The Vue plugin, keeping no template comments. A component whose template starts with one
+ *   compiles to a fragment, which drops a parent's attributes in production, and the CLI may have
+ *   loaded Vue's development compiler, which keeps them by default, before vite sets NODE_ENV (#1817).
  * - `resolve.dedupe: ['vue']`. `boardsmith` installs as a symlink to a checkout carrying its own
  *   copy of vue, so without it the bundle can hold two Vue runtimes, two reactivity systems and two
  *   provide/inject registries, which silently breaks state shared across the game/library boundary.
@@ -42,7 +44,7 @@ import { GAME_EXCLUDES, SIM_FILE, SIM_FILES, TEST_FILE } from './test-files.js';
 export function defineGameViteConfig(overrides = {}) {
   return mergeConfig(
     {
-      plugins: [vue(), rerunTriggers(), testClasses()],
+      plugins: [vue({ template: { compilerOptions: { comments: false } } }), rerunTriggers(), testClasses()],
       resolve: { dedupe: ['vue'] },
       test: {
         exclude: [...configDefaults.exclude, ...GAME_EXCLUDES],

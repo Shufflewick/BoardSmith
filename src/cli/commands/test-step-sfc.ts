@@ -7,7 +7,11 @@
  * maps what it finds back to offsets and lines in the component. Without this a chunk's component
  * logic was never mutated, so a test that pinned only that logic was blamed for asserting nothing.
  */
-import { parse as parseSfc } from 'vue/compiler-sfc';
+import { createRequire } from 'node:module';
+import type * as CompilerSfc from 'vue/compiler-sfc';
+
+// Loaded on first use: Node keeps the first Vue compiler build it loads, and a `boardsmith build` in this process must get the production one, which vite picks by setting NODE_ENV (#1817).
+const parseSfc: typeof CompilerSfc.parse = (source, options) => (createRequire(import.meta.url)('vue/compiler-sfc') as typeof CompilerSfc).parse(source, options);
 
 /** A stretch of a file that parses on its own as TypeScript. */
 interface CodeRegion {
