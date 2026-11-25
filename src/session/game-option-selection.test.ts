@@ -28,10 +28,10 @@ const declared: Record<string, GameOptionDefinition> = {
   level: {
     type: 'select',
     label: 'Level',
-    default: 1,
+    default: 'easy',
     choices: [
-      { value: 1, label: 'Level 1' },
-      { value: 4, label: 'Level 4' },
+      { value: 'easy', label: 'Easy' },
+      { value: 'hard', label: 'Hard' },
     ],
   },
 };
@@ -71,7 +71,7 @@ describe('selectGameOptions admits only what the game declared', () => {
   it('returns a copy, never the input object', () => {
     const raw: Record<string, unknown> = { rounds: 5 };
     const selection = selectGameOptions(declared, raw);
-    expect(selection).toEqual({ rounds: 5, hardMode: false, level: 1 });
+    expect(selection).toEqual({ rounds: 5, hardMode: false, level: 'easy' });
     expect(selection).not.toBe(raw);
   });
 });
@@ -110,9 +110,9 @@ describe('selectGameOptions refuses a value of the wrong type whatever its shape
     expect(() => selectGameOptions(declared, { hardMode: value })).toThrow(/"hardMode" must be true or false/);
   });
 
-  it.each([[[1]], [{ value: 1 }], [null], ['1.0'], [true]])('select: %j is refused', (value) => {
+  it.each([[['easy']], [{ value: 'easy' }], [null], ['Easy'], [true], [1]])('select: %j is refused', (value) => {
     expect(() => selectGameOptions(declared, { level: value })).toThrow(GameOptionSelectionError);
-    expect(() => selectGameOptions(declared, { level: value })).toThrow(/"level".*one of: 1, 4/);
+    expect(() => selectGameOptions(declared, { level: value })).toThrow(/"level".*one of: "easy", "hard"/);
   });
 });
 
@@ -129,76 +129,13 @@ describe('selectGameOptions coerces wire strings to the declared type', () => {
     expect(() => selectGameOptions(declared, { hardMode: 'nope' })).toThrow(/"hardMode"/);
   });
 
-  it('select: a string reaches a non-string declared choice; a value outside the choices is refused', () => {
-    expect(selectGameOptions(declared, { level: '4' })).toMatchObject({ level: 4 });
-    expect(() => selectGameOptions(declared, { level: '99' })).toThrow(GameOptionSelectionError);
-    expect(() => selectGameOptions(declared, { level: 99 })).toThrow(/"level".*one of: 1, 4/);
+  it('select: a declared choice is admitted; a value outside the choices is refused', () => {
+    expect(selectGameOptions(declared, { level: 'hard' })).toMatchObject({ level: 'hard' });
+    expect(() => selectGameOptions(declared, { level: 'medium' })).toThrow(/"level".*one of: "easy", "hard"/);
   });
 
   it('leaves an already typed value untouched', () => {
-    expect(selectGameOptions(declared, { rounds: 5, hardMode: true, level: 1 })).toMatchObject({ rounds: 5, hardMode: true, level: 1 });
-  });
-});
-
-describe('selectGameOptions matches a select value by the choice-matching rule (#574)', () => {
-  // A choice value may be an object, as game bundles and the dev host's lobby
-  // already use (#572), so this declaration needs no cast (#593).
-  const small = { width: 9, height: 9 };
-  const large = { width: 19, height: 19, tiles: [{ kind: 'stone' }] };
-  const board: Record<string, GameOptionDefinition> = {
-    board: {
-      type: 'select',
-      label: 'Board',
-      default: small,
-      choices: [
-        { value: small, label: 'Small' },
-        { value: large, label: 'Large' },
-      ],
-    },
-  };
-
-  it('admits an object choice that crossed the wire as a different, equal object, returning the declared object', () => {
-    const sent = JSON.parse(JSON.stringify({ board: large })) as Record<string, unknown>;
-    expect(sent.board).not.toBe(large);
-    expect(selectGameOptions(board, sent).board).toBe(large);
-  });
-
-  it('refuses the text "[object Object]": a string names a choice by its text only when the choice is not an object (#593)', () => {
-    expect(() => selectGameOptions(board, { board: '[object Object]' })).toThrow(GameOptionSelectionError);
-    expect(() => selectGameOptions(board, { board: '[object Object]' })).toThrow(/"board".*one of:/);
-  });
-
-  it('a direct match wins over a match by text (#593)', () => {
-    const ambiguous: Record<string, GameOptionDefinition> = {
-      pick: {
-        type: 'select',
-        label: 'Pick',
-        default: 1,
-        choices: [
-          { value: 1, label: 'Number one' },
-          { value: '1', label: 'Text one' },
-        ],
-      },
-    };
-    expect(selectGameOptions(ambiguous, { pick: '1' }).pick).toBe('1');
-    expect(selectGameOptions(ambiguous, { pick: 1 }).pick).toBe(1);
-  });
-
-  it('freezes the declared choice it returns, deeply, so a game cannot change the declaration for the next game (#593)', () => {
-    const chosen = selectGameOptions(board, { board: { width: 19, height: 19, tiles: [{ kind: 'stone' }] } }).board as typeof large;
-    expect(() => {
-      chosen.width = 5;
-    }).toThrow(TypeError);
-    expect(() => chosen.tiles.push({ kind: 'sand' })).toThrow(TypeError);
-    expect(() => {
-      chosen.tiles[0].kind = 'sand';
-    }).toThrow(TypeError);
-    expect(selectGameOptions(board, { board: { width: 19, height: 19, tiles: [{ kind: 'stone' }] } }).board).toBe(large);
-  });
-
-  it('still refuses an object that is not one of the choices', () => {
-    expect(() => selectGameOptions(board, { board: { width: 13, height: 13 } })).toThrow(GameOptionSelectionError);
-    expect(() => selectGameOptions(board, { board: { width: 13, height: 13 } })).toThrow(/"board".*one of:/);
+    expect(selectGameOptions(declared, { rounds: 5, hardMode: true, level: 'easy' })).toMatchObject({ rounds: 5, hardMode: true, level: 'easy' });
   });
 });
 
@@ -423,34 +360,26 @@ describe('every selection is filled with the declared defaults (#701)', () => {
   };
 
   it('a player selection holds every declared option: the chosen value, or its default', () => {
-    expect(selectGameOptions(declared, {})).toEqual({ rounds: 3, hardMode: false, level: 1 });
-    expect(selectGameOptions(declared, { rounds: 5 })).toEqual({ rounds: 5, hardMode: false, level: 1 });
+    expect(selectGameOptions(declared, {})).toEqual({ rounds: 3, hardMode: false, level: 'easy' });
+    expect(selectGameOptions(declared, { rounds: 5 })).toEqual({ rounds: 5, hardMode: false, level: 'easy' });
   });
 
   it('an option left undefined gets its default', () => {
-    expect(selectGameOptions(declared, { rounds: undefined, level: 4 })).toEqual({ rounds: 3, hardMode: false, level: 4 });
+    expect(selectGameOptions(declared, { rounds: undefined, level: 'hard' })).toEqual({ rounds: 3, hardMode: false, level: 'hard' });
   });
 
   it('a designer-only option gets its default in a player selection, and the designer selection may set it', () => {
-    expect(selectGameOptions(withKnob, { rounds: 4 })).toEqual({ rounds: 4, hardMode: false, level: 1, lootScale: 1 });
+    expect(selectGameOptions(withKnob, { rounds: 4 })).toEqual({ rounds: 4, hardMode: false, level: 'easy', lootScale: 1 });
     expect(selectDesignerGameOptions(withKnob, { lootScale: 1.5 })).toMatchObject({ rounds: 3, lootScale: 1.5 });
   });
 
-  it('a default select choice is the declared value, frozen like a chosen one', () => {
-    const shaped: Record<string, GameOptionDefinition> = {
-      board: { type: 'select', label: 'Board', default: { w: 3 }, choices: [{ value: { w: 3 }, label: 'Small' }] },
-    };
-    const selection = selectGameOptions(shaped, {});
-    expect(selection.board).toEqual({ w: 3 });
-    expect(Object.isFrozen(selection.board)).toBe(true);
-  });
 });
 
 describe('every declared option has a default its own declaration admits (#701)', () => {
   it.each<[string, Record<string, unknown>]>([
     ['number', { type: 'number', label: 'Rounds' }],
     ['boolean', { type: 'boolean', label: 'Fast' }],
-    ['select', { type: 'select', label: 'Level', choices: [{ value: 1, label: 'One' }] }],
+    ['select', { type: 'select', label: 'Level', choices: [{ value: 'one', label: 'One' }] }],
   ])('refuses a %s option with no default, blaming the game', (_type, def) => {
     expect(() => assertDeclarableGameOptions({ opt: def as unknown as GameOptionDefinition })).toThrow(
       /This game declares game option "opt" with no default.*Give it a default/,
@@ -460,9 +389,9 @@ describe('every declared option has a default its own declaration admits (#701)'
   it('refuses a select default that is not one of its choices, and a boolean default that is not true or false', () => {
     expect(() =>
       assertDeclarableGameOptions({
-        level: { type: 'select', label: 'Level', default: 2, choices: [{ value: 1, label: 'One' }] },
+        level: { type: 'select', label: 'Level', default: 'two', choices: [{ value: 'one', label: 'One' }] },
       }),
-    ).toThrow(/This game declares game option "level" with default 2, which its own declaration refuses/);
+    ).toThrow(/This game declares game option "level" with default "two", which its own declaration refuses/);
     expect(() =>
       assertDeclarableGameOptions({ fast: { type: 'boolean', label: 'Fast', default: 'yes' as unknown as boolean } }),
     ).toThrow(/This game declares game option "fast" with default "yes"/);
@@ -500,6 +429,16 @@ describe('boardsmith.json\'s gameOptions list is the one declaration (#701)', ()
     expect(() => parseGameOptionList([{ id: 'lv', type: 'select', label: 'Lv', default: 1 }])).toThrow(
       /select option "lv" with no choices/,
     );
+  });
+
+  it('parseGameOptionList refuses a select option whose values are not strings, which the platform refuses at publish (#1816)', () => {
+    const seconds = { id: 'secs', type: 'select', label: 'Secs', choices: [{ value: 60, label: '60' }, { value: 120, label: '120' }] };
+    expect(() => parseGameOptionList([{ ...seconds, default: 120 }])).toThrow(
+      /select option "secs" with choice value 60.*Use string values, e\.g\. "value": "60"/,
+    );
+    expect(() =>
+      parseGameOptionList([{ ...seconds, default: { s: 60 }, choices: [{ value: 'sixty', label: '60' }], designerOnly: true }]),
+    ).toThrow(/select option "secs" with default \{"s":60\}.*Use string values/);
   });
 
   it('withDeclaredGameOptions attaches the list to a game definition, where declaredGameOptionsOf reads it', () => {

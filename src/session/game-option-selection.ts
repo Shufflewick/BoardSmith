@@ -18,7 +18,6 @@
  * host's table setup call, admits it (#687). A host that spreads a client's object straight into a constructor
  * is then a type error, not a leak found in review.
  */
-import { valuesEqual } from '../engine/action/choice-matching.js';
 import { ENGINE_OWNED_GAME_OPTION_KEYS } from '../engine/element/game.js';
 import { PERSIST_KEY } from '../persistence/persistence.js';
 import type { GameOptionDefinition, NumberOption, SelectOption } from '../types/protocol.js';
@@ -100,6 +99,32 @@ function assertDeclarableShape(name: string, def: GameOptionDefinition): void {
       `This game declares select option "${name}" with no choices. Give it a "choices" list of { value, label }.`,
     );
   }
+  if (def.type === 'select') assertStringValues(name, def);
+}
+
+/**
+ * Throws, naming the value, when a select option's choice is unlabelled or a
+ * choice value or default is not a string: the platform's lobby carries only
+ * strings, so it would refuse the game at publish (#1816).
+ */
+function assertStringValues(name: string, def: SelectOption): void {
+  const choices: unknown[] = def.choices;
+  if (!choices.every((c) => typeof c === 'object' && c !== null && typeof (c as { label?: unknown }).label === 'string')) {
+    throw new Error(`This game declares select option "${name}" with a choice that has no label. Give every choice the label a player sees.`);
+  }
+  const refuse = (field: string, key: string, value: unknown) => {
+    const text = JSON.stringify(value) ?? String(value);
+    return new Error(
+      `This game declares select option "${name}" with ${field} ${text}, which the platform's lobby refuses: ` +
+        `it carries only strings. Use string values, e.g. "${key}": ${JSON.stringify(text)}.`,
+    );
+  };
+  for (const { value } of def.choices as Array<{ value: unknown }>) {
+    if (typeof value !== 'string') throw refuse('choice value', 'value', value);
+  }
+  const initial: unknown = def.default;
+  // An absent default is left to assertDeclarableDefault, which says to give one.
+  if (initial !== undefined && typeof initial !== 'string') throw refuse('default', 'default', initial);
 }
 
 /**
@@ -108,7 +133,9 @@ function assertDeclarableShape(name: string, def: GameOptionDefinition): void {
  * declaration admits.
  */
 function assertDeclarableDefault(name: string, def: GameOptionDefinition): void {
-  if (def.default === undefined) {
+  // Untyped boardsmith.json can leave out what the type requires.
+  const initial: unknown = def.default;
+  if (initial === undefined) {
     throw new Error(
       `This game declares game option "${name}" with no default. Give it a default: it is the value ` +
         `a game is played with when nobody chooses one` +
@@ -221,12 +248,11 @@ function stepProblem({ min, step }: Pick<NumberOption, 'min' | 'step'>, n: numbe
 }
 
 /**
- * Freeze a declared choice value, and every plain object and array inside it,
- * in place. A game receives the declared value itself, and the same
- * declaration starts every later game in the process (the dev host restarts
- * from it), so a game that could change the value would change its own
- * declaration for the next game; frozen, the write throws in the game instead.
- * Anything that is not a plain object or array is left as it is.
+ * Freeze the declarations, and every plain object and array inside them, in
+ * place. The same declarations start every later game in the process (the dev
+ * host restarts from them), so code that could change one would change it for
+ * the next game; frozen, the write throws instead. Anything that is not a
+ * plain object or array is left as it is.
  */
 function deepFreeze(value: unknown): unknown {
   if (Array.isArray(value)) {
@@ -275,25 +301,15 @@ function coerceBoolean(name: string, raw: unknown): boolean {
   return b;
 }
 
-function coerceSelect(name: string, def: SelectOption, raw: unknown): unknown {
-  // A value matches a choice under `valuesEqual`, so an object choice that
-  // crossed the wire as an equal object is still that choice (#574). Failing
-  // that, a string names the non-object choice it spells, so a numeric
-  // choice is reachable from a text input; an object is never named by its
-  // text, which would make "[object Object]" the first object choice (#593).
-  // The declared choice's value is returned, frozen (see `deepFreeze`).
-  const choice =
-    def.choices.find((c) => valuesEqual(c.value, raw)) ??
-    (typeof raw === 'string'
-      ? def.choices.find((c) => (typeof c.value !== 'object' || c.value === null) && String(c.value) === raw)
-      : undefined);
+function coerceSelect(name: string, def: SelectOption, raw: unknown): string {
+  const choice = def.choices.find((c) => c.value === raw);
   if (!choice) {
     throw new GameOptionSelectionError(
       `Invalid value ${JSON.stringify(raw)} for game option "${name}": must be one of: ` +
         `${def.choices.map((c) => JSON.stringify(c.value)).join(', ')}.`,
     );
   }
-  return deepFreeze(choice.value);
+  return choice.value;
 }
 
 /**

@@ -94,6 +94,11 @@ const builtError = await buildIn(built);
 const stale = project(` gameOptions: { rounds: { type: 'number', label: 'Rounds', default: 3 } }`);
 const staleError = await buildIn(stale);
 
+const numeric = project();
+const seconds = { id: 'secs', type: 'select', label: 'Secs', default: 120, choices: [{ value: 60, label: '60' }, { value: 120, label: '120' }] };
+writeFileSync(join(numeric, 'boardsmith.json'), JSON.stringify({ name: 'fixture', displayName: 'Fixture', backend: 'table', gameOptions: [seconds] }));
+const numericError = await buildIn(numeric);
+
 const unnamed = project();
 writeFileSync(join(unnamed, 'src', 'rules', 'index.ts'), 'export const answer = 42;\n');
 const unnamedError = await buildIn(unnamed);
@@ -116,6 +121,10 @@ describe('boardsmith build publishes boardsmith.json\'s game options (#701)', ()
 
   it('refuses a gameDefinition that still declares gameOptions, saying to move them to boardsmith.json', () => {
     expect(String(staleError)).toMatch(/gameDefinition declares gameOptions.*boardsmith\.json/);
+  });
+
+  it('refuses a select option with number values, which the platform refuses at publish (#1816)', () => {
+    expect(String(numericError)).toMatch(/select option "secs" with choice value 60.*Use string values/);
   });
 
   it('says the rules must export a gameDefinition when they do not, rather than failing inside the bundler', () => {

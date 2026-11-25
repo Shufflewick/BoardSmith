@@ -177,7 +177,7 @@ describe('smokeSeeds: a deal that names its own steps (#1686)', () => {
 
 describe('dealOptionStates: what Table setup\'s option fields are set to for a deal (#1684)', () => {
   const fields = [
-    { id: 'tower', kind: 'select', state: 0, choices: ['string:none', 'string:tar', 'number:3'] },
+    { id: 'tower', kind: 'select', state: 0, choices: ['none', 'tar', '3'] },
     { id: 'lit', kind: 'checkbox', state: false, choices: [] },
     { id: 'rounds', kind: 'text', state: '3', choices: [] },
   ] as const;

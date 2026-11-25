@@ -48,17 +48,6 @@ const declaredGameOptions: Record<string, GameOptionDefinition> = {
   rounds: { type: 'number', label: 'Rounds', default: 3, min: 1, max: 10 },
   // CR-02: a boolean option — a raw string "false" must NOT arrive JS-truthy.
   hardMode: { type: 'boolean', label: 'Hard mode', default: false },
-  // CR-02: a `select` option with NON-STRING declared choice values — a raw
-  // CLI-flag string ("4") must still match the numeric choice (4).
-  level: {
-    type: 'select',
-    label: 'Level',
-    default: 1,
-    choices: [
-      { value: 1, label: 'Level 1' },
-      { value: 4, label: 'Level 4' },
-    ],
-  },
   // #687: a balance knob no player chooses; the dev host's table setup sets it.
   lootScale: { type: 'number', label: 'Loot scale', default: 1, designerOnly: true },
 };
@@ -249,16 +238,6 @@ describe('MultiplayerHost — CR-02: configure values are coerced to their decla
     expect(getStartOptions().hardMode).toBe(true);
   });
 
-  it('a `select` option with NON-STRING declared choices is reachable from a raw CLI-flag string', async () => {
-    const { host, getStartOptions, lastOfType } = makeHost();
-    await host.handleMessage('A', { type: 'hello' });
-    await host.handleMessage('A', { type: 'configure', gameOptions: { level: '4' } });
-    expect(lastOfType('A', 'error')).toBeUndefined(); // must NOT be rejected as "Invalid value"
-    const opts = getStartOptions();
-    expect(opts.level).toBe(4);
-    expect(typeof opts.level).toBe('number');
-  });
-
   it('an uncoercible `number` value is rejected with an actionable error naming the option + expected type', async () => {
     const { host, getStartOptions, lastOfType } = makeHost();
     await host.handleMessage('A', { type: 'hello' });
@@ -310,7 +289,7 @@ describe('MultiplayerHost — every lobby message says which game options are ap
     await host.handleMessage('A', { type: 'getLobby', requestId: 'q' });
 
     expect(getStartOptions().rounds).toBe(5);
-    expect(lobbyOf(lastOfType('A', 'lobby'))?.gameOptions).toEqual({ difficulty: 'hard', rounds: 5, hardMode: false, level: 1, lootScale: 1 });
+    expect(lobbyOf(lastOfType('A', 'lobby'))?.gameOptions).toEqual({ difficulty: 'hard', rounds: 5, hardMode: false, lootScale: 1 });
   });
 
   it('an accepted `configure` is broadcast to every page, so a second page shows it too', async () => {
