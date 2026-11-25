@@ -1333,18 +1333,18 @@ async function aimAndClick(control: Control): Promise<void> {
  * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
  * moment before. A panel redrawing its buttons has none for a moment, so one not there is looked for
  * again until it comes back; one still gone after {@link PRESS_MS} is reported, not skipped: the
- * panel took back what it offered. `wentByItself` is `press`'s.
+ * panel took back what it offered. `wentByItself` is `press`'s. Returns the control when the press landed.
  */
-async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<boolean> {
+async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<Control | undefined> {
   const over = stopwatch(frame.page());
   for (;;) {
     const [control] = await controlsOf(frame, selector);
-    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory, wentByItself);
+    if (control !== undefined) return (await press(control, `the panel's ${what}`, walk, memory, wentByItself)) ? control : undefined;
     if (over(PRESS_MS)) break;
     await frame.waitForTimeout(100);
   }
   noteIn(frame.page(), walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
-  return false;
+  return undefined;
 }
 
 /**
@@ -2201,27 +2201,12 @@ async function takeAction(
   narrate(step, said);
   const selector = actionButton(name);
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
-  const answered = await fieldTheThingAnswers(frame, selector);
-  if (!(await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself))) return;
+  const pressed = await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself);
+  if (pressed === undefined) return;
   memory.wentAway.delete(selector);
-  if (answered === undefined) return;
+  if (pressed.answers === undefined) return;
   if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
-  walk.fieldsMet.get(name)?.set(answered.pick, answered.kind);
-}
-
-/**
- * The field of the action whose panel button is `selector` that the selected thing answers, when
- * the button starts it on a thing (`data-bs-answers`, #1802): the panel fills that field and never
- * draws it, so pressing the button is how the walk meets it.
- */
-async function fieldTheThingAnswers(frame: Frame, selector: string): Promise<{ readonly pick: string; readonly kind: 'text' | 'number' | 'choice' } | undefined> {
-  const [answered] = await inPageTime(frame.page(), 'reading which field the selected thing answers', () =>
-    visibleMatches(frame, `${selector}[data-bs-answers]`).evaluateAll((buttons) =>
-      buttons.map((button) => ({ pick: button.getAttribute('data-bs-answers') ?? '', type: button.getAttribute('data-bs-answers-type') })),
-    ),
-  );
-  if (answered === undefined) return undefined;
-  return { pick: answered.pick, kind: answered.type === 'text' || answered.type === 'number' ? answered.type : 'choice' };
+  walk.fieldsMet.get(name)?.set(pressed.answers.pick, pressed.answers.kind);
 }
 
 /**

@@ -1,5 +1,5 @@
 {
-  "revision": 519,
+  "revision": 520,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4095,6 +4095,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The auto-UI grid template's hand strip wraps its hands at the board region's width instead of scrolling sideways on a phone (#1801)"
+    },
+    {
+      "revision": 520,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The Action Panel marks a verb in a selected thing's menu with the field the thing answers, and the smoke walk counts that field, and one that opens filled, as met (#1802)"
     }
   ]
 }
