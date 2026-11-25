@@ -2054,6 +2054,9 @@ export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
     // Get events from player state (reactive getter)
     events: () => state.value?.animationEvents,
 
+    // Optional: the view of the frame the events came with, for playingView
+    view: () => state.value?.view,
+
     // Optional: delay for events without handlers (ms, default: 0)
     defaultDuration: 0,
 
@@ -2108,7 +2111,7 @@ onUnmounted(() => unregister?.());
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
 | `useAnimationEvents()` | Inject animation events from ancestor |
-| `animationTimeline(state)` | The timeline a seat's `PlayerGameState` belongs to (game, restore count, seat), or `undefined` when the state does not name all three. It changes on an undo, a restore or a change of seat, when event ids start again |
+| `useAnimatedView(props)` | The view a table's board draws: the playing event's `playingView`, or `gameView` when nothing plays or while history is shown. See "Keeping the Board in Step with Queued Animations" in the [Custom UI Guide](./custom-ui-guide.md) |
 
 **Instance API:**
 
@@ -2120,6 +2123,7 @@ onUnmounted(() => unregister?.());
 | `paused` | `Ref<boolean>` | Pause/resume control |
 | `skipAll()` | `() => void` | Skip remaining animations |
 | `pendingCount` | `Ref<number>` | Number of pending events (for UI indicators) |
+| `playingView` | `Ref<GameRootView \| undefined>` | The view of the frame the playing event arrived with; undefined when nothing plays. Set before the event's handler is called |
 
 ### Integration with useFLIP and useFlyingElements
 

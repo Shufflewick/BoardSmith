@@ -1226,9 +1226,9 @@ arrive close together, such as a bot's volley of shots, a board that draws only
 `gameView` plays an earlier event over a later state: a unit vanishes before its
 death animation plays, and dice fly to a unit that is no longer there.
 
-Pair each event with the view of the frame it arrived in, draw that view while
-its handler plays, and go back to the latest view when the queue finishes or
-the player skips:
+Draw `useAnimatedView(props)` instead of `gameView`. While an event plays, it
+is the view of the frame that event arrived with; when the queue runs dry or
+the player skips, it is `gameView` again:
 
 <!-- typecheck: board -->
 ```vue
@@ -1242,46 +1242,22 @@ the player skips:
 </template>
 
 <script setup lang="ts">
-import { computed, shallowRef, watch } from 'vue';
+import { computed, shallowRef } from 'vue';
 import {
-  anchorAttrs, animationTimeline, findElements, useAnimationEvents, useGameContext,
-  type GameRootView, type TableBoardProps,
+  anchorAttrs, findElements, useAnimatedView, useAnimationEvents, type TableBoardProps,
 } from 'boardsmith/ui';
 
 const props = defineProps<TableBoardProps>();
-const { gameState, isViewingHistory } = useGameContext();
 const animations = useAnimationEvents();
-
-// The view each event arrived with. 'sync': the queue starts an idle handler as the frame lands, before a default watcher runs.
-const viewOfEvent = new Map<number, GameRootView>();
-let timeline: string | undefined;
-watch(() => gameState.value?.state, (frame) => {
-  if (!frame) return;
-  if (animationTimeline(frame) !== timeline) viewOfEvent.clear();
-  timeline = animationTimeline(frame);
-  for (const event of frame.animationEvents ?? []) {
-    if (!viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
-  }
-}, { immediate: true, flush: 'sync' });
-
-const playing = shallowRef<GameRootView>();
-const shown = computed(() => (isViewingHistory.value ? props.gameView : (playing.value ?? props.gameView)));
+const shown = useAnimatedView(props);
 const units = computed(() => (shown.value ? findElements(shown.value, { className: 'Unit' }) : []));
 const beat = shallowRef<string>();
 
 animations?.registerHandler('hit', async (event, { signal }) => {
-  playing.value = viewOfEvent.get(event.id);
-  viewOfEvent.delete(event.id);
   beat.value = `${String(event.data.name)} is hit: ${String(event.data.hp)} HP left`;
   await pause(600, signal);
   beat.value = undefined;
 }, { skip: 'drop' });
-
-watch(() => animations?.isAnimating.value, (animating) => {
-  if (animating) return;
-  playing.value = undefined;
-  viewOfEvent.clear();
-});
 
 function pause(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
@@ -1293,26 +1269,10 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 </script>
 ```
 
-- **Record frames with `flush: 'sync'`.** The queue runs the first handler of
-  an idle queue as soon as the frame lands, before a default (`'pre'`) watcher
-  in your board has seen that frame, so a default watcher has no view for it.
-- **Keep the first view an event arrived with, and forget them all when the
-  timeline changes.** The queue plays an event once, however many frames carry
-  it, and frames go on carrying a move's events until the next action. An undo,
-  a restore or a change of seat starts the numbers again (`animationTimeline`
-  names the timeline, as the queue reads it), so an old entry would hand a
-  replayed event a view from before the undo.
-- **Every handler sets `playing` first.** A board with more event types than
-  `hit` does in each handler what this one does, or the next event plays over
-  the view the last one left.
-- **Go back to the latest view when `isAnimating` turns false.** It turns false
-  when the queue runs dry and the moment the player presses Skip, which drops
-  the queued `'drop'` events and aborts the playing one. A `'run'` handler is
-  called once more with its signal already aborted, before `isAnimating` turns
-  false, so set `playing` before its first `await` and the return to the
-  latest view clears it. Wait for the DOM with `nextTick()`
-  after setting `playing` when a handler measures or flies elements.
-- **History wins.** While the debug panel shows a past position, draw
+- **The view is set before the handler is called**, so every handler plays
+  over its own event's frame. Wait for the DOM with `nextTick()` first when a
+  handler measures or flies elements.
+- **History wins.** While the debug panel shows a past position, it is
   `gameView`, which is that position.
 - **The board and the Action Panel still agree.** While the queue plays, the
   panel shows "Playing animations" and a Skip button, not the latest state's

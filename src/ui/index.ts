@@ -225,7 +225,7 @@ export {
 export {
   createAnimationEvents,
   useAnimationEvents,
-  animationTimeline,
+  useAnimatedView,
   ANIMATION_EVENTS_KEY,
   type AnimationHandler,
   type AnimationHandlerContext,

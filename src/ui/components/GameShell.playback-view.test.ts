@@ -4,15 +4,15 @@
  *
  * The shell hands the board the latest frame at once, while the queue still
  * plays earlier events, so a board drawing only `gameView` animates the first
- * hit over a frame where the second hit already removed the unit. This is the
- * pattern `docs/custom-ui-guide.md` § "Keeping the Board in Step with Queued
- * Animations" teaches, run on the real GameShell.
+ * hit over a frame where the second hit already removed the unit. A board that
+ * draws `useAnimatedView` instead, as `docs/custom-ui-guide.md` § "Keeping the
+ * Board in Step with Queued Animations" teaches, draws each event's own frame;
+ * this runs it on the real GameShell (#1815).
  */
 import { describe, it, expect, afterEach } from 'vitest';
 import { flushPromises } from '@vue/test-utils';
-import { computed, defineComponent, h, nextTick, shallowRef, watch, type PropType } from 'vue';
-import { animationTimeline, useAnimationEvents } from '../composables/useAnimationEvents.js';
-import { useGameContext } from '../composables/useGameContext.js';
+import { defineComponent, h, nextTick, type PropType } from 'vue';
+import { useAnimatedView, useAnimationEvents } from '../composables/useAnimationEvents.js';
 import { findElements } from '../composables/useGameViewHelpers.js';
 import type { GameRootView } from '../types.js';
 import { enterIframe, leaveIframe, mountPlatformShell, postFromHost } from './GameShell.platform-mount.test-helper.js';
@@ -24,42 +24,19 @@ const drawnWhilePlaying: string[] = [];
 
 const PlaybackBoard = defineComponent({
   name: 'PlaybackBoard',
-  props: { gameView: { type: Object as PropType<GameRootView | null>, default: null } },
+  props: {
+    gameView: { type: Object as PropType<GameRootView | null>, default: null },
+    isViewingHistory: { type: Boolean, default: false },
+  },
   setup(props) {
-    const { gameState, isViewingHistory } = useGameContext();
     const animations = useAnimationEvents();
-
-    const viewOfEvent = new Map<number, GameRootView>();
-    let timeline: string | undefined;
-    watch(
-      () => gameState.value?.state,
-      (frame) => {
-        if (!frame) return;
-        if (animationTimeline(frame) !== timeline) viewOfEvent.clear();
-        timeline = animationTimeline(frame);
-        for (const event of frame.animationEvents ?? []) {
-          if (!viewOfEvent.has(event.id)) viewOfEvent.set(event.id, frame.view);
-        }
-      },
-      { immediate: true, flush: 'sync' },
-    );
-
-    const playing = shallowRef<GameRootView>();
-    const shown = computed(() => (isViewingHistory.value ? props.gameView : (playing.value ?? props.gameView)));
+    const shown = useAnimatedView(props);
 
     animations?.registerHandler('hit', async (event) => {
-      playing.value = viewOfEvent.get(event.id);
-      viewOfEvent.delete(event.id);
       await nextTick();
       drawnWhilePlaying.push(document.querySelector('[data-testid="units"]')!.textContent!);
       if (event.data.shot === 1) await new Promise<void>((resolve) => { releaseFirstHit = resolve; });
     }, { skip: 'drop' });
-
-    watch(() => animations?.isAnimating.value, (animating) => {
-      if (animating) return;
-      playing.value = undefined;
-      viewOfEvent.clear();
-    });
 
     return () => h('ul', { 'data-testid': 'units' },
       (shown.value ? findElements(shown.value, { className: 'Unit' }) : []).map((unit) =>
