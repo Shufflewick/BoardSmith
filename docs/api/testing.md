@@ -668,11 +668,11 @@ mounted by `renderAsSeat` or `tableShellContext` holds the one frame it was
 built from: it plays the events pending at mount, and nothing after. So build
 the queue with `createAnimationEvents` over a ref holding the seat's frame,
 provide it under `ANIMATION_EVENTS_KEY`, and after each move hand the ref that
-move's frame, `buildPlayerState(testGame.runner, seat)`, as a session
-publishes it. Hand over every frame, in order: a move's frame carries only
-that move's events, so a test that skips one skips its events. If the board
-draws from its props, give it each frame's view with `wrapper.setProps` too.
-Given a board that plays a `shot` event:
+move's frame, `buildPlayerState(testGame.runner, seat)` from
+`boardsmith/session`. Hand over every frame, in order: a move's frame carries
+only that move's events, so a test that skips one skips its events. If the
+board draws from its props, give it each frame's view with `wrapper.setProps`
+too. Given a board that plays a `shot` event:
 
 <!-- typecheck: game src/ui/shot-board.ts -->
 ```typescript
@@ -729,15 +729,21 @@ test('the board plays the shot of each move', async () => {
 
 `flushPromises` lets the queue run the handlers the new frame started. The
 board's own controller still refuses to take a move, so each move goes through
-`testGame.doAction`. Only the animation queue follows the moves: the seat's
+`testGame.doAction`. Only the animation queue follows the moves. The seat's
 action controller and game context keep the frame from mount, and the
-controller waits on the seat's own queue, not yours. When the test needs
-those to follow the moves too, run the real `GameShell` in the browser, as
-[Browser Testing](../browser-testing.md) describes, and drive it with
-`createHeadlessSession` (see [boardsmith/session](./session.md)), whose
-`broadcasts` record every frame a seat is sent. Read them in order:
-`send()` resolves after any bot seat has replied, and `playerState()` returns
-only the latest frame.
+controller waits on the seat's own queue, not yours, so start from a frame
+with no events pending, or the controller holds back, up to that queue's
+three-second handler wait, for a handler that never registers there. The queue is never reset either, so an undo or a restore
+between moves is not followed: its events are dropped.
+
+When the test needs the controller's gating and a live game context too, run
+the real `GameShell` in the browser, as [Browser
+Testing](../browser-testing.md) describes. To take the frames from a real
+host instead of building them, play the moves with `createHeadlessSession`
+(above, from `boardsmith/testing`), whose `broadcasts` record every frame each
+seat is sent. Read them in order: `send()` resolves only after any bot seat
+has replied, so one call can publish several frames, and `playerState()`
+returns only the latest.
 
 **To render or scan a board with an action open, pass `startAction`** (#405).
 A board draws its targets while an action is open, and a target can carry what

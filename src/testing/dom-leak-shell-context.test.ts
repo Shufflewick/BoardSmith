@@ -12,7 +12,7 @@
  * real GameShell and fails if it provides its board anything a board mounted by
  * `renderAsSeat` is not given.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, onTestFinished } from 'vitest';
 import { defineComponent, effectScope, h, nextTick, ref, shallowRef, type PropType } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { Action, Game, Player, actionStep, type GameOptions } from '../engine/index.js';
@@ -189,7 +189,7 @@ describe('renderAsSeat provides the animation events GameShell provides (#406)',
   });
 });
 
-/** Seat 1 fires forever, and each shot animates. */
+/** Seat 1 fires up to 20 times, and each shot animates. */
 class ShotGame extends Game<ShotGame, Player> {
   shots = 0;
 
@@ -218,7 +218,11 @@ describe('a board mounted once plays the animation events of every frame it is h
     const events = scope.run(() => createAnimationEvents({ events: () => frame.value.animationEvents }))!;
     const shell = await tableShellContext(game, 1, { provide: { [ANIMATION_EVENTS_KEY]: events } });
     const wrapper = mount(AnimatedBoard, { global: { provide: shell.provide } });
-    mounted.push(wrapper);
+    onTestFinished(() => {
+      wrapper.unmount();
+      shell.stop();
+      scope.stop();
+    });
 
     for (let move = 0; move < 2; move++) {
       game.doAction(1, 'fire', {});
@@ -227,8 +231,6 @@ describe('a board mounted once plays the animation events of every frame it is h
     }
 
     expect(played).toEqual([{ shot: 1 }, { shot: 2 }]);
-    shell.stop();
-    scope.stop();
   });
 });
 
