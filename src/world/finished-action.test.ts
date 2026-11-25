@@ -1,12 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { worldAction, worldClockAction, type WorldAction } from "./action.js";
+import { finishedActionMessage } from "../engine/action/action-builder.js";
 
-const finishedMessage = (method: string) =>
-  method === "execute"
-    ? `The "act" action was already finished with .execute(), and an action has only one .execute(). ` +
-      `Remove the second .execute() call.`
-    : `The "act" action was already finished with .execute(), so .${method}() cannot add to it. ` +
-      `Move the .${method}() call before .execute().`;
+const finishedMessage = (method: string) => finishedActionMessage("act", method);
 
 const seatedCalls: Record<string, (action: WorldAction) => unknown> = {
   needs: (a) => a.needs(() => ["store"]),

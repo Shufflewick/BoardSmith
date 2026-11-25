@@ -352,14 +352,6 @@ type ChooseElementOptions<G extends Game, A extends Record<string, unknown>, T e
  *   `{ name: type }` so the `execute` handler receives a fully-typed args object
  *   with no casts required.
  */
-/** Why a builder call after `.execute()` is refused; the world builder says the same (#1810, #1814). */
-export function finishedActionMessage(action: string, method: string): string {
-  const finished = `The "${action}" action was already finished with .execute()`;
-  return method === 'execute'
-    ? `${finished}, and an action has only one .execute(). Remove the second .execute() call.`
-    : `${finished}, so .${method}() cannot add to it. Move the .${method}() call before .execute().`;
-}
-
 export class Action<
   G extends Game = Game,
   A extends Record<string, unknown> = NoArgs,
@@ -1377,6 +1369,14 @@ export class Action<
   build(): ActionDefinition {
     return this.definition;
   }
+}
+
+/** Why a builder call after `.execute()` is refused; the world builder says the same (#1810, #1814). */
+export function finishedActionMessage(action: string, method: string): string {
+  const finished = `The "${action}" action was already finished with .execute()`;
+  return method === 'execute'
+    ? `${finished}, and an action has only one .execute(). Remove the second .execute() call.`
+    : `${finished}, so .${method}() cannot add to it. Move the .${method}() call before .execute().`;
 }
 
 // Re-export ElementClass type for use in chooseElement
