@@ -1272,6 +1272,9 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 - **The view is set before the handler is called**, so every handler plays
   over its own event's frame. Wait for the DOM with `nextTick()` first when a
   handler measures or flies elements.
+- **Skip, an undo, a restore or a change of seat goes back to the latest
+  view.** A `'run'` handler called on Skip plays over it, and so does an event
+  still queued from before an undo or from another seat.
 - **History wins.** While the debug panel shows a past position, it is
   `gameView`, which is that position.
 - **The board and the Action Panel still agree.** While the queue plays, the

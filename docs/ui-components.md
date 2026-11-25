@@ -2057,9 +2057,6 @@ export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
     // Optional: the view of the frame the events came with, for playingView
     view: () => state.value?.view,
 
-    // Optional: delay for events without handlers (ms, default: 0)
-    defaultDuration: 0,
-
     // Optional: time to wait for handler registration before skipping (ms, default: 3000)
     handlerWaitTimeout: 3000,
   });
@@ -2111,6 +2108,7 @@ onUnmounted(() => unregister?.());
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
 | `useAnimationEvents()` | Inject animation events from ancestor |
+| `animationTimeline(state)` | The timeline a seat's `PlayerGameState` belongs to (game, restore count, seat), for the `timeline` option, or `undefined` when the state does not name all three. It changes on an undo, a restore or a change of seat, when event ids start again |
 | `useAnimatedView(props)` | The view a table's board draws: the playing event's `playingView`, or `gameView` when nothing plays or while history is shown. See "Keeping the Board in Step with Queued Animations" in the [Custom UI Guide](./custom-ui-guide.md) |
 
 **Instance API:**

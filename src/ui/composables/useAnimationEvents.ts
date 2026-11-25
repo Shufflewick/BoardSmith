@@ -82,8 +82,6 @@ export interface UseAnimationEventsOptions {
   events: () => AnimationEvent[] | undefined;
   /** Getter for the view of the frame `events` came with, which becomes `playingView` while each of its events plays. */
   view?: () => GameRootView | undefined;
-  /** Default delay for events without handlers (ms, default: 0) */
-  defaultDuration?: number;
   /**
    * Time to wait for a handler to register before skipping an unhandled event (ms, default: 3000).
    * Set to 0 to skip immediately (no wait).
@@ -179,7 +177,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, view: getView, defaultDuration = 0, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
+  const { events: getEvents, view: getView, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
 
   // Handler registry
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
@@ -285,10 +283,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
       const { event, view } = queue.shift()!;
       pendingCount.value = queue.length;
-      playingView.value = view;
 
       let handler = handlers.get(event.type)?.handler;
       let timedOut = false;
+      if (!handler) playingView.value = undefined;
       while (!handler && handlerWaitTimeout > 0 && !claimedNone() && !skipRequested) {
         const outcome = await waitForHandler(event.type, handlerWaitTimeout);
         if (outcome === 'timeout') {
@@ -309,6 +307,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       if (handler) {
         const abort = new AbortController();
         currentHandlerAbort = abort;
+        playingView.value = view;
         try {
           // Race handler against abort so skipAll() unblocks the queue immediately
           await Promise.race([
@@ -453,6 +452,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           currentTimeline !== lastTimeline
         ) {
           lastQueuedId = 0;
+          // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
+          for (const entry of queue) entry.view = undefined;
+          playingView.value = undefined;
         }
         lastTimeline = currentTimeline;
       },
