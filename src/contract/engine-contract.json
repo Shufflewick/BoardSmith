@@ -1,5 +1,5 @@
 {
-  "revision": 525,
+  "revision": 526,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4143,6 +4143,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith/ui exports animationTimeline, and the custom UI guide shows how a board draws each queued animation event over the view it arrived with (#1807)"
+    },
+    {
+      "revision": 526,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "An MCTS bot's chooseFrom pick of an element is sent as { id, className }, not the search copy's element, so the live game accepts it and a bot seat no longer stalls (#1808)"
     }
   ]
 }

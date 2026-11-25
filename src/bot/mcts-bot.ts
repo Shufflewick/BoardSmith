@@ -9,6 +9,8 @@ import type {
 import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
+import { asElementRefs } from '../engine/element/pick-candidates.js';
+import { seatIdOf } from '../engine/element/seat-placeholders.js';
 import { createSnapshot, createSeatSnapshot } from '../engine/utils/index.js';
 import { acceptsSubmission, enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { NotSimulableError } from '../engine/errors.js';
@@ -1224,7 +1226,7 @@ export class MCTSBot<G extends Game = Game> {
   /**
    * Every move `seat` may make in `flowState`: its listed actions with every
    * legal set of args, then the follow-up it holds, if any. Args are in wire
-   * form (element ids). With `sample`, each action contributes at most 20 arg
+   * form (see {@link serializeChoice}). With `sample`, each action contributes at most 20 arg
    * sets, drawn from the bot's own random source, to bound the branching. An
    * action with more moves than enumeration lists contributes 20 drawn at
    * random, with or without `sample` (#691).
@@ -1279,7 +1281,7 @@ export class MCTSBot<G extends Game = Game> {
       // sample of them, drawn from the bot's own seeded source (#691).
       const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng, onSampled: () => { sampled = true; } };
       const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
-        .map((args) => this.serializeArgs(args, actionDef.selections));
+        .map((args) => this.serializeArgs(args, actionDef.selections, seat));
       const cut = options.sample && serialized.length > MAX_SAMPLED_ARGS;
       sampled ||= cut;
       const kept = cut ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS) : serialized;
@@ -1382,20 +1384,18 @@ export class MCTSBot<G extends Game = Game> {
 
 
   /**
-   * Serialize a choice value for action args
+   * A choice in wire form, never the search copy's element, whose contents the
+   * live game does not match (#1808): a `chooseElement(s)` pick as its id, and
+   * each element in a `chooseFrom` value as `{ id, className }`. An element that
+   * is the whole value keeps its id; one inside an array or object is in the ids
+   * `seat` knows it by, which is how the engine matches it (#1793).
    */
-  private serializeChoice(choice: unknown, selection: Selection): unknown {
-    // Use the public .id getter for both element types — consistent and immune to
-    // internal tree-node (_t) renames. GameElement.id returns this._t.id but the
-    // public surface is stable.
-    if (selection.type === 'element') {
+  private serializeChoice(choice: unknown, selection: Selection, seat: number): unknown {
+    if (selection.type === 'element' || selection.type === 'elements') {
       return (choice as { id: number }).id;
     }
-    // For 'elements' type (chooseElements), choices are GameElement objects with id property
-    if (selection.type === 'elements') {
-      return (choice as { id: number }).id;
-    }
-    return choice;
+    if (isElement(choice)) return asElementRefs(choice, (element) => element.id);
+    return asElementRefs(choice, (element) => seatIdOf(element, seat));
   }
 
   /**
@@ -1403,15 +1403,16 @@ export class MCTSBot<G extends Game = Game> {
    * This ensures element objects are available during recursion for dependent filters,
    * and only converted to IDs when returning final results.
    *
-   * Elements become bare numeric ids, not the `{ id, className }` performAction resolves,
-   * on purpose (#685): `BotMove.args` is public, and game bot hooks
+   * A `chooseElement(s)` pick becomes a bare numeric id, not the `{ id, className }` a
+   * `chooseFrom` element becomes, on purpose (#685): `BotMove.args` is public, and game bot hooks
    * (`playoutPolicy`, `moveOrdering`, `threatResponseMoves`,
    * `hintTargetFromMove`) and the hint and heatmap fallbacks in
    * session/stateless-ops.ts read element args as numbers. Do not merge the two.
    */
   private serializeArgs(
     args: Record<string, unknown>,
-    selections: Selection[]
+    selections: Selection[],
+    seat: number,
   ): Record<string, unknown> {
     const serialized: Record<string, unknown> = {};
 
@@ -1423,9 +1424,9 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       if (Array.isArray(value)) {
-        serialized[key] = value.map(v => this.serializeChoice(v, selection));
+        serialized[key] = value.map(v => this.serializeChoice(v, selection, seat));
       } else {
-        serialized[key] = this.serializeChoice(value, selection);
+        serialized[key] = this.serializeChoice(value, selection, seat);
       }
     }
 
