@@ -64,6 +64,13 @@ export const PRESS_MARK = 'data-bs-smoke-press';
  */
 export function pageControls(elements: Element[], mark?: { key: string; index: number; mark: string }): PageControl[] {
   const found: Array<Omit<PageControl, 'marked'>> = [];
+  // Defined in here, since the page runs this function on its own.
+  const answersOf = (html: HTMLElement): Pick<PageControl, 'answers'> => {
+    const pick = html.getAttribute('data-bs-answers');
+    const type = html.getAttribute('data-bs-answers-type');
+    const kind: 'text' | 'number' | 'choice' = type === 'text' || type === 'number' ? type : 'choice';
+    return pick === null ? {} : { answers: { pick, kind } };
+  };
   elements.forEach((element, index) => {
     if (element.closest('.game-over-card, [inert]') !== null) return;
     const html = element as HTMLElement;
@@ -75,11 +82,7 @@ export function pageControls(elements: Element[], mark?: { key: string; index: n
     const keyboardOnly =
       getComputedStyle(html).pointerEvents === 'none' && !html.checkVisibility({ opacityProperty: true, visibilityProperty: true });
     const onBoard = html.closest('[data-testid="bs-board"]') !== null;
-    const pick = html.getAttribute('data-bs-answers');
-    const type = html.getAttribute('data-bs-answers-type');
-    const kind: 'text' | 'number' | 'choice' = type === 'text' || type === 'number' ? type : 'choice';
-    const answers = pick === null ? {} : { answers: { pick, kind } };
-    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null, onBoard, ...answers });
+    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null, onBoard, ...answersOf(html) });
   });
   const pick = mark && (found.find((c) => c.key === mark.key && c.index === mark.index) ?? found.find((c) => c.key === mark.key));
   if (mark && pick) elements[pick.index].setAttribute('data-bs-smoke-press', mark.mark);

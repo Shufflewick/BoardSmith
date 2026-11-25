@@ -1608,18 +1608,26 @@ async function fillAField(answering: Answering): Promise<void> {
   if (field === undefined) return;
   const page = frame.page();
   const shown = await withinPageTime(page, PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }));
-  const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
-    field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
-  );
-  const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
+  const { pick, kind } = await fieldPick(field);
   walk.fieldsMet.get(name)?.set(pick, kind);
   const attempts = attemptsIn(memory, page);
-  if (shown !== '' && (attempts.typed.get(name)?.some((t) => t.field === pick) || !Object.hasOwn(walk.inputs[name] ?? {}, pick))) return;
+  const typedHere = attempts.typed.get(name)?.some((t) => t.field === pick) === true;
+  if (shown !== '' && (typedHere || !Object.hasOwn(walk.inputs[name] ?? {}, pick))) return;
   const typed = await valueToType(answering, field, pick, kind);
   if (typed === undefined) return;
   attempts.typed.set(name, [...(attempts.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
   narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
   await withinPageTime(frame.page(), PRESS_MS, 'typing into the field', (timeout) => field.target.fill(typed.value, { timeout }));
+}
+
+/** The pick the open action's text or number `field` answers (`data-bs-pick`), and which of the two it is. */
+async function fieldPick(field: Control): Promise<{ readonly pick: string; readonly kind: 'text' | 'number' }> {
+  const page = field.frame.page();
+  const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
+    field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
+  );
+  const type = await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }));
+  return { pick, kind: type === 'number' ? 'number' : 'text' };
 }
 
 /**
