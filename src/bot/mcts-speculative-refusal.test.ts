@@ -10,6 +10,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Player, Space, Piece, Action, simultaneousActionStep, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import { searchCopyForSeat } from './search-copy.js';
+import { acceptsSubmission } from '../engine/utils/enumerate-moves.js';
 
 class Card extends Piece<DrawGame> {}
 
@@ -40,6 +41,9 @@ class DrawGame extends Game<DrawGame, Player> {
         .execute((_args, ctx) => {
           (ctx.game as DrawGame).kept.push(ctx.player.seat);
         }),
+      Action.create<DrawGame>('call')
+        .chooseFrom('suit', { choices: ['hearts', 'spades'], repeat: { until: () => true } })
+        .execute(() => {}),
     );
     this.setFlow({
       root: simultaneousActionStep<DrawGame>({
@@ -64,11 +68,11 @@ function newGame(): DrawGame {
   return game;
 }
 
-const invalidSelectionWarnings = () =>
+const refusedPickWarnings = () =>
   vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-const warned = (spy: ReturnType<typeof invalidSelectionWarnings>) =>
-  spy.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('Invalid selection'));
+const warned = (spy: ReturnType<typeof refusedPickWarnings>) =>
+  spy.mock.calls.map((call) => String(call[0])).filter((line) => line.includes('The player was told'));
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -84,7 +88,7 @@ describe('a pick refused inside the bot search (#1809)', () => {
       if (state.actionError && this !== game) refusals.push(state.actionError);
       return state;
     });
-    const warn = invalidSelectionWarnings();
+    const warn = refusedPickWarnings();
 
     const move = await new MCTSBot(game, DrawGame, 'draw', 1, { iterations: 200, playoutDepth: 6, seed: 'draw', timeout: Infinity }).play();
 
@@ -97,7 +101,7 @@ describe('a pick refused inside the bot search (#1809)', () => {
     const game = newGame();
     game.continueFlow('draw', { end: 'top' }, 1);
     const kingId = game.deck.first(Card)!.id;
-    const warn = invalidSelectionWarnings();
+    const warn = refusedPickWarnings();
 
     expect(game.continueFlow('keep', { card: kingId }, 1).actionError).toBeDefined();
     expect(warned(warn)).toHaveLength(1);
@@ -106,9 +110,17 @@ describe('a pick refused inside the bot search (#1809)', () => {
   it('logs no player warning for a pick refused in a game\'s own search copy', () => {
     const copy = searchCopyForSeat(newGame(), 1, 'draw');
     copy.continueFlow('draw', { end: 'top' }, 1);
-    const warn = invalidSelectionWarnings();
+    const warn = refusedPickWarnings();
 
     expect(copy.continueFlow('keep', { card: copy.deck.first(Card)!.id }, 1).actionError).toBeDefined();
+    expect(warned(warn)).toEqual([]);
+  });
+
+  it('logs no player warning for a repeating pick refused on a scratch copy of the search copy', () => {
+    const copy = searchCopyForSeat(newGame(), 1, 'draw');
+    const warn = refusedPickWarnings();
+
+    expect(acceptsSubmission(copy, 'call', 1, { suit: ['clubs'] })).toBe(false);
     expect(warned(warn)).toEqual([]);
   });
 });
