@@ -419,8 +419,11 @@ describe('boardsmith doctor', () => {
     '',
   ].join('\n');
 
-  it('rewrites a config that sets nothing defineGameViteConfig does not to the one-line config, removing its vitest config', async () => {
-    const projectDir = await project({ 'vite.config.ts': OLD_VITE_CONFIG, 'vitest.config.ts': OLD_VITEST_CONFIG });
+  it.each([
+    ['its plain Vue plugin', OLD_VITE_CONFIG],
+    ['its Vue plugin keeping no template comments', OLD_VITE_CONFIG.replace('[vue()]', '[vue({ template: { compilerOptions: { comments: false } } })]')],
+  ])('rewrites a config that sets nothing defineGameViteConfig does not (%s) to the one-line config, removing its vitest config', async (_what, viteConfig) => {
+    const projectDir = await project({ 'vite.config.ts': viteConfig, 'vitest.config.ts': OLD_VITEST_CONFIG });
 
     const before = await doctorCommand({ project: projectDir });
     expect(before.findings.map((f) => f.kind)).toEqual(['test-run-collects-worktrees']);

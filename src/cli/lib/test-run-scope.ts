@@ -125,7 +125,7 @@ const sameText = (node: ts.Node, expected: string) => node.getText().replace(/"/
 function shipped(path: string, value: ts.Expression): boolean {
   switch (path) {
     case 'plugins':
-      return sameText(value, '[vue()]');
+      return sameText(value, '[vue()]') || sameText(value, '[vue({template:{compilerOptions:{comments:false}}})]');
     case 'resolve':
     case 'test':
       return ts.isObjectLiteralExpression(value);
@@ -171,6 +171,8 @@ export function settingNotShipped(text: string): string | undefined {
         found = path.join('.');
         return;
       }
+      // shipped() judges any value but a config object whole, Vue plugin options included.
+      if (!ts.isObjectLiteralExpression(node.initializer)) return;
     }
     ts.forEachChild(node, visit);
   };
