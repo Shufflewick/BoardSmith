@@ -1,5 +1,5 @@
 {
-  "revision": 523,
+  "revision": 524,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4127,6 +4127,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The testing guide shows how to follow one mounted table board across animated moves (#1805)"
+    },
+    {
+      "revision": 524,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The Action Panel's help \"?\" sits beside its action with a mouse, not over the button's corner (#1806)"
     }
   ]
 }
