@@ -13,14 +13,15 @@
  * `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { defineComponent, h, nextTick, ref, type PropType } from 'vue';
-import { mount } from '@vue/test-utils';
+import { defineComponent, effectScope, h, nextTick, ref, shallowRef, type PropType } from 'vue';
+import { flushPromises, mount } from '@vue/test-utils';
+import { Action, Game, Player, actionStep, type GameOptions } from '../engine/index.js';
 import { MoveGame } from '../session/move-game.test-helper.js';
 import { buildPlayerState } from '../session/utils.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import { GAME_CONTEXT_KEYS, useGameContext } from '../ui/composables/useGameContext.js';
 import { WORLD_CONTEXT_KEY } from '../ui/world/useWorld.js';
-import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
+import { ANIMATION_EVENTS_KEY, createAnimationEvents, useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
 import { useMenuCommands } from '../ui/composables/menuCommands.js';
 import { useActionHolds } from '../ui/composables/actionHolds.js';
@@ -185,6 +186,49 @@ describe('renderAsSeat provides the animation events GameShell provides (#406)',
     await render(renderAsSeat(game, 1, { component: AnimatedBoard }));
 
     expect(played).toEqual([{ room: 'bridge' }]);
+  });
+});
+
+/** Seat 1 fires forever, and each shot animates. */
+class ShotGame extends Game<ShotGame, Player> {
+  shots = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create('fire').execute((_args, ctx) => {
+        const game = ctx.game as ShotGame;
+        game.shots += 1;
+        game.animate('flash', { shot: game.shots });
+        return { success: true };
+      }),
+    );
+    this.setFlow({
+      root: actionStep({ actions: ['fire'], player: (ctx) => ctx.game.getPlayer(1)!, repeatUntil: () => false, maxMoves: 20 }),
+    });
+  }
+}
+
+describe('a board mounted once plays the animation events of every frame it is handed (#1805)', () => {
+  it("plays each move's events when the test provides its own queue and hands it each seat frame in order", async () => {
+    played.length = 0;
+    const game = TestGame.create(ShotGame, { playerCount: 2, seed: 'bs1805' });
+    const frame = shallowRef(buildPlayerState(game.runner, 1));
+    const scope = effectScope();
+    const events = scope.run(() => createAnimationEvents({ events: () => frame.value.animationEvents }))!;
+    const shell = await tableShellContext(game, 1, { provide: { [ANIMATION_EVENTS_KEY]: events } });
+    const wrapper = mount(AnimatedBoard, { global: { provide: shell.provide } });
+    mounted.push(wrapper);
+
+    for (let move = 0; move < 2; move++) {
+      game.doAction(1, 'fire', {});
+      frame.value = buildPlayerState(game.runner, 1);
+      await flushPromises();
+    }
+
+    expect(played).toEqual([{ shot: 1 }, { shot: 2 }]);
+    shell.stop();
+    scope.stop();
   });
 });
 
