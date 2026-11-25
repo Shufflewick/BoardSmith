@@ -6,6 +6,8 @@
  * rules file defines, which verbs a test file dispatches through the engine, and which lines call
  * a guard unreachable. Kept apart from the command so the mutation runner can share the parser.
  */
+import { isBuiltin } from 'node:module';
+import { posix } from 'node:path';
 import { parse, parseForESLint } from '@typescript-eslint/parser';
 import { scanTestCitations } from './trace-check.js';
 
@@ -641,18 +643,131 @@ const slotText = (slot: Slot) => `${slot.index}${pathText(slot.path)}`;
  * the library's own names would miss every verb such a game has.
  */
 export interface DispatchWrappers {
-  /** Every slot of every function by each bare name: what a member call, or a call to an import, reaches. */
+  /** Every slot of every function by each bare name: what a member call reaches, or a call to an import `exported` cannot follow. */
   byName: ReadonlyMap<string, Slots>;
   /** One function's own slots, by `<file>:<offset>`: what a call to a function its own file declares reaches. */
   byFunction: ReadonlyMap<string, Slots>;
-  /** The files `byFunction` was read from; a call to a function another file declares falls back to `byName`. */
+  /** The files `byFunction` was read from; a call to a function an unread file declares falls back to `byName`. */
   files: ReadonlySet<string>;
+  /**
+   * The slots of the function a file read exports by a name, followed through its re-exports:
+   * what a call to an import reaches. Undefined when the export is not a function this can read.
+   */
+  exported: (file: string, name: string) => Slots | undefined;
 }
 
-/** A project with no dispatch helpers of its own. */
-export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({ byName: new Map(), byFunction: new Map(), files: new Set<string>() });
-
 const NO_SLOTS: Slots = new Map();
+
+/** A project with no dispatch helpers of its own. */
+export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({
+  byName: new Map(),
+  byFunction: new Map(),
+  files: new Set<string>(),
+  exported: () => undefined,
+});
+
+/** The project script a module path names, trying TypeScript's extension rules. */
+export function resolveScript(path: string, exists: (path: string) => boolean): string | undefined {
+  const stem = path.replace(/\.(m|c)?js$/, '');
+  const candidates = [
+    path,
+    ...['.ts', '.mts', '.cts', '.js', '.mjs'].map((ext) => `${stem}${ext}`),
+    ...['/index.ts', '/index.js'].map((index) => `${path}${index}`),
+  ];
+  return candidates.find(exists);
+}
+
+/** A name a module takes from another: the module it is written as coming from, and its name there. */
+interface Import {
+  specifier: string;
+  name: string;
+}
+
+/** A name a module passes on: the file read it comes from (none for a package or a file not read), and its name there. */
+interface Passed {
+  from: string | undefined;
+  name: string;
+}
+
+/** What a module exports by a name: a function it declares, or a name it passes on from another module. */
+type Export = { fn: AstNode } | Passed;
+
+/** A module's exports by name, and the modules whose every export it passes on (`export * from`). */
+interface ModuleExports {
+  named: Map<string, Export>;
+  star: Array<string | undefined>;
+}
+
+/** The name an import or export specifier gives, written as an identifier or a string. */
+const moduleName = (node: unknown): string => identifierName(node) ?? literalText(node) ?? '';
+
+const isRelative = (specifier: string) => ['.', '..'].includes(specifier) || /^\.\.?\//.test(specifier);
+
+/** The file read a module specifier names, for a relative one. */
+function resolveImport(file: string, specifier: unknown, files: ReadonlySet<string>): string | undefined {
+  if (typeof specifier !== 'string' || !isRelative(specifier)) return undefined;
+  return resolveScript(posix.join(posix.dirname(file), specifier).replace(/\/$/, ''), (path) => files.has(path));
+}
+
+const IMPORTED_NAMES: Readonly<Record<string, (specifier: AstNode) => string>> = Object.freeze({
+  ImportSpecifier: (specifier) => moduleName(specifier.imported),
+  ImportDefaultSpecifier: () => 'default',
+});
+
+/** The module and name an identifier was imported by, when an `import` statement names one export. */
+function importOf(source: ScopedSource, id: AstNode): Import | undefined {
+  const def = source.references.get(id)?.resolved?.defs[0];
+  const declaration = def?.parent as unknown as AstNode | undefined;
+  if (def?.type !== 'ImportBinding' || declaration?.type !== 'ImportDeclaration') return undefined;
+  const specifier = def.node as unknown as AstNode;
+  const name = IMPORTED_NAMES[specifier.type]?.(specifier);
+  return name === undefined ? undefined : { specifier: (declaration.source as AstNode).value as string, name };
+}
+
+/** What a module's own binding exports: a function the module declares, or a name it imported. */
+function bindingExport(source: ScopedSource, id: unknown, files: ReadonlySet<string>): Export | undefined {
+  if (!isNode(id) || id.type !== 'Identifier') return undefined;
+  const fn = localFunction(source, id);
+  if (fn) return { fn };
+  const imported = importOf(source, id);
+  return imported && { from: resolveImport(source.file, imported.specifier, files), name: imported.name };
+}
+
+type ExportReader = (node: AstNode, module: ModuleExports, source: ScopedSource, files: ReadonlySet<string>) => void;
+
+const exportedFrom = (node: AstNode, source: ScopedSource, files: ReadonlySet<string>) =>
+  resolveImport(source.file, (node.source as AstNode | null)?.value, files);
+
+/** The functions an `export const` or `export function` declares. */
+function declaredFunctions(declaration: AstNode | null): Array<{ name: string; fn: AstNode }> {
+  if (declaration === null) return [];
+  const declarators = declaration.type === 'VariableDeclaration' ? (declaration.declarations as AstNode[]) : [declaration];
+  return declarators.flatMap((node) => namedFunction(node) ?? []);
+}
+
+const EXPORT_READERS: Readonly<Record<string, ExportReader>> = Object.freeze({
+  ExportAllDeclaration: (node, module, source, files) => {
+    if (node.exported === null) module.star.push(exportedFrom(node, source, files));
+  },
+  ExportDefaultDeclaration: (node, module, source, files) => {
+    const declared = isFunction(node.declaration) ? { fn: node.declaration } : bindingExport(source, node.declaration, files);
+    if (declared) module.named.set('default', declared);
+  },
+  ExportNamedDeclaration: (node, module, source, files) => {
+    for (const { name, fn } of declaredFunctions(node.declaration as AstNode | null)) module.named.set(name, { fn });
+    for (const specifier of node.specifiers as AstNode[]) {
+      const local = specifier.local as AstNode;
+      const target = node.source ? { from: exportedFrom(node, source, files), name: moduleName(local) } : bindingExport(source, local, files);
+      if (target) module.named.set(moduleName(specifier.exported), target);
+    }
+  },
+});
+
+function moduleExports(source: ScopedSource, files: ReadonlySet<string>): ModuleExports {
+  const module: ModuleExports = { named: new Map(), star: [] };
+  for (const node of source.ast.body as AstNode[]) EXPORT_READERS[node.type]?.(node, module, source, files);
+  return module;
+}
 
 const functionKey = (file: string, fn: AstNode) => `${file}:${fn.range[0]}`;
 
@@ -672,15 +787,36 @@ interface Carrier {
 
 type Carriers = (source: ScopedSource, call: AstNode, wrappers: DispatchWrappers) => Carrier[];
 
-/** The slots a callee reaches: a function its own (read) file declares, else every helper by its bare name. */
-function calleeSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slot[] {
+/** The slots an import reaches: none from Node's own modules, the function's own from a file read, else unknown. */
+function importedSlots(file: string, imported: Import, wrappers: DispatchWrappers): Slots | undefined {
+  if (isBuiltin(imported.specifier)) return NO_SLOTS;
+  const from = resolveImport(file, imported.specifier, wrappers.files);
+  return from === undefined ? undefined : wrappers.exported(from, imported.name);
+}
+
+/** The slots of the function a callee names when its own (read) file declares it. */
+function localSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slots | undefined {
   const local = callee.type === 'Identifier' && wrappers.files.has(source.file) ? localFunction(source, callee) : undefined;
-  if (local) return [...(wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS).values()];
-  const name = calleeName(callee) ?? '';
+  return local && (wrappers.byFunction.get(functionKey(source.file, local)) ?? NO_SLOTS);
+}
+
+/** Every slot of every helper by the callee's bare name (an import's own name, not its alias). */
+function namedSlots(callee: AstNode, imported: Import | undefined, wrappers: DispatchWrappers): Slot[] {
+  const name = (imported?.name === 'default' ? undefined : imported?.name) ?? calleeName(callee) ?? '';
   const slots = [...(wrappers.byName.get(name) ?? NO_SLOTS).values()];
   // `runner.apply(...)` and `fn.apply(...)` are the runner's and Function's, not a command helper named apply.
   const isEntryPoint = callee.type === 'MemberExpression' && ENTRY_POINT_NAMES.includes(name);
   return isEntryPoint ? slots.filter((slot) => slot.path.length === 0) : slots;
+}
+
+/**
+ * The slots a callee reaches: an import's, read from the file it comes from; a function its own
+ * (read) file declares; else every helper by its bare name.
+ */
+function calleeSlots(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): Slot[] {
+  const imported = callee.type === 'Identifier' ? importOf(source, callee) : undefined;
+  const bound = imported ? importedSlots(source.file, imported, wrappers) : localSlots(source, callee, wrappers);
+  return bound ? [...bound.values()] : namedSlots(callee, imported, wrappers);
 }
 
 /** The arguments a call hands a project helper's slots. */
@@ -703,11 +839,37 @@ export function mentionsAny(text: string, names: Iterable<string>): boolean {
  * slot any function by that name has, since a game's test files declare many local `run` helpers.
  */
 function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNames: readonly string[]): DispatchWrappers {
-  const parsed = new Map<SourceFile, ScopedSource>();
+  const texts = new Map(sources.map((file) => [file.path, file.text]));
+  const parsed = new Map<string, ScopedSource>();
+  const scoped = (path: string): ScopedSource => {
+    const source = parsed.get(path) ?? parseScoped(texts.get(path)!, path);
+    parsed.set(path, source);
+    return source;
+  };
+  const modules = new Map<string, ModuleExports>();
+  const exportsOf = (path: string): ModuleExports => {
+    const module = modules.get(path) ?? moduleExports(scoped(path), wrappers.files);
+    modules.set(path, module);
+    return module;
+  };
+  const exported = (file: string, name: string, seen = new Set<string>()): Slots | undefined => {
+    const key = `${file}:${name}`;
+    if (seen.has(key)) return undefined;
+    seen.add(key);
+    const module = exportsOf(file);
+    const target = module.named.get(name);
+    if (target && 'fn' in target) return wrappers.byFunction.get(functionKey(file, target.fn)) ?? NO_SLOTS;
+    // `export *` never passes on a default export.
+    const passed = target ? [target] : name === 'default' ? [] : module.star.map((from) => ({ from, name }));
+    const found = passed.flatMap((next) => (next.from === undefined ? [] : [exported(next.from, next.name, seen)]));
+    const read = found.filter((slots) => slots !== undefined);
+    return read.length === 0 ? undefined : new Map(read.flatMap((slots) => [...slots]));
+  };
   const wrappers = {
     byName: new Map<string, Map<string, Slot>>(),
     byFunction: new Map<string, Map<string, Slot>>(),
-    files: new Set(sources.map((file) => file.path)),
+    files: new Set(texts.keys()),
+    exported: (file: string, name: string) => exported(file, name),
   };
   const add = (map: Map<string, Map<string, Slot>>, key: string, slot: Slot): boolean => {
     const slots = map.get(key) ?? new Map<string, Slot>();
@@ -719,8 +881,7 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
     changed = false;
     for (const file of sources) {
       if (!mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()])) continue;
-      const source = parsed.get(file) ?? parseScoped(file.text, file.path);
-      parsed.set(file, source);
+      const source = scoped(file.path);
       walk(source.ast, (node) => {
         if (node.type !== 'CallExpression') return;
         for (const value of carriedValues(source, node, carriers, wrappers)) {

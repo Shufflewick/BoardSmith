@@ -28,7 +28,7 @@
  */
 import { posix } from 'node:path';
 import { isSameOrInside, mayBeSameOrInside } from '../lib/path-inside.js';
-import { findDispatches, parseSource, walk, type AstNode, type DispatchWrappers } from './test-step-ast.js';
+import { findDispatches, parseSource, resolveScript, walk, type AstNode, type DispatchWrappers } from './test-step-ast.js';
 
 /** Modules a scan never needs: they mount components or run a game. */
 const CODE_RUNNING_MODULES = new Set(['@vue/test-utils', 'boardsmith/testing']);
@@ -181,17 +181,6 @@ function globCodeRun(node: AstNode, file: string): string | undefined {
   }
   const reached = (patterns as string[]).find((p) => !p.startsWith('!') && globReachesCode(p, file));
   return reached && `loads ${reached} with import.meta.glob`;
-}
-
-/** The project script a relative module path names, trying TypeScript's extension rules. */
-function resolveScript(path: string, context: Pick<CodeRunContext, 'text'>): string | undefined {
-  const stem = path.replace(/\.(m|c)?js$/, '');
-  const candidates = [
-    path,
-    ...['.ts', '.mts', '.cts', '.js', '.mjs'].map((ext) => `${stem}${ext}`),
-    ...['/index.ts', '/index.js'].map((index) => `${path}${index}`),
-  ];
-  return candidates.find((candidate) => context.text(candidate) !== undefined);
 }
 
 // -------------------------------------------------------------------------------------------
@@ -360,7 +349,7 @@ function codeRunByRelativeImport(
   const [pathPart, query] = specifier.split('?');
   if (query === 'raw') return undefined;
   const target = posix.normalize(posix.join(posix.dirname(file), pathPart));
-  const resolved = resolveScript(target, context) ?? target;
+  const resolved = resolveScript(target, (path) => context.text(path) !== undefined) ?? target;
   if (mayBeSameOrInside('src', resolved)) {
     return importsOnlyThemeConstants(node, resolved, context) ? undefined : `imports ${resolved} from the game's src/`;
   }

@@ -629,6 +629,53 @@ it('a', () => { run('notDispatched'); });
     expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual([]);
     expect(findDispatchedVerbs("it('b', () => run('imported'));\n", 'tests/b.test.ts', wrappers)).toEqual(['imported']);
   });
+
+  it("does not count a package's import that shares a helper's bare name, and counts a helper imported under another name (#1804)", () => {
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/actions.ts', text: 'export const join = (game: G, name: string) => game.doAction(1, name);\n' },
+    ]);
+    const test = `
+import { join } from 'node:path';
+import { join as play } from '../support/actions.js';
+join('a', 'notDispatched');
+play(game, 'played');
+`;
+    expect(findDispatchedVerbs(test, 'tests/guards/paths.test.ts', wrappers)).toEqual(['played']);
+  });
+
+  it('reads an imported helper from the file it comes from, through a re-export, not from another helper by its name (#1804)', () => {
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/world.ts', text: 'export function act(name: string, seat: string) { return world.take(seat, name); }\n' },
+      { path: 'tests/support/table.ts', text: 'export function act(seat: string, name: string) { return testGame.doAction(seat, name); }\n' },
+      { path: 'tests/support/index.ts', text: "export * from './world';\n" },
+      {
+        path: 'tests/support/moves.ts',
+        text: "import { act } from './index';\nexport function move(seat: string, name: string) { return act(name, seat); }\n",
+      },
+    ]);
+    const test = "import { move } from './support/moves';\nmove('p1', 'moved');\n";
+    expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual(['moved']);
+  });
+
+  it('still counts a helper imported in a way this cannot follow to its function, by its bare name (#1804 review F1-F4, F7)', () => {
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/index.ts', text: 'export function act(game: G, name: string) { return game.doAction(1, name); }\n' },
+      { path: 'tests/support/late.ts', text: 'let hop = (game: G, name: string) => game.doAction(1, name);\nhop = hop;\nexport { hop };\n' },
+    ]);
+    const test = `
+import { act as aliased } from '@/support/index';
+import { act as dot } from '.';
+import { act as slash } from './';
+import { hop } from './late';
+import act = require('./index');
+aliased(game, 'viaAlias');
+dot(game, 'viaDot');
+slash(game, 'viaSlash');
+hop(game, 'viaLet');
+act(game, 'viaRequire');
+`;
+    expect(findDispatchedVerbs(test, 'tests/support/a.test.ts', wrappers)).toEqual(['viaAlias', 'viaDot', 'viaSlash', 'viaLet', 'viaRequire']);
+  });
 });
 
 // -------------------------------------------------------------------------------------------
@@ -1300,6 +1347,15 @@ it('regression: a bid is defined', () => { expect(bid).toBeTruthy(); });
     const findings = await findingsFor({ 'src/rules/auction.ts': RULES, [support]: text });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['guard-runs-code', 'tests/guards/a11y-floor.test.ts:2']]);
     expect(findings[0].detail).toContain(module);
+  });
+
+  it("leaves alone a guard that calls node:path's join while a support helper named join dispatches (#1804)", async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/support/actions.ts': 'export const join = (game: G, name: string) => game.doAction(1, name);\n',
+      'tests/guards/paths.test.ts': "import { join } from 'node:path';\njoin('a', 'b');\n",
+    });
+    expect(findings).toEqual([]);
   });
 
   it('follows support files that import each other without looping (#1013)', async () => {
