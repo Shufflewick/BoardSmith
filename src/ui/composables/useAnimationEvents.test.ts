@@ -10,6 +10,7 @@ import {
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
+import type { GameRootView } from '../types.js';
 
 /**
  * Helper to create test events
@@ -1433,7 +1434,9 @@ describe('unmount (#749)', () => {
 });
 
 describe('playingView', () => {
-  const viewAt = (round: number) => ({ id: 0, className: 'Game', attributes: { round } });
+  const viewAt = (round: number): GameRootView => ({
+    id: 0, className: 'Game', phase: 'started', isFinished: false, settings: {}, attributes: { round },
+  });
 
   /** A queue whose 'test' handler records the view it played over and waits until released. */
   function harness(options: { handlerWaitTimeout?: number } = {}) {
@@ -1447,7 +1450,7 @@ describe('playingView', () => {
     const playedOver: Array<number | undefined> = [];
     let release: () => void = () => {};
     const register = () => instance.registerHandler('test', async () => {
-      playedOver.push(instance.playingView.value?.attributes.round as number | undefined);
+      playedOver.push(instance.playingView.value?.attributes?.round as number | undefined);
       await new Promise<void>((resolve) => { release = resolve; });
     }, { skip: 'drop' });
     return { frame, instance, playedOver, register, release: () => release() };
