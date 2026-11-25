@@ -932,6 +932,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   private readonly definition: ActionDefinition;
   /** How many rounds were declared before `.condition()`, or all of them without one. */
   private roundsBeforeCondition = Infinity;
+  private finished = false;
 
   private constructor(
     private readonly inner: Action<G, Record<string, unknown>>,
@@ -969,7 +970,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     // second may read what the first loaded -- which is how a declaration whose
     // subject is itself state gets written without branching on whether the
     // partition happens to be there yet.
-    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, false);
+    this.declareAt("needs", this.definition.selections.length, declare as unknown as WorldNeeds, false);
     return this;
   }
 
@@ -980,13 +981,26 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * A partition another round names with `.needs()` stays writable.
    */
   reads(declare: (context: WorldNeedsContext<G>) => readonly string[]): this {
-    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, true);
+    this.declareAt("reads", this.definition.selections.length, declare as unknown as WorldNeeds, true);
     return this;
+  }
+
+  /** Refuse a builder call made after `.execute()` returned the definition (#1810). */
+  private refuseIfFinished(method: string): void {
+    if (!this.finished) return;
+    const action = `The "${this.definition.name}" action was already finished with .execute()`;
+    throw worldRefusal(
+      "invalid-world-action",
+      method === "execute"
+        ? `${action}, and an action has only one .execute(). Remove the second .execute() call.`
+        : `${action}, so .${method}() cannot add to it. Move the .${method}() call before .execute().`,
+    );
   }
 
   /** Append one round of the walk. `worldClockAction`'s facade reaches it for
    *  a seatless action's rounds, which is why it is not private. */
-  declareAt(before: number, declare: WorldNeeds, readOnly: boolean): void {
+  declareAt(method: string, before: number, declare: WorldNeeds, readOnly: boolean): void {
+    this.refuseIfFinished(method);
     (this.definition.world!.needs as WorldNeedsRound[]).push({
       kind: "partitions",
       before,
@@ -1003,7 +1017,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * `assertWorldAction` refuses the round on a seated definition however it
    * got there.
    */
-  askAbout(before: number, about: WorldSeatNeeds): void {
+  askAbout(method: string, before: number, about: WorldSeatNeeds): void {
+    this.refuseIfFinished(method);
     (this.definition.world!.needs as WorldNeedsRound[]).push({
       kind: "activity",
       before,
@@ -1034,28 +1049,32 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * ```
    */
   noticeBox(declare: (context: WorldNeedsContext<G>) => number | null): this {
-    this.askNoticeBox(this.definition.selections.length, declare as unknown as WorldNoticeSeatNeeds);
+    this.askNoticeBox("noticeBox", this.definition.selections.length, declare as unknown as WorldNoticeSeatNeeds);
     return this;
   }
 
   /** Append one NOTICE-BOX round of the walk (ShufflewickPub #521).
    *  `worldClockAction`'s `.noticeBox()` reaches it too. */
-  askNoticeBox(before: number, box: WorldNoticeSeatNeeds): void {
+  askNoticeBox(method: string, before: number, box: WorldNoticeSeatNeeds): void {
+    this.refuseIfFinished(method);
     (this.definition.world!.needs as WorldNeedsRound[]).push({ kind: "notices", before, box });
   }
 
   prompt(prompt: WorldPrompt<G>): this {
+    this.refuseIfFinished("prompt");
     this.inner.prompt(forwardPrompt<G>(prompt)!);
     return this;
   }
 
   help(text: string): this {
+    this.refuseIfFinished("help");
     this.inner.help(text);
     return this;
   }
 
   /** Offer this action only when the world says it is relevant here. */
   condition(config: Record<string, (context: WorldActionContext<G>) => boolean>): this {
+    this.refuseIfFinished("condition");
     const forwarded: Record<string, (context: AnyContext) => boolean> = {};
     for (const [label, predicate] of Object.entries(config)) {
       forwarded[label] = (context: AnyContext) => predicate(withWorld<G>(context));
@@ -1067,6 +1086,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** Offer it greyed out, with the reason why. */
   disabled(fn: (context: WorldActionContext<G>) => string | false): this {
+    this.refuseIfFinished("disabled");
     this.inner.disabled((context) => fn(withWorld<G>(context as AnyContext)));
     return this;
   }
@@ -1088,6 +1108,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** The whole-action gate, checked at submit with every selection resolved. */
   validate(fn: (args: A, context: WorldActionContext<G>) => boolean | string): this {
+    this.refuseIfFinished("validate");
     this.inner.validate(((args: Record<string, unknown>, context: AnyContext) =>
       fn(args as A, withWorld<G>(context))) as never);
     return this;
@@ -1132,6 +1153,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * the defect this method exists for.
    */
   quote(fn: (args: Partial<A>, context: WorldActionContext<G>) => readonly string[] | null): this {
+    this.refuseIfFinished("quote");
     (this.definition.world as { quote?: WorldQuote }).quote = (args, context) =>
       fn(args as Partial<A>, withWorld<G>(context as AnyContext));
     return this;
@@ -1139,6 +1161,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** Surface a no-selection action rather than taking the beat for the player. */
   manual(): this {
+    this.refuseIfFinished("manual");
     this.inner.manual();
     return this;
   }
@@ -1149,6 +1172,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * screen-reader label. Presentation only; it confirms nothing on its own.
    */
   destructive(): this {
+    this.refuseIfFinished("destructive");
     this.inner.destructive();
     return this;
   }
@@ -1163,12 +1187,14 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * group sends no command and dirties no partition.
    */
   group(...path: string[]): this {
+    this.refuseIfFinished("group");
     this.inner.group(...path);
     return this;
   }
 
   /** Place its button within its menu level; lower sorts earlier (#228). */
   order(order: number): this {
+    this.refuseIfFinished("order");
     this.inner.order(order);
     return this;
   }
@@ -1214,7 +1240,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       orderedList?: WorldOrderedList<G>;
     },
   ): WorldAction<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
-    this.declareSelection(options.needs);
+    this.declareSelection("chooseFrom", options.needs);
     if (options.tooMany !== undefined) {
       const selection = `The "${this.definition.name}" action's "${name}" selection`;
       if (this.definition.selections.length === 0) {
@@ -1289,7 +1315,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       subject?: SubjectBinding<T, WorldActionContext<G>>;
     },
   ): WorldAction<G, AddArg<A, K, T, O>> {
-    this.declareSelection(options.needs);
+    this.declareSelection("chooseElement", options.needs);
     const group = options.group;
     this.inner.chooseElement<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
@@ -1326,7 +1352,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       ) => boolean | string;
     },
   ): WorldAction<G, AddArg<A, K, T[], O>> {
-    this.declareSelection(options.needs);
+    this.declareSelection("chooseElements", options.needs);
     this.inner.chooseElements<K, T, P, O>(name, {
       ...forwardElementOptions<G, T, P, O>(options),
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
@@ -1366,7 +1392,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       ) => boolean | string;
     } = {},
   ): WorldAction<G, AddArg<A, K, string, O>> {
-    this.declareSelection(options.needs);
+    this.declareSelection("enterText", options.needs);
     this.inner.enterText<K, O, WorldActionContext<G>>(name, {
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
@@ -1408,7 +1434,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       ) => boolean | string;
     } = {},
   ): WorldAction<G, AddArg<A, K, number, O>> {
-    this.declareSelection(options.needs);
+    this.declareSelection("enterNumber", options.needs);
     this.inner.enterNumber<K, O>(name, {
       prompt: forwardPrompt<G>(options.prompt),
       min: options.min,
@@ -1424,13 +1450,15 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** Record the declaration belonging to the selection about to be added. */
   private declareSelection(
+    method: string,
     declare: ((context: WorldNeedsContext<G>) => readonly string[]) | undefined,
   ): void {
+    this.refuseIfFinished(method);
     if (declare === undefined) return;
     // Called just BEFORE the selection is pushed, so `selections.length` is
     // this selection's own index -- which is exactly the step this round comes
     // before.
-    this.declareAt(this.definition.selections.length, declare as unknown as WorldNeeds, false);
+    this.declareAt(method, this.definition.selections.length, declare as unknown as WorldNeeds, false);
   }
 
   /**
@@ -1443,7 +1471,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   execute(
     fn: (args: A, context: WorldActionContext<G>) => ExecuteResult | void,
   ): ActionDefinition {
+    this.refuseIfFinished("execute");
     this.placeExecuteRounds();
+    this.finished = true;
     const handler = fn as unknown as (
       args: A,
       context: WorldActionContext<G> | WorldClockContext<G>,
@@ -1489,13 +1519,13 @@ export class WorldClockAction<G extends Game = Game> {
     // A seatless action has no selections, so every round comes before execute.
     // Called more than once they are consecutive rounds, and the second reads
     // what the first loaded.
-    this.action.declareAt(0, declare as unknown as WorldNeeds, false);
+    this.action.declareAt("needs", 0, declare as unknown as WorldNeeds, false);
     return this;
   }
 
   /** As `WorldAction.reads()`: a round whose partitions are loaded but never saved (#1334). */
   reads(declare: (context: WorldClockNeedsContext<G>) => readonly string[]): this {
-    this.action.declareAt(0, declare as unknown as WorldNeeds, true);
+    this.action.declareAt("reads", 0, declare as unknown as WorldNeeds, true);
     return this;
   }
 
@@ -1522,7 +1552,7 @@ export class WorldClockAction<G extends Game = Game> {
    * the memory is still true.
    */
   about(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
-    this.action.askAbout(0, declare as unknown as WorldSeatNeeds);
+    this.action.askAbout("about", 0, declare as unknown as WorldSeatNeeds);
     return this;
   }
 
@@ -1541,7 +1571,7 @@ export class WorldClockAction<G extends Game = Game> {
    * ```
    */
   noticeBox(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
-    this.action.askNoticeBox(0, declare as unknown as WorldNoticeSeatNeeds);
+    this.action.askNoticeBox("noticeBox", 0, declare as unknown as WorldNoticeSeatNeeds);
     return this;
   }
 

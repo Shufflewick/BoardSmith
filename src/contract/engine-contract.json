@@ -1,6 +1,6 @@
 {
-  "revision": 527,
-  "surfaceHash": "6b5c18ddd6ddafb3",
+  "revision": 528,
+  "surfaceHash": "9f2dbf6bd7713de5",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4159,6 +4159,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "A pick refused inside the bot's search no longer logs the live player's refused-pick warning (#1809)."
+    },
+    {
+      "revision": 528,
+      "date": "2026-11-25",
+      "surfaceHash": "9f2dbf6bd7713de5",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "A world action builder throws at any call made after .execute(), naming the action and the method (#1810)."
     }
   ]
 }
