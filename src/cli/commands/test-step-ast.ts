@@ -9,6 +9,7 @@
 import { isBuiltin } from 'node:module';
 import { posix } from 'node:path';
 import { parse, parseForESLint } from '@typescript-eslint/parser';
+import ts from 'typescript';
 import { scanTestCitations } from './trace-check.js';
 
 /** The part of an ESTree node these readers look at. */
@@ -649,6 +650,8 @@ export interface DispatchWrappers {
   byFunction: ReadonlyMap<string, Slots>;
   /** The files `byFunction` was read from; a call to a function an unread file declares falls back to `byName`. */
   files: ReadonlySet<string>;
+  /** The files read that may call a seed or a helper: they name one, or import from a file that declares one. */
+  involved: ReadonlySet<string>;
   /**
    * The slots of the function a file read exports by a name, followed through its re-exports:
    * what a call to an import reaches. Undefined when the export is not a function this can read.
@@ -663,6 +666,7 @@ export const NO_DISPATCH_WRAPPERS: DispatchWrappers = Object.freeze({
   byName: new Map(),
   byFunction: new Map(),
   files: new Set<string>(),
+  involved: new Set<string>(),
   exported: () => undefined,
 });
 
@@ -827,16 +831,59 @@ const carriedValues = (source: ScopedSource, call: AstNode, carriers: Carriers, 
   carriers(source, call, wrappers).flatMap((carrier) => valuesOf(source, carrier.node, carrier.path));
 
 /** Whether `text` mentions any of `names`: a file that names none of them cannot involve one. */
-export function mentionsAny(text: string, names: Iterable<string>): boolean {
+function mentionsAny(text: string, names: Iterable<string>): boolean {
   for (const name of names) if (text.includes(name)) return true;
   return false;
 }
 
+/** A file read that a module takes values from or passes them on from, and their names there (`*` for every one). */
+interface ValueImport {
+  from: string;
+  names: string[];
+}
+
+const VALUE_IMPORT_NAMES: Readonly<Record<string, (specifier: AstNode) => string>> = Object.freeze({
+  ...IMPORTED_NAMES,
+  ImportNamespaceSpecifier: () => '*',
+  ExportSpecifier: (specifier) => moduleName(specifier.local),
+});
+
+const isTypeOnly = (node: AstNode) => node.importKind === 'type' || node.exportKind === 'type';
+
+/** The values an import or `export ... from` statement takes from a file read. */
+function valueImport(file: string, node: AstNode, files: ReadonlySet<string>): ValueImport[] {
+  const from = resolveImport(file, (node.source as AstNode | null | undefined)?.value, files);
+  if (from === undefined || isTypeOnly(node)) return [];
+  if (node.type === 'ExportAllDeclaration') return [{ from, names: ['*'] }];
+  const names = ((node.specifiers ?? []) as AstNode[]).filter((s) => !isTypeOnly(s)).map((s) => VALUE_IMPORT_NAMES[s.type](s));
+  return names.length === 0 ? [] : [{ from, names }];
+}
+
+/**
+ * A file's value imports and re-exports, parsed from its text up to its last `from '...'` alone,
+ * so a data file nested too deeply to parse whole that only takes a type is never parsed.
+ */
+function valueImports(file: SourceFile, files: ReadonlySet<string>): ValueImport[] {
+  const ends = ts
+    .preProcessFile(file.text, true, false)
+    .importedFiles.filter(({ pos }) => /\bfrom\s*$/.test(file.text.slice(Math.max(0, pos - 16), pos)))
+    // `end` is the specifier's last character, so the closing quote is the one after it.
+    .map(({ end }) => end + 2);
+  if (ends.length === 0) return [];
+  const head = parseSource(file.text.slice(0, Math.max(...ends)), file.path);
+  return (head.ast.body as AstNode[]).flatMap((node) => valueImport(file.path, node, files));
+}
+
+/** The files read a module passes exports on from. */
+const passedFrom = (module: ModuleExports): string[] =>
+  [...module.star, ...[...module.named.values()].map((target) => ('from' in target ? target.from : undefined))].filter((from) => from !== undefined);
+
 /**
  * Finds helpers to a fixed point, so a helper around a helper is found too. Only files that
- * mention a name already known (`seedNames` or a helper found so far) are parsed at all, which
- * also keeps a huge data file that names nothing from ever reaching the parser. A name keeps every
- * slot any function by that name has, since a game's test files declare many local `run` helpers.
+ * mention a name already known (`seedNames` or a helper found so far), or import from a file that
+ * declares a helper or passes one on, are parsed at all, which also keeps a huge data file that
+ * names nothing from ever reaching the parser. A name keeps every slot any function by that name
+ * has, since a game's test files declare many local `run` helpers.
  */
 function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNames: readonly string[]): DispatchWrappers {
   const texts = new Map(sources.map((file) => [file.path, file.text]));
@@ -869,7 +916,21 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
     byName: new Map<string, Map<string, Slot>>(),
     byFunction: new Map<string, Map<string, Slot>>(),
     files: new Set(texts.keys()),
+    involved: new Set<string>(),
     exported: (file: string, name: string) => exported(file, name),
+  };
+  const imports = new Map(sources.map((file) => [file.path, valueImports(file, wrappers.files)]));
+  /** Files that declare a helper, or pass on an export of a file that does. */
+  const helperFiles = new Set<string>();
+  const takesHelper = ({ from, names }: ValueImport) =>
+    helperFiles.has(from) && names.some((name) => name === '*' || (wrappers.exported(from, name)?.size ?? 0) > 0);
+  const involves = (file: SourceFile) =>
+    mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()]) || imports.get(file.path)!.some(takesHelper);
+  /** Adds `key`, saying whether it was new. */
+  const once = (set: Set<string>, key: string): boolean => {
+    if (set.has(key)) return false;
+    set.add(key);
+    return true;
   };
   const add = (map: Map<string, Map<string, Slot>>, key: string, slot: Slot): boolean => {
     const slots = map.get(key) ?? new Map<string, Slot>();
@@ -880,7 +941,8 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
   for (let changed = true; changed; ) {
     changed = false;
     for (const file of sources) {
-      if (!mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()])) continue;
+      if (!wrappers.involved.has(file.path) && !involves(file)) continue;
+      if (once(wrappers.involved, file.path)) changed = true;
       const source = scoped(file.path);
       walk(source.ast, (node) => {
         if (node.type !== 'CallExpression') return;
@@ -889,8 +951,10 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
           const slot = { index: value.index, path: value.path };
           const named = add(wrappers.byName, value.name, slot);
           if (add(wrappers.byFunction, functionKey(source.file, value.fn), slot) || named) changed = true;
+          if (once(helperFiles, source.file)) changed = true;
         }
       });
+      if (passedFrom(exportsOf(file.path)).some((from) => helperFiles.has(from)) && once(helperFiles, file.path)) changed = true;
     }
   }
   return wrappers;
@@ -906,37 +970,33 @@ const verbFactoryCarriers: Carriers = (source, call, wrappers) =>
   isVerbFactory(call.callee as AstNode) ? [{ node: argAt(call, 0), path: [] }] : helperCarriers(source, call, wrappers);
 
 /** The names a file must mention to define a verb itself. */
-export const VERB_FACTORY_NAMES = Object.freeze(['Action.create', 'worldAction']);
+const VERB_FACTORY_NAMES = Object.freeze(['Action.create', 'worldAction']);
 
-/** A project's verb factory wrappers, by name, to the index of the parameter that names the verb. */
-export type Wrappers = ReadonlyMap<string, ReadonlySet<number>>;
-
-/** Every project function that defines a verb named by one of its parameters. */
-export function findVerbWrappers(sources: readonly SourceFile[]): Map<string, Set<number>> {
-  const wrappers = new Map<string, Set<number>>();
-  for (const [name, slots] of findWrappers(sources, verbFactoryCarriers, VERB_FACTORY_NAMES).byName) {
-    const indexes = [...slots.values()].filter((slot) => slot.path.length === 0).map((slot) => slot.index);
-    if (indexes.length > 0) wrappers.set(name, new Set(indexes));
-  }
-  return wrappers;
+/** Every project function that defines a verb named by one of its parameters, and the files that may call one. */
+export function findVerbWrappers(sources: readonly SourceFile[]): DispatchWrappers {
+  return findWrappers(sources, verbFactoryCarriers, VERB_FACTORY_NAMES);
 }
 
-/** The arguments of a call that name the verb it defines: a factory's first, or a wrapper's. */
-const factoryIndexes = (callee: AstNode, wrappers: Wrappers): Iterable<number> =>
-  isVerbFactory(callee) ? [0] : (wrappers.get(identifierName(callee) ?? '') ?? []);
+/** The arguments of a call that name the verb it defines: a factory's first, or the parameter a wrapper passes on whole. */
+function factoryIndexes(source: ScopedSource, callee: AstNode, wrappers: DispatchWrappers): number[] {
+  if (isVerbFactory(callee)) return [0];
+  if (callee.type !== 'Identifier') return [];
+  return calleeSlots(source, callee, wrappers).flatMap((slot) => (slot.path.length === 0 ? [slot.index] : []));
+}
 
 /** Every verb name the file defines (only on `onLines`, when given), in source order. */
 export function findDefinedVerbs(
   source: string,
   file?: string,
-  wrappers: Wrappers = new Map(),
+  wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS,
   onLines?: ReadonlySet<number>,
 ): string[] {
   const verbs: string[] = [];
-  walk(parseSource(source, file).ast, (node) => {
+  const scoped = parseScoped(source, file);
+  walk(scoped.ast, (node) => {
     if (node.type !== 'CallExpression') return;
     if (onLines && !onLines.has(node.loc.start.line)) return;
-    for (const index of factoryIndexes(node.callee as AstNode, wrappers)) {
+    for (const index of factoryIndexes(scoped, node.callee as AstNode, wrappers)) {
       const name = literalText(argAt(node, index));
       if (name !== undefined && !verbs.includes(name)) verbs.push(name);
     }

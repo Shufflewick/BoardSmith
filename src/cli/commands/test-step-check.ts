@@ -58,8 +58,6 @@ import {
   findTestBlocks,
   findUnreachableGuards,
   findVerbWrappers,
-  mentionsAny,
-  VERB_FACTORY_NAMES,
   type SourceFile,
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
@@ -485,11 +483,10 @@ function uncoveredClaimFindings(manifest: SpecManifest, claims: ChunkClaims): Te
 async function definedVerbs(projectDir: string, added?: ReadonlyMap<string, ReadonlySet<number>>): Promise<string[]> {
   const implementation = await implementationNow(projectDir);
   const wrappers = findVerbWrappers(implementation);
-  const names = [...VERB_FACTORY_NAMES, ...wrappers.keys()];
   const verbs = new Set<string>();
   for (const { path, text } of implementation) {
     const lines = added?.get(path);
-    if ((added === undefined || lines) && mentionsAny(text, names)) findDefinedVerbs(text, path, wrappers, lines).forEach((v) => verbs.add(v));
+    if ((added === undefined || lines) && wrappers.involved.has(path)) findDefinedVerbs(text, path, wrappers, lines).forEach((v) => verbs.add(v));
   }
   return [...verbs];
 }

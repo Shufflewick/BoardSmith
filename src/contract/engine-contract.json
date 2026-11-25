@@ -1,5 +1,5 @@
 {
-  "revision": 529,
+  "revision": 530,
   "surfaceHash": "9f2dbf6bd7713de5",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4175,6 +4175,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The action bar's waiting message wraps a long word inside itself instead of running past the bar on a phone (#1811)"
+    },
+    {
+      "revision": 530,
+      "date": "2026-11-25",
+      "surfaceHash": "9f2dbf6bd7713de5",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith test-step-check reads a verb wrapper from the file it is imported from, and finds a helper called through a default import under another name."
     }
   ]
 }

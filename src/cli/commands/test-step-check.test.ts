@@ -184,6 +184,10 @@ const other = Something.create('notAVerb');
   });
 });
 
+/** Each helper's slots by name: the parameter that carries the verb, and the path inside it (`1.name`). */
+const slotsByName = (wrappers: DispatchWrappers) =>
+  Object.fromEntries([...wrappers.byName].map(([name, slots]) => [name, [...slots.keys()]]));
+
 describe('findDefinedVerbs through worlds and wrappers', () => {
   it('finds a world verb, and a verb named through a project wrapper that passes its parameter on', () => {
     const rules = `
@@ -197,8 +201,23 @@ const list = counter('auctionOffItem');
 const notAVerb = standingVerb;
 `;
     const wrappers = findVerbWrappers([{ path: 'src/rules/world.ts', text: rules }]);
-    expect([...wrappers.entries()]).toEqual([['standingVerb', new Set([0])], ['counter', new Set([0])]]);
-    expect(findDefinedVerbs(rules, 'world.ts', wrappers)).toEqual(['look', 'bidOnItem', 'auctionOffItem']);
+    expect(slotsByName(wrappers)).toEqual({ standingVerb: ['0'], counter: ['0'] });
+    expect(findDefinedVerbs(rules, 'src/rules/world.ts', wrappers)).toEqual(['look', 'bidOnItem', 'auctionOffItem']);
+  });
+
+  it("does not take a Node built-in or a file's own function that shares a wrapper's bare name for the wrapper (#1812)", () => {
+    const paths = "import { join } from 'node:path';\njoin('assets', 'x');\n";
+    const local = "function join(a: string) { return a; }\njoin('label');\n";
+    const aliased = "import { join as define } from './a';\ndefine('aliased');\n";
+    const wrappers = findVerbWrappers([
+      { path: 'src/rules/a.ts', text: 'export function join(name: string) { return worldAction(name); }\n' },
+      { path: 'src/rules/b.ts', text: paths },
+      { path: 'src/rules/c.ts', text: local },
+      { path: 'src/rules/d.ts', text: aliased },
+    ]);
+    expect(findDefinedVerbs(paths, 'src/rules/b.ts', wrappers)).toEqual([]);
+    expect(findDefinedVerbs(local, 'src/rules/c.ts', wrappers)).toEqual([]);
+    expect(findDefinedVerbs(aliased, 'src/rules/d.ts', wrappers)).toEqual(['aliased']);
   });
 });
 
@@ -224,13 +243,20 @@ describe('scriptRegions on a component that does not parse', () => {
 describe('findVerbWrappers on a file that names no verb', () => {
   it('never parses it, so a data file nested too deeply for the parser does not stop the check', () => {
     const data = `export const NAMES = "a"${' + "b"'.repeat(20_000)};\n`;
-    expect(findVerbWrappers([{ path: 'src/rules/names.ts', text: data }])).toEqual(new Map());
+    const wrappers = findVerbWrappers([{ path: 'src/rules/names.ts', text: data }]);
+    expect([wrappers.byName, wrappers.involved]).toEqual([new Map(), new Set()]);
+  });
+
+  it('never parses a file that takes only types, or nothing, from a wrapper\'s file (#1812 review F1)', () => {
+    const deep = `"a"${' + "b"'.repeat(20_000)}`;
+    const wrappers = findVerbWrappers([
+      { path: 'src/rules/verbs.ts', text: 'export type Name = string;\nexport function define(name: string) { return worldAction(name); }\n' },
+      { path: 'src/rules/names.ts', text: `import type { Name } from './verbs';\nexport const NAMES: Name = ${deep};\n` },
+      { path: 'src/rules/kinds.ts', text: `import { type Name } from './verbs';\nexport const KINDS: Name = ${deep};\nconst later = () => import('./verbs');\n` },
+    ]);
+    expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts']);
   });
 });
-
-/** Each helper's slots by name: the parameter that carries the verb, and the path inside it (`1.name`). */
-const slotsByName = (wrappers: DispatchWrappers) =>
-  Object.fromEntries([...wrappers.byName].map(([name, slots]) => [name, [...slots.keys()]]));
 
 describe('findDispatchedVerbs through a project harness', () => {
   it('counts a harness method that hands its parameter to the world engine as the command name', () => {
@@ -657,6 +683,17 @@ play(game, 'played');
     expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual(['moved']);
   });
 
+  it('finds a helper that calls a default import under another name, directly or through a re-export (#1812)', () => {
+    const wrappers = findDispatchWrappers([
+      { path: 'tests/support/harness.ts', text: 'export default function act(g: G, n: string) { return g.doAction(1, n); }\n' },
+      { path: 'tests/support/index.ts', text: "export { default as harness } from './harness';\n" },
+      { path: 'tests/support/moves.ts', text: "import run from './harness';\nexport function move(g: G, n: string) { return run(g, n); }\n" },
+      { path: 'tests/support/hops.ts', text: "import { harness as go } from './index';\nexport function hop(g: G, n: string) { return go(g, n); }\n" },
+    ]);
+    const test = "import { move } from './support/moves';\nimport { hop } from './support/hops';\nmove(g, 'bid');\nhop(g, 'pass');\n";
+    expect(findDispatchedVerbs(test, 'tests/a.test.ts', wrappers)).toEqual(['bid', 'pass']);
+  });
+
   it('still counts a helper imported in a way this cannot follow to its function, by its bare name (#1804 review F1-F4, F7)', () => {
     const wrappers = findDispatchWrappers([
       { path: 'tests/support/index.ts', text: 'export function act(game: G, name: string) { return game.doAction(1, name); }\n' },
@@ -873,6 +910,21 @@ it('claim 1 and 2', async () => {
     const result = await checkTestStep(project, 'auction');
     expect(result.verbs).toEqual(['auctionOffItem', 'bidOnItem']);
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'bidOnItem']]);
+  });
+
+  it("reads a verb wrapper from the file it is imported from, so a default import counts and node:path's join does not (#1812)", async () => {
+    await build(
+      {
+        'src/rules/verbs.ts': 'export default function define(name: string) {\n  return worldAction(name);\n}\nexport function join(name: string) {\n  return worldAction(name);\n}\n',
+        'src/rules/auction.ts': "import make from './verbs';\nexport const bid = make('bid');\n",
+        'src/rules/assets.ts': "import { join } from 'node:path';\nexport const art = join('assets', 'art.png');\n",
+        'tests/auction.test.ts': "import { it } from 'vitest';\nit('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });\n",
+      },
+      '| tests/auction.test.ts | 1, 2 | yes |\n',
+    );
+    const result = await checkTestStep(project, 'auction');
+    expect(result.verbs).toEqual(['bid']);
+    expect(result.findings).toEqual([]);
   });
 
   it('never attributes a verb another chunk committed while this one was under way', async () => {
