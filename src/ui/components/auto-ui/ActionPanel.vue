@@ -1683,9 +1683,9 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       <div v-if="shownThing && menuNodes.length === 0" class="action-menu-label" role="status" data-bs-thing-empty>
         Nothing can be done with {{ shownThing.label }} right now.
       </div>
-      <!-- Each action wrapped in .action-btn-group: positioning context for "?" affordance.
+      <!-- Each action wrapped in .action-btn-group, which keeps its "?" beside it.
            .action-buttons { display: contents } propagates the parent flex context so
-           .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
+           .action-btn-group (inline-flex) becomes a direct action bar flex item, its "?" taking its own width. -->
       <div
         v-for="node in menuNodes"
         :key="node.kind === 'group' ? `group:${node.path.join(' / ')}` : node.item.name"
@@ -2422,14 +2422,12 @@ button {
 
 /* Action button group — wraps each action + its "?" affordance.
    inline-flex becomes a direct action bar flex item (because .action-buttons has
-   display:contents, propagating the parent flex context). With a mouse the "?" is
-   absolutely positioned so it does NOT affect the group's intrinsic width (RESEARCH
-   Pitfall 5); on touch it takes 44px beside the button, as a finger needs (#1636).
+   display:contents, propagating the parent flex context), so the "?" wraps with its
+   action and nothing else takes its place beside it (#1806).
    No width or flex-grow set — action-btn retains its own sizing rules. */
 .action-btn-group {
   display: inline-flex;
   align-items: stretch;
-  position: relative;
 }
 
 /* Primary action button — Slate teal plate */
@@ -2580,11 +2578,6 @@ button {
   font-weight: bold;
   font-size: 1rem;
   white-space: nowrap;
-}
-
-/* The popover pins its "?" to a button's corner; beside the open action's title it takes its own place in the row. */
-.config-header :deep(.action-help-btn) {
-  position: static;
 }
 
 .cancel-btn {

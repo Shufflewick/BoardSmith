@@ -24,8 +24,11 @@
  * the window, over the card, at 390x500 (#1459). The reason is sized to fall
  * between the room above the card and the window's height.
  *
- * Once an action is open its button, and the "?" pinned to the button's
- * corner, are gone (a step's only action opens on its own, as Go Fish's ask
+ * Before any action is open, each "?" sits beside its action's button, in the
+ * same row and touching none of it, with a mouse as on a touch screen (#1806).
+ *
+ * Once an action is open its button, and the "?" beside it, are gone (a
+ * step's only action opens on its own, as Go Fish's ask
  * does). Its "?" then sits in the row after its prompt and before its cancel,
  * over neither, and shows its help (#1455).
  *
@@ -105,6 +108,20 @@ async function helpShows(frame, expected) {
   return { ...seen, text: seen.visible ? (await tip.innerText()).trim() : '' };
 }
 
+/** Each listed action's "?" sits beside its button, on the button's line, over none of it (#1806). */
+async function checkBesideActions(frame, width) {
+  for (const [action, selector] of [['draw', TRIGGER], ['play', TALL_TRIGGER]]) {
+    const [button, help] = await Promise.all(
+      [frame.locator(`.action-btn[data-bs-action="${action}"]`), frame.locator(selector)].map((el) => el.boundingBox()),
+    );
+    await check(`at ${width}px, the ${action} action's "?" sits beside its button, over none of it (#1806)`, async () => {
+      assert(help.x >= button.x + button.width, `the "?" overlaps the button: "?" ${JSON.stringify(help)}, button ${JSON.stringify(button)}`);
+      const middle = help.y + help.height / 2;
+      assert(middle > button.y && middle < button.y + button.height, `the "?" is off the button's line: "?" ${JSON.stringify(help)}, button ${JSON.stringify(button)}`);
+    });
+  }
+}
+
 /** Opens the play action and checks its "?" beside the prompt, then cancels it (#1455). */
 async function checkOpenActionHelp(frame, width) {
   await frame.locator('.action-btn[data-bs-action="play"]').click();
@@ -170,6 +187,7 @@ await runBrowserRegression(
         // The touch page reclaims this seat with the same client id; a new one would be a second, unseated player.
         player = await page.context().storageState();
         const frame = gameFrame(page);
+        await checkBesideActions(frame, 1440);
         await frame.locator(TRIGGER).hover();
         const hovered = await helpShows(frame, true);
         await check('with a mouse, hovering the "?" opens the help', async () => {
@@ -274,6 +292,7 @@ await runBrowserRegression(
       // A fresh touch page with no mouse, so a pointer resting over the "?" cannot open the help the taps check.
       await onFreshPage(browser, hostUrl, { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, storageState: player }, triggerDrawn, async (page) => {
         const frame = gameFrame(page);
+        await checkBesideActions(frame, 390);
         await frame.locator(TRIGGER).tap();
         const tapped = await helpShows(frame, true);
         await check('on a touch screen, a tap on the "?" shows the help', async () => {
