@@ -110,7 +110,7 @@ export function mountPlatformShell(options: PlatformShellOptions = {}) {
 /** The two seats {@link mountTableWithDebugPanel} seats; seat 1 is the viewer. */
 export const DEBUG_TABLE_PLAYERS = [{ name: 'P1', seat: 1 }, { name: 'P2', seat: 2 }];
 
-function postFromHost(data: Record<string, unknown>): void {
+export function postFromHost(data: Record<string, unknown>): void {
   window.dispatchEvent(new MessageEvent('message', { source: window.parent, data: { source: 'shufflewick', ...data } }));
 }
 

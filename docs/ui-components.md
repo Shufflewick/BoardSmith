@@ -1942,7 +1942,7 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
 - Reconnecting players see current state immediately (with optional animation replay)
-- Players always see truth -- animations are visual overlays on the current state
+- Players always see truth -- animations are visual overlays on the current state. A board whose moves arrive faster than they play draws each event over the view it arrived with: see [Keeping the Board in Step with Queued Animations](./custom-ui-guide.md#keeping-the-board-in-step-with-queued-animations)
 
 ### Engine-Side: Emitting Events
 

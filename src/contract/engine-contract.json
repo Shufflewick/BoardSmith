@@ -1,5 +1,5 @@
 {
-  "revision": 524,
+  "revision": 525,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4135,6 +4135,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The Action Panel's help \"?\" sits beside its action with a mouse, not over the button's corner (#1806)"
+    },
+    {
+      "revision": 525,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The custom UI guide shows how a board draws each queued animation event over the view it arrived with (#1807)"
     }
   ]
 }
