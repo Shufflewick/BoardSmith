@@ -4,21 +4,22 @@
  * `DevGamePlayer`).
  */
 import { PRESS_MARK } from '../../testing/browser-smoke-page.js';
-import type { SmokeDeal } from '../../testing/browser-smoke-verdict.js';
+import type { SmokeDeal, SmokeInputs } from '../../testing/browser-smoke-verdict.js';
 
 /**
- * A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. With
+ * A smoke spec listing `actions`, with `unreachable`, `seed`, `steps` and `inputs` given when they are. With
  * `echo`, the spec also prints each page console line containing it to the walk's output, so a test
  * can see what a fixture's page did.
  */
 export function smokeSpec(
   actions: readonly string[],
   unreachable?: Record<string, string>,
-  more: { seed?: SmokeDeal | readonly SmokeDeal[]; steps?: number; echo?: string } = {},
+  more: { seed?: SmokeDeal | readonly SmokeDeal[]; steps?: number; echo?: string; inputs?: SmokeInputs } = {},
 ): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
   const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
   const steps = more.steps === undefined ? '' : `\n  steps: ${more.steps},`;
+  const inputs = more.inputs === undefined ? '' : `\n  inputs: ${JSON.stringify(more.inputs)},`;
   const echo =
     more.echo === undefined
       ? ''
@@ -33,7 +34,7 @@ test.beforeEach(({ page }) => {
   return `import { defineSmokeTest } from 'boardsmith/testing/browser';
 ${echo}
 defineSmokeTest({
-  actions: ${JSON.stringify(actions)},${declared}${seed}${steps}
+  actions: ${JSON.stringify(actions)},${declared}${seed}${steps}${inputs}
 });
 `;
 }
@@ -1865,9 +1866,9 @@ export const NOBODY_CALLED_THAT = 'Nobody at the table is called that.';
  * `wave` at the other player by name (a text field the game refuses unless it is the other
  * player's name, which the players panel shows), `pledge` coins (a number field, 1 to 10, the game
  * refuses unless it is 7), write a `note` (free text, any of it accepted) or `draw`, which the log
- * says.
+ * says. With `pledgeOpensAt`, the coins field opens filled with that number (#1802).
  */
-export function greetingsGame(): Record<string, string> {
+export function greetingsGame({ pledgeOpensAt }: { pledgeOpensAt?: number } = {}): Record<string, string> {
   return {
     'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
 import { Card, Hand, Deck } from './elements.js';
@@ -1925,7 +1926,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
     toTheOther('wave'),
     Action.create('pledge')
       .prompt('Pledge coins')
-      .enterNumber('coins', { prompt: 'How many coins?', min: 1, max: 10, integer: true })
+      .enterNumber('coins', { prompt: 'How many coins?', min: 1, max: 10, integer: true${pledgeOpensAt === undefined ? '' : `, initial: ${pledgeOpensAt}`} })
       .execute((args) => (args.coins === 7 ? { success: true } : { success: false, error: 'The pot takes seven coins.' })),
     Action.create('note')
       .prompt('Write a note')
@@ -2689,7 +2690,7 @@ function choose() {
  * actions have been taken (#1794). Each group holds two actions, so the panel draws it as a group.
  * Its pastures' keys hold a newline, which a selector must quote as CSS does, not as JSON does.
  */
-export function pastureGame({ bare, town = false }: { bare: boolean; town?: boolean }): Record<string, string> {
+export function pastureGame({ bare, town = false, inputs }: { bare: boolean; town?: boolean; inputs?: SmokeInputs }): Record<string, string> {
   const actions = [...(bare ? [] : ['draw']), ...(town ? ['chat', 'gossip', 'fence'] : []), 'tend', 'harvest'];
   const inTown = town ? ".group('Town')" : '';
   const key = town ? "pasture + '\\nfield'" : 'pasture';
@@ -2746,7 +2747,7 @@ export function createGameFlow(game: DevGameGame): FlowDefinition {
   };
 }
 `,
-    'tests/browser/smoke.spec.ts': smokeSpec(actions, undefined, { seed: ACE_SEEDS.WITHOUT, steps: 30 }),
+    'tests/browser/smoke.spec.ts': smokeSpec(actions, undefined, { seed: ACE_SEEDS.WITHOUT, steps: 30, inputs }),
   };
 }
 

@@ -34,4 +34,13 @@ describe('boardsmith smoke', () => {
     expect(outcome.passed, `${outcome.summary}\n${steps.join('\n')}`).toBe(true);
     expect(outcome.summary).toContain('a seated player took "chat", "draw", "fence", "gossip", "harvest", "tend"');
   });
+
+  it("#1802: counts a field the selected thing answers as met, so an input for it stands, and still fails one that names no field", async () => {
+    const { outcome } = await smokeOf(false, pastureGame({ bare: false, inputs: { tend: { pasture: 'north' }, harvest: { pastur: 'north' } } }));
+
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "blank", found a problem: - `inputs.harvest.pastur` in tests/browser/smoke.spec.ts names a field ' +
+        'the walk never met in "harvest", whose fields it met are "pasture". Name the field by the pick name its rules give it.',
+    );
+  });
 });

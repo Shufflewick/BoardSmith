@@ -1333,18 +1333,18 @@ async function aimAndClick(control: Control): Promise<void> {
  * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
  * moment before. A panel redrawing its buttons has none for a moment, so one not there is looked for
  * again until it comes back; one still gone after {@link PRESS_MS} is reported, not skipped: the
- * panel took back what it offered. `wentByItself` is `press`'s.
+ * panel took back what it offered. `wentByItself` is `press`'s. Returns the control when the press landed.
  */
-async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<boolean> {
+async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory, wentByItself?: () => void): Promise<Control | undefined> {
   const over = stopwatch(frame.page());
   for (;;) {
     const [control] = await controlsOf(frame, selector);
-    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory, wentByItself);
+    if (control !== undefined) return (await press(control, `the panel's ${what}`, walk, memory, wentByItself)) ? control : undefined;
     if (over(PRESS_MS)) break;
     await frame.waitForTimeout(100);
   }
   noteIn(frame.page(), walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
-  return false;
+  return undefined;
 }
 
 /**
@@ -1444,7 +1444,7 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   const { frame } = answering;
   const skip = answering.reopened ? await firstPressable(frame, ['.action-config .skip-btn']) : undefined;
   if (skip !== undefined) return pressAnswer(skip, answering);
-  await fillAnEmptyField(answering);
+  await fillAField(answering);
   const given = await pressGivenChoice(answering);
   if (given !== NOT_GIVEN) return given;
   const shown = (selector: string) => inPageTime(frame.page(), 'looking for a list pick', () => frame.locator(selector).count());
@@ -1591,41 +1591,53 @@ function inputView(frame: Frame, otherSeats: readonly number[], seed: string | n
 }
 
 /**
- * Fills the open action's text or number field when it is empty, as a player types before pressing
- * Done: the value the spec's `inputs` give that field (`data-bs-pick` names it, #470), else "smoke
- * test" in a text field, and in a number field a value its own min, max and step accept, moved up
- * past each one the game refused before (#465, #466, `numberToEnter`). An input that gives no value
- * yet, or fails, stops the answering (`Answering.stop`) with the field left empty.
+ * Fills the open action's text or number field, as a player types before pressing Done, recording
+ * the field as met (`SmokeWalk.fieldsMet`): the value the spec's `inputs` give that field
+ * (`data-bs-pick` names it, #470), typed over one it opens filled with (#1802), else, in an empty
+ * field, "smoke test" in a text field, and in a number field a value its own min, max and step
+ * accept, moved up past each one the game refused before (#465, #466, `numberToEnter`). An input
+ * that gives no value yet, or fails, stops the answering (`Answering.stop`) with the field left as it was.
  */
-async function fillAnEmptyField(answering: Answering): Promise<void> {
-  const { frame, memory, name, step } = answering;
+async function fillAField(answering: Answering): Promise<void> {
+  const { frame, walk, memory, name, step } = answering;
   const field = await firstPressable(frame, [
     '.action-config .text-input input',
     '.action-config .text-input textarea',
     '.action-config .number-input input[type="number"]',
   ]);
-  if (field === undefined || (await withinPageTime(frame.page(), PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }))) !== '') return;
-  const typed = await valueToType(answering, field);
+  if (field === undefined) return;
+  const page = frame.page();
+  const shown = await withinPageTime(page, PRESS_MS, 'reading the field', (timeout) => field.target.inputValue({ timeout }));
+  const { pick, kind } = await fieldPick(field);
+  walk.fieldsMet.get(name)?.set(pick, kind);
+  const attempts = attemptsIn(memory, page);
+  const typedHere = attempts.typed.get(name)?.some((t) => t.field === pick) === true;
+  if (shown !== '' && (typedHere || !Object.hasOwn(walk.inputs[name] ?? {}, pick))) return;
+  const typed = await valueToType(answering, field, pick, kind);
   if (typed === undefined) return;
-  const attempts = attemptsIn(memory, frame.page());
   attempts.typed.set(name, [...(attempts.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
   narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
   await withinPageTime(frame.page(), PRESS_MS, 'typing into the field', (timeout) => field.target.fill(typed.value, { timeout }));
 }
 
-/**
- * The value to type in the open action's empty `field`: the spec's input for its pick (#470), else
- * the walk's own, recording the field as met (`SmokeWalk.fieldsMet`). Undefined, with the answering
- * stopped (`Answering.stop`), when the spec's input gives no value yet or fails.
- */
-async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
-  const { frame, walk, memory, name, otherSeats } = answering;
-  const page = frame.page();
+/** The pick the open action's text or number `field` answers (`data-bs-pick`), and which of the two it is. */
+async function fieldPick(field: Control): Promise<{ readonly pick: string; readonly kind: 'text' | 'number' }> {
+  const page = field.frame.page();
   const pick = await withinPageTime(page, PRESS_MS, 'reading which pick the field answers', (timeout) =>
     field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, { timeout }),
   );
-  const kind = (await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }))) === 'number' ? 'number' : 'text';
-  walk.fieldsMet.get(name)?.set(pick, kind);
+  const type = await withinPageTime(page, PRESS_MS, "reading the field's type", (timeout) => field.target.getAttribute('type', { timeout }));
+  return { pick, kind: type === 'number' ? 'number' : 'text' };
+}
+
+/**
+ * The value to type in the open action's `field`, which answers `pick`: the spec's input for it
+ * (#470), else the walk's own. Undefined, with the answering stopped (`Answering.stop`), when the
+ * spec's input gives no value yet or fails.
+ */
+async function valueToType(answering: Answering, field: Control, pick: string, kind: 'text' | 'number'): Promise<TypedValue | undefined> {
+  const { frame, walk, memory, name, otherSeats } = answering;
+  const page = frame.page();
   const attempts = attemptsIn(memory, page);
   const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame, otherSeats, memory.seed), attempts.refused.get(name) ?? 0);
   if (given !== undefined) {
@@ -2197,7 +2209,12 @@ async function takeAction(
   narrate(step, said);
   const selector = actionButton(name);
   const wentByItself = goneByItself(frame, walk, memory, step, selector, `the panel's "${name}"`, () => {});
-  if (await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself)) memory.wentAway.delete(selector);
+  const pressed = await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself);
+  if (pressed === undefined) return;
+  memory.wentAway.delete(selector);
+  if (pressed.answers === undefined) return;
+  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
+  walk.fieldsMet.get(name)?.set(pressed.answers.pick, pressed.answers.kind);
 }
 
 /**

@@ -18,9 +18,9 @@ import {
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
-/** Runs the smoke check on the greetings game (#470), with the spec's `inputs` written as `inputs`. */
-function walkGreetings(inputs: string) {
-  return smokeOf(false, { ...greetingsGame(), 'tests/browser/smoke.spec.ts': greetingsSpec(inputs) });
+/** Runs the smoke check on the greetings game (#470) made with `game`, with the spec's `inputs` written as `inputs`. */
+function walkGreetings(inputs: string, game: Parameters<typeof greetingsGame>[0] = {}) {
+  return smokeOf(false, { ...greetingsGame(game), 'tests/browser/smoke.spec.ts': greetingsSpec(inputs) });
 }
 
 describe('boardsmith smoke', () => {
@@ -154,6 +154,13 @@ describe('boardsmith smoke', () => {
       expect(steps.filter((line) => line.endsWith('`inputs` gives no value for "whom" of "wave" yet; cancelling it until the game moves on'))).toHaveLength(1);
     },
   );
+
+  it("#1802: types the spec's input over a number field that opens filled, counting the field as met", async () => {
+    const { outcome, steps } = await walkGreetings('{ greet: { whom: theOther }, wave: { whom: theOther }, pledge: { coins: 7 } }', { pledgeOpensAt: 3 });
+
+    expect(outcome.passed, outcome.summary).toBe(true);
+    expect(steps.some((line) => line.endsWith('entering "7" for "pledge", from `inputs`'))).toBe(true);
+  });
 
   it(
     "#470: fails on a value from the spec's `inputs` the game refuses, naming it; on a value of the walk's own the game " +
