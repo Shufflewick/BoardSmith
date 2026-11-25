@@ -419,9 +419,10 @@ export class Action<
     // not refuse one with picks, because method parameters compare bivariantly.
     this: [keyof A] extends [never] ? Action<G, A> : 'followUpArgs() goes before any pick, once',
   ): Action<G, A & F> {
-    this.refuseIfFinished('followUpArgs');
     // The same load-bearing re-type as the selection methods (see AddArg).
-    return this as Action<G, A & F>;
+    const action = this as Action<G, A & F>;
+    action.refuseIfFinished('followUpArgs');
+    return action;
   }
 
   /**
