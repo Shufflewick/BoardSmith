@@ -35,8 +35,9 @@
  * }
  * ```
  */
-import { ref, watch, onScopeDispose, type Ref, type InjectionKey, inject } from 'vue';
+import { computed, ref, shallowRef, watch, onScopeDispose, type ComputedRef, type Ref, type InjectionKey, inject } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
+import type { GameRootView } from '../types.js';
 
 /**
  * Context passed to animation handlers as the second argument.
@@ -79,8 +80,8 @@ type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
 export interface UseAnimationEventsOptions {
   /** Getter that returns animation events from PlayerGameState */
   events: () => AnimationEvent[] | undefined;
-  /** Default delay for events without handlers (ms, default: 0) */
-  defaultDuration?: number;
+  /** Getter for the view of the frame `events` came with, which becomes `playingView` while each of its events plays. */
+  view?: () => GameRootView | undefined;
   /**
    * Time to wait for a handler to register before skipping an unhandled event (ms, default: 3000).
    * Set to 0 to skip immediately (no wait).
@@ -144,6 +145,12 @@ export interface UseAnimationEventsReturn {
   skipAll: () => void;
   /** Number of pending events (for UI indicators) */
   pendingCount: Ref<number>;
+  /**
+   * The view of the frame the playing event arrived with, or undefined when
+   * nothing plays. It is set before the event's handler is called and cleared
+   * when the queue runs dry or is skipped.
+   */
+  playingView: Readonly<Ref<GameRootView | undefined>>;
 }
 
 /**
@@ -170,18 +177,19 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, defaultDuration = 0, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
+  const { events: getEvents, view: getView, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
 
   // Handler registry
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
 
-  // Internal queue of events to process
-  const queue: AnimationEvent[] = [];
+  // Internal queue of events to process, each with the view of the frame it arrived in
+  const queue: Array<{ event: AnimationEvent; view: GameRootView | undefined }> = [];
 
   // Reactive state
   const isAnimating = ref(false);
   const paused = ref(false);
   const pendingCount = ref(0);
+  const playingView = shallowRef<GameRootView>();
 
   // The watermark: the highest id queued in the current timeline, so an event
   // is queued once however many frames carry it. A timeline change resets it.
@@ -273,11 +281,12 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         }
       }
 
-      const event = queue.shift()!;
+      const { event, view } = queue.shift()!;
       pendingCount.value = queue.length;
 
       let handler = handlers.get(event.type)?.handler;
       let timedOut = false;
+      if (!handler) playingView.value = undefined;
       while (!handler && handlerWaitTimeout > 0 && !claimedNone() && !skipRequested) {
         const outcome = await waitForHandler(event.type, handlerWaitTimeout);
         if (outcome === 'timeout') {
@@ -298,6 +307,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       if (handler) {
         const abort = new AbortController();
         currentHandlerAbort = abort;
+        playingView.value = view;
         try {
           // Race handler against abort so skipAll() unblocks the queue immediately
           await Promise.race([
@@ -320,6 +330,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
 
     isProcessing = false;
+    playingView.value = undefined;
     isAnimating.value = false;
   }
 
@@ -329,7 +340,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   function skipAll(): void {
     // Collect 'run' events from the queue before clearing
     const runOnSkipEvents: AnimationEvent[] = [];
-    for (const event of queue) {
+    for (const { event } of queue) {
       const entry = handlers.get(event.type);
       if (entry?.skip === 'run') runOnSkipEvents.push(event);
     }
@@ -374,6 +385,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     }
 
     // Reset animating state immediately
+    playingView.value = undefined;
     isAnimating.value = false;
   }
 
@@ -440,6 +452,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           currentTimeline !== lastTimeline
         ) {
           lastQueuedId = 0;
+          // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
+          for (const entry of queue) entry.view = undefined;
+          playingView.value = undefined;
         }
         lastTimeline = currentTimeline;
       },
@@ -463,7 +478,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       }
 
       // Add to queue and update lastQueuedId
-      queue.push(...newEvents);
+      const view = getView?.();
+      queue.push(...newEvents.map((event) => ({ event, view })));
       lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
       pendingCount.value = queue.length;
 
@@ -480,5 +496,19 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     paused,
     skipAll,
     pendingCount,
+    playingView,
   };
+}
+
+/**
+ * The view a table's board draws so each queued animation event plays over the
+ * frame it arrived with, not a later one: the playing event's view, or
+ * `gameView` when nothing plays, outside a shell, or while the debug panel
+ * shows history. Pass the board's props.
+ */
+export function useAnimatedView(
+  board: { gameView: GameRootView | null; isViewingHistory: boolean },
+): ComputedRef<GameRootView | null> {
+  const animations = useAnimationEvents();
+  return computed(() => (board.isViewingHistory ? board.gameView : (animations?.playingView.value ?? board.gameView)));
 }

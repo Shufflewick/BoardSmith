@@ -10,6 +10,7 @@ import {
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
+import type { GameRootView } from '../types.js';
 
 /**
  * Helper to create test events
@@ -1431,3 +1432,61 @@ describe('unmount (#749)', () => {
     }
   });
 });
+
+describe('playingView', () => {
+  const viewAt = (round: number): GameRootView => ({
+    id: 0, className: 'Game', phase: 'started', isFinished: false, settings: {}, attributes: { round },
+  });
+
+  /** A queue whose 'test' handler records the view it played over and waits until released. */
+  function harness(options: { handlerWaitTimeout?: number } = {}) {
+    const frame = ref({ events: [] as AnimationEvent[], view: viewAt(0), timeline: 'game:0' });
+    const instance = createAnimationEvents({
+      events: () => frame.value.events,
+      view: () => frame.value.view,
+      timeline: () => frame.value.timeline,
+      ...options,
+    });
+    const playedOver: Array<number | undefined> = [];
+    let release: () => void = () => {};
+    const register = () => instance.registerHandler('test', async () => {
+      playedOver.push(instance.playingView.value?.attributes?.round as number | undefined);
+      await new Promise<void>((resolve) => { release = resolve; });
+    }, { skip: 'drop' });
+    return { frame, instance, playedOver, register, release: () => release() };
+  }
+
+  it('plays a queued event over gameView once the timeline changes, never over the old timeline\'s view', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.frame.value = { events: [createEvent(2, 'test')], view: viewAt(2), timeline: 'game:0' };
+    await nextTick();
+
+    q.frame.value = { events: [], view: viewAt(9), timeline: 'game:1' };
+    await nextTick();
+    expect(q.instance.playingView.value).toBeUndefined();
+
+    q.release();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([1, undefined]);
+  });
+
+  it('holds no view while the queue waits for a handler to register', async () => {
+    const q = harness({ handlerWaitTimeout: 60_000 });
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    expect(q.instance.isAnimating.value).toBe(true);
+    expect(q.instance.playingView.value).toBeUndefined();
+
+    q.register();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([1]);
+    q.release();
+  });
+});
+
+async function flushMicrotasks(): Promise<void> {
+  for (let i = 0; i < 10; i++) await Promise.resolve();
+}

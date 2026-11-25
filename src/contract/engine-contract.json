@@ -1,5 +1,5 @@
 {
-  "revision": 532,
+  "revision": 533,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4199,6 +4199,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "An Action builder throws at any call made after .execute(), naming the action and the method (#1814)."
+    },
+    {
+      "revision": 533,
+      "date": "2026-11-25",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith/ui adds useAnimatedView and the animation queue's playingView, so a board draws each queued event over the frame it arrived with (#1815)"
     }
   ]
 }

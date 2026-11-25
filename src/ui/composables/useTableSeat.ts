@@ -168,6 +168,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   // seat plays the new seat's events, which are numbered in its own sequence.
   const animationEvents = createAnimationEvents({
     events: () => state.value?.state?.animationEvents,
+    view: () => state.value?.state?.view,
     timeline: () => animationTimeline(state.value?.state),
   });
 
