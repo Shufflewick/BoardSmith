@@ -317,8 +317,8 @@ describe('DevHost: dealing from a seed (#460)', () => {
     await wrapper.vm.$nextTick();
     const tower = wrapper.find('[data-testid="deal-option-tower"]');
     expect((tower.element as HTMLSelectElement).selectedIndex).toBe(1);
-    // The walk finds a choice by the key the engine identifies its value by.
-    expect(tower.findAll('option').map((option) => option.attributes('data-value'))).toEqual(['string:none', 'string:tar']);
+    // The walk finds a choice by its value.
+    expect(tower.findAll('option').map((option) => option.attributes('data-value'))).toEqual(['none', 'tar']);
     ws.send.mockClear();
 
     await wrapper.find('[data-testid="deal-seed"]').setValue('tarry');

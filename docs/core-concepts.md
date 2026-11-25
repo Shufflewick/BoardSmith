@@ -949,6 +949,9 @@ reads the option by.
 ```
 
 Option types: `number` (with min/max/step), `select` (with choices), `boolean`.
+A `select` option's choice values and default are strings, the only values the
+platform's lobby carries; every BoardSmith command refuses any other (#1816).
+Use a `number` option for a count, such as seconds.
 
 Every option needs a `default`. Every host starts a game with every declared
 option: the value someone chose, or else the default. The selection a lobby

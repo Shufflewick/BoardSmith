@@ -18,7 +18,7 @@ export interface DevOptionDef {
   type: string;
   label?: string;
   default?: unknown;
-  choices?: Array<{ value: unknown; label?: string }>;
+  choices?: Array<{ value: string; label: string }>;
   min?: number;
   max?: number;
   step?: number;

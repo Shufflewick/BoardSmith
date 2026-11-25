@@ -4,7 +4,6 @@
  * Kept apart from `browser-smoke.ts`, which drives Chromium under Playwright, so the verdict is
  * decided by plain code a vitest test can hold to its wording.
  */
-import { choiceValueKey } from '../engine/action/choice-matching.js';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { PageFrozen } from './browser-smoke-clock.js';
 import { parsePositiveWholeNumber } from '../utils/positive-whole-number.js';
@@ -187,10 +186,9 @@ function fieldState(kind: DealOptionField['kind'], choices: readonly string[], v
     if (value === false || value === 'false') return false;
     throw set('which is not true or false');
   }
-  // Text, as `boardsmith smoke --game-option` gives it, names the number or true/false it spells, as the host reads it.
-  const keys = typeof value === 'string' ? [choiceValueKey(value), `number:${value}`, `boolean:${value}`] : [choiceValueKey(value)];
-  const index = choices.findIndex((key) => keys.includes(key));
-  if (index === -1) throw set(`which is not one of its choices: ${choices.map((key) => key.slice(key.indexOf(':') + 1)).join(', ')}`);
+  // A spec may spell a choice as the number or true/false it reads as, as the text and checkbox fields take it.
+  const index = choices.indexOf(String(value));
+  if (index === -1) throw set(`which is not one of its choices: ${choices.join(', ')}`);
   return index;
 }
 

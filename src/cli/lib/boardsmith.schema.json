@@ -131,7 +131,11 @@
           "step": { "type": "number" },
           "choices": {
             "type": "array",
-            "items": { "type": "object", "required": ["value", "label"] }
+            "items": {
+              "type": "object",
+              "required": ["value", "label"],
+              "properties": { "value": { "type": "string" }, "label": { "type": "string" } }
+            }
           },
           "designerOnly": { "const": true }
         }

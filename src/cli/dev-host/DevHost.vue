@@ -13,7 +13,7 @@
  */
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useFrameSafeArea } from './use-frame-safe-area.js';
-import type { DevHostConfig } from './config-types.js';
+import type { DevHostConfig, DevOptionDef } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import GameOptionField from './GameOptionField.vue';
 import { useToast } from '../../ui/composables/useToast.js';
@@ -24,7 +24,6 @@ import { DEV_HOST_WS_PATH } from './socket-path.js';
 import { applyViewPatch, type ViewPatch } from '../../session/view-patch.js';
 import { useMenuDismiss } from './use-menu-dismiss.js';
 import { handleEscape } from '../../ui/utils/escape.js';
-import { valuesEqual, choiceValueKey } from '../../engine/action/choice-matching.js';
 import { getDisplayFromValue } from '../../ui/composables/actionControllerHelpers.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
@@ -578,23 +577,10 @@ function handleChromeKeydown(e: KeyboardEvent) {
   if (tableSetupOpen.value) handleEscape(e, () => { tableSetupOpen.value = false; });
 }
 
-/**
- * What an option choice shows: its label, or else the label the Action Panel
- * derives for a value, so an object choice never reads "[object Object]".
- */
-function choiceLabel(choice: { value: unknown; label?: string }): string {
-  return choice.label ?? getDisplayFromValue(choice.value);
-}
-
-/**
- * Resolve the display label for one of an option's values. The value is
- * matched to its choice structurally, so an object value finds the choice it
- * equals.
- */
-function optionValueLabel(opt: { choices?: Array<{ value: unknown; label?: string }> }, value: unknown): string {
+/** The label of the choice an option's value is, or the value as the Action Panel shows it. */
+function optionValueLabel(opt: DevOptionDef, value: unknown): string {
   if (value === undefined || value === null) return '—';
-  const match = opt.choices?.find((c) => valuesEqual(c.value, value));
-  return match ? choiceLabel(match) : getDisplayFromValue(value);
+  return opt.choices?.find((c) => c.value === value)?.label ?? getDisplayFromValue(value);
 }
 
 /**
@@ -1072,8 +1058,8 @@ onUnmounted(() => {
                   class="dev-chrome__select"
                   :data-testid="`seat-option-${index + 1}-${opt.id}`"
                 >
-                  <option v-for="c in opt.choices" :key="choiceValueKey(c.value)" :value="c.value">
-                    {{ choiceLabel(c) }}
+                  <option v-for="c in opt.choices" :key="c.value" :value="c.value">
+                    {{ c.label }}
                   </option>
                 </select>
                 <input
