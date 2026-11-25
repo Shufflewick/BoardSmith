@@ -114,9 +114,9 @@ function assertStringValues(name: string, def: SelectOption): void {
   }
   const refuse = (field: string, key: string, value: unknown) => {
     const text = JSON.stringify(value) ?? String(value);
+    const fix = typeof value === 'number' || typeof value === 'boolean' ? `Use string values, e.g. "${key}": "${text}".` : 'Give it a string value.';
     return new Error(
-      `This game declares select option "${name}" with ${field} ${text}, which the platform's lobby refuses: ` +
-        `it carries only strings. Use string values, e.g. "${key}": ${JSON.stringify(text)}.`,
+      `This game declares select option "${name}" with ${field} ${text}, which the platform's lobby refuses: it carries only strings. ${fix}`,
     );
   };
   for (const { value } of def.choices as Array<{ value: unknown }>) {

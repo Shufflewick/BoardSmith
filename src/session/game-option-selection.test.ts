@@ -438,7 +438,7 @@ describe('boardsmith.json\'s gameOptions list is the one declaration (#701)', ()
     );
     expect(() =>
       parseGameOptionList([{ ...seconds, default: { s: 60 }, choices: [{ value: 'sixty', label: '60' }], designerOnly: true }]),
-    ).toThrow(/select option "secs" with default \{"s":60\}.*Use string values/);
+    ).toThrow(/select option "secs" with default \{"s":60\}.*Give it a string value\.$/);
   });
 
   it('withDeclaredGameOptions attaches the list to a game definition, where declaredGameOptionsOf reads it', () => {

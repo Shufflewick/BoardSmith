@@ -186,7 +186,8 @@ function fieldState(kind: DealOptionField['kind'], choices: readonly string[], v
     if (value === false || value === 'false') return false;
     throw set('which is not true or false');
   }
-  const index = choices.indexOf(value as string);
+  // A spec may spell a choice as the number or true/false it reads as, as the text and checkbox fields take it.
+  const index = choices.indexOf(String(value));
   if (index === -1) throw set(`which is not one of its choices: ${choices.join(', ')}`);
   return index;
 }

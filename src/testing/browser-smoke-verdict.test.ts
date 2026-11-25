@@ -193,6 +193,7 @@ describe('dealOptionStates: what Table setup\'s option fields are set to for a d
 
   it('reads the text `boardsmith smoke --game-option` gives as the value it spells', () => {
     expect(dealOptionStates(fields, { seed: 'tarry', gameOptions: { tower: '3', lit: 'true' } }).map((field) => field.state)).toEqual([2, true, '3']);
+    expect(dealOptionStates(fields, { seed: 'tarry', gameOptions: { tower: 3 } }).map((field) => field.state)).toEqual([2, false, '3']);
   });
 
   it('refuses an option the game does not declare, a value that is not one of its choices, and a checkbox that is not true or false', () => {
