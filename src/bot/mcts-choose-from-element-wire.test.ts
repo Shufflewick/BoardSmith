@@ -6,9 +6,10 @@
  * them differ, so the move was refused and the step stalled.
  */
 import { describe, it, expect } from 'vitest';
-import { Game, Player, Piece, Space, Action, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Player, Piece, Space, Action, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import { MCTSBot } from './mcts-bot.js';
+import type { MCTSNode } from './types.js';
 
 class Unit extends Piece<SkirmishGame> {}
 class Card extends Piece<SkirmishGame> {}
@@ -49,5 +50,67 @@ describe('a bot move that picks an element with chooseFrom', () => {
     const move = (await bot.play())!;
 
     expect(runner.performAction(move.action, 1, move.args)).toMatchObject({ success: true });
+  });
+});
+
+/** Each seat in turn marks a card in any hand, a card the other seat sees only by its placeholder. */
+class MarkGame extends Game<MarkGame, Player> {
+  marks = 0;
+
+  /** A choice naming `card`; this game offers it wrapped in a plain object. */
+  choiceOf(card: Card): unknown {
+    return { card, mark: 'x' };
+  }
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Space]);
+    for (const player of this.players) {
+      const hand = this.create(Space<MarkGame>, `hand-${player.seat}`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      hand.create(Card, `card-${player.seat}`);
+    }
+    this.registerAction(
+      Action.create<MarkGame>('mark')
+        .chooseFrom('choice', { choices: (ctx) => [...ctx.game.all(Card)].map((card) => this.choiceOf(card)) })
+        .execute((_args, ctx) => {
+          if (++this.marks === 4) this.finish([ctx.player]);
+          return { success: true };
+        }),
+    );
+    this.setFlow({
+      root: loop({ while: () => !this.isFinished(), maxIterations: 10, do: eachPlayer({ do: actionStep({ actions: ['mark'] }) }) }),
+    });
+  }
+}
+
+/** Offers each card itself as the choice. */
+class BareMarkGame extends MarkGame {
+  override choiceOf(card: Card): unknown {
+    return card;
+  }
+}
+
+/** Every move a node of the search tree refused, wherever it sits. */
+function refusedMoves(node: MCTSNode): string[] {
+  return [...node.refusedMoveKeys, ...node.children.flatMap(refusedMoves)];
+}
+
+describe('a searched opponent move whose chooseFrom value holds an element', () => {
+  it.each([
+    { value: 'the element itself', GameClass: BareMarkGame },
+    { value: 'a plain object holding the element', GameClass: MarkGame },
+  ])('is made in the search when $value is one that opponent knows only by a placeholder', async ({ GameClass }) => {
+    const game = new GameClass({ playerCount: 2, seed: 'bs1808-mark' });
+    game.startFlow();
+    const bot = new MCTSBot(
+      game, GameClass, 'mark', 1,
+      { iterations: 40, playoutDepth: 1, seed: 'bs1808-mark', async: false, timeout: Infinity, usePNS: false },
+    ) as unknown as { runSearch(): Promise<{ root: MCTSNode }> };
+
+    const { root } = await bot.runSearch();
+
+    expect(refusedMoves(root)).toEqual([]);
   });
 });
