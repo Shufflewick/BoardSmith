@@ -467,6 +467,8 @@ defineExpose({ clearHistory, copyHistory, hasMessages, scrollToNewest });
 .text {
   color: var(--bsg-ink-2);
   line-height: 1.4;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .message.system .text,

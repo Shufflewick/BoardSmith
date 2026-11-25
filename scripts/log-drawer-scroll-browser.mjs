@@ -13,6 +13,9 @@
  * log is always shown, the same must hold, and the log's screen-reader status
  * line (the shared `sr-only.css`, #1183) must take no space.
  *
+ * The verb also narrates one word wider than a phone's log line, which must
+ * wrap inside the line rather than make the log scroll sideways (#1803).
+ *
  * Runs under `boardsmith test --browser`, or by hand with
  * `node scripts/log-drawer-scroll-browser.mjs`; a missing Chromium says to run
  * `boardsmith install-browser`.
@@ -21,6 +24,9 @@ import { assert, check, onFreshPage, runBrowserRegression, summarise, waitForAct
 
 /** Enough lines to overflow the log and the drawer several times over. */
 const LINES = 40;
+
+/** One word wider than the log's line at 390px. */
+const LONG_WORD = 'readTheInterestingTidbitsScreenAloudToEveryoneInTheTavernTonight';
 
 const RULES = `import { Game, Player, Space } from 'boardsmith';
 import type { GameElement, GameOptions } from 'boardsmith';
@@ -42,6 +48,7 @@ const chatter = worldAction<Tavern>('chatter')
   .prompt('Chatter')
   .needs(() => [ROOM])
   .execute((_args, ctx) => {
+    ctx.world.emit(ROOM, {}, 'You ${LONG_WORD}.');
     for (let i = 1; i <= ${LINES}; i++) ctx.world.emit(ROOM, { line: i }, \`Line \${i} of the chatter.\`);
   });
 
@@ -120,6 +127,13 @@ await runBrowserRegression(
           await check(`the newest log line is in view ${phone ? 'after opening the drawer' : 'in the sidebar'} at ${width}px ${colorScheme}`, async () => {
             assert(seen.text?.includes(`Line ${LINES} of the chatter.`), `the last log line read ${JSON.stringify(seen.text)}`);
             assert(seen.hidden.length === 0, `the newest line is outside ${seen.hidden.join(' and ')}`);
+          });
+          await check(`a long word wraps inside its log line at ${width}px ${colorScheme}`, async () => {
+            const log = await surface.locator('[data-testid="bs-log"] .messages-container').evaluate((el) => ({
+              content: el.scrollWidth,
+              box: el.clientWidth,
+            }));
+            assert(log.content <= log.box, `the log scrolls sideways: its content is ${log.content}px wide in a box ${log.box}px wide`);
           });
           if (!phone) {
             await check(`the log's screen-reader status is in the page but takes no space at ${width}px`, async () => {
