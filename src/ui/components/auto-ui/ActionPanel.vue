@@ -2969,6 +2969,7 @@ button {
 .waiting-message {
   flex: 1 1 0;
   min-width: 0;
+  overflow-wrap: anywhere;
   padding: 10px 20px;
   background: var(--bsg-surface-2);
   border-radius: 8px;
