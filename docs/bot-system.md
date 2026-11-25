@@ -173,7 +173,8 @@ It is handed the search's copy of the game, the seat whose moves are listed
 would otherwise consider. Filter that listing to leave moves out, or return the
 game's own short list without calling `listMoves`, which spares the full
 enumeration of an action with a large or open-ended set of args. Moves are in
-wire form (element ids). Return only legal moves: the bot can choose any move
+wire form: a `chooseElement` or `chooseElements` pick is the element's id, and
+an element in a `chooseFrom` value is `{ id, className }`. Return only legal moves: the bot can choose any move
 it is given, so an illegal one can reach the engine as the bot's move.
 
 In a simultaneous step, once the search has made a move in it, the copy a seat's

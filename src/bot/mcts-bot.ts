@@ -9,6 +9,7 @@ import type {
 import type { GameStateSnapshot, SeatSnapshot } from '../engine/utils/index.js';
 import { canSeatAct, dueSeats, availableActionsForSeat, followUpForSeat } from '../engine/index.js';
 import { isElement } from '../engine/element/game-element.js';
+import { asElementRefs } from '../engine/element/pick-candidates.js';
 import { createSnapshot, createSeatSnapshot } from '../engine/utils/index.js';
 import { acceptsSubmission, enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { NotSimulableError } from '../engine/errors.js';
@@ -1382,20 +1383,15 @@ export class MCTSBot<G extends Game = Game> {
 
 
   /**
-   * Serialize a choice value for action args
+   * A choice in wire form: a `chooseElement(s)` pick as its id, and every
+   * element in a `chooseFrom` value as `{ id, className }`, never the search
+   * copy's element, whose contents the live game does not match (#1808).
    */
   private serializeChoice(choice: unknown, selection: Selection): unknown {
-    // Use the public .id getter for both element types — consistent and immune to
-    // internal tree-node (_t) renames. GameElement.id returns this._t.id but the
-    // public surface is stable.
-    if (selection.type === 'element') {
+    if (selection.type === 'element' || selection.type === 'elements') {
       return (choice as { id: number }).id;
     }
-    // For 'elements' type (chooseElements), choices are GameElement objects with id property
-    if (selection.type === 'elements') {
-      return (choice as { id: number }).id;
-    }
-    return choice;
+    return asElementRefs(choice, (element) => element.id);
   }
 
   /**
@@ -1403,8 +1399,8 @@ export class MCTSBot<G extends Game = Game> {
    * This ensures element objects are available during recursion for dependent filters,
    * and only converted to IDs when returning final results.
    *
-   * Elements become bare numeric ids, not the `{ id, className }` performAction resolves,
-   * on purpose (#685): `BotMove.args` is public, and game bot hooks
+   * A `chooseElement(s)` pick becomes a bare numeric id, not the `{ id, className }` a
+   * `chooseFrom` element becomes, on purpose (#685): `BotMove.args` is public, and game bot hooks
    * (`playoutPolicy`, `moveOrdering`, `threatResponseMoves`,
    * `hintTargetFromMove`) and the hint and heatmap fallbacks in
    * session/stateless-ops.ts read element args as numbers. Do not merge the two.
