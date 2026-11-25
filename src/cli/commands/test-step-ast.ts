@@ -836,9 +836,43 @@ function mentionsAny(text: string, names: Iterable<string>): boolean {
   return false;
 }
 
-/** The files read that a file imports from or passes exports on from, read from its import statements alone, so a file too deeply nested to parse still has them. */
-const importedFiles = (file: SourceFile, files: ReadonlySet<string>): string[] =>
-  ts.preProcessFile(file.text, true, false).importedFiles.flatMap(({ fileName }) => resolveImport(file.path, fileName, files) ?? []);
+/** A file read that a module takes values from or passes them on from, and their names there (`*` for every one). */
+interface ValueImport {
+  from: string;
+  names: string[];
+}
+
+const VALUE_IMPORT_NAMES: Readonly<Record<string, (specifier: AstNode) => string>> = Object.freeze({
+  ...IMPORTED_NAMES,
+  ImportNamespaceSpecifier: () => '*',
+  ExportSpecifier: (specifier) => moduleName(specifier.local),
+});
+
+const isTypeOnly = (node: AstNode) => node.importKind === 'type' || node.exportKind === 'type';
+
+/** The values an import or `export ... from` statement takes from a file read. */
+function valueImport(file: string, node: AstNode, files: ReadonlySet<string>): ValueImport[] {
+  const from = resolveImport(file, (node.source as AstNode | null | undefined)?.value, files);
+  if (from === undefined || isTypeOnly(node)) return [];
+  if (node.type === 'ExportAllDeclaration') return [{ from, names: ['*'] }];
+  const names = ((node.specifiers ?? []) as AstNode[]).filter((s) => !isTypeOnly(s)).map((s) => VALUE_IMPORT_NAMES[s.type](s));
+  return names.length === 0 ? [] : [{ from, names }];
+}
+
+/**
+ * A file's value imports and re-exports, parsed from its text up to its last `from '...'` alone,
+ * so a data file nested too deeply to parse whole that only takes a type is never parsed.
+ */
+function valueImports(file: SourceFile, files: ReadonlySet<string>): ValueImport[] {
+  const ends = ts
+    .preProcessFile(file.text, true, false)
+    .importedFiles.filter(({ pos }) => /\bfrom\s*$/.test(file.text.slice(Math.max(0, pos - 16), pos)))
+    // `end` is the specifier's last character, so the closing quote is the one after it.
+    .map(({ end }) => end + 2);
+  if (ends.length === 0) return [];
+  const head = parseSource(file.text.slice(0, Math.max(...ends)), file.path);
+  return (head.ast.body as AstNode[]).flatMap((node) => valueImport(file.path, node, files));
+}
 
 /** The files read a module passes exports on from. */
 const passedFrom = (module: ModuleExports): string[] =>
@@ -885,11 +919,13 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
     involved: new Set<string>(),
     exported: (file: string, name: string) => exported(file, name),
   };
-  const imports = new Map(sources.map((file) => [file.path, importedFiles(file, wrappers.files)]));
+  const imports = new Map(sources.map((file) => [file.path, valueImports(file, wrappers.files)]));
   /** Files that declare a helper, or pass on an export of a file that does. */
   const helperFiles = new Set<string>();
+  const takesHelper = ({ from, names }: ValueImport) =>
+    helperFiles.has(from) && names.some((name) => name === '*' || (wrappers.exported(from, name)?.size ?? 0) > 0);
   const involves = (file: SourceFile) =>
-    mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()]) || imports.get(file.path)!.some((from) => helperFiles.has(from));
+    mentionsAny(file.text, [...seedNames, ...wrappers.byName.keys()]) || imports.get(file.path)!.some(takesHelper);
   /** Adds `key`, saying whether it was new. */
   const once = (set: Set<string>, key: string): boolean => {
     if (set.has(key)) return false;

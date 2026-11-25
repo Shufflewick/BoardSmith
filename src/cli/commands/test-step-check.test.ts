@@ -246,6 +246,16 @@ describe('findVerbWrappers on a file that names no verb', () => {
     const wrappers = findVerbWrappers([{ path: 'src/rules/names.ts', text: data }]);
     expect([wrappers.byName, wrappers.involved]).toEqual([new Map(), new Set()]);
   });
+
+  it('never parses a file that takes only types, or nothing, from a wrapper\'s file (#1812 review F1)', () => {
+    const deep = `"a"${' + "b"'.repeat(20_000)}`;
+    const wrappers = findVerbWrappers([
+      { path: 'src/rules/verbs.ts', text: 'export type Name = string;\nexport function define(name: string) { return worldAction(name); }\n' },
+      { path: 'src/rules/names.ts', text: `import type { Name } from './verbs';\nexport const NAMES: Name = ${deep};\n` },
+      { path: 'src/rules/kinds.ts', text: `import { type Name } from './verbs';\nexport const KINDS: Name = ${deep};\nconst later = () => import('./verbs');\n` },
+    ]);
+    expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts']);
+  });
 });
 
 describe('findDispatchedVerbs through a project harness', () => {
