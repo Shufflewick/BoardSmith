@@ -94,7 +94,8 @@ describe('a pick refused inside the bot search (#1809)', () => {
 
     expect(refusals.length).toBeGreaterThan(0);
     expect(warned(warn)).toEqual([]);
-    expect(game.continueFlow(move.action, move.args, 1).actionError).toBeUndefined();
+    expect(move).not.toBeNull();
+    expect(game.continueFlow(move!.action, move!.args, 1).actionError).toBeUndefined();
   });
 
   it('still warns when the live game refuses a pick', () => {
