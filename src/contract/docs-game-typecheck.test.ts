@@ -66,6 +66,12 @@ describe('the game code the docs teach (#511)', () => {
     ]);
   });
 
+  it("marks the testing guide's board followed across animated moves for compiling (#1805)", () => {
+    expect(blocks.filter((block) => block.doc === 'docs/api/testing').map((block) => block.path)).toEqual(
+      expect.arrayContaining(['src/ui/shot-board.ts', 'tests/shot-board.test.ts']),
+    );
+  });
+
   it('marks the game code of every aspect template for compiling (#645)', () => {
     for (const aspect of ['dice', 'hex-grid', 'playing-cards', 'square-grid']) {
       expect(

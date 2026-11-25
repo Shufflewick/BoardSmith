@@ -80,7 +80,7 @@ There is one way to run an action and one way to assert it fails:
 
 ### Basic Test
 
-The examples test `GoFishGame` and `CheckersGame`, game classes like these. A real game also registers its elements, actions and flow; [Getting Started](../getting-started.md) builds one.
+The examples test `GoFishGame`, `CheckersGame` and `BattleGame`, game classes like these. A real game also registers its elements, actions and flow; [Getting Started](../getting-started.md) builds one.
 
 <!-- typecheck: game src/game.ts -->
 ```typescript
@@ -107,6 +107,8 @@ export class GoFishGame extends Game<GoFishGame, GoFishPlayer> {
 }
 
 export class CheckersGame extends Game<CheckersGame> {}
+
+export class BattleGame extends Game<BattleGame> {}
 ```
 
 <!-- typecheck: game tests/game.test.ts -->
@@ -659,6 +661,90 @@ const wrapper = mount(RoomReport, { props: { room }, global: { provide: shell.pr
 wrapper.unmount();
 shell.stop();
 ```
+
+**To follow one mounted board across several animated moves** (#1805), mount
+it once with `tableShellContext` and provide your own animation queue. A seat
+mounted by `renderAsSeat` or `tableShellContext` holds the one frame it was
+built from: it plays the events pending at mount, and nothing after. So build
+the queue with `createAnimationEvents` over a ref holding the seat's frame,
+provide it under `ANIMATION_EVENTS_KEY`, and after each move hand the ref that
+move's frame, `buildPlayerState(testGame.runner, seat)` from
+`boardsmith/session`. Hand over every frame, in order: a move's frame carries
+only that move's events, so a test that skips one skips its events. If the
+board draws from its props, give it each frame's view with `wrapper.setProps`
+too. Given a board that plays a `shot` event:
+
+<!-- typecheck: game src/ui/shot-board.ts -->
+```typescript
+import { defineComponent, h, ref } from 'vue';
+import { useAnimationEvents } from 'boardsmith/ui';
+
+export const ShotBoard = defineComponent({
+  name: 'ShotBoard',
+  setup() {
+    const shots = ref<unknown[]>([]);
+    useAnimationEvents()?.registerHandler('shot', async (event) => void shots.value.push(event.data.shot), { skip: 'run' });
+    return () => h('ol', shots.value.map((shot) => h('li', { class: 'shot' }, `Shot ${shot}`)));
+  },
+});
+```
+
+the test mounts it once and plays two moves through it:
+
+<!-- typecheck: game tests/shot-board.test.ts -->
+```typescript
+// @vitest-environment jsdom
+import { expect, test } from 'vitest';
+import { effectScope, shallowRef } from 'vue';
+import { flushPromises, mount } from '@vue/test-utils';
+import { buildPlayerState } from 'boardsmith/session';
+import { createTestGame, preloadSeatRenderer, tableShellContext } from 'boardsmith/testing';
+import { ANIMATION_EVENTS_KEY, createAnimationEvents } from 'boardsmith/ui';
+import { BattleGame } from '../src/game.js';
+import { ShotBoard } from '../src/ui/shot-board.js';
+
+await preloadSeatRenderer();
+
+test('the board plays the shot of each move', async () => {
+  const testGame = createTestGame(BattleGame, { playerCount: 2 });
+  const frame = shallowRef(buildPlayerState(testGame.runner, 1));
+  const scope = effectScope();
+  const events = scope.run(() => createAnimationEvents({ events: () => frame.value.animationEvents }))!;
+  const shell = await tableShellContext(testGame, 1, { provide: { [ANIMATION_EVENTS_KEY]: events } });
+  const wrapper = mount(ShotBoard, { global: { provide: shell.provide } });
+
+  // The game's `fire` action calls game.animate('shot', { shot: target }).
+  for (const target of ['a1', 'b2']) {
+    testGame.doAction(1, 'fire', { target });
+    frame.value = buildPlayerState(testGame.runner, 1);
+    await flushPromises();
+  }
+
+  expect(wrapper.findAll('.shot').map((shot) => shot.text())).toEqual(['Shot a1', 'Shot b2']);
+  wrapper.unmount();
+  shell.stop();
+  scope.stop();
+});
+```
+
+`flushPromises` lets the queue run the handlers the new frame started. The
+board's own controller still refuses to take a move, so each move goes through
+`testGame.doAction`. Only the animation queue follows the moves. The seat's
+action controller and game context keep the frame from mount, and the
+controller waits on the seat's own queue, not yours, so start from a frame
+with no events pending, or the controller holds back, up to that queue's
+three-second handler wait, for a handler that never registers there. The queue is never reset either, so an undo or a restore
+between moves is not followed: its events are dropped.
+
+When the test needs the controller's gating and a live game context too, run
+the real `GameShell` in the browser, as [Browser
+Testing](../browser-testing.md) describes. To take the frames from a real
+host instead of building them, play the moves with `createHeadlessSession`
+(above, from `boardsmith/testing`), whose `broadcasts` record every frame each
+seat is sent. Read them in order: `send()` resolves only after any bot seat
+has replied, so one call can publish several frames, and `playerState()`
+returns only the latest.
+
 **To render or scan a board with an action open, pass `startAction`** (#405).
 A board draws its targets while an action is open, and a target can carry what
 it hides: a blind pick labelled with the card's face is invisible to a scan of
