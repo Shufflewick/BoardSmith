@@ -75,6 +75,18 @@ function addSearchSteps(total: SearchSteps, sub: SearchSteps): void {
 }
 
 /** An object literal, not a class instance: the only objects whose fields a move's args are walked through. */
+/**
+ * A `chooseFrom` value in wire form, never naming the search copy's element,
+ * whose contents the live game does not match (#1808): each element as
+ * `{ id, className }`. An element that is the whole value keeps its id; one
+ * inside an array or object is in the ids `seat` knows it by, which is how the
+ * engine matches it (#1793).
+ */
+function wireChoice(choice: unknown, seat: number): unknown {
+  if (isElement(choice)) return asElementRefs(choice, (element) => element.id);
+  return asElementRefs(choice, (element) => seatIdOf(element, seat));
+}
+
 function isPlainObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && Object.getPrototypeOf(v) === Object.prototype;
 }
@@ -120,6 +132,9 @@ export class MCTSBot<G extends Game = Game> {
   private warnedSeededTruncation = false;
   /** The last search's steps, for the warning about thrown-away steps (#669). */
   private searchSteps: SearchSteps = { made: 0, scored: 0, choseAtRandom: false };
+
+  /** Each listed move's args in wire form, made where it was listed (see {@link listedMove}). */
+  private readonly wireForms = new WeakMap<BotMove, Record<string, unknown>>();
 
   /** Live game instance used during search (cloned from original) */
   private searchGame: G | null = null;
@@ -233,7 +248,7 @@ export class MCTSBot<G extends Game = Game> {
     if (subSearches > 1) return this.playParallel(subSearches);
     const { move } = await this.runSearch();
     this.warnIfStepsWereDropped(this.searchSteps);
-    return move;
+    return move && this.wireMove(move);
   }
 
   /**
@@ -252,11 +267,11 @@ export class MCTSBot<G extends Game = Game> {
     this.warnIfStepsWereDropped(this.searchSteps);
     if (!move || !root) return { move: null, stats: [] };
     const stats: BotMoveStats[] = root.children.map(child => ({
-      move: child.parentMove!,
+      move: this.wireMove(child.parentMove!),
       visits: child.visits,
       value: child.visits > 0 ? child.value / child.visits : 0,
     }));
-    return { move, stats };
+    return { move: this.wireMove(move), stats };
   }
 
   /**
@@ -336,8 +351,8 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       addSearchSteps(steps, subBot.searchSteps);
-      entryFor(move).votes++;
-      for (const child of root.children) entryFor(child.parentMove!).visits += child.visits;
+      entryFor(subBot.wireMove(move)).votes++;
+      for (const child of root.children) entryFor(subBot.wireMove(child.parentMove!)).visits += child.visits;
     }
 
     this.warnIfStepsWereDropped(steps);
@@ -847,7 +862,7 @@ export class MCTSBot<G extends Game = Game> {
     const before = { randomState: game.getRandomState(), sequence: game._ctx.sequence };
     let flowState: FlowState;
     try {
-      flowState = game.continueFlow(move.action, this.rebindArgs(move.args), seat);
+      flowState = game.continueFlow(move.action, this.rebindArgs(this.wireArgs(move)), seat);
     } catch (error) {
       // The flow itself threw, possibly after the move changed the game.
       this.searchSteps.firstFailure ??= error instanceof Error ? error.message : String(error);
@@ -1225,8 +1240,8 @@ export class MCTSBot<G extends Game = Game> {
 
   /**
    * Every move `seat` may make in `flowState`: its listed actions with every
-   * legal set of args, then the follow-up it holds, if any. Args are in wire
-   * form (see {@link serializeChoice}). With `sample`, each action contributes at most 20 arg
+   * legal set of args, then the follow-up it holds, if any. Args are as
+   * {@link listedMove} lists them. With `sample`, each action contributes at most 20 arg
    * sets, drawn from the bot's own random source, to bound the branching. An
    * action with more moves than enumeration lists contributes 20 drawn at
    * random, with or without `sample` (#691).
@@ -1259,6 +1274,8 @@ export class MCTSBot<G extends Game = Game> {
     // The game narrows or replaces the listing here, so every listing the search makes obeys it (#1387).
     // An empty list says the seat waits here (#1537): it has no move at this position.
     const moves = this.candidateMoves(enumerationGame, seat, () => list().moves);
+    // A move the hook built itself is sent in wire form too, made from this copy's elements (#1813).
+    for (const move of moves) this.holdWireForm(move, enumerationGame.getAction(move.action)?.selections ?? [], seat);
     return { moves, sampled: listed?.sampled ?? false };
   }
 
@@ -1280,12 +1297,11 @@ export class MCTSBot<G extends Game = Game> {
       // An action with more moves than enumeration lists gives a random
       // sample of them, drawn from the bot's own seeded source (#691).
       const sampleAboveBudget = { count: MAX_SAMPLED_ARGS, random: this.rng, onSampled: () => { sampled = true; } };
-      const serialized = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
-        .map((args) => this.serializeArgs(args, actionDef.selections, seat));
-      const cut = options.sample && serialized.length > MAX_SAMPLED_ARGS;
+      const listed = enumerateActionMoves(enumerationGame, actionDef, player, { followUp, sampleAboveBudget })
+        .map((args) => this.listedMove(actionDef, args, seat));
+      const cut = options.sample && listed.length > MAX_SAMPLED_ARGS;
       sampled ||= cut;
-      const kept = cut ? this.rng.shuffle(serialized).slice(0, MAX_SAMPLED_ARGS) : serialized;
-      for (const args of kept) moves.push({ action: actionDef.name, args });
+      moves.push(...(cut ? this.rng.shuffle(listed).slice(0, MAX_SAMPLED_ARGS) : listed));
     };
 
     for (const actionName of availableActionsForSeat(flowState, seat)) {
@@ -1314,7 +1330,7 @@ export class MCTSBot<G extends Game = Game> {
       || followUpForSeat(flowState, seat)?.action === move.action;
     if (!action || !player || !offered || game.getActionRefusalReason(action, player)) return false;
     try {
-      return acceptsSubmission(game, move.action, seat, this.rebindArgs(move.args));
+      return acceptsSubmission(game, move.action, seat, this.rebindArgs(this.wireArgs(move)));
     } catch (error) {
       // A gate that needs what this world was never told rules the move out, as enumeration does (#19).
       if (error instanceof NotSimulableError) return false;
@@ -1361,7 +1377,7 @@ export class MCTSBot<G extends Game = Game> {
     seatGame.setRandomState(before.randomState);
     seatGame._ctx.sequence = before.sequence;
     try {
-      const state = seatGame.continueFlow(move.action, this.rebindArgs(move.args, seatGame), seat);
+      const state = seatGame.continueFlow(move.action, this.rebindArgs(this.wireArgs(move), seatGame), seat);
       if (state.actionError === undefined) return true;
       this.searchSteps.firstFailure ??= state.actionError;
     } catch (error) {
@@ -1384,18 +1400,39 @@ export class MCTSBot<G extends Game = Game> {
 
 
   /**
-   * A choice in wire form, never the search copy's element, whose contents the
-   * live game does not match (#1808): a `chooseElement(s)` pick as its id, and
-   * each element in a `chooseFrom` value as `{ id, className }`. An element that
-   * is the whole value keeps its id; one inside an array or object is in the ids
-   * `seat` knows it by, which is how the engine matches it (#1793).
+   * The move `args` make for `seat`, as the game's bot hooks read it: a
+   * `chooseFrom` value holds the element itself, so a hook reads its fields
+   * (#1813). Its wire form, made now while the elements are this listing's,
+   * is what the search submits and the bot hands out (#1808).
    */
-  private serializeChoice(choice: unknown, selection: Selection, seat: number): unknown {
+  private listedMove(actionDef: ActionDefinition, args: Record<string, unknown>, seat: number): BotMove {
+    const move = { action: actionDef.name, args: this.serializeArgs(args, actionDef.selections, (choice) => choice) };
+    this.holdWireForm(move, actionDef.selections, seat);
+    return move;
+  }
+
+  /** Hold `move`'s wire form for `seat`, unless one is held already. */
+  private holdWireForm(move: BotMove, selections: Selection[], seat: number): void {
+    if (this.wireForms.has(move)) return;
+    this.wireForms.set(move, this.serializeArgs(move.args, selections, (choice) => wireChoice(choice, seat)));
+  }
+
+  /** `move`'s args in wire form: as listed, or as written for a move a hook other than `candidateMoves` built itself. */
+  private wireArgs(move: BotMove): Record<string, unknown> {
+    return this.wireForms.get(move) ?? move.args;
+  }
+
+  /** `move` as the bot hands it out, in wire form. */
+  private wireMove(move: BotMove): BotMove {
+    return { action: move.action, args: this.wireArgs(move) };
+  }
+
+  /** A choice with a `chooseElement(s)` pick as its id, and a `chooseFrom` value as `chooseFromValue` makes it. */
+  private serializeChoice(choice: unknown, selection: Selection, chooseFromValue: (choice: unknown) => unknown): unknown {
     if (selection.type === 'element' || selection.type === 'elements') {
-      return (choice as { id: number }).id;
+      return isElement(choice) ? choice.id : choice;
     }
-    if (isElement(choice)) return asElementRefs(choice, (element) => element.id);
-    return asElementRefs(choice, (element) => seatIdOf(element, seat));
+    return chooseFromValue(choice);
   }
 
   /**
@@ -1404,7 +1441,7 @@ export class MCTSBot<G extends Game = Game> {
    * and only converted to IDs when returning final results.
    *
    * A `chooseElement(s)` pick becomes a bare numeric id, not the `{ id, className }` a
-   * `chooseFrom` element becomes, on purpose (#685): `BotMove.args` is public, and game bot hooks
+   * `chooseFrom` element becomes in wire form, on purpose (#685): `BotMove.args` is public, and game bot hooks
    * (`playoutPolicy`, `moveOrdering`, `threatResponseMoves`,
    * `hintTargetFromMove`) and the hint and heatmap fallbacks in
    * session/stateless-ops.ts read element args as numbers. Do not merge the two.
@@ -1412,7 +1449,7 @@ export class MCTSBot<G extends Game = Game> {
   private serializeArgs(
     args: Record<string, unknown>,
     selections: Selection[],
-    seat: number,
+    chooseFromValue: (choice: unknown) => unknown,
   ): Record<string, unknown> {
     const serialized: Record<string, unknown> = {};
 
@@ -1424,9 +1461,9 @@ export class MCTSBot<G extends Game = Game> {
       }
 
       if (Array.isArray(value)) {
-        serialized[key] = value.map(v => this.serializeChoice(v, selection, seat));
+        serialized[key] = value.map(v => this.serializeChoice(v, selection, chooseFromValue));
       } else {
-        serialized[key] = this.serializeChoice(value, selection, seat);
+        serialized[key] = this.serializeChoice(value, selection, chooseFromValue);
       }
     }
 

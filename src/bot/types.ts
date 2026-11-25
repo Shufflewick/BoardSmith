@@ -271,9 +271,10 @@ export interface BotStrategy {
    * Narrow the listing (`listMoves().filter(...)`) to leave a move out of the
    * search entirely, or return the game's own short list of sensible moves
    * without calling `listMoves`, which spares the full enumeration of an
-   * action with a large or open-ended set of args. Moves are in wire form: a
-   * `chooseElement(s)` pick is the element's id, and an element in a
-   * `chooseFrom` value is `{ id, className }`. Return only legal moves: the bot can choose any move it
+   * action with a large or open-ended set of args. In the moves every hook sees,
+   * a `chooseElement(s)` pick is the element's id, and a `chooseFrom` value
+   * holds the search copy's element itself; build a move the same way. The bot
+   * hands its chosen move out with that element as `{ id, className }`. Return only legal moves: the bot can choose any move it
    * is given, so an illegal one can reach the engine as the bot's move.
    *
    * Return no moves to say the seat waits (#1537): at the root the bot makes
