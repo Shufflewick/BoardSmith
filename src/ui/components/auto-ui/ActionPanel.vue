@@ -1685,7 +1685,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       </div>
       <!-- Each action wrapped in .action-btn-group, which keeps its "?" beside it.
            .action-buttons { display: contents } propagates the parent flex context so
-           .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
+           .action-btn-group (inline-flex) becomes a direct action bar flex item, its "?" taking its own width. -->
       <div
         v-for="node in menuNodes"
         :key="node.kind === 'group' ? `group:${node.path.join(' / ')}` : node.item.name"
