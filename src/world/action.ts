@@ -86,7 +86,7 @@ import type {
 import type { ChoiceValue, ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
 import type { TextPattern } from "../engine/action/text-rules.js";
 import type { SubjectBinding, SubjectType } from "../engine/action/subject-type.js";
-import type { AddArg } from "../engine/action/action-builder.js";
+import { finishedActionMessage, type AddArg } from "../engine/action/action-builder.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
@@ -987,14 +987,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
 
   /** Refuse a builder call made after `.execute()` returned the definition (#1810). */
   private refuseIfFinished(method: string): void {
-    if (!this.finished) return;
-    const action = `The "${this.definition.name}" action was already finished with .execute()`;
-    throw worldRefusal(
-      "invalid-world-action",
-      method === "execute"
-        ? `${action}, and an action has only one .execute(). Remove the second .execute() call.`
-        : `${action}, so .${method}() cannot add to it. Move the .${method}() call before .execute().`,
-    );
+    if (this.finished) throw worldRefusal("invalid-world-action", finishedActionMessage(this.definition.name, method));
   }
 
   /** Append one round of the walk. `worldClockAction`'s facade reaches it for

@@ -357,6 +357,7 @@ export class Action<
   A extends Record<string, unknown> = NoArgs,
 > {
   private definition: ActionDefinition;
+  private finished = false;
 
   private constructor(name: string) {
     this.definition = {
@@ -378,6 +379,10 @@ export class Action<
    */
   static create<G extends Game = Game>(name: string): Action<G, NoArgs> {
     return new Action<G, NoArgs>(name);
+  }
+
+  private refuseIfFinished(method: string): void {
+    if (this.finished) throw new Error(finishedActionMessage(this.definition.name, method));
   }
 
   /**
@@ -415,13 +420,16 @@ export class Action<
     this: [keyof A] extends [never] ? Action<G, A> : 'followUpArgs() goes before any pick, once',
   ): Action<G, A & F> {
     // The same load-bearing re-type as the selection methods (see AddArg).
-    return this as Action<G, A & F>;
+    const action = this as Action<G, A & F>;
+    action.refuseIfFinished('followUpArgs');
+    return action;
   }
 
   /**
    * Set the user-facing prompt for this action
    */
   prompt(prompt: string | ((context: ActionContext<G>) => string)): this {
+    this.refuseIfFinished('prompt');
     this.definition.prompt = prompt as ActionDefinition['prompt'];
     return this;
   }
@@ -432,6 +440,7 @@ export class Action<
    * Display-only; never used as a predicate.
    */
   help(text: string): this {
+    this.refuseIfFinished('help');
     this.definition.help = text;
     return this;
   }
@@ -460,6 +469,7 @@ export class Action<
    * ```
    */
   condition(config: ConditionConfig<G, Partial<A>>): this {
+    this.refuseIfFinished('condition');
     // Stored as the base ConditionConfig; G extends Game so this is sound.
     this.definition.condition = config as ConditionConfig;
     return this;
@@ -497,6 +507,7 @@ export class Action<
    * ```
    */
   disabled(fn: (context: PickContext<G, A>) => string | false): this {
+    this.refuseIfFinished('disabled');
     // Same erasure as `.execute()`/`.validate()`: ActionDefinition is non-generic,
     // and the runtime always passes the game this chain declared.
     this.definition.disabled = fn as ActionDefinition['disabled'];
@@ -540,6 +551,7 @@ export class Action<
    * ```
    */
   validate(fn: (args: A, context: ActionContext<G, A>) => boolean | string): this {
+    this.refuseIfFinished('validate');
     // Same erasure as `.execute()`: ActionDefinition is non-generic, and the
     // runtime always passes the args/game this chain declared.
     this.definition.validate = fn as ActionDefinition['validate'];
@@ -555,6 +567,7 @@ export class Action<
    * `checkpoints: { actionHistory: 'undo' }` (docs/state-size.md).
    */
   notUndoable(): this {
+    this.refuseIfFinished('notUndoable');
     this.definition.undoable = false;
     return this;
   }
@@ -571,6 +584,7 @@ export class Action<
    * seat's undo.
    */
   seatUndoable(): this {
+    this.refuseIfFinished('seatUndoable');
     this.definition.seatUndoable = true;
     return this;
   }
@@ -589,6 +603,7 @@ export class Action<
    *   final pick is what completes the action (AUTOEXEC-01 / F-02).
    */
   manual(): this {
+    this.refuseIfFinished('manual');
     this.definition.manual = true;
     return this;
   }
@@ -600,6 +615,7 @@ export class Action<
    * about nothing now. A thing the seat cannot see is left out.
    */
   about<T, C extends ActionContext>(type: SubjectType<T, C>, things: (context: ActionContext<G>) => readonly NoInfer<T>[]): this {
+    this.refuseIfFinished('about');
     (this.definition.about ??= []).push((context) => things(context as ActionContext<G>).flatMap((thing) => type.describe(thing, context as C) ?? []));
     return this;
   }
@@ -642,6 +658,7 @@ export class Action<
    * @returns The builder for chaining
    */
   destructive(): this {
+    this.refuseIfFinished('destructive');
     this.definition.destructive = true;
     return this;
   }
@@ -702,6 +719,7 @@ export class Action<
    * @returns The builder for chaining
    */
   group(...path: string[]): this {
+    this.refuseIfFinished('group');
     if (path.length === 0) {
       throw new Error(
         `Action "${this.definition.name}": .group() needs at least one label, e.g. `
@@ -735,6 +753,7 @@ export class Action<
    * @returns The builder for chaining
    */
   order(order: number): this {
+    this.refuseIfFinished('order');
     if (!Number.isFinite(order)) {
       throw new Error(
         `Action "${this.definition.name}": .order() needs a finite number and was given `
@@ -818,6 +837,7 @@ export class Action<
     // narrowest of the overloads, so every overload's validate is accepted.
     options: ChooseFromOptions<G, AddArg<A, K, ChoiceValue<T>[]>, T, O, ChoiceValue<T> | ChoiceValue<T>[], RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, ChoiceValue<T>, P> & Partial<RepeatingOptions<G, ChoiceValue<T>, AddArg<A, K, ChoiceValue<T>[]>>>
   ): Action<G, AddArg<A, K, ChoiceValue<T> | ChoiceValue<T>[], O>> {
+    this.refuseIfFinished('chooseFrom');
     assertPrepareHasDisabled('chooseFrom', name, options);
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
     assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
@@ -943,6 +963,7 @@ export class Action<
     // Validate args as the repeating overload's: the narrowest, so every overload's validate is accepted.
     options: ChooseElementOptions<G, AddArg<A, K, T[]>, T, O, RepeatContextArgs<A, K>> & DisabledOptions<G, RepeatContextArgs<A, K>, T, P> & Partial<RepeatingOptions<G, T, AddArg<A, K, T[]>>> = {}
   ): Action<G, AddArg<A, K, T, O>> | Action<G, AddArg<A, K, T[], O>> {
+    this.refuseIfFinished('chooseElement');
     assertPrepareHasDisabled('chooseElement', name, options);
     assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
     assertBindsOneValue('chooseElement', name, options);
@@ -1058,6 +1079,7 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     }
   ): Action<G, AddArg<A, K, T[], O>> {
+    this.refuseIfFinished('chooseElements');
     assertPrepareHasDisabled('chooseElements', name, options);
     assertReadsEarlierPick('chooseElements', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
@@ -1173,6 +1195,7 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): Action<G, AddArg<A, K, string, O>> {
+    this.refuseIfFinished('enterText');
     if (options.maxBytes !== undefined && !(Number.isInteger(options.maxBytes) && options.maxBytes > 0)) {
       throw new Error(
         `enterText('${name}') was given maxBytes ${String(options.maxBytes)}. maxBytes is the most ` +
@@ -1272,6 +1295,7 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): Action<G, AddArg<A, K, number, O>> {
+    this.refuseIfFinished('enterNumber');
     // REFUSED WHEN THE ACTION IS WRITTEN, not when a player opens the panel
     // (#258). Both of these are about the declaration alone, so there is no
     // state to wait for -- and a field that opens on a refused value, or a
@@ -1324,6 +1348,8 @@ export class Action<
   execute(
     fn: (args: A, context: ActionContext<G, A>) => ExecuteResult | void
   ): ActionDefinition {
+    this.refuseIfFinished('execute');
+    this.finished = true;
     // The accumulated args type A and game type G are erased at the storage
     // boundary (ActionDefinition is non-generic); both are sound because the
     // runtime always passes the args/game this chain declared.
@@ -1344,6 +1370,14 @@ export class Action<
   build(): ActionDefinition {
     return this.definition;
   }
+}
+
+/** Why a builder call after `.execute()` is refused; the world builder says the same (#1810, #1814). */
+export function finishedActionMessage(action: string, method: string): string {
+  const finished = `The "${action}" action was already finished with .execute()`;
+  return method === 'execute'
+    ? `${finished}, and an action has only one .execute(). Remove the second .execute() call.`
+    : `${finished}, so .${method}() cannot add to it. Move the .${method}() call before .execute().`;
 }
 
 // Re-export ElementClass type for use in chooseElement
