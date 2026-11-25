@@ -144,6 +144,12 @@ export type ElementContext = {
    */
   _seatView?: boolean;
   /**
+   * Internal: true on the bot's search copy of a game (#1809). A pick the
+   * search makes is speculative, so a refused one is no player's refused
+   * pick and logs nothing. Not public API.
+   */
+  _searchCopy?: boolean;
+  /**
    * Internal: the elements the platform has declared partition roots
    * (`Game#definePartition` for a root built in memory, `Game#adoptSubtree`
    * for one grafted from storage),

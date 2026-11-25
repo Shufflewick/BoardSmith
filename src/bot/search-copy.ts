@@ -56,6 +56,7 @@ export function restoreSeatCopy<G extends Game>(
   }
 
   const game = constructGame(GameClass, gameOptions as GameOptions);
+  game._ctx._searchCopy = true;
 
   // Adopt the authoritative element tree (clears + rebuilds children, re-points
   // the game's own serialized refs, resolves element references).
