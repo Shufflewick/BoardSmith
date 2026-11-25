@@ -1,5 +1,5 @@
 {
-  "revision": 533,
+  "revision": 534,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4207,6 +4207,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith/ui adds useAnimatedView and the animation queue's playingView, so a board draws each queued event over the frame it arrived with (#1815)"
+    },
+    {
+      "revision": 534,
+      "date": "2026-11-25",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "A select game option's default and choice values are strings: SelectOption types them so, and parseGameOptionList (so validate, dev and build) refuses any other, as the platform's manifest check already does (#1816). selectGameOptions matches a select value by string equality only, so number and object choices are gone. Platform: re-vendor; nothing else is required, and no payload or stored format changed."
     }
   ]
 }
