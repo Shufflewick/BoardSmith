@@ -1,5 +1,5 @@
 {
-  "revision": 520,
+  "revision": 521,
   "surfaceHash": "6b5c18ddd6ddafb3",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4103,6 +4103,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The Action Panel marks a verb in a selected thing's menu with the field the thing answers, and the smoke walk counts that field, and one that opens filled, as met (#1802)"
+    },
+    {
+      "revision": 521,
+      "date": "2026-11-25",
+      "surfaceHash": "6b5c18ddd6ddafb3",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The shell's message log wraps a long word inside its line instead of scrolling sideways on a phone (#1803)"
     }
   ]
 }
