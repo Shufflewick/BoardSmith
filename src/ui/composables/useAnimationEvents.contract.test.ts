@@ -952,6 +952,29 @@ describe('the sequences council found breaking the contract after #1821 (#1822, 
     expect(queue.isAnimating.value).toBe(false);
   });
 
+  it('ends the play of a handler whose scope stopped without releasing it (#1824 review F1)', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = defineComponent({
+      setup() {
+        // Vue stops running a scope's dispose callbacks at the first that throws, so the queue's own never runs.
+        onScopeDispose(() => { throw new Error('a cleanup failed'); });
+        useAnimationEvents()!.registerHandler('x', async (e) => void calls.push(`x${e.id}`), { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    const queue = shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    show.value = false;
+    await expect(nextTick()).rejects.toThrow('a cleanup failed');
+
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual([]);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
   it('refuses a registration and a claim made after an await in setup resumes in a component that already unmounted', async () => {
     const frame = shallowRef(frameOf([]));
     const show = shallowRef(true);

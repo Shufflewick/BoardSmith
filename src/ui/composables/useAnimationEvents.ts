@@ -289,8 +289,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const playing: Playing = { kind: 'playing', event, entry, abort: new AbortController() };
     state = playing;
     callOuts.push(() => {
-      // A watcher of the snapshot may have unmounted the handler's component; its release ends this play.
-      if (!callable(entry)) return;
+      // A watcher may have unmounted the handler's component, or its scope stopped without releasing it (a cleanup before the queue's threw).
+      if (!callable(entry)) return send(() => settle(playing));
       const { signal } = playing.abort;
       let settled: Promise<void>;
       try {
