@@ -1,8 +1,10 @@
+// @vitest-environment jsdom
 /**
  * Tests for useAnimationEvents composable
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick, effectScope } from 'vue';
+import { ref, nextTick, effectScope, watch, defineComponent, h, provide, onMounted, onUnmounted } from 'vue';
+import { mount } from '@vue/test-utils';
 import {
   createAnimationEvents,
   useAnimationEvents,
@@ -1512,5 +1514,121 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
     q.instance.skipAll();
     await flushMicrotasks();
     expect(q.played).toEqual(['r1 skipped']);
+  });
+
+  it('runs each queued skip: run handler once when the playing handler calls Skip from its abort listener', async () => {
+    const q = harness();
+    q.instance.registerHandler('slow', (_event, { signal }) => {
+      signal.addEventListener('abort', () => q.instance.skipAll());
+      return new Promise<void>(() => {});
+    }, { skip: 'drop' });
+    q.register('sync', 'run');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'sync')]);
+    await nextTick();
+
+    q.instance.skipAll();
+    await flushMicrotasks();
+    expect(q.played).toEqual(['sync2 skipped']);
+  });
+
+  it('runs no skip: run handler when the playing handler calls Skip from its abort listener as the owner scope stops', async () => {
+    const q = harness();
+    q.instance.registerHandler('slow', (_event, { signal }) => {
+      signal.addEventListener('abort', () => q.instance.skipAll());
+      return new Promise<void>(() => {});
+    }, { skip: 'drop' });
+    q.register('sync', 'run');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'sync')]);
+    await nextTick();
+
+    q.scope.stop();
+    await flushMicrotasks();
+    expect(q.played).toEqual([]);
+  });
+
+  it('runs no further skip: run handler once one run during Skip stops the owner scope', async () => {
+    const q = harness();
+    q.register('slow');
+    q.instance.registerHandler('r', async (event) => {
+      q.played.push(`r${event.id}`);
+      q.scope.stop();
+    }, { skip: 'run' });
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'r'), createEvent(3, 'r')]);
+    await nextTick();
+
+    q.instance.skipAll();
+    await flushMicrotasks();
+    expect(q.played).toEqual(['slow1', 'r2']);
+  });
+
+  it('does not call a handler that a watcher of isAnimating unregistered as the event started', async () => {
+    const q = harness({ handlerWaitTimeout: 0 });
+    const unregister = q.register('test');
+    watch(q.instance.isAnimating, (animating) => { if (animating) unregister(); }, { flush: 'sync' });
+    q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await flushMicrotasks();
+    expect(q.played).toEqual([]);
+    expect(q.instance.isAnimating.value).toBe(false);
+  });
+
+  it('treats an event that a watcher of isAnimating skipped as it started like any skipped event', async () => {
+    const q = harness();
+    q.register('drop');
+    q.register('sync', 'run');
+    watch(q.instance.isAnimating, (animating) => { if (animating) q.instance.skipAll(); }, { flush: 'sync' });
+    q.frame.value = seatFrame(1, [createEvent(1, 'drop')]);
+    await nextTick();
+    q.frame.value = seatFrame(1, [createEvent(2, 'sync')]);
+    await nextTick();
+    await flushMicrotasks();
+    expect(q.played).toEqual(['sync2 skipped']);
+  });
+
+  it('skips a waiting event once the last handler unregisters while the board claims no events', async () => {
+    const q = harness({ handlerWaitTimeout: 60_000 });
+    q.instance.claimNoEvents();
+    const unregister = q.register('other');
+    q.frame.value = seatFrame(1, [createEvent(1, 'unhandled')]);
+    await nextTick();
+    expect(q.instance.isAnimating.value).toBe(true);
+
+    unregister();
+    await flushMicrotasks();
+    expect(q.instance.isAnimating.value).toBe(false);
+  });
+});
+
+describe('a board that swaps the child handling an event in the frame that brings the event (#1819)', () => {
+  it('hands the event to the child that mounts, not the one that unmounts', async () => {
+    const frame = ref<AnimationFrame & { phase: 'a' | 'b' }>({ phase: 'a', animationEvents: [] });
+    const played: string[] = [];
+    const child = (name: string) => defineComponent({
+      setup() {
+        const animations = useAnimationEvents()!;
+        let unregister = () => {};
+        onMounted(() => {
+          unregister = animations.registerHandler('x', async (event) => void played.push(`${name}${event.id}`), { skip: 'drop' });
+        });
+        onUnmounted(() => unregister());
+        return () => h('div', name);
+      },
+    });
+    const ChildA = child('a');
+    const ChildB = child('b');
+    const Shell = defineComponent({
+      setup() {
+        provide(ANIMATION_EVENTS_KEY, createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 }));
+        return () => h(frame.value.phase === 'a' ? ChildA : ChildB);
+      },
+    });
+    const wrapper = mount(Shell);
+    await nextTick();
+
+    frame.value = { phase: 'b', animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+    await flushMicrotasks();
+    expect(played).toEqual(['b1']);
+    wrapper.unmount();
   });
 });

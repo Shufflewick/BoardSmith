@@ -90,9 +90,13 @@ export interface AnimationFrame {
   viewerSeat?: number;
 }
 
-/** Where playback is. Only `waiting` holds a timer and only `playing` an abort controller, so neither outlives its state. */
+/**
+ * Where playback is. Only `waiting` holds a timer and only `playing` an abort controller, so neither outlives its state.
+ * `starting` is an event whose handler is not yet called, so a watcher of isAnimating that skips it skips a queued event.
+ */
 type Playback =
   | { kind: 'idle' }
+  | { kind: 'starting'; event: AnimationEvent }
   | { kind: 'waiting'; event: AnimationEvent; timer: ReturnType<typeof setTimeout> }
   | { kind: 'playing'; event: AnimationEvent; abort: AbortController }
   | { kind: 'disposed' };
@@ -174,7 +178,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const queue: AnimationEvent[] = [];
   const pendingCount = ref(0);
   const state = shallowRef<Playback>({ kind: 'idle' });
-  const isAnimating = computed(() => state.value.kind === 'waiting' || state.value.kind === 'playing');
+  const isAnimating = computed(() => state.value.kind !== 'idle' && state.value.kind !== 'disposed');
 
   // The highest id queued in each timeline, kept for good, so an event is
   // queued once however many frames carry it, and a return to a seat replays nothing.
@@ -186,26 +190,38 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     return noEventClaims.size > 0 && handlers.size === 0;
   }
 
-  /** Start the next event while idle: hand it to its handler, wait for one to register, or skip it. */
+  /** The wait for a handler to register, or none when the event is skipped at once. */
+  function waitFor(event: AnimationEvent): Playback | undefined {
+    if (handlerWaitTimeout === 0 || claimedNone()) return undefined;
+    return { kind: 'waiting', event, timer: setTimeout(timeOut, handlerWaitTimeout) };
+  }
+
+  /**
+   * Start the next event while idle: hand it to its handler, wait for one to register, or skip it.
+   * Every state change is published before any game code runs, and the state is checked again after.
+   */
   function pump(): void {
     while (state.value.kind === 'idle' && queue.length > 0) {
       const event = queue.shift()!;
+      const next: Playback | undefined = handlers.has(event.type) ? { kind: 'starting', event } : waitFor(event);
+      if (next) state.value = next;
       pendingCount.value = queue.length;
-      const entry = handlers.get(event.type);
-      if (entry) play(event, entry.handler);
-      else if (handlerWaitTimeout > 0 && !claimedNone()) {
-        state.value = { kind: 'waiting', event, timer: setTimeout(timeOut, handlerWaitTimeout) };
-      }
+      if (next?.kind === 'starting' && state.value === next) play(event);
     }
   }
 
-  function play(event: AnimationEvent, handler: AnimationHandler): void {
+  function play(event: AnimationEvent): void {
+    const entry = handlers.get(event.type);
+    if (!entry) {
+      state.value = waitFor(event) ?? { kind: 'idle' };
+      return;
+    }
     const abort = new AbortController();
     state.value = { kind: 'playing', event, abort };
     let settled: Promise<void>;
     try {
       // A handler written in JavaScript may return no promise.
-      settled = Promise.resolve(handler(event, { signal: abort.signal }));
+      settled = Promise.resolve(entry.handler(event, { signal: abort.signal }));
     } catch (error) {
       settled = Promise.reject(error);
     }
@@ -252,22 +268,27 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     pump();
   }
 
-  /** End playback and empty the queue, returning the events that never started: the waiting one first. */
-  function stop(): AnimationEvent[] {
+  /**
+   * End playback in `next` and empty the queue, returning the events that never started: the waiting or starting one first.
+   * The abort comes last, so a listener that calls back in finds the queue already stopped.
+   */
+  function stop(next: Playback): AnimationEvent[] {
     const now = state.value;
-    const skipped = now.kind === 'waiting' ? [now.event, ...queue] : [...queue];
-    if (now.kind === 'waiting') clearTimeout(now.timer);
-    if (now.kind === 'playing') now.abort.abort();
-    if (now.kind !== 'disposed') state.value = { kind: 'idle' };
+    if (now.kind === 'disposed') return [];
+    const skipped = now.kind === 'waiting' || now.kind === 'starting' ? [now.event, ...queue] : [...queue];
     queue.length = 0;
+    if (now.kind === 'waiting') clearTimeout(now.timer);
+    state.value = next;
     pendingCount.value = 0;
+    if (now.kind === 'playing') now.abort.abort();
     return skipped;
   }
 
   /** Stop, then call the skip: 'run' handler of each event that never started, with its signal already aborted. */
   function skipAll(): void {
     const aborted = AbortSignal.abort();
-    for (const event of stop()) {
+    for (const event of stop({ kind: 'idle' })) {
+      if (state.value.kind === 'disposed') return;
       const entry = handlers.get(event.type);
       if (entry?.skip !== 'run') continue;
       try {
@@ -287,7 +308,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (state.value.kind === 'waiting' && state.value.event.type === eventType) queueMicrotask(resume);
     return () => {
       // Another component may have replaced this handler since; leave theirs.
-      if (handlers.get(eventType) === entry) handlers.delete(eventType);
+      if (handlers.get(eventType) !== entry) return;
+      handlers.delete(eventType);
+      if (state.value.kind === 'waiting') queueMicrotask(skipUnclaimedWait);
     };
   }
 
@@ -333,14 +356,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     },
     { immediate: true, flush: 'sync' },
   );
-  // Playback starts once Vue has drawn the frame, not inside the code that set the state.
-  watch(framesLanded, pump, { immediate: true, flush: 'post' });
+  // Playback starts once Vue has drawn the frame and run its unmount and mount hooks, so a child it replaced has handed over its handlers.
+  watch(framesLanded, () => queueMicrotask(pump), { immediate: true, flush: 'post' });
 
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
-  onScopeDispose(() => {
-    stop();
-    state.value = { kind: 'disposed' };
-  }, true);
+  onScopeDispose(() => stop({ kind: 'disposed' }), true);
 
   return {
     registerHandler,
