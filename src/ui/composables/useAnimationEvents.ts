@@ -20,7 +20,7 @@
  * }, { skip: 'drop' });
  * ```
  */
-import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onBeforeUnmount, onMounted, onScopeDispose, onUnmounted, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
+import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch, type EffectScope, type InjectionKey, type Ref } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -81,11 +81,12 @@ export interface AnimationFrame {
 }
 
 /**
- * A registration or claim, bound to the component (or effect scope) that made it.
- * `life` is that component's mount lifetime, which changes the moment Vue mounts or unmounts it;
+ * A registration or claim, bound to the effect scope that made it.
+ * `life` changes the moment Vue mounts the scope's component or stops the scope;
  * the queue's handler map and claims follow it as inputs, in the order they come.
  */
 interface Lease {
+  scope: EffectScope;
   life: 'mounting' | 'mounted' | 'released';
   /** Put it in the handler map or the claims, as a step. */
   add: () => void;
@@ -138,8 +139,9 @@ export interface UseAnimationEventsReturn {
   /**
    * Register a handler for an event type. Call it in a component's setup (or inside an
    * effect scope): the handler counts once the update that mounts that component has finished,
-   * is released when it unmounts, and its signal aborts if it is playing then. The returned
-   * function releases it earlier, the same way, taking effect in order with every other input.
+   * is released when the scope it was made in stops (a component's unmount, for its setup), and
+   * its signal aborts if it is playing then. The returned function releases it earlier, the same
+   * way, taking effect in order with every other input.
    */
   registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /**
@@ -287,8 +289,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const playing: Playing = { kind: 'playing', event, entry, abort: new AbortController() };
     state = playing;
     callOuts.push(() => {
-      // A watcher of the snapshot may have unmounted the handler's component; its release ends this play.
-      if (entry.life !== 'mounted') return;
+      // A watcher may have unmounted the handler's component, or its scope stopped without releasing it (a cleanup before the queue's threw).
+      if (!callable(entry)) return send(() => settle(playing));
       const { signal } = playing.abort;
       let settled: Promise<void>;
       try {
@@ -329,7 +331,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (skipped.length > 0) inbox.push(runSkipped);
     callOuts.push(() => {
       const entry = handlers.get(event.type);
-      if (entry?.skip !== 'run' || entry.life !== 'mounted') return;
+      if (entry?.skip !== 'run' || !callable(entry)) return;
       const logError = (error: unknown) => console.error(`Handler error during skipAll for '${event.type}':`, error);
       try {
         void Promise.resolve(entry.handler(event, { signal: AbortSignal.abort() })).catch(logError);
@@ -357,6 +359,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       abortAfter(state);
       becomeIdle();
     }
+  }
+
+  /** Vue marks a scope stopped before it runs the scope's dispose callbacks, so one of them calling in finds the lease not yet released. */
+  function callable(entry: HandlerEntry): boolean {
+    return entry.life === 'mounted' && entry.scope.active;
   }
 
   // Leases a Vue update mounts, taken in as one input once that update has finished.
@@ -388,31 +395,29 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     scheduleAdvance();
   }
 
-  /**
-   * Bind `lease` to the caller: it is taken in once the caller's component has mounted, with every
-   * other component the same update mounts, and released the moment that component or scope ends, whichever is first.
-   */
-  function bindToCaller(method: string, lease: Lease): () => void {
+  /** The live scope a registration or claim belongs to: the queue releases it when that scope stops. */
+  function callerScope(method: string): EffectScope {
     const scope = getCurrentScope();
     if (!scope) {
       throw new Error(
         `${method}() must be called from a component's setup (or inside an effectScope), so the queue can release it when that component unmounts.`,
       );
     }
-    const end = () => { if (retire(lease)) send(() => dropRetired(lease)); };
-    onScopeDispose(end);
-    const instance = getCurrentInstance();
-    if (instance) {
-      // A detached scope in the component's setup outlives the component unless the unmount ends it too.
-      onBeforeUnmount(end);
-      onUnmounted(() => {
-        if (!scope.active) return;
-        console.warn(
-          `${method}() was called in an effect scope that outlived the component whose setup made the call (a detached effectScope, createSharedComposable or a Pinia setup store). ` +
-          'The queue released it when that component unmounted, so no other component keeps it. Call it from the setup of the component that plays the event.',
-        );
-      });
+    if (!scope.active) {
+      throw new Error(
+        `${method}() was called in an effect scope that has already stopped (for example after an await in the setup of a component that has since unmounted), so the queue could never release it. Call it before the first await in setup.`,
+      );
     }
+    return scope;
+  }
+
+  /**
+   * Bind `lease` to its scope: it is taken in once the caller's component has mounted, with every
+   * other component the same update mounts, and released the moment the scope stops.
+   */
+  function bindToCaller(lease: Lease): () => void {
+    onScopeDispose(() => { if (retire(lease)) send(() => dropRetired(lease)); });
+    const instance = getCurrentInstance();
     if (!instance || instance.isMounted) {
       send(() => take([lease]));
     } else {
@@ -449,16 +454,16 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
     const entry: HandlerEntry = {
-      life: 'mounting', type: eventType, handler, skip: handlerOptions.skip,
+      scope: callerScope('registerHandler'), life: 'mounting', type: eventType, handler, skip: handlerOptions.skip,
       add: () => handlers.set(eventType, entry),
       drop: () => dropHandler(entry),
     };
-    return bindToCaller('registerHandler', entry);
+    return bindToCaller(entry);
   }
 
   function claimNoEvents(): () => void {
-    const claim: Lease = { life: 'mounting', add: () => noEventClaims.add(claim), drop: () => noEventClaims.delete(claim) };
-    return bindToCaller('claimNoEvents', claim);
+    const claim: Lease = { scope: callerScope('claimNoEvents'), life: 'mounting', add: () => noEventClaims.add(claim), drop: () => noEventClaims.delete(claim) };
+    return bindToCaller(claim);
   }
 
   const framesLanded = ref(0);

@@ -8,19 +8,20 @@
  * handler, an abort listener, a watcher of the queue's snapshot) it may call
  * back in. Boards and claims are real components: children of the shell, which
  * mount and unmount in the shell's next update, or Vue apps of their own, which
- * mount and unmount at once. It checks the invariants docs/ui-components.md
- * § "The playback contract" promises a game author at every call, at every
+ * mount and unmount at once. It asserts what docs/ui-components.md
+ * § "The playback contract" says the walk asserts, at every call, at every
  * snapshot the queue publishes, in every abort listener, after every input
  * (where pendingCount must count exactly the events still queued), and, at the
  * end, that every event was handed to a handler or ended for a reason the
- * contract gives. Explicit releases, registrations in an effect scope and
- * `handlerWaitTimeout: 0` are left to the cases below it.
+ * contract gives. Explicit releases, registrations in an effect scope, calls
+ * from a scope's teardown and `handlerWaitTimeout: 0` are left to the cases below it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { createApp, defineComponent, effectScope, h, nextTick, onBeforeUnmount, onMounted, provide, shallowRef, Suspense, watch, type App, type Component, type VNodeChild } from 'vue';
+import { createApp, defineComponent, effectScope, h, nextTick, onBeforeUnmount, onMounted, onScopeDispose, provide, shallowRef, Suspense, watch, type App, type Component, type VNodeChild } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, useAnimationEvents, type AnimationFrame, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { createSeededRandom } from '../../utils/random.js';
+import AwaitingBoard from './__fixtures__/AwaitingBoard.vue';
 
 const TYPES = ['a', 'b', 'c'] as const;
 const WAIT = 1000;
@@ -153,7 +154,7 @@ class Walk {
     return defineComponent({
       name: part.name,
       setup() {
-        // First, so the walk knows the part is leaving before the queue's own unmount hook releases it.
+        // Runs before Vue stops the component's scope, so the walk knows the part is leaving before the queue releases it.
         onBeforeUnmount(() => walk.unmounting(part));
         const queue = useAnimationEvents()!;
         if (part.claim) queue.claimNoEvents();
@@ -807,7 +808,7 @@ describe('the seven sequences council found breaking the contract (#1821)', () =
   });
 });
 
-describe('the sequences council found breaking the contract after #1821 (#1822)', () => {
+describe('the sequences council found breaking the contract after #1821 (#1822, #1824)', () => {
   const event = (id: number, type: string) => ({ id, type, data: {} });
   const frameOf = (events: Array<{ id: number; type: string; data: Record<string, unknown> }>): AnimationFrame => ({
     animationEvents: events, gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 1,
@@ -926,51 +927,71 @@ describe('the sequences council found breaking the contract after #1821 (#1822)'
     expect(calls).toEqual([]);
   });
 
-  /** A board child whose setup registers `x` inside a detached effect scope it never stops. */
-  function detachedBoard(calls: string[]) {
-    return defineComponent({
-      setup() {
-        const queue = useAnimationEvents()!;
-        effectScope(true).run(() => queue.registerHandler('x', (e, { signal }) => {
-          calls.push(`x${e.id}`);
-          signal.addEventListener('abort', () => calls.push(`x${e.id} aborted`));
-          return new Promise<void>(() => {});
-        }, { skip: 'drop' }));
-        return () => h('i');
-      },
-    });
-  }
-
-  it('releases a handler registered in a detached scope when its component unmounts', async () => {
+  it('never runs a skip: run handler for a Skip sent from its own scope teardown', async () => {
     const frame = shallowRef(frameOf([]));
     const calls: string[] = [];
     const show = shallowRef(true);
-    const Board = detachedBoard(calls);
-    shell(frame, () => (show.value ? h(Board) : null));
+    const Board = defineComponent({
+      setup() {
+        const q = useAnimationEvents()!;
+        // Registered first, so it runs while the queue still holds this board's handlers.
+        onScopeDispose(() => q.skipAll());
+        q.registerHandler('y', () => new Promise<void>(() => {}), { skip: 'drop' });
+        q.registerHandler('x', async (e, { signal }) => void calls.push(`x${e.id}${signal.aborted ? ' skipped' : ''}`), { skip: 'run' });
+        return () => h('i');
+      },
+    });
+    const queue = shell(frame, () => (show.value ? h(Board) : null));
     await flushPromises();
+    frame.value = frameOf([event(1, 'y'), event(2, 'x')]);
+    await flushPromises();
+
     show.value = false;
     await flushPromises();
+    expect(calls).toEqual([]);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
+  it('ends the play of a handler whose scope stopped without releasing it (#1824 review F1)', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = defineComponent({
+      setup() {
+        // Vue stops running a scope's dispose callbacks at the first that throws, so the queue's own never runs.
+        onScopeDispose(() => { throw new Error('a cleanup failed'); });
+        useAnimationEvents()!.registerHandler('x', async (e) => void calls.push(`x${e.id}`), { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    const queue = shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    show.value = false;
+    await expect(nextTick()).rejects.toThrow('a cleanup failed');
 
     frame.value = frameOf([event(1, 'x')]);
     await flushPromises();
     expect(calls).toEqual([]);
-    expect(vi.mocked(console.warn)).toHaveBeenCalledWith(expect.stringContaining('registerHandler() was called in an effect scope that outlived the component'));
+    expect(queue.isAnimating.value).toBe(false);
   });
 
-  it('aborts a playing handler registered in a detached scope when its component unmounts', async () => {
+  it('refuses a registration and a claim made after an await in setup resumes in a component that already unmounted', async () => {
     const frame = shallowRef(frameOf([]));
-    const calls: string[] = [];
     const show = shallowRef(true);
-    const Board = detachedBoard(calls);
-    const queue = shell(frame, () => (show.value ? h(Board) : null));
+    let resume!: () => void;
+    const resumed = new Promise<void>((resolve) => { resume = resolve; });
+    let report!: (errors: string[]) => void;
+    const reported = new Promise<string[]>((resolve) => { report = resolve; });
+    shell(frame, () => (show.value ? h(Suspense, null, { default: () => h(AwaitingBoard, { resumed, report }) }) : null));
     await flushPromises();
-    frame.value = frameOf([event(1, 'x')]);
-    await flushPromises();
-    expect(calls).toEqual(['x1']);
-
     show.value = false;
     await flushPromises();
-    expect(calls).toEqual(['x1', 'x1 aborted']);
-    expect(queue.isAnimating.value).toBe(false);
+
+    resume();
+    const errors = await reported;
+    expect(errors).toEqual([
+      expect.stringContaining('registerHandler() was called in an effect scope that has already stopped'),
+      expect.stringContaining('claimNoEvents() was called in an effect scope that has already stopped'),
+    ]);
   });
 });
