@@ -1,5 +1,5 @@
 {
-  "revision": 540,
+  "revision": 541,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4263,6 +4263,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The UI animation queue releases a board's handlers and claims when it unmounts, aborting a playing handler, and isAnimating stays true from a frame landing until its last event ends (#1820)."
+    },
+    {
+      "revision": 541,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The animation queue takes a board's handlers in once the update that mounts it has finished, publishes one snapshot per input, runs skipped events in order, and accepts frames of any size."
     }
   ]
 }
