@@ -107,4 +107,13 @@ describe('PlayerToken shape is derived from seat, not render position', () => {
     const cls = mount(PlayerToken, { props: { name: 'A', seat } }).find('.tok').classes().find(c => c.startsWith('sh-'));
     expect(cls).toBe(shape);
   });
+
+  it('outlines only the acting seat in the strip, in that token\'s own shape (#1828)', () => {
+    const strip = mount(PlayersPanel, {
+      props: { players: SEAT_ORDER, playerSeat: 1, dueSeats: [2], seatStrip: true },
+    });
+    const toks = strip.findAll('.strip-tokens .tok');
+    expect(toks.map(tok => tok.find('.ring').exists())).toEqual([false, true, false]);
+    expect(toks[1].find('.ring path').attributes('d')).toBe(toks[1].find('.shape path').attributes('d'));
+  });
 });

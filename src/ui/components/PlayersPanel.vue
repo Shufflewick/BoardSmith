@@ -314,6 +314,7 @@ defineSlots<{
           :seat="player.seat"
           :color="player.color"
           :size="isPlayerActive(player.seat) ? STRIP_TOKEN_ACTING : STRIP_TOKEN_IDLE"
+          :acting="isPlayerActive(player.seat)"
         />
         <slot name="player-strip-extra" :player="player"></slot>
       </span>
@@ -584,35 +585,6 @@ defineSlots<{
   place-items: center;
   /* Clears the acting token's 3px outline. */
   gap: 4px;
-}
-
-/* Its own stacking context, so the outline sits behind the token rather than behind the strip. */
-.strip-tokens .pt.strip-active > .tok {
-  isolation: isolate;
-}
-
-/* The acting token's outline: its own shape, 3px larger, behind it, throbbing so a glance finds whose turn it is.
-   Same PERF constraint as .turn-indicator-dot: transform + opacity ONLY. */
-.strip-tokens .pt.strip-active > .tok::after {
-  content: '';
-  position: absolute;
-  inset: -3px;
-  z-index: -1;
-  clip-path: var(--tok-shape);
-  background: var(--bsg-accent);
-  pointer-events: none;
-  animation: strip-throb 1.6s ease-in-out infinite;
-}
-
-/* Throbs inward, so the outline never reaches past its resting 3px onto a seat's extra. */
-@keyframes strip-throb {
-  0%, 100% { transform: scale(1); opacity: 1; }
-  50% { transform: scale(0.92); opacity: 0.35; }
-}
-
-/* Reduced motion keeps the outline, still at its resting full-size, opaque state. */
-.bs-reduce-motion .strip-tokens .pt.strip-active > .tok::after {
-  animation: none;
 }
 
 /* The capped-list footer. Deliberately not a card: it is not a seat, and drawing
