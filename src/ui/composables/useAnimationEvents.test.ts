@@ -46,7 +46,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -65,7 +65,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
 
@@ -92,7 +92,7 @@ describe('useAnimationEvents', () => {
     it('a stale unregister leaves the handler that replaced it in place (#868)', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: string[] = [];
-      const instance = createAnimationEvents({ events: () => events.value, handlerWaitTimeout: 0 });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 0 });
 
       const unregisterFirst = instance.registerHandler('test', async () => { handled.push('first'); }, { skip: 'drop' });
       instance.registerHandler('test', async () => { handled.push('second'); }, { skip: 'drop' });
@@ -109,7 +109,7 @@ describe('useAnimationEvents', () => {
       const handled: Array<{ type: string; id: number }> = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('typeA', async (event) => {
@@ -142,7 +142,7 @@ describe('useAnimationEvents', () => {
       const order: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -166,7 +166,7 @@ describe('useAnimationEvents', () => {
       const timeline: Array<{ event: string; id: number }> = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -194,7 +194,7 @@ describe('useAnimationEvents', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -224,7 +224,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
 
@@ -250,7 +250,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       expect(instance.isAnimating.value).toBe(false);
@@ -261,7 +261,7 @@ describe('useAnimationEvents', () => {
       let wasAnimatingDuringHandler = false;
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async () => {
@@ -284,7 +284,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async () => {
@@ -305,7 +305,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -335,7 +335,7 @@ describe('useAnimationEvents', () => {
       const handlerStarts: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -362,7 +362,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -400,7 +400,7 @@ describe('useAnimationEvents', () => {
       const timeline: string[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('slow', async (_event, { signal }) => {
@@ -437,7 +437,7 @@ describe('useAnimationEvents', () => {
       let signalAborted: boolean | undefined;
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (_event, { signal }) => {
@@ -457,7 +457,7 @@ describe('useAnimationEvents', () => {
       let handlerFinished = false;
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       // Non-cooperative handler — ignores signal
@@ -493,7 +493,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -522,7 +522,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -556,7 +556,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -592,7 +592,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       // Pause so events queue up
@@ -613,7 +613,7 @@ describe('useAnimationEvents', () => {
       const counts: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async () => {
@@ -637,7 +637,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       // Pause to queue events
@@ -664,7 +664,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -690,7 +690,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -720,7 +720,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('test', async (event) => {
@@ -751,7 +751,7 @@ describe('useAnimationEvents', () => {
       const handled: AnimationEvent[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       // Push event with no handler registered
@@ -780,7 +780,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       events.value = [createEvent(42, 'unknownType')];
@@ -807,7 +807,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('handled', async (event) => {
@@ -839,7 +839,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       events.value = [createEvent(1, 'lazy')];
@@ -869,7 +869,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       events.value = [
@@ -903,7 +903,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 500,
       });
 
@@ -927,7 +927,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
 
@@ -948,7 +948,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('known', async (event) => {
@@ -981,7 +981,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ events: () => events.value });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
       instance.claimNoEvents();
 
       events.value = [createEvent(1, 'demo'), createEvent(2, 'demo')];
@@ -998,7 +998,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ events: () => events.value });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
 
       events.value = [createEvent(1, 'demo')];
       await nextTick();
@@ -1019,7 +1019,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({ events: () => events.value });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
       instance.registerHandler('known', async () => {}, { skip: 'drop' });
       instance.claimNoEvents();
 
@@ -1041,7 +1041,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({ events: () => events.value });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
 
       events.value = [createEvent(1, 'move')];
       await nextTick();
@@ -1064,7 +1064,7 @@ describe('useAnimationEvents', () => {
       vi.useFakeTimers();
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ events: () => events.value });
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
       const release = instance.claimNoEvents();
       release();
 
@@ -1081,7 +1081,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       // Register handler BEFORE event arrives
@@ -1107,7 +1107,7 @@ describe('useAnimationEvents', () => {
       const dropCalls: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('sync-type', async (event, { signal }) => {
@@ -1144,7 +1144,7 @@ describe('useAnimationEvents', () => {
       const timeline: string[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('sync-work', async (_event, { signal }) => {
@@ -1171,7 +1171,7 @@ describe('useAnimationEvents', () => {
       const calls: number[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('cosmetic', async (event) => {
@@ -1194,7 +1194,7 @@ describe('useAnimationEvents', () => {
       const secondCalled = { value: false };
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('boom', async () => {
@@ -1222,7 +1222,7 @@ describe('useAnimationEvents', () => {
       const timeline: string[] = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('slow-sync', async (_event, { signal }) => {
@@ -1252,7 +1252,7 @@ describe('useAnimationEvents', () => {
       const processed: Array<{ type: string; id: number }> = [];
 
       const instance = createAnimationEvents({
-        events: () => events.value,
+        frame: () => ({ animationEvents: events.value }),
       });
 
       instance.registerHandler('sync', async (event) => {
@@ -1317,12 +1317,10 @@ describe('useAnimationEvents', () => {
      * moving the timeline, when one is given) and waits for the queue to drain.
      */
     function harness(initialTimeline?: string) {
-      const events = ref<AnimationEvent[]>([]);
-      const timeline = ref(initialTimeline);
+      const frame = ref({ events: [] as AnimationEvent[], timeline: initialTimeline });
       const delivered: number[] = [];
       const instance = createAnimationEvents({
-        events: () => events.value,
-        ...(initialTimeline === undefined ? {} : { timeline: () => timeline.value }),
+        frame: () => ({ animationEvents: frame.value.events, ...timelineOf(frame.value.timeline) }),
       });
       instance.registerHandler('test', async (event) => {
         delivered.push(event.id);
@@ -1330,8 +1328,10 @@ describe('useAnimationEvents', () => {
       return {
         delivered,
         async send(ids: number[], movedTimeline?: string) {
-          if (movedTimeline !== undefined) timeline.value = movedTimeline;
-          events.value = ids.map((id) => createEvent(id, 'test'));
+          frame.value = {
+            events: ids.map((id) => createEvent(id, 'test')),
+            timeline: movedTimeline ?? frame.value.timeline,
+          };
           await nextTick();
           await waitForIdle(instance);
         },
@@ -1373,30 +1373,30 @@ describe('useAnimationEvents', () => {
     it("plays a new seat's events after skipping the old seat's, whatever their numbers (#489)", async () => {
       // Each seat numbers its own events, so the queue can hold seat 1's
       // events 5..7 when the page moves to seat 2, whose next event is 1.
-      const events = ref<AnimationEvent[]>([]);
-      const timeline = ref('game-a:0:1');
+      const frame = ref({ events: [] as AnimationEvent[], seat: 1 });
       const delivered: string[] = [];
-      const instance = createAnimationEvents({ events: () => events.value, timeline: () => timeline.value });
+      const instance = createAnimationEvents({
+        frame: () => ({ animationEvents: frame.value.events, gameInstanceId: 'game-a', restoreEpoch: 0, viewerSeat: frame.value.seat }),
+      });
       instance.registerHandler('test', async (event, { signal }) => {
-        delivered.push(`${timeline.value}#${event.id}`);
+        delivered.push(`seat ${frame.value.seat}#${event.id}`);
         // Seat 1's first event is still playing when the page changes seat.
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       }, { skip: 'drop' });
 
-      events.value = [5, 6, 7].map((id) => createEvent(id, 'test'));
+      frame.value = { events: [5, 6, 7].map((id) => createEvent(id, 'test')), seat: 1 };
       await nextTick();
       // Seat 2's first frame carries no events.
-      timeline.value = 'game-a:0:2';
-      events.value = [];
+      frame.value = { events: [], seat: 2 };
       await nextTick();
       instance.skipAll();
       await waitForIdle(instance);
 
-      events.value = [createEvent(1, 'test')];
+      frame.value = { events: [createEvent(1, 'test')], seat: 2 };
       await nextTick();
       instance.skipAll();
       await waitForIdle(instance);
-      expect(delivered).toEqual(['game-a:0:1#5', 'game-a:0:2#1']);
+      expect(delivered).toEqual(['seat 1#5', 'seat 2#1']);
     });
 
     it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {
@@ -1417,7 +1417,7 @@ describe('unmount (#749)', () => {
     try {
       const events = ref<AnimationEvent[]>([]);
       const scope = effectScope();
-      scope.run(() => createAnimationEvents({ events: () => events.value, handlerWaitTimeout: 500 }));
+      scope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 }));
       events.value = [createEvent(1, 'unhandled')];
       await nextTick();
 
@@ -1440,11 +1440,11 @@ describe('playingView', () => {
 
   /** A queue whose 'test' handler records the view it played over and waits until released. */
   function harness(options: { handlerWaitTimeout?: number } = {}) {
-    const frame = ref({ events: [] as AnimationEvent[], view: viewAt(0), timeline: 'game:0' });
+    const frame = ref<{ events: AnimationEvent[]; view: GameRootView; timeline: string | undefined }>({
+      events: [], view: viewAt(0), timeline: 'game:0',
+    });
     const instance = createAnimationEvents({
-      events: () => frame.value.events,
-      view: () => frame.value.view,
-      timeline: () => frame.value.timeline,
+      frame: () => ({ animationEvents: frame.value.events, view: frame.value.view, ...timelineOf(frame.value.timeline) }),
       ...options,
     });
     const playedOver: Array<number | undefined> = [];
@@ -1516,7 +1516,7 @@ describe('playingView', () => {
     q.release();
     await flushMicrotasks();
 
-    q.frame.value = { events: [], view: viewAt(2), timeline: undefined as unknown as string };
+    q.frame.value = { events: [], view: viewAt(2), timeline: undefined };
     q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(9), timeline: 'game:1' };
     await nextTick();
     expect(q.playedOver).toEqual([1, 9]);
@@ -1532,6 +1532,38 @@ describe('playingView', () => {
     await nextTick();
     await flushMicrotasks();
     expect(q.playedOver).toEqual([1, 2]);
+  });
+
+  it('does not replay a seat\'s played events when the page leaves that seat and comes back before Vue flushes', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+
+    q.frame.value = { events: [], view: viewAt(5), timeline: 'other-seat' };
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([1]);
+  });
+
+  it('plays a replay that keeps its events array over the frame that moved the timeline, not a later one', async () => {
+    const q = harness();
+    q.register();
+    const events = [createEvent(1, 'test')];
+    q.frame.value = { events, view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+
+    q.frame.value = { events, view: viewAt(9), timeline: 'game:1' };
+    q.frame.value = { events: [...events, createEvent(2, 'test')], view: viewAt(10), timeline: 'game:1' };
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([1, 9, 10]);
   });
 
   it('plays a queued event over gameView once the timeline changes, never over the old timeline\'s view', async () => {
@@ -1567,4 +1599,9 @@ describe('playingView', () => {
 
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
+}
+
+/** A frame naming `timeline` as its game instance, or naming none. */
+function timelineOf(timeline: string | undefined) {
+  return timeline === undefined ? {} : { gameInstanceId: timeline, restoreEpoch: 0, viewerSeat: 1 };
 }

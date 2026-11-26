@@ -23,7 +23,7 @@ import type { GameState } from '../../client/types.js';
 import { dueSeats as dueSeatsOf } from '../../engine/flow/seat-activity.js';
 import type { GameRootView } from '../types.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
-import { ANIMATION_EVENTS_KEY, createAnimationEvents, animationTimeline, type UseAnimationEventsReturn } from './useAnimationEvents.js';
+import { ANIMATION_EVENTS_KEY, createAnimationEvents, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createLiveRegion, type LiveRegion, type UseAnnouncerReturn } from './useAnnouncer.js';
 import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { MENU_COMMANDS_KEY, createMenuCommands } from './menuCommands.js';
@@ -166,11 +166,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
   // shown) resets the queue's watermark when it changes, so a reconnect into a
   // rewound session still plays the replayed events, and a page that changes
   // seat plays the new seat's events, which are numbered in its own sequence.
-  const animationEvents = createAnimationEvents({
-    events: () => state.value?.state?.animationEvents,
-    view: () => state.value?.state?.view,
-    timeline: () => animationTimeline(state.value?.state),
-  });
+  const animationEvents = createAnimationEvents({ frame: () => state.value?.state });
 
   const { liveRegion, announcer } = createLiveRegion();
 

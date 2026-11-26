@@ -75,45 +75,44 @@ export interface AnimationHandlerOptions {
 type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
 
 /**
+ * The parts of a seat's frame the queue reads. A seat's `PlayerGameState` is one.
+ */
+export interface AnimationFrame {
+  /** The events this frame carries. */
+  animationEvents?: AnimationEvent[];
+  /** The frame's view, which becomes `playingView` while each event that arrived with it plays. */
+  view?: GameRootView;
+  /**
+   * The game, how many times its runner was restored, and the seat whose
+   * numbers the ids are (UNDO-04, #489). Each seat numbers only the events it
+   * may see, and a restore numbers them again, so a CHANGE in these starts a
+   * new sequence: the queue resumes that timeline's watermark, or starts from
+   * 0, so replayed beats are delivered instead of silently dropped. A frame
+   * that does not name all three gives no signal, which is never a rewind.
+   * It is not an action count: a count of every seat's actions would let a
+   * seat count another seat's secret ones (#449).
+   */
+  gameInstanceId?: string;
+  restoreEpoch?: number;
+  viewerSeat?: number;
+}
+
+/**
  * Options for creating an animation events instance
  */
 export interface UseAnimationEventsOptions {
-  /** Getter that returns animation events from PlayerGameState */
-  events: () => AnimationEvent[] | undefined;
-  /** Getter for the view of the frame `events` came with, which becomes `playingView` while each of its events plays. */
-  view?: () => GameRootView | undefined;
+  /** Getter for the seat's latest frame: one object, replaced whole when a frame lands. */
+  frame: () => AnimationFrame | undefined;
   /**
    * Time to wait for a handler to register before skipping an unhandled event (ms, default: 3000).
    * Set to 0 to skip immediately (no wait).
    */
   handlerWaitTimeout?: number;
-  /**
-   * Optional getter naming the timeline the events belong to (UNDO-04
-   * defense-in-depth): the game, how many times its runner was restored, and
-   * the seat whose numbers the ids are, from `PlayerGameState.gameInstanceId`,
-   * `restoreEpoch` and `viewerSeat`. Each seat numbers only the events it may
-   * see (#489), so a page that changes seat must start counting again: the new
-   * seat's ids can sit below the old seat's watermark.
-   *
-   * The server-side fix makes the animation-event id sequence monotonic for a client
-   * that stays connected, but a client that reconnects or joins mid-rewind can still
-   * carry a stale watermark above the ids it is now being sent.
-   * When this getter is supplied, a CHANGE in its value between two observations is
-   * treated as a new sequence and resets the watermark to 0 before the incoming
-   * `events` batch is filtered, so replayed beats are delivered instead of silently
-   * dropped. If omitted (or its value is `undefined`), there is no signal, and
-   * behavior is identical to not having this option at all -- absence must never be
-   * treated as "rewound".
-   *
-   * It is not an action count: a count of every seat's actions would let a seat
-   * count another seat's secret ones (#449).
-   */
-  timeline?: () => string | undefined;
 }
 
 /**
- * The `timeline` a seat's state names, for {@link UseAnimationEventsOptions.timeline}:
- * this game, how many times its runner was restored, and the seat the state
+ * The timeline a seat's frame names (see {@link AnimationFrame.gameInstanceId}):
+ * this game, how many times its runner was restored, and the seat the frame
  * was built for. `undefined` (no signal) when any is missing, so a state that
  * does not name all three can never look like a rewind or a change of seat.
  */
@@ -177,7 +176,7 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
  * @returns Animation events controller
  */
 export function createAnimationEvents(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
-  const { events: getEvents, view: getView, handlerWaitTimeout = 3000, timeline: getTimeline } = options;
+  const { frame: getFrame, handlerWaitTimeout = 3000 } = options;
 
   // Handler registry
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
@@ -438,53 +437,42 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // One watcher takes in every frame as it lands ('sync'): a frame that a
   // later one replaced before Vue flushed still queues its events, each with
-  // that frame's view. UNDO-04, #489: a CHANGE in the timeline (a replaced
-  // runner, another game, another seat) resets the watermark, and the events
-  // are taken in again when Vue flushes, by when every source has moved to
-  // the new frame. `undefined` (source not wired, or a frame that does not
-  // name it) is "no signal" -- it must never be treated as a rewind.
+  // that frame's view. A change of timeline resumes that timeline's
+  // watermark, or starts from 0, before the frame's events are filtered.
+  const watermarks = new Map<string, number>();
   let lastEvents: AnimationEvent[] | undefined;
-  let takeInAgainAtFlush = false;
   const framesTakenIn = ref(0);
-
-  /** Queue the events above the watermark, with the view of the frame they came in. */
-  function takeIn(events: AnimationEvent[] | undefined): void {
-    lastEvents = events;
-    const newEvents = (events ?? []).filter((e) => e.id > lastQueuedId);
-    if (newEvents.length === 0) return;
-    const view = getView?.();
-    queue.push(...newEvents.map((event) => ({ event, view })));
-    lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
-    pendingCount.value = queue.length;
-  }
-
   watch(
-    () => [getTimeline?.(), getEvents()] as const,
-    ([currentTimeline, events]) => {
-      if (currentTimeline !== undefined) {
-        if (lastTimeline !== undefined && currentTimeline !== lastTimeline) {
-          lastQueuedId = 0;
+    getFrame,
+    (frame) => {
+      const timeline = animationTimeline(frame);
+      let moved = false;
+      if (timeline !== undefined) {
+        if (lastTimeline !== undefined && timeline !== lastTimeline) {
+          watermarks.set(lastTimeline, lastQueuedId);
+          lastQueuedId = watermarks.get(timeline) ?? 0;
           // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
           for (const entry of queue) entry.view = undefined;
           playingView.value = undefined;
-          takeInAgainAtFlush = true;
+          moved = true;
         }
-        lastTimeline = currentTimeline;
+        lastTimeline = timeline;
       }
-      if (events !== lastEvents) takeIn(events);
+      const events = frame?.animationEvents;
+      // The shell keeps an unchanged events array, so a replay may be the very array already taken in.
+      if (events === lastEvents && !moved) return;
+      lastEvents = events;
+      const newEvents = (events ?? []).filter((e) => e.id > lastQueuedId);
+      if (newEvents.length === 0) return;
+      queue.push(...newEvents.map((event) => ({ event, view: frame?.view })));
+      lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
+      pendingCount.value = queue.length;
       framesTakenIn.value++;
     },
     { immediate: true, flush: 'sync' },
   );
   // Playback starts when Vue flushes, not inside the code that set the state.
-  watch(framesTakenIn, () => {
-    // The shell keeps an unchanged events array, so a replay may be the very array already taken in.
-    if (takeInAgainAtFlush) {
-      takeInAgainAtFlush = false;
-      takeIn(getEvents());
-    }
-    void processQueue();
-  }, { immediate: true });
+  watch(framesTakenIn, () => void processQueue(), { immediate: true });
 
   return {
     registerHandler,

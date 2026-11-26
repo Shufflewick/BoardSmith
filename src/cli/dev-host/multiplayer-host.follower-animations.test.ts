@@ -18,7 +18,7 @@ import { effectScope, nextTick, shallowRef, type EffectScope } from 'vue';
 import { executeOp } from '../../session/index.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { secretDeploymentDefinition } from '../../session/testing/fixtures/secret-deployment-fixture.js';
-import { animationTimeline, createAnimationEvents } from '../../ui/composables/useAnimationEvents.js';
+import { createAnimationEvents } from '../../ui/composables/useAnimationEvents.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 import { applyViewPatch } from '../../session/view-patch.js';
@@ -55,8 +55,7 @@ describe('a page that changes seat plays the new seat its animations (#489)', ()
     });
     const queue = scope.run(() =>
       createAnimationEvents({
-        events: () => shown.value?.state.animationEvents,
-        timeline: () => animationTimeline(shown.value?.state),
+        frame: () => shown.value?.state,
         handlerWaitTimeout: 0,
       }),
     )!;

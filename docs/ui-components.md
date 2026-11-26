@@ -2051,11 +2051,10 @@ import { createAnimationEvents, ANIMATION_EVENTS_KEY } from 'boardsmith/ui';
 // Call from the root component's setup, with the seat's latest state.
 export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
   const animationEvents = createAnimationEvents({
-    // Get events from player state (reactive getter)
-    events: () => state.value?.animationEvents,
-
-    // Optional: the view of the frame the events came with, for playingView
-    view: () => state.value?.view,
+    // The seat's latest frame, replaced whole as each one lands. The queue reads
+    // its events, its view (for playingView) and the timeline it names, which
+    // starts the event ids again after an undo, a restore or a change of seat.
+    frame: () => state.value ?? undefined,
 
     // Optional: time to wait for handler registration before skipping (ms, default: 3000)
     handlerWaitTimeout: 3000,
@@ -2108,7 +2107,6 @@ onUnmounted(() => unregister?.());
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
 | `useAnimationEvents()` | Inject animation events from ancestor |
-| `animationTimeline(state)` | The timeline a seat's `PlayerGameState` belongs to (game, restore count, seat), for the `timeline` option, or `undefined` when the state does not name all three. It changes on an undo, a restore or a change of seat, when event ids start again |
 | `useAnimatedView(props)` | The view a table's board draws: the playing event's `playingView`, or `gameView` when nothing plays or while history is shown. See "Keeping the Board in Step with Queued Animations" in the [Custom UI Guide](./custom-ui-guide.md) |
 
 **Instance API:**

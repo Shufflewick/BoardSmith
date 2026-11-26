@@ -35,8 +35,7 @@ describe('demo step back (#449 review)', () => {
     const seat1 = ref<SeatState | undefined>();
     const delivered: unknown[] = [];
     const queue = createAnimationEvents({
-      events: () => seat1.value?.animationEvents,
-      timeline: () => animationTimeline(seat1.value),
+      frame: () => seat1.value,
     });
     queue.registerHandler('moved', async (event) => {
       delivered.push(event.data);
