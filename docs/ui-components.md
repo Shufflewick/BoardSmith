@@ -1939,19 +1939,20 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 
 **Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes once that component has mounted. If the timeout expires, the event is skipped with a console warning. AutoUI registers no handlers, so it calls `claimNoEvents()`, and while no handler is registered the queue skips every event at once, without a warning. A board that registers any handler keeps its waits, even with AutoUI inside it.
 
-**Handlers belong to the component that registers them.** Call `registerHandler` and `claimNoEvents` in a component's setup (or a composable it calls). The queue releases them when that component unmounts, and aborts the signal of a handler still playing then, so a board that a UI switch or the phone breakpoint replaces mid-animation never holds the queue up. Called outside any component, they throw.
+**Handlers belong to the component that registers them.** Call `registerHandler` and `claimNoEvents` in a component's setup (or a composable it calls). The queue takes them in once the update that mounts that component has finished, releases them when it unmounts, and aborts the signal of a handler still playing then, so a board that a UI switch or the phone breakpoint replaces mid-animation never holds the queue up. Called outside any component, they throw.
 
 ### The playback contract
 
 What a board can rely on. `src/ui/composables/useAnimationEvents.contract.test.ts` checks every line on a seeded random walk of all of the inputs below.
 
-- Each event your seat may see is offered once, in order, one at a time.
-- Your handler is called only while the component that registered it is mounted, and plays an event only after the board has drawn the frame that brought it.
-- From a frame landing until its last event ends, `isAnimating` is true and the Action Panel is gated.
-- The signal aborts on Skip, undo, restore, a change of seat, the shell's unmount or your component's unmount, and the queue has already moved on.
-- A skipped event that never started calls a `'run'` handler once with an aborted signal, and never calls a `'drop'` handler.
+- Each event your seat may see is offered once, in order, one at a time. Once-only and order hold within a timeline: the game, its restore count and your seat. An undo, a restore or a change of seat starts a new timeline, which numbers its events afresh.
+- Your handler is called only while the component that registered it is mounted. A registration or claim made in a component's setup counts from the end of the update that mounts that component: a child under `<Suspense>` counts once it mounts, and components mounted in one update count together. It stops counting the moment the component unmounts. One made in an effect scope outside any component's setup counts at once and stops when that scope stops.
+- An event plays only after Vue has drawn the frame that brought it. Vue may draw several frames in one update, so playback can start over a newer view than the event's own frame: draw each beat from the event's data (see [Keeping the Board in Step with Queued Animations](./custom-ui-guide.md#keeping-the-board-in-step-with-queued-animations)).
+- From a frame landing until its last event ends, `isAnimating` is true and the Action Panel is gated. The queue publishes one snapshot of `isAnimating` and `pendingCount` per input, so a change of timeline that brings new events never shows them idle in between.
+- The signal aborts on Skip, undo, restore, a change of seat, the shell's unmount or your component's unmount. By the time an abort listener runs, the queue has published its new state and moved on. It does not wait for aborted work to finish.
+- Skip, an undo, a restore and a change of seat end every event that has not started. For each, in order, the queue calls the `'run'` handler registered for its type at that moment, if there is one, once with an aborted signal. It never calls a `'drop'` handler, and the shell's unmount calls none.
 - With no handler, the queue waits `handlerWaitTimeout` (3s), warns and skips. A board that claimed none skips at once.
-- Calling into the queue (Skip, a frame, a registration) from a handler, an abort listener or a watcher is allowed, and takes effect after the queue's current step.
+- Calling into the queue (Skip, a frame, a registration, a claim, a release) from a handler, an abort listener or a watcher is allowed, and takes effect after the queue's current step, in the order sent.
 
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
