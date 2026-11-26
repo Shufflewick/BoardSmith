@@ -23,6 +23,9 @@
  */
 import { computed } from 'vue';
 import { seatInk } from '../utils/color-contrast';
+import { syncReducedMotionClass } from '../composables/reducedMotion.js';
+
+syncReducedMotionClass();
 
 interface Shape {
   name: string;
