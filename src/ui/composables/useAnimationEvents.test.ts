@@ -1593,7 +1593,6 @@ describe('playingView', () => {
     await flushMicrotasks();
 
     q.frame.value = { events: [], view: viewAt(2), timeline: 'game:1' };
-    await nextTick();
     q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(3), timeline: 'game:0' };
     await nextTick();
     expect(q.playedOver).toEqual([1, 3]);
@@ -1741,6 +1740,25 @@ describe('the queue across a change of seat, a skip and an unmount (#1815)', () 
     instance.skipAll();
     await flushMicrotasks();
     expect(aborted).toEqual([true]);
+  });
+
+  it('holds a waiting event while paused, even when its handler registers during the pause', async () => {
+    const frame = ref<AnimationFrame>({ animationEvents: [] });
+    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+    frame.value = { animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+
+    const calls: number[] = [];
+    instance.paused.value = true;
+    await nextTick();
+    instance.registerHandler('x', async (event) => void calls.push(event.id), { skip: 'drop' });
+    await flushMicrotasks();
+    expect(calls).toEqual([]);
+
+    instance.paused.value = false;
+    await nextTick();
+    await flushMicrotasks();
+    expect(calls).toEqual([1]);
   });
 
   it('a skip: run handler called on Skip reads the latest view, not the interrupted event\'s', async () => {
