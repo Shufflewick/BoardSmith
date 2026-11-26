@@ -879,7 +879,7 @@ async function stubbedSeat(
   return {
     ...seatContext,
     provide: {
-      [AUTO_UI_ON_SCREEN as symbol]: ref(false),
+      [AUTO_UI_ON_SCREEN as symbol]: ref(0),
       ...seatContext.provide,
       ...options.provide,
       [BOARD_INTERACTION_KEY as symbol]: boardInteraction,

@@ -7,7 +7,7 @@
  * Asserted on the real GameShell, driven by the host's own messages.
  */
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
-import { defineComponent, h, nextTick } from 'vue';
+import { defineComponent, h, nextTick, ref } from 'vue';
 import { enterIframe, leaveIframe, mountPlatformShell, type BoardComponent } from './GameShell.platform-mount.test-helper.js';
 import { usePlayContext } from '../composables/useGameContext.js';
 import { definePlayerPreferences } from '../player-preferences.js';
@@ -184,6 +184,32 @@ describe('GameShell action panel start preference (#1826)', () => {
     expect(barIsDown(wrapper)).toBe(false);
     await openMenu(wrapper);
     expect(panelChoice('Closed')).toBeUndefined();
+    wrapper.unmount();
+  });
+
+  it('keeps the bar open when the automatic UI is remounted', async () => {
+    const generation = ref(0);
+    const RemountingBoard = defineComponent({
+      setup: () => () => h(AutoUI, { key: generation.value, gameView: null, playerSeat: 0 }),
+    });
+    const wrapper = await mountAtTable({ actionBarStartsCollapsed: true, board: RemountingBoard });
+    generation.value++;
+    await nextTick();
+    await nextTick();
+    expect(barIsDown(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('keeps its saved pick apart from a game preference of the same name', async () => {
+    const game = definePlayerPreferences('windup', {
+      actionPanel: { label: 'Panel side', options: [{ value: 'left', label: 'Left' }, { value: 'right', label: 'Right' }], default: 'left' },
+    });
+    game.use('actionPanel').value = 'right';
+    const wrapper = await mountAtTable({ actionBarStartsCollapsed: true });
+    await openMenu(wrapper);
+    panelChoice('Open')!.click();
+    await nextTick();
+    expect(definePlayerPreferences('windup', game.declarations).use('actionPanel').value).toBe('right');
     wrapper.unmount();
   });
 

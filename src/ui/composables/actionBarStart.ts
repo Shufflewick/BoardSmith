@@ -13,11 +13,14 @@
 import { computed, provide, ref, watch, type InjectionKey, type Ref } from 'vue';
 import { definePlayerPreferences, type PlayerPreferences } from '../player-preferences.js';
 
-/** Set by the automatic UI while it is the board on screen. */
-export const AUTO_UI_ON_SCREEN: InjectionKey<Ref<boolean>> = Symbol('boardsmith:auto-ui-on-screen');
+/** How many automatic UIs are mounted: a count, as a remount mounts the new one before the old one unmounts. */
+export const AUTO_UI_ON_SCREEN: InjectionKey<Ref<number>> = Symbol('boardsmith:auto-ui-on-screen');
+
+// Under the game's own name, so a key no game would declare.
+const KEY = 'boardsmith.actionPanel';
 
 const declarations = {
-  actionPanel: {
+  [KEY]: {
     label: 'Action panel',
     description: 'How it starts in this game',
     options: [{ value: 'open', label: 'Open' }, { value: 'closed', label: 'Closed' }],
@@ -32,12 +35,12 @@ export function useActionBarStart(startsCollapsed: boolean, gamePreferences: Pla
       + "so the shell needs the game's preferences: pass :preferences=\"definePlayerPreferences('your-game', {})\".",
     );
   }
-  const autoUiOnScreen = ref(false);
+  const autoUiOnScreen = ref(0);
   provide(AUTO_UI_ON_SCREEN, autoUiOnScreen);
 
   const choice = startsCollapsed && gamePreferences ? definePlayerPreferences(gamePreferences.game, declarations) : null;
-  const pick = choice?.use('actionPanel');
-  const offered = computed(() => (choice && !autoUiOnScreen.value ? choice : null));
+  const pick = choice?.use(KEY);
+  const offered = computed(() => (choice && autoUiOnScreen.value === 0 ? choice : null));
   const startsClosed = () => !!offered.value && pick?.value === 'closed';
 
   /** What the player asked for: `v-model` of PlayShell's `actionBarMinimized`. */
@@ -49,6 +52,6 @@ export function useActionBarStart(startsCollapsed: boolean, gamePreferences: Pla
     /** The menu item, or null where the game does not let the bar start closed. */
     panelPreference: offered,
     /** The host's account setting, for a player who has not chosen. */
-    seed: (value: unknown) => choice?.seed('actionPanel', value),
+    seed: (value: unknown) => choice?.seed(KEY, value),
   };
 }

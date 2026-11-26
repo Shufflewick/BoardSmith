@@ -29,8 +29,8 @@ defineProps<{
 // The panel is the only way to start most actions here, so the shell keeps the bar open (#1826).
 const onScreen = inject(AUTO_UI_ON_SCREEN, null);
 if (onScreen) {
-  onScreen.value = true;
-  onUnmounted(() => { onScreen.value = false; });
+  onScreen.value++;
+  onUnmounted(() => { onScreen.value--; });
 }
 </script>
 

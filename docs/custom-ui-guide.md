@@ -1407,7 +1407,8 @@ The board region reserves one row for the Action Panel under the board
 it. Rows beyond the first float over the bottom of the board. While the player
 has the panel put down to its thin line, the reserve is only that line, so the
 board reaches it; a game that passes `action-bar-starts-collapsed` starts that
-way. The reserve changes only on the player's own toggle, never on a pick, so
+way unless the player picks Open (see
+[The action bar can start collapsed](./ui-components.md#the-action-bar-can-start-collapsed)). The reserve changes only on the player's own toggle, never on a pick, so
 your board never depends on the panel's live height: the panel showing,
 growing or shrinking never moves the board. A question that brings the panel
 up by itself while it is put down floats over the board.
