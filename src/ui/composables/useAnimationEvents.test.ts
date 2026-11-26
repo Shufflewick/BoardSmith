@@ -1656,3 +1656,141 @@ function timelineOf(timeline: string | undefined) {
   const [gameInstanceId, restoreEpoch = '0', viewerSeat = '1'] = timeline.split(':');
   return { gameInstanceId, restoreEpoch: Number(restoreEpoch), viewerSeat: Number(viewerSeat) };
 }
+
+describe('the queue across a change of seat, a skip and an unmount (#1815)', () => {
+  const view = (round: number): GameRootView => ({
+    id: 0, className: 'Game', phase: 'started', isFinished: false, settings: {}, attributes: { round },
+  });
+  const seatFrame = (seat: number, events: AnimationEvent[], round = seat): AnimationFrame => ({
+    animationEvents: events, view: view(round), gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: seat,
+  });
+  const roundOf = (instance: UseAnimationEventsReturn) => instance.playingView.value?.attributes?.round;
+
+  it('an event waiting for its handler plays over the latest view once the seat changes', async () => {
+    const frame = ref<AnimationFrame>(seatFrame(1, []));
+    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+    frame.value = seatFrame(1, [createEvent(1, 'late')]);
+    await nextTick();
+    frame.value = seatFrame(2, []);
+    await nextTick();
+
+    const seen: unknown[] = [];
+    instance.registerHandler('late', async () => void seen.push(roundOf(instance)), { skip: 'drop' });
+    await flushMicrotasks();
+    expect(seen).toEqual([undefined]);
+  });
+
+  it('does not replay a seat\'s played event when the page leaves that seat and comes back before Vue flushes', async () => {
+    const frame = ref<AnimationFrame>(seatFrame(1, []));
+    const instance = createAnimationEvents({ frame: () => frame.value });
+    const played: number[] = [];
+    instance.registerHandler('test', async (event) => void played.push(event.id), { skip: 'drop' });
+    frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(instance);
+
+    frame.value = seatFrame(2, []);
+    frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(instance);
+    expect(played).toEqual([1]);
+  });
+
+  it('keeps the views of a seat\'s queued events when the page leaves it and comes back before Vue flushes', async () => {
+    const frame = ref<AnimationFrame>(seatFrame(1, []));
+    const instance = createAnimationEvents({ frame: () => frame.value });
+    const seen: unknown[] = [];
+    let release: () => void = () => {};
+    instance.registerHandler('test', async () => {
+      seen.push(roundOf(instance));
+      await new Promise<void>((resolve) => { release = resolve; });
+    }, { skip: 'drop' });
+    const events = [createEvent(1, 'test'), createEvent(2, 'test')];
+    frame.value = seatFrame(1, events, 5);
+    frame.value = seatFrame(2, []);
+    frame.value = seatFrame(1, events, 5);
+    await nextTick();
+    release();
+    await flushMicrotasks();
+    expect(seen).toEqual([5, 5]);
+  });
+
+  it('plays nothing more once the owner scope stops, even when the playing handler settles after', async () => {
+    const frame = ref<AnimationFrame>({ animationEvents: [] });
+    const scope = effectScope();
+    const instance = scope.run(() => createAnimationEvents({ frame: () => frame.value }))!;
+    const played: number[] = [];
+    let finish: () => void = () => {};
+    instance.registerHandler('slow', async (event) => {
+      played.push(event.id);
+      await new Promise<void>((resolve) => { finish = resolve; });
+    }, { skip: 'drop' });
+    frame.value = { animationEvents: [createEvent(1, 'slow'), createEvent(2, 'slow')] };
+    await nextTick();
+
+    scope.stop();
+    finish();
+    await flushMicrotasks();
+    expect(played).toEqual([1]);
+  });
+
+  it('never hands a waiting event to a handler that unregistered before the queue resumed', async () => {
+    const frame = ref<AnimationFrame>({ animationEvents: [] });
+    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+    frame.value = { animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+
+    const calls: string[] = [];
+    const unregisterA = instance.registerHandler('x', async () => void calls.push('A'), { skip: 'drop' });
+    unregisterA();
+    instance.registerHandler('x', async () => void calls.push('B'), { skip: 'drop' });
+    await flushMicrotasks();
+    expect(calls).toEqual(['B']);
+  });
+
+  it('runs a skip: run handler that registered for a waiting event when Skip comes before the queue resumes', async () => {
+    const frame = ref<AnimationFrame>({ animationEvents: [] });
+    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+    frame.value = { animationEvents: [createEvent(1, 'r')] };
+    await nextTick();
+
+    const aborted: boolean[] = [];
+    instance.registerHandler('r', async (_event, { signal }) => void aborted.push(signal.aborted), { skip: 'run' });
+    instance.skipAll();
+    await flushMicrotasks();
+    expect(aborted).toEqual([true]);
+  });
+
+  it('holds a waiting event while paused, even when its handler registers during the pause', async () => {
+    const frame = ref<AnimationFrame>({ animationEvents: [] });
+    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+    frame.value = { animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+
+    const calls: number[] = [];
+    instance.paused.value = true;
+    await nextTick();
+    instance.registerHandler('x', async (event) => void calls.push(event.id), { skip: 'drop' });
+    await flushMicrotasks();
+    expect(calls).toEqual([]);
+
+    instance.paused.value = false;
+    await nextTick();
+    await flushMicrotasks();
+    expect(calls).toEqual([1]);
+  });
+
+  it('a skip: run handler called on Skip reads the latest view, not the interrupted event\'s', async () => {
+    const frame = ref<AnimationFrame>(seatFrame(1, []));
+    const instance = createAnimationEvents({ frame: () => frame.value });
+    instance.registerHandler('a', () => new Promise<void>(() => {}), { skip: 'drop' });
+    const seen: unknown[] = [];
+    instance.registerHandler('b', async () => void seen.push(roundOf(instance)), { skip: 'run' });
+    frame.value = seatFrame(1, [createEvent(1, 'a'), createEvent(2, 'b')], 7);
+    await nextTick();
+    expect(roundOf(instance)).toBe(7);
+
+    instance.skipAll();
+    expect(seen).toEqual([undefined]);
+  });
+});

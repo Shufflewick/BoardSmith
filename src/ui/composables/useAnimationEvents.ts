@@ -69,8 +69,8 @@ export interface AnimationHandlerOptions {
   skip: 'run' | 'drop';
 }
 
-/** How a wait for a handler ended: the handler that registered, its timeout, or skipAll or a claim cutting it short. */
-type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
+/** How a wait for a handler ended: a handler registered, its timeout, or skipAll or a claim cutting it short. */
+type WaitOutcome = 'registered' | 'timeout' | 'interrupted';
 
 /**
  * The parts of a seat's frame the queue reads. A seat's `PlayerGameState` is one.
@@ -93,6 +93,13 @@ export interface AnimationFrame {
   gameInstanceId?: string;
   restoreEpoch?: number;
   viewerSeat?: number;
+}
+
+/** A queued event, the view of the frame it arrived in, and the timeline that frame named. */
+interface QueuedEvent {
+  event: AnimationEvent;
+  view: GameRootView | undefined;
+  timeline: string | undefined;
 }
 
 /**
@@ -178,7 +185,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const handlers = new Map<string, { handler: AnimationHandler; skip: 'run' | 'drop' }>();
 
   // Internal queue of events to process, each with the view of the frame it arrived in
-  const queue: Array<{ event: AnimationEvent; view: GameRootView | undefined }> = [];
+  const queue: QueuedEvent[] = [];
+  // The event the loop has taken off the queue, until its handler is called (or it is skipped).
+  let waiting: QueuedEvent | null = null;
 
   // Reactive state
   const isAnimating = ref(false);
@@ -187,7 +196,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const playingView = shallowRef<GameRootView>();
 
   // The watermark: the highest id queued in the current timeline, so an event
-  // is queued once however many frames carry it. A change of timeline resets it.
+  // is queued once however many frames carry it. A change of timeline resets
+  // it, except a return to a seat left earlier in the same flush.
   let lastQueuedId = 0;
 
   // Last timeline a frame named (UNDO-04 rewind signal). `undefined` means "no
@@ -196,7 +206,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // Processing state
   let isProcessing = false;
-  let skipRequested = false;
+  // Each run of the loop has a number; Skip and unmount end the run, so a loop still winding down from one does nothing more.
+  let run = 0;
 
   // Abort controller for the currently-running handler
   let currentHandlerAbort: AbortController | null = null;
@@ -210,10 +221,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
   const noEventClaims = new Set<symbol>();
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
-  let disposed = false;
   onScopeDispose(() => {
-    disposed = true;
-    if (waitTimer !== null) clearTimeout(waitTimer);
+    stopPlayback();
   }, true);
 
   /**
@@ -232,7 +241,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   /**
    * Wait for a handler to register for the given event type, or timeout.
-   * Resolves with the handler, 'timeout', or 'interrupted' (skipAll or a claim ended the wait).
+   * Resolves with 'registered', 'timeout', or 'interrupted' (skipAll or a claim ended the wait).
    */
   function waitForHandler(type: string, timeout: number): Promise<WaitOutcome> {
     return new Promise((resolve) => {
@@ -250,95 +259,115 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   }
 
   /**
+   * The handler for an event type once one is registered and playback is not
+   * paused: 'timeout' when none registered in time, undefined when there is
+   * none to wait for (timeout 0, or the board claims no events).
+   */
+  async function awaitHandler(type: string, myRun: number): Promise<AnimationHandler | 'timeout' | undefined> {
+    // Look up each time: the handler that ended a wait may have unregistered before the queue resumed.
+    const registered = () => handlers.get(type)?.handler;
+    for (;;) {
+      while (myRun === run && shouldWait(registered())) {
+        if ((await waitForHandler(type, handlerWaitTimeout)) === 'timeout') return 'timeout';
+      }
+      if (myRun !== run || !paused.value) return registered();
+      await waitForUnpause();
+    }
+  }
+
+  /** Play one event over its frame's view until its handler settles or Skip aborts it. */
+  async function play(entry: QueuedEvent, handler: AnimationHandler): Promise<void> {
+    const { event } = entry;
+    const abort = new AbortController();
+    currentHandlerAbort = abort;
+    // An event from another timeline, perhaps another seat's, plays over the latest view.
+    playingView.value = entry.timeline === lastTimeline ? entry.view : undefined;
+    try {
+      // Race handler against abort so skipAll() unblocks the queue immediately
+      await Promise.race([
+        handler(event, { signal: abort.signal }),
+        new Promise<void>((resolve) => {
+          if (abort.signal.aborted) { resolve(); return; }
+          abort.signal.addEventListener('abort', () => resolve(), { once: true });
+        }),
+      ]);
+    } catch (error) {
+      // Suppress errors from aborted handlers; log the rest and go on, so one handler cannot break the chain
+      if (!abort.signal.aborted) console.error(`Animation handler error for event type '${event.type}':`, error);
+    }
+    if (currentHandlerAbort === abort) currentHandlerAbort = null;
+  }
+
+  /** Whether the queue should wait for a handler to register for the event it holds. */
+  function shouldWait(handler: AnimationHandler | undefined): boolean {
+    return !handler && handlerWaitTimeout > 0 && !claimedNone();
+  }
+
+  /**
    * Process the event queue sequentially
    */
   async function processQueue(): Promise<void> {
-    // Guard against re-entry
-    if (isProcessing) {
-      return;
-    }
-
-    // Nothing to process
-    if (queue.length === 0) {
-      return;
-    }
-
+    if (isProcessing || queue.length === 0) return;
     isProcessing = true;
     isAnimating.value = true;
-    skipRequested = false;
-
-    while (queue.length > 0 && !skipRequested) {
-      // If paused, wait for resume
-      if (paused.value) {
-        await waitForUnpause();
-        // Check skip again after resuming
-        if (skipRequested) {
-          break;
-        }
-      }
-
-      const { event, view } = queue.shift()!;
-      pendingCount.value = queue.length;
-
-      let handler = handlers.get(event.type)?.handler;
-      let timedOut = false;
-      if (!handler) playingView.value = undefined;
-      while (!handler && handlerWaitTimeout > 0 && !claimedNone() && !skipRequested) {
-        const outcome = await waitForHandler(event.type, handlerWaitTimeout);
-        if (outcome === 'timeout') {
-          timedOut = true;
-          break;
-        }
-        // An interrupted wait looks again: a claim may have been released before the queue resumed.
-        handler = outcome === 'interrupted' ? handlers.get(event.type)?.handler : outcome;
-      }
-      if (skipRequested) break;
-      if (timedOut) {
-        console.warn(
-          `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
-        );
-        continue;
-      }
-
-      if (handler) {
-        const abort = new AbortController();
-        currentHandlerAbort = abort;
-        playingView.value = view;
-        try {
-          // Race handler against abort so skipAll() unblocks the queue immediately
-          await Promise.race([
-            handler(event, { signal: abort.signal }),
-            new Promise<void>((resolve) => {
-              if (abort.signal.aborted) { resolve(); return; }
-              abort.signal.addEventListener('abort', () => resolve(), { once: true });
-            }),
-          ]);
-        } catch (error) {
-          // Suppress errors from aborted handlers
-          if (!abort.signal.aborted) {
-            // Log error but continue processing - don't let one handler break the chain
-            console.error(`Animation handler error for event type '${event.type}':`, error);
-          }
-        }
-        currentHandlerAbort = null;
-      }
-      // No handler and nothing to wait for (timeout 0, or the board claims no events) -- skip
+    const myRun = run;
+    while (queue.length > 0) {
+      if (!(await playNext(myRun))) return;
     }
-
     isProcessing = false;
     playingView.value = undefined;
     isAnimating.value = false;
-    // Events taken in while a skipped loop wound down found it still running, so they start here.
-    if (queue.length > 0 && !disposed) void processQueue();
+  }
+
+  /** Take the next event off the queue and play it. False once Skip or unmount ended this run. */
+  async function playNext(myRun: number): Promise<boolean> {
+    if (paused.value) await waitForUnpause();
+    if (myRun !== run) return false;
+    const entry = queue.shift()!;
+    const { event } = entry;
+    waiting = entry;
+    pendingCount.value = queue.length;
+    if (!handlers.has(event.type)) playingView.value = undefined;
+
+    const handler = await awaitHandler(event.type, myRun);
+    if (myRun !== run) return false;
+    waiting = null;
+    if (handler === 'timeout') {
+      console.warn(
+        `Animation event "${event.type}" (id: ${event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
+      );
+    } else if (handler) {
+      await play(entry, handler);
+    }
+    // No handler and nothing to wait for (timeout 0, or the board claims no events) -- skip
+    return myRun === run;
+  }
+
+  /** Empty the queue and end whatever the loop is waiting on, so it stops at once. */
+  function stopPlayback(): void {
+    queue.length = 0;
+    waiting = null;
+    pendingCount.value = 0;
+    run++;
+    isProcessing = false;
+    currentHandlerAbort?.abort();
+    currentHandlerAbort = null;
+    if (unpauseResolve) {
+      unpauseResolve();
+      unpauseResolve = null;
+    }
+    endWait('interrupted');
+    playingView.value = undefined;
+    isAnimating.value = false;
   }
 
   /**
    * Skip all remaining animations
    */
   function skipAll(): void {
-    // Collect 'run' events from the queue before clearing
+    // Collect 'run' events, the one waiting for its handler first, before clearing
     const runOnSkipEvents: AnimationEvent[] = [];
-    for (const { event } of queue) {
+    for (const { event } of waiting ? [waiting, ...queue] : queue) {
       const entry = handlers.get(event.type);
       if (entry?.skip === 'run') runOnSkipEvents.push(event);
     }
@@ -347,25 +376,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     // this timeline, and the queue may still hold events from an earlier one (a
     // seat the page no longer shows, #489), whose numbers mean nothing here.
 
-    // Clear the queue
-    queue.length = 0;
-    pendingCount.value = 0;
-    skipRequested = true;
-
-    // Abort the currently-running handler so the queue unblocks immediately
-    if (currentHandlerAbort) {
-      currentHandlerAbort.abort();
-      currentHandlerAbort = null;
-    }
-
-    // If paused, resolve the unpause promise to exit the wait
-    if (unpauseResolve) {
-      unpauseResolve();
-      unpauseResolve = null;
-    }
-
-    // If waiting for a handler, cancel the wait
-    endWait('interrupted');
+    stopPlayback();
 
     // Execute 'run' handlers with pre-aborted signal (fire-and-forget)
     const abortedSignal = AbortSignal.abort();
@@ -381,14 +392,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         }
       }
     }
-
-    // Reset animating state immediately
-    playingView.value = undefined;
-    isAnimating.value = false;
   }
 
   /** End the current wait for a handler, if any, handing the queue `outcome`. */
-  function endWait(outcome: AnimationHandler | 'interrupted'): void {
+  function endWait(outcome: 'registered' | 'interrupted'): void {
     if (!waitResolve) return;
     const resolve = waitResolve;
     waitResolve = null;
@@ -408,7 +415,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     handlers.set(eventType, entry);
 
     // If the queue is waiting for this type, resume processing immediately
-    if (waitingForType === eventType) endWait(handler);
+    if (waitingForType === eventType) endWait('registered');
 
     return () => {
       // Another component may have replaced this handler since; leave theirs.
@@ -439,18 +446,27 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // frame's events are filtered: a new seat, a restore or a reloaded snapshot
   // numbers the events again.
   let lastEvents: AnimationEvent[] | undefined;
-  const framesTakenIn = ref(0);
+  const framesLanded = ref(0);
+  const flushWatermarks = new Map<string, number>();
+  let lastSeat: number | undefined;
+
+  /** Move the watermark to a new timeline. A change of seat keeps the seat left for a return within this flush; a restore or a reload numbers the events again. */
+  function moveWatermark(from: string, to: string, seatChanged: boolean): void {
+    if (seatChanged) flushWatermarks.set(from, lastQueuedId);
+    else flushWatermarks.clear();
+    lastQueuedId = flushWatermarks.get(to) ?? 0;
+  }
 
   /** Follow the timeline the frame names; true when it moved, which resets the watermark. */
   function followTimeline(frame: AnimationFrame | undefined): boolean {
     const timeline = animationTimeline(frame);
     if (timeline === undefined) return false;
-    const moved = lastTimeline !== undefined && timeline !== lastTimeline;
+    const previous = lastTimeline;
+    const previousSeat = lastSeat;
     lastTimeline = timeline;
-    if (!moved) return false;
-    lastQueuedId = 0;
-    // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
-    for (const entry of queue) entry.view = undefined;
+    lastSeat = frame?.viewerSeat;
+    if (previous === undefined || timeline === previous) return false;
+    moveWatermark(previous, timeline, lastSeat !== previousSeat);
     playingView.value = undefined;
     return true;
   }
@@ -460,15 +476,15 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const events = frame?.animationEvents ?? [];
     const newEvents = events.filter((e) => e.id > lastQueuedId);
     if (newEvents.length === 0) return;
-    queue.push(...newEvents.map((event) => ({ event, view: frame?.view })));
+    queue.push(...newEvents.map((event) => ({ event, view: frame?.view, timeline: lastTimeline })));
     lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
     pendingCount.value = queue.length;
-    framesTakenIn.value++;
   }
 
   watch(
     getFrame,
     (frame) => {
+      framesLanded.value++;
       const moved = followTimeline(frame);
       // The shell keeps an unchanged events array, so a replay may be the very array already taken in.
       if (frame?.animationEvents === lastEvents && !moved) return;
@@ -478,7 +494,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     { immediate: true, flush: 'sync' },
   );
   // Playback starts when Vue flushes, not inside the code that set the state.
-  watch(framesTakenIn, () => void processQueue(), { immediate: true });
+  watch(framesLanded, () => {
+    flushWatermarks.clear();
+    void processQueue();
+  }, { immediate: true });
 
   return {
     registerHandler,

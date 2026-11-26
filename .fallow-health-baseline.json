@@ -546,11 +546,6 @@
         "count": 11
       }
     },
-    "src/ui/composables/useAnimationEvents.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/ui/composables/useBoardActionBridge.ts": {
       "complexity_high": {
         "count": 1
