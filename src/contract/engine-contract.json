@@ -4230,7 +4230,7 @@
       "surfaceHash": "3fdad2d7c1e7f5c6",
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
-      "summary": "The animation queue pairs each event with the view of the frame it first arrived in, even when two frames land in one Vue flush (#1815)"
+      "summary": "The animation queue takes in every seat frame as it lands, so the events of a frame replaced before Vue flushes still play, each over the view of the frame it arrived in (#1815)"
     }
   ]
 }
