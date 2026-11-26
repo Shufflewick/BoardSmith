@@ -204,7 +204,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     state.value = { kind: 'playing', event, abort };
     let settled: Promise<void>;
     try {
-      settled = handler(event, { signal: abort.signal });
+      // A handler written in JavaScript may return no promise.
+      settled = Promise.resolve(handler(event, { signal: abort.signal }));
     } catch (error) {
       settled = Promise.reject(error);
     }
@@ -332,8 +333,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     },
     { immediate: true, flush: 'sync' },
   );
-  // Playback starts when Vue flushes, not inside the code that set the state.
-  watch(framesLanded, pump, { immediate: true });
+  // Playback starts once Vue has drawn the frame, not inside the code that set the state.
+  watch(framesLanded, pump, { immediate: true, flush: 'post' });
 
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
   onScopeDispose(() => {

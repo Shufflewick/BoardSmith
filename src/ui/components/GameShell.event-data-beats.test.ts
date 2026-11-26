@@ -18,6 +18,8 @@ import { enterIframe, leaveIframe, mountPlatformShell, postFromHost } from './Ga
 
 /** The playing hit's handler waits on this, so the test can look at the board while it plays. */
 let releaseHit: () => void = () => {};
+/** What the board had drawn each time a hit's handler started. */
+const drawnAtStart: string[] = [];
 
 const PlaybackBoard = defineComponent({
   name: 'PlaybackBoard',
@@ -27,6 +29,7 @@ const PlaybackBoard = defineComponent({
   setup(props) {
     const beat = shallowRef<string>();
     useAnimationEvents()?.registerHandler('hit', async (event) => {
+      drawnAtStart.push(document.querySelector('[data-testid="units"]')!.textContent!);
       beat.value = `scout ${String(event.data.hp)}hp`;
       await new Promise<void>((resolve) => { releaseHit = resolve; });
       beat.value = undefined;
@@ -83,6 +86,7 @@ async function threeHitsArrive() {
 afterEach(() => {
   wrapper?.unmount();
   wrapper = undefined;
+  drawnAtStart.length = 0;
   leaveIframe();
   document.body.innerHTML = '';
 });
@@ -99,6 +103,18 @@ describe('a board draws each queued beat from its event data (#1807, #1818)', ()
     releaseHit();
     await flushPromises();
     expect(text('beat')).toBe('scout 0hp');
+  });
+
+  it('starts a handler once the board has drawn the frame that brought its event', async () => {
+    enterIframe();
+    wrapper = mountPlatformShell({ board: PlaybackBoard, attachTo: document.body });
+    await nextTick();
+    postFromHost({ type: 'init', seat: 1 });
+    frame(3, []);
+    await flushPromises();
+    frame(2, [{ id: 1, hp: 2 }]);
+    await flushPromises();
+    expect(drawnAtStart).toEqual(['scout 2hp']);
   });
 
   it('ends playback when the player skips the animations in the Action Panel', async () => {

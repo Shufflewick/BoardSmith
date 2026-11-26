@@ -8,6 +8,7 @@ import {
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type AnimationFrame,
+  type AnimationHandler,
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
@@ -217,6 +218,20 @@ describe('useAnimationEvents', () => {
       expect(consoleError).toHaveBeenCalled();
 
       consoleError.mockRestore();
+    });
+
+    it('a handler that returns no promise does not stop the queue', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const handled: number[] = [];
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      // A board written in JavaScript can hand in a handler that returns nothing.
+      const noPromise = ((event: AnimationEvent) => void handled.push(event.id)) as unknown as AnimationHandler;
+      instance.registerHandler('test', noPromise, { skip: 'drop' });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(handled).toEqual([1, 2]);
     });
 
     it('events without handlers are skipped when handlerWaitTimeout is 0', async () => {
