@@ -78,7 +78,7 @@ type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
  * Options for creating an animation events instance
  */
 export interface UseAnimationEventsOptions {
-  /** Getter that returns animation events from PlayerGameState. `events`, `view` and `timeline` read the same frame, which changes whole. */
+  /** Getter that returns animation events from PlayerGameState */
   events: () => AnimationEvent[] | undefined;
   /** Getter for the view of the frame `events` came with, which becomes `playingView` while each of its events plays. */
   view?: () => GameRootView | undefined;
@@ -195,9 +195,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // is queued once however many frames carry it. A timeline change resets it.
   let lastQueuedId = 0;
 
-  // Last observed timeline (UNDO-04 rewind signal). `undefined` means "no
-  // observation yet" -- distinct from the source being absent entirely, so the
-  // first tick never spuriously looks like a change.
+  // Last timeline a frame named (UNDO-04 rewind signal). `undefined` means "no
+  // observation yet", so the first frame never spuriously looks like a change.
   let lastTimeline: string | undefined;
 
   // Processing state
@@ -332,6 +331,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     isProcessing = false;
     playingView.value = undefined;
     isAnimating.value = false;
+    // Events taken in while a skipped loop wound down found it still running, so they start here.
+    if (queue.length > 0) void processQueue();
   }
 
   /**
@@ -438,41 +439,52 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // One watcher takes in every frame as it lands ('sync'): a frame that a
   // later one replaced before Vue flushed still queues its events, each with
   // that frame's view. UNDO-04, #489: a CHANGE in the timeline (a replaced
-  // runner, another game, another seat) resets the watermark before the
-  // frame's events are filtered. `undefined` (source not wired, or first
-  // observation) is "no signal" -- it must never be treated as a rewind.
+  // runner, another game, another seat) resets the watermark, and the events
+  // are taken in again when Vue flushes, by when every source has moved to
+  // the new frame. `undefined` (source not wired, or a frame that does not
+  // name it) is "no signal" -- it must never be treated as a rewind.
   let lastEvents: AnimationEvent[] | undefined;
+  let takeInAgainAtFlush = false;
   const framesTakenIn = ref(0);
+
+  /** Queue the events above the watermark, with the view of the frame they came in. */
+  function takeIn(events: AnimationEvent[] | undefined): void {
+    lastEvents = events;
+    const newEvents = (events ?? []).filter((e) => e.id > lastQueuedId);
+    if (newEvents.length === 0) return;
+    const view = getView?.();
+    queue.push(...newEvents.map((event) => ({ event, view })));
+    lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
+    pendingCount.value = queue.length;
+  }
+
   watch(
     () => [getTimeline?.(), getEvents()] as const,
     ([currentTimeline, events]) => {
-      if (currentTimeline !== undefined && lastTimeline !== undefined && currentTimeline !== lastTimeline) {
-        lastQueuedId = 0;
-        // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
-        for (const entry of queue) entry.view = undefined;
-        playingView.value = undefined;
-        // The shell keeps an unchanged events array, so the replay may be the very array already taken in.
-        lastEvents = undefined;
+      if (currentTimeline !== undefined) {
+        if (lastTimeline !== undefined && currentTimeline !== lastTimeline) {
+          lastQueuedId = 0;
+          // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
+          for (const entry of queue) entry.view = undefined;
+          playingView.value = undefined;
+          takeInAgainAtFlush = true;
+        }
+        lastTimeline = currentTimeline;
       }
-      lastTimeline = currentTimeline;
-
-      if (events === lastEvents) return;
-      lastEvents = events;
-
-      // Only events above the watermark are new.
-      const newEvents = (events ?? []).filter((e) => e.id > lastQueuedId);
-      if (newEvents.length === 0) return;
-
-      const view = getView?.();
-      queue.push(...newEvents.map((event) => ({ event, view })));
-      lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
-      pendingCount.value = queue.length;
+      if (events !== lastEvents) takeIn(events);
       framesTakenIn.value++;
     },
     { immediate: true, flush: 'sync' },
   );
   // Playback starts when Vue flushes, not inside the code that set the state.
-  watch(framesTakenIn, () => void processQueue(), { immediate: true });
+  watch(framesTakenIn, () => {
+    // The shell keeps an unchanged events array, so a replay may be the very array already taken in.
+    if (takeInAgainAtFlush) {
+      takeInAgainAtFlush = false;
+      takeIn(getEvents());
+    }
+    void processQueue();
+  }, { immediate: true });
 
   return {
     registerHandler,

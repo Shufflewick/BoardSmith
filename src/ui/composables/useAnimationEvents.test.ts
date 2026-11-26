@@ -1313,15 +1313,16 @@ describe('useAnimationEvents', () => {
   describe('rewind detection via the timeline signal', () => {
     /**
      * A queue fed by `events`, optionally watching `timeline`, whose one
-     * handler records every delivered id. `send` lands a frame with a batch of
-     * ids (on a moved timeline, when one is given) and waits for the queue to drain.
+     * handler records every delivered id. `send` pushes a batch of ids (after
+     * moving the timeline, when one is given) and waits for the queue to drain.
      */
     function harness(initialTimeline?: string) {
-      const frame = ref({ events: [] as AnimationEvent[], timeline: initialTimeline });
+      const events = ref<AnimationEvent[]>([]);
+      const timeline = ref(initialTimeline);
       const delivered: number[] = [];
       const instance = createAnimationEvents({
-        events: () => frame.value.events,
-        ...(initialTimeline === undefined ? {} : { timeline: () => frame.value.timeline }),
+        events: () => events.value,
+        ...(initialTimeline === undefined ? {} : { timeline: () => timeline.value }),
       });
       instance.registerHandler('test', async (event) => {
         delivered.push(event.id);
@@ -1329,10 +1330,8 @@ describe('useAnimationEvents', () => {
       return {
         delivered,
         async send(ids: number[], movedTimeline?: string) {
-          frame.value = {
-            events: ids.map((id) => createEvent(id, 'test')),
-            timeline: movedTimeline ?? frame.value.timeline,
-          };
+          if (movedTimeline !== undefined) timeline.value = movedTimeline;
+          events.value = ids.map((id) => createEvent(id, 'test'));
           await nextTick();
           await waitForIdle(instance);
         },
@@ -1374,24 +1373,26 @@ describe('useAnimationEvents', () => {
     it("plays a new seat's events after skipping the old seat's, whatever their numbers (#489)", async () => {
       // Each seat numbers its own events, so the queue can hold seat 1's
       // events 5..7 when the page moves to seat 2, whose next event is 1.
-      const frame = ref({ events: [] as AnimationEvent[], timeline: 'game-a:0:1' });
+      const events = ref<AnimationEvent[]>([]);
+      const timeline = ref('game-a:0:1');
       const delivered: string[] = [];
-      const instance = createAnimationEvents({ events: () => frame.value.events, timeline: () => frame.value.timeline });
+      const instance = createAnimationEvents({ events: () => events.value, timeline: () => timeline.value });
       instance.registerHandler('test', async (event, { signal }) => {
-        delivered.push(`${frame.value.timeline}#${event.id}`);
+        delivered.push(`${timeline.value}#${event.id}`);
         // Seat 1's first event is still playing when the page changes seat.
         await new Promise<void>((resolve) => signal.addEventListener('abort', () => resolve(), { once: true }));
       }, { skip: 'drop' });
 
-      frame.value = { events: [5, 6, 7].map((id) => createEvent(id, 'test')), timeline: 'game-a:0:1' };
+      events.value = [5, 6, 7].map((id) => createEvent(id, 'test'));
       await nextTick();
       // Seat 2's first frame carries no events.
-      frame.value = { events: [], timeline: 'game-a:0:2' };
+      timeline.value = 'game-a:0:2';
+      events.value = [];
       await nextTick();
       instance.skipAll();
       await waitForIdle(instance);
 
-      frame.value = { events: [createEvent(1, 'test')], timeline: 'game-a:0:2' };
+      events.value = [createEvent(1, 'test')];
       await nextTick();
       instance.skipAll();
       await waitForIdle(instance);
@@ -1505,6 +1506,32 @@ describe('playingView', () => {
     q.frame.value = { events, view: viewAt(9), timeline: 'game:1' };
     await nextTick();
     expect(q.playedOver).toEqual([1, 9]);
+  });
+
+  it('resets on a timeline that passes through one with no signal before Vue flushes', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+
+    q.frame.value = { events: [], view: viewAt(2), timeline: undefined as unknown as string };
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(9), timeline: 'game:1' };
+    await nextTick();
+    expect(q.playedOver).toEqual([1, 9]);
+  });
+
+  it('plays a frame that lands while a skipped event is still winding down', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.instance.skipAll();
+    q.frame.value = { events: [createEvent(2, 'test')], view: viewAt(2), timeline: 'game:0' };
+    await nextTick();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([1, 2]);
   });
 
   it('plays a queued event over gameView once the timeline changes, never over the old timeline\'s view', async () => {
