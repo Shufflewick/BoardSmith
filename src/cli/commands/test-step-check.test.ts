@@ -257,6 +257,16 @@ describe('findVerbWrappers on a file that names no verb', () => {
     expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts']);
   });
 
+  it('never parses past the imports of a data file nested deeply in arrays (#1823 review F1)', () => {
+    const grid = `${'['.repeat(2_000)}${']'.repeat(2_000)}`;
+    const wrappers = findVerbWrappers([
+      { path: 'src/rules/verbs.ts', text: 'export type Cell = number;\nexport function define(name: string) { return worldAction(name); }\n' },
+      { path: 'src/rules/board.ts', text: `export const GRID = ${grid};\n` },
+      { path: 'src/rules/cells.ts', text: `import type { Cell } from './verbs';\nexport const CELLS: Cell[] = ${grid};\n` },
+    ]);
+    expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts']);
+  });
+
   it('reads the imports of a file whose regex literal holds import text (#1823)', () => {
     const wrappers = findVerbWrappers([
       { path: 'src/rules/verbs.ts', text: 'export function define(name: string) { return worldAction(name); }\n' },

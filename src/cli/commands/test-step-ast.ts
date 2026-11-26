@@ -868,11 +868,20 @@ function valueImport(file: string, statement: ts.Statement, files: ReadonlySet<s
 }
 
 /**
- * A file's value imports and re-exports, read from TypeScript's own syntax tree, which (unlike
- * the ESTree one) a data file nested too deeply to convert that only takes a type never overflows.
+ * A file's value imports and re-exports, parsed from its text up to its last `from '...'` alone,
+ * so a data file nested too deeply to parse whole that only takes a type is never parsed. The
+ * scanner that finds that cut takes import text inside a regex literal for an import, so the head
+ * may end mid-statement: TypeScript's parser recovers from that, and only real declarations count.
  */
 function valueImports(file: SourceFile, files: ReadonlySet<string>): ValueImport[] {
-  const tree = parseOrExplain(() => ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS), file.path);
+  const ends = ts
+    .preProcessFile(file.text, true, false)
+    .importedFiles.filter(({ pos }) => /\bfrom\s*$/.test(file.text.slice(Math.max(0, pos - 16), pos)))
+    // `end` is the specifier's last character, so the closing quote is the one after it.
+    .map(({ end }) => end + 2);
+  if (ends.length === 0) return [];
+  const head = file.text.slice(0, Math.max(...ends));
+  const tree = parseOrExplain(() => ts.createSourceFile(file.path, head, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS), file.path);
   return tree.statements.flatMap((statement) => valueImport(file.path, statement, files));
 }
 
