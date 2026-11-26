@@ -2097,7 +2097,7 @@ const unregister = animations?.registerHandler('duel', async (event, { signal })
   }
 }, { skip: 'drop' });
 
-// Clean up on unmount (optional - composable handles cleanup)
+// Unregister on unmount: the queue keeps a handler until it is unregistered
 onUnmounted(() => unregister?.());
 ```
 

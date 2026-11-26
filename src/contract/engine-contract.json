@@ -1,5 +1,5 @@
 {
-  "revision": 538,
+  "revision": 539,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4247,6 +4247,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The animation queue is an explicit state machine with no frame views: useAnimatedView, playingView and paused are gone, a board draws each beat from its event's data, an undo, restore or change of seat skips the events still queued, and a return to a seat never replays its events (#1818)."
+    },
+    {
+      "revision": 539,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The UI animation queue starts an event only after Vue's unmount and mount hooks, and closes re-entry races in Skip, unmount and isAnimating watchers."
     }
   ]
 }
