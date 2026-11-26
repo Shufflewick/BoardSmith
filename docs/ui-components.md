@@ -340,28 +340,43 @@ should do the same.
 
 The player can collapse the action bar with the round arrow button on its top
 edge. Collapsed, the bar is a thin line along the bottom of the screen holding
-only the controls menu (the three dots, drawn horizontally) and that button, and
-the board gets the rest of the space. A dot on the button and its spoken label
-("Expand action bar, your move") say when the game is waiting on this player. The
-bar opens itself while an action is asking a question and collapses again after.
+only the controls menu (the three dots, drawn horizontally) and that button, which
+then reads "Actions", and the board gets the rest of the space. A dot on the
+button and its spoken label ("Show actions, your move") say when the game is
+waiting on this player. The bar opens itself while an action is asking a question
+and collapses again after.
 
-A game whose board already offers most choices can start the bar collapsed:
+A game whose board offers every action, on the phone layout too, can start the
+bar collapsed. It needs the game's `preferences` (see
+[Player preferences](#player-preferences)), even an empty set, because each
+player's choice is saved under that game name:
 
 ```vue
-<GameShell :uis="uis" action-bar-starts-collapsed />
+<GameShell :uis="uis" :preferences="preferences" action-bar-starts-collapsed />
 ```
 
-`actionBarStartsCollapsed` sets only the starting state, default open, and
-`WorldShell` takes the same prop. The player can still open and close the bar,
-and it stays on screen, so the controls menu and the button stay reachable by
-keyboard and screen reader, unless the board hides it (see
+Do not set it for a board that leaves any action to the panel: a closed bar
+hides those actions until the player opens it. The automatic UI always starts
+open, since its panel is the only way to start most actions. `WorldShell` takes
+the same prop.
+
+Where the game starts collapsed, the controls menu offers "Action panel: Open /
+Closed", saved for this game in this browser. A host may set the pick for a
+player who has not chosen with `actionPanel: 'open' | 'closed'` on its `init`
+message, from an account setting; it has no effect on a game that starts open.
+`boardsmith dev` sends nothing, so designers see the game's own start. The arrow
+button is not saved: it changes the bar for this visit only.
+
+The player can still open and close the bar, and it stays on screen, so the
+controls menu and the button stay reachable by keyboard and screen reader, unless
+the board hides it (see
 [Hiding the chrome to show the field](#hiding-the-chrome-to-show-the-field)).
 
-A game whose board answers every question itself, so that it starts actions all
-the time, can keep the bar from opening itself:
+A game whose board answers every question, confirmation and Cancel itself, by
+keyboard and screen reader too, can keep the bar from opening itself:
 
 ```vue
-<GameShell :uis="uis" action-bar-starts-collapsed :action-bar-opens-for-actions="false" />
+<GameShell :uis="uis" :preferences="preferences" action-bar-starts-collapsed :action-bar-opens-for-actions="false" />
 ```
 
 With `actionBarOpensForActions` set to `false` (default `true`), a bar the player
@@ -414,6 +429,10 @@ longer accepts (an option you removed, say) reads as the declared default.
 one of its options, and `use` throws for a key that was not declared. On/off
 preferences are menu checkboxes and list picks are menu radio buttons, so both
 work by keyboard and screen reader.
+
+`preferences.seed('flicker', 'slow')` uses a value for this visit while the
+player has never chosen one, such as a setting the host sent. It is not saved,
+and a value the declaration does not accept is ignored.
 
 `WorldShell` takes the same prop. A world has no turn, undo or zoom, so its
 controls menu holds only "Preferences": Reduce motion, Show action help, Sound

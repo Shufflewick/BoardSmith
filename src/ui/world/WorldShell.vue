@@ -83,7 +83,7 @@
 
       <!-- A world has no turn, undo or zoom, so its menu holds only Preferences (#1443). -->
       <template #controls>
-        <ControlsMenu class="actionbar-controls" :has-action-help="hasHelpToShow" :preferences="preferences" :commands="menuCommands.commands.value" />
+        <ControlsMenu class="actionbar-controls" :has-action-help="hasHelpToShow" :preferences="preferences" :panel-preference="panelPreference" :commands="menuCommands.commands.value" />
       </template>
 
       <template #board>
@@ -123,6 +123,7 @@ import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
 import LiveRegions from '../components/LiveRegions.vue';
 import ControlsMenu from '../components/ControlsMenu.vue';
+import { useActionBarStart } from '../composables/actionBarStart.js';
 import BoardErrorBoundary from '../components/BoardErrorBoundary.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
@@ -172,7 +173,7 @@ const props = withDefaults(defineProps<{
   displayName: string;
   /** Origins allowed to talk to this frame. See `GameShellInit.isOriginAllowed`. */
   trustedOrigins?: string[];
-  /** Start with the action bar collapsed to its thin line; the player can still open it (#1439). */
+  /** Start with the action bar collapsed; see GameShell's prop of the same name for when a game may (#1439, #1826). */
   actionBarStartsCollapsed?: boolean;
   /** Whether a question opens the bar the player put down (#1519). Default true; see GameShell's prop of the same name. */
   actionBarOpensForActions?: boolean;
@@ -292,9 +293,8 @@ const connectionIndicator = computed<PlayConnection | null>(() => {
 
 // ── Chrome layout state, the shell's own ──────────────────────────────────────
 const sidebarRail = ref(props.sidebarStartsCollapsed);
-// #230: the player's own action-bar preference, held exactly where the sidebar
-// rail's is, and not persisted for the same reason.
-const actionBarMinimized = ref(props.actionBarStartsCollapsed);
+const { actionBarMinimized, panelPreference, seed: seedActionPanel } = useActionBarStart(props.actionBarStartsCollapsed, props.preferences);
+watch(host.actionPanelSeed, seedActionPanel);
 const mobileExpanded = ref(false);
 
 /**

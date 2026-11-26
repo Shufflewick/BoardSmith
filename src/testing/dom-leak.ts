@@ -307,7 +307,8 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
     import('../ui/composables/actionHolds.js'),
     import('../ui/world/useWorld.js'),
     import('../ui/composables/requestHostState.js'),
-  ]).then(([interaction, context, animation, announcer, gameOver, menu, hideChrome, holds, world, hostState]) => {
+    import('../ui/composables/actionBarStart.js'),
+  ]).then(([interaction, context, animation, announcer, gameOver, menu, hideChrome, holds, world, hostState, barStart]) => {
     const key = (k: unknown) => k as symbol;
     const allContext = Object.values(context.GAME_CONTEXT_KEYS).map(key);
     const playContext = context.PLAY_CONTEXT_KEY_NAMES.map((name) => key(context.GAME_CONTEXT_KEYS[name]));
@@ -321,6 +322,7 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
         key(hideChrome.HIDE_CHROME_KEY),
         key(holds.ACTION_HOLDS_KEY),
         key(hostState.REQUEST_HOST_STATE_KEY),
+        key(barStart.AUTO_UI_ON_SCREEN),
         ...allContext,
       ]),
       world: new Set([
@@ -329,6 +331,7 @@ export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbo
         key(menu.MENU_COMMANDS_KEY),
         key(hideChrome.HIDE_CHROME_KEY),
         key(holds.ACTION_HOLDS_KEY),
+        key(barStart.AUTO_UI_ON_SCREEN),
         ...playContext,
         key(world.WORLD_CONTEXT_KEY),
       ]),
@@ -871,9 +874,16 @@ async function stubbedSeat(
   const boardInteraction =
     (options.provide?.[BOARD_INTERACTION_KEY as symbol] as BoardInteraction | undefined) ?? createBoardInteraction();
   const seatContext = await seatContextFor(shell, seat, options, boardInteraction);
+  // Both shells provide it, for the automatic UI to say it is on screen (#1826).
+  const [{ AUTO_UI_ON_SCREEN }, { ref }] = await Promise.all([import('../ui/composables/actionBarStart.js'), import('vue')]);
   return {
     ...seatContext,
-    provide: { ...seatContext.provide, ...options.provide, [BOARD_INTERACTION_KEY as symbol]: boardInteraction },
+    provide: {
+      [AUTO_UI_ON_SCREEN as symbol]: ref(0),
+      ...seatContext.provide,
+      ...options.provide,
+      [BOARD_INTERACTION_KEY as symbol]: boardInteraction,
+    },
   };
 }
 

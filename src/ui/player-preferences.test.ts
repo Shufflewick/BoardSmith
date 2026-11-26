@@ -68,6 +68,24 @@ describe('definePlayerPreferences', () => {
     expect(() => prefs.use('typo' as 'flicker')).toThrow(/"typo".*battleEffects, flicker/);
   });
 
+  it('takes a seed only while the player has never chosen, and never saves it (#1826)', () => {
+    const fresh = definePlayerPreferences('windup', declarations);
+    fresh.seed('flicker', 'slow');
+    expect(fresh.use('flicker').value).toBe('slow');
+    expect(localStorage.getItem('boardsmith-preference:windup:flicker')).toBeNull();
+
+    fresh.use('flicker').value = 'full';
+    const later = definePlayerPreferences('windup', declarations);
+    later.seed('flicker', 'slow');
+    expect(later.use('flicker').value).toBe('full');
+  });
+
+  it('ignores a seed that is not one of the options (#1826)', () => {
+    const prefs = definePlayerPreferences('windup', declarations);
+    prefs.seed('flicker', 'strobe');
+    expect(prefs.use('flicker').value).toBe('full');
+  });
+
   it('refuses an empty game name', () => {
     expect(() => definePlayerPreferences('', declarations)).toThrow(/game name/);
   });

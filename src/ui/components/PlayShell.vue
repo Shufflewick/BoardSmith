@@ -277,7 +277,8 @@ const containerZoom = computed(() => (props.boardFailed ? 1 : props.zoomLevel));
 /** The toggle's label, carrying the attention state for screen readers too. */
 const barToggleLabel = computed(() => {
   if (!actionBarCollapsed.value) return 'Collapse action bar';
-  return barWaitsOnMe.value ? 'Expand action bar, your move' : 'Expand action bar';
+  // Holds the visible "Actions", so a voice command that says what it sees reaches it.
+  return barWaitsOnMe.value ? 'Show actions, your move' : 'Show actions';
 });
 
 /**
@@ -730,6 +731,7 @@ const mobileToggleLabel = computed(() => {
         data-testid="bs-actionbar-toggle"
         @click="toggleActionBar"
       >
+        <span v-if="actionBarCollapsed" class="bar-edge__label">Actions</span>
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
@@ -1191,6 +1193,16 @@ const mobileToggleLabel = computed(() => {
   fill: none;
   stroke-width: 2;
   transition: transform var(--bsg-dur-fast);
+}
+/* Down, the toggle is a pill that says what it opens (#1826). */
+.action-bar-collapsed .bar-edge {
+  width: auto;
+  grid-auto-flow: column;
+  gap: 4px;
+  padding: 0 10px 0 12px;
+  border-radius: 999px;
+  font-size: var(--bsg-text-sm);
+  font-weight: 600;
 }
 /* Chevron down while the bar is up (push it away), up while it is down. */
 .action-bar-collapsed .bar-edge svg {

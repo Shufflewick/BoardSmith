@@ -336,6 +336,21 @@ interface WorldQuoteResultMessage {
   readonly code?: string;
 }
 
+/**
+ * THE HOST'S SETTINGS FOR THIS PLAYER, sent once the frame loads (#1826), as
+ * the table's `init` carries them. Every field is optional.
+ */
+interface WorldInitMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'init';
+  /**
+   * How the action panel starts for a player who has not chosen in this game,
+   * from the host's account setting. Applies only where the game lets the panel
+   * start closed (`actionBarStartsCollapsed`).
+   */
+  readonly actionPanel?: 'open' | 'closed';
+}
+
 /** The frame's safe areas in CSS pixels, sent on load and on every change (#1611, `src/ui/safe-area.ts`). */
 interface WorldSafeAreaMessage {
   readonly source: typeof WORLD_HOST_SOURCE;
@@ -362,7 +377,8 @@ export type WorldHostMessage =
   | WorldResponseMessage
   | WorldPickResultMessage
   | WorldQuoteResultMessage
-  | WorldSafeAreaMessage;
+  | WorldSafeAreaMessage
+  | WorldInitMessage;
 
 /** What one command becomes on the wire. */
 interface WorldCommandMessage {

@@ -20,12 +20,14 @@
 import { assert, check, runBrowserRegression, summarise, waitUntil } from './browser-harness.mjs';
 
 const APP = `<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
+import { GameShell, definePlayerPreferences } from 'boardsmith/ui';
 import uis from './uis.js';
+
+const preferences = definePlayerPreferences('sample', {});
 </script>
 
 <template>
-  <GameShell :uis="uis" action-bar-starts-collapsed :action-bar-opens-for-actions="false" />
+  <GameShell :uis="uis" :preferences="preferences" action-bar-starts-collapsed :action-bar-opens-for-actions="false" />
 </template>
 `;
 
