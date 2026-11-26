@@ -1696,6 +1696,25 @@ describe('the queue across a change of seat, a skip and an unmount (#1815)', () 
     expect(played).toEqual([1]);
   });
 
+  it('keeps the views of a seat\'s queued events when the page leaves it and comes back before Vue flushes', async () => {
+    const frame = ref<AnimationFrame>(seatFrame(1, []));
+    const instance = createAnimationEvents({ frame: () => frame.value });
+    const seen: unknown[] = [];
+    let release: () => void = () => {};
+    instance.registerHandler('test', async () => {
+      seen.push(roundOf(instance));
+      await new Promise<void>((resolve) => { release = resolve; });
+    }, { skip: 'drop' });
+    const events = [createEvent(1, 'test'), createEvent(2, 'test')];
+    frame.value = seatFrame(1, events, 5);
+    frame.value = seatFrame(2, []);
+    frame.value = seatFrame(1, events, 5);
+    await nextTick();
+    release();
+    await flushMicrotasks();
+    expect(seen).toEqual([5, 5]);
+  });
+
   it('plays nothing more once the owner scope stops, even when the playing handler settles after', async () => {
     const frame = ref<AnimationFrame>({ animationEvents: [] });
     const scope = effectScope();

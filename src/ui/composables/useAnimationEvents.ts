@@ -95,10 +95,11 @@ export interface AnimationFrame {
   viewerSeat?: number;
 }
 
-/** A queued event and the view of the frame it arrived in. */
+/** A queued event, the view of the frame it arrived in, and the timeline that frame named. */
 interface QueuedEvent {
   event: AnimationEvent;
   view: GameRootView | undefined;
+  timeline: string | undefined;
 }
 
 /**
@@ -279,7 +280,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const { event } = entry;
     const abort = new AbortController();
     currentHandlerAbort = abort;
-    playingView.value = entry.view;
+    // An event from another timeline, perhaps another seat's, plays over the latest view.
+    playingView.value = entry.timeline === lastTimeline ? entry.view : undefined;
     try {
       // Race handler against abort so skipAll() unblocks the queue immediately
       await Promise.race([
@@ -465,9 +467,6 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     lastSeat = frame?.viewerSeat;
     if (previous === undefined || timeline === previous) return false;
     moveWatermark(previous, timeline, lastSeat !== previousSeat);
-    // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
-    for (const entry of queue) entry.view = undefined;
-    if (waiting) waiting.view = undefined;
     playingView.value = undefined;
     return true;
   }
@@ -477,7 +476,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const events = frame?.animationEvents ?? [];
     const newEvents = events.filter((e) => e.id > lastQueuedId);
     if (newEvents.length === 0) return;
-    queue.push(...newEvents.map((event) => ({ event, view: frame?.view })));
+    queue.push(...newEvents.map((event) => ({ event, view: frame?.view, timeline: lastTimeline })));
     lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
     pendingCount.value = queue.length;
   }
