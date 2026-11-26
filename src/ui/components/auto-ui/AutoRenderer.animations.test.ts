@@ -16,7 +16,7 @@ afterEach(() => {
 });
 
 function mountWithAnimations(events: ReturnType<typeof ref<AnimationEvent[]>>) {
-  const animationEvents = createAnimationEvents({ events: () => events.value });
+  const animationEvents = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
   const wrapper = mount(AutoRenderer, {
     props: { gameView: null, playerSeat: 0 },
     global: { provide: { [ANIMATION_EVENTS_KEY as symbol]: animationEvents } },

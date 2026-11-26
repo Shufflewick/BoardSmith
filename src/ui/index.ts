@@ -226,12 +226,12 @@ export {
   createAnimationEvents,
   useAnimationEvents,
   useAnimatedView,
-  animationTimeline,
   ANIMATION_EVENTS_KEY,
   type AnimationHandler,
   type AnimationHandlerContext,
   type AnimationHandlerOptions,
   type UseAnimationEventsOptions,
+  type AnimationFrame,
   type UseAnimationEventsReturn,
 } from './composables/useAnimationEvents.js';
 

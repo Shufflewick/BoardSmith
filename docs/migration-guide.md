@@ -943,7 +943,7 @@ After:
 
 ```typescript
 const animationEvents = createAnimationEvents({
-  events: () => state.value?.animationEvents,
+  frame: () => state.value ?? undefined, // the seat's latest PlayerGameState
   handlerWaitTimeout: 3000, // optional, default 3s
 });
 ```

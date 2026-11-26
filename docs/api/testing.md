@@ -709,7 +709,7 @@ test('the board plays the shot of each move', async () => {
   const testGame = createTestGame(BattleGame, { playerCount: 2 });
   const frame = shallowRef(buildPlayerState(testGame.runner, 1));
   const scope = effectScope();
-  const events = scope.run(() => createAnimationEvents({ events: () => frame.value.animationEvents }))!;
+  const events = scope.run(() => createAnimationEvents({ frame: () => frame.value }))!;
   const shell = await tableShellContext(testGame, 1, { provide: { [ANIMATION_EVENTS_KEY]: events } });
   const wrapper = mount(ShotBoard, { global: { provide: shell.provide } });
 

@@ -215,7 +215,7 @@ describe('a board mounted once plays the animation events of every frame it is h
     const game = TestGame.create(ShotGame, { playerCount: 2, seed: 'bs1805' });
     const frame = shallowRef(buildPlayerState(game.runner, 1));
     const scope = effectScope();
-    const events = scope.run(() => createAnimationEvents({ events: () => frame.value.animationEvents }))!;
+    const events = scope.run(() => createAnimationEvents({ frame: () => frame.value }))!;
     const shell = await tableShellContext(game, 1, { provide: { [ANIMATION_EVENTS_KEY]: events } });
     const wrapper = mount(AnimatedBoard, { global: { provide: shell.provide } });
     onTestFinished(() => {
