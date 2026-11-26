@@ -167,7 +167,7 @@ export const gameDefinition: GameDefinition = {
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
 `actions`, `view` and `vacate` are required; `stateVersion`, `genesis`,
-`presence`, `referral` and `vacateByClock` are optional. `vacate` and
+`fixtures`, `presence`, `referral` and `vacateByClock` are optional. `vacate` and
 `vacateByClock` are how a chair comes back, see [giving a chair
 back](#giving-a-chair-back).
 
@@ -287,6 +287,30 @@ Genesis is all or nothing. A store checks every partition's name and size
 before it writes any of them (`WorldPartitionWriter.createAll`), so a world
 whose genesis names one partition it may not hold is refused outright rather
 than left half-created and wedged forever.
+
+### `world.fixtures`: named states a new world can start from instead
+
+```ts
+fixtures?: Record<string, (game: Game) => Record<string, GameElement>>;
+```
+
+A check that needs an established world, such as two empires already allied,
+should not have to play into it on the world's clock. Declare that state as a
+named fixture: each one has genesis's shape and runs on the same game,
+registration and id allocation, so build it with your own rules and return its
+roots. Genesis's rules apply to it, including the `invalid-partition-root`
+refusal.
+
+A host starts a new world from one with `runner.fixture(name)` in place of
+`runner.genesis()`, and gets the same `{ partitions, nextElementId }` back. A
+name the bundle does not declare is refused `unknown-fixture` before anything is
+built. `boardsmith build` lists the names in the manifest's `world.fixtures`, so
+a host can check a requested name before it builds a world. Which worlds a host
+lets start from a fixture is its own policy.
+
+A test starts one with `createTestWorld({ definition, fixture: 'allied' })`.
+`boardsmith validate`, and so `boardsmith verify`, fails when a declared fixture
+is started by no test, because nothing else runs it.
 
 ### `world.createPartition`: a root built the first time somebody reaches for it
 
@@ -3056,6 +3080,8 @@ your game.
 | `seat-conflict` | A seating named a player who already holds a different seat, or a seat another player already holds. |
 | `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. When what it is behind on is a scheduled event that refused, the message names that event (by its `.prompt()` if the clock action declares one, otherwise by its action name) and says the world is waiting on it, since a refused event is retried but may never go through. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
+| `unknown-fixture` | A host asked to start a new world from a fixture the bundle does not declare in `world.fixtures`. Nothing was built. |
+| `fixture-world-launched` | A host asked to start a world from a fixture after the world had already launched. A fixture only builds a new world. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
 | `stale-draft` | A quote, or a pick re-asked with earlier answers bound, was asked about a draft whose element selection names nothing this action can offer the seat now: the element was taken since the offer was sent, or the id was never in an offer. Ask for the offer again. |

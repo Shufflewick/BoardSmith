@@ -1083,6 +1083,14 @@ export function findDispatchWrappers(sources: readonly SourceFile[]): DispatchWr
   return findWrappers(sources, dispatchCarriers, ENTRY_POINT_NAMES);
 }
 
+/** Whether a node sits inside a skipped, todo or conditional test, which never counts as covering anything. */
+function skippedTestCheck(scoped: ScopedSource): (node: AstNode) => boolean {
+  const ranges = collectBlocks(scoped)
+    .filter((b) => b.skipped)
+    .map((b) => b.range);
+  return (node) => ranges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
+}
+
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
 export function findDispatches(
   source: string,
@@ -1090,12 +1098,7 @@ export function findDispatches(
   wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS,
 ): Array<{ verb: string; line: number }> {
   const scoped = parseScoped(source, file);
-  const skippedRanges = collectBlocks(scoped)
-    .filter((b) => b.skipped)
-    .map((b) => b.range);
-  const inSkipped = (node: AstNode) =>
-    skippedRanges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
-
+  const inSkipped = skippedTestCheck(scoped);
   const dispatches: Array<{ verb: string; line: number }> = [];
   walk(scoped.ast, (node) => {
     if (node.type !== 'CallExpression' || inSkipped(node)) return;
@@ -1110,6 +1113,45 @@ export function findDispatches(
 /** Every verb the file dispatches through the engine, outside skipped tests, in source order. */
 export function findDispatchedVerbs(source: string, file?: string, wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS): string[] {
   return [...new Set(findDispatches(source, file, wrappers).map((d) => d.verb))];
+}
+
+// -------------------------------------------------------------------------------------------
+// World fixtures (#1825)
+// -------------------------------------------------------------------------------------------
+
+/** Names every way a test counts as starting a world from a fixture, for error messages. */
+export const FIXTURE_FORMS =
+  "createTestWorld({ definition, fixture: 'name' }), runner.fixture('name') on the world runner, " +
+  "or a helper of the project's own under tests/ that passes the name it is given to one of these";
+
+/** What a call that starts a world from a fixture carries the fixture's name in. */
+const fixtureCarriers: Carriers = (source, call, wrappers) => {
+  const name = calleeName(call.callee as AstNode);
+  const own =
+    name === 'fixture' && (call.callee as AstNode).type === 'MemberExpression' ? [{ node: argAt(call, 0), path: [] }]
+    : name === 'createTestWorld' ? [{ node: argAt(call, 0), path: ['fixture'] }]
+    : [];
+  return [...own, ...helperCarriers(source, call, wrappers)];
+};
+
+/** Every project function (a test harness, usually) that starts a world from a fixture named by a parameter. */
+export function findFixtureWrappers(sources: readonly SourceFile[]): DispatchWrappers {
+  return findWrappers(sources, fixtureCarriers, ['fixture', 'createTestWorld']);
+}
+
+/** Every fixture the file starts a world from, outside skipped tests. */
+export function findStartedFixtures(source: string, file?: string, wrappers: DispatchWrappers = NO_DISPATCH_WRAPPERS): string[] {
+  const scoped = parseScoped(source, file);
+  const inSkipped = skippedTestCheck(scoped);
+  const started = new Set<string>();
+  walk(scoped.ast, (node) => {
+    if (node.type !== 'CallExpression' || inSkipped(node)) return;
+    for (const value of carriedValues(scoped, node, fixtureCarriers, wrappers)) {
+      const name = isNode(value) ? literalText(value) : undefined;
+      if (name !== undefined) started.add(name);
+    }
+  });
+  return [...started];
 }
 
 // -------------------------------------------------------------------------------------------

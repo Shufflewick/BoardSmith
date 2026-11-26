@@ -148,8 +148,10 @@ function deriveWorldBlock(world: WorldDefinition): {
   maxPlayers: number;
   stateVersion: number;
   migratesFrom?: number;
+  fixtures?: string[];
 } {
   const declared = readWorldDefinition({ world });
+  const fixtureNames = Object.keys(declared.fixtures ?? {});
   return {
     maxPlayers: declared.maxPlayers,
     stateVersion: declared.stateVersion ?? 0,
@@ -160,6 +162,9 @@ function deriveWorldBlock(world: WorldDefinition): {
     // migration itself stays inside the rules, where it can see the elements;
     // a manifest that carried the hook would be a copy of code nobody runs.
     ...(declared.migration === undefined ? {} : { migratesFrom: declared.migration.from }),
+    // WHICH FIXTURES A HOST MAY START A NEW WORLD FROM (#1825), so it can
+    // check a requested name, and list them, before it builds a world.
+    ...(fixtureNames.length === 0 ? {} : { fixtures: fixtureNames }),
   };
 }
 

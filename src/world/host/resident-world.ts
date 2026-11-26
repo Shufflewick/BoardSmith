@@ -535,8 +535,12 @@ export class ResidentWorld {
    * one -- never a world marked launched with nothing in it, which would refuse
    * every command it ever received for a partition whose absence nothing
    * explains.
+   *
+   * `fixture` launches a new world from that named `world.fixtures` entry
+   * instead of genesis (#1825). It is refused for a world already launched,
+   * whose state a fixture would not replace.
    */
-  async start(): Promise<WorldStartOutcome> {
+  async start(fixture?: string): Promise<WorldStartOutcome> {
     let migrated: WorldStartOutcome["migrated"] = undefined;
     await this.run(async () => {
       // A CRASH'S LEFTOVER MARKS (#730) describe a live tree that died with the
@@ -556,8 +560,14 @@ export class ResidentWorld {
         // world born on stateVersion 2 that recorded 0 would be asked to
         // migrate from a version it was never written in.
         await this.#store.createAll(
-          await this.#world.runner.genesis(),
+          await (fixture === undefined ? this.#world.runner.genesis() : this.#world.runner.fixture(fixture)),
           readWorldDefinition(this.#definition).stateVersion ?? 0,
+        );
+      } else if (fixture !== undefined) {
+        throw worldRefusal(
+          "fixture-world-launched",
+          `This world has already launched, so it cannot start from fixture ${JSON.stringify(fixture)}: ` +
+            "a fixture builds a new world and would not replace this one's state. Start it from an empty store.",
         );
       } else {
         // BEFORE ANYTHING IS WRITTEN (#400): an ended world is never moved

@@ -420,6 +420,17 @@ describe('deriveManifest — a world-only bundle', () => {
     });
   });
 
+  it('names the fixtures a host may start a new world from, so it can check a name before it builds anything (#1825)', () => {
+    const fixture = () => ({});
+    const world = { ...makeWorldDefinition(12).world!, fixtures: { allied: fixture, besieged: fixture } };
+    expect(deriveWorld(worldConfig, { ...makeWorldDefinition(12), world } as GameDefinition).world).toEqual({
+      maxPlayers: 12,
+      stateVersion: 0,
+      fixtures: ['allied', 'besieged'],
+    });
+    expect(deriveWorld(worldConfig, makeWorldDefinition(12)).world).not.toHaveProperty('fixtures');
+  });
+
   it('leaves the field off entirely for a bundle that declares no migration', () => {
     expect(deriveWorld(worldConfig, makeWorldDefinition(12)).world).not.toHaveProperty(
       'migratesFrom',

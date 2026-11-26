@@ -52,6 +52,8 @@ import { ENGINE_CONTRACT } from '../../contract/index.js';
 import { engineChangeHint } from '../lib/engine-changes.js';
 import { isRecord } from '../../utils/is-record.js';
 import { getProjectContext } from '../lib/project-context.js';
+import { unstartedFixtures } from './test-step-check.js';
+import { FIXTURE_FORMS } from './test-step-ast.js';
 
 interface ValidationResult {
   name: string;
@@ -146,6 +148,9 @@ async function runValidation(
 
   // 9. Every sprite the table builds carries the sizes getSpriteStyle needs (#1021).
   if (!worldMode) results.push(await validateSpriteImages(rules));
+
+  // 10. Every world fixture is started by a test, since nothing else runs one (#1825).
+  if (worldMode) results.push(await validateWorldFixtures(rules));
 
   return { results, worldMode };
 }
@@ -1441,6 +1446,47 @@ async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationRe
   if (result.passed) spinner.succeed('Rules agree with boardsmith.json');
   else spinner.fail('Rules and boardsmith.json disagree');
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// World fixtures (#1825)
+// ---------------------------------------------------------------------------
+
+/**
+ * Every `world.fixtures` entry is started by some test file. A host starts a
+ * world from one on request and no other check runs it, so a fixture no test
+ * starts could break with nothing saying so.
+ */
+export async function validateWorldFixtures(rules: ProjectRules): Promise<ValidationResult> {
+  const name = 'World fixtures started by tests';
+  const spinner = ora('Checking every world fixture is started by a test...').start();
+  let declared: string[];
+  try {
+    declared = Object.keys((await rules.load()).world?.fixtures ?? {});
+  } catch (error) {
+    spinner.fail('Rules could not be loaded');
+    return {
+      name,
+      passed: false,
+      message: `Your rules could not be loaded, so their world fixtures could not be checked: ${(error as Error).message}. Fix that error and run boardsmith validate again.`,
+    };
+  }
+  const unstarted = declared.length === 0 ? [] : await unstartedFixtures(rules.cwd, declared);
+  if (unstarted.length === 0) {
+    spinner.succeed(name);
+    const message = declared.length === 0 ? 'This world declares no fixtures.' : 'A test starts a world from every fixture it declares.';
+    return { name, passed: true, message };
+  }
+  spinner.fail(name);
+  return {
+    name,
+    passed: false,
+    message:
+      `No test starts a world from ${unstarted.length === 1 ? 'this fixture' : 'these fixtures'}: ` +
+      `${unstarted.map((one) => JSON.stringify(one)).join(', ')}. A host can start a new world from any fixture the ` +
+      `bundle declares, and nothing else runs one. For each, add a test that starts a world from it with ${FIXTURE_FORMS}, ` +
+      'and checks the state it builds.',
+  };
 }
 
 // ---------------------------------------------------------------------------
