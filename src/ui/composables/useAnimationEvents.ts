@@ -84,8 +84,8 @@ export interface AnimationFrame {
    * The game, how many times its runner was restored, and the seat whose
    * numbers the ids are (UNDO-04, #489). Each seat numbers only the events it
    * may see, and a restore numbers them again, so a CHANGE in these starts a
-   * new sequence: the queue resumes that timeline's watermark, or starts from
-   * 0, so replayed beats are delivered instead of silently dropped. A frame
+   * new sequence: the queue resets its watermark to 0, so replayed beats are
+   * delivered instead of silently dropped. A frame
    * that does not name all three gives no signal, which is never a rewind.
    * It is not an action count: a count of every seat's actions would let a
    * seat count another seat's secret ones (#449).
@@ -210,7 +210,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   let waitTimer: ReturnType<typeof setTimeout> | null = null;
   const noEventClaims = new Set<symbol>();
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
+  let disposed = false;
   onScopeDispose(() => {
+    disposed = true;
     if (waitTimer !== null) clearTimeout(waitTimer);
   }, true);
 
@@ -327,7 +329,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     playingView.value = undefined;
     isAnimating.value = false;
     // Events taken in while a skipped loop wound down found it still running, so they start here.
-    if (queue.length > 0) void processQueue();
+    if (queue.length > 0 && !disposed) void processQueue();
   }
 
   /**

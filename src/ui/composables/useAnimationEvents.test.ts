@@ -1416,6 +1416,15 @@ describe('useAnimationEvents', () => {
         await waitForIdle(instance);
       }
       expect(delivered).toEqual([1]);
+
+      frame.value = { gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 0, animationEvents: [createEvent(1, 'test')] };
+      await nextTick();
+      await waitForIdle(instance);
+      frame.value = { gameInstanceId: 'g', restoreEpoch: 1, viewerSeat: 0, animationEvents: [createEvent(1, 'test')] };
+      await nextTick();
+      await waitForIdle(instance);
+      // Seat 0 names a timeline like any other, so its restore replays.
+      expect(delivered).toEqual([1, 1]);
     });
 
     it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {
@@ -1444,6 +1453,28 @@ describe('unmount (#749)', () => {
       await vi.advanceTimersByTimeAsync(500);
 
       // The timeout would have warned "skipped: no handler" for a shell that is gone.
+      expect(consoleWarn).not.toHaveBeenCalled();
+    } finally {
+      consoleWarn.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+  it('starts no wait after the owner scope stops, for events a skipped loop left behind', async () => {
+    vi.useFakeTimers();
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const events = ref<AnimationEvent[]>([]);
+      const scope = effectScope();
+      const instance = scope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 }))!;
+      instance.registerHandler('slow', () => new Promise<void>(() => {}), { skip: 'drop' });
+      events.value = [createEvent(1, 'slow')];
+      await nextTick();
+
+      instance.skipAll();
+      events.value = [createEvent(2, 'unhandled')];
+      scope.stop();
+      await vi.advanceTimersByTimeAsync(500);
+
       expect(consoleWarn).not.toHaveBeenCalled();
     } finally {
       consoleWarn.mockRestore();
