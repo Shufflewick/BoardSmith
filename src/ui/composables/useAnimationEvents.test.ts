@@ -7,6 +7,7 @@ import {
   createAnimationEvents,
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
+  type AnimationFrame,
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
@@ -1399,6 +1400,24 @@ describe('useAnimationEvents', () => {
       expect(delivered).toEqual(['seat 1#5', 'seat 2#1']);
     });
 
+    it('never resets on a frame that does not name its game, its restore count and its seat', async () => {
+      const frame = ref<AnimationFrame>({ animationEvents: [], restoreEpoch: 0, viewerSeat: 1 });
+      const delivered: number[] = [];
+      const instance = createAnimationEvents({ frame: () => frame.value });
+      instance.registerHandler('test', async (event) => void delivered.push(event.id), { skip: 'drop' });
+      for (const named of [
+        { restoreEpoch: 0, viewerSeat: 1 },
+        { gameInstanceId: 'g', viewerSeat: 1 },
+        { gameInstanceId: 'g', restoreEpoch: 2 },
+        { restoreEpoch: 3, viewerSeat: 2 },
+      ]) {
+        frame.value = { ...named, animationEvents: [createEvent(1, 'test')] };
+        await nextTick();
+        await waitForIdle(instance);
+      }
+      expect(delivered).toEqual([1]);
+    });
+
     it('never resets when no timeline source is supplied (absence is not a rewind signal)', async () => {
       const q = harness();
       await q.send([1, 2, 3]);
@@ -1532,21 +1551,6 @@ describe('playingView', () => {
     await nextTick();
     await flushMicrotasks();
     expect(q.playedOver).toEqual([1, 2]);
-  });
-
-  it('does not replay a seat\'s played events when the page leaves that seat and comes back before Vue flushes', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-
-    q.frame.value = { events: [], view: viewAt(5), timeline: 'game:0:2' };
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0:1' };
-    await nextTick();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1]);
   });
 
   it('plays the events of a restore count it saw before, since a reloaded snapshot numbers them again', async () => {

@@ -19,9 +19,7 @@
  * @example
  * ```typescript
  * // In GameShell setup (root component)
- * const animationEvents = createAnimationEvents({
- *   events: () => state.value?.animationEvents,
- * });
+ * const animationEvents = createAnimationEvents({ frame: () => state.value?.state });
  * provide(ANIMATION_EVENTS_KEY, animationEvents);
  *
  * // In child components
@@ -116,9 +114,7 @@ export interface UseAnimationEventsOptions {
  * was built for. `undefined` (no signal) when any is missing, so a state that
  * does not name all three can never look like a rewind or a change of seat.
  */
-export function animationTimeline(
-  state: { gameInstanceId?: string; restoreEpoch?: number; viewerSeat?: number } | undefined,
-): string | undefined {
+function animationTimeline(state: AnimationFrame | undefined): string | undefined {
   if (state?.gameInstanceId === undefined || state.restoreEpoch === undefined || state.viewerSeat === undefined) {
     return undefined;
   }
@@ -191,7 +187,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const playingView = shallowRef<GameRootView>();
 
   // The watermark: the highest id queued in the current timeline, so an event
-  // is queued once however many frames carry it. A change of timeline moves it.
+  // is queued once however many frames carry it. A change of timeline resets it.
   let lastQueuedId = 0;
 
   // Last timeline a frame named (UNDO-04 rewind signal). `undefined` means "no
@@ -437,11 +433,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // One watcher takes in every frame as it lands ('sync'): a frame that a
   // later one replaced before Vue flushed still queues its events, each with
-  // that frame's view. A change of seat resumes that seat's watermark in
-  // this game and restore count; any other change of timeline starts from 0,
-  // since a restore or a reloaded snapshot numbers the events again.
-  const seatWatermarks = new Map<string, number>();
-  let lastRun: string | undefined;
+  // that frame's view. A change of timeline resets the watermark before the
+  // frame's events are filtered: a new seat, a restore or a reloaded snapshot
+  // numbers the events again.
   let lastEvents: AnimationEvent[] | undefined;
   const framesTakenIn = ref(0);
   watch(
@@ -450,21 +444,14 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const timeline = animationTimeline(frame);
       let moved = false;
       if (timeline !== undefined) {
-        const run = `${frame?.gameInstanceId}:${frame?.restoreEpoch}`;
         if (lastTimeline !== undefined && timeline !== lastTimeline) {
-          if (run === lastRun) {
-            seatWatermarks.set(lastTimeline, lastQueuedId);
-          } else {
-            seatWatermarks.clear();
-          }
-          lastQueuedId = seatWatermarks.get(timeline) ?? 0;
+          lastQueuedId = 0;
           // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
           for (const entry of queue) entry.view = undefined;
           playingView.value = undefined;
           moved = true;
         }
         lastTimeline = timeline;
-        lastRun = run;
       }
       const events = frame?.animationEvents;
       // The shell keeps an unchanged events array, so a replay may be the very array already taken in.

@@ -4,7 +4,7 @@ import type { AnimationEvent } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import { botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
 import { SnapshotSessionHost, type SnapshotHostState } from './snapshot-session-host.js';
-import { createAnimationEvents, animationTimeline } from '../ui/composables/useAnimationEvents.js';
+import { createAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 
 // A demo's "back" puts the game one move back. The move it then plays has
 // animations, and the client must play them: it already played the beats of
@@ -133,14 +133,5 @@ describe('demo step back (#449 review)', () => {
 
     await host.handleOp(1, { type: 'demoStop' });
     await until(() => seat1?.isDemoRunning === undefined);
-  });
-
-  it('names no timeline when the state does not say which game, restore or seat it is', () => {
-    expect(animationTimeline(undefined)).toBeUndefined();
-    expect(animationTimeline({ restoreEpoch: 0, viewerSeat: 1 })).toBeUndefined();
-    expect(animationTimeline({ gameInstanceId: 'g', viewerSeat: 1 })).toBeUndefined();
-    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2 })).toBeUndefined();
-    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2, viewerSeat: 1 })).toBe('g:2:1');
-    expect(animationTimeline({ gameInstanceId: 'g', restoreEpoch: 2, viewerSeat: 0 })).toBe('g:2:0');
   });
 });

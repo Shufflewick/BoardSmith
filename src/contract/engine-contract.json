@@ -4230,7 +4230,7 @@
       "surfaceHash": "3fdad2d7c1e7f5c6",
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
-      "summary": "createAnimationEvents takes one frame getter (a seat's PlayerGameState) in place of events, view and timeline, and animationTimeline is no longer exported. The queue takes in every frame as it lands, so a frame replaced before Vue flushes still plays its events, each over that frame's view; events queued before an undo or a change of seat play over the latest view, and returning to a seat does not replay what it played (#1815)."
+      "summary": "createAnimationEvents takes one frame getter (a seat's PlayerGameState) in place of events, view and timeline, and animationTimeline is no longer exported. The queue takes in every frame as it lands, so a frame replaced before Vue flushes still plays its events, each over that frame's view; events queued before an undo or a change of seat play over the latest view (#1815)."
     }
   ]
 }
