@@ -61,8 +61,7 @@ provide('presentation', computed(() => props.presentation));
 provide(GAME_VIEW_KEY, computed(() => props.gameView));
 
 // Without this claim the queue waits 3s per event for a handler, hiding the Action Panel.
-const releaseAnimationClaim = useAnimationEvents()?.claimNoEvents();
-onUnmounted(() => releaseAnimationClaim?.());
+useAnimationEvents()?.claimNoEvents();
 
 // ---------------------------------------------------------------------------
 // findDefaultBackImage — scans element tree for the first card back image
