@@ -1,5 +1,5 @@
 {
-  "revision": 537,
+  "revision": 538,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4239,6 +4239,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The animation queue clears a waiting event's view on a change of seat, resumes a seat's watermark when the page returns to it within one Vue flush, stops on unmount, holds a waiting event while paused, hands it only to a handler still registered, and on Skip runs a skip: run handler for it, over the latest view (#1815)."
+    },
+    {
+      "revision": 538,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The animation queue is an explicit state machine with no frame views: useAnimatedView, playingView and paused are gone, a board draws each beat from its event's data, an undo, restore or change of seat skips the events still queued, and a return to a seat never replays its events (#1818)."
     }
   ]
 }

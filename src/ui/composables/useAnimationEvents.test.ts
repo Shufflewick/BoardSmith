@@ -8,10 +8,10 @@ import {
   useAnimationEvents,
   ANIMATION_EVENTS_KEY,
   type AnimationFrame,
+  type AnimationHandler,
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
-import type { GameRootView } from '../types.js';
 
 /**
  * Helper to create test events
@@ -220,6 +220,20 @@ describe('useAnimationEvents', () => {
       consoleError.mockRestore();
     });
 
+    it('a handler that returns no promise does not stop the queue', async () => {
+      const events = ref<AnimationEvent[]>([]);
+      const handled: number[] = [];
+      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      // A board written in JavaScript can hand in a handler that returns nothing.
+      const noPromise = ((event: AnimationEvent) => void handled.push(event.id)) as unknown as AnimationHandler;
+      instance.registerHandler('test', noPromise, { skip: 'drop' });
+
+      events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
+      await nextTick();
+      await waitForIdle(instance);
+      expect(handled).toEqual([1, 2]);
+    });
+
     it('events without handlers are skipped when handlerWaitTimeout is 0', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
@@ -358,44 +372,6 @@ describe('useAnimationEvents', () => {
       expect(handlerStarts).toEqual([1]);
     });
 
-    it('works when paused (resumes and clears)', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const handled: number[] = [];
-
-      const instance = createAnimationEvents({
-        frame: () => ({ animationEvents: events.value }),
-      });
-
-      instance.registerHandler('test', async (event) => {
-        handled.push(event.id);
-        if (event.id === 1) {
-          // Pause after first handler
-          instance.paused.value = true;
-        }
-        await new Promise((r) => setTimeout(r, 10));
-      }, { skip: 'drop' });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-        createEvent(3, 'test'),
-      ];
-      await nextTick();
-
-      // Wait for first event to be processed and paused
-      await new Promise((r) => setTimeout(r, 50));
-      expect(instance.paused.value).toBe(true);
-      expect(handled).toEqual([1]);
-
-      // Skip should work even when paused
-      instance.skipAll();
-
-      await waitForIdle(instance);
-
-      // Only first event handled, rest skipped
-      expect(handled).toEqual([1]);
-    });
-
     it('aborts in-flight handler via signal so queue unblocks immediately', async () => {
       const events = ref<AnimationEvent[]>([]);
       const timeline: string[] = [];
@@ -488,106 +464,6 @@ describe('useAnimationEvents', () => {
     });
   });
 
-  describe('paused state', () => {
-    it('pausing stops processing at current event', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const handled: number[] = [];
-
-      const instance = createAnimationEvents({
-        frame: () => ({ animationEvents: events.value }),
-      });
-
-      instance.registerHandler('test', async (event) => {
-        handled.push(event.id);
-        if (event.id === 1) {
-          instance.paused.value = true;
-        }
-        await new Promise((r) => setTimeout(r, 10));
-      }, { skip: 'drop' });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-      ];
-      await nextTick();
-
-      // Wait for pause to take effect
-      await new Promise((r) => setTimeout(r, 50));
-
-      expect(handled).toEqual([1]);
-      expect(instance.isAnimating.value).toBe(true); // Still animating (paused)
-    });
-
-    it('resuming continues from where it stopped', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const handled: number[] = [];
-
-      const instance = createAnimationEvents({
-        frame: () => ({ animationEvents: events.value }),
-      });
-
-      instance.registerHandler('test', async (event) => {
-        handled.push(event.id);
-        if (event.id === 1) {
-          instance.paused.value = true;
-        }
-        await new Promise((r) => setTimeout(r, 10));
-      }, { skip: 'drop' });
-
-      events.value = [
-        createEvent(1, 'test'),
-        createEvent(2, 'test'),
-        createEvent(3, 'test'),
-      ];
-      await nextTick();
-
-      // Wait for pause
-      await new Promise((r) => setTimeout(r, 50));
-      expect(handled).toEqual([1]);
-
-      // Resume
-      instance.paused.value = false;
-      await waitForIdle(instance);
-
-      expect(handled).toEqual([1, 2, 3]);
-    });
-
-    it('events still queue while paused', async () => {
-      const events = ref<AnimationEvent[]>([]);
-      const handled: number[] = [];
-
-      const instance = createAnimationEvents({
-        frame: () => ({ animationEvents: events.value }),
-      });
-
-      instance.registerHandler('test', async (event) => {
-        handled.push(event.id);
-        if (event.id === 1) {
-          instance.paused.value = true;
-        }
-        await new Promise((r) => setTimeout(r, 10));
-      }, { skip: 'drop' });
-
-      events.value = [createEvent(1, 'test')];
-      await nextTick();
-
-      // Wait for pause
-      await new Promise((r) => setTimeout(r, 50));
-
-      // Add more events while paused
-      events.value = [...events.value, createEvent(2, 'test'), createEvent(3, 'test')];
-      await nextTick();
-
-      expect(instance.pendingCount.value).toBe(2);
-
-      // Resume
-      instance.paused.value = false;
-      await waitForIdle(instance);
-
-      expect(handled).toEqual([1, 2, 3]);
-    });
-  });
-
   describe('pendingCount', () => {
     it('updates as events are added', async () => {
       const events = ref<AnimationEvent[]>([]);
@@ -596,15 +472,12 @@ describe('useAnimationEvents', () => {
         frame: () => ({ animationEvents: events.value }),
       });
 
-      // Pause so events queue up
-      instance.paused.value = true;
 
       events.value = [
         createEvent(1, 'test'),
         createEvent(2, 'test'),
         createEvent(3, 'test'),
       ];
-      await nextTick();
 
       expect(instance.pendingCount.value).toBe(3);
     });
@@ -641,15 +514,12 @@ describe('useAnimationEvents', () => {
         frame: () => ({ animationEvents: events.value }),
       });
 
-      // Pause to queue events
-      instance.paused.value = true;
 
       events.value = [
         createEvent(1, 'test'),
         createEvent(2, 'test'),
         createEvent(3, 'test'),
       ];
-      await nextTick();
 
       expect(instance.pendingCount.value).toBe(3);
 
@@ -1119,15 +989,12 @@ describe('useAnimationEvents', () => {
         dropCalls.push(event.id);
       }, { skip: 'drop' });
 
-      // Pause so events queue up without processing
-      instance.paused.value = true;
 
       events.value = [
         createEvent(1, 'sync-type'),
         createEvent(2, 'cosmetic-type'),
         createEvent(3, 'sync-type'),
       ];
-      await nextTick();
 
       instance.skipAll();
       // Let fire-and-forget promises settle
@@ -1157,9 +1024,7 @@ describe('useAnimationEvents', () => {
         timeline.push('cleanup');
       }, { skip: 'run' });
 
-      instance.paused.value = true;
       events.value = [createEvent(1, 'sync-work')];
-      await nextTick();
 
       instance.skipAll();
       await new Promise((r) => setTimeout(r, 20));
@@ -1179,9 +1044,7 @@ describe('useAnimationEvents', () => {
         calls.push(event.id);
       }, { skip: 'drop' });
 
-      instance.paused.value = true;
       events.value = [createEvent(1, 'cosmetic'), createEvent(2, 'cosmetic')];
-      await nextTick();
 
       instance.skipAll();
       await new Promise((r) => setTimeout(r, 20));
@@ -1206,9 +1069,7 @@ describe('useAnimationEvents', () => {
         secondCalled.value = true;
       }, { skip: 'run' });
 
-      instance.paused.value = true;
       events.value = [createEvent(1, 'boom'), createEvent(2, 'safe')];
-      await nextTick();
 
       instance.skipAll();
       await new Promise((r) => setTimeout(r, 20));
@@ -1268,7 +1129,6 @@ describe('useAnimationEvents', () => {
         processed.push({ type: 'sync2', id: event.id });
       }, { skip: 'run' });
 
-      instance.paused.value = true;
       events.value = [
         createEvent(1, 'cosmetic'),
         createEvent(2, 'sync'),
@@ -1276,7 +1136,6 @@ describe('useAnimationEvents', () => {
         createEvent(4, 'sync2'),
         createEvent(5, 'cosmetic'),
       ];
-      await nextTick();
 
       instance.skipAll();
       await new Promise((r) => setTimeout(r, 20));
@@ -1483,169 +1342,6 @@ describe('unmount (#749)', () => {
   });
 });
 
-describe('playingView', () => {
-  const viewAt = (round: number): GameRootView => ({
-    id: 0, className: 'Game', phase: 'started', isFinished: false, settings: {}, attributes: { round },
-  });
-
-  /** A queue whose 'test' handler records the view it played over and waits until released. */
-  function harness(options: { handlerWaitTimeout?: number } = {}) {
-    const frame = ref<{ events: AnimationEvent[]; view: GameRootView; timeline: string | undefined }>({
-      events: [], view: viewAt(0), timeline: 'game:0',
-    });
-    const instance = createAnimationEvents({
-      frame: () => ({ animationEvents: frame.value.events, view: frame.value.view, ...timelineOf(frame.value.timeline) }),
-      ...options,
-    });
-    const playedOver: Array<number | undefined> = [];
-    let release: () => void = () => {};
-    const register = () => instance.registerHandler('test', async () => {
-      playedOver.push(instance.playingView.value?.attributes?.round as number | undefined);
-      await new Promise<void>((resolve) => { release = resolve; });
-    }, { skip: 'drop' });
-    return { frame, instance, playedOver, register, release: () => release() };
-  }
-
-  it('pairs each event with the frame it first arrived in when two frames land in one flush', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    q.frame.value = { events: [createEvent(1, 'test'), createEvent(2, 'test')], view: viewAt(2), timeline: 'game:0' };
-    await nextTick();
-
-    q.release();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1, 2]);
-  });
-
-  it('plays the events of every frame that lands in one flush, each over its own frame', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test'), createEvent(2, 'test')], view: viewAt(1), timeline: 'game:0' };
-    q.frame.value = { events: [createEvent(3, 'test')], view: viewAt(2), timeline: 'game:0' };
-    await nextTick();
-
-    for (let i = 0; i < 3; i++) {
-      q.release();
-      await flushMicrotasks();
-    }
-    expect(q.playedOver).toEqual([1, 1, 2]);
-  });
-
-  it('plays an event from before an undo in the same flush over the latest view, and its replay over the frame after the undo', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(9), timeline: 'game:1' };
-    await nextTick();
-
-    q.release();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([undefined, 9]);
-  });
-
-  it('replays the very events array it already took in once the timeline changes', async () => {
-    const q = harness();
-    q.register();
-    const events = [createEvent(1, 'test')];
-    q.frame.value = { events, view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-
-    q.frame.value = { events, view: viewAt(9), timeline: 'game:1' };
-    await nextTick();
-    expect(q.playedOver).toEqual([1, 9]);
-  });
-
-  it('resets on a timeline that passes through one with no signal before Vue flushes', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-
-    q.frame.value = { events: [], view: viewAt(2), timeline: undefined };
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(9), timeline: 'game:1' };
-    await nextTick();
-    expect(q.playedOver).toEqual([1, 9]);
-  });
-
-  it('plays a frame that lands while a skipped event is still winding down', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.instance.skipAll();
-    q.frame.value = { events: [createEvent(2, 'test')], view: viewAt(2), timeline: 'game:0' };
-    await nextTick();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1, 2]);
-  });
-
-  it('plays the events of a restore count it saw before, since a reloaded snapshot numbers them again', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-
-    q.frame.value = { events: [], view: viewAt(2), timeline: 'game:1' };
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(3), timeline: 'game:0' };
-    await nextTick();
-    expect(q.playedOver).toEqual([1, 3]);
-  });
-
-  it('plays a replay that keeps its events array over the frame that moved the timeline, not a later one', async () => {
-    const q = harness();
-    q.register();
-    const events = [createEvent(1, 'test')];
-    q.frame.value = { events, view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-
-    q.frame.value = { events, view: viewAt(9), timeline: 'game:1' };
-    q.frame.value = { events: [...events, createEvent(2, 'test')], view: viewAt(10), timeline: 'game:1' };
-    await nextTick();
-    q.release();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1, 9, 10]);
-  });
-
-  it('plays a queued event over gameView once the timeline changes, never over the old timeline\'s view', async () => {
-    const q = harness();
-    q.register();
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    q.frame.value = { events: [createEvent(2, 'test')], view: viewAt(2), timeline: 'game:0' };
-    await nextTick();
-
-    q.frame.value = { events: [], view: viewAt(9), timeline: 'game:1' };
-    await nextTick();
-    expect(q.instance.playingView.value).toBeUndefined();
-
-    q.release();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1, undefined]);
-  });
-
-  it('holds no view while the queue waits for a handler to register', async () => {
-    const q = harness({ handlerWaitTimeout: 60_000 });
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
-    await nextTick();
-    expect(q.instance.isAnimating.value).toBe(true);
-    expect(q.instance.playingView.value).toBeUndefined();
-
-    q.register();
-    await flushMicrotasks();
-    expect(q.playedOver).toEqual([1]);
-    q.release();
-  });
-});
-
 async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
@@ -1657,140 +1353,164 @@ function timelineOf(timeline: string | undefined) {
   return { gameInstanceId, restoreEpoch: Number(restoreEpoch), viewerSeat: Number(viewerSeat) };
 }
 
-describe('the queue across a change of seat, a skip and an unmount (#1815)', () => {
-  const view = (round: number): GameRootView => ({
-    id: 0, className: 'Game', phase: 'started', isFinished: false, settings: {}, attributes: { round },
-  });
-  const seatFrame = (seat: number, events: AnimationEvent[], round = seat): AnimationFrame => ({
-    animationEvents: events, view: view(round), gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: seat,
-  });
-  const roundOf = (instance: UseAnimationEventsReturn) => instance.playingView.value?.attributes?.round;
 
-  it('an event waiting for its handler plays over the latest view once the seat changes', async () => {
+describe('the queue across frames, a change of timeline, a skip and an unmount (#1815, #1818)', () => {
+  const seatFrame = (seat: number, events: AnimationEvent[], restoreEpoch = 0): AnimationFrame => ({
+    animationEvents: events, gameInstanceId: 'g', restoreEpoch, viewerSeat: seat,
+  });
+
+  /** A queue whose handlers record each event they are handed; 'slow' ones wait until released. */
+  function harness(options: { handlerWaitTimeout?: number } = {}) {
     const frame = ref<AnimationFrame>(seatFrame(1, []));
-    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
-    frame.value = seatFrame(1, [createEvent(1, 'late')]);
-    await nextTick();
-    frame.value = seatFrame(2, []);
-    await nextTick();
-
-    const seen: unknown[] = [];
-    instance.registerHandler('late', async () => void seen.push(roundOf(instance)), { skip: 'drop' });
-    await flushMicrotasks();
-    expect(seen).toEqual([undefined]);
-  });
-
-  it('does not replay a seat\'s played event when the page leaves that seat and comes back before Vue flushes', async () => {
-    const frame = ref<AnimationFrame>(seatFrame(1, []));
-    const instance = createAnimationEvents({ frame: () => frame.value });
-    const played: number[] = [];
-    instance.registerHandler('test', async (event) => void played.push(event.id), { skip: 'drop' });
-    frame.value = seatFrame(1, [createEvent(1, 'test')]);
-    await nextTick();
-    await waitForIdle(instance);
-
-    frame.value = seatFrame(2, []);
-    frame.value = seatFrame(1, [createEvent(1, 'test')]);
-    await nextTick();
-    await waitForIdle(instance);
-    expect(played).toEqual([1]);
-  });
-
-  it('keeps the views of a seat\'s queued events when the page leaves it and comes back before Vue flushes', async () => {
-    const frame = ref<AnimationFrame>(seatFrame(1, []));
-    const instance = createAnimationEvents({ frame: () => frame.value });
-    const seen: unknown[] = [];
+    const scope = effectScope();
+    const instance = scope.run(() => createAnimationEvents({ frame: () => frame.value, ...options }))!;
+    const played: string[] = [];
     let release: () => void = () => {};
-    instance.registerHandler('test', async () => {
-      seen.push(roundOf(instance));
-      await new Promise<void>((resolve) => { release = resolve; });
-    }, { skip: 'drop' });
-    const events = [createEvent(1, 'test'), createEvent(2, 'test')];
-    frame.value = seatFrame(1, events, 5);
-    frame.value = seatFrame(2, []);
-    frame.value = seatFrame(1, events, 5);
+    const register = (type: string, skip: 'run' | 'drop' = 'drop') => instance.registerHandler(type, async (event, { signal }) => {
+      played.push(`${type}${event.id}${signal.aborted ? ' skipped' : ''}`);
+      if (type === 'slow' && !signal.aborted) await new Promise<void>((resolve) => { release = resolve; });
+    }, { skip });
+    return { frame, scope, instance, played, register, release: () => release() };
+  }
+
+  it('plays the events of every frame that lands in one flush, even one replaced before the flush', async () => {
+    const q = harness();
+    q.register('slow');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'slow')]);
+    q.frame.value = seatFrame(1, [createEvent(3, 'slow')]);
     await nextTick();
-    release();
+    for (let i = 0; i < 3; i++) {
+      q.release();
+      await flushMicrotasks();
+    }
+    expect(q.played).toEqual(['slow1', 'slow2', 'slow3']);
+  });
+
+  it('does not replay a seat\'s played event when the page leaves that seat and comes back within one flush', async () => {
+    const q = harness();
+    q.register('test');
+    q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(q.instance);
+
+    q.frame.value = seatFrame(2, []);
+    q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(q.instance);
+    expect(q.played).toEqual(['test1']);
+  });
+
+  it('does not replay a seat\'s played event when the page leaves that seat and comes back across flushes', async () => {
+    const q = harness();
+    q.register('test');
+    q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(q.instance);
+
+    q.frame.value = seatFrame(2, []);
+    await nextTick();
+    q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
+    await nextTick();
+    await waitForIdle(q.instance);
+    expect(q.played).toEqual(['test1']);
+  });
+
+  it('skips the events still queued when an undo lands, running their skip: run handlers', async () => {
+    const q = harness();
+    q.register('slow');
+    q.register('sync', 'run');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'sync'), createEvent(3, 'slow')]);
+    await nextTick();
+
+    q.frame.value = seatFrame(1, [], 1);
+    expect(q.instance.isAnimating.value).toBe(false);
+    q.release();
     await flushMicrotasks();
-    expect(seen).toEqual([5, 5]);
+    expect(q.played).toEqual(['slow1', 'sync2 skipped']);
+  });
+
+  it('skips an event waiting for its handler when the seat changes', async () => {
+    const q = harness({ handlerWaitTimeout: 60_000 });
+    q.frame.value = seatFrame(1, [createEvent(1, 'late')]);
+    await nextTick();
+    q.frame.value = seatFrame(2, []);
+    await nextTick();
+
+    q.register('late');
+    await flushMicrotasks();
+    expect(q.played).toEqual([]);
+  });
+
+  it('replays the very events array it already took in once the timeline changes', async () => {
+    const q = harness();
+    q.register('test');
+    const events = [createEvent(1, 'test')];
+    q.frame.value = seatFrame(1, events);
+    await nextTick();
+    await waitForIdle(q.instance);
+
+    q.frame.value = seatFrame(1, events, 1);
+    await nextTick();
+    await waitForIdle(q.instance);
+    expect(q.played).toEqual(['test1', 'test1']);
+  });
+
+  it('plays a frame that lands while a skipped event is still winding down', async () => {
+    const q = harness();
+    q.register('slow');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow')]);
+    await nextTick();
+    q.instance.skipAll();
+    q.frame.value = seatFrame(1, [createEvent(2, 'slow')]);
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+    expect(q.played).toEqual(['slow1', 'slow2']);
   });
 
   it('plays nothing more once the owner scope stops, even when the playing handler settles after', async () => {
-    const frame = ref<AnimationFrame>({ animationEvents: [] });
-    const scope = effectScope();
-    const instance = scope.run(() => createAnimationEvents({ frame: () => frame.value }))!;
-    const played: number[] = [];
-    let finish: () => void = () => {};
-    instance.registerHandler('slow', async (event) => {
-      played.push(event.id);
-      await new Promise<void>((resolve) => { finish = resolve; });
-    }, { skip: 'drop' });
-    frame.value = { animationEvents: [createEvent(1, 'slow'), createEvent(2, 'slow')] };
+    const q = harness();
+    q.register('slow');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'slow')]);
     await nextTick();
 
-    scope.stop();
-    finish();
+    q.scope.stop();
+    q.release();
     await flushMicrotasks();
-    expect(played).toEqual([1]);
+    expect(q.played).toEqual(['slow1']);
+    expect(q.instance.isAnimating.value).toBe(false);
+  });
+
+  it('runs no skip: run handler on a Skip after the owner scope stops', async () => {
+    const q = harness();
+    q.register('sync', 'run');
+    q.frame.value = seatFrame(1, [createEvent(1, 'sync')]);
+    q.scope.stop();
+    q.instance.skipAll();
+    await flushMicrotasks();
+    expect(q.played).toEqual([]);
   });
 
   it('never hands a waiting event to a handler that unregistered before the queue resumed', async () => {
-    const frame = ref<AnimationFrame>({ animationEvents: [] });
-    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
-    frame.value = { animationEvents: [createEvent(1, 'x')] };
+    const q = harness({ handlerWaitTimeout: 60_000 });
+    q.frame.value = seatFrame(1, [createEvent(1, 'x')]);
     await nextTick();
 
-    const calls: string[] = [];
-    const unregisterA = instance.registerHandler('x', async () => void calls.push('A'), { skip: 'drop' });
+    const unregisterA = q.register('x');
     unregisterA();
-    instance.registerHandler('x', async () => void calls.push('B'), { skip: 'drop' });
+    q.instance.registerHandler('x', async () => void q.played.push('B'), { skip: 'drop' });
     await flushMicrotasks();
-    expect(calls).toEqual(['B']);
+    expect(q.played).toEqual(['B']);
   });
 
   it('runs a skip: run handler that registered for a waiting event when Skip comes before the queue resumes', async () => {
-    const frame = ref<AnimationFrame>({ animationEvents: [] });
-    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
-    frame.value = { animationEvents: [createEvent(1, 'r')] };
+    const q = harness({ handlerWaitTimeout: 60_000 });
+    q.frame.value = seatFrame(1, [createEvent(1, 'r')]);
     await nextTick();
 
-    const aborted: boolean[] = [];
-    instance.registerHandler('r', async (_event, { signal }) => void aborted.push(signal.aborted), { skip: 'run' });
-    instance.skipAll();
+    q.register('r', 'run');
+    q.instance.skipAll();
     await flushMicrotasks();
-    expect(aborted).toEqual([true]);
-  });
-
-  it('holds a waiting event while paused, even when its handler registers during the pause', async () => {
-    const frame = ref<AnimationFrame>({ animationEvents: [] });
-    const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
-    frame.value = { animationEvents: [createEvent(1, 'x')] };
-    await nextTick();
-
-    const calls: number[] = [];
-    instance.paused.value = true;
-    await nextTick();
-    instance.registerHandler('x', async (event) => void calls.push(event.id), { skip: 'drop' });
-    await flushMicrotasks();
-    expect(calls).toEqual([]);
-
-    instance.paused.value = false;
-    await nextTick();
-    await flushMicrotasks();
-    expect(calls).toEqual([1]);
-  });
-
-  it('a skip: run handler called on Skip reads the latest view, not the interrupted event\'s', async () => {
-    const frame = ref<AnimationFrame>(seatFrame(1, []));
-    const instance = createAnimationEvents({ frame: () => frame.value });
-    instance.registerHandler('a', () => new Promise<void>(() => {}), { skip: 'drop' });
-    const seen: unknown[] = [];
-    instance.registerHandler('b', async () => void seen.push(roundOf(instance)), { skip: 'run' });
-    frame.value = seatFrame(1, [createEvent(1, 'a'), createEvent(2, 'b')], 7);
-    await nextTick();
-    expect(roundOf(instance)).toBe(7);
-
-    instance.skipAll();
-    expect(seen).toEqual([undefined]);
+    expect(q.played).toEqual(['r1 skipped']);
   });
 });
