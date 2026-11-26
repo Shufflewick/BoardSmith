@@ -455,6 +455,21 @@ markers this page documents, so it keeps up with any game without knowing it:
   of the page, so once no game-over card or modal dialog is up, the walk opens
   it with its toggle (`[data-testid="bs-actionbar-toggle"]`) before it reads
   the panel (#1482).
+- A game whose action bar starts closed (`actionBarStartsCollapsed`, #1826)
+  promises its board offers every action, phones included, and the walk checks
+  that as well as it can (#1827). It learns the bar started closed from the
+  shell's `action-bar-minimized` class, read the first time it looks at each
+  game page, before it opens the bar. Before it first takes an action from the
+  panel that no board press has started yet, it closes the bar and presses one
+  board control it has not pressed, once for each action, then opens the bar
+  again. A board control pressed with nothing open is credited with the action
+  that resolves first after it, else the one open once the page settles. The
+  walk plays a step on a phone held upright (390x844, touch on) when the panel
+  offers an action it has started at its own size but not yet on a phone, so
+  each action is started on both. A passing walk then names each action it
+  started from the panel without seeing a board start for it (`Smoke used the
+  panel to start "play" and saw no board start for it.`, or `On a phone, ...`).
+  That is a warning, not a failure: crediting a start to a press is a guess.
 - Each step it answers or takes an action it has not taken yet, presses a board
   control it has not pressed, answers the open action (the panel marks it
   `data-bs-open-action="<name>"`), or takes the next `[data-bs-action]` button,

@@ -2786,3 +2786,49 @@ table {${width} }
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }
+
+/**
+ * A GAME WHOSE ACTION BAR STARTS CLOSED (#1827): the ace game, each turn offering `draw` and `play`
+ * so the shell starts neither by itself, with `actionBarStartsCollapsed`, and a board that offers a
+ * "Start <action>" button for each of `boardStarts` the seat may take now. With `hiddenOnPhones`,
+ * the board hides those buttons in a frame as narrow as a phone's.
+ */
+export function closedBarGame(options: { boardStarts: readonly string[]; hiddenOnPhones?: boolean }): Record<string, string> {
+  const phones = options.hiddenOnPhones ? '\n@media (max-width: 500px) { .start { display: none; } }' : '';
+  const ace = aceGame();
+  return {
+    ...ace,
+    'src/rules/flow.ts': ace['src/rules/flow.ts'].replace("['draw', 'play', 'showAce']", "['draw', 'play']"),
+    'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { steps: 20 }),
+    'src/ui/App.vue': `<script setup lang="ts">
+import { GameShell, definePlayerPreferences } from 'boardsmith/ui';
+import uis from './uis.js';
+
+const preferences = definePlayerPreferences('dev-game', {});
+</script>
+
+<template>
+  <GameShell :uis="uis" :preferences="preferences" action-bar-starts-collapsed />
+</template>
+`,
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed } from 'vue';
+import type { TableBoardProps } from 'boardsmith/ui';
+
+const props = defineProps<TableBoardProps>();
+const starts = computed(() => (props.isMyTurn ? props.availableActions.filter((name) => ${JSON.stringify(options.boardStarts)}.includes(name)) : []));
+</script>
+
+<template>
+  <div class="board">
+    <button v-for="name in starts" :key="name" type="button" class="start" @click="props.actionController.start(name)">Start {{ name }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { padding: 20px; }${phones}
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
