@@ -333,6 +333,12 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
         + 'read, and published as `capabilities.crossSessionState`. Remove this key from '
         + 'boardsmith.json.',
       );
+    } else if (key === 'asyncPlay' || key === 'joinInProgress') {
+      issues.push(
+        `Unknown key '${key}': every BoardSmith game is turn-based and survives gaps between moves, `
+        + "and whether a human may take a bot's seat is the host's decision, not the rules'. "
+        + 'Remove this key from boardsmith.json.',
+      );
     } else if (key === 'categories') {
       issues.push(
         "Unknown key 'categories' — replaced by 'audience' (a single string: who the game is for). Genre/theme/mechanism labels belong in 'tags'.",
@@ -443,10 +449,9 @@ function checkPlatformIdsShape(raw: unknown): string[] {
 
 /**
  * Shape checks for the blocks the PUBLISHING PLATFORM reads out of the built
- * manifest: `persistence`, `bot`, `joinInProgress`, `idleAction`,
- * `roundDeadline` and `world`. They reach the platform untouched through
- * build.ts's `deriveManifest` config spread, so a malformed block is only
- * discovered at upload unless it is caught here.
+ * manifest: `backend`, `idleAction` and `roundDeadline`. They reach the
+ * platform untouched through build.ts's `deriveManifest` config spread, so a
+ * malformed block is only discovered at upload unless it is caught here.
  *
  * SHAPE only, deliberately — the platform's own POLICY (its hour bounds, and
  * its rule that `roundDeadline` needs either `bot: true` or an `idleAction`)
@@ -467,21 +472,6 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
       + 'spectators; "world" keeps only named partitions resident and runs continuously. '
       + `Got ${JSON.stringify(config.backend)}.`,
     );
-  }
-
-  // THE TWO CAPABILITIES AN AUTHOR STILL DECLARES. Everything else in the
-  // manifest's `capabilities` object is derived from the backend and the
-  // compiled rules; these two are judgments about a game's rules that no code
-  // can answer. Both are TABLE-ONLY — `deriveManifest` refuses either on a
-  // world, where the backend already answers them.
-  const booleans: Record<string, string> = {
-    joinInProgress: 'true when a player may join a session already underway',
-    asyncPlay: 'true when the game can be played asynchronously over hours or days',
-  };
-  for (const [key, meaning] of Object.entries(booleans)) {
-    if (config[key] !== undefined && typeof config[key] !== 'boolean') {
-      issues.push(`"${key}" must be a boolean — ${meaning}.`);
-    }
   }
 
   if (config.idleAction !== undefined) {

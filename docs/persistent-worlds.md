@@ -235,7 +235,7 @@ copy, so the number a platform checks and the number your rules state cannot
 disagree. `boardsmith.json` has no `world` block at all, and putting one there
 is refused by `boardsmith validate`.
 
-## What the backend implies, and what you still declare
+## What the backend implies
 
 `boardsmith build` writes one `capabilities` object into `dist/manifest.json`:
 
@@ -246,16 +246,11 @@ is refused by `boardsmith validate`.
 | `undo` | true — the per-action snapshot is what it rewinds to | false — checkpoints on dirty, and a neighbour has already acted |
 | `spectators` | true | false — a world projects a view per *seat* |
 | `bots` | `gameDefinition.bot` exists | false — no turn, no terminal state to search toward |
-| `asyncPlay` | your declared `asyncPlay` | true, always |
-| `joinInProgress` | your declared `joinInProgress` | true, always |
 | `crossSessionState` | your `gameDefinition.persistence` | true — the partitions *are* the state that survives |
 
-`asyncPlay` and `joinInProgress` are the only two you write, in
-`boardsmith.json`, and they are **table-only**: a world is always asynchronous
-and always joinable in progress, so writing either on a world is refused rather
-than quietly ignored. `bot` and `persistence` are no longer manifest keys at
-all — they are read out of your compiled `gameDefinition`, so a manifest can no
-longer claim a bot the bundle does not ship.
+You write none of them. `bot` and `persistence` are not manifest keys — they
+are read out of your compiled `gameDefinition`, so a manifest cannot claim a bot
+the bundle does not ship.
 
 If a bundle's manifest declares a world and its compiled rules export no
 `world.actions`, or no `world.view`, it is refused on the world's first wake with

@@ -106,11 +106,10 @@ async function throwResponseError(
  * AFTER the spread so the derivation can never shadow them.
  *
  * `capabilities` (#171) is the one the platform reads for every feature
- * decision -- whether the game has a table, whether it can be played
- * asynchronously, whether a seat may be a bot, whether a move may be taken
- * back. It REPLACES the per-flag keys `asyncPlay`, `joinInProgress`,
- * `persistence` and `bot`, which the platform used to parse one at a time with
- * a separate function each; none of the four exists in a manifest any more.
+ * decision -- whether the game has a table, whether a seat may be a bot,
+ * whether a move may be taken back. It REPLACES the per-flag keys `persistence` and `bot`, which the
+ * platform used to parse one at a time with a separate function each; neither
+ * exists in a manifest any more.
  * `backend` travels beside it as an authorable schema key, for diagnostics and
  * for the one question a capability set cannot answer (which host runs this),
  * never as the thing a feature is decided from.

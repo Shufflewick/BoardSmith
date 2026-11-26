@@ -167,7 +167,6 @@ describe('config-schema', () => {
       colorPalette: [],
       paths: { rules: 'src/rules' },
       platforms: { prod: { gameId: 'abc123' } },
-      asyncPlay: true,
     });
     expect(result).toEqual([]);
   });
@@ -540,11 +539,9 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
 });
 
 /**
- * The platform-consumed blocks (`backend`, `roundDeadline`, `idleAction`,
- * `joinInProgress`, `asyncPlay`). Every one of them reaches the publishing
- * platform through build.ts's `deriveManifest` -- the two capability flags
- * inside the resolved `capabilities` object, the rest through the config
- * spread -- and until this change none of them was in
+ * The platform-consumed blocks (`backend`, `roundDeadline`, `idleAction`).
+ * Every one of them reaches the publishing platform through build.ts's
+ * `deriveManifest` config spread, and until this change none of them was in
  * `boardsmith.schema.json`, so `boardsmith validate` / `boardsmith dev` flagged
  * an author for writing exactly the block the platform requires. The shapes
  * below mirror ShufflewickPub `games/src/manifest-schema.ts`, which is the
@@ -588,14 +585,13 @@ describe('platform-consumed blocks', () => {
     expect(message).toContain('capabilities.crossSessionState');
   });
 
-  it('accepts the two capability flags an author still declares, and rejects non-boolean values', () => {
-    expect(checkMetadataIssues({
-      ...validConfig(),
-      joinInProgress: false,
-      asyncPlay: true,
-    })).toEqual([]);
-    expect(checkMetadataIssues({ ...validConfig(), joinInProgress: 'true' })[0]).toContain('"joinInProgress" must be a boolean');
-    expect(checkMetadataIssues({ ...validConfig(), asyncPlay: 'yes' })[0]).toContain('"asyncPlay" must be a boolean');
+  it('rejects `asyncPlay` and `joinInProgress`, which are the host\'s to decide (#1829)', () => {
+    for (const key of ['asyncPlay', 'joinInProgress']) {
+      const [message] = checkMetadataIssues({ ...validConfig(), [key]: true });
+      expect(message).toContain(`Unknown key '${key}'`);
+      expect(message).toContain('host');
+      expect(message).toContain('Remove this key');
+    }
   });
 
   it('accepts a valid idleAction + roundDeadline pair', () => {

@@ -100,13 +100,10 @@ describe('deriveManifest', () => {
     expect(manifest.roundDeadline).toEqual(config.roundDeadline);
   });
 
-  it('resolves the capability set, and does NOT leave the flags it was resolved from beside it', () => {
+  it('resolves the capability set, and does NOT leave the fields it was resolved from beside it', () => {
     // The whole point of #171: one object, and nothing to read instead of it.
-    // `asyncPlay`/`joinInProgress` were the manifest's answer AND a capability
-    // input; leaving both in would give a reader two places to look and one of
-    // them would drift.
     const manifest = derive(
-      { name: 'fixture', asyncPlay: true, joinInProgress: true },
+      { name: 'fixture' },
       { ...makeGameDefinition(2, 4), persistence: true },
     );
 
@@ -117,13 +114,9 @@ describe('deriveManifest', () => {
       undo: true,
       spectators: true,
       bots: false,
-      asyncPlay: true,
-      joinInProgress: true,
       crossSessionState: true,
       timedSteps: false,
     });
-    expect(manifest.asyncPlay).toBeUndefined();
-    expect(manifest.joinInProgress).toBeUndefined();
     expect(manifest.persistence).toBeUndefined();
     expect(manifest.bot).toBeUndefined();
   });
@@ -246,20 +239,6 @@ describe('deriveManifest', () => {
     ).toThrow(/"backend": "world"/);
   });
 
-  it('refuses each flag the world backend already answers, naming it', () => {
-    for (const key of ['asyncPlay', 'joinInProgress'] as const) {
-      expect(() =>
-        deriveManifest(
-          { name: 'fixture', backend: 'world', [key]: true },
-          PKG,
-          makeWorldDefinition(),
-          7,
-          { tableUi: false, worldUi: true },
-        ),
-      ).toThrow(/world backend already answers/);
-    }
-  });
-
   it('PROC-02: a stale config playerCount does NOT reach the manifest — gameDefinition wins', () => {
     // Stale/hand-edited boardsmith.json claiming a 9-9 player count, while the
     // compiled rules (gameDefinition) say 2-4. This is exactly the drift
@@ -362,8 +341,6 @@ describe('deriveManifest — a world-only bundle', () => {
       undo: false,
       spectators: false,
       bots: false,
-      asyncPlay: true,
-      joinInProgress: true,
       crossSessionState: true,
       timedSteps: false,
     });
