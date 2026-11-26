@@ -20,7 +20,7 @@
  * }, { skip: 'drop' });
  * ```
  */
-import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onBeforeUnmount, onMounted, onScopeDispose, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
+import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onBeforeUnmount, onMounted, onScopeDispose, onUnmounted, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -375,28 +375,44 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     reconsiderWait();
   }
 
-  /** Take `lease` out of the queue. Run the moment its component or scope ends, or as a step for an explicit release. */
-  function end(lease: Lease): void {
-    const was = lease.life;
+  /** Mark `lease` released, returning whether the queue had taken it in. */
+  function retire(lease: Lease): boolean {
+    const taken = lease.life === 'mounted';
     lease.life = 'released';
-    // Whether a wait ends waits for the flush, in case the same update mounts what takes the event.
-    if (was === 'mounted') send(() => { lease.drop(); scheduleAdvance(); });
+    return taken;
+  }
+
+  /** Take a retired lease out, as a step. Whether a wait ends waits for the flush, in case the same update mounts what takes the event. */
+  function dropRetired(lease: Lease): void {
+    lease.drop();
+    scheduleAdvance();
   }
 
   /**
    * Bind `lease` to the caller: it is taken in once the caller's component has mounted, with every
-   * other component the same update mounts, and released when that component or scope ends, whichever is first.
+   * other component the same update mounts, and released the moment that component or scope ends, whichever is first.
    */
   function bindToCaller(method: string, lease: Lease): () => void {
-    if (!getCurrentScope()) {
+    const scope = getCurrentScope();
+    if (!scope) {
       throw new Error(
         `${method}() must be called from a component's setup (or inside an effectScope), so the queue can release it when that component unmounts.`,
       );
     }
-    onScopeDispose(() => end(lease));
+    const end = () => { if (retire(lease)) send(() => dropRetired(lease)); };
+    onScopeDispose(end);
     const instance = getCurrentInstance();
-    // A detached scope in the component's setup outlives the component unless the unmount ends it too.
-    if (instance) onBeforeUnmount(() => end(lease));
+    if (instance) {
+      // A detached scope in the component's setup outlives the component unless the unmount ends it too.
+      onBeforeUnmount(end);
+      onUnmounted(() => {
+        if (!scope.active) return;
+        console.warn(
+          `${method}() was called in an effect scope that outlived the component whose setup made the call (a detached effectScope, createSharedComposable or a Pinia setup store). ` +
+          'The queue released it when that component unmounted, so no other component keeps it. Call it from the setup of the component that plays the event.',
+        );
+      });
+    }
     if (!instance || instance.isMounted) {
       send(() => take([lease]));
     } else {
@@ -404,7 +420,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         if (mountedThisFlush.push(lease) === 1) void nextTick(() => send(takeMounted));
       });
     }
-    return () => send(() => end(lease));
+    // An explicit release is one input: it takes effect after the current step, before any input sent after it.
+    return () => send(() => { if (retire(lease)) dropRetired(lease); });
   }
 
   /** Follow the timeline the frame names: a change skips what the queue holds, and the first timeline named is no change. */

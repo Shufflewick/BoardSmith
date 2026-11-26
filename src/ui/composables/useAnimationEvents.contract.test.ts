@@ -897,6 +897,33 @@ describe('the sequences council found breaking the contract after #1821 (#1822)'
     expect(calls).toEqual(['x3 skipped']);
   });
 
+  it('applies a release before a claim and a registration a watcher sends after it (#1822 review F2)', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    let release!: () => void;
+    const Board = defineComponent({
+      setup() {
+        release = useAnimationEvents()!.registerHandler('h', async () => {}, { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    shell(frame, () => h(Board), (q) => {
+      watch(q.pendingCount, (now, before) => {
+        if (before !== 1 || now !== 0) return;
+        release();
+        effectScope(true).run(() => {
+          q.claimNoEvents();
+          q.registerHandler('w', async (e) => void calls.push(`w${e.id}`), { skip: 'drop' });
+        });
+      }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'w')]);
+    await flushPromises();
+    expect(calls).toEqual([]);
+  });
+
   /** A board child whose setup registers `x` inside a detached effect scope it never stops. */
   function detachedBoard(calls: string[]) {
     return defineComponent({
@@ -925,6 +952,7 @@ describe('the sequences council found breaking the contract after #1821 (#1822)'
     frame.value = frameOf([event(1, 'x')]);
     await flushPromises();
     expect(calls).toEqual([]);
+    expect(vi.mocked(console.warn)).toHaveBeenCalledWith(expect.stringContaining('registerHandler() was called in an effect scope that outlived the component'));
   });
 
   it('aborts a playing handler registered in a detached scope when its component unmounts', async () => {
