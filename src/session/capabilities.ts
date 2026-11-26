@@ -134,8 +134,7 @@ export interface GameCapabilities {
  *
  * Typed loosely on purpose. `boardsmith build` hands this raw JSON and a
  * freshly compiled definition, so every field arrives as whatever was written
- * there; `capabilityContradictions` is what turns a wrong type into a sentence
- * an author can act on, and `resolveCapabilities` never reads truthiness.
+ * there, and `resolveCapabilities` never reads truthiness.
  */
 export interface CapabilityInputs {
   backend: GameBackend;

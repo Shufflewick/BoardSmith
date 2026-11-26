@@ -349,6 +349,12 @@ describe('formatUnknownKeyWarnings (CLIX-02: dev startup warns loudly, does not 
     const warnings = formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd' });
     expect(warnings).toEqual([]);
   });
+
+  it('warns about a retired key in the words validate refuses it with (#1829)', () => {
+    const [warning] = formatUnknownKeyWarnings({ name: 'x', asyncPlay: true });
+    expect(warning).toMatch(/^Warning: Unknown key 'asyncPlay'/);
+    expect(warning).toContain('Remove this key from boardsmith.json');
+  });
 });
 
 describe('resolvePlayerCount (D14/DEVHOST-02: default --players to gameDefinition.minPlayers, not a literal 2)', () => {

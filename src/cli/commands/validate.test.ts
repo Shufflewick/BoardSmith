@@ -585,13 +585,15 @@ describe('platform-consumed blocks', () => {
     expect(message).toContain('capabilities.crossSessionState');
   });
 
-  it('rejects `asyncPlay` and `joinInProgress`, which are the host\'s to decide (#1829)', () => {
-    for (const key of ['asyncPlay', 'joinInProgress']) {
-      const [message] = checkMetadataIssues({ ...validConfig(), [key]: true });
-      expect(message).toContain(`Unknown key '${key}'`);
-      expect(message).toContain('host');
-      expect(message).toContain('Remove this key');
-    }
+  it('rejects `asyncPlay` and `joinInProgress`, each saying why it is gone (#1829)', () => {
+    const [asyncPlay] = checkMetadataIssues({ ...validConfig(), asyncPlay: true });
+    expect(asyncPlay).toContain("Unknown key 'asyncPlay'");
+    expect(asyncPlay).toContain('long gaps between moves');
+    expect(asyncPlay).toContain('Remove this key');
+    const [joinInProgress] = checkMetadataIssues({ ...validConfig(), joinInProgress: true });
+    expect(joinInProgress).toContain("Unknown key 'joinInProgress'");
+    expect(joinInProgress).toContain('already underway');
+    expect(joinInProgress).toContain('Remove this key');
   });
 
   it('accepts a valid idleAction + roundDeadline pair', () => {

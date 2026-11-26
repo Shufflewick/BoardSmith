@@ -6,8 +6,8 @@ import ora from 'ora';
 import { scanSandboxViolations } from '../lib/sandbox-scan.js';
 import { listFiles } from '../lib/source-files.js';
 import {
-  findUnknownKeys,
   findUnknownKeysIn,
+  unknownKeyMessages,
   ALLOWED_ROUND_DEADLINE_KEYS,
   ALLOWED_NAMED_ACTION_KEYS,
   ALLOWED_PLATFORM_KEYS,
@@ -291,71 +291,7 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
   issues.push(...agentsBlockProblems(config.agents));
   issues.push(...mutationBlockProblems(config.mutation));
 
-  // Unknown top-level keys — did-you-mean suggestions from the shared
-  // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration
-  // messages instead of a generic did-you-mean (CLIX-01).
-  for (const { key, suggestion } of findUnknownKeys(config)) {
-    if (key === 'ui') {
-      issues.push(
-        "Unknown key 'ui' — a game's UIs are declared in src/ui/uis.ts (defineGameUIs), "
-        + 'which is the single source of truth for which boards exist and which one ships. '
-        + 'Remove this key from boardsmith.json.',
-      );
-    } else if (key === 'scoreboard') {
-      issues.push(
-        "Unknown key 'scoreboard': nothing in BoardSmith or the platform ever read it. "
-        + 'Remove this key from boardsmith.json.',
-      );
-    } else if (key === 'playerCount') {
-      issues.push(
-        "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
-      );
-    } else if (key === 'world') {
-      issues.push(
-        "Unknown key 'world' — a project says it is a persistent world with \"backend\": \"world\", "
-        + 'and everything else about the world is declared in your gameDefinition\'s `world` block '
-        + '(compiled rules): `maxPlayers`, the number the runtime actually enforces, and '
-        + '`stateVersion`, your statement about what this version makes of a live world\'s stored '
-        + 'state. The manifest\'s copies of both are derived from it at build. Remove this key from '
-        + 'boardsmith.json.',
-      );
-    } else if (key === 'bot') {
-      issues.push(
-        "Unknown key 'bot' — whether a seat may be played by a bot is DERIVED from your "
-        + 'gameDefinition\'s `bot` block (compiled rules) and published as `capabilities.bots`, so a '
-        + 'manifest can no longer claim a bot the bundle does not ship. It is a table capability: a '
-        + 'world backend has no bots. Remove this key from boardsmith.json.',
-      );
-    } else if (key === 'persistence') {
-      issues.push(
-        "Unknown key 'persistence' — whether state survives a sitting is DERIVED from your "
-        + 'gameDefinition\'s `persistence` (compiled rules), which is what `boardsmith dev` already '
-        + 'read, and published as `capabilities.crossSessionState`. Remove this key from '
-        + 'boardsmith.json.',
-      );
-    } else if (key === 'asyncPlay' || key === 'joinInProgress') {
-      issues.push(
-        `Unknown key '${key}': every BoardSmith game is turn-based and survives gaps between moves, `
-        + "and whether a human may take a bot's seat is the host's decision, not the rules'. "
-        + 'Remove this key from boardsmith.json.',
-      );
-    } else if (key === 'categories') {
-      issues.push(
-        "Unknown key 'categories' — replaced by 'audience' (a single string: who the game is for). Genre/theme/mechanism labels belong in 'tags'.",
-      );
-    } else if (key === 'estimatedDuration') {
-      issues.push(
-        "Unknown key 'estimatedDuration' — replaced by 'playtime': { \"min\": <minutes>, \"max\": <minutes> }.",
-      );
-    } else if (key === 'gameId' || key === 'publisherId') {
-      issues.push(topLevelIdMessage(key));
-    } else if (suggestion) {
-      issues.push(`Unknown key '${key}' — did you mean '${suggestion}'?`);
-    } else {
-      issues.push(`Unknown key '${key}' — not a recognized boardsmith.json field.`);
-    }
-  }
-
+  issues.push(...unknownKeyMessages(config));
 
   return issues;
 }
@@ -410,16 +346,6 @@ function checkBlockKeys(
       ? `Unknown key '${key}' in "${path}" — did you mean '${suggestion}'?`
       : `Unknown key '${key}' in "${path}" — not a recognized field of "${path}".`
   ));
-}
-
-/** Why a top-level platform id is refused and where it goes (#704); `publish` refuses with the same words. */
-export function topLevelIdMessage(key: 'gameId' | 'publisherId'): string {
-  return (
-    `Unknown key '${key}' — each publishing platform keeps its own ids, because dev and prod are separate ` +
-    'deployments. Move it under "platforms.dev" or "platforms.prod", whichever platform gave it, e.g. ' +
-    '"platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. If you are not sure which platform it ' +
-    'belongs to, delete it and publish again with --publisher <slug>; the platform finds the game by its slug.'
-  );
 }
 
 /** Shape of the per-platform ids `boardsmith publish` keeps (#704). */
