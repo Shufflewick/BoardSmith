@@ -1,5 +1,5 @@
 {
-  "revision": 541,
+  "revision": 542,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4271,6 +4271,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The animation queue takes a board's handlers in once the update that mounts it has finished, publishes one snapshot per input, runs skipped events in order, and accepts frames of any size."
+    },
+    {
+      "revision": 542,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "The animation queue applies an explicit release in order with other inputs, and releases a handler registered in a detached effect scope when its component unmounts (#1822)."
     }
   ]
 }
