@@ -1468,14 +1468,30 @@ describe('playingView', () => {
     expect(q.playedOver).toEqual([1, 2]);
   });
 
-  it('pairs a replayed event with the frame after an undo that lands in the same flush as the frame before it', async () => {
+  it('plays the events of every frame that lands in one flush, each over its own frame', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test'), createEvent(2, 'test')], view: viewAt(1), timeline: 'game:0' };
+    q.frame.value = { events: [createEvent(3, 'test')], view: viewAt(2), timeline: 'game:0' };
+    await nextTick();
+
+    for (let i = 0; i < 3; i++) {
+      q.release();
+      await flushMicrotasks();
+    }
+    expect(q.playedOver).toEqual([1, 1, 2]);
+  });
+
+  it('plays an event from before an undo in the same flush over the latest view, and its replay over the frame after the undo', async () => {
     const q = harness();
     q.register();
     q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
     q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(9), timeline: 'game:1' };
     await nextTick();
 
-    expect(q.playedOver).toEqual([9]);
+    q.release();
+    await flushMicrotasks();
+    expect(q.playedOver).toEqual([undefined, 9]);
   });
 
   it('plays a queued event over gameView once the timeline changes, never over the old timeline\'s view', async () => {
