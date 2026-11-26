@@ -124,6 +124,8 @@ class Walk {
     return defineComponent({
       name: part.name,
       setup() {
+        // First, so the walk knows the part is leaving before the queue's own unmount hook releases it.
+        onBeforeUnmount(() => walk.unmounting(part));
         const queue = useAnimationEvents()!;
         if (part.claim) queue.claimNoEvents();
         for (const [type, skip] of part.types) {
@@ -133,7 +135,6 @@ class Walk {
           part.life = 'mounted';
           for (const type of part.types.keys()) walk.latest.set(type, part);
         });
-        onBeforeUnmount(() => walk.unmounting(part));
         return () => h('i');
       },
     });
@@ -709,5 +710,119 @@ describe('the seven sequences council found breaking the contract (#1821)', () =
     frame.value = { ...frame.value, dealer: true };
     await flushPromises();
     expect(calls).toEqual(['deal1']);
+  });
+});
+
+describe('the two sequences council found breaking the contract after #1821 (#1822)', () => {
+  const event = (id: number, type: string) => ({ id, type, data: {} });
+  const frameOf = (events: Array<{ id: number; type: string; data: Record<string, unknown> }>): AnimationFrame => ({
+    animationEvents: events, gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 1,
+  });
+
+  function shell(frame: { value: AnimationFrame }, board: () => VNodeChild = () => null, inShell: (queue: UseAnimationEventsReturn) => void = () => {}) {
+    let queue!: UseAnimationEventsReturn;
+    const Shell = defineComponent({
+      setup() {
+        queue = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+        provide(ANIMATION_EVENTS_KEY, queue);
+        inShell(queue);
+        return () => h('div', [board()]);
+      },
+    });
+    mount(Shell);
+    return queue;
+  }
+
+  it('applies a claim released by a watcher after the claim and registration sent before it', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const queue = shell(frame, () => null, (q) => {
+      watch(q.pendingCount, (now, before) => {
+        if (before !== 2 || now !== 1) return;
+        effectScope(true).run(() => {
+          const release = q.claimNoEvents();
+          q.registerHandler('x', async (e) => void calls.push(`x${e.id}`), { skip: 'drop' });
+          release();
+        });
+      }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x'), event(2, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x2']);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
+  it('hands the selected event to a handler that a watcher releases as it starts, then aborts it', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    let release!: () => void;
+    const Board = defineComponent({
+      setup() {
+        release = useAnimationEvents()!.registerHandler('x', (e, { signal }) => {
+          calls.push(`x${e.id}`);
+          signal.addEventListener('abort', () => calls.push(`x${e.id} aborted`));
+          return new Promise<void>(() => {});
+        }, { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    const queue = shell(frame, () => h(Board), (q) => {
+      watch(q.pendingCount, (now, before) => { if (before === 1 && now === 0) release(); }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x1', 'x1 aborted']);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
+  /** A board child whose setup registers `x` inside a detached effect scope it never stops. */
+  function detachedBoard(calls: string[]) {
+    return defineComponent({
+      setup() {
+        const queue = useAnimationEvents()!;
+        effectScope(true).run(() => queue.registerHandler('x', (e, { signal }) => {
+          calls.push(`x${e.id}`);
+          signal.addEventListener('abort', () => calls.push(`x${e.id} aborted`));
+          return new Promise<void>(() => {});
+        }, { skip: 'drop' }));
+        return () => h('i');
+      },
+    });
+  }
+
+  it('releases a handler registered in a detached scope when its component unmounts', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = detachedBoard(calls);
+    shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    show.value = false;
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual([]);
+  });
+
+  it('aborts a playing handler registered in a detached scope when its component unmounts', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = detachedBoard(calls);
+    const queue = shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x1']);
+
+    show.value = false;
+    await flushPromises();
+    expect(calls).toEqual(['x1', 'x1 aborted']);
+    expect(queue.isAnimating.value).toBe(false);
   });
 });

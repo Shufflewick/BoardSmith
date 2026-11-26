@@ -20,7 +20,7 @@
  * }, { skip: 'drop' });
  * ```
  */
-import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
+import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onBeforeUnmount, onMounted, onScopeDispose, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -139,14 +139,14 @@ export interface UseAnimationEventsReturn {
    * Register a handler for an event type. Call it in a component's setup (or inside an
    * effect scope): the handler counts once the update that mounts that component has finished,
    * is released when it unmounts, and its signal aborts if it is playing then. The returned
-   * function releases it earlier, the same way.
+   * function releases it earlier, the same way, taking effect in order with every other input.
    */
   registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /**
    * Declare that the mounted board handles no event types, so while no handler is
    * registered an event is skipped at once instead of waiting for one to mount. Call it in a
    * component's setup: the claim counts once that component has mounted, and is released when it
-   * unmounts, or earlier by the returned function.
+   * unmounts, or earlier by the returned function, in order with every other input.
    */
   claimNoEvents: () => () => void;
   /** Whether an event is playing, waiting for its handler or queued: true from a frame landing until its last event ends. */
@@ -375,9 +375,17 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     reconsiderWait();
   }
 
+  /** Take `lease` out of the queue. Run the moment its component or scope ends, or as a step for an explicit release. */
+  function end(lease: Lease): void {
+    const was = lease.life;
+    lease.life = 'released';
+    // Whether a wait ends waits for the flush, in case the same update mounts what takes the event.
+    if (was === 'mounted') send(() => { lease.drop(); scheduleAdvance(); });
+  }
+
   /**
    * Bind `lease` to the caller: it is taken in once the caller's component has mounted, with every
-   * other component the same update mounts, and released when that component (or scope) ends.
+   * other component the same update mounts, and released when that component or scope ends, whichever is first.
    */
   function bindToCaller(method: string, lease: Lease): () => void {
     if (!getCurrentScope()) {
@@ -385,14 +393,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         `${method}() must be called from a component's setup (or inside an effectScope), so the queue can release it when that component unmounts.`,
       );
     }
-    const release = () => {
-      const was = lease.life;
-      lease.life = 'released';
-      // Whether a wait ends waits for the flush, in case the same update mounts what takes the event.
-      if (was === 'mounted') send(() => { lease.drop(); scheduleAdvance(); });
-    };
-    onScopeDispose(release);
+    onScopeDispose(() => end(lease));
     const instance = getCurrentInstance();
+    // A detached scope in the component's setup outlives the component unless the unmount ends it too.
+    if (instance) onBeforeUnmount(() => end(lease));
     if (!instance || instance.isMounted) {
       send(() => take([lease]));
     } else {
@@ -400,7 +404,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         if (mountedThisFlush.push(lease) === 1) void nextTick(() => send(takeMounted));
       });
     }
-    return release;
+    return () => send(() => end(lease));
   }
 
   /** Follow the timeline the frame names: a change skips what the queue holds, and the first timeline named is no change. */
