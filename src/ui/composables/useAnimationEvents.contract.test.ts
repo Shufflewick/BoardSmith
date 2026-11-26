@@ -184,16 +184,18 @@ class Walk {
   unmounting(part: Part): void {
     part.life = 'unmounted';
     for (const call of this.running()) if (call.board === part) this.mustAbort.add(call);
-    for (const type of part.types.keys()) {
-      if (this.held.get(type) === part) this.held.delete(type);
-      // The queue may have taken it in, replacing the holder, and now drops it.
-      if (!part.taken) this.lost.set(type, Math.max(this.lost.get(type) ?? -1, part.mountSeq!));
-    }
+    for (const type of part.types.keys()) this.unhold(part, type);
     // A watcher sees the snapshot of the step that hands an event out, before the handler is called.
     if (this.from === 'watcher') for (const fate of this.waiting()) if (part.types.has(fate.type)) fate.boardLost = true;
     // Its handler is gone before the turn of any stopped event it was owed for.
     for (const fate of this.owed) if (fate.runOn === part) fate.runOn = undefined;
     this.markClaimed();
+  }
+
+  unhold(part: Part, type: string): void {
+    if (this.held.get(type) === part) this.held.delete(type);
+    // The queue may have taken it in, replacing the holder, and now drops it.
+    if (!part.taken) this.lost.set(type, Math.max(this.lost.get(type) ?? -1, part.mountSeq!));
   }
 
   // --- Inputs ---------------------------------------------------------------
@@ -362,10 +364,9 @@ class Walk {
   checkCall(board: Part, skip: 'run' | 'drop', key: string, kind: Call['kind'], tl: string, id: number): void {
     if (board.life !== 'mounted') this.violate(`${key} was handed to ${board.name} while it was ${board.life}`);
     if (!this.shellAlive) this.violate(`${key} was handed out after the shell unmounted`);
-    if (kind === 'skipped' && skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${key}`);
     this.checkOrder(key, tl, id);
     const fate = this.fates.get(key)!;
-    if (kind === 'skipped') this.checkSkipRun(board, fate);
+    if (kind === 'skipped') this.checkSkipRun(board, skip, fate);
     if (fate.offered) this.violate(`${key} was offered twice`);
     if (kind === 'play' && fate.stopped && !fate.mayStillPlay) this.violate(`${key} played after it was stopped`);
     fate.offered = kind;
@@ -407,8 +408,9 @@ class Walk {
 
   // --- Invariants -----------------------------------------------------------
 
-  /** A skipped event runs on the handler the queue holds for its type now, after every owed run before it. */
-  checkSkipRun(board: Part, fate: Fate): void {
+  /** A skipped event runs on the skip: 'run' handler the queue holds for its type now, after every owed run before it. */
+  checkSkipRun(board: Part, skip: 'run' | 'drop', fate: Fate): void {
+    if (skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${fate.key}`);
     const holder = this.holder(fate.type);
     if (holder !== 'unsure' && holder !== board) this.violate(`skipped ${fate.key} ran on ${board.name}, which the queue did not hold for ${fate.type}`);
     const turn = this.owed.indexOf(fate);
