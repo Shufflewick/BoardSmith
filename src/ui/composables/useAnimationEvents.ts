@@ -403,15 +403,18 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     return release;
   }
 
-  /** Follow the timeline the frame names, then queue its events above that timeline's watermark. */
-  function takeFrame(frame: AnimationFrame | undefined, number: number): void {
+  /** Follow the timeline the frame names: a change skips what the queue holds, and the first timeline named is no change. */
+  function followTimeline(frame: AnimationFrame | undefined): void {
     const next = animationTimeline(frame);
-    if (next !== undefined && next !== timeline) {
-      // A change skips what the queue holds; the first timeline named is no change.
-      if (timeline === undefined) watermarks.set(next, watermarks.get(undefined) ?? 0);
-      else skip();
-      timeline = next;
-    }
+    if (next === undefined || next === timeline) return;
+    if (timeline === undefined) watermarks.set(next, watermarks.get(undefined) ?? 0);
+    else skip();
+    timeline = next;
+  }
+
+  /** Follow the frame's timeline, then queue its events above that timeline's watermark. */
+  function takeFrame(frame: AnimationFrame | undefined, number: number): void {
+    followTimeline(frame);
     const floor = watermarks.get(timeline) ?? 0;
     let watermark = floor;
     // One event at a time: a spread of a frame's events into a call overflows the stack on a large frame.

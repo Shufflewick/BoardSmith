@@ -169,19 +169,23 @@ class Walk {
     if (this.timeline(next) !== this.timeline()) this.stopped(true);
     const events = next.animationEvents!;
     this.log.push(`land seq ${next.seq} tl ${this.timeline(next)} [${events.map((e) => `${e.type}${e.id}`).join(' ')}]${reentrant ? ' (re-entrant)' : ''}`);
-    const claimed = this.parts.some((p) => p.claim && p.life !== 'unmounted');
-    for (const e of events) {
-      const key = `${e.type}${e.id}@${this.timeline(next)}`;
-      this.fates.set(key, { key, type: e.type, stopped: false, warned: false, claimed, boardLost: false });
-    }
+    this.recordFates(next);
     const before = this.reentries;
-    this.mustStayBusy = !reentrant && events.length > 0 && this.shellAlive;
+    const watched = !reentrant && events.length > 0 && this.shellAlive;
+    this.mustStayBusy = watched;
     this.frame.value = next;
     this.mustStayBusy = false;
     // A Skip or an unmount sent from a watcher as the frame lands may rightly end its events at once.
-    const undisturbed = !reentrant && this.reentries === before && this.shellAlive;
-    if (undisturbed && events.length > 0 && !this.queue.isAnimating.value) {
+    if (watched && this.reentries === before && !this.queue.isAnimating.value) {
       this.violate(`isAnimating was false right after seq ${next.seq} landed with events`);
+    }
+  }
+
+  recordFates(frame: Frame): void {
+    const claimed = this.parts.some((p) => p.claim && p.life !== 'unmounted');
+    for (const e of frame.animationEvents!) {
+      const key = `${e.type}${e.id}@${this.timeline(frame)}`;
+      this.fates.set(key, { key, type: e.type, stopped: false, warned: false, claimed, boardLost: false });
     }
   }
 
@@ -235,10 +239,16 @@ class Walk {
     for (const call of this.running()) this.mustAbort.add(call);
     for (const fate of this.waiting()) {
       fate.stopped = true;
-      const board = this.latest.get(fate.type);
-      // An event a claim or a lost board may have ended already has no skip: 'run' call owed.
-      if (runsSkipped && !fate.claimed && !fate.boardLost && board?.taken && board.life === 'mounted' && board.types.get(fate.type) === 'run') fate.runOn = board;
+      if (runsSkipped) fate.runOn = this.owedRun(fate);
     }
+  }
+
+  /** The board whose skip: 'run' handler the queue surely holds for a stopped event. */
+  owedRun(fate: Fate): Part | undefined {
+    // An event a claim or a lost board may have ended already has no skip: 'run' call owed.
+    if (fate.claimed || fate.boardLost) return undefined;
+    const board = this.latest.get(fate.type);
+    return board?.taken && board.life === 'mounted' && board.types.get(fate.type) === 'run' ? board : undefined;
   }
 
   skip(): void {
@@ -303,12 +313,16 @@ class Walk {
     if (board.life !== 'mounted') this.violate(`${key} was handed to ${board.name} while it was ${board.life}`);
     if (!this.shellAlive) this.violate(`${key} was handed out after the shell unmounted`);
     if (kind === 'skipped' && skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${key}`);
-    if ((this.lastOffered.get(tl) ?? 0) >= id) this.violate(`${key} was offered after id ${this.lastOffered.get(tl)} of its timeline`);
-    this.lastOffered.set(tl, id);
+    this.checkOrder(key, tl, id);
     const fate = this.fates.get(key)!;
     if (fate.offered) this.violate(`${key} was offered twice`);
     if (kind === 'play' && fate.stopped) this.violate(`${key} played after it was stopped`);
     fate.offered = kind;
+  }
+
+  checkOrder(key: string, tl: string, id: number): void {
+    if ((this.lastOffered.get(tl) ?? 0) >= id) this.violate(`${key} was offered after id ${this.lastOffered.get(tl)} of its timeline`);
+    this.lastOffered.set(tl, id);
   }
 
   /** What a call that plays its event must hold: its frame is drawn and nothing else plays. */
@@ -353,10 +367,14 @@ class Walk {
     const { isAnimating } = this.queue;
     if (!isAnimating.value && this.running().length > 0) this.violate(`isAnimating was false while ${this.running()[0].key} played`);
     if (!this.shellAlive && isAnimating.value) this.violate('isAnimating stayed true after the shell unmounted');
-    for (const fate of this.fates.values()) {
-      if (fate.runOn && !fate.offered && fate.runOn.life === 'mounted' && this.latest.get(fate.type) === fate.runOn) {
-        this.violate(`${fate.key} was skipped without calling ${fate.runOn.name}'s skip: 'run' handler`);
-      }
+    this.checkSkipRuns();
+  }
+
+  /** Every stopped event the queue held a mounted skip: 'run' handler for, which still holds, was run skipped. */
+  checkSkipRuns(): void {
+    for (const { runOn, offered, type, key } of this.fates.values()) {
+      if (!runOn || offered || runOn.life !== 'mounted' || this.latest.get(type) !== runOn) continue;
+      this.violate(`${key} was skipped without calling ${runOn.name}'s skip: 'run' handler`);
     }
   }
 
