@@ -1873,13 +1873,13 @@ async function giveTheBoardAFirstPress(
   const leads = await leftToTheLead(play, plays);
   let pressed = false;
   for (;;) {
-    const press = await pressAnUntriedControl(play, frame, offers, walk, memory, step, leads);
-    if (press === undefined) {
+    const tried = await pressAnUntriedControl(play, frame, offers, walk, memory, step, leads);
+    if (tried === undefined) {
       starts.tried.add(due);
       return pressed;
     }
     pressed = true;
-    if (press.started !== undefined) return true;
+    if (tried.started !== undefined) return true;
   }
 }
 
