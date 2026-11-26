@@ -113,7 +113,7 @@ export interface UseAnimationEventsOptions {
   frame: () => AnimationFrame | undefined;
   /**
    * Time to wait for a handler to register before skipping an unhandled event (ms, default: 3000).
-   * Set to 0 to skip immediately (no wait).
+   * Set to 0 to skip at once, with no wait and no warning.
    */
   handlerWaitTimeout?: number;
 }
