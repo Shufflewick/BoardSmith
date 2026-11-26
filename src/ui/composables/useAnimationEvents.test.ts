@@ -1542,11 +1542,25 @@ describe('playingView', () => {
     q.release();
     await flushMicrotasks();
 
-    q.frame.value = { events: [], view: viewAt(5), timeline: 'other-seat' };
-    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    q.frame.value = { events: [], view: viewAt(5), timeline: 'game:0:2' };
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0:1' };
     await nextTick();
     await flushMicrotasks();
     expect(q.playedOver).toEqual([1]);
+  });
+
+  it('plays the events of a restore count it saw before, since a reloaded snapshot numbers them again', async () => {
+    const q = harness();
+    q.register();
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(1), timeline: 'game:0' };
+    await nextTick();
+    q.release();
+    await flushMicrotasks();
+
+    q.frame.value = { events: [], view: viewAt(2), timeline: 'game:1' };
+    q.frame.value = { events: [createEvent(1, 'test')], view: viewAt(3), timeline: 'game:0' };
+    await nextTick();
+    expect(q.playedOver).toEqual([1, 3]);
   });
 
   it('plays a replay that keeps its events array over the frame that moved the timeline, not a later one', async () => {
@@ -1601,7 +1615,9 @@ async function flushMicrotasks(): Promise<void> {
   for (let i = 0; i < 10; i++) await Promise.resolve();
 }
 
-/** A frame naming `timeline` as its game instance, or naming none. */
+/** A frame naming the timeline `game:restoreEpoch:seat` (restore count 0 and seat 1 when left out), or naming none. */
 function timelineOf(timeline: string | undefined) {
-  return timeline === undefined ? {} : { gameInstanceId: timeline, restoreEpoch: 0, viewerSeat: 1 };
+  if (timeline === undefined) return {};
+  const [gameInstanceId, restoreEpoch = '0', viewerSeat = '1'] = timeline.split(':');
+  return { gameInstanceId, restoreEpoch: Number(restoreEpoch), viewerSeat: Number(viewerSeat) };
 }

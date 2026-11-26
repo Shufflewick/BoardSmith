@@ -191,7 +191,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const playingView = shallowRef<GameRootView>();
 
   // The watermark: the highest id queued in the current timeline, so an event
-  // is queued once however many frames carry it. A timeline change resets it.
+  // is queued once however many frames carry it. A change of timeline moves it.
   let lastQueuedId = 0;
 
   // Last timeline a frame named (UNDO-04 rewind signal). `undefined` means "no
@@ -437,9 +437,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // One watcher takes in every frame as it lands ('sync'): a frame that a
   // later one replaced before Vue flushed still queues its events, each with
-  // that frame's view. A change of timeline resumes that timeline's
-  // watermark, or starts from 0, before the frame's events are filtered.
-  const watermarks = new Map<string, number>();
+  // that frame's view. A change of seat resumes that seat's watermark in
+  // this game and restore count; any other change of timeline starts from 0,
+  // since a restore or a reloaded snapshot numbers the events again.
+  const seatWatermarks = new Map<string, number>();
+  let lastRun: string | undefined;
   let lastEvents: AnimationEvent[] | undefined;
   const framesTakenIn = ref(0);
   watch(
@@ -448,15 +450,21 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const timeline = animationTimeline(frame);
       let moved = false;
       if (timeline !== undefined) {
+        const run = `${frame?.gameInstanceId}:${frame?.restoreEpoch}`;
         if (lastTimeline !== undefined && timeline !== lastTimeline) {
-          watermarks.set(lastTimeline, lastQueuedId);
-          lastQueuedId = watermarks.get(timeline) ?? 0;
+          if (run === lastRun) {
+            seatWatermarks.set(lastTimeline, lastQueuedId);
+          } else {
+            seatWatermarks.clear();
+          }
+          lastQueuedId = seatWatermarks.get(timeline) ?? 0;
           // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
           for (const entry of queue) entry.view = undefined;
           playingView.value = undefined;
           moved = true;
         }
         lastTimeline = timeline;
+        lastRun = run;
       }
       const events = frame?.animationEvents;
       // The shell keeps an unchanged events array, so a replay may be the very array already taken in.

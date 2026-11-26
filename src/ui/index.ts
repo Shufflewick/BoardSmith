@@ -231,6 +231,7 @@ export {
   type AnimationHandlerContext,
   type AnimationHandlerOptions,
   type UseAnimationEventsOptions,
+  type AnimationFrame,
   type UseAnimationEventsReturn,
 } from './composables/useAnimationEvents.js';
 
