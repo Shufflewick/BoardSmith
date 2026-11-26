@@ -167,7 +167,7 @@ export const gameDefinition: GameDefinition = {
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
 `actions`, `view` and `vacate` are required; `stateVersion`, `genesis`,
-`presence`, `referral` and `vacateByClock` are optional. `vacate` and
+`fixtures`, `presence`, `referral` and `vacateByClock` are optional. `vacate` and
 `vacateByClock` are how a chair comes back, see [giving a chair
 back](#giving-a-chair-back).
 
@@ -287,6 +287,30 @@ Genesis is all or nothing. A store checks every partition's name and size
 before it writes any of them (`WorldPartitionWriter.createAll`), so a world
 whose genesis names one partition it may not hold is refused outright rather
 than left half-created and wedged forever.
+
+### `world.fixtures`: named states a new world can start from instead
+
+```ts
+fixtures?: Record<string, (game: Game) => Record<string, GameElement>>;
+```
+
+A check that needs an established world, such as two empires already allied,
+should not have to play into it on the world's clock. Declare that state as a
+named fixture: each one has genesis's shape and runs on the same game,
+registration and id allocation, so build it with your own rules and return its
+roots. Genesis's rules apply to it, including the `invalid-partition-root`
+refusal.
+
+A host starts a new world from one with `runner.fixture(name)` in place of
+`runner.genesis()`, and gets the same `{ partitions, nextElementId }` back. A
+name the bundle does not declare is refused `unknown-fixture` before anything is
+built. `boardsmith build` lists the names in the manifest's `world.fixtures`, so
+a host can check a requested name before it builds a world. Which worlds a host
+lets start from a fixture is its own policy.
+
+A test starts one with `createTestWorld({ definition, fixture: 'allied' })`.
+`boardsmith validate`, and so `boardsmith verify`, fails when a declared fixture
+is started by no test, because nothing else runs it.
 
 ### `world.createPartition`: a root built the first time somebody reaches for it
 

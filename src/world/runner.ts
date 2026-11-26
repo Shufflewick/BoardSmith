@@ -91,7 +91,7 @@ import type {
 import { declaredSources } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import type { DeclaredNoticeBox } from "./notices.js";
-import { WorldRefusal, worldRefusal } from "./refusals.js";
+import { WorldRefusal, unknownWorldFixture, worldRefusal } from "./refusals.js";
 import { PlayerFacingError } from "../engine/errors.js";
 import { withDevDetail } from "../engine/action/rules-error.js";
 
@@ -826,9 +826,26 @@ export interface WorldMigrated extends WorldAllocation {
 }
 
 /**
+ * HOW A NEW WORLD'S FIRST PARTITIONS ARE BUILT: the bundle's `genesis`, or one
+ * of its named `fixtures` (#1825). Supplied by `createWorld` for the reason the
+ * migration hooks are: only it holds both the game and the declaration.
+ */
+export interface WorldRootBuilders {
+  genesis(): Record<string, StoredPartition>;
+  fixture(name: string): Record<string, StoredPartition>;
+}
+
+const NO_ROOTS: WorldRootBuilders = {
+  genesis: () => ({}),
+  fixture: (name) => {
+    throw unknownWorldFixture(name, []);
+  },
+};
+
+/**
  * The bundle's own migration hooks, handed to the runner (#379).
  *
- * Supplied the way `buildGenesis` is, and for the same reason: the runner is
+ * Supplied the way `WorldRootBuilders` is, and for the same reason: the runner is
  * handed the ENGINE rather than the game, and only `createWorld` holds both the
  * game and the bundle's declaration.
  */
@@ -1161,7 +1178,7 @@ async function adopt(
 export function createWorldRunner(
   engine: WorldEngine,
   store: InlinedPartitionStore,
-  buildGenesis: () => Record<string, StoredPartition> = () => ({}),
+  roots: WorldRootBuilders = NO_ROOTS,
   migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
   /** What each player's view named on the last round of the look in
@@ -1210,11 +1227,16 @@ export function createWorldRunner(
     },
 
     async genesis(): Promise<WorldGenesis> {
-      const partitions = buildGenesis();
+      const partitions = roots.genesis();
       // THE STAMP RIDES WITH THE BYTES (#377). Genesis minted every id this
       // world has, so the counter it leaves behind is the world's durable
       // allocation -- and a host that wrote the partitions without it would
       // have no way to mint safely on any later wake.
+      return { partitions, nextElementId: engine.nextElementId() };
+    },
+
+    async fixture(name: string): Promise<WorldGenesis> {
+      const partitions = roots.fixture(name);
       return { partitions, nextElementId: engine.nextElementId() };
     },
 
@@ -1639,6 +1661,7 @@ function stopsOnStaleStamp(handle: WorldRunnerHandle): WorldRunnerHandle {
     ...handle,
     declare: gate(handle.declare),
     genesis: gate(handle.genesis),
+    fixture: gate(handle.fixture),
     serialize: gate(handle.serialize),
     migrateAll: gate(handle.migrateAll),
     declarePick: gate(handle.declarePick),
@@ -1669,6 +1692,14 @@ export interface WorldRunnerHandle {
    * never looks inside.
    */
   genesis(): Promise<WorldGenesis>;
+  /**
+   * A brand-new world's partitions, built by the bundle's `world.fixtures[name]`
+   * instead of its `genesis` (#1825), and answered in the shape `genesis()`
+   * answers, stamp included. Call one or the other, once, on a world that has
+   * never launched. A name the bundle does not declare is refused
+   * `unknown-fixture` before anything is built.
+   */
+  fixture(name: string): Promise<WorldGenesis>;
   /**
    * Serialize exactly the partitions the parent says are dirty (#37 item 4).
    *

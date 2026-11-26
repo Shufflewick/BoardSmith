@@ -150,6 +150,10 @@ export const WORLD_REFUSALS = {
       "arrives after the catch-up finishes runs exactly once. The platform re-arms before " +
       "answering, so the catch-up is already continuing when the player reads this",
   },
+  "unknown-fixture": {
+    owner: "caller",
+    why: "#1825: a host asked to start a world from a fixture this bundle does not declare in `world.fixtures`. Nothing is built and nothing is written, so the world is unaffected; the host checks a requested name against the manifest's `world.fixtures` before it builds anything",
+  },
   "world-ended": {
     owner: "caller",
     why:
@@ -606,6 +610,19 @@ export class WorldRefusal extends Error {
  *  what the park ladder and the operator's logs read. */
 export function worldRefusal(code: WorldRefusalCode, message: string): WorldRefusal {
   return new WorldRefusal(code, message);
+}
+
+/** Raise `unknown-fixture` (#1825), naming what the bundle does declare. */
+export function unknownWorldFixture(name: string, declared: readonly string[]): WorldRefusal {
+  const offered =
+    declared.length === 0
+      ? "This world declares no fixtures, so it can only start from its genesis."
+      : `It declares ${declared.map((one) => JSON.stringify(one)).join(", ")}.`;
+  return new WorldRefusal(
+    "unknown-fixture",
+    `This world has no fixture named ${JSON.stringify(name)}, so nothing was built. ${offered} ` +
+      "Ask for one of the names in the manifest's `world.fixtures`.",
+  );
 }
 
 /**

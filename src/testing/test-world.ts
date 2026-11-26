@@ -75,6 +75,8 @@ export interface TestWorldOptions {
   readonly budgets?: WorldBudgets;
   /** The instant this world starts at. */
   readonly now?: number;
+  /** Start from this `world.fixtures` entry instead of genesis (#1825). */
+  readonly fixture?: string;
   /**
    * WHICH SEATS ARE WATCHING, which is what `presence` answers.
    *
@@ -232,7 +234,7 @@ export class TestWorld {
    */
   static async create(options: TestWorldOptions): Promise<TestWorld> {
     const world = new TestWorld(options);
-    await world.#world.start();
+    await world.#world.start(options.fixture);
     for (let seat = 1; seat <= world.#world.seatCount; seat++) {
       world.#world.seat(worldSeatPlayer(seat), seat);
     }

@@ -31,7 +31,7 @@ import type { ActionDefinition } from "../engine/index.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
 import type { InlinedPartitionStore, WorldRunnerHandle } from "./runner.js";
 import type { StoredPartition } from "./contract.js";
-import { worldRefusal } from "./refusals.js";
+import { unknownWorldFixture, worldRefusal } from "./refusals.js";
 import { assertMintedUnderThisKey } from "./key-check.js";
 import { assertWorldMigration, type WorldMigration } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -151,6 +151,19 @@ export interface WorldDefinition {
    * refusing it would be the library having an opinion about game design.
    */
   readonly genesis?: (game: Game) => Record<string, GameElement>;
+  /**
+   * NAMED STARTING STATES A HOST MAY START A NEW WORLD FROM INSTEAD OF GENESIS
+   * (#1825), so a check that needs an established world (two empires already
+   * allied) does not have to play into it on the world's clock.
+   *
+   * Each has `genesis`'s shape and runs on the same game, registration and id
+   * allocation: build the state with your own rules and return its roots. A
+   * host starts one through `WorldRunnerHandle.fixture(name)`, a test through
+   * `createTestWorld({ fixture })`, and `boardsmith validate` refuses a fixture
+   * no test starts a world from. Their names are in the manifest's
+   * `world.fixtures`. Which worlds a host lets start from one is its own policy.
+   */
+  readonly fixtures?: Readonly<Record<string, (game: Game) => Record<string, GameElement>>>;
   /**
    * A PARTITION ROOT BUILT THE FIRST TIME SOMEBODY REACHES FOR IT (#218).
    *
@@ -420,6 +433,7 @@ export function readWorldDefinition(definition: {
   }
   assertWorldVacate(world);
   assertWorldVacateByClock(world);
+  assertWorldFixtures(world.fixtures);
   if (world.ordering !== undefined && !WORLD_ORDERINGS.includes(world.ordering)) {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -445,6 +459,20 @@ export function readWorldDefinition(definition: {
     );
   }
   return world;
+}
+
+/** `world.fixtures`, when declared, is a record of named builders (#1825). */
+function assertWorldFixtures(fixtures: unknown): void {
+  if (fixtures === undefined) return;
+  const entries =
+    typeof fixtures === "object" && fixtures !== null && !Array.isArray(fixtures) ? Object.entries(fixtures) : undefined;
+  if (entries !== undefined && entries.every(([name, build]) => name !== "" && typeof build === "function")) return;
+  throw worldRefusal(
+    "bundle-not-a-world",
+    "This bundle's `world.fixtures` is not a record of named fixtures. Write " +
+      "`fixtures: { allied: (game) => ({ ... }) }`: each key is the name a host asks for, and each " +
+      "value builds a new world's partitions the way `genesis` does.",
+  );
 }
 
 /** The bundle's `world.vacate`, which `assertWorldVacate` checked when the world was read. */
@@ -722,7 +750,8 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
 }
 
 /**
- * Run the bundle's `world.genesis(game)` and collect what it built.
+ * Run the bundle's `world.genesis(game)`, or a fixture in its place (#1825),
+ * and collect what it built. `source` names which, for a refusal.
  *
  * The hook returns the ELEMENTS it created as `name -> element`, and this turns
  * each into the `{ parentId, json }` a store holds -- because `parentId` is the
@@ -732,14 +761,12 @@ function hslToHex(hue: number, saturation: number, lightness: number): string {
  */
 function buildGenesis(
   game: Game,
-  world: WorldDefinition,
   engine: BoardSmithWorldEngine,
+  build: (game: Game) => Record<string, GameElement>,
+  source: string,
 ): Record<string, StoredPartition> {
-  const genesis = world.genesis;
-  if (!genesis) return {};
-
   const { answer: partitions, unclaimed: added } = unclaimedAllocations(game, () =>
-    registerGenesis(game, genesis(game), engine),
+    registerGenesis(game, build(game), engine),
   );
   const unclaimed = namedForRefusal(added);
   // An unreturned top-level element stays resident for the runner's life and
@@ -747,8 +774,8 @@ function buildGenesis(
   if (unclaimed.length > 0) {
     throw worldRefusal(
       "invalid-partition-root",
-      `This world's genesis created ${unclaimed.join(", ")} at the top level of the game and did ` +
-        `not return ${unclaimed.length === 1 ? "it" : "them"}. Nothing stores an element genesis ` +
+      `This world's ${source} created ${unclaimed.join(", ")} at the top level of the game and did ` +
+        `not return ${unclaimed.length === 1 ? "it" : "them"}. Nothing stores an element it ` +
         "does not return, so it would be read while this world stays loaded and be gone after a " +
         "restart. Return it as a partition (`name -> element`), build it inside an element you " +
         "return, or do not create it.",
@@ -1083,10 +1110,18 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // only if a migration that declares `join` actually reads one.
     sourceGame: buildGame,
   });
+  const fixtures = world.fixtures ?? {};
   const runner = createWorldRunner(
     engine,
     store,
-    () => buildGenesis(game, world, engine),
+    {
+      genesis: () => (world.genesis === undefined ? {} : buildGenesis(game, engine, world.genesis, "genesis")),
+      fixture: (name) => {
+        // OWN NAMES ONLY: a host's requested name must not reach `toString`.
+        if (!Object.hasOwn(fixtures, name)) throw unknownWorldFixture(name, Object.keys(fixtures));
+        return buildGenesis(game, engine, fixtures[name]!, `fixture ${JSON.stringify(name)}`);
+      },
+    },
     // The bundle's own migration hooks, or a world that declares none.
     world.migration ?? {},
   );

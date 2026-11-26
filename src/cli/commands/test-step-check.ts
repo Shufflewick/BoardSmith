@@ -55,6 +55,8 @@ import {
   findDefinedVerbs,
   findDispatchWrappers,
   findDispatchedVerbs,
+  findFixtureWrappers,
+  findStartedFixtures,
   findTestBlocks,
   findUnreachableGuards,
   findVerbWrappers,
@@ -505,6 +507,14 @@ export async function undispatchedVerbs(projectDir: string): Promise<{ defined: 
   const verbs = await definedVerbs(projectDir);
   const dispatched = await dispatchedVerbs(projectDir, (await projectScripts(projectDir)).filter((f) => isTestFile(f.path)));
   return { defined: verbs.length, undispatched: verbs.filter((verb) => !dispatched.has(verb)) };
+}
+
+/** The world fixtures among `declared` that no test file in the project starts a world from (#1825). */
+export async function unstartedFixtures(projectDir: string, declared: readonly string[]): Promise<string[]> {
+  const tests = (await projectScripts(projectDir)).filter((f) => isTestFile(f.path));
+  const wrappers = findFixtureWrappers([...(await testSupportSources(projectDir)), ...tests]);
+  const started = new Set(tests.flatMap((f) => findStartedFixtures(f.text, f.path, wrappers)));
+  return declared.filter((name) => !started.has(name));
 }
 
 /** Check 3: every verb the chunk added is dispatched through the engine by one of its tests. */
