@@ -1,5 +1,5 @@
 {
-  "revision": 544,
+  "revision": 545,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4295,6 +4295,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith test-step-check reads a test file's imports correctly when a regex literal holds import text (#1823)"
+    },
+    {
+      "revision": 545,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "Games that start the action panel closed now let each player prefer Open or Closed, and a host may seed that with actionPanel on its init message (tables) or a new init message (worlds)."
     }
   ]
 }
