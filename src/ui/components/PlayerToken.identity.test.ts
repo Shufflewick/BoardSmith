@@ -21,15 +21,15 @@ import PlayerToken from './PlayerToken.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 
 const SEAT_ORDER: Player[] = [
-  { seat: 0, name: 'Alice' },
-  { seat: 1, name: 'Bob' },
-  { seat: 2, name: 'Carol' },
+  { seat: 1, name: 'Alice' },
+  { seat: 2, name: 'Bob' },
+  { seat: 3, name: 'Carol' },
 ];
 
 /** The shape class (`sh-*`) each seat's token renders with, keyed by seat. */
 function shapesBySeat(players: Player[], props: Record<string, unknown> = {}): Record<number, string> {
   const wrapper = mount(PlayersPanel, {
-    props: { players, playerSeat: 0, dueSeats: [1], ...props },
+    props: { players, playerSeat: 1, dueSeats: [2], ...props },
   });
   const cards = wrapper.findAll('.player-card');
   expect(cards).toHaveLength(players.length);
@@ -68,7 +68,7 @@ describe('PlayerToken shape is derived from seat, not render position', () => {
   it('keeps the seat strip in step with the full cards for the same seat', () => {
     const cardShapes = shapesBySeat(SEAT_ORDER);
     const strip = mount(PlayersPanel, {
-      props: { players: [...SEAT_ORDER].reverse(), playerSeat: 0, dueSeats: [1], seatStrip: true },
+      props: { players: [...SEAT_ORDER].reverse(), playerSeat: 1, dueSeats: [2], seatStrip: true },
     });
     const toks = strip.findAll('.strip-tokens .tok');
     expect(toks).toHaveLength(SEAT_ORDER.length);
@@ -88,10 +88,23 @@ describe('PlayerToken shape is derived from seat, not render position', () => {
     expect(mount(PlayerToken, { props: { name, seat: 2 } }).find('.tok').text()).toBe(glyph);
   });
 
-  it('wraps around the shape set by seat, so a 9th seat reuses the first shape', () => {
-    const first = mount(PlayerToken, { props: { name: 'A', seat: 0 } });
-    const ninth = mount(PlayerToken, { props: { name: 'I', seat: 8 } });
-    const shapeOf = (w: typeof first) => w.find('.tok').classes().find(c => c.startsWith('sh-'));
-    expect(shapeOf(ninth)).toBe(shapeOf(first));
+  it.each([
+    [1, 'sh-circle'],
+    [2, 'sh-heart'],
+    [3, 'sh-triangle'],
+    [4, 'sh-diamond'],
+    [5, 'sh-pentagon'],
+    [6, 'sh-hexagon'],
+    [7, 'sh-shield'],
+    [8, 'sh-octagon'],
+    [9, 'sh-triarm'],
+    [10, 'sh-star'],
+    [11, 'sh-hendecagon'],
+    [12, 'sh-plus'],
+    [13, 'sh-square'],
+    [40, 'sh-square'],
+  ])('draws seat %i as %s, a shape whose side count is the seat number up to 12 (#1828)', (seat, shape) => {
+    const cls = mount(PlayerToken, { props: { name: 'A', seat } }).find('.tok').classes().find(c => c.startsWith('sh-'));
+    expect(cls).toBe(shape);
   });
 });

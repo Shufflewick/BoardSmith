@@ -273,7 +273,7 @@ describe('GameOverCard — a winner looks as they do in the players panel (#904,
     const token = wrapper.findComponent(PlayerToken);
     expect(token.exists()).toBe(true);
     expect(token.props('seat')).toBe(1);
-    expect(token.classes()).toContain('sh-square');
+    expect(token.classes()).toContain('sh-circle');
     expect(token.find('.ini').text()).toBe('1');
   });
 

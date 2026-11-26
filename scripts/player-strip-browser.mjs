@@ -105,7 +105,7 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', engines: ['chro
         const shapeClass = () => [...tok.classList].find((c) => c.startsWith('sh-'));
         const own = shapeClass();
         const out = [];
-        for (const shape of ['sh-circle', 'sh-square', 'sh-hexagon', 'sh-octagon', 'sh-diamond', 'sh-pentagon', 'sh-shield', 'sh-plus']) {
+        for (const shape of ['sh-circle', 'sh-heart', 'sh-triangle', 'sh-diamond', 'sh-pentagon', 'sh-hexagon', 'sh-shield', 'sh-octagon', 'sh-triarm', 'sh-star', 'sh-hendecagon', 'sh-plus', 'sh-square']) {
           tok.classList.replace(shapeClass(), shape);
           const outline = getComputedStyle(tok, '::after').clipPath;
           const token = getComputedStyle(tok.querySelector('.shape')).clipPath;
