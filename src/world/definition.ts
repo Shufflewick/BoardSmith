@@ -784,6 +784,19 @@ function buildGenesis(
   return partitions;
 }
 
+/** The bundle's genesis and its named fixtures (#1825), as the runner builds a new world from them. */
+function rootBuilders(game: Game, engine: BoardSmithWorldEngine, world: WorldDefinition) {
+  const fixtures = world.fixtures ?? {};
+  return {
+    genesis: () => (world.genesis === undefined ? {} : buildGenesis(game, engine, world.genesis, "genesis")),
+    fixture: (name: string) => {
+      // OWN NAMES ONLY: a host's requested name must not reach `toString`.
+      if (!Object.hasOwn(fixtures, name)) throw unknownWorldFixture(name, Object.keys(fixtures));
+      return buildGenesis(game, engine, fixtures[name]!, `fixture ${JSON.stringify(name)}`);
+    },
+  };
+}
+
 function registerGenesis(
   game: Game,
   built: Record<string, GameElement>,
@@ -1110,18 +1123,10 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // only if a migration that declares `join` actually reads one.
     sourceGame: buildGame,
   });
-  const fixtures = world.fixtures ?? {};
   const runner = createWorldRunner(
     engine,
     store,
-    {
-      genesis: () => (world.genesis === undefined ? {} : buildGenesis(game, engine, world.genesis, "genesis")),
-      fixture: (name) => {
-        // OWN NAMES ONLY: a host's requested name must not reach `toString`.
-        if (!Object.hasOwn(fixtures, name)) throw unknownWorldFixture(name, Object.keys(fixtures));
-        return buildGenesis(game, engine, fixtures[name]!, `fixture ${JSON.stringify(name)}`);
-      },
-    },
+    rootBuilders(game, engine, world),
     // The bundle's own migration hooks, or a world that declares none.
     world.migration ?? {},
   );
