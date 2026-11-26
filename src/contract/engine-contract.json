@@ -1,5 +1,5 @@
 {
-  "revision": 548,
+  "revision": 549,
   "surfaceHash": "833cab24eebd50db",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4327,6 +4327,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "Player tokens draw a shape whose side count matches the seat number, with the edge and acting outline drawn as strokes"
+    },
+    {
+      "revision": 549,
+      "date": "2026-11-26",
+      "surfaceHash": "833cab24eebd50db",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "BREAKING for the platform: capabilities no longer carries asyncPlay or joinInProgress, and boardsmith build refuses either key (and any other key boardsmith.json does not allow). The platform must drop both from CAPABILITY_KEYS and stop reading them before it accepts a bundle built at this revision."
     }
   ]
 }
