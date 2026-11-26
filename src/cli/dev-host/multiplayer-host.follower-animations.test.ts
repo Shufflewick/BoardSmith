@@ -60,9 +60,9 @@ describe('a page that changes seat plays the new seat its animations (#489)', ()
       }),
     )!;
     for (const type of ['packPlaced', 'signal']) {
-      queue.registerHandler(type, async (event) => {
+      scope.run(() => queue.registerHandler(type, async (event) => {
         played.push(`${type} by ${String(event.data.seat ?? seat)}`);
-      }, { skip: 'drop' });
+      }, { skip: 'drop' }));
     }
 
     await host.handleMessage('A', { type: 'hello' });

@@ -1937,7 +1937,21 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 
 **The client owns playback entirely.** The server broadcasts truth and moves on. The client processes events through a FIFO queue, playing animations sequentially via registered handlers. The server has no knowledge of animation playback state.
 
-**Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes immediately. If the timeout expires, the event is skipped with a console warning. AutoUI registers no handlers, so it calls `claimNoEvents()`, and while no handler is registered the queue skips every event at once, without a warning. A board that registers any handler keeps its waits, even with AutoUI inside it.
+**Wait-for-handler.** When the queue encounters an event type with no registered handler, it pauses (up to a configurable `handlerWaitTimeout`, default 3s) to allow lazily-mounted components to register their handlers. If a handler registers during the wait, processing resumes once that component has mounted. If the timeout expires, the event is skipped with a console warning. AutoUI registers no handlers, so it calls `claimNoEvents()`, and while no handler is registered the queue skips every event at once, without a warning. A board that registers any handler keeps its waits, even with AutoUI inside it.
+
+**Handlers belong to the component that registers them.** Call `registerHandler` and `claimNoEvents` in a component's setup (or a composable it calls). The queue releases them when that component unmounts, and aborts the signal of a handler still playing then, so a board that a UI switch or the phone breakpoint replaces mid-animation never holds the queue up. Called outside any component, they throw.
+
+### The playback contract
+
+What a board can rely on. `src/ui/composables/useAnimationEvents.contract.test.ts` checks every line on a seeded random walk of all of the inputs below.
+
+- Each event your seat may see is offered once, in order, one at a time.
+- Your handler is called only while the component that registered it is mounted, and plays an event only after the board has drawn the frame that brought it.
+- From a frame landing until its last event ends, `isAnimating` is true and the Action Panel is gated.
+- The signal aborts on Skip, undo, restore, a change of seat, the shell's unmount or your component's unmount, and the queue has already moved on.
+- A skipped event that never started calls a `'run'` handler once with an aborted signal, and never calls a `'drop'` handler.
+- With no handler, the queue waits `handlerWaitTimeout` (3s), warns and skips. A board that claimed none skips at once.
+- Calling into the queue (Skip, a frame, a registration) from a handler, an abort listener or a watcher is allowed, and takes effect after the queue's current step.
 
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
@@ -2069,15 +2083,15 @@ export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
 **Registering handlers (in game board components):**
 
 ```typescript
-// In a board's setup. useAnimationEvents comes from 'boardsmith/ui', onUnmounted from 'vue';
+// In a board's setup. useAnimationEvents comes from 'boardsmith/ui';
 // playAttackAnimation and the rest are your game's own animations.
 const animations = useAnimationEvents();
 
-// Register handler - returns cleanup function
+// The queue releases the handler when this component unmounts.
 // The handler's second argument provides a signal for cooperative skip support.
 // The third says what skipAll() does to it: 'run' calls it with the signal already
 // aborted (for cleanup that must happen), 'drop' discards the event. It is required.
-const unregister = animations?.registerHandler('duel', async (event, { signal }) => {
+animations?.registerHandler('duel', async (event, { signal }) => {
   const { attackerId, targetId, damage, outcome } = event.data;
 
   // Find DOM elements
@@ -2096,9 +2110,6 @@ const unregister = animations?.registerHandler('duel', async (event, { signal })
     await playDeathAnimation(targetEl);
   }
 }, { skip: 'drop' });
-
-// Unregister on unmount: the queue keeps a handler until it is unregistered
-onUnmounted(() => unregister?.());
 ```
 
 **Composable API:**
@@ -2112,11 +2123,11 @@ onUnmounted(() => unregister?.());
 
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
-| `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
-| `claimNoEvents()` | `() => () => void` | Declare that the mounted board handles no event types, so while no handler is registered an event is skipped at once instead of waiting `handlerWaitTimeout` for one. Returns the release function. AutoUI calls it. |
-| `isAnimating` | `Readonly<Ref<boolean>>` | Whether an event is playing or waiting for its handler |
+| `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register a handler from a component's setup; it is released when that component unmounts, and the returned function releases it earlier. `signal` is an `AbortSignal` that fires on skip or unmount; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
+| `claimNoEvents()` | `() => () => void` | Declare, from a component's setup, that the mounted board handles no event types, so while no handler is registered an event is skipped at once instead of waiting `handlerWaitTimeout` for one. Released when that component unmounts, or earlier by the returned function. AutoUI calls it. |
+| `isAnimating` | `Readonly<Ref<boolean>>` | Whether an event is playing, waiting for its handler or queued: true from a frame landing until its last event ends |
 | `skipAll()` | `() => void` | Skip remaining animations |
-| `pendingCount` | `Readonly<Ref<number>>` | Number of pending events (for UI indicators) |
+| `pendingCount` | `Readonly<Ref<number>>` | Number of events queued behind the one playing or waiting (for UI indicators) |
 
 ### Integration with useFLIP and useFlyingElements
 

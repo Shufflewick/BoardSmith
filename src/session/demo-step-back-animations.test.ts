@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, effectScope } from 'vue';
 import type { AnimationEvent } from '../engine/index.js';
 import { executeOp } from './stateless-ops.js';
 import { botGameDef, botGameOptions } from './testing/fixtures/bot-game-fixture.js';
@@ -34,12 +34,13 @@ describe('demo step back (#449 review)', () => {
     // Seat 1's client: the real queue, fed from what the host broadcasts to seat 1.
     const seat1 = ref<SeatState | undefined>();
     const delivered: unknown[] = [];
-    const queue = createAnimationEvents({
+    const scope = effectScope();
+    const queue = scope.run(() => createAnimationEvents({
       frame: () => seat1.value,
-    });
-    queue.registerHandler('moved', async (event) => {
+    }))!;
+    scope.run(() => queue.registerHandler('moved', async (event) => {
       delivered.push(event.data);
-    }, { skip: 'drop' });
+    }, { skip: 'drop' }));
 
     let moves = 0;
     const causes: string[] = [];
@@ -99,6 +100,7 @@ describe('demo step back (#449 review)', () => {
 
     await host.handleOp(1, { type: 'demoStop' });
     await until(() => seat1.value?.isDemoRunning === undefined);
+    scope.stop();
   });
 
   it('keeps only the last 20 moves to step back through, however long the demo runs (#818)', async () => {

@@ -3,7 +3,7 @@
  * Tests for useAnimationEvents composable
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick, effectScope, watch, type Ref, defineComponent, h, provide, onMounted, onUnmounted } from 'vue';
+import { ref, nextTick, effectScope, watch, type EffectScope, type Ref, defineComponent, h, provide, onMounted, onUnmounted } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
   createAnimationEvents,
@@ -11,6 +11,7 @@ import {
   ANIMATION_EVENTS_KEY,
   type AnimationFrame,
   type AnimationHandler,
+  type UseAnimationEventsOptions,
   type UseAnimationEventsReturn,
 } from './useAnimationEvents.js';
 import type { AnimationEvent } from '../../engine/index.js';
@@ -42,13 +43,33 @@ async function waitForIdle(
   }
 }
 
+/** A queue made in `scope`, whose handlers and claims are bound to that scope too, as a shell and its board bind theirs in setup. */
+function queueIn(scope: EffectScope, options: UseAnimationEventsOptions): UseAnimationEventsReturn {
+  const instance = scope.run(() => createAnimationEvents(options))!;
+  return {
+    ...instance,
+    registerHandler: (...args) => scope.run(() => instance.registerHandler(...args))!,
+    claimNoEvents: () => scope.run(() => instance.claimNoEvents())!,
+  };
+}
+
+let testScope: EffectScope;
+beforeEach(() => {
+  testScope = effectScope();
+});
+afterEach(() => testScope.stop());
+
+function createQueue(options: UseAnimationEventsOptions): UseAnimationEventsReturn {
+  return queueIn(testScope, options);
+}
+
 describe('useAnimationEvents', () => {
   describe('handler registration', () => {
     it('registers handler for event type', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -67,7 +88,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
@@ -92,10 +113,28 @@ describe('useAnimationEvents', () => {
       expect(handled).toEqual([1]); // Still only 1
     });
 
+    it('refuses a handler or a claim made outside any component, which nothing could release', () => {
+      const instance = createAnimationEvents({ frame: () => undefined });
+      expect(() => instance.registerHandler('test', async () => {}, { skip: 'drop' })).toThrow(/must be called from a component's setup/);
+      expect(() => instance.claimNoEvents()).toThrow(/must be called from a component's setup/);
+    });
+
+    it("releases a board's handlers when it unmounts, so a claim of no events then skips at once (#1820)", () => {
+      const events = ref<AnimationEvent[]>([]);
+      const instance = testScope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }) }))!;
+      const board = effectScope();
+      board.run(() => instance.registerHandler('test', async () => {}, { skip: 'drop' }));
+      testScope.run(() => instance.claimNoEvents());
+
+      board.stop();
+      events.value = [createEvent(1, 'test')];
+      expect(instance.isAnimating.value).toBe(false);
+    });
+
     it('a stale unregister leaves the handler that replaced it in place (#868)', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: string[] = [];
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 0 });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 0 });
 
       const unregisterFirst = instance.registerHandler('test', async () => { handled.push('first'); }, { skip: 'drop' });
       instance.registerHandler('test', async () => { handled.push('second'); }, { skip: 'drop' });
@@ -111,7 +150,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: Array<{ type: string; id: number }> = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -144,7 +183,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const order: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -168,7 +207,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const timeline: Array<{ event: string; id: number }> = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -196,7 +235,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -225,7 +264,7 @@ describe('useAnimationEvents', () => {
     it('a handler that returns no promise does not stop the queue', async () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }) });
       // A board written in JavaScript can hand in a handler that returns nothing.
       const noPromise = ((event: AnimationEvent) => void handled.push(event.id)) as unknown as AnimationHandler;
       instance.registerHandler('test', noPromise, { skip: 'drop' });
@@ -240,7 +279,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
@@ -266,7 +305,7 @@ describe('useAnimationEvents', () => {
     it('is false when no events', () => {
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -277,7 +316,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       let wasAnimatingDuringHandler = false;
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -300,7 +339,7 @@ describe('useAnimationEvents', () => {
     it('is false after all events processed', async () => {
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -321,7 +360,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -351,7 +390,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handlerStarts: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -378,7 +417,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const timeline: string[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -415,7 +454,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       let signalAborted: boolean | undefined;
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -435,7 +474,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
       let handlerFinished = false;
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -470,7 +509,7 @@ describe('useAnimationEvents', () => {
     it('updates as events are added', async () => {
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -488,7 +527,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const counts: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -512,7 +551,7 @@ describe('useAnimationEvents', () => {
     it('is zero after skipAll', async () => {
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -536,7 +575,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -562,7 +601,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -592,7 +631,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -623,7 +662,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: AnimationEvent[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -652,7 +691,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -679,7 +718,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -711,7 +750,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -741,7 +780,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -775,7 +814,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 500,
       });
@@ -799,7 +838,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
         handlerWaitTimeout: 0,
       });
@@ -820,7 +859,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -854,7 +893,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }) });
       instance.claimNoEvents();
 
       events.value = [createEvent(1, 'demo'), createEvent(2, 'demo')];
@@ -871,7 +910,7 @@ describe('useAnimationEvents', () => {
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }) });
 
       events.value = [createEvent(1, 'demo')];
       await nextTick();
@@ -892,7 +931,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const handled: number[] = [];
 
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }) });
       instance.registerHandler('known', async () => {}, { skip: 'drop' });
       instance.claimNoEvents();
 
@@ -908,36 +947,11 @@ describe('useAnimationEvents', () => {
       expect(handled).toEqual([1]);
     });
 
-    it('a claim released before the queue resumes leaves the event waiting for the next board, without a warning', async () => {
-      vi.useFakeTimers();
-      const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      const events = ref<AnimationEvent[]>([]);
-      const handled: number[] = [];
-
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
-
-      events.value = [createEvent(1, 'move')];
-      await nextTick();
-      instance.claimNoEvents()();
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(instance.isAnimating.value).toBe(true);
-      expect(consoleWarn).not.toHaveBeenCalled();
-
-      instance.registerHandler('move', async (event) => {
-        handled.push(event.id);
-      }, { skip: 'drop' });
-      await vi.advanceTimersByTimeAsync(0);
-
-      expect(handled).toEqual([1]);
-      consoleWarn.mockRestore();
-    });
-
     it('releasing the claim waits for a handler again', async () => {
       vi.useFakeTimers();
       const events = ref<AnimationEvent[]>([]);
 
-      const instance = createAnimationEvents({ frame: () => ({ animationEvents: events.value }) });
+      const instance = createQueue({ frame: () => ({ animationEvents: events.value }) });
       const release = instance.claimNoEvents();
       release();
 
@@ -953,7 +967,7 @@ describe('useAnimationEvents', () => {
       const handled: number[] = [];
       const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -979,7 +993,7 @@ describe('useAnimationEvents', () => {
       const runCalls: Array<{ id: number; aborted: boolean }> = [];
       const dropCalls: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1013,7 +1027,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const timeline: string[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1038,7 +1052,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const calls: number[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1059,7 +1073,7 @@ describe('useAnimationEvents', () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
       const secondCalled = { value: false };
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1085,7 +1099,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const timeline: string[] = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1115,7 +1129,7 @@ describe('useAnimationEvents', () => {
       const events = ref<AnimationEvent[]>([]);
       const processed: Array<{ type: string; id: number }> = [];
 
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: events.value }),
       });
 
@@ -1181,7 +1195,7 @@ describe('useAnimationEvents', () => {
     function harness(initialTimeline?: string) {
       const frame = ref({ events: [] as AnimationEvent[], timeline: initialTimeline });
       const delivered: number[] = [];
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: frame.value.events, ...timelineOf(frame.value.timeline) }),
       });
       instance.registerHandler('test', async (event) => {
@@ -1237,7 +1251,7 @@ describe('useAnimationEvents', () => {
       // events 5..7 when the page moves to seat 2, whose next event is 1.
       const frame = ref({ events: [] as AnimationEvent[], seat: 1 });
       const delivered: string[] = [];
-      const instance = createAnimationEvents({
+      const instance = createQueue({
         frame: () => ({ animationEvents: frame.value.events, gameInstanceId: 'game-a', restoreEpoch: 0, viewerSeat: frame.value.seat }),
       });
       instance.registerHandler('test', async (event, { signal }) => {
@@ -1264,7 +1278,7 @@ describe('useAnimationEvents', () => {
     it('never resets on a frame that does not name its game, its restore count and its seat', async () => {
       const frame = ref<AnimationFrame>({ animationEvents: [], restoreEpoch: 0, viewerSeat: 1 });
       const delivered: number[] = [];
-      const instance = createAnimationEvents({ frame: () => frame.value });
+      const instance = createQueue({ frame: () => frame.value });
       instance.registerHandler('test', async (event) => void delivered.push(event.id), { skip: 'drop' });
       for (const named of [
         { restoreEpoch: 0, viewerSeat: 1 },
@@ -1306,7 +1320,7 @@ describe('unmount (#749)', () => {
     try {
       const events = ref<AnimationEvent[]>([]);
       const scope = effectScope();
-      scope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 }));
+      queueIn(scope, { frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 });
       events.value = [createEvent(1, 'unhandled')];
       await nextTick();
 
@@ -1326,7 +1340,7 @@ describe('unmount (#749)', () => {
     try {
       const events = ref<AnimationEvent[]>([]);
       const scope = effectScope();
-      const instance = scope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 }))!;
+      const instance = queueIn(scope, { frame: () => ({ animationEvents: events.value }), handlerWaitTimeout: 500 });
       instance.registerHandler('slow', () => new Promise<void>(() => {}), { skip: 'drop' });
       events.value = [createEvent(1, 'slow')];
       await nextTick();
@@ -1365,7 +1379,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
   function harness(options: { handlerWaitTimeout?: number } = {}) {
     const frame = ref<AnimationFrame>(seatFrame(1, []));
     const scope = effectScope();
-    const instance = scope.run(() => createAnimationEvents({ frame: () => frame.value, ...options }))!;
+    const instance = queueIn(scope, { frame: () => frame.value, ...options });
     const played: string[] = [];
     let release: () => void = () => {};
     const register = (type: string, skip: 'run' | 'drop' = 'drop') => instance.registerHandler(type, async (event, { signal }) => {
