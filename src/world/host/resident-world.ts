@@ -564,7 +564,8 @@ export class ResidentWorld {
           readWorldDefinition(this.#definition).stateVersion ?? 0,
         );
       } else if (fixture !== undefined) {
-        throw new Error(
+        throw worldRefusal(
+          "fixture-world-launched",
           `This world has already launched, so it cannot start from fixture ${JSON.stringify(fixture)}: ` +
             "a fixture builds a new world and would not replace this one's state. Start it from an empty store.",
         );

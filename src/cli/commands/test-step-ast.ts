@@ -1128,7 +1128,7 @@ export const FIXTURE_FORMS =
 const fixtureCarriers: Carriers = (source, call, wrappers) => {
   const name = calleeName(call.callee as AstNode);
   const own =
-    name === 'fixture' ? [{ node: argAt(call, 0), path: [] }]
+    name === 'fixture' && (call.callee as AstNode).type === 'MemberExpression' ? [{ node: argAt(call, 0), path: [] }]
     : name === 'createTestWorld' ? [{ node: argAt(call, 0), path: ['fixture'] }]
     : [];
   return [...own, ...helperCarriers(source, call, wrappers)];

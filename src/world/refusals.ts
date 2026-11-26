@@ -154,6 +154,10 @@ export const WORLD_REFUSALS = {
     owner: "caller",
     why: "#1825: a host asked to start a world from a fixture this bundle does not declare in `world.fixtures`. Nothing is built and nothing is written, so the world is unaffected; the host checks a requested name against the manifest's `world.fixtures` before it builds anything",
   },
+  "fixture-world-launched": {
+    owner: "caller",
+    why: "#1825: a host asked to start a world from a fixture, and the world has already launched. A fixture builds a new world and would not replace a launched one's state, so nothing is built and the world is unaffected",
+  },
   "world-ended": {
     owner: "caller",
     why:

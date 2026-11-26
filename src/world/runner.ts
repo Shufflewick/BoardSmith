@@ -830,7 +830,7 @@ export interface WorldMigrated extends WorldAllocation {
  * of its named `fixtures` (#1825). Supplied by `createWorld` for the reason the
  * migration hooks are: only it holds both the game and the declaration.
  */
-export interface WorldRootBuilders {
+interface WorldRootBuilders {
   genesis(): Record<string, StoredPartition>;
   fixture(name: string): Record<string, StoredPartition>;
 }

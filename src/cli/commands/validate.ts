@@ -1471,10 +1471,10 @@ export async function validateWorldFixtures(rules: ProjectRules): Promise<Valida
       message: `Your rules could not be loaded, so their world fixtures could not be checked: ${(error as Error).message}. Fix that error and run boardsmith validate again.`,
     };
   }
-  const unstarted = await unstartedFixtures(rules.cwd, declared);
+  const unstarted = declared.length === 0 ? [] : await unstartedFixtures(rules.cwd, declared);
   if (unstarted.length === 0) {
     spinner.succeed(name);
-    const message = declared.length === 0 ? 'This world declares no fixtures.' : `A test starts a world from each of its ${declared.length} fixtures.`;
+    const message = declared.length === 0 ? 'This world declares no fixtures.' : 'A test starts a world from every fixture it declares.';
     return { name, passed: true, message };
   }
   spinner.fail(name);

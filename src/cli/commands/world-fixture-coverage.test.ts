@@ -14,6 +14,8 @@ const world = await createTestWorld({ definition: gameDefinition, fixture: 'alli
 await runner.fixture('besieged');
 await runner.genesis();
 const fixture = { name: 'notStarted' };
+const loaded = fixtureFile('jsonOnDisk');
+fixture('bareHelper');
 `;
     expect(findStartedFixtures(source, 'tests/a.test.ts').sort()).toEqual(['allied', 'besieged']);
   });

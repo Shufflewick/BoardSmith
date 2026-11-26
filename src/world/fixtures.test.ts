@@ -153,6 +153,9 @@ describe("world fixtures: a world started from a named state the bundle declares
       mintId: () => "event",
     });
     await world.start();
-    await expect(world.start("busy")).rejects.toThrow(/already launched, so it cannot start from fixture "busy"/);
+    const refused = await refusal(() => world.start("busy"));
+    expect(refused.code).toBe("fixture-world-launched");
+    expect(refused.owner).toBe("caller");
+    expect(refused.message).toContain('already launched, so it cannot start from fixture "busy"');
   });
 });
