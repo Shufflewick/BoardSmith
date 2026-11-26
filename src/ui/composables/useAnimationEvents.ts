@@ -462,6 +462,33 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     );
   }
 
+  // The view each event first arrived with, recorded as each frame lands,
+  // because the events watcher below sees only the last frame of a flush.
+  // It follows the timeline itself, so it keeps no view across an undo.
+  const arrivalViews = new Map<number, GameRootView>();
+  let recordedTimeline: string | undefined;
+  let recordedUpTo = 0;
+  if (getView) {
+    watch(
+      getEvents,
+      (events) => {
+        const timeline = getTimeline?.();
+        if (timeline !== undefined && recordedTimeline !== undefined && timeline !== recordedTimeline) {
+          arrivalViews.clear();
+          recordedUpTo = 0;
+        }
+        if (timeline !== undefined) recordedTimeline = timeline;
+        const view = getView();
+        for (const event of events ?? []) {
+          if (event.id <= recordedUpTo) continue;
+          if (view) arrivalViews.set(event.id, view);
+          recordedUpTo = Math.max(recordedUpTo, event.id);
+        }
+      },
+      { immediate: true, flush: 'sync' },
+    );
+  }
+
   // Watch for new events
   watch(
     getEvents,
@@ -478,8 +505,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       }
 
       // Add to queue and update lastQueuedId
-      const view = getView?.();
-      queue.push(...newEvents.map((event) => ({ event, view })));
+      for (const event of newEvents) {
+        queue.push({ event, view: arrivalViews.get(event.id) });
+        arrivalViews.delete(event.id);
+      }
       lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
       pendingCount.value = queue.length;
 
