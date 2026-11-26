@@ -3,7 +3,7 @@
  * Tests for useAnimationEvents composable
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick, effectScope, watch, defineComponent, h, provide, onMounted, onUnmounted } from 'vue';
+import { ref, nextTick, effectScope, watch, type Ref, defineComponent, h, provide, onMounted, onUnmounted } from 'vue';
 import { mount } from '@vue/test-utils';
 import {
   createAnimationEvents,
@@ -1564,7 +1564,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
   it('does not call a handler that a watcher of isAnimating unregistered as the event started', async () => {
     const q = harness({ handlerWaitTimeout: 0 });
     const unregister = q.register('test');
-    watch(q.instance.isAnimating, (animating) => { if (animating) unregister(); }, { flush: 'sync' });
+    q.scope.run(() => watch(q.instance.isAnimating, (animating) => { if (animating) unregister(); }, { flush: 'sync' }));
     q.frame.value = seatFrame(1, [createEvent(1, 'test')]);
     await nextTick();
     await flushMicrotasks();
@@ -1576,13 +1576,46 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
     const q = harness();
     q.register('drop');
     q.register('sync', 'run');
-    watch(q.instance.isAnimating, (animating) => { if (animating) q.instance.skipAll(); }, { flush: 'sync' });
+    q.scope.run(() => watch(q.instance.isAnimating, (animating) => { if (animating) q.instance.skipAll(); }, { flush: 'sync' }));
     q.frame.value = seatFrame(1, [createEvent(1, 'drop')]);
     await nextTick();
     q.frame.value = seatFrame(1, [createEvent(2, 'sync')]);
     await nextTick();
     await flushMicrotasks();
     expect(q.played).toEqual(['sync2 skipped']);
+  });
+
+  it('keeps pendingCount equal to the queue when a watcher of isAnimating lands a frame as Skip stops playback', async () => {
+    const q = harness();
+    q.register('slow');
+    q.frame.value = seatFrame(1, [createEvent(1, 'slow')]);
+    await nextTick();
+    q.scope.run(() => watch(q.instance.isAnimating, (animating) => {
+      if (!animating) q.frame.value = seatFrame(1, [createEvent(2, 'slow'), createEvent(3, 'slow')]);
+    }, { flush: 'sync' }));
+
+    q.instance.skipAll();
+    expect(q.instance.pendingCount.value).toBe(2);
+  });
+
+  it('runs a skip: run handler that returns no promise during Skip without logging an error', async () => {
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const q = harness();
+      q.register('slow');
+      // A board written in JavaScript can hand in a handler that returns nothing.
+      const noPromise = ((event: AnimationEvent) => void q.played.push(`plain${event.id}`)) as unknown as AnimationHandler;
+      q.instance.registerHandler('plain', noPromise, { skip: 'run' });
+      q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'plain')]);
+      await nextTick();
+
+      q.instance.skipAll();
+      await flushMicrotasks();
+      expect(q.played).toEqual(['slow1', 'plain2']);
+      expect(consoleError).not.toHaveBeenCalled();
+    } finally {
+      consoleError.mockRestore();
+    }
   });
 
   it('skips a waiting event once the last handler unregisters while the board claims no events', async () => {
@@ -1600,8 +1633,10 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
 });
 
 describe('a board that swaps the child handling an event in the frame that brings the event (#1819)', () => {
-  it('hands the event to the child that mounts, not the one that unmounts', async () => {
-    const frame = ref<AnimationFrame & { phase: 'a' | 'b' }>({ phase: 'a', animationEvents: [] });
+  type BoardFrame = AnimationFrame & { board: 'a' | 'b' };
+
+  /** A shell over `frame` whose board shows child a or b, each registering an 'x' handler while mounted. */
+  function mountBoard(frame: Ref<BoardFrame>, inShell: (instance: UseAnimationEventsReturn) => void = () => {}) {
     const played: string[] = [];
     const child = (name: string) => defineComponent({
       setup() {
@@ -1614,18 +1649,42 @@ describe('a board that swaps the child handling an event in the frame that bring
         return () => h('div', name);
       },
     });
-    const ChildA = child('a');
-    const ChildB = child('b');
+    const children = { a: child('a'), b: child('b') };
     const Shell = defineComponent({
       setup() {
-        provide(ANIMATION_EVENTS_KEY, createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 }));
-        return () => h(frame.value.phase === 'a' ? ChildA : ChildB);
+        const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+        provide(ANIMATION_EVENTS_KEY, instance);
+        inShell(instance);
+        return () => h(children[frame.value.board]);
       },
     });
-    const wrapper = mount(Shell);
+    return { played, wrapper: mount(Shell) };
+  }
+
+  it('hands the event to the child that mounts, not the one that unmounts', async () => {
+    const frame = ref<BoardFrame>({ board: 'a', animationEvents: [] });
+    const { played, wrapper } = mountBoard(frame);
     await nextTick();
 
-    frame.value = { phase: 'b', animationEvents: [createEvent(1, 'x')] };
+    frame.value = { board: 'b', animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+    await flushMicrotasks();
+    expect(played).toEqual(['b1']);
+    wrapper.unmount();
+  });
+
+  it('hands a new seat\'s event to the new board when a watcher changes seat as an event starts', async () => {
+    const frame = ref<BoardFrame>({ board: 'a', animationEvents: [], gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 1 });
+    const { played, wrapper } = mountBoard(frame, (instance) => {
+      watch(instance.isAnimating, (animating) => {
+        if (animating && frame.value.viewerSeat === 1) {
+          frame.value = { board: 'b', animationEvents: [createEvent(1, 'x')], gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 2 };
+        }
+      }, { flush: 'sync' });
+    });
+    await nextTick();
+
+    frame.value = { ...frame.value, animationEvents: [createEvent(1, 'x')] };
     await nextTick();
     await flushMicrotasks();
     expect(played).toEqual(['b1']);

@@ -201,23 +201,29 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
    * Every state change is published before any game code runs, and the state is checked again after.
    */
   function pump(): void {
-    while (state.value.kind === 'idle' && queue.length > 0) {
+    let idle = state.value;
+    // A Stop or a frame landing from that code replaces the state; the frame's own pump then starts its events, after Vue draws it.
+    while (idle.kind === 'idle' && state.value === idle && queue.length > 0) {
       const event = queue.shift()!;
-      const next: Playback | undefined = handlers.has(event.type) ? { kind: 'starting', event } : waitFor(event);
-      if (next) state.value = next;
+      const next: Playback = handlers.has(event.type) ? { kind: 'starting', event } : (waitFor(event) ?? idle);
+      state.value = next;
       pendingCount.value = queue.length;
-      if (next?.kind === 'starting' && state.value === next) play(event);
+      if (state.value !== next) return;
+      if (next.kind === 'starting') idle = play(event);
     }
   }
 
-  function play(event: AnimationEvent): void {
+  /** Call the event's handler, returning the state that leaves: playing, or the wait or skip when the handler unregistered as the event started. */
+  function play(event: AnimationEvent): Playback {
     const entry = handlers.get(event.type);
     if (!entry) {
-      state.value = waitFor(event) ?? { kind: 'idle' };
-      return;
+      const next = waitFor(event) ?? { kind: 'idle' };
+      state.value = next;
+      return next;
     }
     const abort = new AbortController();
-    state.value = { kind: 'playing', event, abort };
+    const playing: Playback = { kind: 'playing', event, abort };
+    state.value = playing;
     let settled: Promise<void>;
     try {
       // A handler written in JavaScript may return no promise.
@@ -237,6 +243,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
           pump();
         }
       });
+    return playing;
   }
 
   function timeOut(): void {
@@ -277,9 +284,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (now.kind === 'disposed') return [];
     const skipped = now.kind === 'waiting' || now.kind === 'starting' ? [now.event, ...queue] : [...queue];
     queue.length = 0;
+    pendingCount.value = 0;
     if (now.kind === 'waiting') clearTimeout(now.timer);
     state.value = next;
-    pendingCount.value = 0;
     if (now.kind === 'playing') now.abort.abort();
     return skipped;
   }
@@ -292,7 +299,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const entry = handlers.get(event.type);
       if (entry?.skip !== 'run') continue;
       try {
-        void entry.handler(event, { signal: aborted }).catch((error: unknown) => {
+        void Promise.resolve(entry.handler(event, { signal: aborted })).catch((error: unknown) => {
           console.error(`Handler error during skipAll for '${event.type}':`, error);
         });
       } catch (error) {
