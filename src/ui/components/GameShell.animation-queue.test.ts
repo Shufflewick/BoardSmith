@@ -15,26 +15,26 @@ import { useAnimationEvents } from '../composables/useAnimationEvents.js';
 import { defineGameUIs, defaultUI, devUI } from '../game-uis.js';
 import { enterIframe, leaveIframe, mountPlatformShell, postFromHost } from './GameShell.platform-mount.test-helper.js';
 
-interface Play { board: string; id: number; signal: AbortSignal }
+interface Play { board: string; id: number; epoch: unknown; skipped: boolean; signal: AbortSignal }
 
 /** Every event a board was handed. A handler ignores its signal and never settles, as a board awaiting a removed element's animation would. */
 const plays: Play[] = [];
 
-function playingBoard(name: string) {
+function playingBoard(name: string, skip: 'run' | 'drop') {
   return defineComponent({
     name,
     setup() {
       useAnimationEvents()?.registerHandler('hit', (event, { signal }) => {
-        plays.push({ board: name, id: event.id, signal });
+        plays.push({ board: name, id: event.id, epoch: event.data.epoch, skipped: signal.aborted, signal });
         return new Promise<void>(() => {});
-      }, { skip: 'drop' });
+      }, { skip });
       return () => h('div', { class: name }, name);
     },
   });
 }
 
-const First = playingBoard('first');
-const Second = playingBoard('second');
+const First = playingBoard('first', 'run');
+const Second = playingBoard('second', 'drop');
 
 function frame(ids: number[], restoreEpoch = 0): void {
   postFromHost({
@@ -45,7 +45,7 @@ function frame(ids: number[], restoreEpoch = 0): void {
         view: { id: 0, className: 'Game', attributes: {}, children: [] },
         players: [{ name: 'P1', seat: 1 }], currentPlayer: 1, isMyTurn: true,
         availableActions: ['pass'], actionMetadata: { pass: { name: 'pass', prompt: 'Pass', selections: [] } },
-        animationEvents: ids.map((id) => ({ id, type: 'hit', data: {}, timestamp: id })),
+        animationEvents: ids.map((id) => ({ id, type: 'hit', data: { epoch: restoreEpoch }, timestamp: id })),
         gameInstanceId: 'battle', restoreEpoch, viewerSeat: 1,
       },
     },
@@ -96,9 +96,28 @@ describe('the animation queue on GameShell (#1820)', () => {
 
     frame([], 1);
     await flushPromises();
-    expect(plays.map((p) => [p.id, p.signal.aborted])).toEqual([[1, true]]);
+    expect(plays.map((p) => [p.id, p.skipped, p.signal.aborted])).toEqual([[1, false, true], [2, true, true]]);
     expect(gated()).toBe(false);
     expect(passOffered()).toBe(true);
+  });
+
+  it('runs the old timeline\'s skip: run handlers in order and keeps the panel gated when an undo brings a new event', async () => {
+    await mountShell();
+    frame([1, 2, 3]);
+    await flushPromises();
+
+    frame([1], 1);
+    await nextTick();
+    expect(gated()).toBe(true);
+    await flushPromises();
+    expect(plays.map((p) => [p.epoch, p.id, p.skipped, p.signal.aborted])).toEqual([
+      [0, 1, false, true],
+      [0, 2, true, true],
+      [0, 3, true, true],
+      [1, 1, false, false],
+    ]);
+    expect(gated()).toBe(true);
+    expect(passOffered()).toBe(false);
   });
 
   it('aborts the handler of a board the UI switcher replaces mid-play, and plays the next event on the new board', async () => {

@@ -3,21 +3,8 @@
  *
  * Plays a seat's animation events through the handlers its board registers,
  * one at a time, in order. The contract a board can rely on is written in
- * docs/ui-components.md § "The playback contract", and the queue's random-walk
- * test asserts it:
- *
- * - Each event the seat may see is offered once, in order, one at a time.
- * - A handler is called only while the component that registered it is
- *   mounted, and only after the board has drawn the event's frame.
- * - From a frame landing until its last event ends, `isAnimating` is true.
- * - The signal aborts on Skip, undo, restore, seat change, shell unmount or the
- *   registering component's unmount, and the queue has already moved on.
- * - A skipped event that never started calls a `'run'` handler once with an
- *   aborted signal, and never calls a `'drop'` handler.
- * - With no handler, the queue waits `handlerWaitTimeout` (3s), warns and
- *   skips. A board that claimed none skips at once.
- * - A call into the queue from a handler, abort listener or watcher is allowed,
- *   and takes effect after the current step.
+ * docs/ui-components.md § "The playback contract", and
+ * useAnimationEvents.contract.test.ts checks it.
  *
  * @example
  * ```typescript
@@ -33,7 +20,7 @@
  * }, { skip: 'drop' });
  * ```
  */
-import { computed, getCurrentScope, nextTick, ref, shallowRef, watch, onScopeDispose, type Ref, type InjectionKey, inject } from 'vue';
+import { computed, getCurrentInstance, getCurrentScope, inject, nextTick, onMounted, onScopeDispose, ref, shallowRef, watch, type InjectionKey, type Ref } from 'vue';
 import type { AnimationEvent } from '../../engine/index.js';
 
 /**
@@ -93,7 +80,21 @@ export interface AnimationFrame {
   viewerSeat?: number;
 }
 
-interface HandlerEntry {
+/**
+ * A registration or claim, bound to the component (or effect scope) that made it.
+ * `life` is that component's mount lifetime, which changes the moment Vue mounts or unmounts it;
+ * the queue's handler map and claims follow it as inputs, in the order they come.
+ */
+interface Lease {
+  life: 'mounting' | 'mounted' | 'released';
+  /** Put it in the handler map or the claims, as a step. */
+  add: () => void;
+  /** Take it out, as a step. */
+  drop: () => void;
+}
+
+interface HandlerEntry extends Lease {
+  type: string;
   handler: AnimationHandler;
   skip: 'run' | 'drop';
 }
@@ -136,14 +137,16 @@ function animationTimeline(state: AnimationFrame | undefined): string | undefine
 export interface UseAnimationEventsReturn {
   /**
    * Register a handler for an event type. Call it in a component's setup (or inside an
-   * effect scope): the handler is released when that component unmounts, and its signal
-   * aborts if it is playing then. The returned function releases it earlier, the same way.
+   * effect scope): the handler counts once the update that mounts that component has finished,
+   * is released when it unmounts, and its signal aborts if it is playing then. The returned
+   * function releases it earlier, the same way.
    */
   registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /**
    * Declare that the mounted board handles no event types, so while no handler is
    * registered an event is skipped at once instead of waiting for one to mount. Call it in a
-   * component's setup: the claim is released when that component unmounts, or earlier by the returned function.
+   * component's setup: the claim counts once that component has mounted, and is released when it
+   * unmounts, or earlier by the returned function.
    */
   claimNoEvents: () => () => void;
   /** Whether an event is playing, waiting for its handler or queued: true from a frame landing until its last event ends. */
@@ -169,17 +172,6 @@ export function useAnimationEvents(): UseAnimationEventsReturn | undefined {
   return inject(ANIMATION_EVENTS_KEY, undefined);
 }
 
-/** Release `release` when the caller's component unmounts, refusing a caller with no component to bind it to. */
-function bindToCaller(method: string, release: () => void): () => void {
-  if (!getCurrentScope()) {
-    throw new Error(
-      `${method}() must be called from a component's setup (or inside an effectScope), so the queue can release it when that component unmounts.`,
-    );
-  }
-  onScopeDispose(release);
-  return release;
-}
-
 /**
  * Create an animation events instance.
  *
@@ -192,12 +184,14 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const { frame: getFrame, handlerWaitTimeout = 3000 } = options;
 
   const handlers = new Map<string, HandlerEntry>();
-  const noEventClaims = new Set<symbol>();
-  // Holds only the current timeline's events: a change of timeline stops playback first.
-  // The last `undrawn` of them came in frames Vue has not drawn yet, so none of them may start.
-  const queue: AnimationEvent[] = [];
-  let undrawn = 0;
+  const noEventClaims = new Set<Lease>();
+  // Holds only the current timeline's events, each with the number of the frame that brought it:
+  // a change of timeline stops playback first. One whose frame Vue has not drawn yet may not start.
+  const queue: Array<{ event: AnimationEvent; frame: number }> = [];
+  let framesDrawn = 0;
   let state: Playback = { kind: 'idle' };
+  // Events Skip ended before they started, run one per step in the order Skip ended them.
+  const skipped: AnimationEvent[] = [];
 
   // The one published snapshot: isAnimating and pendingCount can never disagree.
   const snapshot = shallowRef({ busy: false, pending: 0 });
@@ -209,11 +203,13 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const watermarks = new Map<string | undefined, number>();
   let timeline: string | undefined;
 
-  // Every input (a frame, a registration, a claim, Skip, a settle, the timer, the unmount) is a step in this inbox.
+  // Every input (a frame, a registration, a claim, a release, Skip, a settle, the timer, the unmount) is a step in this inbox.
   const inbox: Array<() => void> = [];
+  // What a step calls out to (a handler, an abort), run once the step's snapshot is published.
+  const callOuts: Array<() => void> = [];
   let stepping = false;
 
-  /** Run a step. One sent while a step runs (from a handler, a listener or a watcher) runs after that step. */
+  /** Run a step, publish its snapshot, then make its call-outs. One sent meanwhile (from a call-out or a watcher) runs after. */
   function send(step: () => void): void {
     inbox.push(step);
     if (stepping) return;
@@ -223,6 +219,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         if (state.kind === 'disposed') continue;
         next();
         publish();
+        for (let callOut = callOuts.shift(); callOut; callOut = callOuts.shift()) callOut();
       }
     } finally {
       stepping = false;
@@ -236,8 +233,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   }
 
   function skip(): void {
-    const skipped = stop({ kind: 'idle' });
-    if (skipped.length > 0) inbox.push(() => runSkipped(skipped));
+    const ended = stop({ kind: 'idle' });
+    if (ended.length === 0) return;
+    if (skipped.length === 0) inbox.push(runSkipped);
+    for (const event of ended) skipped.push(event);
   }
 
   function settle(playing: Playing): void {
@@ -267,11 +266,13 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     scheduleAdvance();
   }
 
-  /** Hand the next drawn event to its handler, wait for one to register, or skip it. */
+  /** Settle the wait, then hand the next drawn event to its handler, wait for one to register, or skip it. */
   function advance(): void {
+    // This runs after a flush, so what it mounted and unmounted counts before a wait ends or an event is handed out.
+    takeMounted();
     if (state.kind !== 'idle') return;
-    while (queue.length > undrawn) {
-      const event = queue.shift()!;
+    while (queue.length > 0 && queue[0].frame <= framesDrawn) {
+      const { event } = queue.shift()!;
       const entry = handlers.get(event.type);
       if (entry) return play(event, entry);
       if (handlerWaitTimeout !== 0 && !claimedNone()) {
@@ -285,135 +286,177 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   function play(event: AnimationEvent, entry: HandlerEntry): void {
     const playing: Playing = { kind: 'playing', event, entry, abort: new AbortController() };
     state = playing;
-    publish();
-    const { signal } = playing.abort;
-    let settled: Promise<void>;
-    try {
-      // A handler written in JavaScript may return no promise.
-      settled = Promise.resolve(entry.handler(event, { signal }));
-    } catch (error) {
-      settled = Promise.reject(error);
-    }
-    void settled
-      .catch((error: unknown) => {
-        // A skipped handler's error is noise; any other is logged and the queue goes on, so one handler cannot break the chain.
-        if (!signal.aborted) console.error(`Animation handler error for event type '${event.type}':`, error);
-      })
-      .then(() => send(() => settle(playing)));
+    callOuts.push(() => {
+      // A watcher of the snapshot may have unmounted the handler's component; its release ends this play.
+      if (entry.life !== 'mounted') return;
+      const { signal } = playing.abort;
+      let settled: Promise<void>;
+      try {
+        // A handler written in JavaScript may return no promise.
+        settled = Promise.resolve(entry.handler(event, { signal }));
+      } catch (error) {
+        settled = Promise.reject(error);
+      }
+      void settled
+        .catch((error: unknown) => {
+          // A skipped handler's error is noise; any other is logged and the queue goes on, so one handler cannot break the chain.
+          if (!signal.aborted) console.error(`Animation handler error for event type '${event.type}':`, error);
+        })
+        .then(() => send(() => settle(playing)));
+    });
   }
 
-  /**
-   * End playback in `next` and empty the queue, returning the events that never started: the waiting one first.
-   * The abort comes last, so a listener finds the queue already moved on.
-   */
+  /** Abort `playing` once the step's snapshot is out, so a listener finds the queue already moved on. */
+  function abortAfter(playing: Playing): void {
+    callOuts.push(() => playing.abort.abort());
+  }
+
+  /** End playback in `next` and empty the queue, returning the events that never started: the waiting one first. */
   function stop(next: Playback): AnimationEvent[] {
     const now = state;
-    const skipped = now.kind === 'waiting' ? [now.event, ...queue] : [...queue];
+    const ended = queue.map((queued) => queued.event);
+    if (now.kind === 'waiting') ended.unshift(now.event);
     queue.length = 0;
-    undrawn = 0;
     if (now.kind === 'waiting') clearTimeout(now.timer);
+    if (now.kind === 'playing') abortAfter(now);
     state = next;
-    publish();
-    if (now.kind === 'playing') now.abort.abort();
-    return skipped;
+    return ended;
   }
 
-  /** Call the skip: 'run' handler of the first skipped event, then queue the rest behind whatever that handler sent. */
-  function runSkipped([event, ...rest]: AnimationEvent[]): void {
-    const entry = handlers.get(event.type);
-    if (entry?.skip === 'run') {
+  /** Call the skip: 'run' handler of the first skipped event, chosen as it is called, then take the next in a step of its own. */
+  function runSkipped(): void {
+    const event = skipped.shift()!;
+    if (skipped.length > 0) inbox.push(runSkipped);
+    callOuts.push(() => {
+      const entry = handlers.get(event.type);
+      if (entry?.skip !== 'run' || entry.life !== 'mounted') return;
       const logError = (error: unknown) => console.error(`Handler error during skipAll for '${event.type}':`, error);
       try {
         void Promise.resolve(entry.handler(event, { signal: AbortSignal.abort() })).catch(logError);
       } catch (error) {
         logError(error);
       }
-    }
-    if (rest.length > 0) inbox.push(() => runSkipped(rest));
-  }
-
-  /** Hand the waiting event back to the queue once a handler for it registers. */
-  function resume(eventType: string): void {
-    if (state.kind !== 'waiting' || state.event.type !== eventType || !handlers.has(eventType)) return;
-    clearTimeout(state.timer);
-    queue.unshift(state.event);
-    becomeIdle();
-  }
-
-  /** A released handler that is playing is aborted and the queue moves on; a wait the board claims none for ends. */
-  function abortOrSkipWait(entry: HandlerEntry): void {
-    if (state.kind === 'playing' && state.entry === entry) {
-      const { abort } = state;
-      becomeIdle();
-      publish();
-      abort.abort();
-      return;
-    }
-    skipUnclaimedWait();
-  }
-
-  /** Skip the waiting event when the board claims no events. */
-  function skipUnclaimedWait(): void {
-    if (state.kind !== 'waiting' || !claimedNone()) return;
-    clearTimeout(state.timer);
-    becomeIdle();
-  }
-
-  /** Follow the timeline the frame names, then queue its events above that timeline's watermark. */
-  function takeFrame(frame: AnimationFrame | undefined): void {
-    const next = animationTimeline(frame);
-    if (next !== undefined && next !== timeline) {
-      // A change skips what the queue holds; the first timeline named is no change.
-      if (timeline === undefined) watermarks.set(next, watermarks.get(undefined) ?? 0);
-      else skip();
-      timeline = next;
-    }
-    const watermark = watermarks.get(timeline) ?? 0;
-    const newEvents = (frame?.animationEvents ?? []).filter((e) => e.id > watermark);
-    if (newEvents.length === 0) return;
-    watermarks.set(timeline, Math.max(watermark, ...newEvents.map((e) => e.id)));
-    queue.push(...newEvents);
-    undrawn += newEvents.length;
-  }
-
-  // The handler map and the claims change at once, so no step queued before a release can call a
-  // released handler; what playback does about it is an input like any other.
-  function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
-    const entry = { handler, skip: handlerOptions.skip };
-    const release = bindToCaller('registerHandler', () => {
-      // Another component may have replaced this handler since; leave theirs.
-      if (handlers.get(eventType) === entry) handlers.delete(eventType);
-      send(() => abortOrSkipWait(entry));
     });
-    handlers.set(eventType, entry);
-    send(() => resume(eventType));
+  }
+
+  /** After the handlers or claims change: hand the waiting event back to the queue if it has a handler now, or skip it if the board claims none. */
+  function reconsiderWait(): void {
+    if (state.kind !== 'waiting') return;
+    const { event, timer } = state;
+    // It waited, so its frame was drawn.
+    if (handlers.has(event.type)) queue.unshift({ event, frame: 0 });
+    else if (!claimedNone()) return;
+    clearTimeout(timer);
+    becomeIdle();
+  }
+
+  /** A released handler that is playing is aborted and the queue moves on. */
+  function dropHandler(entry: HandlerEntry): void {
+    if (handlers.get(entry.type) === entry) handlers.delete(entry.type);
+    if (state.kind === 'playing' && state.entry === entry) {
+      abortAfter(state);
+      becomeIdle();
+    }
+  }
+
+  // Leases a Vue update mounts, taken in as one input once that update has finished.
+  const mountedThisFlush: Lease[] = [];
+
+  function takeMounted(): void {
+    take(mountedThisFlush.splice(0));
+  }
+
+  function take(leases: Lease[]): void {
+    for (const lease of leases) {
+      if (lease.life !== 'mounting') continue;
+      lease.life = 'mounted';
+      lease.add();
+    }
+    reconsiderWait();
+  }
+
+  /**
+   * Bind `lease` to the caller: it is taken in once the caller's component has mounted, with every
+   * other component the same update mounts, and released when that component (or scope) ends.
+   */
+  function bindToCaller(method: string, lease: Lease): () => void {
+    if (!getCurrentScope()) {
+      throw new Error(
+        `${method}() must be called from a component's setup (or inside an effectScope), so the queue can release it when that component unmounts.`,
+      );
+    }
+    const release = () => {
+      const was = lease.life;
+      lease.life = 'released';
+      // Whether a wait ends waits for the flush, in case the same update mounts what takes the event.
+      if (was === 'mounted') send(() => { lease.drop(); scheduleAdvance(); });
+    };
+    onScopeDispose(release);
+    const instance = getCurrentInstance();
+    if (!instance || instance.isMounted) {
+      send(() => take([lease]));
+    } else {
+      onMounted(() => {
+        if (mountedThisFlush.push(lease) === 1) void nextTick(() => send(takeMounted));
+      });
+    }
     return release;
+  }
+
+  /** Follow the timeline the frame names: a change skips what the queue holds, and the first timeline named is no change. */
+  function followTimeline(frame: AnimationFrame | undefined): void {
+    const next = animationTimeline(frame);
+    if (next === undefined || next === timeline) return;
+    if (timeline === undefined) watermarks.set(next, watermarks.get(undefined) ?? 0);
+    else skip();
+    timeline = next;
+  }
+
+  /** Follow the frame's timeline, then queue its events above that timeline's watermark. */
+  function takeFrame(frame: AnimationFrame | undefined, number: number): void {
+    followTimeline(frame);
+    const floor = watermarks.get(timeline) ?? 0;
+    let watermark = floor;
+    // One event at a time: a spread of a frame's events into a call overflows the stack on a large frame.
+    for (const event of frame?.animationEvents ?? []) {
+      if (event.id <= floor) continue;
+      queue.push({ event, frame: number });
+      watermark = Math.max(watermark, event.id);
+    }
+    watermarks.set(timeline, watermark);
+  }
+
+  function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
+    const entry: HandlerEntry = {
+      life: 'mounting', type: eventType, handler, skip: handlerOptions.skip,
+      add: () => handlers.set(eventType, entry),
+      drop: () => dropHandler(entry),
+    };
+    return bindToCaller('registerHandler', entry);
   }
 
   function claimNoEvents(): () => void {
-    const claim = Symbol('no animation events');
-    const release = bindToCaller('claimNoEvents', () => {
-      noEventClaims.delete(claim);
-    });
-    noEventClaims.add(claim);
-    send(skipUnclaimedWait);
-    return release;
+    const claim: Lease = { life: 'mounting', add: () => noEventClaims.add(claim), drop: () => noEventClaims.delete(claim) };
+    return bindToCaller('claimNoEvents', claim);
   }
 
-  // Created first, so the first frame's count change reaches it once Vue has drawn that frame too.
   const framesLanded = ref(0);
-  watch(framesLanded, () => {
-    // Vue has drawn every frame taken in, so each queued event may start.
-    undrawn = 0;
-    scheduleAdvance();
-  }, { flush: 'post' });
+  // Created first, so it sees the first frame land too. A 'pre' job runs in the flush that draws the
+  // frames landed so far, or before it when a nested app's mount flushes Vue's queues early, so the
+  // tick after it is always after that drawing.
+  watch(framesLanded, (landed) => {
+    void nextTick(() => send(() => {
+      framesDrawn = Math.max(framesDrawn, landed);
+      advance();
+    }));
+  }, { flush: 'pre' });
   // Every frame is taken in as it lands ('sync'), so a frame that a later one
   // replaced before Vue flushed still queues its events.
   watch(
     getFrame,
     (frame) => {
-      framesLanded.value++;
-      send(() => takeFrame(frame));
+      const number = ++framesLanded.value;
+      send(() => takeFrame(frame, number));
     },
     { immediate: true, flush: 'sync' },
   );
