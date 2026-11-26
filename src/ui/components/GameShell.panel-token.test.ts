@@ -90,7 +90,7 @@ describe('action bar identity token', () => {
     const wrapper = mount(TokenHarness, { props: { playerSeat: 1, currentPlayer: 2 } });
     expect(wrapper.find('.turn-token').exists()).toBe(true);
     // Seat 2's glyph, not the viewer's (seat 1) — this is a claim about the table.
-    expect(shapeOf(wrapper)).toBe('sh-hexagon');
+    expect(shapeOf(wrapper)).toBe('sh-heart');
   });
 
   it('shows the VIEWER during a simultaneous step, instead of nothing', () => {
@@ -105,7 +105,7 @@ describe('action bar identity token', () => {
       },
     });
     expect(wrapper.find('.turn-token').exists()).toBe(true);
-    expect(shapeOf(wrapper)).toBe('sh-square'); // seat 1 — the viewer
+    expect(shapeOf(wrapper)).toBe('sh-circle'); // seat 1 — the viewer
   });
 
   it('draws the you-token identically to the whose-turn token', () => {
@@ -133,7 +133,7 @@ describe('action bar identity token', () => {
           awaitingPlayers: [{ playerIndex: 0, completed: false }, { playerIndex: 2, completed: false }],
         },
       });
-      expect(shapeOf(wrapper)).toBe('sh-square');
+      expect(shapeOf(wrapper)).toBe('sh-circle');
     }
   });
 
@@ -147,7 +147,7 @@ describe('action bar identity token', () => {
       },
     });
     expect(wrapper.find('.turn-token').exists()).toBe(true);
-    expect(shapeOf(wrapper)).toBe('sh-square');
+    expect(shapeOf(wrapper)).toBe('sh-circle');
   });
 
   it('renders no token for a spectator, who has no identity to show', () => {

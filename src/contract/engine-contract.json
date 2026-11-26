@@ -1,5 +1,5 @@
 {
-  "revision": 547,
+  "revision": 548,
   "surfaceHash": "833cab24eebd50db",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4319,6 +4319,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith smoke warns when a game that starts its action bar closed had an action started only from the panel"
+    },
+    {
+      "revision": 548,
+      "date": "2026-11-26",
+      "surfaceHash": "833cab24eebd50db",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "Player tokens draw a shape whose side count matches the seat number, with the edge and acting outline drawn as strokes"
     }
   ]
 }

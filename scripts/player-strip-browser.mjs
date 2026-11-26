@@ -44,14 +44,14 @@ function readStrip(frame, strip) {
     };
     const status = root.querySelector('.strip-status');
     const acting = root.querySelector('.pt.strip-active > .tok');
-    const ring = acting && root.ownerDocument.getAnimations().find((a) => a.effect.target === acting && a.effect.pseudoElement === '::after');
-    const after = acting && getComputedStyle(acting, '::after');
+    const outline = acting && acting.querySelector('.ring');
+    const ring = outline && root.ownerDocument.getAnimations().find((a) => a.effect.target === outline);
     const tokens = root.querySelector('.strip-tokens');
-    // How far the outline reaches past the token at its largest scale.
+    // How far the outline's stroke reaches past the token at its largest scale.
     const scales = ring ? ring.effect.getKeyframes().map((k) => (k.transform && k.transform !== 'none' ? new DOMMatrix(k.transform).a : 1)) : [1];
-    const side = acting && acting.getBoundingClientRect().width - 2 * parseFloat(after.left);
+    const side = outline && (outline.getBoundingClientRect().width + parseFloat(getComputedStyle(outline.querySelector('path')).strokeWidth)) * Math.max(...scales);
     return {
-      reach: acting && (side * Math.max(...scales) - acting.getBoundingClientRect().width) / 2,
+      reach: outline && (side - acting.getBoundingClientRect().width) / 2,
       actingSeat: acting && [...root.querySelectorAll('.strip-tokens .pt')].indexOf(acting.parentElement),
       tokens: { right: tokens.getBoundingClientRect().right, scrolls: tokens.scrollWidth > tokens.clientWidth },
       root: box(root),
@@ -62,7 +62,7 @@ function readStrip(frame, strip) {
         iterations: ring.effect.getTiming().iterations,
         properties: [...new Set(ring.effect.getKeyframes().flatMap((k) => Object.keys(k)))].filter((p) => !['offset', 'computedOffset', 'easing', 'composite'].includes(p)),
       },
-      still: after && { content: after.content, opacity: after.opacity, clipPath: after.clipPath },
+      still: outline && { display: getComputedStyle(outline).display, opacity: getComputedStyle(outline).opacity },
     };
   });
 }
@@ -100,32 +100,22 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', engines: ['chro
       });
     }
 
-    await check("the acting badge's outline takes its token's shape, whichever it is (#1646 review F7)", async () => {
-      const mismatches = await frame.locator('.mobile-strip .pt.strip-active > .tok').evaluate((tok) => {
-        const shapeClass = () => [...tok.classList].find((c) => c.startsWith('sh-'));
-        const own = shapeClass();
-        const out = [];
-        for (const shape of ['sh-circle', 'sh-square', 'sh-hexagon', 'sh-octagon', 'sh-diamond', 'sh-pentagon', 'sh-shield', 'sh-plus']) {
-          tok.classList.replace(shapeClass(), shape);
-          const outline = getComputedStyle(tok, '::after').clipPath;
-          const token = getComputedStyle(tok.querySelector('.shape')).clipPath;
-          if (outline !== token) out.push(`${shape}: outline ${outline}, token ${token}`);
-        }
-        tok.classList.replace(shapeClass(), own);
-        return out;
-      });
-      assert(mismatches.length === 0, mismatches.join('; '));
+    await check("the acting badge's outline takes its token's shape (#1646 review F7)", async () => {
+      const shapes = await frame.locator('.mobile-strip .pt.strip-active > .tok').evaluate((tok) => ({
+        outline: tok.querySelector('.ring path')?.getAttribute('d'),
+        token: tok.querySelector('.shape path').getAttribute('d'),
+      }));
+      assert(shapes.outline === shapes.token, `outline ${shapes.outline}, token ${shapes.token}`);
     });
 
     await check('every badge is drawn at full strength, edged in its own shape opposite its colour (#1723)', async () => {
       const faults = await frame.locator('.mobile-strip .strip-tokens').evaluate((row) => [...row.querySelectorAll('.pt > .tok')].flatMap((tok) => {
-        const edge = getComputedStyle(tok, '::before');
-        const shape = getComputedStyle(tok.querySelector('.shape'));
+        const edge = getComputedStyle(tok.querySelector('.shape path'));
         const ink = getComputedStyle(tok.querySelector('.ini')).color;
         const out = [];
         if (getComputedStyle(tok).opacity !== '1') out.push(`opacity ${getComputedStyle(tok).opacity}`);
-        if (edge.content === 'none' || edge.clipPath !== shape.clipPath) out.push(`edge ${edge.content} clipped ${edge.clipPath}, token ${shape.clipPath}`);
-        if (edge.backgroundColor !== ink) out.push(`edge ${edge.backgroundColor}, ink ${ink}`);
+        if (edge.strokeWidth !== '2px' || edge.paintOrder !== 'stroke') out.push(`edge ${edge.strokeWidth} painted ${edge.paintOrder}`);
+        if (edge.stroke !== ink) out.push(`edge ${edge.stroke}, ink ${ink}`);
         return out;
       }));
       assert(faults.length === 0, faults.join('; '));
@@ -164,7 +154,7 @@ await runBrowserRegression({ script: 'player-strip-browser.mjs', engines: ['chro
     await check('under reduced motion the acting badge keeps a still outline', async () => {
       const read = await readStrip(frame, '.mobile-strip .seat-strip');
       assert(read.acting && !read.ring, `the outline still animates: ${JSON.stringify(read.ring)}`);
-      assert(read.still.content !== 'none' && read.still.opacity === '1' && read.still.clipPath !== 'none', `no still outline: ${JSON.stringify(read.still)}`);
+      assert(read.still.display !== 'none' && read.still.opacity === '1', `no still outline: ${JSON.stringify(read.still)}`);
     });
   } finally {
     await browser.close();
