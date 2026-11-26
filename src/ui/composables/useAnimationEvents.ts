@@ -104,19 +104,6 @@ interface Playing { kind: 'playing'; event: AnimationEvent; entry: HandlerEntry;
 /** Where playback is. Only `waiting` holds a timer and only `playing` an abort controller, so neither outlives its state. */
 type Playback = { kind: 'idle' } | Waiting | Playing | { kind: 'disposed' };
 
-/** Everything that can change the queue. Each runs to completion before the next, whoever sent it. */
-type Input =
-  | { kind: 'frame'; frame: AnimationFrame | undefined }
-  | { kind: 'advance' }
-  | { kind: 'registered'; eventType: string }
-  | { kind: 'unregistered'; entry: HandlerEntry }
-  | { kind: 'claimed' }
-  | { kind: 'skip' }
-  | { kind: 'runSkipped'; events: AnimationEvent[] }
-  | { kind: 'settled'; playing: Playing }
-  | { kind: 'timeout'; waiting: Waiting }
-  | { kind: 'dispose' };
-
 /**
  * Options for creating an animation events instance
  */
@@ -222,17 +209,19 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   const watermarks = new Map<string | undefined, number>();
   let timeline: string | undefined;
 
-  const inbox: Input[] = [];
+  // Every input (a frame, a registration, a claim, Skip, a settle, the timer, the unmount) is a step in this inbox.
+  const inbox: Array<() => void> = [];
   let stepping = false;
 
-  /** Take an input in. One sent while a step runs (from a handler, a listener or a watcher) runs after that step. */
-  function send(input: Input): void {
-    inbox.push(input);
+  /** Run a step. One sent while a step runs (from a handler, a listener or a watcher) runs after that step. */
+  function send(step: () => void): void {
+    inbox.push(step);
     if (stepping) return;
     stepping = true;
     try {
       for (let next = inbox.shift(); next; next = inbox.shift()) {
-        step(next);
+        if (state.kind === 'disposed') continue;
+        next();
         publish();
       }
     } finally {
@@ -246,27 +235,9 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (busy !== snapshot.value.busy || pending !== snapshot.value.pending) snapshot.value = { busy, pending };
   }
 
-  function step(input: Input): void {
-    if (state.kind === 'disposed') return;
-    switch (input.kind) {
-      case 'frame': return takeFrame(input.frame);
-      case 'advance': return advance();
-      case 'registered': return resume(input.eventType);
-      case 'unregistered': return abortOrSkipWait(input.entry);
-      case 'claimed': return skipUnclaimedWait();
-      case 'skip': return skip();
-      case 'runSkipped': return runSkipped(input.events);
-      case 'settled': return settle(input.playing);
-      case 'timeout': return timeOut(input.waiting);
-      case 'dispose':
-        stop({ kind: 'disposed' });
-        return;
-    }
-  }
-
   function skip(): void {
     const skipped = stop({ kind: 'idle' });
-    if (skipped.length > 0) inbox.push({ kind: 'runSkipped', events: skipped });
+    if (skipped.length > 0) inbox.push(() => runSkipped(skipped));
   }
 
   function settle(playing: Playing): void {
@@ -288,7 +259,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   /** Start the next event once the caller is done: after the Vue flush under way, so every unmount and mount hook in it has run. */
   function scheduleAdvance(): void {
-    void nextTick(() => send({ kind: 'advance' }));
+    void nextTick(() => send(advance));
   }
 
   function becomeIdle(): void {
@@ -304,7 +275,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       const entry = handlers.get(event.type);
       if (entry) return play(event, entry);
       if (handlerWaitTimeout !== 0 && !claimedNone()) {
-        const waiting: Waiting = { kind: 'waiting', event, timer: setTimeout(() => send({ kind: 'timeout', waiting }), handlerWaitTimeout) };
+        const waiting: Waiting = { kind: 'waiting', event, timer: setTimeout(() => send(() => timeOut(waiting)), handlerWaitTimeout) };
         state = waiting;
         return;
       }
@@ -328,7 +299,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         // A skipped handler's error is noise; any other is logged and the queue goes on, so one handler cannot break the chain.
         if (!signal.aborted) console.error(`Animation handler error for event type '${event.type}':`, error);
       })
-      .then(() => send({ kind: 'settled', playing }));
+      .then(() => send(() => settle(playing)));
   }
 
   /**
@@ -358,7 +329,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         logError(error);
       }
     }
-    if (rest.length > 0) inbox.push({ kind: 'runSkipped', events: rest });
+    if (rest.length > 0) inbox.push(() => runSkipped(rest));
   }
 
   /** Hand the waiting event back to the queue once a handler for it registers. */
@@ -412,10 +383,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const release = bindToCaller('registerHandler', () => {
       // Another component may have replaced this handler since; leave theirs.
       if (handlers.get(eventType) === entry) handlers.delete(eventType);
-      send({ kind: 'unregistered', entry });
+      send(() => abortOrSkipWait(entry));
     });
     handlers.set(eventType, entry);
-    send({ kind: 'registered', eventType });
+    send(() => resume(eventType));
     return release;
   }
 
@@ -425,7 +396,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       noEventClaims.delete(claim);
     });
     noEventClaims.add(claim);
-    send({ kind: 'claimed' });
+    send(skipUnclaimedWait);
     return release;
   }
 
@@ -442,19 +413,19 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     getFrame,
     (frame) => {
       framesLanded.value++;
-      send({ kind: 'frame', frame });
+      send(() => takeFrame(frame));
     },
     { immediate: true, flush: 'sync' },
   );
 
   // The wait would otherwise fire and warn after the owning shell has unmounted (#749).
-  onScopeDispose(() => send({ kind: 'dispose' }), true);
+  onScopeDispose(() => send(() => stop({ kind: 'disposed' })), true);
 
   return {
     registerHandler,
     claimNoEvents,
     isAnimating,
-    skipAll: () => send({ kind: 'skip' }),
+    skipAll: () => send(skip),
     pendingCount,
   };
 }
