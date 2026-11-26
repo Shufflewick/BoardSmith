@@ -101,7 +101,7 @@ export type ExecutorOp =
     } & BoundaryStamped)
   /**
    * A host closing one seat still due because a deadline the host keeps has
-   * passed: a step's own time limit, or any deadline of the host's own on any
+   * passed: a timed step's, or any deadline of the host's own on any
    * step, timed or not (#494: host deadlines always win). Only a host composes
    * it, from its own timer: no client message maps to it, so nothing a client
    * sends can become one. The seat is closed the way the step allows: the

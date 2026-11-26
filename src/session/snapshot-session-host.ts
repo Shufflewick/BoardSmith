@@ -15,7 +15,7 @@ import type { GameStateSnapshot } from '../engine/utils/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
-import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
+import { stepIsTimed, type TimedStepState } from '../engine/flow/timed-step.js';
 import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
@@ -275,25 +275,25 @@ export interface TurnBoundary {
    */
   dueSeats: number[];
   /**
-   * How long the open step stays open, in milliseconds, when the step declared
-   * a limit (`timeLimitMs` on `actionStep`/`simultaneousActionStep`). Absent
-   * when it did not, and in a finished game.
+   * Present when the open step is declared `timed: true` on
+   * `actionStep`/`simultaneousActionStep` (#1830). Absent when it is not, and
+   * in a finished game.
    *
-   * A DURATION, never an instant: the engine keeps no clock. It was resolved
-   * when the step was entered and is republished unchanged on every broadcast
-   * inside the same boundary, so a host arms its deadline once, when `key`
-   * changes, from its own clock -- and closes the step when it elapses by
+   * The step says nothing about how long it stays open: the host times it with
+   * the table's time per turn, on its own clock. It is republished unchanged
+   * on every broadcast inside the same boundary, so a host arms its deadline
+   * once, when `key` changes -- and closes the step when it elapses by
    * submitting the game's `idleAction` for every seat still due, stamped with
    * the `key` it armed under. It does not take part in `key`.
    */
-  timeLimitMs?: number;
+  timed?: true;
   /**
    * The host's instant, epoch ms, at which an offer in these views goes out
    * of date (#1536): an action whose `disabled` rule read
    * `game.stepOpenFor()` and was told "not yet" answers differently then.
    * Absent when no offer waits on the step clock, and in a finished game.
    *
-   * Unlike `timeLimitMs` it can change inside one boundary. A host arms a
+   * Unlike `timed` it can change inside one boundary. A host arms a
    * timer for it on its own clock, beside the step's deadline, and calls
    * {@link SnapshotSessionHost.reoffer} when it comes, which builds the views
    * again at that instant and publishes them with the next `reofferAt`, if
@@ -1095,7 +1095,7 @@ export class SnapshotSessionHost {
    * `this._snapshot` BEFORE it broadcasts, so a re-broadcast necessarily
    * republishes the identical boundary rather than minting a new one.
    *
-   * Routed through `dueSeats` / `flowBoundaryKey` / `stepTimeLimitMs` — never a
+   * Routed through `dueSeats` / `flowBoundaryKey` / `stepIsTimed` — never a
    * second predicate.
    */
   private turnBoundary(): TurnBoundary {
@@ -1103,14 +1103,12 @@ export class SnapshotSessionHost {
     // [] for a completed flow (it is not awaiting input); this is belt-and-braces
     // for a flow state that is complete while still awaiting input.
     const flowState = this.flowState;
-    const timeLimitMs = this.isComplete
-      ? undefined
-      : stepTimeLimitMs(flowState as StepTimeLimitState | null);
+    const timed = !this.isComplete && stepIsTimed(flowState as TimedStepState | null);
     const reofferAt = this.isComplete ? undefined : earliest(this._snapshot?.reofferAt, this.heldBackHere()?.wakeAt);
     return {
       key: flowBoundaryKey(flowState as BoundaryKeyState | null),
       dueSeats: this.isComplete ? [] : dueSeats(flowState as SeatActivityState | null),
-      ...(timeLimitMs === undefined ? {} : { timeLimitMs }),
+      ...(timed ? { timed: true as const } : {}),
       ...(reofferAt === undefined ? {} : { reofferAt }),
     };
   }

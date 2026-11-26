@@ -150,7 +150,7 @@ describe('createHeadlessSession now', () => {
 /** A deploy round whose only action, which also commits, waits for the playback. */
 class OnlyLevelUpGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['levelUp']);
+    super(options, true, 'simultaneous', ['levelUp']);
     this.registerAction(
       Action.create<OnlyLevelUpGame>('levelUp')
         .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
@@ -165,7 +165,7 @@ class OnlyLevelUpGame extends DeployGame {
 function promoteGame(shape: 'simultaneous' | 'sequential', actions: string[]) {
   return class PromoteGame extends DeployGame {
     constructor(options: GameOptions) {
-      super(options, 120_000, shape, actions);
+      super(options, true, shape, actions);
       this.registerAction(
         Action.create<PromoteGame>('promote')
           .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && REASON)

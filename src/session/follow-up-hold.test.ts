@@ -93,10 +93,11 @@ function raiding(ctx: { game: unknown }): boolean {
   return game.players.some((p) => !game.scouted.includes(p.seat) && !game.rested.includes(p.seat));
 }
 
-function flowFor(shape: Shape, actions: string[], timeLimitMs?: number): FlowNode<RaidGame> {
+function flowFor(shape: Shape, actions: string[], timed: boolean): FlowNode<RaidGame> {
+  const mark = timed ? { timed: true as const } : {};
   return shape === 'turn'
-    ? loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: actionStep({ actions, turnScope: 'restart', timeLimitMs }) }) })
-    : loop({ maxIterations: 3, while: raiding, do: simultaneousActionStep({ actions, timeLimitMs }) });
+    ? loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: actionStep({ actions, turnScope: 'restart', ...mark }) }) })
+    : loop({ maxIterations: 3, while: raiding, do: simultaneousActionStep({ actions, ...mark }) });
 }
 
 const classes = new Map<string, typeof RaidGame>();
@@ -108,7 +109,7 @@ function raidClass(shape: Shape, decline: boolean, timed = false): typeof RaidGa
     cls = class extends RaidGame {
       constructor(options: GameOptions) {
         super(options);
-        this.setFlow({ root: flowFor(shape, actions, timed ? 30_000 : undefined) });
+        this.setFlow({ root: flowFor(shape, actions, timed) });
       }
     };
     classes.set(key, cls);
@@ -467,13 +468,13 @@ describe('stateless ops', () => {
 
 /**
  * Host deadlines always win (#494, ruled). When a host's deadline for a seat
- * passes, a step's own time limit or any deadline the host keeps itself, the
+ * passes, a timed step's or any deadline the host keeps itself, the
  * host submits one `expireSeat` op per seat still due, naming the game's idle
  * action. A seat holding a follow-up is closed like any other: with the idle
  * action when the step offers it (which drops the follow-up), else by dropping
  * the follow-up and ending the seat's part. That close runs no action, so the
  * history records it as a seat expiry: a replay re-applies it, and undo never
- * reaches behind it. A step needs no time limit for this: the deadline is the
+ * reaches behind it. A step need not be timed for this: the deadline is the
  * host's, so the op closes a seat on any step.
  */
 describe('a host deadline that passed for a seat', () => {
@@ -499,7 +500,7 @@ describe('a host deadline that passed for a seat', () => {
 
   for (const shape of ['turn', 'simultaneous'] as const) {
     for (const timed of [true, false]) {
-    const step = timed ? 'timed step' : 'step with no time limit';
+    const step = timed ? 'timed step' : 'step that is not timed';
     it(`${shape}, ${step}: the idle action the step offers closes the held seat and drops its follow-up`, async () => {
       const { scouted, expire, history } = await scoutedTimed(shape, true, timed);
 
@@ -660,7 +661,7 @@ describe('a host deadline that passed for a seat', () => {
         this.registerAction(Action.create<RaidGame>('wait').execute(() => {}));
         this.setFlow({
           root: loop({ maxIterations: 3, while: raiding, do: eachPlayer({ do: sequence(
-            actionStep({ actions: ['scout'], turnScope: 'continue', timeLimitMs: 30_000 }),
+            actionStep({ actions: ['scout'], turnScope: 'continue', timed: true }),
             actionStep({ actions: ['wait'], turnScope: 'continue', maxMoves: 2 }),
           ) }) }),
         });

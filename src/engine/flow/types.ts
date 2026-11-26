@@ -229,33 +229,22 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    */
   handoffUndo?: boolean;
   /**
-   * How long this step stays open once it is entered, in milliseconds.
-   *
-   * A number, or a function of the flow context resolved ONCE when the step is
-   * entered; the resolved value is fixed for as long as the step stays open, so
-   * a seat submitting mid-round cannot move it. It is a duration, never an
-   * instant: the engine keeps no clock and never closes the step itself. It
-   * publishes the value as {@link FlowState.timeLimitMs} and on the host's turn
-   * boundary, and the HOST closes the step when the window elapses with one
+   * The host closes this step when the table's time per turn runs out
+   * (#1830). The step does not say how long that is: the table chooses it, from
+   * the game's `defaultTimePerTurn` in `boardsmith.json`, and the host runs the
+   * only clock. The engine publishes the mark as {@link FlowState.timed} and on
+   * the host's turn boundary, and the HOST closes the step with one
    * `expireSeat` op per seat that has not acted, naming the game's
-   * `idleAction`. Time limits always win over a held follow-up: a seat the
-   * step does not offer the idle action has its follow-up dropped and its
-   * part ended instead (`GameRunner.closeExpiredHeldSeat`), which the action
-   * history records as a seat expiry.
-   * A game that declares one must therefore declare `idleAction` in
-   * `boardsmith.json` -- `boardsmith validate` and `boardsmith build` refuse it
-   * otherwise. See docs/simultaneous-and-interrupt-semantics.md section 5.
-   *
-   * Must be a whole number of milliseconds, at least `MIN_STEP_TIME_LIMIT_MS` (ten seconds).
+   * `idleAction`. The deadline always wins over a held follow-up: a seat the
+   * step does not offer the idle action has its follow-up dropped and its part
+   * ended instead (`GameRunner.closeExpiredHeldSeat`), which the action history
+   * records as a seat expiry. A game that declares one must therefore declare
+   * `idleAction` in `boardsmith.json` -- `boardsmith validate` and `boardsmith
+   * build` refuse it otherwise. See docs/simultaneous-and-interrupt-semantics.md
+   * section 5.
    */
-  timeLimitMs?: StepTimeLimit<G>;
+  timed?: true;
 }
-
-/**
- * A step's declared time limit: a fixed number of milliseconds, or a function
- * resolved when the step is entered. See {@link ActionStepConfig.timeLimitMs}.
- */
-export type StepTimeLimit<G extends Game = Game> = number | ((context: FlowContext<G>) => number);
 
 /**
  * Whether a fresh entry into an action step continues the acting seat's
@@ -307,12 +296,8 @@ export interface SimultaneousActionStepConfig<G extends Game = Game> extends Bas
   allDone?: (context: FlowContext<G>) => boolean;
   /** Skip this player if returns true */
   skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
-  /**
-   * How long this step stays open once it is entered, in milliseconds. Resolved
-   * once, at entry, and fixed while the step is open. See
-   * {@link ActionStepConfig.timeLimitMs}.
-   */
-  timeLimitMs?: StepTimeLimit<G>;
+  /** The host closes this step when the table's time per turn runs out. See {@link ActionStepConfig.timed}. */
+  timed?: true;
   /**
    * Each seat's undo takes back its own last action, one at a time, whatever
    * the other seats did since (#1526). Without it, only the seat that acted
@@ -493,13 +478,10 @@ export interface FlowState {
    */
   handoffUndo?: true;
   /**
-   * How long the open step stays open, in milliseconds, as the step declared it
-   * ({@link ActionStepConfig.timeLimitMs}) and resolved when it was entered.
-   * Present only while a step that declared a limit is awaiting input; absent
-   * otherwise. A duration, never an instant: the host that receives it owns the
-   * clock and closes the step.
+   * Present while a step declared {@link ActionStepConfig.timed} is awaiting
+   * input. The host that receives it owns the clock and closes the step.
    */
-  timeLimitMs?: number;
+  timed?: true;
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
   /**

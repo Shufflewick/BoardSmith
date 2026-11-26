@@ -26,6 +26,7 @@ import {
   capabilityContradictions,
   isGameBackend,
   resolveCapabilities,
+  timePerTurnProblem,
 } from '../../session/index.js';
 
 interface BuildOptions {
@@ -202,6 +203,8 @@ export function deriveManifest(
 
   const unknownKeys = unknownKeyMessages(config);
   if (unknownKeys.length > 0) throw new Error(unknownKeys.join('\n\n'));
+  const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
+  if (timePerTurn !== undefined) throw new Error(timePerTurn);
 
   // WHAT THE BUILD ACTUALLY PRODUCED HAS TO MATCH THE DECLARED BACKEND, and a
   // mismatch is refused in every direction rather than recorded.

@@ -50,7 +50,7 @@ import {
   fixedDeployDefinition,
   untimedDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
-import type { GameDefinition } from '../../session/index.js';
+import { TIME_PER_TURN_MS, type GameDefinition } from '../../session/index.js';
 import {
   GoodSpriteGame,
   MissingSheetSizeGame,
@@ -594,6 +594,21 @@ describe('platform-consumed blocks', () => {
     expect(joinInProgress).toContain("Unknown key 'joinInProgress'");
     expect(joinInProgress).toContain('already underway');
     expect(joinInProgress).toContain('Remove this key');
+  });
+
+  it('accepts a default time per turn from the host\'s set and refuses any other (#1830)', () => {
+    for (const choice of ['1m', '2m', '5m', '10m', '15m', '1h', '6h', '12h', '24h', '48h']) {
+      expect(checkMetadataIssues({ ...validConfig(), defaultTimePerTurn: choice })).toEqual([]);
+    }
+    for (const bad of ['3m', '5 min', 300_000, '72h']) {
+      const [message] = checkMetadataIssues({ ...validConfig(), defaultTimePerTurn: bad });
+      expect(message).toContain('"defaultTimePerTurn"');
+      expect(message).toContain('"1m", "2m", "5m", "10m", "15m", "1h", "6h", "12h", "24h", "48h"');
+    }
+  });
+
+  it('offers an editor exactly the times per turn validate accepts (#1830)', () => {
+    expect(boardsmithSchema.properties.defaultTimePerTurn.enum).toEqual(Object.keys(TIME_PER_TURN_MS));
   });
 
   it('accepts a valid idleAction + roundDeadline pair', () => {

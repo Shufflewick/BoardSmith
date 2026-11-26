@@ -167,34 +167,34 @@ Which means, precisely:
   to close and who acts for a silent seat. The engine has no opinion; it only
   states which round it is in, and refuses submissions from a round that is not
   that one.
-- **A step's time window: the engine states it, the host enforces it.** An
-  `actionStep` or `simultaneousActionStep` may declare `timeLimitMs` (a number,
-  or a function of the flow context). The engine resolves it once, when the step
-  is entered, keeps the number on the step's frame so every restore path
-  (snapshot, undo checkpoint, MCTS clone) carries it rather than re-resolving
-  it, and publishes it as `FlowState.timeLimitMs` and as
-  `TurnBoundary.timeLimitMs` on every broadcast inside that boundary. It is a
-  duration, never an instant, and it does not take part in the boundary key.
-  The HOST arms its own deadline when the key changes, from its own clock, and
-  when the window elapses submits one `expireSeat` op per seat still due,
+- **A timed step: the engine marks it, the host times it.** An
+  `actionStep` or `simultaneousActionStep` may be declared `timed: true`. The
+  engine marks the step's frame when it is entered, so every restore path
+  (snapshot, undo checkpoint, MCTS clone) carries the mark, and publishes it as
+  `FlowState.timed` and as `TurnBoundary.timed` on every broadcast inside that
+  boundary. It says nothing about how long the step stays open, and it does not
+  take part in the boundary key. The HOST arms its own deadline when the key
+  changes, from its own clock, for the table's time per turn (#1830; a game
+  declares the default as `defaultTimePerTurn` in `boardsmith.json`), and when
+  it runs out submits one `expireSeat` op per seat still due,
   naming the game's `idleAction` and stamped with the key it armed under — so a
   round a human closed while the timer ran refuses the op as stale rather than
   letting it land in the next round (§7: the host carries a boundary it
   captured earlier, not the current one). The op is a host-only member of the
   `Op` union: no wire op maps to it, so nothing a client sends can become one.
-  It does not need a time limit on the step: a host that keeps a deadline of
+  The step need not be timed for it: a host that keeps a deadline of
   its own (a table's hours-long round) closes a seat with the same op on any
   step, and the seat is closed the same way.
 - **How long the step has been open: the host stamps it, the engine records
   it.** A host passes its own instant with every op (`hostOptions.now`). The
   engine keeps the instant of the op that opened a timed step on the step's
   frame, and `game.stepOpenFor(ms)` answers whether the op's instant is `ms`
-  past that one, so a rule can refuse something during part of the window
+  past that one, so a rule can refuse something during part of the turn
   without trusting a client (#1532). Each "not yet" names the instant it lapses;
   the earliest is published as `turnBoundary.reofferAt`, and the host offers
   again then with `SnapshotSessionHost.reoffer()` (#1536).
   A timed step is always resolved by `idleAction`, never by a bot: the player
-  is present and slow, not absent. Time limits always win over a held follow-up
+  is present and slow, not absent. Host deadlines always win over a held follow-up
   (#494): a seat held for one is closed by the idle action when the step offers
   it, and otherwise its follow-up is dropped and its part ends
   (`GameRunner.closeExpiredHeldSeat`), which the action history records as a
@@ -202,12 +202,7 @@ Which means, precisely:
   undo never reaches behind it. The idle action is recorded the same way for
   undo: not undoable, marked `timedOut` (#1788). `boardsmith build` stamps
   `capabilities.timedSteps` from the compiled flow, and `boardsmith validate`
-  and `build` refuse a timed game that declares no `idleAction`. A window is at
-  least `MIN_STEP_TIME_LIMIT_MS` (ten seconds, #307): closing a step takes the
-  host real time, so a shorter window would be over before the host could close
-  it. The engine refuses a fixed number under it when the flow is built and a
-  function's answer under it when the step is entered, and since a host runs its
-  own copy of the engine, no host ever sees a shorter window. The
+  and `build` refuse a timed game that declares no `idleAction`. The
   `boardsmith dev` host (`MultiplayerHost`) is a host in this sense and does
   exactly the same, so a timed game can be played end to end locally.
 - **Un-takeover / seat reclamation** — what happens to a seat that a caretaker

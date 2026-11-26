@@ -114,7 +114,7 @@ function enabledSeats(
 
 /**
  * The seats to ask for a move ({@link ClockWaits.seatsToAsk}), or why the game
- * stops: no seat can move, or a seat waits past the open step's time limit.
+ * stops: no seat can move, or every seat waits with no instant.
  */
 function seatsToAsk(testGame: TestGame<Game>, flowState: FlowState, waits: ClockWaits): ReturnType<typeof enabledSeats>['seats'] | string {
   let refused: string[] = [];

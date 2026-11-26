@@ -29,7 +29,6 @@ import type {
   PhaseConfig,
   PlayerAwaitingState,
 } from './types.js';
-import { resolveTimeLimit } from './step-time-limit.js';
 import { flowChildCount, resolveFlowChild, SWITCH_DEFAULT_KEY } from './flow-navigation.js';
 
 /**
@@ -658,8 +657,8 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * A host deadline passed (the step's time limit, or one the host keeps on
-   * any step) while `seat` held a follow-up, and the step does not offer that
+   * A host deadline passed (a timed step's, or one the host keeps on any
+   * step) while `seat` held a follow-up, and the step does not offer that
    * seat the game's idle action. Host deadlines always win (#494): the
    * follow-up is dropped and the seat's part ends, as if it had
    * finished. In an action step that ends the step; in a simultaneous step the
@@ -1392,26 +1391,20 @@ export class FlowEngine<G extends Game = Game> {
 
   /**
    * The host's instant when the open timed step opened (#1532): `undefined`
-   * when the innermost frame is no step with `timeLimitMs`, `null` when the
+   * when the innermost frame is no step declared `timed`, `null` when the
    * host stamped no instant on the op that opened it. Not gated on
    * `awaitingInput`: a step's offers are read while it is being entered.
    */
   openTimedStepOpenedAt(): number | null | undefined {
     const data = this.stack[this.stack.length - 1]?.data;
-    if (typeof data?.timeLimitMs !== 'number') return undefined;
+    if (data?.timed !== true) return undefined;
     return typeof data.openedAt === 'number' ? data.openedAt : null;
-  }
-
-  /** The host instant the open timed step's time limit ends at (#1541), or `undefined` when no step with a stamped opening is open. */
-  openTimedStepClosesAt(): number | undefined {
-    const data = this.stack[this.stack.length - 1]?.data;
-    return typeof data?.timeLimitMs === 'number' && typeof data.openedAt === 'number' ? data.openedAt + data.timeLimitMs : undefined;
   }
 
   /** Open the open timed step again at `now`, as a new game started from a saved position does (#1532). */
   reopenTimedStep(now: number): void {
     const frame = this.stack[this.stack.length - 1];
-    if (typeof frame?.data?.timeLimitMs === 'number') frame.data = { ...frame.data, openedAt: now };
+    if (frame?.data?.timed === true) frame.data = { ...frame.data, openedAt: now };
   }
 
   /** Whether the step awaiting input is a simultaneous step that undoes per seat (#1526). */
@@ -1444,14 +1437,10 @@ export class FlowEngine<G extends Game = Game> {
 
   /** Writes the open step's window, the last action's error and the held follow-ups into `state`. */
   private publishOpenStep(state: FlowState): void {
-    // The open step's window, resolved when it was entered and kept on its
-    // frame (see `openStepWindow`), so every restore path that rebuilds the
-    // frame from `position.frameData` publishes the same number.
-    if (this.awaitingInput) {
-      const timeLimitMs = this.stack[this.stack.length - 1]?.data?.timeLimitMs;
-      if (typeof timeLimitMs === 'number') {
-        state.timeLimitMs = timeLimitMs;
-      }
+    // Kept on the step's frame (see `openStepWindow`), so every restore path
+    // that rebuilds the frame from `position.frameData` publishes it the same.
+    if (this.awaitingInput && this.stack[this.stack.length - 1]?.data?.timed === true) {
+      state.timed = true;
     }
 
     // Include action error if present
@@ -2154,29 +2143,25 @@ export class FlowEngine<G extends Game = Game> {
   }
 
   /**
-   * Resolve a step's declared time limit ONCE, as it is entered and before its
-   * offers are read, and keep the number on its frame (#300), with the host's
-   * instant for the op that opened it (#1532), which `game.stepOpenFor()`
-   * measures from, so its actions' rules can read the clock while they are offered.
+   * Mark a timed step's frame ONCE, as it is entered and before its offers are
+   * read (#300), with the host's instant for the op that opened it (#1532),
+   * which `game.stepOpenFor()` measures from, so its actions' rules can read
+   * the clock while they are offered.
    *
    * Once per frame: an action step re-runs this executor after every move while
    * it stays open (`repeatUntil`, `maxMoves`), and a seat's move must not move
-   * the window it is acting inside. A fresh frame -- the next round of a loop,
-   * the next seat of an `eachPlayer` -- resolves its own. The frame is the
-   * durable home because `getPosition`/`restore` round-trip `frame.data`, so a
-   * snapshot restore, an undo checkpoint and an MCTS clone all carry the value
-   * rather than re-resolving it against later state.
+   * the opening it is acting inside. A fresh frame -- the next round of a loop,
+   * the next seat of an `eachPlayer` -- opens its own. The frame is the durable
+   * home because `getPosition`/`restore` round-trip `frame.data`, so a snapshot
+   * restore, an undo checkpoint and an MCTS clone all carry it.
    */
   private openStepWindow(
     frame: ExecutionFrame<G>,
     config: ActionStepConfig<G> | SimultaneousActionStepConfig<G>,
-    context: FlowContext<G>,
-    stepType: 'action-step' | 'simultaneous-action-step',
   ): void {
-    if (config.timeLimitMs === undefined || frame.data?.timeLimitMs !== undefined) return;
-    const timeLimitMs = resolveTimeLimit(config.timeLimitMs, context, config.name ?? stepType);
+    if (config.timed !== true || frame.data?.timed === true) return;
     const openedAt = this.game._hostNow;
-    frame.data = { ...frame.data, timeLimitMs, ...(openedAt !== undefined && { openedAt }) };
+    frame.data = { ...frame.data, timed: true, ...(openedAt !== undefined && { openedAt }) };
   }
 
   private executeActionStep(
@@ -2234,7 +2219,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
     this.currentPlayer = player;
-    this.openStepWindow(frame, config, context, 'action-step');
+    this.openStepWindow(frame, config);
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2287,7 +2272,7 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
     this.currentPlayer = player;
-    this.openStepWindow(frame, config, context, 'action-step');
+    this.openStepWindow(frame, config);
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
@@ -2326,7 +2311,7 @@ export class FlowEngine<G extends Game = Game> {
     // boundary comes from `simultaneousUndoBoundary` (session/utils.ts), not
     // from a sequential run, so no run survives across it.
     this.turnRun = undefined;
-    this.openStepWindow(frame, config, context, 'simultaneous-action-step');
+    this.openStepWindow(frame, config);
 
     for (const player of players) {
       if (this.seatEligibility(config, context, player, frame) !== 'awaited') continue;

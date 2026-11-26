@@ -205,9 +205,7 @@ up. Below the root, a seat with no moves has none at that position. Under
 `boardsmith simulate` and the benchmark time passes only when a bot waits on
 the clock (#1541): the other seats move first, and once every seat that can
 move waits, they move their clock to the earliest instant waited for and ask
-again, so the bot plays the action it waited for. They run no deadlines, so a
-wait that reaches the step's time limit, where a host would close the seat,
-stops the game and says so. A wait with no instant holds the seat until
+again, so the bot plays the action it waited for. They run no deadlines. A wait with no instant holds the seat until
 another seat moves, as a host does (#1719); when every seat that can move waits
 with no instant, nothing would wake them, so the game stops and names them. The narrated demo, which
 makes one move after another, stops when a bot waits and says why.

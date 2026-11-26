@@ -109,14 +109,14 @@ describe('game.stepOpenFor()', () => {
     const runner = new GameRunner({ GameClass: UntimedDeployGame, gameType: 'step-clock', gameOptions: opts });
     runner.setNow(START);
     runner.start();
-    expect(() => runner.game.stepOpenFor(1)).toThrow(/no step with timeLimitMs is open/);
+    expect(() => runner.game.stepOpenFor(1)).toThrow(/no step declared timed: true is open/);
   });
 });
 
 /** A game that hides an action with a `condition` reading the clock, which is never asked again as time passes. */
 class ConditionClockGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['peek', 'commit']);
+    super(options, true, 'simultaneous', ['peek', 'commit']);
     this.registerAction(
       Action.create<ConditionClockGame>('peek')
         .condition({ 'playback over': (ctx) => ctx.game.stepOpenFor(PLAYBACK_MS) })
@@ -144,7 +144,7 @@ describe('where a rule may read the step clock', () => {
 /** A game whose `pack` has a repeating pick, so enumeration judges it on a scratch copy, refused until the playback ends. */
 class RepeatingClockGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['pack', 'commit']);
+    super(options, true, 'simultaneous', ['pack', 'commit']);
     this.registerAction(
       Action.create<RepeatingClockGame>('pack')
         .chooseFrom('item', { choices: ['a', 'b'], repeat: { until: () => true } })
@@ -201,7 +201,7 @@ class PromoteTurnGame extends DeployGame {
   rechecked: number[] = [];
 
   constructor(options: GameOptions) {
-    super(options, 120_000, 'sequential', ['promote', 'recheck']);
+    super(options, true, 'sequential', ['promote', 'recheck']);
     this.registerAction(
       Action.create<PromoteTurnGame>('promote')
         .disabled((ctx) => !ctx.game.stepOpenFor(PLAYBACK_MS) && 'The battle is still playing back.')
@@ -249,7 +249,7 @@ class VoteClockGame extends DeployGame {
   votedAt: number[] = [];
 
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['vote', 'commit']);
+    super(options, true, 'simultaneous', ['vote', 'commit']);
     this.registerAction(
       Action.create<VoteClockGame>('vote').execute((_args, ctx) => {
         ctx.game.votedAt = [...ctx.game.votedAt, ctx.game.stepOpenMs()];
@@ -261,7 +261,7 @@ class VoteClockGame extends DeployGame {
 /** A `peek` greyed by a number read from the clock in `disabled`, which no host could offer again on time. */
 class DisabledMsGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['peek', 'commit']);
+    super(options, true, 'simultaneous', ['peek', 'commit']);
     this.registerAction(
       Action.create<DisabledMsGame>('peek')
         .disabled((ctx) => ctx.game.stepOpenMs() < PLAYBACK_MS && 'Still playing back.')
@@ -278,7 +278,7 @@ class NestedMsGame extends DeployGame {
   refusals: string[] = [];
 
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['relay', 'commit']);
+    super(options, true, 'simultaneous', ['relay', 'commit']);
     this.registerAction(
       Action.create<NestedMsGame>('relay')
         .chooseFrom('inner', { choices: ['inCondition', 'inDisabled', 'inValidate', 'inChoices'] })

@@ -11,7 +11,6 @@ import type {
   SwitchConfig,
   IfConfig,
 } from './types.js';
-import { checkDeclaredTimeLimit } from './step-time-limit.js';
 import { SWITCH_DEFAULT_KEY } from './flow-navigation.js';
 
 /**
@@ -230,7 +229,6 @@ export function forEach<
  * ```
  */
 export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): FlowNode<G> {
-  checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'action-step');
   return {
     type: 'action-step',
     config: {
@@ -244,7 +242,7 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
       turnScope: config.turnScope,
       undo: config.undo,
       handoffUndo: config.handoffUndo,
-      timeLimitMs: config.timeLimitMs,
+      timed: config.timed,
     },
   };
 }
@@ -296,9 +294,8 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
  * @param config.skipPlayer - Exclude a seat from the step entirely.
  * @param config.allDone - Round-level completion. Defaults to "every awaiting
  *   seat is done" — see above before relying on it.
- * @param config.timeLimitMs - How long the step stays open once entered, in
- *   milliseconds, or a function resolved at entry. The host closes it with the
- *   game's `idleAction`; see {@link ActionStepConfig.timeLimitMs}.
+ * @param config.timed - The host closes the step when the table's time per
+ *   turn runs out, with the game's `idleAction`; see {@link ActionStepConfig.timed}.
  *
  * @example
  * ```typescript
@@ -309,7 +306,6 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
  * ```
  */
 export function simultaneousActionStep<G extends Game = Game>(config: SimultaneousActionStepConfig<G>): FlowNode<G> {
-  checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'simultaneous-action-step');
   return {
     type: 'simultaneous-action-step',
     config: {
@@ -319,7 +315,7 @@ export function simultaneousActionStep<G extends Game = Game>(config: Simultaneo
       playerDone: config.playerDone,
       allDone: config.allDone,
       skipPlayer: config.skipPlayer,
-      timeLimitMs: config.timeLimitMs,
+      timed: config.timed,
       seatUndo: config.seatUndo,
     },
   };

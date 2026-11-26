@@ -13,7 +13,6 @@ import { benchmarkBot, weightedBot, weightedObjectives } from './benchmark.js';
 import {
   PlaybackTurnGame,
   disabledGatedDefinition,
-  shortWindowGatedDefinition,
   commitRoundDefinition,
   levelUpWhenAllowed,
   seatOneWaitsForSeatTwo,
@@ -352,20 +351,6 @@ describe('benchmarkBot', () => {
       spy.mockRestore();
     }
     expect(instants).toEqual([0]);
-  });
-
-  it('reports a game whose trained bot waits past the open step\'s time limit as incomplete (#1541)', async () => {
-    const result = await benchmarkBot(shortWindowGatedDefinition.gameClass, 'short', levelUpWhenAllowed, noWeights, {
-      gameCount: 1,
-      mctsIterations: 1,
-      maxActions: 20,
-      seed: 'late',
-      allowIncomplete: true,
-    });
-    expect(result.failures).toEqual([
-      "The trained bot for seat 1 waits until instant 30000, but the open step's time limit ends at instant 10000, when a host would close the seat. " +
-        'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.',
-    ]);
   });
 
   // #1719: as the live host does, the benchmark holds a seat that waits with no instant until the game changes.

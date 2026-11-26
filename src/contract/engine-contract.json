@@ -1,7 +1,7 @@
 {
-  "revision": 549,
-  "surfaceHash": "833cab24eebd50db",
-  "payloadHash": "b2b4ec8012db6e73",
+  "revision": 550,
+  "surfaceHash": "b69250667600aece",
+  "payloadHash": "b793462940ecdab6",
   "formatHash": "e7644203601ae348",
   "history": [
     {
@@ -4335,6 +4335,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "BREAKING for the platform: capabilities no longer carries asyncPlay or joinInProgress, and boardsmith build refuses either key (and any other key boardsmith.json does not allow). The platform must drop both from CAPABILITY_KEYS and stop reading them before it accepts a bundle built at this revision."
+    },
+    {
+      "revision": 550,
+      "date": "2026-11-26",
+      "surfaceHash": "b69250667600aece",
+      "payloadHash": "b793462940ecdab6",
+      "formatHash": "e7644203601ae348",
+      "summary": "BREAKING for the platform: a step is timed with timed: true instead of timeLimitMs, and the turn boundary carries timed: true instead of timeLimitMs, so a step no longer says how long it stays open. The host times it with the table's time per turn. boardsmith.json may declare defaultTimePerTurn (1m, 2m, 5m, 10m, 15m, 1h, 6h, 12h, 24h or 48h; five minutes when absent), which build copies into the manifest and the Convex sink. session exports TIME_PER_TURN_MS, DEFAULT_TIME_PER_TURN and timePerTurnProblem. MIN_STEP_TIME_LIMIT_MS is gone (#1830)."
     }
   ]
 }

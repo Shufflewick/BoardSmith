@@ -17,7 +17,10 @@
 
 import { createDevSession, type DevSession } from './bridge.js';
 import {
+  DEFAULT_TIME_PER_TURN,
   StatePushGate,
+  TIME_PER_TURN_MS,
+  type TimePerTurn,
   type ExecutableOp,
   type ExecuteOpAdapter,
   type OpFailure,
@@ -345,6 +348,12 @@ export interface MultiplayerHostOptions {
    * close it.
    */
   idleAction?: { name: string; args?: Record<string, unknown> };
+  /**
+   * boardsmith.json's `defaultTimePerTurn` (#1830): how long the host gives a
+   * timed step before it closes it, as the platform gives a new table. Absent
+   * means the platform's default, five minutes.
+   */
+  defaultTimePerTurn?: TimePerTurn;
   /**
    * The clock step windows are measured and armed on. Defaults to the Node
    * clock the world host uses (#197), which serves a long window as a chain of
@@ -1873,7 +1882,7 @@ export class MultiplayerHost {
    */
   private observeBoundary(session: DevSession, boundary: TurnBoundary): void {
     const open = this.window;
-    const timed = boundary.timeLimitMs !== undefined;
+    const timed = boundary.timed === true;
     if (
       open?.session === session &&
       open.boundary.key === boundary.key &&
@@ -1884,11 +1893,10 @@ export class MultiplayerHost {
       if (moved) this.armWindow(open);
       return;
     }
-    const limit = boundary.timeLimitMs;
     const window: StepWindow = {
       session,
       boundary,
-      deadlineAt: limit === undefined ? null : this.now() + limit,
+      deadlineAt: timed ? this.now() + TIME_PER_TURN_MS[this.opts.defaultTimePerTurn ?? DEFAULT_TIME_PER_TURN] : null,
     };
     this.window = window;
     this.armWindow(window);

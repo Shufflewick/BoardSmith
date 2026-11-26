@@ -31,7 +31,7 @@ describe('boardsmith smoke', () => {
   it('#1593: walks as it would without an `unreachable` declaration, so the action it says to remove one for is still taken once it is removed', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...playbackGame(),
-      'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], { levelUp: 'Greyed by the step clock for ten minutes, which a walk never waits out.' }, { steps: 8 }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['levelUp', 'ready'], { levelUp: 'Greyed by the step clock for a minute, which a walk never waits out.' }, { steps: 8 }),
     });
 
     expect(outcome.passed, outcome.summary).toBe(true);
