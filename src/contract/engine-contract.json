@@ -1,5 +1,5 @@
 {
-  "revision": 543,
+  "revision": 544,
   "surfaceHash": "3fdad2d7c1e7f5c6",
   "payloadHash": "b2b4ec8012db6e73",
   "formatHash": "e7644203601ae348",
@@ -4287,6 +4287,14 @@
       "payloadHash": "b2b4ec8012db6e73",
       "formatHash": "e7644203601ae348",
       "summary": "The animation queue never calls a handler whose effect scope has stopped, refuses a registration or claim in a stopped scope, and keeps a registration for as long as the scope it was made in (#1824)."
+    },
+    {
+      "revision": 544,
+      "date": "2026-11-26",
+      "surfaceHash": "3fdad2d7c1e7f5c6",
+      "payloadHash": "b2b4ec8012db6e73",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith test-step-check reads a test file's imports correctly when a regex literal holds import text (#1823)"
     }
   ]
 }
