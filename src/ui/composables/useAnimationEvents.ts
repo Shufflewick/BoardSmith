@@ -107,7 +107,6 @@ type Playback = { kind: 'idle' } | Waiting | Playing | { kind: 'disposed' };
 /** Everything that can change the queue. Each runs to completion before the next, whoever sent it. */
 type Input =
   | { kind: 'frame'; frame: AnimationFrame | undefined }
-  | { kind: 'drawn' }
   | { kind: 'advance' }
   | { kind: 'registered'; eventType: string }
   | { kind: 'unregistered'; entry: HandlerEntry }
@@ -251,32 +250,35 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (state.kind === 'disposed') return;
     switch (input.kind) {
       case 'frame': return takeFrame(input.frame);
-      case 'drawn':
-        undrawn = 0;
-        return scheduleAdvance();
       case 'advance': return advance();
       case 'registered': return resume(input.eventType);
       case 'unregistered': return abortOrSkipWait(input.entry);
       case 'claimed': return skipUnclaimedWait();
-      case 'skip': {
-        const skipped = stop({ kind: 'idle' });
-        if (skipped.length > 0) inbox.push({ kind: 'runSkipped', events: skipped });
-        return;
-      }
+      case 'skip': return skip();
       case 'runSkipped': return runSkipped(input.events);
-      case 'settled':
-        if (state === input.playing) becomeIdle();
-        return;
-      case 'timeout':
-        if (state !== input.waiting) return;
-        console.warn(
-          `Animation event "${input.waiting.event.type}" (id: ${input.waiting.event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
-        );
-        return becomeIdle();
+      case 'settled': return settle(input.playing);
+      case 'timeout': return timeOut(input.waiting);
       case 'dispose':
         stop({ kind: 'disposed' });
         return;
     }
+  }
+
+  function skip(): void {
+    const skipped = stop({ kind: 'idle' });
+    if (skipped.length > 0) inbox.push({ kind: 'runSkipped', events: skipped });
+  }
+
+  function settle(playing: Playing): void {
+    if (state === playing) becomeIdle();
+  }
+
+  function timeOut(waiting: Waiting): void {
+    if (state !== waiting) return;
+    console.warn(
+      `Animation event "${waiting.event.type}" (id: ${waiting.event.id}) skipped: no handler registered after ${handlerWaitTimeout}ms`
+    );
+    becomeIdle();
   }
 
   /** A claim counts only while no board registers handlers on this queue, so one that does keeps its waits. */
@@ -392,7 +394,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (next !== undefined && next !== timeline) {
       // A change skips what the queue holds; the first timeline named is no change.
       if (timeline === undefined) watermarks.set(next, watermarks.get(undefined) ?? 0);
-      else step({ kind: 'skip' });
+      else skip();
       timeline = next;
     }
     const watermark = watermarks.get(timeline) ?? 0;
@@ -429,7 +431,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
 
   // Created first, so the first frame's count change reaches it once Vue has drawn that frame too.
   const framesLanded = ref(0);
-  watch(framesLanded, () => send({ kind: 'drawn' }), { flush: 'post' });
+  watch(framesLanded, () => {
+    // Vue has drawn every frame taken in, so each queued event may start.
+    undrawn = 0;
+    scheduleAdvance();
+  }, { flush: 'post' });
   // Every frame is taken in as it lands ('sync'), so a frame that a later one
   // replaced before Vue flushed still queues its events.
   watch(

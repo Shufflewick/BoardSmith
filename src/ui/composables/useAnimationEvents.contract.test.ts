@@ -78,28 +78,32 @@ class Walk {
 
   // --- Inputs ---------------------------------------------------------------
 
-  land(reentrant: boolean): void {
+  /** The next frame: in the same timeline mostly, else after an undo or a change of seat, with up to two new events. */
+  nextFrame(): Frame {
     const roll = this.random();
     const prev = this.frame.value;
     const next: Frame = { ...prev, seq: prev.seq + 1 };
     if (roll < 0.1) next.restoreEpoch = prev.restoreEpoch! + 1;
     else if (roll < 0.2) next.viewerSeat = prev.viewerSeat === 1 ? 2 : 1;
-    const changed = this.timeline(next) !== this.timeline(prev);
-    if (changed) for (const call of this.running()) this.mustAbort.add(call);
     const tl = this.timeline(next);
-    const count = Math.floor(this.random() * 3);
-    const events = [];
-    for (let i = 0; i < count; i++) {
+    next.animationEvents = Array.from({ length: Math.floor(this.random() * 3) }, () => {
       const id = (this.nextId.get(tl) ?? 0) + 1;
       this.nextId.set(tl, id);
-      events.push({ id, type: this.pick(TYPES), data: { tl, seq: next.seq } });
-    }
-    next.animationEvents = events;
-    this.log.push(`land seq ${next.seq} tl ${tl} [${events.map((e) => `${e.type}${e.id}`).join(' ')}]${reentrant ? ' (re-entrant)' : ''}`);
+      return { id, type: this.pick(TYPES), data: { tl, seq: next.seq } };
+    });
+    return next;
+  }
+
+  land(reentrant: boolean): void {
+    const next = this.nextFrame();
+    if (this.timeline(next) !== this.timeline()) for (const call of this.running()) this.mustAbort.add(call);
+    const events = next.animationEvents!;
+    this.log.push(`land seq ${next.seq} tl ${this.timeline(next)} [${events.map((e) => `${e.type}${e.id}`).join(' ')}]${reentrant ? ' (re-entrant)' : ''}`);
     const before = this.reentries;
     this.frame.value = next;
     // A Skip or an unmount sent from a watcher as the frame lands may rightly end its events at once.
-    if (!reentrant && this.reentries === before && events.length > 0 && this.shellAlive && !this.queue.isAnimating.value) {
+    const undisturbed = !reentrant && this.reentries === before && this.shellAlive;
+    if (undisturbed && events.length > 0 && !this.queue.isAnimating.value) {
       this.violate(`isAnimating was false right after seq ${next.seq} landed with events`);
     }
   }
@@ -175,22 +179,30 @@ class Walk {
     ])();
   }
 
+  /** What every call must hold, whether it plays the event or runs it skipped. */
+  checkCall(board: Board, skip: 'run' | 'drop', key: string, kind: Call['kind'], tl: string, id: number): void {
+    if (!board.alive) this.violate(`${key} was handed to an unmounted board`);
+    if (!this.shellAlive) this.violate(`${key} was handed out after the shell unmounted`);
+    if (kind === 'skipped' && skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${key}`);
+    if ((this.lastOffered.get(tl) ?? 0) >= id) this.violate(`${key} was offered after id ${this.lastOffered.get(tl)} of its timeline`);
+    this.lastOffered.set(tl, id);
+  }
+
+  /** What a call that plays its event must hold: its frame is drawn and nothing else plays. */
+  checkPlay(key: string, seq: number): void {
+    const drawn = Number(document.getElementById('drawn')?.dataset.seq);
+    if (drawn < seq) this.violate(`${key} played before its frame ${seq} was drawn (drawn: ${drawn})`);
+    const other = this.running();
+    if (other.length > 0) this.violate(`${key} played while ${other.map((c) => c.key).join(', ')} still played`);
+  }
+
   handle(board: Board, skip: 'run' | 'drop', event: { id: number; type: string; data: Record<string, unknown> }, signal: AbortSignal): Promise<void> {
     const tl = String(event.data.tl);
     const key = `${event.type}${event.id}@${tl}`;
     const kind = signal.aborted ? 'skipped' : 'play';
     this.log.push(`  ${kind === 'play' ? 'play' : 'skip-run'} ${key} on board ${this.boards.indexOf(board)}`);
-    if (!board.alive) this.violate(`${key} was handed to an unmounted board`);
-    if (!this.shellAlive) this.violate(`${key} was handed out after the shell unmounted`);
-    if (kind === 'skipped' && skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${key}`);
-    if ((this.lastOffered.get(tl) ?? 0) >= event.id) this.violate(`${key} was offered after id ${this.lastOffered.get(tl)} of its timeline`);
-    this.lastOffered.set(tl, event.id);
-    if (kind === 'play') {
-      const drawn = Number(document.getElementById('drawn')?.dataset.seq);
-      if (drawn < Number(event.data.seq)) this.violate(`${key} played before its frame ${String(event.data.seq)} was drawn (drawn: ${drawn})`);
-      const other = this.running();
-      if (other.length > 0) this.violate(`${key} played while ${other.map((c) => c.key).join(', ')} still played`);
-    }
+    this.checkCall(board, skip, key, kind, tl, event.id);
+    if (kind === 'play') this.checkPlay(key, Number(event.data.seq));
     let release = () => {};
     const done = new Promise<void>((resolve) => { release = resolve; });
     const call: Call = { board, key, kind, signal, released: false, release: () => { call.released = true; release(); } };
