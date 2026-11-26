@@ -2123,7 +2123,7 @@ animations?.registerHandler('duel', async (event, { signal }) => {
 
 | Property/Method | Type | Description |
 |-----------------|------|-------------|
-| `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register a handler from a component's setup; it is released when that component unmounts, and the returned function releases it earlier. `signal` is an `AbortSignal` that fires on skip or unmount; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
+| `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register a handler from a component's setup; it is released when that component unmounts (aborting it if it is playing), and the returned function releases it earlier the same way. `signal` is an `AbortSignal` that fires on skip or unmount; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
 | `claimNoEvents()` | `() => () => void` | Declare, from a component's setup, that the mounted board handles no event types, so while no handler is registered an event is skipped at once instead of waiting `handlerWaitTimeout` for one. Released when that component unmounts, or earlier by the returned function. AutoUI calls it. |
 | `isAnimating` | `Readonly<Ref<boolean>>` | Whether an event is playing, waiting for its handler or queued: true from a frame landing until its last event ends |
 | `skipAll()` | `() => void` | Skip remaining animations |

@@ -119,15 +119,18 @@ describe('useAnimationEvents', () => {
       expect(() => instance.claimNoEvents()).toThrow(/must be called from a component's setup/);
     });
 
-    it("releases a board's handlers when it unmounts, so a claim of no events then skips at once (#1820)", () => {
+    it("releases a board's handlers when it unmounts, so a claim of no events then skips at once (#1820)", async () => {
       const events = ref<AnimationEvent[]>([]);
       const instance = testScope.run(() => createAnimationEvents({ frame: () => ({ animationEvents: events.value }) }))!;
+      const handled: number[] = [];
       const board = effectScope();
-      board.run(() => instance.registerHandler('test', async () => {}, { skip: 'drop' }));
+      board.run(() => instance.registerHandler('test', async (event) => void handled.push(event.id), { skip: 'drop' }));
       testScope.run(() => instance.claimNoEvents());
 
       board.stop();
       events.value = [createEvent(1, 'test')];
+      await flushMicrotasks();
+      expect(handled).toEqual([]);
       expect(instance.isAnimating.value).toBe(false);
     });
 
@@ -432,7 +435,7 @@ describe('useAnimationEvents', () => {
       }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'slow')];
-      await nextTick();
+      await flushMicrotasks();
 
       // Handler should be running
       expect(instance.isAnimating.value).toBe(true);
@@ -486,7 +489,7 @@ describe('useAnimationEvents', () => {
       }, { skip: 'drop' });
 
       events.value = [createEvent(1, 'test'), createEvent(2, 'test')];
-      await nextTick();
+      await flushMicrotasks();
 
       expect(instance.isAnimating.value).toBe(true);
 
@@ -1113,7 +1116,7 @@ describe('useAnimationEvents', () => {
       }, { skip: 'run' });
 
       events.value = [createEvent(1, 'slow-sync')];
-      await nextTick();
+      await flushMicrotasks();
 
       // Handler is running
       expect(timeline).toEqual(['start']);
@@ -1261,7 +1264,7 @@ describe('useAnimationEvents', () => {
       }, { skip: 'drop' });
 
       frame.value = { events: [5, 6, 7].map((id) => createEvent(id, 'test')), seat: 1 };
-      await nextTick();
+      await flushMicrotasks();
       // Seat 2's first frame carries no events.
       frame.value = { events: [], seat: 2 };
       await nextTick();
@@ -1269,7 +1272,7 @@ describe('useAnimationEvents', () => {
       await waitForIdle(instance);
 
       frame.value = { events: [createEvent(1, 'test')], seat: 2 };
-      await nextTick();
+      await flushMicrotasks();
       instance.skipAll();
       await waitForIdle(instance);
       expect(delivered).toEqual(['seat 1#5', 'seat 2#1']);
@@ -1436,7 +1439,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
     q.register('slow');
     q.register('sync', 'run');
     q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'sync'), createEvent(3, 'slow')]);
-    await nextTick();
+    await flushMicrotasks();
 
     q.frame.value = seatFrame(1, [], 1);
     expect(q.instance.isAnimating.value).toBe(false);
@@ -1475,7 +1478,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
     const q = harness();
     q.register('slow');
     q.frame.value = seatFrame(1, [createEvent(1, 'slow')]);
-    await nextTick();
+    await flushMicrotasks();
     q.instance.skipAll();
     q.frame.value = seatFrame(1, [createEvent(2, 'slow')]);
     await nextTick();
@@ -1488,7 +1491,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
     const q = harness();
     q.register('slow');
     q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'slow')]);
-    await nextTick();
+    await flushMicrotasks();
 
     q.scope.stop();
     q.release();
@@ -1568,7 +1571,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
       q.scope.stop();
     }, { skip: 'run' });
     q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'r'), createEvent(3, 'r')]);
-    await nextTick();
+    await flushMicrotasks();
 
     q.instance.skipAll();
     await flushMicrotasks();
@@ -1621,7 +1624,7 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
       const noPromise = ((event: AnimationEvent) => void q.played.push(`plain${event.id}`)) as unknown as AnimationHandler;
       q.instance.registerHandler('plain', noPromise, { skip: 'run' });
       q.frame.value = seatFrame(1, [createEvent(1, 'slow'), createEvent(2, 'plain')]);
-      await nextTick();
+      await flushMicrotasks();
 
       q.instance.skipAll();
       await flushMicrotasks();
@@ -1646,24 +1649,27 @@ describe('the queue across frames, a change of timeline, a skip and an unmount (
   });
 });
 
-describe('a board that swaps the child handling an event in the frame that brings the event (#1819)', () => {
-  type BoardFrame = AnimationFrame & { board: 'a' | 'b' };
+describe('a board that swaps the child handling an event in the frame that brings the event (#1819, #1820)', () => {
+  type BoardFrame = AnimationFrame & { board: 'a' | 'b' | 'none' };
 
-  /** A shell over `frame` whose board shows child a or b, each registering an 'x' handler while mounted. */
+  /** A shell over `frame` whose board shows child a or b, each registering an 'x' handler in its setup. */
   function mountBoard(frame: Ref<BoardFrame>, inShell: (instance: UseAnimationEventsReturn) => void = () => {}) {
     const played: string[] = [];
     const child = (name: string) => defineComponent({
       setup() {
-        const animations = useAnimationEvents()!;
-        let unregister = () => {};
-        onMounted(() => {
-          unregister = animations.registerHandler('x', async (event) => void played.push(`${name}${event.id}`), { skip: 'drop' });
-        });
-        onUnmounted(() => unregister());
+        let mounted = false;
+        onMounted(() => (mounted = true));
+        useAnimationEvents()!.registerHandler('x', async (event) => void played.push(`${name}${event.id}${mounted ? '' : ' before its mounted hook'}`), { skip: 'drop' });
         return () => h('div', name);
       },
     });
-    const children = { a: child('a'), b: child('b') };
+    const claimsNone = defineComponent({
+      setup() {
+        useAnimationEvents()!.claimNoEvents();
+        return () => h('div', 'none');
+      },
+    });
+    const children = { a: child('a'), b: child('b'), none: claimsNone };
     const Shell = defineComponent({
       setup() {
         const instance = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
@@ -1677,6 +1683,18 @@ describe('a board that swaps the child handling an event in the frame that bring
 
   it('hands the event to the child that mounts, not the one that unmounts', async () => {
     const frame = ref<BoardFrame>({ board: 'a', animationEvents: [] });
+    const { played, wrapper } = mountBoard(frame);
+    await nextTick();
+
+    frame.value = { board: 'b', animationEvents: [createEvent(1, 'x')] };
+    await nextTick();
+    await flushMicrotasks();
+    expect(played).toEqual(['b1']);
+    wrapper.unmount();
+  });
+
+  it('hands the event to a board that replaces one claiming no events in the frame that brings it', async () => {
+    const frame = ref<BoardFrame>({ board: 'none', animationEvents: [] });
     const { played, wrapper } = mountBoard(frame);
     await nextTick();
 

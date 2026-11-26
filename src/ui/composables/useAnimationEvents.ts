@@ -109,10 +109,9 @@ type Input =
   | { kind: 'frame'; frame: AnimationFrame | undefined }
   | { kind: 'drawn' }
   | { kind: 'advance' }
-  | { kind: 'register'; eventType: string; entry: HandlerEntry }
-  | { kind: 'unregister'; eventType: string; entry: HandlerEntry }
-  | { kind: 'claim'; claim: symbol }
-  | { kind: 'release'; claim: symbol }
+  | { kind: 'registered'; eventType: string }
+  | { kind: 'unregistered'; entry: HandlerEntry }
+  | { kind: 'claimed' }
   | { kind: 'skip' }
   | { kind: 'runSkipped'; events: AnimationEvent[] }
   | { kind: 'settled'; playing: Playing }
@@ -152,7 +151,7 @@ export interface UseAnimationEventsReturn {
   /**
    * Register a handler for an event type. Call it in a component's setup (or inside an
    * effect scope): the handler is released when that component unmounts, and its signal
-   * aborts if it is playing then. The returned function releases it earlier.
+   * aborts if it is playing then. The returned function releases it earlier, the same way.
    */
   registerHandler: (eventType: string, handler: AnimationHandler, options: AnimationHandlerOptions) => () => void;
   /**
@@ -253,18 +252,12 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     switch (input.kind) {
       case 'frame': return takeFrame(input.frame);
       case 'drawn':
-        // Vue has drawn every frame taken in, and a component it unmounted has already let go of its handlers.
         undrawn = 0;
-        return advance();
+        return scheduleAdvance();
       case 'advance': return advance();
-      case 'register': return register(input.eventType, input.entry);
-      case 'unregister': return unregister(input.eventType, input.entry);
-      case 'claim':
-        noEventClaims.add(input.claim);
-        return skipUnclaimedWait();
-      case 'release':
-        noEventClaims.delete(input.claim);
-        return;
+      case 'registered': return resume(input.eventType);
+      case 'unregistered': return abortOrSkipWait(input.entry);
+      case 'claimed': return skipUnclaimedWait();
       case 'skip': {
         const skipped = stop({ kind: 'idle' });
         if (skipped.length > 0) inbox.push({ kind: 'runSkipped', events: skipped });
@@ -291,7 +284,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     return noEventClaims.size > 0 && handlers.size === 0;
   }
 
-  /** Start the next event once the caller is done: after the Vue flush under way, so a component mounting in it has mounted. */
+  /** Start the next event once the caller is done: after the Vue flush under way, so every unmount and mount hook in it has run. */
   function scheduleAdvance(): void {
     void nextTick(() => send({ kind: 'advance' }));
   }
@@ -366,17 +359,16 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     if (rest.length > 0) inbox.push({ kind: 'runSkipped', events: rest });
   }
 
-  function register(eventType: string, entry: HandlerEntry): void {
-    handlers.set(eventType, entry);
-    if (state.kind !== 'waiting' || state.event.type !== eventType) return;
+  /** Hand the waiting event back to the queue once a handler for it registers. */
+  function resume(eventType: string): void {
+    if (state.kind !== 'waiting' || state.event.type !== eventType || !handlers.has(eventType)) return;
     clearTimeout(state.timer);
     queue.unshift(state.event);
     becomeIdle();
   }
 
-  function unregister(eventType: string, entry: HandlerEntry): void {
-    // Another component may have replaced this handler since; leave theirs.
-    if (handlers.get(eventType) === entry) handlers.delete(eventType);
+  /** A released handler that is playing is aborted and the queue moves on; a wait the board claims none for ends. */
+  function abortOrSkipWait(entry: HandlerEntry): void {
     if (state.kind === 'playing' && state.entry === entry) {
       const { abort } = state;
       becomeIdle();
@@ -407,23 +399,31 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const newEvents = (frame?.animationEvents ?? []).filter((e) => e.id > watermark);
     if (newEvents.length === 0) return;
     watermarks.set(timeline, Math.max(watermark, ...newEvents.map((e) => e.id)));
-    // Skipped at once, so a board that plays none never gates the Action Panel for a render.
-    if (claimedNone()) return;
     queue.push(...newEvents);
     undrawn += newEvents.length;
   }
 
+  // The handler map and the claims change at once, so no step queued before a release can call a
+  // released handler; what playback does about it is an input like any other.
   function registerHandler(eventType: string, handler: AnimationHandler, handlerOptions: AnimationHandlerOptions): () => void {
     const entry = { handler, skip: handlerOptions.skip };
-    const release = bindToCaller('registerHandler', () => send({ kind: 'unregister', eventType, entry }));
-    send({ kind: 'register', eventType, entry });
+    const release = bindToCaller('registerHandler', () => {
+      // Another component may have replaced this handler since; leave theirs.
+      if (handlers.get(eventType) === entry) handlers.delete(eventType);
+      send({ kind: 'unregistered', entry });
+    });
+    handlers.set(eventType, entry);
+    send({ kind: 'registered', eventType });
     return release;
   }
 
   function claimNoEvents(): () => void {
     const claim = Symbol('no animation events');
-    const release = bindToCaller('claimNoEvents', () => send({ kind: 'release', claim }));
-    send({ kind: 'claim', claim });
+    const release = bindToCaller('claimNoEvents', () => {
+      noEventClaims.delete(claim);
+    });
+    noEventClaims.add(claim);
+    send({ kind: 'claimed' });
     return release;
   }
 

@@ -38,8 +38,6 @@ class Walk {
   readonly calls: Call[] = [];
   readonly boards: Board[] = [];
   readonly claims: EffectScope[] = [];
-  /** Which board's handler the queue holds for each type, as the queue's own map would. */
-  readonly registered = new Map<string, Board>();
   /** The last id handed to any handler in each timeline. */
   readonly lastOffered = new Map<string, number>();
   readonly nextId = new Map<string, number>();
@@ -78,11 +76,6 @@ class Walk {
     this.violations.push(message);
   }
 
-  /** The state a frame landing must gate the panel from: some board can take events. */
-  claimedNone(): boolean {
-    return this.claims.length > 0 && this.registered.size === 0;
-  }
-
   // --- Inputs ---------------------------------------------------------------
 
   land(reentrant: boolean): void {
@@ -106,7 +99,7 @@ class Walk {
     const before = this.reentries;
     this.frame.value = next;
     // A Skip or an unmount sent from a watcher as the frame lands may rightly end its events at once.
-    if (!reentrant && this.reentries === before && events.length > 0 && !this.claimedNone() && this.shellAlive && !this.queue.isAnimating.value) {
+    if (!reentrant && this.reentries === before && events.length > 0 && this.shellAlive && !this.queue.isAnimating.value) {
       this.violate(`isAnimating was false right after seq ${next.seq} landed with events`);
     }
   }
@@ -118,7 +111,6 @@ class Walk {
     this.boards.push(board);
     board.scope.run(() => {
       for (const [type, skip] of board.types) {
-        this.registered.set(type, board);
         this.queue.registerHandler(type, (event, { signal }) => this.handle(board, skip, event, signal), { skip });
       }
     });
@@ -128,7 +120,6 @@ class Walk {
     if (!board?.alive) return;
     this.log.push(`unmount board ${this.boards.indexOf(board)}`);
     board.alive = false;
-    for (const [type, owner] of this.registered) if (owner === board) this.registered.delete(type);
     for (const call of this.running()) if (call.board === board) this.mustAbort.add(call);
     board.scope.stop();
   }
