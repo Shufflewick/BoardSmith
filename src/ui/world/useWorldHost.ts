@@ -80,8 +80,8 @@ export interface WorldHost {
   offersPending: Ref<boolean>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
-  /** How the host says the action panel starts for a player who has not chosen (#1826), or null. */
-  actionPanelSeed: Ref<'open' | 'closed' | null>;
+  /** How the host says the action panel starts for a player who has not chosen (#1826), if it has. */
+  actionPanelSeed: Ref<'open' | 'closed' | undefined>;
   /** Who holds an open connection right now, or `null` when the host has no
    *  live claim. The contract, in full, is on `world_state` in
    *  `worldProtocol.ts`; this is that field, copied and nothing more. */
@@ -318,7 +318,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   let heldOffers: { revision: number; actions: readonly WorldActionOffer[] } | null = null;
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
-  const actionPanelSeed = ref<'open' | 'closed' | null>(null);
+  const actionPanelSeed = ref<'open' | 'closed'>();
   const presence = ref<readonly number[] | null>(null);
   const players = shallowRef<readonly WorldPlayer[]>([]);
   const events = shallowRef<readonly WorldNarration[]>([]);
@@ -681,34 +681,29 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   function handleMessage(event: MessageEvent): void {
     const data = fromTheHost(event);
     if (data === null) return;
+    // ONE ROAD FOR EVERY QUESTION'S ANSWER (#378, #248), so this stays about
+    // which KIND of frame arrived rather than about what each one carries.
+    if (data.type === 'world_response' || data.type === 'world_pick_result' || data.type === 'world_quote_result') {
+      takeAnswer(data);
+      return;
+    }
+    takeNews(data);
+  }
 
-    if (data.type === 'world_response') {
-      settle(data.requestId, outcomeOf(data), { answered: true });
-      return;
-    }
-    // ONE ROAD FOR EVERY QUESTION'S ANSWER (#378, #248), so this switch stays
-    // about which KIND of frame arrived rather than about what each one carries.
-    if (data.type === 'world_pick_result' || data.type === 'world_quote_result') {
-      settleAnswer(data);
-      return;
-    }
-    if (data.type === 'safe_area') {
-      applySafeAreaInsets(data);
-      return;
-    }
-    if (data.type === 'init') {
-      actionPanelSeed.value = data.actionPanel ?? null;
-      return;
-    }
-    if (data.type === 'world_events') {
-      takeNarration(data.events);
-      return;
-    }
-    if (data.type === 'world_offers') {
-      takeOffers(data);
-      return;
-    }
-    if (data.type === 'world_state') takeState(data);
+  type AnswerMessage = Extract<WorldHostMessage, { type: 'world_response' | 'world_pick_result' | 'world_quote_result' }>;
+
+  function takeAnswer(data: AnswerMessage): void {
+    if (data.type === 'world_response') settle(data.requestId, outcomeOf(data), { answered: true });
+    else settleAnswer(data);
+  }
+
+  /** Everything the host sends unasked: the frame's settings and the world's news. */
+  function takeNews(data: Exclude<WorldHostMessage, AnswerMessage>): void {
+    if (data.type === 'safe_area') applySafeAreaInsets(data);
+    else if (data.type === 'init') actionPanelSeed.value = data.actionPanel;
+    else if (data.type === 'world_events') takeNarration(data.events);
+    else if (data.type === 'world_offers') takeOffers(data);
+    else takeState(data);
   }
 
   /**
