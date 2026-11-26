@@ -20,8 +20,8 @@ describe('boardsmith smoke', () => {
     );
   });
 
-  it('#1827: gives no advice for a game starting its bar closed whose board starts every action, on a phone too', async () => {
-    const { outcome } = await smokeOf(false, closedBarGame({ boardStarts: ['draw', 'play'] }));
+  it('#1827: gives no advice for a game starting its bar closed whose board starts every action, on a phone too, behind controls that start nothing', async () => {
+    const { outcome } = await smokeOf(false, closedBarGame({ boardStarts: ['draw', 'play'], decoys: 3 }));
 
     expect(outcome.passed, outcome.summary).toBe(true);
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and pressed \d+ board controls?, with no error\.$/);

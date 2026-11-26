@@ -539,12 +539,14 @@ export interface ClosedBarStarts {
 
 /**
  * Where the walk plays a step of a game whose action bar started closed, given the actions the panel
- * offers ready to take (#1827): on a phone when it offers one the walk has started at its own size and
- * not yet on a phone, so the walk starts each action at both; else at its own size.
+ * offers ready to take and where the last step in that browser played (#1827): on a phone when it
+ * offers one the walk has started at its own size and not yet on a phone, so the walk starts each
+ * action at both; else at its own size. Never on a phone twice running, as an action offered every
+ * turn that the walk does not start there would otherwise keep every later step off its own size.
  */
-export function closedBarLayout(walk: SmokeWalk, enabled: readonly string[]): SmokeLayout {
+export function closedBarLayout(walk: SmokeWalk, enabled: readonly string[], last: SmokeLayout | undefined): SmokeLayout {
   const started = (layout: SmokeLayout, name: string) => walk.closedBar[layout].panel.has(name) || walk.closedBar[layout].board.has(name);
-  return enabled.some((name) => started('desktop', name) && !started('phone', name)) ? 'phone' : 'desktop';
+  return last !== 'phone' && enabled.some((name) => started('desktop', name) && !started('phone', name)) ? 'phone' : 'desktop';
 }
 
 /** No action started yet, at either layout. */

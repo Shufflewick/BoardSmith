@@ -615,9 +615,15 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
 describe('closedBarLayout: where the walk plays a step of a game whose bar starts closed (#1827)', () => {
   it('plays on a phone an action the walk started at its own size and not yet on a phone, and anything else at its own size', () => {
     const played = walk({ closedBar: closedBar({ desktop: { panel: ['play'], board: ['draw'] }, phone: { board: ['play'] } }) });
-    expect(closedBarLayout(played, ['draw'])).toBe('phone');
-    expect(closedBarLayout(played, ['play', 'pass'])).toBe('desktop');
-    expect(closedBarLayout(walk({}), ['draw'])).toBe('desktop');
+    expect(closedBarLayout(played, ['draw'], 'desktop')).toBe('phone');
+    expect(closedBarLayout(played, ['play', 'pass'], 'desktop')).toBe('desktop');
+    expect(closedBarLayout(walk({}), ['draw'], undefined)).toBe('desktop');
+  });
+
+  it('never plays two steps running on a phone, so an action the walk keeps leaving untaken there cannot keep it off its own size', () => {
+    const played = walk({ closedBar: closedBar({ desktop: { panel: ['pass'] } }) });
+    expect(closedBarLayout(played, ['pass'], undefined)).toBe('phone');
+    expect(closedBarLayout(played, ['pass'], 'phone')).toBe('desktop');
   });
 });
 

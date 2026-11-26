@@ -459,14 +459,17 @@ markers this page documents, so it keeps up with any game without knowing it:
   promises its board offers every action, phones included, and the walk checks
   that as well as it can (#1827). It learns the bar started closed from the
   shell's `action-bar-minimized` class, read the first time it looks at each
-  game page, before it opens the bar. Before it first takes an action from the
-  panel that no board press has started yet, it closes the bar and presses one
-  board control it has not pressed, once for each action, then opens the bar
-  again. A board control pressed with nothing open is credited with the action
-  that resolves first after it, else the one open once the page settles. The
-  walk plays a step on a phone held upright (390x844, touch on) when the panel
-  offers an action it has started at its own size but not yet on a phone, so
-  each action is started on both. A passing walk then names each action it
+  game page, before it opens the bar. Before it takes again from the panel an
+  action it has taken but no board press has started, it closes the bar and
+  presses the board controls it has not pressed, until one starts an action,
+  then opens the bar again; the action stops getting those presses once none is
+  left. An action not taken yet still comes from the panel first, since it may
+  be offered only for a moment. A board control pressed with nothing open is
+  credited with the action that resolves first after it, else the one open once
+  the page settles. The walk plays a step on a phone held upright (390x844,
+  touch on) when the panel offers an action it has started at its own size but
+  not yet on a phone, never two steps running, so each action is started on
+  both. A passing walk then names each action it
   started from the panel without seeing a board start for it (`Smoke used the
   panel to start "play" and saw no board start for it.`, or `On a phone, ...`).
   That is a warning, not a failure: crediting a start to a press is a guess.

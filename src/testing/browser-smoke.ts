@@ -1794,9 +1794,11 @@ function goneByItself(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: n
 
 /**
  * Presses one board control the walk has not pressed yet, other than those in `leadsControls`; in a
- * game whose action bar started closed, one it has not pressed at this step's layout (#1827), pressed
+ * game whose action bar started closed, one it has not pressed at this step's layout, with an action
+ * open or with none as there is now (#1827), pressed
  * as a closed bar leaves it when nothing is open (`pressUnderAClosedBar`). One the game took away by
- * itself is pressed again when it shows (`goneByItself`). Returns false when every one was pressed.
+ * itself is pressed again when it shows (`goneByItself`). Returns undefined when every one was
+ * pressed, else the action the press started under a closed bar, if any.
  */
 async function pressAnUntriedControl(
   play: SeatPlay,
@@ -1806,28 +1808,34 @@ async function pressAnUntriedControl(
   memory: WalkMemory,
   step: number,
   leadsControls: ReadonlySet<string>,
-): Promise<boolean> {
-  const tried = (key: string) => (play.layout === 'phone' ? `phone:${key}` : key);
+): Promise<{ readonly started: string | undefined } | undefined> {
+  // Under a closed bar, a press with an action open credits nothing, so it leaves the control to press again with nothing open.
+  const tried = (key: string) => `${play.layout === 'phone' ? 'phone:' : ''}${play.layout !== undefined && offers.open !== null ? 'open:' : ''}${key}`;
   const control = (await boardControls(frame)).find((found) => !memory.pressed.has(tried(found.key)) && !leadsControls.has(found.key));
-  if (control === undefined) return false;
+  if (control === undefined) return undefined;
   memory.pressed.add(tried(control.key));
   play.boardPress = control.key;
   const name = `the board's "${nameOf(control)}"`;
   const wentByItself = goneByItself(frame, walk, memory, step, control.key, name, () => memory.pressed.delete(tried(control.key)));
   const pressIt = () => pressABoardControl(control, name, walk, memory, step, { wentByItself });
-  const landed = play.layout !== undefined && offers.open === null ? await pressUnderAClosedBar(frame, walk, memory, play.layout, pressIt) : await pressIt();
-  if (landed) memory.wentAway.delete(control.key);
-  return true;
+  if (play.layout === undefined || offers.open !== null) {
+    if (await pressIt()) memory.wentAway.delete(control.key);
+    return { started: undefined };
+  }
+  const pressed = await pressUnderAClosedBar(frame, walk, memory, play.layout, pressIt);
+  if (pressed !== false) memory.wentAway.delete(control.key);
+  return { started: pressed === false ? undefined : pressed };
 }
 
 /**
  * Presses a board control with nothing open, in a game whose action bar started closed (#1827), as a
  * player who keeps the bar closed does: the walk closes the bar, presses, and opens it again, then
  * credits the board at `layout` with the action the press started, if it started one. That is the
- * first action to resolve after it, else the action open once it has settled: a follow-up opens or
- * resolves only after the action before it resolved. Returns whether the press landed.
+ * first action to resolve after it, failed or not, else the action open once it has settled: a
+ * follow-up opens or resolves only after the action before it resolved. Returns false when the press
+ * did not land, else the action it started, if any.
  */
-async function pressUnderAClosedBar(frame: Frame, walk: SmokeWalk, memory: WalkMemory, layout: SmokeLayout, pressIt: () => Promise<boolean>): Promise<boolean> {
+async function pressUnderAClosedBar(frame: Frame, walk: SmokeWalk, memory: WalkMemory, layout: SmokeLayout, pressIt: () => Promise<boolean>): Promise<string | undefined | false> {
   await drainThePage(frame, walk, memory);
   await setTheBar(frame, 'collapse');
   const landed = await pressIt();
@@ -1836,19 +1844,18 @@ async function pressUnderAClosedBar(frame: Frame, walk: SmokeWalk, memory: WalkM
   await settle(frame);
   const [first] = await drainThePage(frame, walk, memory);
   const started =
-    first === undefined
-      ? await inPageTime(frame.page(), 'reading the open action', () => frame.evaluate(() => document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction))
-      : first.success ? first.action : undefined;
+    first?.action ?? (await inPageTime(frame.page(), 'reading the open action', () => frame.evaluate(() => document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction)));
   if (started !== undefined) walk.closedBar[layout].board.add(started);
-  return true;
+  return started;
 }
 
 /**
- * In a game whose action bar started closed, gives the board one press of a control the walk has not
- * pressed at this layout before the walk first goes to the panel for an action it offers there that
- * no board press has started (#1827), so a board that offers the action can start it first. Each
- * action gets that press once per layout, so the panel's offers, some of which last only a moment
- * (#1659), wait one step at most for each. Returns whether it pressed.
+ * In a game whose action bar started closed, presses the board's controls the walk has not pressed at
+ * this layout, before the walk goes to the panel again for an action it offers there that it has taken
+ * and no board press has started (#1827), so a board that offers the action can start it. It presses
+ * until one starts an action, since a press that starts nothing leaves the game where it was. An
+ * action not taken yet is left to the panel, which may offer it only for a moment (#1659). The action
+ * stops being given presses once none is left untried at this layout. Returns whether it pressed.
  */
 async function giveTheBoardAFirstPress(
   play: SeatPlay,
@@ -1861,10 +1868,19 @@ async function giveTheBoardAFirstPress(
 ): Promise<boolean> {
   if (play.layout === undefined || offers.open !== null) return false;
   const starts = walk.closedBar[play.layout];
-  const due = offers.enabled.find((name) => !starts.board.has(name) && !starts.tried.has(name));
+  const due = offers.enabled.find((name) => walk.taken.has(name) && !starts.board.has(name) && !starts.tried.has(name));
   if (due === undefined) return false;
-  starts.tried.add(due);
-  return pressAnUntriedControl(play, frame, offers, walk, memory, step, await leftToTheLead(play, plays));
+  const leads = await leftToTheLead(play, plays);
+  let pressed = false;
+  for (;;) {
+    const press = await pressAnUntriedControl(play, frame, offers, walk, memory, step, leads);
+    if (press === undefined) {
+      starts.tried.add(due);
+      return pressed;
+    }
+    pressed = true;
+    if (press.started !== undefined) return true;
+  }
 }
 
 /** How many times the walk opens a dialog again to reach one control in it, before it leaves that control be. */
@@ -2408,7 +2424,7 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator(GAME_OVER).isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
-  play.layout = (await barStartedClosed(frame)) ? closedBarLayout(walk, await openOffers(frame, walk)) : undefined;
+  play.layout = (await barStartedClosed(frame)) ? closedBarLayout(walk, await openOffers(frame, walk), play.layout) : undefined;
   if (play.layout !== 'phone') return playTheStep(play, plays, frame, walk, memory, step);
   return asAPhone(frame, async () => {
     await resize(frame, PHONE_VIEWPORTS[0]);
@@ -2436,7 +2452,7 @@ async function playTheStep(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   if (await actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
   if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
-  if (await pressAnUntriedControl(play, frame, offers, walk, memory, step, await leftToTheLead(play, plays))) return true;
+  if ((await pressAnUntriedControl(play, frame, offers, walk, memory, step, await leftToTheLead(play, plays))) !== undefined) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
 }
 
