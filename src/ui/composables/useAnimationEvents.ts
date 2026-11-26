@@ -78,7 +78,7 @@ type WaitOutcome = AnimationHandler | 'timeout' | 'interrupted';
  * Options for creating an animation events instance
  */
 export interface UseAnimationEventsOptions {
-  /** Getter that returns animation events from PlayerGameState */
+  /** Getter that returns animation events from PlayerGameState. `events`, `view` and `timeline` read the same frame, which changes whole. */
   events: () => AnimationEvent[] | undefined;
   /** Getter for the view of the frame `events` came with, which becomes `playingView` while each of its events plays. */
   view?: () => GameRootView | undefined;
@@ -451,10 +451,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
         // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
         for (const entry of queue) entry.view = undefined;
         playingView.value = undefined;
+        // The shell keeps an unchanged events array, so the replay may be the very array already taken in.
+        lastEvents = undefined;
       }
       lastTimeline = currentTimeline;
 
-      // A change of timeline alone takes in no events: these were taken in when they arrived.
       if (events === lastEvents) return;
       lastEvents = events;
 
