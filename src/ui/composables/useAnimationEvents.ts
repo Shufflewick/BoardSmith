@@ -440,31 +440,40 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   // numbers the events again.
   let lastEvents: AnimationEvent[] | undefined;
   const framesTakenIn = ref(0);
+
+  /** Follow the timeline the frame names; true when it moved, which resets the watermark. */
+  function followTimeline(frame: AnimationFrame | undefined): boolean {
+    const timeline = animationTimeline(frame);
+    if (timeline === undefined) return false;
+    const moved = lastTimeline !== undefined && timeline !== lastTimeline;
+    lastTimeline = timeline;
+    if (!moved) return false;
+    lastQueuedId = 0;
+    // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
+    for (const entry of queue) entry.view = undefined;
+    playingView.value = undefined;
+    return true;
+  }
+
+  /** Queue the frame's events above the watermark, each with the frame's view. */
+  function takeIn(frame: AnimationFrame | undefined): void {
+    const events = frame?.animationEvents ?? [];
+    const newEvents = events.filter((e) => e.id > lastQueuedId);
+    if (newEvents.length === 0) return;
+    queue.push(...newEvents.map((event) => ({ event, view: frame?.view })));
+    lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
+    pendingCount.value = queue.length;
+    framesTakenIn.value++;
+  }
+
   watch(
     getFrame,
     (frame) => {
-      const timeline = animationTimeline(frame);
-      let moved = false;
-      if (timeline !== undefined) {
-        if (lastTimeline !== undefined && timeline !== lastTimeline) {
-          lastQueuedId = 0;
-          // The queued events' views belong to the old timeline, perhaps another seat's, so they play over the latest view.
-          for (const entry of queue) entry.view = undefined;
-          playingView.value = undefined;
-          moved = true;
-        }
-        lastTimeline = timeline;
-      }
-      const events = frame?.animationEvents;
+      const moved = followTimeline(frame);
       // The shell keeps an unchanged events array, so a replay may be the very array already taken in.
-      if (events === lastEvents && !moved) return;
-      lastEvents = events;
-      const newEvents = (events ?? []).filter((e) => e.id > lastQueuedId);
-      if (newEvents.length === 0) return;
-      queue.push(...newEvents.map((event) => ({ event, view: frame?.view })));
-      lastQueuedId = Math.max(lastQueuedId, ...newEvents.map((e) => e.id));
-      pendingCount.value = queue.length;
-      framesTakenIn.value++;
+      if (frame?.animationEvents === lastEvents && !moved) return;
+      lastEvents = frame?.animationEvents;
+      takeIn(frame);
     },
     { immediate: true, flush: 'sync' },
   );
