@@ -356,7 +356,9 @@ player's choice is saved under that game name:
 ```
 
 Do not set it for a board that leaves any action to the panel: a closed bar
-hides those actions until the player opens it. The automatic UI always starts
+hides those actions until the player opens it. `boardsmith smoke` warns about
+each action it had to start from the panel, at desktop size or on a phone (see
+[the smoke test](./browser-testing.md#the-smoke-test-every-game-has-testsbrowsersmokespects)). The automatic UI always starts
 open, since its panel is the only way to start most actions. `WorldShell` takes
 the same prop.
 

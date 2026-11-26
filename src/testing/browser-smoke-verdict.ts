@@ -518,6 +518,41 @@ export interface SmokeWalk {
   readonly seats: number[];
   /** Each box already reported scrolling sideways on a phone (`sidewaysKey`, #1797), so it is reported once. */
   readonly sideways: Set<string>;
+  /** How the walk started actions in games whose action bar started closed, at each layout it played them at (#1827). */
+  readonly closedBar: Record<SmokeLayout, ClosedBarStarts>;
+}
+
+/** Where the walk plays a step of a game whose action bar starts closed (#1827): at its own size, or on a phone held upright. */
+export type SmokeLayout = 'desktop' | 'phone';
+
+const LAYOUTS: readonly SmokeLayout[] = ['desktop', 'phone'];
+
+/** How the walk started actions at one layout in games whose action bar started closed (#1827). */
+export interface ClosedBarStarts {
+  /** The actions it started from the panel's buttons. */
+  readonly panel: Set<string>;
+  /** The actions a board control it pressed with nothing open started. */
+  readonly board: Set<string>;
+  /** The actions it gave the board a press to start before it went to the panel's button, once each. */
+  readonly tried: Set<string>;
+}
+
+/**
+ * Where the walk plays a step of a game whose action bar started closed, given the actions the panel
+ * offers ready to take and where the last step in that browser played (#1827): on a phone when it
+ * offers one the walk has started at its own size and not yet on a phone, so the walk starts each
+ * action at both; else at its own size. Never on a phone twice running, as an action offered every
+ * turn that the walk does not start there would otherwise keep every later step off its own size.
+ */
+export function closedBarLayout(walk: SmokeWalk, enabled: readonly string[], last: SmokeLayout | undefined): SmokeLayout {
+  const started = (layout: SmokeLayout, name: string) => walk.closedBar[layout].panel.has(name) || walk.closedBar[layout].board.has(name);
+  return last !== 'phone' && enabled.some((name) => started('desktop', name) && !started('phone', name)) ? 'phone' : 'desktop';
+}
+
+/** No action started yet, at either layout. */
+export function noClosedBarStarts(): Record<SmokeLayout, ClosedBarStarts> {
+  const none = (): ClosedBarStarts => ({ panel: new Set(), board: new Set(), tried: new Set() });
+  return { desktop: none(), phone: none() };
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
@@ -895,6 +930,11 @@ export interface SmokeRecord {
   readonly excused: Array<{ action: string; reason: string }>;
   /** The declared actions the walk took anyway, whose declaration should go. */
   readonly reachedAnyway: string[];
+  /**
+   * The actions the walk started from the panel in a game whose action bar started closed, each with
+   * the layouts it saw no board start of it at (#1827): a closed bar hides them from the player.
+   */
+  readonly panelOnly: Array<{ action: string; layouts: SmokeLayout[] }>;
 }
 
 /** The record of a walk that pressed `controls` board controls over `games` games. */
@@ -910,7 +950,29 @@ export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: 
       .filter((name) => !walk.taken.has(name) && excused(walk, name))
       .map((action) => ({ action, reason: walk.unreachable[action].trim() })),
     reachedAnyway: declared.filter((name) => walk.taken.has(name)),
+    panelOnly: [...new Set(LAYOUTS.flatMap((layout) => [...walk.closedBar[layout].panel]))].sort().flatMap((action) => {
+      const layouts = LAYOUTS.filter((layout) => walk.closedBar[layout].panel.has(action) && !walk.closedBar[layout].board.has(action));
+      return layouts.length === 0 ? [] : [{ action, layouts }];
+    }),
   };
+}
+
+/**
+ * The advice for actions a game starting its bar closed left to the panel (#1827), " " first, or the
+ * empty string. A warning, not a failure: crediting a start to a board press is a heuristic.
+ */
+function panelOnlyNote(panelOnly: SmokeRecord['panelOnly']): string {
+  if (panelOnly.length === 0) return '';
+  const them = (count: number) => (count === 1 ? 'it' : 'them');
+  const sentences = [
+    { layouts: 'desktop,phone', opening: 'Smoke' },
+    { layouts: 'desktop', opening: 'At desktop size, smoke' },
+    { layouts: 'phone', opening: 'On a phone, smoke' },
+  ].flatMap(({ layouts, opening }) => {
+    const names = panelOnly.filter((entry) => entry.layouts.join() === layouts).map((entry) => entry.action);
+    return names.length === 0 ? [] : [`${opening} used the panel to start ${quoted(names)} and saw no board start for ${them(names.length)}.`];
+  });
+  return ` ${sentences.join(' ')} Check the board offers ${them(panelOnly.length)}, or drop actionBarStartsCollapsed.`;
 }
 
 /** What `boardsmith smoke` says a passing walk did. */
@@ -932,7 +994,7 @@ export function smokeSummary(record: SmokeRecord): string {
         `reach: remove ${record.reachedAnyway.length === 1 ? 'it' : 'them'} from \`unreachable\` there, so the walk requires ` +
         `${record.reachedAnyway.length === 1 ? 'it' : 'them'}.`
       : '';
-  return `Served by \`boardsmith dev\` from a fresh start${dealt}, ${whoPlayed(record)} took ${took} and pressed ${pressed}, with no error${games}.${excusedNote}${reached}`;
+  return `Served by \`boardsmith dev\` from a fresh start${dealt}, ${whoPlayed(record)} took ${took} and pressed ${pressed}, with no error${games}.${excusedNote}${reached}${panelOnlyNote(record.panelOnly)}`;
 }
 
 /** Who a passing walk played as: the world seats it played (#471), or one seated player. */

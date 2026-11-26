@@ -8,6 +8,7 @@ import { PageFrozen, PageTimeOverrun } from './browser-smoke-clock.js';
 import {
   actionFailed,
   answered,
+  closedBarLayout,
   DEFAULT_SMOKE_SEED,
   inputFor,
   MOST_ANSWERS,
@@ -34,6 +35,7 @@ import {
   type ResolvedMemory,
   type SeatAttempts,
   type SmokeInputView,
+  type SmokeLayout,
   type SmokeWalk,
   type TypedValue,
   typedFrom,
@@ -56,8 +58,15 @@ function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
     greyed: new Map(),
     seats: [],
     sideways: new Set(),
+    closedBar: closedBar({}),
     ...overrides,
   };
+}
+
+/** How a walk started actions in games whose bar started closed (#1827), by layout: the actions it started from the panel and from the board. */
+function closedBar(starts: Partial<Record<SmokeLayout, { panel?: string[]; board?: string[] }>>): SmokeWalk['closedBar'] {
+  const at = (layout: SmokeLayout) => ({ panel: new Set(starts[layout]?.panel), board: new Set(starts[layout]?.board), tried: new Set<string>() });
+  return { desktop: at('desktop'), phone: at('phone') };
 }
 
 describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
@@ -492,7 +501,7 @@ describe('smokeProblems', () => {
 describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
   it('says what was taken and pressed, in one game, with no error, and the seed it was dealt from', () => {
     const record = smokeRecord(walk({ listed: ['draw', 'play'], taken: new Set(['play', 'draw']) }), { controls: 1, games: 1 });
-    expect(record).toEqual({ seeds: ['smoke'], seats: [], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
+    expect(record).toEqual({ seeds: ['smoke'], seats: [], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [], panelOnly: [] });
     expect(smokeSummary(record)).toBe(
       'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and ' +
         'pressed 1 board control, with no error.',
@@ -568,6 +577,53 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
           'cannot reach: remove it from `unreachable` there, so the walk requires it\\.$',
       ),
     );
+  });
+
+  it('#1827: advises each action a game starting its action bar closed had started from the panel, where the walk saw no board start of it', () => {
+    const record = smokeRecord(
+      walk({
+        listed: ['draw', 'play', 'pass'],
+        taken: new Set(['draw', 'play', 'pass']),
+        closedBar: closedBar({ desktop: { panel: ['draw', 'play', 'pass'], board: ['draw', 'pass'] }, phone: { panel: ['play', 'draw'], board: ['pass'] } }),
+      }),
+      { controls: 2, games: 1 },
+    );
+    expect(record.panelOnly).toEqual([
+      { action: 'draw', layouts: ['phone'] },
+      { action: 'play', layouts: ['desktop', 'phone'] },
+    ]);
+    expect(smokeSummary(record)).toMatch(
+      /with no error\. Smoke used the panel to start "play" and saw no board start for it\. On a phone, smoke used the panel to start "draw" and saw no board start for it\. Check the board offers them, or drop actionBarStartsCollapsed\.$/,
+    );
+  });
+
+  it('#1827: gives no advice when the board started every action the panel did, or no game started its bar closed', () => {
+    const covered = smokeRecord(walk({ closedBar: closedBar({ desktop: { panel: ['draw'], board: ['draw'] }, phone: { board: ['draw'] } }) }), { controls: 1, games: 1 });
+    expect(covered.panelOnly).toEqual([]);
+    expect(smokeSummary(covered)).not.toMatch(/actionBarStartsCollapsed/);
+    expect(smokeRecord(walk({ taken: new Set(['draw']) }), { controls: 0, games: 1 }).panelOnly).toEqual([]);
+  });
+
+  it('#1827: says "at desktop size" for an action the board started only on a phone', () => {
+    const record = smokeRecord(walk({ closedBar: closedBar({ desktop: { panel: ['play'] }, phone: { panel: ['play'], board: ['play'] } }) }), { controls: 1, games: 1 });
+    expect(smokeSummary(record)).toMatch(
+      / At desktop size, smoke used the panel to start "play" and saw no board start for it\. Check the board offers it, or drop actionBarStartsCollapsed\.$/,
+    );
+  });
+});
+
+describe('closedBarLayout: where the walk plays a step of a game whose bar starts closed (#1827)', () => {
+  it('plays on a phone an action the walk started at its own size and not yet on a phone, and anything else at its own size', () => {
+    const played = walk({ closedBar: closedBar({ desktop: { panel: ['play'], board: ['draw'] }, phone: { board: ['play'] } }) });
+    expect(closedBarLayout(played, ['draw'], 'desktop')).toBe('phone');
+    expect(closedBarLayout(played, ['play', 'pass'], 'desktop')).toBe('desktop');
+    expect(closedBarLayout(walk({}), ['draw'], undefined)).toBe('desktop');
+  });
+
+  it('never plays two steps running on a phone, so an action the walk keeps leaving untaken there cannot keep it off its own size', () => {
+    const played = walk({ closedBar: closedBar({ desktop: { panel: ['pass'] } }) });
+    expect(closedBarLayout(played, ['pass'], undefined)).toBe('phone');
+    expect(closedBarLayout(played, ['pass'], 'phone')).toBe('desktop');
   });
 });
 

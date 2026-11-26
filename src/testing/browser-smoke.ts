@@ -72,10 +72,12 @@ import {
 import {
   answered,
   choiceNotOffered,
+  closedBarLayout,
   dealOptionStates,
   dealSeed,
   DEFAULT_SMOKE_SEED,
   inputFor,
+  noClosedBarStarts,
   note,
   readyToTake,
   recordGreyed,
@@ -105,6 +107,7 @@ import {
   type SmokeDeal,
   type SmokeInputs,
   type SmokeInputView,
+  type SmokeLayout,
   type SmokeWalk,
   type TypedValue,
   typedFrom,
@@ -298,6 +301,7 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     greyed: new Map(),
     seats: [],
     sideways: new Set(),
+    closedBar: noClosedBarStarts(),
   };
 }
 
@@ -382,9 +386,9 @@ interface PageDid {
 /**
  * What `frame` did since the last call, recorded: a board selection that is not the panel's (#1642) is
  * reported after the press that led there (`WalkMemory.lastPress`); the actions resolved are recorded (`recordResolved`). Returns
- * how many resolved.
+ * the actions resolved, in order.
  */
-async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
+async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<ResolvedAction[]> {
   const page = frame.page();
   const did = await inPageTime(page, 'reading what the page did', () =>
     frame.evaluate((): PageDid => {
@@ -400,7 +404,7 @@ async function drainThePage(frame: Frame, walk: SmokeWalk, memory: WalkMemory): 
   const after = memory.lastPress.get(page) ?? `before the walk pressed anything, ${stepWhere(memory)}`;
   if (did.selection !== undefined) noteASelectionApart(page, walk, memory, did.marked, did.selection, after);
   recordResolved(did.resolved, walk, memory, attemptsIn(memory, page), browserNames.get(page));
-  return did.resolved.length;
+  return did.resolved;
 }
 
 /** Reports the board's marked selection when it is not the panel's (`selectionsDiffer`), once for each time the two change. */
@@ -672,10 +676,12 @@ interface SeatPlay {
    * action from the panel's buttons: the same action open again is a follow-up re-opening it (#1596).
    */
   resolvedOpen: string | undefined;
+  /** Where this step plays, in a game whose action bar started closed (#1827); undefined in one that started open. */
+  layout: SmokeLayout | undefined;
 }
 
 function newPlay(page: Page, seat: number | null): SeatPlay {
-  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Map(), wentBackAt: undefined, lastResort: false, inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined, resolvedOpen: undefined };
+  return { page, seat, offered: [], took: undefined, followed: 0, opened: new Map(), wentBackAt: undefined, lastResort: false, inDialog: false, boardPress: undefined, dialogPress: undefined, closing: undefined, resolvedOpen: undefined, layout: undefined };
 }
 
 /**
@@ -1723,7 +1729,7 @@ async function finishOpenAction(
     }
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
-    if ((await drainThePage(frame, walk, memory)) > 0) {
+    if ((await drainThePage(frame, walk, memory)).length > 0) {
       play.resolvedOpen = name;
       return;
     }
@@ -1787,28 +1793,94 @@ function goneByItself(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: n
 }
 
 /**
- * Presses one board control the walk has not pressed yet, other than those in `leadsControls`. One
- * the game took away by itself is pressed again when it shows (`goneByItself`). Returns false when
- * every one was pressed.
+ * Presses one board control the walk has not pressed yet, other than those in `leadsControls`; in a
+ * game whose action bar started closed, one it has not pressed at this step's layout, with an action
+ * open or with none as there is now (#1827), pressed
+ * as a closed bar leaves it when nothing is open (`pressUnderAClosedBar`). One the game took away by
+ * itself is pressed again when it shows (`goneByItself`). Returns undefined when every one was
+ * pressed, else the action the press started under a closed bar, if any.
  */
 async function pressAnUntriedControl(
   play: SeatPlay,
   frame: Frame,
+  offers: Offers,
   walk: SmokeWalk,
   memory: WalkMemory,
   step: number,
   leadsControls: ReadonlySet<string>,
-): Promise<boolean> {
-  for (const control of await boardControls(frame)) {
-    if (memory.pressed.has(control.key) || leadsControls.has(control.key)) continue;
-    memory.pressed.add(control.key);
-    play.boardPress = control.key;
-    const name = `the board's "${nameOf(control)}"`;
-    const wentByItself = goneByItself(frame, walk, memory, step, control.key, name, () => memory.pressed.delete(control.key));
-    if (await pressABoardControl(control, name, walk, memory, step, { wentByItself })) memory.wentAway.delete(control.key);
-    return true;
+): Promise<{ readonly started: string | undefined } | undefined> {
+  // Under a closed bar, a press with an action open credits nothing, so it leaves the control to press again with nothing open.
+  const tried = (key: string) => `${play.layout === 'phone' ? 'phone:' : ''}${play.layout !== undefined && offers.open !== null ? 'open:' : ''}${key}`;
+  const control = (await boardControls(frame)).find((found) => !memory.pressed.has(tried(found.key)) && !leadsControls.has(found.key));
+  if (control === undefined) return undefined;
+  memory.pressed.add(tried(control.key));
+  play.boardPress = control.key;
+  const name = `the board's "${nameOf(control)}"`;
+  const wentByItself = goneByItself(frame, walk, memory, step, control.key, name, () => memory.pressed.delete(tried(control.key)));
+  const pressIt = () => pressABoardControl(control, name, walk, memory, step, { wentByItself });
+  if (play.layout === undefined || offers.open !== null) {
+    if (await pressIt()) memory.wentAway.delete(control.key);
+    return { started: undefined };
   }
-  return false;
+  const pressed = await pressUnderAClosedBar(frame, walk, memory, play.layout, pressIt);
+  if (pressed !== false) memory.wentAway.delete(control.key);
+  return { started: pressed === false ? undefined : pressed };
+}
+
+/**
+ * Presses a board control with nothing open, in a game whose action bar started closed (#1827), as a
+ * player who keeps the bar closed does: the walk closes the bar, presses, and opens it again, then
+ * credits the board at `layout` with the action the press started, if it started one. That is the
+ * first action to resolve after it, failed or not, else the action open once it has settled: a
+ * follow-up opens or resolves only after the action before it resolved. Returns false when the press
+ * did not land, else the action it started, if any.
+ */
+async function pressUnderAClosedBar(frame: Frame, walk: SmokeWalk, memory: WalkMemory, layout: SmokeLayout, pressIt: () => Promise<boolean>): Promise<string | undefined | false> {
+  await drainThePage(frame, walk, memory);
+  await setTheBar(frame, 'collapse');
+  const landed = await pressIt();
+  await setTheBar(frame, 'open');
+  if (!landed) return false;
+  await settle(frame);
+  const [first] = await drainThePage(frame, walk, memory);
+  const started =
+    first?.action ?? (await inPageTime(frame.page(), 'reading the open action', () => frame.evaluate(() => document.querySelector<HTMLElement>('[data-bs-open-action]')?.dataset.bsOpenAction)));
+  if (started !== undefined) walk.closedBar[layout].board.add(started);
+  return started;
+}
+
+/**
+ * In a game whose action bar started closed, presses the board's controls the walk has not pressed at
+ * this layout, before the walk goes to the panel again for an action it offers there that it has taken
+ * and no board press has started (#1827), so a board that offers the action can start it. It presses
+ * until one starts an action, since a press that starts nothing leaves the game where it was. An
+ * action not taken yet is left to the panel, which may offer it only for a moment (#1659). The action
+ * stops being given presses once none is left untried at this layout. Returns whether it pressed.
+ */
+async function giveTheBoardAFirstPress(
+  play: SeatPlay,
+  plays: readonly SeatPlay[],
+  frame: Frame,
+  offers: Offers,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+): Promise<boolean> {
+  if (play.layout === undefined || offers.open !== null) return false;
+  const starts = walk.closedBar[play.layout];
+  const due = offers.enabled.find((name) => walk.taken.has(name) && !starts.board.has(name) && !starts.tried.has(name));
+  if (due === undefined) return false;
+  const leads = await leftToTheLead(play, plays);
+  let pressed = false;
+  for (;;) {
+    const tried = await pressAnUntriedControl(play, frame, offers, walk, memory, step, leads);
+    if (tried === undefined) {
+      starts.tried.add(due);
+      return pressed;
+    }
+    pressed = true;
+    if (tried.started !== undefined) return true;
+  }
 }
 
 /** How many times the walk opens a dialog again to reach one control in it, before it leaves that control be. */
@@ -2212,6 +2284,7 @@ async function takeAction(
   const pressed = await pressThePanels(frame, selector, `"${name}"`, walk, memory, wentByItself);
   if (pressed === undefined) return;
   memory.wentAway.delete(selector);
+  if (play.layout !== undefined) walk.closedBar[play.layout].panel.add(name);
   if (pressed.answers === undefined) return;
   if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Map());
   walk.fieldsMet.get(name)?.set(pressed.answers.pick, pressed.answers.kind);
@@ -2351,13 +2424,35 @@ async function stepInFrame(play: SeatPlay, plays: readonly SeatPlay[], frame: Fr
   if (await inPageTime(play.page, 'looking for the end of the game', () => frame.locator(GAME_OVER).isVisible())) return afterTheGame(play.page, walk, memory, step);
   const inDialog = await answerAnOpenDialog(play, frame, walk, memory, step);
   if (inDialog !== undefined) return inDialog;
+  play.layout = (await barStartedClosed(frame)) ? closedBarLayout(walk, await openOffers(frame, walk), play.layout) : undefined;
+  if (play.layout !== 'phone') return playTheStep(play, plays, frame, walk, memory, step);
+  return asAPhone(frame, async () => {
+    await resize(frame, PHONE_VIEWPORTS[0]);
+    return playTheStep(play, plays, frame, walk, memory, step);
+  });
+}
+
+/** What the panel offers ready to take, read once a collapsed action bar is opened (`openACollapsedBar`). */
+async function openOffers(frame: Frame, walk: SmokeWalk): Promise<string[]> {
+  await openACollapsedBar(frame);
+  return (await settledOffers(frame, walk)).enabled;
+}
+
+/**
+ * The rest of {@link stepInFrame}, once no game over or dialog called for it, at the layout it plays
+ * at: press the board first for an action a closed bar would hide (`giveTheBoardAFirstPress`), then
+ * answer or take an action the walk still has to take, skip the step clock's wait, open a dialog
+ * again, press an untried board control, or answer the open action or take what the panel offers.
+ */
+async function playTheStep(play: SeatPlay, plays: readonly SeatPlay[], frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | typeof IDLE> {
   await openACollapsedBar(frame);
   const offers = await settledOffers(frame, walk);
   if (offers.open === null) play.offered = offers.enabled;
+  if (await giveTheBoardAFirstPress(play, plays, frame, offers, walk, memory, step)) return true;
   if (await actionLeftFor(play, plays, offers, walk, memory)) return answerOrTake(play, plays, frame, offers, walk, memory, step);
   if (offers.open === null && (await skipAWait(play.page, offers, walk, memory, step))) return true;
   if (await reopenADialog(play, frame, walk, memory, step)) return true;
-  if (await pressAnUntriedControl(play, frame, walk, memory, step, await leftToTheLead(play, plays))) return true;
+  if ((await pressAnUntriedControl(play, frame, offers, walk, memory, step, await leftToTheLead(play, plays))) !== undefined) return true;
   return answerOrTake(play, plays, frame, offers, walk, memory, step);
 }
 
@@ -2381,13 +2476,7 @@ async function setTouch(page: Page, enabled: boolean): Promise<void> {
  */
 async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   const page = frame.page();
-  const before = page.viewportSize();
-  if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
-  // Off the game, so a board the resize moves under a resting pointer is not hovered by it.
-  await inPageTime(page, 'moving the pointer off the game', () => page.mouse.move(0, 0));
-  const hadTouch = await inPageTime(page, 'reading whether the page has touch', () => frame.evaluate(() => navigator.maxTouchPoints > 0));
-  await inPageTime(page, 'switching on touch', () => setTouch(page, true));
-  try {
+  await asAPhone(frame, async () => {
     for (const phone of PHONE_VIEWPORTS) {
       await resize(frame, { width: phone.width, height: phone.height });
       for (const scroll of await inPageTime(page, 'reading what scrolls sideways', () => frame.evaluate(sidewaysScrolls))) {
@@ -2397,9 +2486,28 @@ async function checkOnPhones(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
         noteIn(page, walk, sidewaysProblem(phone, scroll, stepWhere(memory)));
       }
     }
+  });
+}
+
+/**
+ * Runs `run` with touch on in `frame`'s page, as a phone has it, then puts touch and the page's size
+ * back as they were, so whatever size `run` lays the game out at, the walk goes on as it found it. A
+ * frame put up again meanwhile has no layout to wait for, so the size alone goes back then.
+ */
+async function asAPhone<T>(frame: Frame, run: () => Promise<T>): Promise<T> {
+  const page = frame.page();
+  const before = page.viewportSize();
+  if (before === null) throw new Error('The smoke walk needs a fixed viewport to lay the game out on phones, and its page has none. Report this as a BoardSmith bug.');
+  // Off the game, so a board the resize moves under a resting pointer is not hovered by it.
+  await inPageTime(page, 'moving the pointer off the game', () => page.mouse.move(0, 0));
+  const hadTouch = await inPageTime(page, 'reading whether the page has touch', () => frame.evaluate(() => navigator.maxTouchPoints > 0));
+  await inPageTime(page, 'switching on touch', () => setTouch(page, true));
+  try {
+    return await run();
   } finally {
     await inPageTime(page, 'putting touch back as it was', () => setTouch(page, hadTouch));
-    await resize(frame, before);
+    if (frame.isDetached()) await inPageTime(page, 'putting the page\'s size back', () => page.setViewportSize(before));
+    else await resize(frame, before);
   }
 }
 
@@ -2455,11 +2563,43 @@ async function skipAWait(page: Page, offers: Offers, walk: SmokeWalk, memory: Wa
 
 /**
  * Opens the action bar with its toggle when it is collapsed, since that holds the panel's buttons out
- * of the page (#1482). Read and pressed in one look: the bar also opens by itself when an action starts.
+ * of the page (#1482).
  */
 async function openACollapsedBar(frame: Frame): Promise<void> {
-  await inPageTime(frame.page(), 'opening a collapsed action bar', () =>
-    frame.evaluate(() => document.querySelector<HTMLElement>('[data-testid="bs-actionbar-toggle"][aria-expanded="false"]')?.click()),
+  await setTheBar(frame, 'open');
+}
+
+/**
+ * Opens or collapses the action bar with its toggle, unless it already is so. Read and pressed in one
+ * look: the bar also opens by itself when an action starts. Waits for the page to paint the change.
+ */
+async function setTheBar(frame: Frame, to: 'open' | 'collapse'): Promise<void> {
+  const pressed = await inPageTime(frame.page(), to === 'open' ? 'opening a collapsed action bar' : 'collapsing the action bar', () =>
+    frame.evaluate((expanded) => {
+      const toggle = document.querySelector<HTMLElement>(`[data-testid="bs-actionbar-toggle"][aria-expanded="${expanded}"]`);
+      toggle?.click();
+      return toggle !== null;
+    }, to === 'open' ? 'false' : 'true'),
+  );
+  if (pressed) await framesPass(frame);
+}
+
+/**
+ * Whether the game in `frame` started its action bar closed (#1826, #1827): the shell's
+ * `action-bar-minimized`, the player's own pick with the automatic UI's exception applied, read the
+ * first time the walk looks in each page the frame loads, before the walk's toggle changes it. Not
+ * the toggle's `aria-expanded`, which says whether the bar shows now: an action opens it over a
+ * closed pick. False, and read again next time, while the shell has not mounted.
+ */
+function barStartedClosed(frame: Frame): Promise<boolean> {
+  return inPageTime(frame.page(), 'reading how the action bar started', () =>
+    frame.evaluate(() => {
+      const kept = window as unknown as { __boardsmithSmokeBarStartedClosed?: boolean };
+      const shell = document.querySelector('.game-shell__game');
+      if (shell === null) return false;
+      kept.__boardsmithSmokeBarStartedClosed ??= shell.classList.contains('action-bar-minimized');
+      return kept.__boardsmithSmokeBarStartedClosed;
+    }),
   );
 }
 
