@@ -198,3 +198,70 @@ export function findUnknownKeysIn(
 
   return results;
 }
+
+/** Why a top-level platform id is refused and where it goes (#704); `publish` refuses with the same words. */
+export function topLevelIdMessage(key: 'gameId' | 'publisherId'): string {
+  return (
+    `Unknown key '${key}' — each publishing platform keeps its own ids, because dev and prod are separate ` +
+    'deployments. Move it under "platforms.dev" or "platforms.prod", whichever platform gave it, e.g. ' +
+    '"platforms": { "prod": { "gameId": "...", "publisherId": "..." } }. If you are not sure which platform it ' +
+    'belongs to, delete it and publish again with --publisher <slug>; the platform finds the game by its slug.'
+  );
+}
+
+/** Keys boardsmith.json once carried, each with where its job went (CLIX-01). */
+const RETIRED_KEY_MESSAGES: Readonly<Record<string, string>> = {
+  ui:
+    "Unknown key 'ui' — a game's UIs are declared in src/ui/uis.ts (defineGameUIs), "
+    + 'which is the single source of truth for which boards exist and which one ships. '
+    + 'Remove this key from boardsmith.json.',
+  scoreboard:
+    "Unknown key 'scoreboard': nothing in BoardSmith or the platform ever read it. "
+    + 'Remove this key from boardsmith.json.',
+  playerCount:
+    "Unknown key 'playerCount' — player count is now derived from your gameDefinition (compiled rules), remove this key from boardsmith.json.",
+  world:
+    "Unknown key 'world' — a project says it is a persistent world with \"backend\": \"world\", "
+    + 'and everything else about the world is declared in your gameDefinition\'s `world` block '
+    + '(compiled rules): `maxPlayers`, the number the runtime actually enforces, and '
+    + '`stateVersion`, your statement about what this version makes of a live world\'s stored '
+    + 'state. The manifest\'s copies of both are derived from it at build. Remove this key from '
+    + 'boardsmith.json.',
+  bot:
+    "Unknown key 'bot' — whether a seat may be played by a bot is DERIVED from your "
+    + 'gameDefinition\'s `bot` block (compiled rules) and published as `capabilities.bots`, so a '
+    + 'manifest can no longer claim a bot the bundle does not ship. It is a table capability: a '
+    + 'world backend has no bots. Remove this key from boardsmith.json.',
+  persistence:
+    "Unknown key 'persistence' — whether state survives a sitting is DERIVED from your "
+    + 'gameDefinition\'s `persistence` (compiled rules), which is what `boardsmith dev` already '
+    + 'read, and published as `capabilities.crossSessionState`. Remove this key from '
+    + 'boardsmith.json.',
+  categories:
+    "Unknown key 'categories' — replaced by 'audience' (a single string: who the game is for). Genre/theme/mechanism labels belong in 'tags'.",
+  estimatedDuration:
+    "Unknown key 'estimatedDuration' — replaced by 'playtime': { \"min\": <minutes>, \"max\": <minutes> }.",
+  asyncPlay:
+    "Unknown key 'asyncPlay': every game may now be played with long gaps between moves, and "
+    + 'the host sets the time each turn allows. Remove this key from boardsmith.json.',
+  joinInProgress:
+    "Unknown key 'joinInProgress': whether a player may join a session already underway is now "
+    + "the host's decision, not the rules'. Remove this key from boardsmith.json.",
+  gameId: topLevelIdMessage('gameId'),
+  publisherId: topLevelIdMessage('publisherId'),
+};
+
+/**
+ * One sentence per top-level key boardsmith.json may not carry: where a retired
+ * key's job went, or the nearest allowed key. `validate` and `build` refuse with
+ * these words and `dev` warns with them, so the three cannot disagree.
+ */
+export function unknownKeyMessages(config: Record<string, unknown>): string[] {
+  return findUnknownKeys(config).map(({ key, suggestion }) =>
+    Object.hasOwn(RETIRED_KEY_MESSAGES, key)
+      ? RETIRED_KEY_MESSAGES[key]
+      : suggestion
+        ? `Unknown key '${key}' — did you mean '${suggestion}'?`
+        : `Unknown key '${key}' — not a recognized boardsmith.json field.`,
+  );
+}

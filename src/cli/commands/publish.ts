@@ -15,7 +15,7 @@ import {
   type TaxonomyAudience,
   type PlatformTarget,
 } from '../lib/publish-api.js';
-import { topLevelIdMessage } from './validate.js';
+import { topLevelIdMessage } from '../lib/config-schema.js';
 import {
   requireGameProjectManifests,
   requireTableUi,

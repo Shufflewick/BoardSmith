@@ -15,6 +15,7 @@ import { requireGameProjectManifests, requireRulesIndex, requireTableUi, resolve
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { listFiles } from '../lib/source-files.js';
 import { coverArtPaths } from '../lib/cover-art.js';
+import { unknownKeyMessages } from '../lib/config-schema.js';
 import { browserFloorCheck, floorBuildOptions, floorEsbuildOptions } from '../lib/browser-floor.js';
 import { parseGameOptionList } from '../../session/game-option-selection.js';
 import { mergePlayerOptions } from '../lib/player-options.js';
@@ -199,6 +200,9 @@ export function deriveManifest(
 
   const version = resolveGameVersion(config, pkg);
 
+  const unknownKeys = unknownKeyMessages(config);
+  if (unknownKeys.length > 0) throw new Error(unknownKeys.join('\n\n'));
+
   // WHAT THE BUILD ACTUALLY PRODUCED HAS TO MATCH THE DECLARED BACKEND, and a
   // mismatch is refused in every direction rather than recorded.
   //
@@ -246,12 +250,10 @@ export function deriveManifest(
   const { minPlayers, maxPlayers } = gameDefinition;
   const hasTableRoster = Number.isInteger(minPlayers) && Number.isInteger(maxPlayers);
 
-  // The flags the capability set was RESOLVED FROM never travel beside it, and the role mapping
-  // (#454) says which agents build the game, and the publish ids and slug are local publish
-  // bookkeeping (#706): nothing a player or the platform reads.
+  // The role mapping (#454) says which agents build the game, and the publish ids and slug are
+  // local publish bookkeeping (#706): nothing a player or the platform reads.
   const {
-    asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, agents: _agents,
-    platforms: _platforms, publisher: _publisher, gameOptions, playerOptions, ...rest
+    agents: _agents, platforms: _platforms, publisher: _publisher, gameOptions, playerOptions, ...rest
   } = config;
   const publishedPlayerOptions = mergePlayerOptions(gameDefinition.playerOptions, playerOptions);
 

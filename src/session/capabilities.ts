@@ -20,10 +20,7 @@
  *
  * A capability an author can declare inconsistently with their own game is a
  * capability that will drift, and every member below is therefore derived from
- * the BACKEND plus the COMPILED game definition. The only two an author still
- * writes are `asyncPlay` and `joinInProgress`, because they are judgments about
- * the game's rules that no code can answer -- and even those are refused on a
- * world, where the backend already answers them.
+ * the BACKEND plus the COMPILED game definition.
  *
  * `capabilityContradictions` is the other half of the same rule: where an
  * author must declare something, a declaration that contradicts the code is
@@ -103,25 +100,6 @@ export interface GameCapabilities {
    */
   bots: boolean;
   /**
-   * May a session run one move at a time, over hours or days, with nobody else
-   * connected?
-   *
-   * table: the author's declared `asyncPlay` -- only their rules can say whether
-   * the game survives long gaps between moves.
-   * world: always true, implied by the backend. A world runs continuously and
-   * nobody is waiting on anybody's turn.
-   */
-  asyncPlay: boolean;
-  /**
-   * May a player join a session that is already underway?
-   *
-   * table: the author's declared `joinInProgress` -- only a game whose rules can
-   * seat a latecomer should say yes.
-   * world: always true, implied by the backend. A world is already running
-   * before anybody opens a browser; joining one is the only way in.
-   */
-  joinInProgress: boolean;
-  /**
    * Does state survive the end of a sitting?
    *
    * table: the compiled `gameDefinition.persistence` -- the game opts into the
@@ -152,12 +130,11 @@ export interface GameCapabilities {
 
 /**
  * What a resolved set is derived FROM: the declared backend, the compiled game
- * definition, and the handful of flags an author writes in `boardsmith.json`.
+ * definition, and the `boardsmith.json` fields named in `declared`.
  *
  * Typed loosely on purpose. `boardsmith build` hands this raw JSON and a
  * freshly compiled definition, so every field arrives as whatever was written
- * there; `capabilityContradictions` is what turns a wrong type into a sentence
- * an author can act on, and `resolveCapabilities` never reads truthiness.
+ * there, and `resolveCapabilities` never reads truthiness.
  */
 export interface CapabilityInputs {
   backend: GameBackend;
@@ -174,10 +151,8 @@ export interface CapabilityInputs {
     persistence?: unknown;
     world?: { maxPlayers?: unknown } | null;
   };
-  /** The capability flags `boardsmith.json` still carries. */
+  /** The `boardsmith.json` fields a capability or contradiction reads. */
   declared: {
-    asyncPlay?: unknown;
-    joinInProgress?: unknown;
     /** Round policy. Table-only: a world has no rounds to put a deadline on. */
     roundDeadline?: unknown;
     idleAction?: unknown;
@@ -366,11 +341,6 @@ export function describeBuild({ playerCount, choices }: TableBuild): string {
     (chosen.length === 0 ? 'the default game options' : `game options ${chosen.join(', ')}`);
 }
 
-/** `true` only for a literal `true`; anything else, including `'yes'`, is false. */
-function declaredTrue(value: unknown): boolean {
-  return value === true;
-}
-
 /**
  * The one resolution. Total over both backends and every input shape, so a
  * caller never has to ask which backend it is holding.
@@ -385,9 +355,7 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     undo: !isWorld,
     spectators: !isWorld,
     bots: !isWorld && definition.bot !== undefined && definition.bot !== null,
-    asyncPlay: isWorld || declaredTrue(declared.asyncPlay),
-    joinInProgress: isWorld || declaredTrue(declared.joinInProgress),
-    crossSessionState: isWorld || declaredTrue(definition.persistence),
+    crossSessionState: isWorld || definition.persistence === true,
     timedSteps: timedStepsResolved(backend, definition, declared.colorPalette),
   };
 }
@@ -398,25 +366,6 @@ function timedStepsResolved(backend: GameBackend, definition: CapabilityInputs['
   const { timed, refusal } = findTimedBuild(definition, colorPalette);
   if (refusal !== undefined) throw new Error(refusal);
   return timed !== undefined;
-}
-
-/**
- * The flags an author writes, checked for TYPE before anything reads them. A
- * declaration that is neither `true` nor `false` is not a third answer; it is a
- * typo, and reading its truthiness would silently pick one.
- */
-function malformedDeclarations(declared: CapabilityInputs['declared']): string[] {
-  const issues: string[] = [];
-  for (const key of ['asyncPlay', 'joinInProgress'] as const) {
-    const value = declared[key];
-    if (value !== undefined && typeof value !== 'boolean') {
-      issues.push(
-        `"${key}" must be true or false; got ${JSON.stringify(value)}. It is a statement about ` +
-          'your rules, so there is no third answer.',
-      );
-    }
-  }
-  return issues;
 }
 
 /**
@@ -459,28 +408,16 @@ function worldSeatContradictions(definition: CapabilityInputs['definition']): st
  * THE FIELDS A WORLD MUST NOT WRITE, each with the reason it says nothing.
  *
  * A field that says nothing is a field the next reader will believe, which is
- * why every one of these is refused rather than ignored. Three of them the
- * backend already ANSWERS (a world is always asynchronous, always joinable in
- * progress, and its partitions are the state that survives); two are ROUND
- * policy, and a world has no rounds; one is a bot, and a world has no turn to
- * take it.
+ * why every one of these is refused rather than ignored. Persistence the
+ * backend already ANSWERS (a world's partitions are the state that survives);
+ * two are ROUND policy, and a world has no rounds; one is a bot, and a world
+ * has no turn to take it.
  */
 function worldFieldContradictions(
   definition: CapabilityInputs['definition'],
   declared: CapabilityInputs['declared'],
 ): string[] {
-  const alreadyAnswered =
-    'and the world backend already answers it: a world is always asynchronous, always joinable ' +
-    'in progress, and its partitions ARE the state that survives, because there is no sitting to ' +
-    'end.';
-
   const refusals: Array<{ present: boolean; message: string }> = [
-    ...(['asyncPlay', 'joinInProgress'] as const).map((key) => ({
-      present: declared[key] !== undefined,
-      message:
-        `boardsmith.json declares "${key}" on a game whose backend is "world", ${alreadyAnswered} ` +
-        `Delete "${key}".`,
-    })),
     ...(['roundDeadline', 'idleAction'] as const).map((key) => ({
       present: declared[key] !== undefined,
       message:
@@ -492,7 +429,8 @@ function worldFieldContradictions(
       present: definition.persistence !== undefined,
       message:
         'This game\'s gameDefinition declares `persistence` on a game whose backend is "world", ' +
-        `${alreadyAnswered} Delete \`persistence\` from your gameDefinition.`,
+        'and the world backend already answers it: its partitions ARE the state that survives, ' +
+        'because there is no sitting to end. Delete `persistence` from your gameDefinition.',
     },
     {
       present: definition.bot !== undefined && definition.bot !== null,
@@ -564,13 +502,7 @@ function timedStepContradictions(
  */
 export function capabilityContradictions(inputs: CapabilityInputs): string[] {
   const { backend, definition, declared } = inputs;
-  return [
-    ...malformedDeclarations(declared),
-    ...(backend === 'world'
-      ? [
-          ...worldSeatContradictions(definition),
-          ...worldFieldContradictions(definition, declared),
-        ]
-      : [...tableContradictions(definition), ...timedStepContradictions(definition, declared)]),
-  ];
+  return backend === 'world'
+    ? [...worldSeatContradictions(definition), ...worldFieldContradictions(definition, declared)]
+    : [...tableContradictions(definition), ...timedStepContradictions(definition, declared)];
 }

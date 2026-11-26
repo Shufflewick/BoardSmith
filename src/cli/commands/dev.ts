@@ -20,7 +20,7 @@ import { toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue, type TableRuntime } from './dev-table-runtime.js';
 import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { RulesError } from '../dev-host/rules-worker.js';
-import { findUnknownKeys } from '../lib/config-schema.js';
+import { unknownKeyMessages } from '../lib/config-schema.js';
 import { DEV_BOT_LEVEL, presetSeatSetup, resolveDevPlayerOptions, type ConfigOptionDefinition, type SeatSetup } from '../lib/player-options.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex, requireTableUi } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
@@ -223,15 +223,11 @@ export function multiplayerBannerLine(isNonLocal: boolean): string {
 
 /**
  * CLIX-02 / F22: loud (non-exiting) startup warning for unknown top-level
- * `boardsmith.json` keys, reusing the Plan 05 `config-schema` module. `dev`
- * WARNS (does not exit) — `boardsmith validate` is the hard gate.
+ * `boardsmith.json` keys. `dev` WARNS (does not exit) — `boardsmith validate`
+ * and `boardsmith build` refuse them, in the same words.
  */
 export function formatUnknownKeyWarnings(config: Record<string, unknown>): string[] {
-  return findUnknownKeys(config).map(({ key, suggestion }) =>
-    suggestion
-      ? `Warning: Unknown boardsmith.json key "${key}" (did you mean "${suggestion}"?) — this key is ignored.`
-      : `Warning: Unknown boardsmith.json key "${key}" — this key is ignored.`,
-  );
+  return unknownKeyMessages(config).map((message) => `Warning: ${message}`);
 }
 
 interface BoardSmithConfig {

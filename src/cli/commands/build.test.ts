@@ -100,13 +100,10 @@ describe('deriveManifest', () => {
     expect(manifest.roundDeadline).toEqual(config.roundDeadline);
   });
 
-  it('resolves the capability set, and does NOT leave the flags it was resolved from beside it', () => {
+  it('resolves the capability set, and does NOT leave the fields it was resolved from beside it', () => {
     // The whole point of #171: one object, and nothing to read instead of it.
-    // `asyncPlay`/`joinInProgress` were the manifest's answer AND a capability
-    // input; leaving both in would give a reader two places to look and one of
-    // them would drift.
     const manifest = derive(
-      { name: 'fixture', asyncPlay: true, joinInProgress: true },
+      { name: 'fixture' },
       { ...makeGameDefinition(2, 4), persistence: true },
     );
 
@@ -117,13 +114,9 @@ describe('deriveManifest', () => {
       undo: true,
       spectators: true,
       bots: false,
-      asyncPlay: true,
-      joinInProgress: true,
       crossSessionState: true,
       timedSteps: false,
     });
-    expect(manifest.asyncPlay).toBeUndefined();
-    expect(manifest.joinInProgress).toBeUndefined();
     expect(manifest.persistence).toBeUndefined();
     expect(manifest.bot).toBeUndefined();
   });
@@ -246,29 +239,23 @@ describe('deriveManifest', () => {
     ).toThrow(/"backend": "world"/);
   });
 
-  it('refuses each flag the world backend already answers, naming it', () => {
-    for (const key of ['asyncPlay', 'joinInProgress'] as const) {
-      expect(() =>
-        deriveManifest(
-          { name: 'fixture', backend: 'world', [key]: true },
-          PKG,
-          makeWorldDefinition(),
-          7,
-          { tableUi: false, worldUi: true },
-        ),
-      ).toThrow(/world backend already answers/);
-    }
+  it('refuses a stale config playerCount, which only the gameDefinition declares (PROC-02)', () => {
+    expect(() => derive({ name: 'fixture', playerCount: { min: 9, max: 9 } }))
+      .toThrow(/Unknown key 'playerCount'.*gameDefinition/);
   });
 
-  it('PROC-02: a stale config playerCount does NOT reach the manifest — gameDefinition wins', () => {
-    // Stale/hand-edited boardsmith.json claiming a 9-9 player count, while the
-    // compiled rules (gameDefinition) say 2-4. This is exactly the drift
-    // scenario T-135-07 must prevent: a raw `{ ...config }` spread would let
-    // the stale 9/9 ride into the manifest unchanged.
-    const manifest = derive({ name: 'fixture', playerCount: { min: 9, max: 9 } });
-
-    expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
-    expect(manifest.playerCount).not.toEqual({ min: 9, max: 9 });
+  it('refuses a key boardsmith.json does not carry, in the words validate uses, so it never reaches the manifest (#1829)', () => {
+    expect(() => derive({ name: 'fixture', asyncPlay: true })).toThrow(/Unknown key 'asyncPlay'/);
+    expect(() => derive({ name: 'fixture', gameOption: [] })).toThrow(/did you mean 'gameOptions'/);
+    expect(() =>
+      deriveManifest(
+        { name: 'fixture', backend: 'world', joinInProgress: false },
+        PKG,
+        makeWorldDefinition(),
+        7,
+        { tableUi: false, worldUi: true },
+      ),
+    ).toThrow(/Unknown key 'joinInProgress'/);
   });
 
   it('preserves buildTime/engineRevision and other passthrough config keys', () => {
@@ -291,16 +278,11 @@ describe('deriveManifest', () => {
     expect(() => new Date(manifest.buildTime as string).toISOString()).not.toThrow();
   });
 
-  it('stamps engineRevision even when boardsmith.json tries to set its own', () => {
-    // The engine stamp is the BUILDING BoardSmith's to declare. If a hand
-    // edited value could ride through the `...config` spread, a game could
-    // claim an older revision than it was built against and defeat the
-    // platform's skew check — so the derived value must overwrite, not merge.
-    const config = { name: 'fixture', engineRevision: 99 };
-
-    const manifest = derive(config, makeGameDefinition(2, 2));
-
-    expect(manifest.engineRevision).toBe(7);
+  it('refuses an engineRevision in boardsmith.json, which only the building BoardSmith stamps', () => {
+    // A hand-edited value could claim an older revision than the bundle was
+    // built against and defeat the platform's skew check.
+    expect(() => derive({ name: 'fixture', engineRevision: 99 }, makeGameDefinition(2, 2)))
+      .toThrow(/Unknown key 'engineRevision'/);
   });
 
   it('stamps no engineProtocol: the engine revision is the one compatibility number (#524)', () => {
@@ -362,8 +344,6 @@ describe('deriveManifest — a world-only bundle', () => {
       undo: false,
       spectators: false,
       bots: false,
-      asyncPlay: true,
-      joinInProgress: true,
       crossSessionState: true,
       timedSteps: false,
     });

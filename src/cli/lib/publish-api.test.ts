@@ -214,11 +214,9 @@ describe('initiatePublish manifest payload', () => {
 
   // The initiate body is an ALLOW-LIST projection, not the whole manifest, so a
   // key the platform reads must be named here or it is silently dropped between
-  // dist/manifest.json and Convex's gameVersions.manifestJson. `asyncPlay` was
-  // lost exactly that way: authorable, present in dist/manifest.json, and still
-  // arriving as `asyncPlaySupported: false`. It is no longer a manifest key at
-  // all -- it is a member of the DERIVED `capabilities` object (#171) -- so the
-  // case that guards the drop is the one below, on that object.
+  // dist/manifest.json and Convex's gameVersions.manifestJson. What a bundle can
+  // do travels in the DERIVED `capabilities` object (#171), so the case that
+  // guards the drop is the one below, on that object.
   it('threads the resolved capability set through to the initiate body', async () => {
     const capabilities = {
       table: true,
@@ -226,8 +224,6 @@ describe('initiatePublish manifest payload', () => {
       undo: true,
       spectators: true,
       bots: false,
-      asyncPlay: true,
-      joinInProgress: false,
       crossSessionState: true,
     };
     expect((await sentManifest({ displayName: 'Fixture', capabilities })).capabilities)
@@ -240,7 +236,7 @@ describe('initiatePublish manifest payload', () => {
   it('carries every false in the set through as false', async () => {
     const capabilities = {
       table: false, world: true, undo: false, spectators: false,
-      bots: false, asyncPlay: true, joinInProgress: true, crossSessionState: true,
+      bots: false, crossSessionState: true,
     };
     const sent = await sentManifest({ displayName: 'Fixture', capabilities });
     expect(sent.capabilities).toEqual(capabilities);

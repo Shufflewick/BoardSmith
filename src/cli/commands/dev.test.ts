@@ -348,7 +348,12 @@ describe('formatUnknownKeyWarnings (CLIX-02: dev startup warns loudly, does not 
   it('returns no warnings for a clean config with only allowed keys', () => {
     const warnings = formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd' });
     expect(warnings).toEqual([]);
-    expect(formatUnknownKeyWarnings({ name: 'x', displayName: 'X', description: 'd', asyncPlay: true })).toEqual([]);
+  });
+
+  it('warns about a retired key in the words validate refuses it with (#1829)', () => {
+    const [warning] = formatUnknownKeyWarnings({ name: 'x', asyncPlay: true });
+    expect(warning).toMatch(/^Warning: Unknown key 'asyncPlay'/);
+    expect(warning).toContain('Remove this key from boardsmith.json');
   });
 });
 
