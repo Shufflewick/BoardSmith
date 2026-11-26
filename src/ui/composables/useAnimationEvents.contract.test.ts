@@ -10,8 +10,11 @@
  * mount and unmount in the shell's next update, or Vue apps of their own, which
  * mount and unmount at once. It checks the invariants docs/ui-components.md
  * § "The playback contract" promises a game author at every call, at every
- * snapshot the queue publishes, after every input, and, at the end, that every
- * event was handed to a handler or ended for a reason the contract gives.
+ * snapshot the queue publishes, in every abort listener, after every input
+ * (where pendingCount must count exactly the events still queued), and, at the
+ * end, that every event was handed to a handler or ended for a reason the
+ * contract gives. Explicit releases, registrations in an effect scope and
+ * `handlerWaitTimeout: 0` are left to the cases below it.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp, defineComponent, effectScope, h, nextTick, onBeforeUnmount, onMounted, provide, shallowRef, Suspense, watch, type App, type Component, type VNodeChild } from 'vue';
@@ -32,7 +35,9 @@ interface Part {
   types: Map<string, 'run' | 'drop'>;
   claim: boolean;
   life: 'pending' | 'mounted' | 'unmounted';
-  /** Mounted before a flush that has since finished, so the queue has taken its handlers in. */
+  /** The order it mounted in, which is the order the queue takes parts in. */
+  mountSeq?: number;
+  /** The queue has surely taken its handlers or claim in: set in a tick after the queue's own. It may take them sooner. */
   taken: boolean;
   component?: Component;
 }
@@ -53,12 +58,14 @@ interface Fate {
   offered?: Call['kind'];
   /** Ended by Skip, a change of timeline or the shell's unmount before it was offered. */
   stopped: boolean;
-  /** When stopped, the board whose skip: 'run' handler the queue held for it then. */
+  /** Stopped from a watcher of the step that may be handing it out, so it may still play first. */
+  mayStillPlay?: boolean;
+  /** When stopped, the board whose skip: 'run' handler the queue held for it then, until that board unmounts. */
   runOn?: Part;
   warned: boolean;
-  /** A claim of no events was alive at some point while it waited. */
+  /** While it waited, a mounted claim may have counted, so the queue may have skipped it unseen. */
   claimed: boolean;
-  /** A board handling its type unmounted while it waited. */
+  /** A watcher of the snapshot unmounted the board holding its type, so it may have been handed out and dropped unseen. */
   boardLost: boolean;
 }
 
@@ -70,8 +77,13 @@ class Walk {
   readonly calls: Call[] = [];
   readonly parts: Part[] = [];
   readonly fates = new Map<string, Fate>();
-  /** The board the queue's map holds for each type: the last one mounted, until it unmounts. */
-  readonly latest = new Map<string, Part>();
+  /** For each type, the last board surely taken in, until it unmounts. */
+  readonly held = new Map<string, Part>();
+  /** Types whose holder is unsure since a board unmounted before it was surely taken, with that board's mount order. */
+  readonly lost = new Map<string, number>();
+  mounts = 0;
+  /** Stopped events with a skip: 'run' handler owed, in the order the queue runs them. */
+  owed: Fate[] = [];
   /** The last id handed to any handler in each timeline. */
   readonly lastOffered = new Map<string, number>();
   readonly nextId = new Map<string, number>();
@@ -81,6 +93,8 @@ class Walk {
   reentries = 0;
   /** True while a frame with events lands and nothing re-entrant may end them: no snapshot may then say the queue is idle. */
   mustStayBusy = false;
+  /** The call-out the walk is calling back in from, if any. */
+  from?: string;
   private readonly wrapper;
 
   constructor(readonly random: () => number) {
@@ -90,7 +104,7 @@ class Walk {
         walk.queue = createAnimationEvents({ frame: () => walk.frame.value, handlerWaitTimeout: WAIT });
         provide(ANIMATION_EVENTS_KEY, walk.queue);
         watch([walk.queue.isAnimating, walk.queue.pendingCount], () => walk.checkSnapshot(), { flush: 'sync' });
-        watch(walk.queue.isAnimating, () => walk.callOut('watcher'), { flush: 'sync' });
+        watch([walk.queue.isAnimating, walk.queue.pendingCount], () => walk.callOut('watcher'), { flush: 'sync' });
         return () => h('div', { id: 'drawn', 'data-seq': String(walk.frame.value.seq) }, walk.children.value.map((part) => h(part.component!, { key: part.name })));
       },
     });
@@ -114,6 +128,21 @@ class Walk {
     return [...this.fates.values()].filter((f) => !f.offered && !f.stopped && !f.warned);
   }
 
+  /** The board the queue's map holds for `type`, or 'unsure' while a board for it is mounted but not surely taken, or after one was lost so. */
+  holder(type: string): Part | undefined | 'unsure' {
+    if (this.lost.has(type) || this.parts.some((p) => p.life === 'mounted' && !p.taken && p.types.has(type))) return 'unsure';
+    return this.held.get(type);
+  }
+
+  /** The queue may skip unseen what waits now: a claim is mounted and no board surely holds a handler. */
+  claimsNone(): boolean {
+    return this.parts.some((p) => p.claim && p.life === 'mounted') && !TYPES.some((type) => typeof this.holder(type) === 'object');
+  }
+
+  markClaimed(): void {
+    if (this.claimsNone()) for (const fate of this.waiting()) fate.claimed = true;
+  }
+
   violate(message: string): void {
     this.violations.push(message);
   }
@@ -124,26 +153,49 @@ class Walk {
     return defineComponent({
       name: part.name,
       setup() {
+        // First, so the walk knows the part is leaving before the queue's own unmount hook releases it.
+        onBeforeUnmount(() => walk.unmounting(part));
         const queue = useAnimationEvents()!;
         if (part.claim) queue.claimNoEvents();
         for (const [type, skip] of part.types) {
           queue.registerHandler(type, (event, { signal }) => walk.handle(part, skip, event, signal), { skip });
         }
+        // After the queue's own mounted hook, so this tick runs after the queue has taken the part in.
         onMounted(() => {
           part.life = 'mounted';
-          for (const type of part.types.keys()) walk.latest.set(type, part);
+          part.mountSeq = walk.mounts++;
+          walk.markClaimed();
+          void nextTick(() => walk.taken(part));
         });
-        onBeforeUnmount(() => walk.unmounting(part));
         return () => h('i');
       },
     });
   }
 
+  taken(part: Part): void {
+    if (part.life !== 'mounted') return;
+    part.taken = true;
+    for (const type of part.types.keys()) {
+      if ((this.held.get(type)?.mountSeq ?? -1) < part.mountSeq!) this.held.set(type, part);
+      if ((this.lost.get(type) ?? Infinity) < part.mountSeq!) this.lost.delete(type);
+    }
+  }
+
   unmounting(part: Part): void {
     part.life = 'unmounted';
     for (const call of this.running()) if (call.board === part) this.mustAbort.add(call);
-    for (const type of part.types.keys()) if (this.latest.get(type) === part) this.latest.delete(type);
-    for (const fate of this.waiting()) if (part.types.has(fate.type)) fate.boardLost = true;
+    for (const type of part.types.keys()) this.unhold(part, type);
+    // A watcher sees the snapshot of the step that hands an event out, before the handler is called.
+    if (this.from === 'watcher') for (const fate of this.waiting()) if (part.types.has(fate.type)) fate.boardLost = true;
+    // Its handler is gone before the turn of any stopped event it was owed for.
+    for (const fate of this.owed) if (fate.runOn === part) fate.runOn = undefined;
+    this.markClaimed();
+  }
+
+  unhold(part: Part, type: string): void {
+    if (this.held.get(type) === part) this.held.delete(type);
+    // The queue may have taken it in, replacing the holder, and now drops it.
+    if (!part.taken) this.lost.set(type, Math.max(this.lost.get(type) ?? -1, part.mountSeq!));
   }
 
   // --- Inputs ---------------------------------------------------------------
@@ -182,7 +234,7 @@ class Walk {
   }
 
   recordFates(frame: Frame): void {
-    const claimed = this.parts.some((p) => p.claim && p.life !== 'unmounted');
+    const claimed = this.claimsNone();
     for (const e of frame.animationEvents!) {
       const key = `${e.type}${e.id}@${this.timeline(frame)}`;
       this.fates.set(key, { key, type: e.type, stopped: false, warned: false, claimed, boardLost: false });
@@ -211,7 +263,6 @@ class Walk {
   }
 
   claim(): void {
-    for (const fate of this.waiting()) fate.claimed = true;
     this.addPart({ name: `claim${this.parts.length}`, types: new Map(), claim: true, life: 'pending', taken: false });
   }
 
@@ -237,8 +288,12 @@ class Walk {
   /** Mark every event not yet offered as stopped, noting the skip: 'run' handler the queue holds for each. */
   stopped(runsSkipped: boolean): void {
     for (const call of this.running()) this.mustAbort.add(call);
-    for (const fate of this.waiting()) {
+    const waiting = this.waiting();
+    // A watcher sees the snapshot of a step that may hand the first event out; a stop sent from it comes after.
+    if (this.from === 'watcher' && waiting.length > 0) waiting[0].mayStillPlay = true;
+    for (const fate of waiting) {
       fate.stopped = true;
+      if (runsSkipped) this.owed.push(fate);
       if (runsSkipped) fate.runOn = this.owedRun(fate);
     }
   }
@@ -247,8 +302,8 @@ class Walk {
   owedRun(fate: Fate): Part | undefined {
     // An event a claim or a lost board may have ended already has no skip: 'run' call owed.
     if (fate.claimed || fate.boardLost) return undefined;
-    const board = this.latest.get(fate.type);
-    return board?.taken && board.life === 'mounted' && board.types.get(fate.type) === 'run' ? board : undefined;
+    const board = this.holder(fate.type);
+    return typeof board === 'object' && board.types.get(fate.type) === 'run' ? board : undefined;
   }
 
   skip(): void {
@@ -265,12 +320,6 @@ class Walk {
     call.release();
   }
 
-  async flush(): Promise<void> {
-    const mounted = this.parts.filter((p) => p.life === 'mounted');
-    await flush();
-    for (const part of mounted) part.taken = true;
-  }
-
   unmountShell(): void {
     this.log.push('unmount shell');
     this.stopped(false);
@@ -285,8 +334,8 @@ class Walk {
     if (!fate) return this.violate(`unexpected warning: ${message}`);
     this.log.push(`  warned ${fate.key}`);
     fate.warned = true;
-    const board = this.latest.get(fate.type);
-    if (board?.taken && board.life === 'mounted') this.violate(`${fate.key} timed out while ${board.name} handled it`);
+    const board = this.holder(fate.type);
+    if (typeof board === 'object') this.violate(`${fate.key} timed out while ${board.name} handled it`);
   }
 
   /** A board, listener or watcher calling back in, as the contract allows. */
@@ -305,18 +354,21 @@ class Walk {
     ]);
     // A re-entrant Skip or change of timeline may rightly end the events landing.
     if (input[0] === 'skip' || input[0] === 'land') this.mustStayBusy = false;
+    const outer = this.from;
+    this.from = from;
     input[1]();
+    this.from = outer;
   }
 
   /** What every call must hold, whether it plays the event or runs it skipped. */
   checkCall(board: Part, skip: 'run' | 'drop', key: string, kind: Call['kind'], tl: string, id: number): void {
     if (board.life !== 'mounted') this.violate(`${key} was handed to ${board.name} while it was ${board.life}`);
     if (!this.shellAlive) this.violate(`${key} was handed out after the shell unmounted`);
-    if (kind === 'skipped' && skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${key}`);
     this.checkOrder(key, tl, id);
     const fate = this.fates.get(key)!;
+    if (kind === 'skipped') this.checkSkipRun(board, skip, fate);
     if (fate.offered) this.violate(`${key} was offered twice`);
-    if (kind === 'play' && fate.stopped) this.violate(`${key} played after it was stopped`);
+    if (kind === 'play' && fate.stopped && !fate.mayStillPlay) this.violate(`${key} played after it was stopped`);
     fate.offered = kind;
   }
 
@@ -345,7 +397,10 @@ class Walk {
     const done = new Promise<void>((resolve) => { release = resolve; });
     const call: Call = { board, key, kind, signal, released: false, release: () => { call.released = true; release(); } };
     this.calls.push(call);
-    signal.addEventListener('abort', () => this.callOut(`abort of ${key}`));
+    signal.addEventListener('abort', () => {
+      this.checkMovedOn(key);
+      this.callOut(`abort of ${key}`);
+    });
     this.callOut(`handler of ${key}`);
     if (this.random() < 0.3) call.release();
     return done;
@@ -353,11 +408,50 @@ class Walk {
 
   // --- Invariants -----------------------------------------------------------
 
+  /** A skipped event runs on the skip: 'run' handler the queue holds for its type now, after every owed run before it. */
+  checkSkipRun(board: Part, skip: 'run' | 'drop', fate: Fate): void {
+    if (skip === 'drop') this.violate(`skip: 'drop' handler was called for skipped ${fate.key}`);
+    const holder = this.holder(fate.type);
+    if (holder !== 'unsure' && holder !== board) this.violate(`skipped ${fate.key} ran on ${board.name}, which the queue did not hold for ${fate.type}`);
+    const turn = this.owed.indexOf(fate);
+    for (const before of this.owed.slice(0, turn)) {
+      if (before.runOn && !before.offered) this.violate(`${before.key} was skipped without calling ${before.runOn.name}'s skip: 'run' handler`);
+    }
+    this.owed = this.owed.slice(turn + 1);
+  }
+
+  /** The events the queue still holds, playing or waiting or queued, as far as the walk can tell: `sure` it must hold, `most` it may. */
+  stillHeld(): { sure: number; most: number } {
+    const open = [...this.fates.values()].filter((f) => !f.offered && !f.stopped && !f.warned);
+    return { sure: open.filter((f) => !f.claimed && !f.boardLost).length, most: open.length };
+  }
+
   /** Every snapshot the queue publishes, the moment it publishes it. */
   checkSnapshot(): void {
     const { isAnimating, pendingCount } = this.queue;
     if (!isAnimating.value && pendingCount.value !== 0) this.violate(`a snapshot said pendingCount ${pendingCount.value} while isAnimating was false`);
     if (this.mustStayBusy && !isAnimating.value) this.violate('a snapshot said isAnimating false while a frame with events landed');
+  }
+
+  /** In an abort listener the queue has moved on: nothing plays or waits, so it is busy exactly when events are queued. */
+  checkMovedOn(key: string): void {
+    const { isAnimating, pendingCount } = this.queue;
+    if (isAnimating.value !== pendingCount.value > 0) {
+      this.violate(`${key}'s abort listener saw isAnimating ${isAnimating.value} with pendingCount ${pendingCount.value}`);
+    }
+  }
+
+  /** After an input, pendingCount counts every event the queue holds but the one waiting, and isAnimating is true while it holds any. */
+  checkCount(): void {
+    const { isAnimating, pendingCount } = this.queue;
+    const { sure, most } = this.stillHeld();
+    const pending = pendingCount.value;
+    // The queue's only timer is the wait's, and a playing event is offered, so every other event held is queued.
+    const waiting = vi.getTimerCount();
+    if (pending < sure - waiting || pending > most - waiting) {
+      this.violate(`pendingCount was ${pending} with ${sure} to ${most} events still held, ${waiting} of them waiting`);
+    }
+    if (!isAnimating.value && sure > 0) this.violate(`isAnimating was false with ${sure} events still held`);
   }
 
   /** After every input. */
@@ -367,15 +461,16 @@ class Walk {
     const { isAnimating } = this.queue;
     if (!isAnimating.value && this.running().length > 0) this.violate(`isAnimating was false while ${this.running()[0].key} played`);
     if (!this.shellAlive && isAnimating.value) this.violate('isAnimating stayed true after the shell unmounted');
+    this.checkCount();
     this.checkSkipRuns();
   }
 
-  /** Every stopped event the queue held a mounted skip: 'run' handler for, which still holds, was run skipped. */
+  /** Every stopped event the queue held a skip: 'run' handler for, which it held still at the event's turn, was run skipped. */
   checkSkipRuns(): void {
-    for (const { runOn, offered, type, key } of this.fates.values()) {
-      if (!runOn || offered || runOn.life !== 'mounted' || this.latest.get(type) !== runOn) continue;
-      this.violate(`${key} was skipped without calling ${runOn.name}'s skip: 'run' handler`);
+    for (const { runOn, offered, key } of this.owed) {
+      if (runOn && !offered) this.violate(`${key} was skipped without calling ${runOn.name}'s skip: 'run' handler`);
     }
+    this.owed = [];
   }
 
   /** Once the queue has run dry: every event was handed to a handler or ended for a reason the contract gives. */
@@ -409,7 +504,7 @@ async function runWalk(seed: string): Promise<Walk> {
   const walk = new Walk(createSeededRandom(seed));
   const steps: Array<[number, () => unknown]> = [
     [5, () => walk.land(false)],
-    [5, () => walk.flush()],
+    [5, () => flush()],
     [2, () => walk.mountBoard()],
     [1, () => walk.unmountBoard()],
     [1, () => walk.claim()],
@@ -432,7 +527,7 @@ async function runWalk(seed: string): Promise<Walk> {
   // Every board unmounts without settling its handlers: the queue must still run dry.
   walk.reentries = 3;
   for (const part of walk.parts) walk.removePart(part);
-  await walk.flush();
+  await flush();
   for (let i = 0; i < 20 && walk.queue.isAnimating.value; i++) await vi.advanceTimersByTimeAsync(WAIT);
   walk.check();
   if (walk.queue.isAnimating.value) walk.violate('the queue never ran dry once every board unmounted');
@@ -709,5 +804,173 @@ describe('the seven sequences council found breaking the contract (#1821)', () =
     frame.value = { ...frame.value, dealer: true };
     await flushPromises();
     expect(calls).toEqual(['deal1']);
+  });
+});
+
+describe('the sequences council found breaking the contract after #1821 (#1822)', () => {
+  const event = (id: number, type: string) => ({ id, type, data: {} });
+  const frameOf = (events: Array<{ id: number; type: string; data: Record<string, unknown> }>): AnimationFrame => ({
+    animationEvents: events, gameInstanceId: 'g', restoreEpoch: 0, viewerSeat: 1,
+  });
+
+  function shell(frame: { value: AnimationFrame }, board: () => VNodeChild = () => null, inShell: (queue: UseAnimationEventsReturn) => void = () => {}) {
+    let queue!: UseAnimationEventsReturn;
+    const Shell = defineComponent({
+      setup() {
+        queue = createAnimationEvents({ frame: () => frame.value, handlerWaitTimeout: 60_000 });
+        provide(ANIMATION_EVENTS_KEY, queue);
+        inShell(queue);
+        return () => h('div', [board()]);
+      },
+    });
+    mount(Shell);
+    return queue;
+  }
+
+  it('applies a claim released by a watcher after the claim and registration sent before it', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const queue = shell(frame, () => null, (q) => {
+      watch(q.pendingCount, (now, before) => {
+        if (before !== 2 || now !== 1) return;
+        effectScope(true).run(() => {
+          const release = q.claimNoEvents();
+          q.registerHandler('x', async (e) => void calls.push(`x${e.id}`), { skip: 'drop' });
+          release();
+        });
+      }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x'), event(2, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x2']);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
+  it('hands the selected event to a handler that a watcher releases as it starts, then aborts it', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    let release!: () => void;
+    const Board = defineComponent({
+      setup() {
+        release = useAnimationEvents()!.registerHandler('x', (e, { signal }) => {
+          calls.push(`x${e.id}`);
+          signal.addEventListener('abort', () => calls.push(`x${e.id} aborted`));
+          return new Promise<void>(() => {});
+        }, { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    const queue = shell(frame, () => h(Board), (q) => {
+      watch(q.pendingCount, (now, before) => { if (before === 1 && now === 0) release(); }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x1', 'x1 aborted']);
+    expect(queue.isAnimating.value).toBe(false);
+  });
+
+  it('runs each skipped event on the skip: run handler registered at its turn, not at the Skip', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    let queue!: UseAnimationEventsReturn;
+    const Board = defineComponent({
+      setup() {
+        useAnimationEvents()!.registerHandler('y', (_e, { signal }) => {
+          // Sent during Skip's own step, so it counts after x2's turn and before x3's.
+          signal.addEventListener('abort', () => effectScope(true).run(() => {
+            queue.registerHandler('x', async (e, { signal: s }) => void calls.push(`x${e.id}${s.aborted ? ' skipped' : ''}`), { skip: 'run' });
+          }));
+          return new Promise<void>(() => {});
+        }, { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    queue = shell(frame, () => h(Board));
+    await flushPromises();
+    frame.value = frameOf([event(1, 'y'), event(2, 'x'), event(3, 'x')]);
+    await flushPromises();
+
+    queue.skipAll();
+    await flushPromises();
+    expect(calls).toEqual(['x3 skipped']);
+  });
+
+  it('applies a release before a claim and a registration a watcher sends after it (#1822 review F2)', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    let release!: () => void;
+    const Board = defineComponent({
+      setup() {
+        release = useAnimationEvents()!.registerHandler('h', async () => {}, { skip: 'drop' });
+        return () => h('i');
+      },
+    });
+    shell(frame, () => h(Board), (q) => {
+      watch(q.pendingCount, (now, before) => {
+        if (before !== 1 || now !== 0) return;
+        release();
+        effectScope(true).run(() => {
+          q.claimNoEvents();
+          q.registerHandler('w', async (e) => void calls.push(`w${e.id}`), { skip: 'drop' });
+        });
+      }, { flush: 'sync' });
+    });
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'w')]);
+    await flushPromises();
+    expect(calls).toEqual([]);
+  });
+
+  /** A board child whose setup registers `x` inside a detached effect scope it never stops. */
+  function detachedBoard(calls: string[]) {
+    return defineComponent({
+      setup() {
+        const queue = useAnimationEvents()!;
+        effectScope(true).run(() => queue.registerHandler('x', (e, { signal }) => {
+          calls.push(`x${e.id}`);
+          signal.addEventListener('abort', () => calls.push(`x${e.id} aborted`));
+          return new Promise<void>(() => {});
+        }, { skip: 'drop' }));
+        return () => h('i');
+      },
+    });
+  }
+
+  it('releases a handler registered in a detached scope when its component unmounts', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = detachedBoard(calls);
+    shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    show.value = false;
+    await flushPromises();
+
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual([]);
+    expect(vi.mocked(console.warn)).toHaveBeenCalledWith(expect.stringContaining('registerHandler() was called in an effect scope that outlived the component'));
+  });
+
+  it('aborts a playing handler registered in a detached scope when its component unmounts', async () => {
+    const frame = shallowRef(frameOf([]));
+    const calls: string[] = [];
+    const show = shallowRef(true);
+    const Board = detachedBoard(calls);
+    const queue = shell(frame, () => (show.value ? h(Board) : null));
+    await flushPromises();
+    frame.value = frameOf([event(1, 'x')]);
+    await flushPromises();
+    expect(calls).toEqual(['x1']);
+
+    show.value = false;
+    await flushPromises();
+    expect(calls).toEqual(['x1', 'x1 aborted']);
+    expect(queue.isAnimating.value).toBe(false);
   });
 });
