@@ -1221,14 +1221,14 @@ out actions for now with `useActionHolds`, with a reason shown like a rule's
 
 The shell hands your board each new frame the moment it arrives, while the
 animation queue still plays the events of earlier frames, one handler at a
-time. A handler is given its event, not the frame it came with. So when moves
-arrive close together, such as a bot's volley of shots, a board that draws only
-`gameView` plays an earlier event over a later state: a unit vanishes before its
-death animation plays, and dice fly to a unit that is no longer there.
+time. So when moves arrive close together, such as a bot's volley of shots,
+`gameView` already shows the end of them all while the first one plays: a
+unit is gone before its death animation starts. A frame cannot show an earlier
+beat either, since it holds the state after its whole move.
 
-Draw `useAnimatedView(props)` instead of `gameView`. While an event plays, it
-is the view of the frame that event arrived with; when the queue runs dry or
-the player skips, it is `gameView` again:
+So emit what each beat shows with its event, and draw the beat from
+`event.data` over `gameView`. After each hit, the game calls
+`game.animate('hit', { name: unit.name, hp: unit.hp })`, and the board shows it:
 
 <!-- typecheck: board -->
 ```vue
@@ -1243,14 +1243,11 @@ the player skips, it is `gameView` again:
 
 <script setup lang="ts">
 import { computed, shallowRef } from 'vue';
-import {
-  anchorAttrs, findElements, useAnimatedView, useAnimationEvents, type TableBoardProps,
-} from 'boardsmith/ui';
+import { anchorAttrs, findElements, useAnimationEvents, type TableBoardProps } from 'boardsmith/ui';
 
 const props = defineProps<TableBoardProps>();
 const animations = useAnimationEvents();
-const shown = useAnimatedView(props);
-const units = computed(() => (shown.value ? findElements(shown.value, { className: 'Unit' }) : []));
+const units = computed(() => (props.gameView ? findElements(props.gameView, { className: 'Unit' }) : []));
 const beat = shallowRef<string>();
 
 animations?.registerHandler('hit', async (event, { signal }) => {
@@ -1269,28 +1266,16 @@ function pause(ms: number, signal: AbortSignal): Promise<void> {
 </script>
 ```
 
-- **The view is set before the handler is called**, so every handler plays
-  over its own event's frame. Wait for the DOM with `nextTick()` first when a
-  handler measures or flies elements.
-- **Skip, an undo, a restore or a change of seat goes back to the latest
-  view.** A `'run'` handler called on Skip plays over it, and so does an event
-  still queued from before an undo or from another seat.
-- **History wins.** While the debug panel shows a past position, it is
-  `gameView`, which is that position.
+- **Put in the event only what its seats may see.** Event data reaches every
+  seat that sees the event. To name an element, pass the element itself, which
+  each seat receives as it may see it, never its raw id (see "Elements in
+  event data" in [UI Components](./ui-components.md#engine-side-emitting-events)).
+- **Skip, an undo, a restore or a change of seat ends the beats.** The queue
+  skips the events it still holds, calling only the `'run'` handlers, with the
+  signal already aborted. Coming back to a seat never replays what it played.
 - **The board and the Action Panel still agree.** While the queue plays, the
   panel shows "Playing animations" and a Skip button, not the latest state's
-  choices, so the older view on the board never sits beside choices it lacks.
-
-**A move with several beats needs each beat's data in the event.** A frame
-holds the state at the end of its move. When one move hits a unit twice, both
-events arrive with a view where both hits have landed, and a unit the second
-hit removed is already gone. So emit what each beat shows with it, such as
-`game.animate('hit', { name: unit.name, hp: unit.hp })` after each hit, and
-draw that beat from `event.data`, as `beat` does above. Event data reaches
-every seat that sees the event, so put in it only what those seats may see. To
-name an element, pass the element itself, which each seat receives as it may
-see it, never its raw id (see "Elements in event data" in
-[UI Components](./ui-components.md#engine-side-emitting-events)).
+  choices.
 
 ## Board Sizing
 

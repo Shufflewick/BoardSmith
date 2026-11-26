@@ -1942,7 +1942,7 @@ BoardSmith's animation event system enables game UIs to play back animations asy
 - Game logic remains clean and synchronous
 - UI can skip or speed through animations without affecting game correctness
 - Reconnecting players see current state immediately (with optional animation replay)
-- Players always see truth -- animations are visual overlays on the current state. A board whose moves arrive faster than they play draws each event over the view it arrived with: see [Keeping the Board in Step with Queued Animations](./custom-ui-guide.md#keeping-the-board-in-step-with-queued-animations)
+- Players always see truth -- animations are visual overlays on the current state. A board whose moves arrive faster than they play draws each beat from its event's data over the latest view: see [Keeping the Board in Step with Queued Animations](./custom-ui-guide.md#keeping-the-board-in-step-with-queued-animations)
 
 ### Engine-Side: Emitting Events
 
@@ -2052,8 +2052,8 @@ import { createAnimationEvents, ANIMATION_EVENTS_KEY } from 'boardsmith/ui';
 export function setUpAnimationEvents(state: Ref<PlayerGameState | null>) {
   const animationEvents = createAnimationEvents({
     // The seat's latest frame, replaced whole as each one lands. The queue reads
-    // its events, its view (for playingView) and the timeline it names, which
-    // starts the event ids again after an undo, a restore or a change of seat.
+    // its events and the timeline it names, which starts the event ids again
+    // after an undo, a restore or a change of seat.
     frame: () => state.value ?? undefined,
 
     // Optional: time to wait for handler registration before skipping (ms, default: 3000)
@@ -2107,7 +2107,6 @@ onUnmounted(() => unregister?.());
 |----------|-------------|
 | `createAnimationEvents(options)` | Create an animation events instance in root component |
 | `useAnimationEvents()` | Inject animation events from ancestor |
-| `useAnimatedView(props)` | The view a table's board draws: the playing event's `playingView`, or `gameView` when nothing plays or while history is shown. See "Keeping the Board in Step with Queued Animations" in the [Custom UI Guide](./custom-ui-guide.md) |
 
 **Instance API:**
 
@@ -2115,11 +2114,9 @@ onUnmounted(() => unregister?.());
 |-----------------|------|-------------|
 | `registerHandler(type, handler, { skip })` | `(string, (event, { signal }) => Promise<void>, { skip: 'run' \| 'drop' }) => () => void` | Register handler, returns cleanup function. `signal` is an `AbortSignal` that fires on skip; `skip` says whether a skipped handler still runs (`'run'`, signal pre-aborted) or is dropped. |
 | `claimNoEvents()` | `() => () => void` | Declare that the mounted board handles no event types, so while no handler is registered an event is skipped at once instead of waiting `handlerWaitTimeout` for one. Returns the release function. AutoUI calls it. |
-| `isAnimating` | `Ref<boolean>` | Whether animations are currently playing |
-| `paused` | `Ref<boolean>` | Pause/resume control |
+| `isAnimating` | `Readonly<Ref<boolean>>` | Whether an event is playing or waiting for its handler |
 | `skipAll()` | `() => void` | Skip remaining animations |
-| `pendingCount` | `Ref<number>` | Number of pending events (for UI indicators) |
-| `playingView` | `Ref<GameRootView \| undefined>` | The view of the frame the playing event arrived with; undefined when nothing plays. Set before the event's handler is called |
+| `pendingCount` | `Readonly<Ref<number>>` | Number of pending events (for UI indicators) |
 
 ### Integration with useFLIP and useFlyingElements
 
