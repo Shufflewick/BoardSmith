@@ -266,8 +266,10 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     scheduleAdvance();
   }
 
-  /** Hand the next drawn event to its handler, wait for one to register, or skip it. */
+  /** Settle the wait, then hand the next drawn event to its handler, wait for one to register, or skip it. */
   function advance(): void {
+    // This runs after a flush, so what it mounted and unmounted counts before a wait ends or an event is handed out.
+    takeMounted();
     if (state.kind !== 'idle') return;
     while (queue.length > 0 && queue[0].frame <= framesDrawn) {
       const { event } = queue.shift()!;
@@ -358,7 +360,11 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
   }
 
   // Leases a Vue update mounts, taken in as one input once that update has finished.
-  let mountedThisFlush: Lease[] | undefined;
+  const mountedThisFlush: Lease[] = [];
+
+  function takeMounted(): void {
+    take(mountedThisFlush.splice(0));
+  }
 
   function take(leases: Lease[]): void {
     for (const lease of leases) {
@@ -382,7 +388,8 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
     const release = () => {
       const was = lease.life;
       lease.life = 'released';
-      if (was === 'mounted') send(() => { lease.drop(); reconsiderWait(); });
+      // Whether a wait ends waits for the flush, in case the same update mounts what takes the event.
+      if (was === 'mounted') send(() => { lease.drop(); scheduleAdvance(); });
     };
     onScopeDispose(release);
     const instance = getCurrentInstance();
@@ -390,12 +397,7 @@ export function createAnimationEvents(options: UseAnimationEventsOptions): UseAn
       send(() => take([lease]));
     } else {
       onMounted(() => {
-        if (mountedThisFlush) return void mountedThisFlush.push(lease);
-        const batch = (mountedThisFlush = [lease]);
-        void nextTick(() => {
-          mountedThisFlush = undefined;
-          send(() => take(batch));
-        });
+        if (mountedThisFlush.push(lease) === 1) void nextTick(() => send(takeMounted));
       });
     }
     return release;

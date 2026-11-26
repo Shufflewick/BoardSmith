@@ -653,4 +653,43 @@ describe('the seven sequences council found breaking the contract (#1821)', () =
     await flushPromises();
     expect(drawnAtCall).toEqual(['hit1 over 1', 'hit2 over 2']);
   });
+
+  it('hands an event to a child that mounts with its frame while a claim of none is already in (#1821 review F1)', async () => {
+    const frame = shallowRef<AnimationFrame & { dealer?: boolean }>(frameOf([]));
+    const calls: string[] = [];
+    const ClaimsNone = defineComponent({
+      setup() {
+        useAnimationEvents()!.claimNoEvents();
+        return () => h('i');
+      },
+    });
+    const Dealer = player('deal', calls);
+    shell(frame, () => [h(ClaimsNone), frame.value.dealer ? h(Dealer) : null]);
+    await flushPromises();
+
+    frame.value = { ...frameOf([event(1, 'deal')]), dealer: true };
+    await flushPromises();
+    expect(calls).toEqual(['deal1']);
+  });
+
+  it('hands a waiting event to a child that replaces the only other handler in one update while a claim of none is in', async () => {
+    const frame = shallowRef<AnimationFrame & { dealer?: boolean }>(frameOf([]));
+    const calls: string[] = [];
+    const ClaimsNone = defineComponent({
+      setup() {
+        useAnimationEvents()!.claimNoEvents();
+        return () => h('i');
+      },
+    });
+    const Other = player('other', calls);
+    const Dealer = player('deal', calls);
+    shell(frame, () => [h(ClaimsNone), frame.value.dealer ? h(Dealer) : h(Other)]);
+    await flushPromises();
+    frame.value = frameOf([event(1, 'deal')]);
+    await flushPromises();
+
+    frame.value = { ...frame.value, dealer: true };
+    await flushPromises();
+    expect(calls).toEqual(['deal1']);
+  });
 });
