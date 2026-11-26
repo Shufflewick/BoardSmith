@@ -842,36 +842,38 @@ interface ValueImport {
   names: string[];
 }
 
-const VALUE_IMPORT_NAMES: Readonly<Record<string, (specifier: AstNode) => string>> = Object.freeze({
-  ...IMPORTED_NAMES,
-  ImportNamespaceSpecifier: () => '*',
-  ExportSpecifier: (specifier) => moduleName(specifier.local),
-});
+/** The names an import clause takes as values (`*` for a namespace). */
+function importedValueNames(clause: ts.ImportClause | undefined): string[] {
+  if (!clause || clause.isTypeOnly) return [];
+  const bindings = clause.namedBindings;
+  const named = !bindings ? [] : ts.isNamespaceImport(bindings) ? ['*'] : bindings.elements.filter((e) => !e.isTypeOnly).map((e) => (e.propertyName ?? e.name).text);
+  return clause.name ? ['default', ...named] : named;
+}
 
-const isTypeOnly = (node: AstNode) => node.importKind === 'type' || node.exportKind === 'type';
+/** The names an `export ... from` statement passes on (`*` for every one). */
+function passedValueNames(declaration: ts.ExportDeclaration): string[] {
+  const clause = declaration.exportClause;
+  if (declaration.isTypeOnly) return [];
+  if (!clause || ts.isNamespaceExport(clause)) return ['*'];
+  return clause.elements.filter((e) => !e.isTypeOnly).map((e) => (e.propertyName ?? e.name).text);
+}
 
 /** The values an import or `export ... from` statement takes from a file read. */
-function valueImport(file: string, node: AstNode, files: ReadonlySet<string>): ValueImport[] {
-  const from = resolveImport(file, (node.source as AstNode | null | undefined)?.value, files);
-  if (from === undefined || isTypeOnly(node)) return [];
-  if (node.type === 'ExportAllDeclaration') return [{ from, names: ['*'] }];
-  const names = ((node.specifiers ?? []) as AstNode[]).filter((s) => !isTypeOnly(s)).map((s) => VALUE_IMPORT_NAMES[s.type](s));
-  return names.length === 0 ? [] : [{ from, names }];
+function valueImport(file: string, statement: ts.Statement, files: ReadonlySet<string>): ValueImport[] {
+  if (!ts.isImportDeclaration(statement) && !ts.isExportDeclaration(statement)) return [];
+  const specifier = statement.moduleSpecifier;
+  const from = specifier && ts.isStringLiteral(specifier) ? resolveImport(file, specifier.text, files) : undefined;
+  const names = ts.isImportDeclaration(statement) ? importedValueNames(statement.importClause) : passedValueNames(statement);
+  return from === undefined || names.length === 0 ? [] : [{ from, names }];
 }
 
 /**
- * A file's value imports and re-exports, parsed from its text up to its last `from '...'` alone,
- * so a data file nested too deeply to parse whole that only takes a type is never parsed.
+ * A file's value imports and re-exports, read from TypeScript's own syntax tree, which (unlike
+ * the ESTree one) a data file nested too deeply to convert that only takes a type never overflows.
  */
 function valueImports(file: SourceFile, files: ReadonlySet<string>): ValueImport[] {
-  const ends = ts
-    .preProcessFile(file.text, true, false)
-    .importedFiles.filter(({ pos }) => /\bfrom\s*$/.test(file.text.slice(Math.max(0, pos - 16), pos)))
-    // `end` is the specifier's last character, so the closing quote is the one after it.
-    .map(({ end }) => end + 2);
-  if (ends.length === 0) return [];
-  const head = parseSource(file.text.slice(0, Math.max(...ends)), file.path);
-  return (head.ast.body as AstNode[]).flatMap((node) => valueImport(file.path, node, files));
+  const tree = parseOrExplain(() => ts.createSourceFile(file.path, file.text, ts.ScriptTarget.Latest, false, ts.ScriptKind.TS), file.path);
+  return tree.statements.flatMap((statement) => valueImport(file.path, statement, files));
 }
 
 /** The files read a module passes exports on from. */

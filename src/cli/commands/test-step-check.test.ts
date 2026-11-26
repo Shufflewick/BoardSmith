@@ -256,6 +256,18 @@ describe('findVerbWrappers on a file that names no verb', () => {
     ]);
     expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts']);
   });
+
+  it('reads the imports of a file whose regex literal holds import text (#1823)', () => {
+    const wrappers = findVerbWrappers([
+      { path: 'src/rules/verbs.ts', text: 'export function define(name: string) { return worldAction(name); }\n' },
+      {
+        path: 'tests/move.test.ts',
+        text: "import { define as d } from '../src/rules/verbs';\n" +
+          "it('x', () => { expect(\"import A from './a.vue';\").toMatch(/import A from '\\.\\/a\\.vue';/); });\n",
+      },
+    ]);
+    expect([...wrappers.involved]).toEqual(['src/rules/verbs.ts', 'tests/move.test.ts']);
+  });
 });
 
 describe('findDispatchedVerbs through a project harness', () => {
