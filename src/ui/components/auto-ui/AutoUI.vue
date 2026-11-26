@@ -11,7 +11,9 @@
  *   :player-seat="playerSeat"
  * />
  */
+import { inject, onUnmounted } from 'vue';
 import AutoRenderer from './AutoRenderer.vue';
+import { AUTO_UI_ON_SCREEN } from '../../composables/actionBarStart.js';
 import type { GameViewElement } from './index';
 import type { PresentationOverlay } from './presentation.js';
 
@@ -23,6 +25,13 @@ defineProps<{
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
 }>();
+
+// The panel is the only way to start most actions here, so the shell keeps the bar open (#1826).
+const onScreen = inject(AUTO_UI_ON_SCREEN, null);
+if (onScreen) {
+  onScreen.value = true;
+  onUnmounted(() => { onScreen.value = false; });
+}
 </script>
 
 <template>

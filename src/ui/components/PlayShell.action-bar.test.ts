@@ -42,19 +42,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, type VueWrapper } from '@vue/test-utils';
 import { h, nextTick, ref, type Ref } from 'vue';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import PlayShell from './PlayShell.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { useActionController } from '../composables/useActionController.js';
 import type { EnrichedActionMetadata } from '../composables/useActionControllerTypes.js';
 import type { UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
-
-// Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
-import.meta.glob(['/src/ui/components/GameShell.vue', '/src/ui/world/WorldShell.vue']);
-
-const HERE = dirname(fileURLToPath(import.meta.url));
 
 class PanelResizeObserver {
   disconnect = vi.fn();
@@ -193,7 +185,7 @@ describe('the bar carries the sidebar rail\'s own gesture', () => {
     expect(collapsed(wrapper)).toBe(true);
     expect(wrapper.classes()).toContain('action-bar-collapsed');
     expect(toggle(wrapper).attributes('aria-expanded')).toBe('false');
-    expect(toggle(wrapper).attributes('aria-label')).toBe('Expand action bar, your move');
+    expect(toggle(wrapper).attributes('aria-label')).toBe('Show actions, your move');
   });
 
   it('takes the panel away when collapsed and puts it back when expanded', async () => {
@@ -223,7 +215,7 @@ describe('the bar carries the sidebar rail\'s own gesture', () => {
     const idle = mountDock({ actionBarMinimized: true, mayAct: false });
     await flush();
     expect(idle.wrapper.find('[data-testid="bs-actionbar-attention"]').exists()).toBe(false);
-    expect(toggle(idle.wrapper).attributes('aria-label')).toBe('Expand action bar');
+    expect(toggle(idle.wrapper).attributes('aria-label')).toBe('Show actions');
   });
 
   it('marks nothing while the bar is open', async () => {
@@ -437,33 +429,5 @@ describe('minimizing is a view preference and nothing more', () => {
     await toggle(wrapper).trigger('click');
     await flush();
     expect(offered(wrapper)).toEqual(before);
-  });
-});
-
-/**
- * BOTH ADAPTERS, OR THE WORLD SILENTLY LOSES IT (#170 R6).
- *
- * The bar is `PlayShell`'s, but the preference is the ADAPTER's ref -- that is
- * where `sidebarRail` lives, and a second home for the same kind of state would
- * be a second idiom for one idea. Which means each adapter has to wire it, and
- * an adapter that forgets loses the feature with every unit test still green.
- */
-describe.each([
-  ['GameShell.vue', join(HERE, 'GameShell.vue')],
-  ['WorldShell.vue', join(HERE, '..', 'world', 'WorldShell.vue')],
-])('%s owns the bar preference, exactly as it owns the sidebar rail', (_name, path) => {
-  const source = readFileSync(path, 'utf8');
-
-  it('holds it in its own ref, seeded from the game\'s starting choice (#1439)', () => {
-    expect(source).toContain('const actionBarMinimized = ref(props.actionBarStartsCollapsed)');
-  });
-
-  it('relays it to the shared chrome with v-model', () => {
-    expect(source).toContain('v-model:action-bar-minimized="actionBarMinimized"');
-  });
-
-  it('does not persist it, because the sidebar rail does not either', () => {
-    expect(source).not.toMatch(/localStorage[\s\S]{0,80}actionBarMinimized/);
-    expect(source).not.toMatch(/actionBarMinimized[\s\S]{0,80}localStorage/);
   });
 });

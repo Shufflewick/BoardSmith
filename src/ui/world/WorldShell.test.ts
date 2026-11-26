@@ -18,6 +18,7 @@ import { useMenuCommands } from '../composables/menuCommands.js';
 import { useHideChrome } from '../composables/hideChrome.js';
 import { useActionHolds } from '../composables/actionHolds.js';
 import { usePlayContext } from '../composables/useGameContext.js';
+import AutoUI from '../components/auto-ui/AutoUI.vue';
 import { anchorAttrs, candidateAttrs, useBoardInteraction } from '../composables/useBoardInteraction.js';
 
 /**
@@ -384,7 +385,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
 
   it('starts the action bar down when the game asks, and the player can still open it (#1439)', async () => {
     const wrapper = mount(WorldShell, {
-      props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall', actionBarStartsCollapsed: true },
+      props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall', actionBarStartsCollapsed: true, preferences: definePlayerPreferences('gloamhall', {}) },
     });
     await drawn(wrapper, stateFrame());
     const bar = () => wrapper.get('[data-testid="bs-actionbar"]');
@@ -1423,7 +1424,7 @@ describe('WorldShell — a game may keep a put-down bar down when an action star
     });
     const move = { name: 'move', prompt: 'Move', selections: [{ name: 'room', type: 'choice', prompt: 'Which room?', choices: [{ value: 'hall', display: 'Hall' }, { value: 'cellar', display: 'Cellar' }] }] };
     const wrapper = mount(WorldShell, {
-      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall', actionBarStartsCollapsed: true, ...over },
+      props: { uis: defineGameUIs({ Hall: defaultUI(Hall) }), displayName: 'Gloamhall', actionBarStartsCollapsed: true, preferences: definePlayerPreferences('gloamhall', {}), ...over },
     });
     await drawn(wrapper, stateFrame({ actions: [{ name: 'look', selections: [] }, move] }));
     await wrapper.get('[data-testid="ask"]').trigger('click');
@@ -1443,6 +1444,56 @@ describe('WorldShell — a game may keep a put-down bar down when an action star
     const wrapper = await askFromTheBoard({ actionBarOpensForActions: false });
     expect(barIsDown(wrapper)).toBe(true);
     expect(wrapper.find('[data-testid="bs-actionbar-attention"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+});
+
+describe('WorldShell — how the action panel starts (#1826)', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    document.body.innerHTML = '';
+  });
+  const barIsDown = (wrapper: ReturnType<typeof mount>) =>
+    wrapper.get('[data-testid="bs-actionbar"]').classes().includes('collapsed');
+  const panelChoice = (label: string) =>
+    Array.from(document.body.querySelectorAll<HTMLElement>('[role="group"][aria-label="Action panel"] [role="menuitemradio"]'))
+      .find((el) => el.textContent?.trim() === label);
+
+  function mountWorld(board: Parameters<typeof defaultUI>[0]) {
+    return mount(WorldShell, {
+      props: {
+        uis: defineGameUIs({ Board: defaultUI(board) }),
+        displayName: 'Gloamhall',
+        actionBarStartsCollapsed: true,
+        preferences: definePlayerPreferences('gloamhall', {}),
+      },
+      attachTo: document.body,
+    });
+  }
+
+  it('offers Open and Closed in the menu, and the pick moves the bar', async () => {
+    const wrapper = mountWorld(defineComponent({ setup: () => () => h('div', 'hall') }));
+    await drawn(wrapper, stateFrame());
+    expect(barIsDown(wrapper)).toBe(true);
+    await wrapper.get('button[aria-label="Game controls"]').trigger('click');
+    panelChoice('Open')!.click();
+    await nextTick();
+    expect(barIsDown(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('starts as the host says for a player who has not chosen', async () => {
+    const wrapper = mountWorld(defineComponent({ setup: () => () => h('div', 'hall') }));
+    tell(wrapper, { source: WORLD_HOST_SOURCE, type: 'init', actionPanel: 'open' });
+    await drawn(wrapper, stateFrame());
+    expect(barIsDown(wrapper)).toBe(false);
+    wrapper.unmount();
+  });
+
+  it('always starts open on the automatic UI', async () => {
+    const wrapper = mountWorld(AutoUI);
+    await drawn(wrapper, stateFrame());
+    expect(barIsDown(wrapper)).toBe(false);
     wrapper.unmount();
   });
 });

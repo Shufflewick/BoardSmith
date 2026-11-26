@@ -17,6 +17,12 @@ export interface InitMessageData {
   seat: number;
   theme?: Record<string, string>;
   scheme?: 'light' | 'dark' | 'auto';
+  /**
+   * How the action panel starts for a player who has not chosen in this game,
+   * from the host's account setting (#1826). Applies only where the game lets
+   * the panel start closed (`actionBarStartsCollapsed`).
+   */
+  actionPanel?: 'open' | 'closed';
   [key: string]: unknown;
 }
 

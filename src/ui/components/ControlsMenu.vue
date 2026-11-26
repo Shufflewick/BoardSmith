@@ -90,6 +90,8 @@ withDefaults(defineProps<{
   teachingDisabled?: boolean;
   /** The game's own player preferences (#1440), listed in their own group. */
   preferences?: PlayerPreferences;
+  /** How the action panel starts, where the game lets it start closed (#1826). */
+  panelPreference?: PlayerPreferences | null;
   /** The game's own commands, registered by its board with `useMenuCommands` (#1448). */
   commands?: readonly MenuCommand[];
 }>(), {
@@ -312,11 +314,13 @@ function runCommand(command: MenuCommand) {
       </template>
 
       <!-- Built-in Reduce motion (#1442), action help (#1449) and sound (#1528), then the game's own
-           preferences (#1440). Action help hides when no available action has any. -->
+           preferences (#1440). Action help hides when no available action has any, and the action panel's
+           start where the game does not let it start closed (#1826). -->
       <div class="grouplabel">Preferences</div>
       <PlayerPreferenceItems :preferences="reduceMotionPreference()" />
       <PlayerPreferenceItems v-if="hasActionHelp" :preferences="actionHelpPreference()" />
       <SoundMenuItems />
+      <PlayerPreferenceItems v-if="panelPreference" :preferences="panelPreference" />
       <PlayerPreferenceItems v-if="preferences" :preferences="preferences" />
 
       <!-- Teaching group: one section for ALL teaching aids. Visible when the game

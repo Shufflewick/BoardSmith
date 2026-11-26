@@ -55,6 +55,7 @@ import { hostRefusal, readHostReply, usePlatformTransport } from '../composables
 import { ErrorCode } from '../../types/protocol.js';
 import { seatDisplay } from '../seat-display.js';
 import { actionHelpPreference, hasActionHelp } from '../composables/actionHelp.js';
+import { useActionBarStart } from '../composables/actionBarStart.js';
 import { seatDisplayName } from '../../engine/element/seat-defaults.js';
 
 interface GameShellProps {
@@ -147,16 +148,20 @@ interface GameShellProps {
    */
   formatTurnDeadline?: (remainingMs: number) => string;
   /**
-   * Start with the action bar collapsed to its thin line (#1439), for a game
-   * whose own board already offers most choices. Only the starting state: the
-   * player can still open and close it. Default: false (open).
+   * Start with the action bar collapsed to its thin line (#1439). Set it only
+   * when the board offers every action, on the phone layout too: a closed bar
+   * hides the actions the board leaves out. Each player may prefer Open in the
+   * controls menu, saved under the game's `preferences`, which this needs; a host
+   * may seed that pick (#1826). The automatic UI always starts open. Default:
+   * false (open).
    */
   actionBarStartsCollapsed?: boolean;
   /**
    * Whether the action bar opens itself when an action starts while the player
-   * has it down (#1519). Default: true. Set `false` for a board that answers
-   * every question itself, so the bar stays where the player put it; the toggle's
-   * mark still says when it is their move.
+   * has it down (#1519). Default: true. Set `false` only for a board that answers
+   * every question, confirmation and Cancel itself, by keyboard and screen reader
+   * too; the bar then stays where the player put it, and the toggle's mark still
+   * says when it is their move.
    */
   actionBarOpensForActions?: boolean;
   /**
@@ -304,10 +309,7 @@ const autoEndTurn = ref(true); // Auto-end turn after making a move
 // IA-06: Sidebar rail state, starting where the game asks (#1529). Phones ignore it
 // and show their own strip (see isCompact above).
 const sidebarRail = ref(props.sidebarStartsCollapsed);
-// #230: the player's own action-bar preference, held exactly where the sidebar
-// rail's is. Not persisted, for the same reason the rail is not: two answers to
-// "does a collapse survive a reload" would be two idioms for one idea.
-const actionBarMinimized = ref(props.actionBarStartsCollapsed);
+const { actionBarMinimized, panelPreference, seed: seedActionPanel } = useActionBarStart(props.actionBarStartsCollapsed, props.preferences);
 // Mobile only: the sidebar defaults to a compact one-line player strip; this opens
 // the full players + log as an overlay over the board (board stays the hero).
 const mobileExpanded = ref<boolean>(false);
@@ -1063,6 +1065,7 @@ if (inHost) {
       // before any broadcast arrives. The broadcast-preferred computed (teachingDisabledProp)
       // will override this with the authoritative session value on first state update.
       teachingDisabled.value = data.teachingDisabled === true;
+      seedActionPanel(data.actionPanel);
       // TOKEN-05: consume any host-supplied theme override delivered at iframe init.
       // consumeInitMessage calls applyTheme() which enforces the --bsg-* key
       // allowlist — this prevents unknown CSS property names but does NOT prevent
@@ -1661,6 +1664,7 @@ defineExpose({
           :is-tutorial-running="isTutorialRunningProp"
           :teaching-disabled="teachingDisabledProp"
           :preferences="preferences"
+          :panel-preference="panelPreference"
           :commands="menuCommands.commands.value"
           @undo="handleUndo"
           @teaching-action="handleTeachingAction"

@@ -11,12 +11,14 @@ vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
 /** The scaffold's App.vue for a game whose action bar starts collapsed (#1439). */
 const COLLAPSED_BAR_APP = `<script setup lang="ts">
-import { GameShell } from 'boardsmith/ui';
+import { GameShell, definePlayerPreferences } from 'boardsmith/ui';
 import uis from './uis.js';
+
+const preferences = definePlayerPreferences('sample', {});
 </script>
 
 <template>
-  <GameShell :uis="uis" action-bar-starts-collapsed />
+  <GameShell :uis="uis" :preferences="preferences" action-bar-starts-collapsed />
 </template>
 `;
 

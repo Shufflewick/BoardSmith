@@ -80,6 +80,8 @@ export interface WorldHost {
   offersPending: Ref<boolean>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
+  /** How the host says the action panel starts for a player who has not chosen (#1826), or null. */
+  actionPanelSeed: Ref<'open' | 'closed' | null>;
   /** Who holds an open connection right now, or `null` when the host has no
    *  live claim. The contract, in full, is on `world_state` in
    *  `worldProtocol.ts`; this is that field, copied and nothing more. */
@@ -316,6 +318,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   let heldOffers: { revision: number; actions: readonly WorldActionOffer[] } | null = null;
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
+  const actionPanelSeed = ref<'open' | 'closed' | null>(null);
   const presence = ref<readonly number[] | null>(null);
   const players = shallowRef<readonly WorldPlayer[]>([]);
   const events = shallowRef<readonly WorldNarration[]>([]);
@@ -693,6 +696,10 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       applySafeAreaInsets(data);
       return;
     }
+    if (data.type === 'init') {
+      actionPanelSeed.value = data.actionPanel ?? null;
+      return;
+    }
     if (data.type === 'world_events') {
       takeNarration(data.events);
       return;
@@ -897,6 +904,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     offersPending,
     notice,
     worldName,
+    actionPanelSeed,
     presence,
     players,
     events,
