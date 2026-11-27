@@ -1,5 +1,5 @@
 {
-  "revision": 553,
+  "revision": 554,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4367,6 +4367,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "Adds boardsmith bot-strength, which measures a bot against weaker play, and has /bs-build-bot run it"
+    },
+    {
+      "revision": 554,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "actionStep and simultaneousActionStep now refuse a step that still sets timeLimitMs, instead of building it untimed (#1835)"
     }
   ]
 }

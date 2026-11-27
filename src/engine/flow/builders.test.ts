@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loop, sequence, switchOn } from './builders.js';
+import { actionStep, loop, sequence, simultaneousActionStep, switchOn } from './builders.js';
 
 describe('loop() — PIT-01 construction-time maxIterations guard', () => {
   it('throws an actionable error when maxIterations is omitted', () => {
@@ -79,5 +79,21 @@ describe('switchOn() refuses a case named "__default" (#1176)', () => {
 
   it('accepts ordinary case names and a default branch', () => {
     expect(() => switchOn({ on: () => 'x', cases: { draw: sequence(), 1: sequence() }, default: sequence() })).not.toThrow();
+  });
+});
+
+describe('a step that still sets timeLimitMs is refused, not built untimed (#1835)', () => {
+  it('names the action step and points to timed: true and defaultTimePerTurn', () => {
+    // @ts-expect-error -- timeLimitMs is gone; a plain JavaScript game reaches the runtime check
+    expect(() => actionStep({ name: 'bid', actions: ['bid'], timeLimitMs: 30000 })).toThrow(
+      /actionStep "bid" sets timeLimitMs.*timed: true.*defaultTimePerTurn/s,
+    );
+  });
+
+  it('names the simultaneous step', () => {
+    // @ts-expect-error -- timeLimitMs is gone; a plain JavaScript game reaches the runtime check
+    expect(() => simultaneousActionStep({ name: 'draft', actions: ['pick'], timeLimitMs: 30000 })).toThrow(
+      /simultaneousActionStep "draft" sets timeLimitMs/,
+    );
   });
 });

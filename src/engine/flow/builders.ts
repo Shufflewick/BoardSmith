@@ -208,6 +208,17 @@ export function forEach<
   };
 }
 
+function refuseTimeLimitMs(builder: string, config: { name?: string }): void {
+  if (!('timeLimitMs' in config)) return;
+  const label = config.name ? `${builder} "${config.name}"` : builder;
+  throw new Error(
+    `${label} sets timeLimitMs, which BoardSmith no longer reads, so the step would never time out. ` +
+    `Remove timeLimitMs and set timed: true on the step. The table chooses the time per turn, starting from ` +
+    `the optional "defaultTimePerTurn" in boardsmith.json (5m when unset), and a timed step needs "idleAction" ` +
+    `declared there too.`
+  );
+}
+
 /**
  * Pause for player action
  *
@@ -229,6 +240,7 @@ export function forEach<
  * ```
  */
 export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): FlowNode<G> {
+  refuseTimeLimitMs('actionStep', config);
   return {
     type: 'action-step',
     config: {
@@ -306,6 +318,7 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
  * ```
  */
 export function simultaneousActionStep<G extends Game = Game>(config: SimultaneousActionStepConfig<G>): FlowNode<G> {
+  refuseTimeLimitMs('simultaneousActionStep', config);
   return {
     type: 'simultaneous-action-step',
     config: {
