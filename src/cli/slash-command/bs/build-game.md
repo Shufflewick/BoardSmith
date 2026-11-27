@@ -351,7 +351,9 @@ refuses a table game with no bot, since every seat no one has taken is played by
 `main` first (`state-machine.md` "Branches and Landing"), with the bot chunk's slug as the work package
 and a `### Dispatch N` entry (`Work: insert-chunk`) in that chunk's run log, to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
-hand), then continue the loop.
+hand), then continue the loop. A persistent world has no bots: it needs no bot-opponent chunk, and
+one its sketch carries is a sketch error to remove the same way, since the world backend refuses a
+`bot`.
 
 **Final acceptance.** The sketch's mandated final-acceptance chunk is the run's last chunk and runs
 through `bs-build-chunk` like any other — its own routing dispatches the coverage check and design-QA

@@ -31,7 +31,7 @@ import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } fro
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
-import { GAME_BACKENDS, capabilityContradictions, isGameBackend, maxWatchSecondsProblem, timePerTurnProblem } from '../../session/index.js';
+import { GAME_BACKENDS, capabilityContradictions, isGameBackend, maxWatchSecondsProblem, shipsBot, timePerTurnProblem } from '../../session/index.js';
 import { type TableBuild, constructBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
 import type { GameDefinition } from '../../session/index.js';
 import { parseImageInfo } from '../../ui/utils/image.js';
@@ -1382,7 +1382,7 @@ async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationRe
  */
 export function checkBot(gameDefinition: Pick<GameDefinition, 'bot'>): ValidationResult {
   const name = 'Bot';
-  if (gameDefinition.bot !== undefined && gameDefinition.bot !== null) {
+  if (shipsBot(gameDefinition)) {
     return { name, passed: true, message: 'Your game ships a bot for the seats no one has taken.' };
   }
   return {

@@ -159,7 +159,7 @@ ${styleText('cyan', 'Everything else runs through the same CLI:')}
   ${styleText('dim', 'boardsmith simulate')}  ${styleText('dim', '- play seeded games headlessly and report their balance')}
   ${styleText('dim', 'boardsmith lint')}      ${styleText('dim', '- check for BoardSmith pitfalls')}
   ${styleText('dim', 'boardsmith build')}     ${styleText('dim', '- build the publishable bundle')}
-  ${styleText('dim', 'boardsmith validate')}  ${styleText('dim', '- run pre-publish checks')}
+  ${styleText('dim', 'boardsmith validate')}  ${styleText('dim', '- run pre-publish checks; a table game needs a bot first (/bs-build-bot)')}
   ${styleText('dim', 'boardsmith --help')}    ${styleText('dim', '- see every command')}
 `);
   },

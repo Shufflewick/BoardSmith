@@ -895,7 +895,7 @@ export const gameDefinition = {
   minPlayers: 2,
   maxPlayers: 4,
   bot: {
-    objectives: getMyGameObjectives,  // Optional bot support
+    objectives: getMyGameObjectives,  // Required for a table game: validate refuses one with no bot
   },
   metrics,                            // Optional balance metrics (defineMetrics, see api/sim.md)
   presets: [ /* ... */ ],             // Optional quick-start presets

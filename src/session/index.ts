@@ -109,6 +109,7 @@ export {
   isGameBackend,
   resolveCapabilities,
   capabilityContradictions,
+  shipsBot,
 } from './capabilities.js';
 export type { GameBackend, GameCapabilities } from './capabilities.js';
 
