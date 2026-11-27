@@ -29,6 +29,7 @@ type BuildingCommand =
   | 'add-ui'
   | 'dev'
   | 'simulate'
+  | 'bot-strength'
   | 'build'
   | 'validate'
   | 'evolve-bot-weights'

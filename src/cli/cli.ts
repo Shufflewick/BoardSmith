@@ -76,6 +76,7 @@ import { agentCommand } from './commands/agent.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
+import { botStrengthCommand } from './commands/bot-strength.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
 import { catalogueCommand } from './commands/catalogue.js';
@@ -334,6 +335,17 @@ export function createProgram(): Command {
     .addOption(new Option('--json', 'Output the run, the unfinished games and the report as JSON').conflicts('csv'))
     .option('--csv', 'Output the report as CSV, one statistic per row: variant,players,section,metric,key,stat,value')
     .action(simulateCommand);
+
+  program
+    .command('bot-strength')
+    .description("Play the bot in each seat against weaker play on the same seeds, and fail unless it wins more than a seat of that play would")
+    .option('--bot <policy>', 'The policy measured: mcts:<level> (easy, medium, hard or an iteration count) or a policy src/sim/index.ts exports (default: mcts:medium)')
+    .option('--against <policy>', 'What every other seat plays: random, mcts:<level>, or a policy src/sim/index.ts exports (default: random)')
+    .option('--games <count>', 'Games per seat at each player count (default: 20)')
+    .option('--players <counts>', 'Player counts, comma-separated; every count the game declares when omitted')
+    .option('--seed <seed>', 'Base seed, to run the same games again (default: a fresh seed each run)')
+    .option('--jobs <n>', 'Worker threads to play games on (default: every core); 1 plays in this process')
+    .action(botStrengthCommand);
 
   // Bot Weight Evolution (new focused command)
   program

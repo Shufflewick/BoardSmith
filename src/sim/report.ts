@@ -79,7 +79,8 @@ function summarize(values: number[]): Summary {
   };
 }
 
-function share(k: number, n: number): Share {
+/** `k` of `n` as a share with its 95% Wilson interval. */
+export function share(k: number, n: number): Share {
   const p = k / n;
   const z2 = Z * Z;
   const centre = (p + z2 / (2 * n)) / (1 + z2 / n);

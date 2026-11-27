@@ -43,11 +43,11 @@ as the bot-opponent chunk's pipeline (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestr
 ## Typed by the Designer
 
 The designer's session writes no file (`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` "The
-Designer's Session Writes No File"), and Phases 5-7 write the bot. So when the designer typed
+Designer's Session Writes No File"), and Phases 5-8 write the bot. So when the designer typed
 `/bs-build-bot`, this session runs Phase 1's checks and asks the designer what this file asks them
-(Phase 1's existing-`bot.ts` question, Phases 3 and 4, and Phase 7's games against the bot), and
+(Phase 1's existing-`bot.ts` question, Phases 3 and 4, and Phase 8's games against the bot), and
 dispatches the writing to the `judgement` role's agent in orchestrated mode: the generation and
-validation of Phases 5 and 6, and each fix Phase 7's games call for. Its brief is
+validation of Phases 5 to 7, and each fix Phase 8's games call for. Its brief is
 `orchestrate/chunk-dispatch.md`'s, with the resolved absolute path of this file and the designer's
 answers quoted verbatim; the work package is the sketch's bot-opponent chunk's slug, or
 `build-bot` when the sketch has none. Relay each return's `designerSummary`.
@@ -510,7 +510,25 @@ After generating the code:
 
 ---
 
-## Phase 7: Human Exploit Testing
+## Phase 7: Measure Strength
+
+Run each check and iterate on the hooks until all of them pass:
+
+```bash
+boardsmith bot-strength --bot mcts:easy                      # every level beats random
+boardsmith bot-strength --bot mcts:hard --against mcts:easy  # hard beats easy
+```
+
+Each exits 1 when the bot is not shown to be stronger at some player count. A
+fail with few games can be noise, so play more with `--games` before changing the
+hooks. A bot that still fails needs better objectives or a better playout policy,
+or, in a game with hidden information, a `determinize` sampler: without one, the
+search drops every move that touches what the seat cannot see. Put the passing
+commands' output in the report.
+
+---
+
+## Phase 8: Human Exploit Testing
 
 **CRITICAL**: bot vs bot benchmarks miss obvious human exploits.
 
@@ -617,7 +635,7 @@ After generating the code:
 4. **playerSeat is 1-indexed** - In 2-player games: 1 or 2
 5. **Verify imports** - Check element types match actual class names
 6. **Run vue-tsc** - Always verify TypeScript compiles (`boardsmith typecheck`, never plain `tsc`)
-7. **Test manually** - bot vs bot misses human exploits
+7. **Measure, then test manually** - `boardsmith bot-strength` must pass, and bot vs bot still misses human exploits
 8. **Weight semantics** - Positive = maximize, negative = minimize/avoid
 
 ---
