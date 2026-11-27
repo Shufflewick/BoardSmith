@@ -30,6 +30,7 @@ import type {
   PlayerAwaitingState,
 } from './types.js';
 import { flowChildCount, resolveFlowChild, SWITCH_DEFAULT_KEY } from './flow-navigation.js';
+import { resolveWatchSeconds, timedStepFields } from './timed-step.js';
 
 /**
  * What running one flow node reports: whether the flow now waits for input.
@@ -1439,11 +1440,7 @@ export class FlowEngine<G extends Game = Game> {
   private publishOpenStep(state: FlowState): void {
     // Kept on the step's frame (see `openStepWindow`), so every restore path
     // that rebuilds the frame from `position.frameData` publishes it the same.
-    const open = this.stack[this.stack.length - 1]?.data;
-    if (this.awaitingInput && open?.timed === true) {
-      state.timed = true;
-      if (typeof open.watchSeconds === 'number') state.watchSeconds = open.watchSeconds;
-    }
+    if (this.awaitingInput) Object.assign(state, timedStepFields(this.stack[this.stack.length - 1]?.data));
 
     // Include action error if present
     if (this.actionError) {
@@ -2165,13 +2162,7 @@ export class FlowEngine<G extends Game = Game> {
     stepType: 'action-step' | 'simultaneous-action-step',
   ): void {
     if (!config.timed || frame.data?.timed === true) return;
-    const watchSeconds = config.timed === true ? 0 : config.timed.watchSeconds(context);
-    if (!Number.isFinite(watchSeconds) || watchSeconds < 0) {
-      throw new Error(
-        `Step '${config.name ?? stepType}' reported ${watchSeconds} seconds of watch time. ` +
-          'watchSeconds must return a finite number of seconds, 0 or more.',
-      );
-    }
+    const watchSeconds = config.timed === true ? 0 : resolveWatchSeconds(config.timed, context, config.name ?? stepType);
     const openedAt = this.game._hostNow;
     frame.data = {
       ...frame.data,

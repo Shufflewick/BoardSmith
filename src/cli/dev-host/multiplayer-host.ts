@@ -1905,26 +1905,31 @@ export class MultiplayerHost {
       if (moved) this.armWindow(open);
       return;
     }
-    const { watchSeconds } = boundary;
-    const { maxWatchSeconds } = this.opts;
-    const times = timed
-      ? timedStepDeadline({
-        openedAt: this.now(),
-        timePerTurn: this.opts.defaultTimePerTurn ?? DEFAULT_TIME_PER_TURN,
-        watchSeconds,
-        maxWatchSeconds,
-      })
-      : { deadlineAt: null, watchEndsAt: null };
-    const window: StepWindow = { session, boundary, ...times };
+    const window: StepWindow = { session, boundary, ...(timed ? this.timedWindow(boundary) : { deadlineAt: null, watchEndsAt: null }) };
     this.window = window;
-    if (timed && watchSeconds !== undefined && watchSeconds > (maxWatchSeconds ?? 0)) {
+    this.armWindow(window);
+  }
+
+  /**
+   * When a timed step that opens now closes, and when its watching ends
+   * (#1831). A step that asks for more watch time than boardsmith.json's
+   * `maxWatchSeconds` gets the cap, and the terminal and every browser say so.
+   */
+  private timedWindow({ watchSeconds }: TurnBoundary): { deadlineAt: number; watchEndsAt: number | null } {
+    const { maxWatchSeconds } = this.opts;
+    if (watchSeconds !== undefined && watchSeconds > (maxWatchSeconds ?? 0)) {
       this.reportDeadlineFailure(
         `The open step reported ${watchSeconds} seconds of watch time, but boardsmith.json's "maxWatchSeconds" is ` +
           `${maxWatchSeconds ?? 'not declared'}, so the host gave ${maxWatchSeconds ?? 0}. ` +
           'Raise "maxWatchSeconds" to the longest watch time your steps can report, or report less.',
       );
     }
-    this.armWindow(window);
+    return timedStepDeadline({
+      openedAt: this.now(),
+      timePerTurn: this.opts.defaultTimePerTurn ?? DEFAULT_TIME_PER_TURN,
+      watchSeconds,
+      maxWatchSeconds,
+    });
   }
 
   /**

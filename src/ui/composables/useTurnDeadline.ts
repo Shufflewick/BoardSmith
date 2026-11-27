@@ -87,6 +87,20 @@ function releaseClock(): void {
 const isEpochMs = (value: unknown): value is number =>
   typeof value === 'number' && Number.isFinite(value);
 
+/** What is wrong with a frame's deadline fields, each as a sentence; empty when nothing is. */
+function frameProblems(deadlineAt: unknown, watchEndsAt: unknown, serverNow: unknown, receivedAt: unknown): string[] {
+  const problems: string[] = [];
+  if (!isEpochMs(deadlineAt)) problems.push('`deadlineAt` must be epoch milliseconds on the host clock, or null');
+  if (watchEndsAt !== undefined && watchEndsAt !== null && !isEpochMs(watchEndsAt)) {
+    problems.push('`watchEndsAt` must be epoch milliseconds on the host clock when the watching ends, or null');
+  }
+  if (!isEpochMs(serverNow)) problems.push('`serverNow` must be epoch milliseconds on the host clock when the frame was sent');
+  if (!isEpochMs(receivedAt)) {
+    problems.push('`receivedAt` must be epoch milliseconds on the parent page\'s clock, stamped when the frame came off the socket');
+  }
+  return problems;
+}
+
 /**
  * Read the deadline fields off a `game_state` message.
  *
@@ -102,15 +116,7 @@ export function readTurnDeadlineFrame(
   const { deadlineAt, watchEndsAt, serverNow, receivedAt } = data;
   if (deadlineAt === undefined || deadlineAt === null) return { frame: null };
 
-  const problems: string[] = [];
-  if (!isEpochMs(deadlineAt)) problems.push('`deadlineAt` must be epoch milliseconds on the host clock, or null');
-  if (watchEndsAt !== undefined && watchEndsAt !== null && !isEpochMs(watchEndsAt)) {
-    problems.push('`watchEndsAt` must be epoch milliseconds on the host clock when the watching ends, or null');
-  }
-  if (!isEpochMs(serverNow)) problems.push('`serverNow` must be epoch milliseconds on the host clock when the frame was sent');
-  if (!isEpochMs(receivedAt)) {
-    problems.push('`receivedAt` must be epoch milliseconds on the parent page\'s clock, stamped when the frame came off the socket');
-  }
+  const problems = frameProblems(deadlineAt, watchEndsAt, serverNow, receivedAt);
   if (problems.length > 0) {
     return {
       frame: null,

@@ -292,14 +292,23 @@ function searchTimedBuild(
   let timed: TimedBuild | undefined;
   for (const build of builds) {
     const steps = timedStepsOf(definition, colorPalette, build);
-    timed ??= steps.timed.length > 0 ? { ...build, steps: steps.timed } : undefined;
-    const watching = steps.watching.length > 0 ? { ...build, steps: steps.watching } : undefined;
+    timed ??= buildWith(build, steps.timed);
+    const watching = buildWith(build, steps.watching);
     if (watching !== undefined || (want === 'timed' && timed !== undefined)) return { timed, watching };
   }
-  if (refusal === undefined || timed !== undefined) return { timed, refusal };
+  return { timed, refusal: timed === undefined ? untimedRefusal(refusal, builds.length) : refusal };
+}
+
+/** `build` naming `steps`, or undefined when there are none. */
+function buildWith(build: TableBuild, steps: string[]): TimedBuild | undefined {
+  return steps.length > 0 ? { ...build, steps } : undefined;
+}
+
+/** Why a search that built fewer tables than the game has and found no timed step is not an answer. */
+function untimedRefusal(refusal: string | undefined, built: number): string | undefined {
   // Only when the defaults were built at every seat count does timing one of them end the search.
-  if (builds.length === 0) return { refusal };
-  return { refusal: `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.` };
+  if (refusal === undefined || built === 0) return refusal;
+  return `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.`;
 }
 
 /** Why this game's seat range holds no seat count to build it at, or undefined when it holds one. */

@@ -7,10 +7,11 @@
  * whole part is here -- read the mark back off a flow state, and find every
  * step that carries it. The engine keeps no clock and never closes a step.
  */
-import type { FlowNode } from './types.js';
+import type { FlowContext, FlowNode, StepTiming } from './types.js';
+import type { Game } from '../element/game.js';
 import { walkFlowNodes } from './walk-flow-nodes.js';
 
-/** The minimal flow-state shape {@link stepIsTimed} and {@link stepWatchSeconds} read. */
+/** The minimal flow-state shape {@link timedStepFields} reads. */
 export interface TimedStepState {
   complete?: boolean;
   timed?: true;
@@ -18,17 +19,29 @@ export interface TimedStepState {
 }
 
 /**
- * Whether a timed step is open, read structurally from a flow state that may
- * have crossed a `structuredClone`/RPC boundary -- the same way `dueSeats` and
+ * What the turn boundary says about the open step's timing: `timed` while a
+ * timed step is open, with the `watchSeconds` it opened with when it has any
+ * (#1831), or nothing. Read structurally from a flow state that may have
+ * crossed a `structuredClone`/RPC boundary -- the same way `dueSeats` and
  * `flowBoundaryKey` read theirs.
  */
-export function stepIsTimed(flowState: TimedStepState | undefined | null): boolean {
-  return !!flowState && !flowState.complete && flowState.timed === true;
+export function timedStepFields(flowState: TimedStepState | undefined | null): { timed?: true; watchSeconds?: number } {
+  if (!flowState || flowState.complete || flowState.timed !== true) return {};
+  return flowState.watchSeconds === undefined ? { timed: true } : { timed: true, watchSeconds: flowState.watchSeconds };
 }
 
-/** The seconds of watching the open timed step started with (#1831), or `undefined` when it has none. */
-export function stepWatchSeconds(flowState: TimedStepState | undefined | null): number | undefined {
-  return stepIsTimed(flowState) ? flowState!.watchSeconds : undefined;
+/** A step's `watchSeconds`, resolved as it opens (#1831), refused unless it is a finite number of seconds, 0 or more. */
+export function resolveWatchSeconds<G extends Game>(
+  timing: Exclude<StepTiming<G>, true>,
+  context: FlowContext<G>,
+  stepName: string,
+): number {
+  const watchSeconds = timing.watchSeconds(context);
+  if (Number.isFinite(watchSeconds) && watchSeconds >= 0) return watchSeconds;
+  throw new Error(
+    `Step '${stepName}' reported ${watchSeconds} seconds of watch time. ` +
+      'watchSeconds must return a finite number of seconds, 0 or more.',
+  );
 }
 
 /**

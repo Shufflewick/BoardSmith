@@ -15,7 +15,7 @@ import type { GameStateSnapshot } from '../engine/utils/index.js';
 import type { HistoryEntry } from '../engine/action/types.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
-import { stepIsTimed, stepWatchSeconds, type TimedStepState } from '../engine/flow/timed-step.js';
+import { timedStepFields, type TimedStepState } from '../engine/flow/timed-step.js';
 import { ErrorCode } from '../types/protocol.js';
 import { describeMoveForNarration } from './move-summary.js';
 import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
@@ -1103,7 +1103,7 @@ export class SnapshotSessionHost {
    * `this._snapshot` BEFORE it broadcasts, so a re-broadcast necessarily
    * republishes the identical boundary rather than minting a new one.
    *
-   * Routed through `dueSeats` / `flowBoundaryKey` / `stepIsTimed` — never a
+   * Routed through `dueSeats` / `flowBoundaryKey` / `timedStepFields` — never a
    * second predicate.
    */
   private turnBoundary(): TurnBoundary {
@@ -1111,14 +1111,11 @@ export class SnapshotSessionHost {
     // [] for a completed flow (it is not awaiting input); this is belt-and-braces
     // for a flow state that is complete while still awaiting input.
     const flowState = this.flowState;
-    const timed = !this.isComplete && stepIsTimed(flowState as TimedStepState | null);
-    const watchSeconds = timed ? stepWatchSeconds(flowState as TimedStepState | null) : undefined;
     const reofferAt = this.isComplete ? undefined : earliest(this._snapshot?.reofferAt, this.heldBackHere()?.wakeAt);
     return {
       key: flowBoundaryKey(flowState as BoundaryKeyState | null),
       dueSeats: this.isComplete ? [] : dueSeats(flowState as SeatActivityState | null),
-      ...(timed ? { timed: true as const } : {}),
-      ...(watchSeconds === undefined ? {} : { watchSeconds }),
+      ...(this.isComplete ? {} : timedStepFields(flowState as TimedStepState | null)),
       ...(reofferAt === undefined ? {} : { reofferAt }),
     };
   }
