@@ -578,15 +578,16 @@ describe('a bot in a simultaneous step waits for every human due in it (#1842)',
     expect(t.host.isComplete).toBe(true);
   });
 
-  it("a deadline that closes every seat still due at once lets the bot make its own move before its seat is closed", async () => {
+  it("a deadline that closes the bot's seat while the bot searches lets the bot make its own move first", async () => {
     const t = await realTable(fixedDeployDefinition, 2, [2]);
     const expire = (seat: number) => t.host.handleOp(seat, {
       type: 'expireSeat', player: seat, idleAction: 'commit', args: {}, boundaryKey: boundaryKeyOfHost(t.host),
     });
-    const human = expire(1);
-    const bot = expire(2);
-    await t.releaseAll(human, bot, t.host.settled());
-    succeeded(await human);
+    succeeded(await expire(1));
+    // The bot searches now; the deadline closes its seat before that search ends.
+    await settle();
+    expect(t.held).toHaveLength(1);
+    await t.releaseAll(expire(2), t.host.settled());
 
     const round = t.host.snapshot!.actionHistory.slice(0, 2);
     expect(round.map((entry) => [entry.player, 'timedOut' in entry && entry.timedOut === true])).toEqual([[1, true], [2, false]]);

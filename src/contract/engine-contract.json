@@ -1,6 +1,6 @@
 {
   "revision": 560,
-  "surfaceHash": "3b2913fd175d0219",
+  "surfaceHash": "c3607ec8e08a2455",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4419,7 +4419,7 @@
     {
       "revision": 560,
       "date": "2026-11-27",
-      "surfaceHash": "3b2913fd175d0219",
+      "surfaceHash": "c3607ec8e08a2455",
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "In a step where every seat moves at once, the session host asks no bot while a seat no bot plays is due and has not moved in the step yet, so bots move after the humans check in or a deadline converts or closes their seats; an expireSeat for a bot seat runs the bots first (#1842)."
