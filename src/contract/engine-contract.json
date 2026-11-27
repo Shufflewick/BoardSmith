@@ -1,5 +1,5 @@
 {
-  "revision": 558,
+  "revision": 559,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4407,6 +4407,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith bot-strength compares the bot with the baseline seed by seed, passing when the paired gain's 95% interval is above 0 and a sign test on the seeds that differ agrees, so a cooperative bot can pass when random play already wins most games (#1837)."
+    },
+    {
+      "revision": 559,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith mutate counts a mutant whose run failed only on vitest time-outs as timed out, not killed, and names why each red test file failed"
     }
   ]
 }
