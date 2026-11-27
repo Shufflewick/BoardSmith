@@ -121,6 +121,8 @@ export interface RunSimulationResult {
   baseSeed: string;
   failing: PerGameReport[];
   report: PlayerCountReport[] | null;
+  /** Each game's winning seats, in game order: none for a game no one won or that did not finish. */
+  winners: number[][];
 }
 
 export interface RunSimulationOptions {
@@ -193,7 +195,8 @@ export async function runSimulation(rules: LoadedSimulation, options: RunSimulat
   const failed = [...played.keys()].filter((i) => !played[i].completed);
   const inDevMode = await playOnWorkers(rules.bundlePath, shardRequest(failed.map((i) => games[i]), options), options.jobs, 'development');
   const failing = failed.map((i, n) => toPerGameReport(played[i], i, inDevMode[n]));
-  return { baseSeed, failing, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, played) };
+  const winners = played.map((g) => g.winners ?? []);
+  return { baseSeed, failing, winners, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, played) };
 }
 
 interface RunReplayOptions {
@@ -212,7 +215,8 @@ interface RunReplayOptions {
 export async function runReplay(rules: LoadedSimulation, options: RunReplayOptions): Promise<RunSimulationResult> {
   const [game] = await playOnWorkers(rules.bundlePath, shardRequest([{ seed: options.seed, players: options.players }], options), 1, 'development');
   const failing = game.completed ? [] : [toPerGameReport(game, 0)];
-  return { baseSeed: options.seed, failing, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, [game]) };
+  const winners = [game.winners ?? []];
+  return { baseSeed: options.seed, failing, winners, report: failing.length > 0 ? null : buildReport(rules.gameDefinition.metrics, [game]) };
 }
 
 /** A loaded simulation bundle, and the file it was loaded from, which worker threads import. */

@@ -515,7 +515,9 @@ After generating the code:
 Run each check and iterate on the hooks until all of them pass:
 
 ```bash
-boardsmith bot-strength --bot mcts:easy                      # every level beats random
+boardsmith bot-strength --bot mcts:easy                      # each level beats random
+boardsmith bot-strength --bot mcts:medium
+boardsmith bot-strength --bot mcts:hard
 boardsmith bot-strength --bot mcts:hard --against mcts:easy  # hard beats easy
 ```
 

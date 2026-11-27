@@ -44,11 +44,11 @@ export interface StrengthAtCount {
   players: number;
   /** Games played times seats the bot took: one per game per seat. */
   seatGames: number;
-  /** The share of those the bot won alone. */
+  /** The bot's share of the wins, a win shared by k seats counting 1/k to each. */
   botShare: Share;
-  /** The share a seat wins alone when every seat plays the opponents' policy, on the same seeds. */
-  baselineShare: number;
-  /** The bot's share, at the low end of its 95% interval, is above the baseline. */
+  /** One seat's share of the wins when every seat plays the opponents' policy, on the same seeds. */
+  baselineShare: Share;
+  /** The low end of the bot's 95% interval is above the high end of the baseline's. */
   stronger: boolean;
 }
 
@@ -57,9 +57,18 @@ type FailingGame = PerGameReport & { policyFlags: string[] };
 
 export interface BotStrengthResult {
   failing: FailingGame[];
-  /** One entry per player count, or `null` when any game did not finish. */
+  /** The game options every game was played with, which a replay command must carry. */
+  gameOptions: Record<string, unknown>;
+  /** One entry per player count, or `null` when a game did not finish, which stops the run. */
   counts: StrengthAtCount[] | null;
 }
+
+/** `seat`'s share of each game's win: 1/k when it is one of k winners. */
+const winCredit = (winners: number[][], seat: number) =>
+  winners.reduce((sum, won) => sum + (won.includes(seat) ? 1 / won.length : 0), 0);
+
+/** A share whose bounds are divided by `seats`: one seat's part of a share of the games. */
+const perSeat = ({ share, low, high }: Share, seats: number): Share => ({ share: share / seats, low: low / seats, high: high / seats });
 
 /**
  * Play the bot in each seat in turn against `against` in every other seat, and every seat as
@@ -67,9 +76,8 @@ export interface BotStrengthResult {
  */
 export async function runBotStrength(rules: LoadedSimulation, options: RunBotStrengthOptions): Promise<BotStrengthResult> {
   const gameOptions = resolveSimulationGameOptions(declaredGameOptionsOf(rules.gameDefinition), []);
-  const failing: FailingGame[] = [];
   const play = async (players: number, policyFlags: string[]) => {
-    const { failing: failed, report } = await runSimulation(rules, {
+    const { failing, winners } = await runSimulation(rules, {
       gamesPerCount: options.gamesPerSeat,
       playerCounts: [players],
       seed: options.seed,
@@ -77,33 +85,35 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
       gameOptions,
       jobs: options.jobs,
     });
-    failing.push(...failed.map((game) => ({ ...game, policyFlags })));
-    return report?.[0];
+    return { failing: failing.map((game) => ({ ...game, policyFlags })), winners };
   };
   const counts: StrengthAtCount[] = [];
   for (const players of options.playerCounts) {
     const baseline = await play(players, [options.against]);
-    let wins = 0;
+    if (baseline.failing.length > 0) return { failing: baseline.failing, gameOptions, counts: null };
+    let credit = 0;
     for (let seat = 1; seat <= players; seat++) {
-      const report = await play(players, [options.against, `${seat}=${options.bot}`]);
-      if (report) wins += Math.round(report.winShare[seat].share * report.games);
+      const run = await play(players, [options.against, `${seat}=${options.bot}`]);
+      if (run.failing.length > 0) return { failing: run.failing, gameOptions, counts: null };
+      credit += winCredit(run.winners, seat);
     }
-    if (!baseline) continue;
     const seatGames = options.gamesPerSeat * players;
-    const botShare = share(wins, seatGames);
-    const baselineShare = (1 - baseline.tieRate.share) / players;
-    counts.push({ players, seatGames, botShare, baselineShare, stronger: botShare.low > baselineShare });
+    const botShare = share(credit, seatGames);
+    const anyoneWon = baseline.winners.filter((won) => won.length > 0).length;
+    const baselineShare = perSeat(share(anyoneWon, options.gamesPerSeat), players);
+    counts.push({ players, seatGames, botShare, baselineShare, stronger: botShare.low > baselineShare.high });
   }
-  return { failing, counts: failing.length > 0 ? null : counts };
+  return { failing: [], gameOptions, counts };
 }
 
 const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
+const interval = (s: Share) => `${percent(s.share)} (${percent(s.low)}-${percent(s.high)})`;
 
 function printCounts(counts: StrengthAtCount[]): void {
-  console.log('Players  Bot win share (95% interval)  Baseline  Stronger');
+  console.log('Players  Bot win share (95%)      Baseline (95%)        Stronger');
   for (const c of counts) {
-    const botShare = `${percent(c.botShare.share)} (${percent(c.botShare.low)}-${percent(c.botShare.high)}) of ${c.seatGames}`;
-    console.log(`${String(c.players).padEnd(9)}${botShare.padEnd(30)}${percent(c.baselineShare).padEnd(10)}${c.stronger ? 'yes' : 'no'}`);
+    const botShare = `${interval(c.botShare)} of ${c.seatGames}`;
+    console.log(`${String(c.players).padEnd(9)}${botShare.padEnd(26)}${interval(c.baselineShare).padEnd(22)}${c.stronger ? 'yes' : 'no'}`);
   }
 }
 
@@ -118,7 +128,7 @@ function printVerdict(run: RunBotStrengthOptions, counts: StrengthAtCount[]): bo
     styleText(
       'red',
       `\n${run.bot} is not shown to beat ${run.against} at ${weak.join(' and ')}: the low end of its win share's 95% interval ` +
-        `is not above the share a seat wins when every seat plays ${run.against}. Strengthen the bot's hooks in src/rules/bot.ts ` +
+        `is not above the high end of a seat's share when every seat plays ${run.against}. Strengthen the bot's hooks in src/rules/bot.ts ` +
         `(see /bs-build-bot), or play more games with --games to narrow the interval. The same run again: --seed ${run.seed}`,
     ),
   );
@@ -131,22 +141,30 @@ export async function botStrengthCommand(options: BotStrengthOptions): Promise<v
   const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { paths?: { rules?: string }; gameOptions?: unknown };
   const rulesPath = resolveRulesDir(cwd, config);
   requireRulesIndex(rulesPath);
+  const refuse = (error: unknown) => console.error(styleText('red', (error as Error).message));
+  let flags: Omit<RunBotStrengthOptions, 'playerCounts'>;
+  try {
+    flags = {
+      bot: options.bot ?? 'mcts:medium',
+      against: options.against ?? 'random',
+      gamesPerSeat: parsePositiveWholeNumber('--games', options.games ?? '20'),
+      seed: options.seed ?? crypto.randomUUID(),
+      jobs: options.jobs === undefined ? availableParallelism() : parsePositiveWholeNumber('--jobs', options.jobs),
+    };
+  } catch (error) {
+    refuse(error);
+    process.exitCode = 1;
+    return;
+  }
 
   const passed = await withCommandBuildDir(cwd, 'bot-strength', async (tempDir) => {
     const rules = await loadSimulation(cwd, rulesPath, tempDir, config.gameOptions, 'bot-strength');
     let run: RunBotStrengthOptions;
     try {
-      run = {
-        bot: options.bot ?? 'mcts:medium',
-        against: options.against ?? 'random',
-        gamesPerSeat: parsePositiveWholeNumber('--games', options.games ?? '20'),
-        playerCounts: parsePlayerCounts(options.players, rules.gameDefinition),
-        seed: options.seed ?? crypto.randomUUID(),
-        jobs: options.jobs === undefined ? availableParallelism() : parsePositiveWholeNumber('--jobs', options.jobs),
-      };
+      run = { ...flags, playerCounts: parsePlayerCounts(options.players, rules.gameDefinition) };
       for (const players of run.playerCounts) seatPolicies([run.against, `1=${run.bot}`], rules.policies, players);
     } catch (error) {
-      console.error(styleText('red', (error as Error).message));
+      refuse(error);
       return false;
     }
     console.log(styleText('cyan', `\nBot strength: ${run.bot} against ${run.against} (seed: ${run.seed}, ${run.gamesPerSeat} games per seat)\n`));
@@ -154,7 +172,9 @@ export async function botStrengthCommand(options: BotStrengthOptions): Promise<v
     for (const g of result.failing) {
       console.error(styleText('red', `Game ${g.index} ${g.status} (seed ${g.seed}) after ${g.turns} action(s).`));
       if (g.error) console.error(styleText('dim', `  ${g.error}`));
-      if (!g.productionOnly) console.error(styleText('dim', `  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: g.players }, {}, g.policyFlags)}`));
+      if (g.productionOnly) continue;
+      const replay = simulateReplayCommand({ seed: g.seed, playerCount: g.players }, result.gameOptions, g.policyFlags);
+      console.error(styleText('dim', `  Replay: ${replay}`));
     }
     if (result.counts === null) {
       console.error(styleText('bold', `\n${result.failing.length} game(s) did not finish, so no strength is reported.`));

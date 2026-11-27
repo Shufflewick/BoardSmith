@@ -9,33 +9,14 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 
-/**
- * A race for 2 or 3 players: each seat in turn adds 1, 2 or 3 to its own score, and the first to
- * reach 10 wins. The project's `biggest` policy always adds 3, so it beats random play.
- */
-function raceProject(): string {
+const engine = JSON.stringify(resolve(here, '../../engine/index.ts'));
+
+/** A project of `rules` (a rules index that adds `amount` 1, 2 or 3 per move), with a `biggest` policy that always adds 3. */
+function project(rules: string[]): string {
   const dir = tempTree('boardsmith-bot-strength-');
   const files: Record<string, string> = {
     'boardsmith.json': JSON.stringify({ name: 'race', backend: 'table' }),
-    'src/rules/index.ts': [
-      `import { Game, Action, loop, eachPlayer, actionStep } from ${JSON.stringify(resolve(here, '../../engine/index.ts'))};`,
-      `class RaceGame extends Game {`,
-      `  scores = {}; first = 0;`,
-      `  constructor(options) {`,
-      `    super(options);`,
-      `    for (const player of this.players) this.scores[player.seat] = 0;`,
-      `    this.registerAction(Action.create('add').chooseFrom('amount', { choices: [1, 2, 3] }).execute((args, ctx) => {`,
-      `      const game = ctx.game; const seat = ctx.player.seat;`,
-      `      game.scores[seat] += args.amount;`,
-      `      if (game.first === 0 && game.scores[seat] >= 10) game.first = seat;`,
-      `    }));`,
-      `    this.setFlow({ root: loop({ while: (ctx) => ctx.game.first === 0, maxIterations: 50,`,
-      `      do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }) });`,
-      `  }`,
-      `  getWinners() { return [...this.players].filter((player) => player.seat === this.first); }`,
-      `}`,
-      `export const gameDefinition = { gameClass: RaceGame, gameType: 'race', displayName: 'Race', minPlayers: 2, maxPlayers: 3 };`,
-    ].join('\n'),
+    'src/rules/index.ts': rules.join('\n'),
     'src/sim/index.ts': [
       `import { greedy } from ${JSON.stringify(resolve(here, '../../sim/index.ts'))};`,
       `export const policies = { biggest: greedy((_game, move) => Number(move.args.amount)) };`,
@@ -48,9 +29,49 @@ function raceProject(): string {
   return dir;
 }
 
+/** A race for 2 or 3 players: each seat in turn adds 1, 2 or 3 to its own score, and the first to reach 10 wins. */
+const raceProject = project([
+  `import { Game, Action, loop, eachPlayer, actionStep } from ${engine};`,
+  `class RaceGame extends Game {`,
+  `  scores = {}; first = 0;`,
+  `  constructor(options) {`,
+  `    super(options);`,
+  `    for (const player of this.players) this.scores[player.seat] = 0;`,
+  `    this.registerAction(Action.create('add').chooseFrom('amount', { choices: [1, 2, 3] }).execute((args, ctx) => {`,
+  `      const game = ctx.game; const seat = ctx.player.seat;`,
+  `      game.scores[seat] += args.amount;`,
+  `      if (game.first === 0 && game.scores[seat] >= 10) game.first = seat;`,
+  `    }));`,
+  `    this.setFlow({ root: loop({ while: (ctx) => ctx.game.first === 0, maxIterations: 50,`,
+  `      do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }) });`,
+  `  }`,
+  `  getWinners() { return [...this.players].filter((player) => player.seat === this.first); }`,
+  `}`,
+  `export const gameDefinition = { gameClass: RaceGame, gameType: 'race', displayName: 'Race', minPlayers: 2, maxPlayers: 3 };`,
+]);
+
+/** A cooperative game for 2 players: three rounds of adding to one shared total, and everyone wins when it reaches 14. */
+const teamProject = project([
+  `import { Game, Action, loop, eachPlayer, actionStep } from ${engine};`,
+  `class TeamGame extends Game {`,
+  `  total = 0; moves = 0;`,
+  `  constructor(options) {`,
+  `    super(options);`,
+  `    this.registerAction(Action.create('add').chooseFrom('amount', { choices: [1, 2, 3] }).execute((args, ctx) => {`,
+  `      ctx.game.total += args.amount; ctx.game.moves++;`,
+  `    }));`,
+  `    this.setFlow({ root: loop({ while: (ctx) => ctx.game.moves < 6, maxIterations: 50,`,
+  `      do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }) });`,
+  `  }`,
+  `  getWinners() { return this.total >= 14 ? [...this.players] : []; }`,
+  `}`,
+  `export const gameDefinition = { gameClass: TeamGame, gameType: 'team', displayName: 'Team', minPlayers: 2, maxPlayers: 2 };`,
+]);
+
 /** Bundled while the file is collected (#363). */
-const project = raceProject();
-const rules = await loadSimulation(project, join(project, 'src', 'rules'), tempTree('boardsmith-bot-strength-bundle-'), undefined);
+const bundle = (dir: string) => loadSimulation(dir, join(dir, 'src', 'rules'), tempTree('boardsmith-bot-strength-bundle-'), undefined);
+const rules = await bundle(raceProject);
+const teamRules = await bundle(teamProject);
 const run = { gamesPerSeat: 30, playerCounts: [2, 3], seed: 'fixed', jobs: 2 };
 
 describe('runBotStrength', () => {
@@ -59,13 +80,19 @@ describe('runBotStrength', () => {
 
     expect(result.failing).toEqual([]);
     expect(result.counts!.map((c) => [c.players, c.seatGames, c.stronger])).toEqual([[2, 60, true], [3, 90, true]]);
-    for (const count of result.counts!) expect(count.botShare.low).toBeGreaterThan(count.baselineShare);
+    for (const count of result.counts!) expect(count.botShare.low).toBeGreaterThan(count.baselineShare.high);
   }, 120_000);
 
   it('does not find a policy stronger than the same policy', async () => {
     const result = await runBotStrength(rules, { ...run, playerCounts: [2], bot: 'random', against: 'random' });
 
     expect(result.counts!.map((c) => c.stronger)).toEqual([false]);
+  }, 120_000);
+
+  it('counts a win shared by every seat, so a bot that helps its team win is stronger', async () => {
+    const result = await runBotStrength(teamRules, { ...run, playerCounts: [2], bot: 'biggest', against: 'random' });
+
+    expect(result.counts!.map((c) => c.stronger)).toEqual([true]);
   }, 120_000);
 });
 
@@ -77,7 +104,7 @@ async function botStrengthIn(options: Parameters<typeof botStrengthCommand>[0]):
   const capture = (...parts: unknown[]) => void printed.push(parts.map(String).join(' '));
   const log = vi.spyOn(console, 'log').mockImplementation(capture);
   const error = vi.spyOn(console, 'error').mockImplementation(capture);
-  process.chdir(project);
+  process.chdir(raceProject);
   try {
     await botStrengthCommand(options);
     return { printed: stripVTControlCharacters(printed.join('\n')), exitCode: process.exitCode };

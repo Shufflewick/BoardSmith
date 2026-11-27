@@ -448,15 +448,16 @@ plays better than its opponents (#1833):
 boardsmith bot-strength                                   # mcts:medium against random, every player count
 boardsmith bot-strength --bot mcts:easy                   # the weakest preset
 boardsmith bot-strength --bot mcts:hard --against mcts:easy --players 2
-boardsmith bot-strength --against greedy                  # a scripted policy src/sim/index.ts exports
+boardsmith bot-strength --against <name>                  # a policy src/sim/index.ts exports as <name>
 ```
 
 At each player count it plays `--games` games (20 by default) with the bot in
 seat 1 and `--against` in every other seat, then the same seeds with the bot in
 seat 2, and so on, and once more with every seat playing `--against`. The bot
 passes a player count when the low end of its win share's 95% interval is above
-the share one seat wins when every seat plays `--against`, so a seat's own
-advantage, and games no one wins alone, count the same on both sides. `--bot`
+the high end of the share one seat wins when every seat plays `--against`, so
+a seat's own advantage counts the same on both sides. A win shared by several
+seats counts a part to each, so a cooperative game is measured too. `--bot`
 and `--against` take any `boardsmith simulate` policy name. The command exits 1
 when the bot is not shown to be stronger at some player count, or a game did not
 finish, and prints `--seed` so the same games can be played again.
