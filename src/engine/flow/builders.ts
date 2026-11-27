@@ -209,12 +209,13 @@ export function forEach<
 }
 
 function refuseTimeLimitMs(builder: string, config: { name?: string }): void {
-  if (!Object.prototype.hasOwnProperty.call(config, 'timeLimitMs')) return;
+  if (!('timeLimitMs' in config)) return;
   const label = config.name ? `${builder} "${config.name}"` : builder;
   throw new Error(
     `${label} sets timeLimitMs, which BoardSmith no longer reads, so the step would never time out. ` +
-    `Remove timeLimitMs and set timed: true on the step; the turn length comes from the table's time per turn, ` +
-    `which defaults to "defaultTimePerTurn" in boardsmith.json.`
+    `Remove timeLimitMs and set timed: true on the step. The table chooses the time per turn, starting from ` +
+    `the optional "defaultTimePerTurn" in boardsmith.json (5m when unset), and a timed step needs "idleAction" ` +
+    `declared there too.`
   );
 }
 
