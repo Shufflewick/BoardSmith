@@ -134,7 +134,6 @@ export class MCTSBot<G extends Game = Game> {
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
   private candidateMoves?: BotStrategy['candidateMoves'];
   private uctConstant?: (game: Game, playerIndex: number) => number;
-  private sharedObjectives: boolean;
   /**
    * The game's declared world sampler (#73). Its presence, and nothing else,
    * is what switches this search from "skip what cannot be resolved" to
@@ -212,7 +211,6 @@ export class MCTSBot<G extends Game = Game> {
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.botStrategy = botStrategy;
     this.objectives = botStrategy?.objectives;
-    this.sharedObjectives = botStrategy?.sharedObjectives === true;
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
@@ -1635,7 +1633,7 @@ export class MCTSBot<G extends Game = Game> {
         const result = 0.1 + normalized * 0.8;
 
         // Unless the game says every seat shares the objectives, another seat's score is taken as the opposite
-        return seat => this.sharedObjectives || seat === this.playerIndex ? result : 1 - result;
+        return seat => this.botStrategy?.sharedObjectives || seat === this.playerIndex ? result : 1 - result;
       }
       return () => 0.5; // Draw/unknown
     }
