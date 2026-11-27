@@ -69,14 +69,12 @@ describe('mid-game bot takeover (BSMITH-03)', () => {
     // waiting on has closed and a new one opened.
     const after = lastBoundary(session);
     expect(after.key).not.toBe(before.key);
-    // Round 2 is open and seat 2 has ALREADY answered it — the pump kept going
-    // for as long as the converted seat owed a move. Only seat 1 is left.
-    expect(after.dueSeats).toEqual([1]);
+    // Round 2 is open, and the bot waits there for the human due with it (#1842).
+    expect(after.dueSeats).toEqual([1, 2]);
 
-    // The proof of record: seat 2's moves are in the engine's action history.
+    // The proof of record: seat 2's move is in the engine's action history.
     expect(await actionHistory(session)).toEqual([
       { name: 'commit', player: 1 },
-      { name: 'commit', player: 2 },
       { name: 'commit', player: 2 },
     ]);
   });

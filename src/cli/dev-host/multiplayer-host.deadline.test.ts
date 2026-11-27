@@ -392,10 +392,9 @@ describe('MultiplayerHost step deadlines (#302)', () => {
         return executeOp(fixedDeployDefinition, gameOptions, snap, pend, op, hostOptions);
       },
     });
-    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and commits round 1 at once
+    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and waits for seat 1 (#1842)
     refuseSearches = true;
-    await h.commit('A', 'a1'); // round 2 opens, and the bot's search of it is refused
-    await h.commit('A', 'a2'); // only the bot owes round 2, and its search is refused again
+    await h.commit('A', 'a1'); // only the bot owes round 1, and its search is refused
     await h.host.settled();
     expect(h.due('A')).toEqual([2]);
     const armedKey = clients.key('A');
@@ -418,15 +417,14 @@ describe('MultiplayerHost step deadlines (#302)', () => {
         return executeOp(fixedDeployDefinition, gameOptions, snap, pend, op, hostOptions);
       },
     });
-    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and commits round 1 at once
+    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and waits for seat 1 (#1842)
     holding = true;
-    await h.commit('A', 'a1'); // round 2 opens, and the bot's search of it is held
+    await h.commit('A', 'a1'); // only the bot owes round 1, and its search is held
     await vi.waitFor(() => expect(held).toHaveLength(1));
+    expect(h.due('A')).toEqual([2]);
     const armedKey = clients.key('A');
 
     h.clock.advance(WINDOW_MS);
-    // Seat 1's idle action lands and is published: only the bot still owes round 2.
-    await vi.waitFor(() => expect(h.due('A')).toEqual([2]));
     expect(clients.key('A')).toBe(armedKey);
     // Its op answers within the same turn of the event loop, with nothing waiting on I/O.
     await new Promise((resolve) => setTimeout(resolve, 0));
@@ -600,7 +598,8 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
 
   it('wakes a bot that waits for an action validate refuses until the playback ends, and it takes it then (#1537)', async () => {
     const h = makeHost({ ...validateGatedDefinition, bot: levelUpWhenAllowed }, { idleAction: { name: 'done' } });
-    await h.host.handleMessage('A', { type: 'hello' }); // seat 2 is the bot, and waits
+    await h.host.handleMessage('A', { type: 'hello' });
+    await h.act('A', 'a1', 'done'); // seat 2 is the bot, and waits for the playback
     await h.host.settled();
     expect(h.actionsFor(2)).toHaveLength(0);
     expect(h.clock.armedDelay).toBe(PLAYBACK_MS);
@@ -608,7 +607,8 @@ describe('MultiplayerHost stamps every op with its clock (#1532)', () => {
     h.clock.advance(PLAYBACK_MS);
     await vi.waitFor(() => expect(h.actionsFor(2).map((e) => (e.op as { actionName: string }).actionName)).toEqual(['levelUp', 'done']));
     expect(h.actionsFor(2).every((e) => e.result.success)).toBe(true);
-    expect(h.clock.armedDelay).toBe(WINDOW_MS - PLAYBACK_MS);
+    // Both seats are done, so the step has closed and no deadline is left.
+    expect(h.clock.armedDelay).toBeNull();
     expect(h.errors('A')).toEqual([]);
   });
 
