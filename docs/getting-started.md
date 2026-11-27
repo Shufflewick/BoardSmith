@@ -292,7 +292,9 @@ loads, and they must pass; then it runs them against each mutant, all 3 at
 once, stopping a run at the first failing test. A mutant no test notices fails
 the run, named by file and line, and so does one in a file none of those tests
 loads. A mutant that makes its run go past the time limit (an infinite loop,
-or a busy machine) counts as timed out, not as a survivor, and not as caught:
+or a busy machine), or whose run fails only on vitest time-outs (a test or hook
+time-out, or a worker's message to vitest timing out), counts as timed out, not
+as a survivor, and not as caught:
 when the mutants only time out and none is killed, the run fails, since no test
 was shown to notice a change. When `--base` measures no change (its
 merge base is the current commit on a clean tree), `boardsmith mutate` refuses

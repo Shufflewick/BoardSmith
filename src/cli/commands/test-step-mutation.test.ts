@@ -1144,6 +1144,29 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
+  it('names why a red test file failed as a whole (#1840)', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/broken.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nbid(1, 2);\nthrow new Error('setup broke');\nit('never runs', () => {});\n",
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['tests/broken.test.ts: setup broke']);
+  }, 60_000);
+
+  // A mutant a test or hook time-out fails on a busy machine looks the same as one it does not, so neither is a kill.
+  it.each([
+    ['a test', "it('runs the bid', () => (process.env.BOARDSMITH_MUTANT ? new Promise(() => {}) : undefined), 50);"],
+    ['a hook', "beforeAll(() => (process.env.BOARDSMITH_MUTANT ? new Promise(() => {}) : undefined), 50);\nit('runs the bid', () => {});"],
+  ])('counts a mutant whose run failed only on %s time-out as timed out, not killed (#1840)', async (_, body) => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/slow.test.ts': `import { it, beforeAll } from 'vitest';\nimport { bid } from '../src/rules';\nbid(1, 2);\n${body}\n`,
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toBeUndefined();
+    expect(result.summary).toEqual({ files: 1, mutants: 2, killed: 0, survived: 0, timedOut: 2, unreached: 0 });
+  }, 60_000);
+
   it('names a red test that threw a value with no message by the test alone (#1515 review F3)', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     await suite(project, {
