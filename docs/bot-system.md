@@ -151,8 +151,10 @@ A playout that reaches the end of the game scores each seat from its own
 result: 1 if it won, 0.5 when the game declares a draw (`isDraw()`), and 0
 otherwise. A finish with no winners and no declared draw is a loss for everyone
 (#1665), so teammates in a cooperative game are not expected to steer toward it.
-Objectives score the bot's seat alone, so before the end another seat's score is
-taken as the opposite of the bot's (#1679).
+Before the end, another seat's score is taken as the opposite of the bot's
+(#1679), unless the strategy sets `sharedObjectives: true`. Set it in a
+cooperative game, where every seat shares the bot's objectives, so a teammate
+is expected to help the party rather than work against it (#1838).
 
 A finished game whose result is certain is solved, and solved results pass up
 the tree: a seat is expected to take a solved ending it wins, and is not assumed

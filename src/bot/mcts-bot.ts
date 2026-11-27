@@ -126,12 +126,15 @@ export class MCTSBot<G extends Game = Game> {
   private gameType: string;
   private playerIndex: number;
   private config: BotConfig;
+  /** The game's strategy, handed whole to each parallel sub-search so none of it is left out. */
+  private botStrategy?: BotStrategy;
   private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
   private moveOrdering?: (game: Game, playerIndex: number, moves: BotMove[]) => BotMove[];
   private candidateMoves?: BotStrategy['candidateMoves'];
   private uctConstant?: (game: Game, playerIndex: number) => number;
+  private sharedObjectives: boolean;
   /**
    * The game's declared world sampler (#73). Its presence, and nothing else,
    * is what switches this search from "skip what cannot be resolved" to
@@ -207,7 +210,9 @@ export class MCTSBot<G extends Game = Game> {
     this.gameType = gameType;
     this.playerIndex = playerIndex;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.botStrategy = botStrategy;
     this.objectives = botStrategy?.objectives;
+    this.sharedObjectives = botStrategy?.sharedObjectives === true;
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
     this.moveOrdering = botStrategy?.moveOrdering;
@@ -343,15 +348,7 @@ export class MCTSBot<G extends Game = Game> {
         this.gameType,
         this.playerIndex,
         subConfig,
-        {
-          objectives: this.objectives,
-          threatResponseMoves: this.threatResponseMoves,
-          playoutPolicy: this.playoutPolicy,
-          moveOrdering: this.moveOrdering,
-          candidateMoves: this.candidateMoves,
-          uctConstant: this.uctConstant,
-          determinize: this.determinize,
-        }
+        this.botStrategy,
       );
 
       const { move, root } = await subBot.runSearch();
@@ -1637,8 +1634,8 @@ export class MCTSBot<G extends Game = Game> {
         const normalized = (totalScore - minPossibleScore) / scoreRange;
         const result = 0.1 + normalized * 0.8;
 
-        // Objectives score the bot's seat alone, so another seat's is taken as the opposite
-        return seat => seat === this.playerIndex ? result : 1 - result;
+        // Unless the game says every seat shares the objectives, another seat's score is taken as the opposite
+        return seat => this.sharedObjectives || seat === this.playerIndex ? result : 1 - result;
       }
       return () => 0.5; // Draw/unknown
     }

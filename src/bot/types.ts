@@ -209,6 +209,14 @@ export interface BotStrategy {
   objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
 
   /**
+   * Set true when every seat shares the bot's objective score, as in a
+   * cooperative game where the seats win or lose together (#1838). A playout
+   * cut off before the end then scores every seat with the bot's objectives.
+   * Left unset, any other seat scores the opposite, as an opponent would.
+   */
+  sharedObjectives?: boolean;
+
+  /**
    * Optional function to identify threat response moves.
    * When opponent has immediate threats, returns moves that address the threat.
    *

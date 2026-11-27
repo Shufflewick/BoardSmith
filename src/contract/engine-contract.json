@@ -1,5 +1,5 @@
 {
-  "revision": 555,
+  "revision": 556,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4383,6 +4383,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "A bot's threatResponseMoves with urgent: false now searches every root move, its listed moves first, instead of forcing them; bot move keys ignore arg order."
+    },
+    {
+      "revision": 556,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "A bot strategy can set sharedObjectives: true so a playout cut off before the end scores every seat with the bot's objectives, as in a cooperative game (#1838)."
     }
   ]
 }

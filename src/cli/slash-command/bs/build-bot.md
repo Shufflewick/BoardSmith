@@ -77,6 +77,7 @@ Add a situational hook when the game calls for it:
 
 - **`candidateMoves`** - Decides which moves the search considers for a seat: at the root, in every tree node and in every playout. The other hooks see only what it returns. Add it when some legal moves are never worth searching, or when an action has a large or open-ended set of args that the search should not list in full. It is the only hook that leaves a move out everywhere the search lists moves; `threatResponseMoves` with `urgent: true` narrows only the root, and `moveOrdering` only reorders.
 - **`determinize`** - Samples a world consistent with what the seat can see. Add it when the game has hidden information (hands, face-down cards, deck order); follow `node_modules/boardsmith/docs/bot-system.md` "Determinization: searching hidden state instead of skipping it".
+- **`sharedObjectives: true`** - Says every seat shares the bot's objective score. Set it when the game is cooperative (`"cooperative": true` in `boardsmith.json`); without it a playout cut off before the end scores every other seat as the opposite of the bot, so the bot expects its teammates to work against the party.
 - **`hintTargetFromMove`** - Maps a move to the board element a hint highlights. Add it when a move's destination arg is named something other than `to`, `destination`, `target`, `square`, `cell` or `position`.
 
 Reference: The Hex game bot implementation demonstrates the five core hooks with production-quality patterns.

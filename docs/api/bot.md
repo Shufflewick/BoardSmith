@@ -161,6 +161,7 @@ The remaining hooks, all optional:
 | Hook | Signature | Purpose |
 |---|---|---|
 | `objectives` | `(game, playerIndex) => Record<string, Objective>` | Partial-credit position evaluation during playouts |
+| `sharedObjectives` | `boolean` | `true` when every seat shares the bot's objective score (a cooperative game). Otherwise a playout cut off before the end scores any other seat as the opposite of the bot |
 | `threatResponseMoves` | `(game, playerIndex, availableMoves) => ThreatResponse` | Force or prioritize defensive moves. `{ moves, urgent }` — `urgent: true` restricts the search to `moves` |
 | `playoutPolicy` | `(game, playerIndex, availableMoves, rng) => BotMove` | Replace random playout move selection with game-specific heuristics. Use `rng` — weighted-random, not deterministic |
 | `moveOrdering` | `(game, playerIndex, moves) => BotMove[]` | Soft ordering: explore promising moves first. All moves are still explored; leave moves out with `candidateMoves` |
