@@ -343,14 +343,17 @@ bot chunk below, without asking: it is a mandated chunk.
 **The bot opponent.** When the sketch's bot-opponent chunk comes up, dispatch it against
 `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` instead of the chunk pipeline (same brief, same return
 shape). It belongs late — after game-end/scoring is verified, since an opponent needs real terminal
-states to evaluate against. If the sketch has **no** bot-opponent chunk, ask the designer once,
-before final acceptance, whether they want a computer opponent; if yes, dispatch the `judgement`
-role's agent (`npx boardsmith agent judgement`) against
+states to evaluate against. If the sketch has **no** bot-opponent chunk and the game is a table
+(not a persistent world), insert one before final acceptance without asking: `boardsmith validate`
+refuses a table game with no bot, since every seat no one has taken is played by one. Dispatch the
+`judgement` role's agent (`npx boardsmith agent judgement`) against
 `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`, on the `insert-chunk-<slug>` branch made from
 `main` first (`state-machine.md` "Branches and Landing"), with the bot chunk's slug as the work package
 and a `### Dispatch N` entry (`Work: insert-chunk`) in that chunk's run log, to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
-hand), then continue the loop. If no, record the decision in `DECISIONS.md` and move on.
+hand), then continue the loop. A persistent world has no bots: it needs no bot-opponent chunk, and
+one its sketch carries is a sketch error to remove the same way, since the world backend refuses a
+`bot`.
 
 **Final acceptance.** The sketch's mandated final-acceptance chunk is the run's last chunk and runs
 through `bs-build-chunk` like any other — its own routing dispatches the coverage check and design-QA

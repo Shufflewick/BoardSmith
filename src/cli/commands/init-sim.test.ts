@@ -152,10 +152,12 @@ describe('boardsmith init --sim (#556)', () => {
     expect(simLint.code).toBe(0);
   });
 
-  it('passes boardsmith validate, its Required Files check asking only for the rules', () => {
+  it('fails boardsmith validate only for its missing bot, its Required Files check asking only for the rules (#1832)', () => {
+    const output = simValidate.stdout + simValidate.stderr;
     expect(simValidate.stdout).toMatch(/Required Files: PASS/);
-    expect(simValidate.stdout + simValidate.stderr).not.toMatch(/FAIL/);
-    expect(simValidate.code).toBe(0);
+    expect(output.split('\n').filter((line) => line.includes(': FAIL'))).toEqual(['  ✗ Bot: FAIL']);
+    expect(output).toContain('Run /bs-build-bot in Claude Code to write one');
+    expect(simValidate.code).not.toBe(0);
   });
 
   it.each(['build', 'smoke', 'publish'] as const)('stops boardsmith %s with the no-UI message', (command) => {

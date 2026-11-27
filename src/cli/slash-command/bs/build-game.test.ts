@@ -405,9 +405,10 @@ describe('WF-07 — the run ends with the bot opponent and final acceptance', ()
     expect(flat(skill)).toMatch(/after game-end\/scoring is verified/i);
   });
 
-  it('build-game.md offers to insert a bot chunk when the sketch has none', () => {
+  it('build-game.md inserts a bot chunk without asking when a table game\'s sketch has none (#1832)', () => {
     const skill = flat(read('build-game.md'));
-    expect(skill).toMatch(/If the sketch has \*\*no\*\* bot-opponent chunk/i);
+    expect(skill).toMatch(/If the sketch has \*\*no\*\* bot-opponent chunk and the game is a table/i);
+    expect(skill).toMatch(/insert one before final acceptance without asking/i);
     expect(skill).toMatch(/never edit the ordered chunk list by\s*hand/i);
   });
 

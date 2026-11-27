@@ -104,7 +104,8 @@ boardsmith simulate --policy greedy
 That writes the same project without its UI: no `index.html`, `src/main.ts`,
 `src/ui/`, `tests/a11y.example.test.ts` or `tests/browser/smoke.spec.ts`.
 `boardsmith test`, `lint`, `typecheck`, `validate` and `simulate` work as
-usual (validate's Required Files check asks only for the rules). `dev`, `build`,
+usual (validate's Required Files check asks only for the rules, and like any
+table game it needs a `bot` before it passes). `dev`, `build`,
 `smoke` and `publish` stop with "This project has no UI yet. Run
 `boardsmith add-ui`." `boardsmith verify` runs test, typecheck, validate and
 verbs, and records build as skipped for that reason; its closing
@@ -385,6 +386,9 @@ This runs:
   the bundle store rather than a request; and every bundle against the publish
   server's 200 MB compressed-zip gate and its uncompressed ceilings
 - Required files check
+- Bot check: a table game must ship a `bot` in its `gameDefinition`, since every
+  seat no one has taken is played by one. Run `/bs-build-bot` to write it. A
+  persistent world has no bots and is not asked.
 
 To detect infinite loops or game-ending bugs, run `boardsmith simulate` (seeded
 headless batch simulation).

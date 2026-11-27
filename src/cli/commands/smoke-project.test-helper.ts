@@ -17,16 +17,24 @@ import type { InitOptions } from './init.js';
 
 /**
  * Scaffolds a table (or a world when `world` is true, or a simulator-only table with `init.sim`),
- * writes `files` over it, and commits it all on `main`, ready for `boardsmith verify` or `runSmoke`.
+ * gives a table the bot validate requires when `bot` is set, writes `files` over it, and commits
+ * it all on `main`, ready for `boardsmith verify` or `runSmoke`.
  *
  * @returns the project directory
  */
 export async function smokeProject(
   world: boolean,
   files: Record<string, string> = {},
-  init: Pick<InitOptions, 'sim'> = {},
+  { bot, ...init }: Pick<InitOptions, 'sim'> & { bot?: true } = {},
 ): Promise<string> {
   const dir = await devProject(world, init);
+  if (bot) {
+    const index = join(dir, 'src/rules/index.ts');
+    const scaffolded = await fs.readFile(index, 'utf-8');
+    const withBot = scaffolded.replace('  metrics,\n} as const;', '  metrics,\n  bot: {},\n} as const;');
+    if (withBot === scaffolded) throw new Error(`smokeProject could not add a bot: ${index} no longer ends its gameDefinition with "metrics,".`);
+    await fs.writeFile(index, withBot);
+  }
   const modules = join(dir, 'node_modules');
   await fs.mkdir(join(modules, '.bin'), { recursive: true });
   await fs.mkdir(join(modules, '@vue'), { recursive: true });

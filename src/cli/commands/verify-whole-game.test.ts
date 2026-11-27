@@ -17,11 +17,11 @@ import { check, verifyAsAUser } from './verify-cli.test-helper.js';
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
 
 /**
- * The table `boardsmith init` scaffolds, built on a branch that adds `fee`: a whole game every one
- * of the five real checks can run.
+ * The table `boardsmith init` scaffolds, given the bot validate requires and built on a branch that
+ * adds `fee`: a whole game every one of the five real checks can run.
  */
 async function scaffoldedTableOnBranch(init: { sim?: boolean } = {}): Promise<string> {
-  const dir = await smokeProject(false, {}, init);
+  const dir = await smokeProject(false, {}, { ...init, bot: true });
   git(dir, 'checkout', '-q', '-b', 'fee');
   await write(dir, {
     'src/rules/fee.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n',

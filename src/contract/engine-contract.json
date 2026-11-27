@@ -1,6 +1,6 @@
 {
-  "revision": 551,
-  "surfaceHash": "525307dad07eaac2",
+  "revision": 552,
+  "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4351,6 +4351,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "A timed step may be declared timed: { watchSeconds } to open on seconds of watching (#1831). FlowState and the turn boundary carry watchSeconds, boardsmith.json may declare maxWatchSeconds (1 to 300, sent to the Convex sink and the manifest), and build refuses a watching step without it or it without one. The platform should set a timed step's deadline with session's new timedStepDeadline (turn start + min(watch time, maxWatchSeconds) + time per turn) and send watchEndsAt beside deadlineAt on game_state; session also exports WATCH_SECONDS_CEILING and maxWatchSecondsProblem. The platform must accept maxWatchSeconds before it accepts a bundle that declares it; one that ignores watch time still closes the step at the time per turn, so the watching eats into the turn."
+    },
+    {
+      "revision": 552,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith validate refuses a table game with no bot; a world is exempt (#1832)"
     }
   ]
 }

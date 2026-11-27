@@ -22,6 +22,7 @@ import {
   buildChoiceCardinalityResult,
   buildLevelButtonsResult,
   validateChoiceCardinality,
+  checkBot,
   checkRulesAgreement,
   checkSpriteImages,
   projectRules,
@@ -1113,6 +1114,23 @@ describe('validate.ts rules agreement (#300)', () => {
 
   it('passes an untimed game with no idleAction', () => {
     expect(checkRulesAgreement({ backend: 'table' }, untimed).passed).toBe(true);
+  });
+});
+
+/**
+ * #1832: a seat nobody has taken is played by a bot, so a table game that ships
+ * none cannot be played without a friend. A world has no bots and is not asked.
+ */
+describe('validate.ts bot (#1832)', () => {
+  it('refuses a table game with no bot, saying how to add one', () => {
+    const result = checkBot({});
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBeUndefined();
+    expect(result.message).toContain('/bs-build-bot');
+  });
+
+  it('passes a table game that ships a bot', () => {
+    expect(checkBot({ bot: {} }).passed).toBe(true);
   });
 });
 

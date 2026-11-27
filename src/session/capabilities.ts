@@ -379,6 +379,11 @@ export function describeBuild({ playerCount, choices }: TableBuild): string {
     (chosen.length === 0 ? 'the default game options' : `game options ${chosen.join(', ')}`);
 }
 
+/** Whether the compiled definition ships a `bot`: what `bots` is derived from, and what validate requires of a table (#1832). */
+export function shipsBot(definition: { bot?: unknown }): boolean {
+  return definition.bot !== undefined && definition.bot !== null;
+}
+
 /**
  * The one resolution. Total over both backends and every input shape, so a
  * caller never has to ask which backend it is holding.
@@ -392,7 +397,7 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     world: isWorld,
     undo: !isWorld,
     spectators: !isWorld,
-    bots: !isWorld && definition.bot !== undefined && definition.bot !== null,
+    bots: !isWorld && shipsBot(definition),
     crossSessionState: isWorld || definition.persistence === true,
     timedSteps: timedStepsResolved(backend, definition, declared.colorPalette),
   };
@@ -471,7 +476,7 @@ function worldFieldContradictions(
         'because there is no sitting to end. Delete `persistence` from your gameDefinition.',
     },
     {
-      present: definition.bot !== undefined && definition.bot !== null,
+      present: shipsBot(definition),
       message:
         'This game\'s gameDefinition ships a `bot` on a game whose backend is "world". The world ' +
         'backend has no bots: a bot searches toward a terminal state on its turn, and a world ' +
