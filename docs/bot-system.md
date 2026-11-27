@@ -325,7 +325,13 @@ await session.host.runBotTurns();
 > The game's custom objectives and threat hooks go in the definition's `bot`
 > field, which every op that builds a bot reads.
 
-A bot moves when the game hands it a turn, and a move the game refuses is
+A bot moves when the game hands it a turn. In a step where every seat moves
+at once, a bot waits until every seat no bot plays that is due in the step has
+moved, so it acts last; a deadline that hands an idle seat to a bot
+(`convertSeatToBot`) or closes it with the idle action (`expireSeat`) then lets
+the bots move (#1842). `setBotSeats` still says only which seats a bot plays.
+
+A move the game refuses is
 reported once on the console, naming the seat and the game's reason. The bot is
 not asked again until the game changes (or, for a seat whose strategy chose
 to wait, until the step clock says its moves have), so a refused move never turns into a

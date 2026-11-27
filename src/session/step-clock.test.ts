@@ -123,16 +123,18 @@ describe('createHeadlessSession now', () => {
   it('wakes the bots when reoffer() offers an action they were waiting for', async () => {
     let now = START;
     const definition = { ...playbackDefinition, gameClass: OnlyLevelUpGame };
-    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
-    // The bot seat has no move until the playback ends, and says so.
+    // Both seats are bots, as a bot waits for a human due with it in a simultaneous step (#1842).
+    const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 1, level: 'easy' }, { seat: 2, level: 'easy' }]);
+    // The bot seats have no move until the playback ends, and say so.
     vi.spyOn(console, 'error').mockImplementation(() => {});
     await session.start();
-    expect(session.readGame().committed).toEqual([]);
+    await session.host.runBotTurns();
+    expect(session.host.snapshot!.actionHistory).toEqual([]);
 
     now = START + PLAYBACK_MS;
     await session.host.reoffer();
     await session.host.settled();
-    expect(session.readGame().committed).toEqual([2]);
+    expect(session.host.snapshot!.actionHistory.map((entry) => entry.player).sort()).toEqual([1, 2]);
   });
 
   it('lets a bot seat search a game that reads the step clock, at the instant of the op', async () => {
@@ -141,8 +143,9 @@ describe('createHeadlessSession now', () => {
     await session.start();
     await session.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} });
 
-    // The bot committed in this round and the next, never levelling up: it was greyed at the instant it searched.
-    expect(session.readGame().commits).toBe(3);
+    // The bot committed in this round, never levelling up: it was greyed at the instant it searched.
+    // In the next round it waits for the human (#1842).
+    expect(session.readGame().commits).toBe(2);
     expect(session.readGame().levelUps).toBe(0);
   });
 });
@@ -246,17 +249,18 @@ describe('a bot seat waiting on the step clock (#1537)', () => {
     const session = createHeadlessSession(definition, { ...gameOptions, now: () => now }, [{ seat: 2, level: 'easy' }]);
     const reported = vi.spyOn(console, 'error');
     await session.start();
-    await session.host.runBotTurns();
+    // The bot is asked once the human, due with it, is done (#1842).
+    await session.send(1, { type: 'action', actionName: 'done', player: 1, args: {} });
 
     // The bot waits rather than giving up its level-up, unreported, and the host is told when to ask it again.
-    expect(session.readGame()).toMatchObject({ levelledUp: [], done: [] });
+    expect(session.readGame()).toMatchObject({ levelledUp: [], done: [1] });
     expect(reported).not.toHaveBeenCalled();
     expect(session.metas.at(-1)!.turnBoundary.reofferAt).toBe(START + PLAYBACK_MS);
 
     now = START + PLAYBACK_MS;
     await session.host.reoffer();
     await session.host.settled();
-    expect(session.readGame()).toMatchObject({ levelledUp: [2], done: [2] });
+    expect(session.readGame()).toMatchObject({ levelledUp: [2], done: [1, 2] });
   });
 
   it('stops a narrated demo when its bot waits, saying why (#1537)', async () => {

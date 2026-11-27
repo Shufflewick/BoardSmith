@@ -34,6 +34,15 @@ const answer = (snapshot: Snap, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
+/** A simultaneous step in which seats 1 and 2 both still owe a move. */
+const seatsOneAndTwoDueAtOnce = {
+  awaitingInput: true,
+  awaitingPlayers: [
+    { playerIndex: 1, availableActions: ['x'], completed: false },
+    { playerIndex: 2, availableActions: ['botMove'], completed: false },
+  ],
+};
+
 interface Search {
   /** The `v` of the snapshot the bot searched from. */
   from: number;
@@ -89,6 +98,7 @@ function table(endsGame = false) {
     if (op.type === 'hint') return hint(from, op);
     if (op.type === 'action' && op.actionName === 'slow') await new Promise<void>((resolve) => slow.push(resolve));
     humanReads.push(from);
+    if (op.type === 'action' && op.actionName === 'dueWithTheBot') return answer(snap(from + 10, seatsOneAndTwoDueAtOnce));
     return answer(snap(from + 10, endsGame ? { complete: true } : {}));
   };
   /** A heatmap computed from `v` = `from`, held until the test releases it; turning it off answers at once unless `holdHeatmapOff` is on. */
@@ -478,126 +488,101 @@ describe('a bot search runs outside the one-at-a-time section (#635)', () => {
     expect(t.botMoves).toEqual([]);
     expect(t.searches).toHaveLength(1);
   });
+});
 
-  it('on a real game: a human commits while the bot searches the same round, and the bot commits once, from the new position', async () => {
+describe('a bot in a simultaneous step waits for every human due in it (#1842)', () => {
+  const commit = (host: SnapshotSessionHost, player: number): SeatOp => ({
+    type: 'action', actionName: 'commit', player, args: {}, boundaryKey: boundaryKeyOfHost(host),
+  });
+
+  it('a bot due with a human is not asked until the human has moved, and then commits once', async () => {
     const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
     const pump = t.host.runBotTurns();
     await settle();
-    expect(t.held).toHaveLength(1);
+    expect(t.held).toHaveLength(0);
+    await pump;
 
-    // Seat 1 commits while the bot is still searching round 1.
-    const human = t.host.handleOp(1, {
-      type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host),
-    });
+    succeeded(await t.host.handleOp(1, commit(t.host, 1)));
     await settle();
-    expect(t.due.at(-1)).toEqual([2]);
+    expect(t.held).toHaveLength(1);
+    await t.releaseAll(t.host.settled());
 
-    await t.releaseAll(pump, human);
-
-    // Round 1 has one commit from each seat: the search from before seat 1's
-    // commit was thrown away, never adopted as a second round-1 move.
-    expect((await t.history()).slice(0, 2)).toEqual([1, 2]);
+    // Round 2 opens with seat 1 due again, so the bot waits again.
+    expect(await t.history()).toEqual([1, 2]);
+    expect(t.due.at(-1)).toEqual([1, 2]);
     t.expectEveryChangeAdopted();
   });
 
-  it('on a real game with two bot seats: a human commits while the first bot searches, and each bot commits once', async () => {
-    const t = await realTable(simultaneousRoundsFixtureDefinition, 3, [2, 3]);
-    const pump = t.host.runBotTurns();
+  it('with two humans due, the bot waits until both have moved', async () => {
+    const t = await realTable(simultaneousRoundsFixtureDefinition, 3, [3]);
+    succeeded(await t.host.handleOp(1, commit(t.host, 1)));
+    await settle();
+    expect(t.held).toHaveLength(0);
+
+    succeeded(await t.host.handleOp(2, commit(t.host, 2)));
     await settle();
     expect(t.held).toHaveLength(1);
-
-    const human = t.host.handleOp(1, {
-      type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host),
-    });
-    await settle();
-    expect(t.due.at(-1)).toEqual([2, 3]);
-    await t.releaseAll(pump, human);
-
-    expect((await t.history()).slice(0, 3)).toEqual([1, 2, 3]);
-    t.expectEveryChangeAdopted();
+    await t.releaseAll(t.host.settled());
+    expect(await t.history()).toEqual([1, 2, 3]);
   });
 
-  it("on a real game: a human's timed seat expires while the bot searches, and the bot commits once, from the new position", async () => {
+  it('a deadline that hands the idle human to a bot lets every bot move', async () => {
+    const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
+    await t.host.runBotTurns();
+    t.host.setBotSeats([{ seat: 1 }, { seat: 2 }]);
+    const converted = t.host.handleOp(1, { type: 'convertSeatToBot', seat: 1 });
+    await t.releaseAll(converted);
+    succeeded(await converted);
+
+    expect([...(await t.history()).slice(0, 2)].sort()).toEqual([1, 2]);
+    expect(t.host.isComplete).toBe(true);
+  });
+
+  it("a deadline that closes the idle human's seat with its idle action lets the bot commit", async () => {
     const t = await realTable(fixedDeployDefinition, 2, [2]);
-    const pump = t.host.runBotTurns();
-    await settle();
-    expect(t.held).toHaveLength(1);
-
-    const expiry = t.host.handleOp(1, {
+    succeeded(await t.host.handleOp(1, {
       type: 'expireSeat', player: 1, idleAction: 'commit', args: {}, boundaryKey: boundaryKeyOfHost(t.host),
-    });
-    await settle();
-    expect(t.due.at(-1)).toEqual([2]);
-    await t.releaseAll(pump, expiry);
+    }));
+    await t.releaseAll(t.host.settled());
 
-    expect((await t.history()).slice(0, 2)).toEqual([1, 2]);
+    expect(await t.history()).toEqual([1, 2]);
     t.expectEveryChangeAdopted();
   });
 
-  it('on a real game: a human undoes a commit while the bot searches, and the bot commits once, from the new position', async () => {
+  it("a human who undoes a commit while the bot searches holds the bot again: the move it found is never made", async () => {
     const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
-    t.host.setBotSeats([]);
-    succeeded(await t.host.handleOp(1, {
-      type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host),
-    }));
-    t.host.setBotSeats([{ seat: 2 }]);
-    const pump = t.host.runBotTurns();
+    succeeded(await t.host.handleOp(1, commit(t.host, 1)));
     await settle();
     expect(t.held).toHaveLength(1);
 
     const undo = t.host.handleOp(1, { type: 'undo', player: 1 });
     await settle();
     expect(t.due.at(-1)).toEqual([1, 2]);
-    await t.releaseAll(pump, undo);
-    expect((await undo).success).toBe(true);
+    succeeded(await undo);
+    await t.releaseAll(t.host.settled());
 
-    expect(await t.history()).toEqual([2]);
+    expect(await t.history()).toEqual([]);
+    expect(t.held).toHaveLength(0);
     t.expectEveryChangeAdopted();
   });
 
-  it("on a real game: a human who commits and undoes during four searches in a row is answered each time, and the bot commits once, in that round (#700)", async () => {
-    const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
+  it('a move chosen on a table that moved, after three stale searches, is not made once a human is due with the bot again', async () => {
+    const t = table();
+    await t.host.start();
     const pump = t.host.runBotTurns();
-    for (let i = 0; i < 4; i++) {
+    for (let i = 0; i < 3; i++) {
+      await untilSearches(t, i + 1);
+      void humanMove(t.host);
       await settle();
-      expect(t.held).toHaveLength(1);
-      const op: Op = i % 2 === 0
-        ? { type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) }
-        : { type: 'undo', player: 1 };
-      succeeded(await answeredWhileSearching(t.host.handleOp(1, op)));
-      t.held.shift()!();
+      t.searches[i].release(moved);
     }
-    await t.releaseAll(pump);
+    await untilSearches(t, 4);
+    succeeded(await answeredWhileSearching(humanMove(t.host, 'dueWithTheBot')));
 
-    // Seat 1's commit was undone; the bot's commit, chosen before that undo, was made in the same round.
-    expect(await t.history()).toEqual([2]);
-    expect(t.due.at(-1)).toEqual([1]);
-    t.expectEveryChangeAdopted();
-  });
-
-  it("on a real game: a round that closes without the bot during its fourth search refuses the bot's move for it, and the bot commits in the next round (#700)", async () => {
-    const t = await realTable(fixedDeployDefinition, 2, [2]);
-    const pump = t.host.runBotTurns();
-    const commit = (): SeatOp => ({ type: 'action', actionName: 'commit', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(t.host) });
-    const ops: Array<[number, () => SeatOp]> = [
-      [1, commit],
-      [1, () => ({ type: 'undo', player: 1 })],
-      [1, commit],
-      // The platform closes the bot's seat at the deadline: round 1 ends without the bot's own move.
-      [2, () => ({ type: 'expireSeat', player: 2, idleAction: 'commit', args: {}, boundaryKey: boundaryKeyOfHost(t.host) })],
-    ];
-    for (const [seat, op] of ops) {
-      await settle();
-      expect(t.held).toHaveLength(1);
-      succeeded(await answeredWhileSearching(t.host.handleOp(seat, op())));
-      t.held.shift()!();
-    }
-    await t.releaseAll(pump);
-
-    // Round 1: seat 1's commit and seat 2's idle commit. The bot's round-1 move was refused; its round-2 move was made.
-    expect(await t.history()).toEqual([1, 2, 2]);
-    expect(t.due.at(-1)).toEqual([1]);
-    t.expectEveryChangeAdopted();
+    t.searches[3].release(moved);
+    await finish(t, pump);
+    expect(t.botMoves).toEqual([]);
+    expect(t.searches).toHaveLength(4);
   });
 });
 

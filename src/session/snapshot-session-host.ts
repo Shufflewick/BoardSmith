@@ -1767,10 +1767,22 @@ export class SnapshotSessionHost {
     return this.botRun;
   }
 
-  /** The bot seats the pump may ask now: every one not held back at this state (#421). */
+  /**
+   * The bot seats the pump may ask now: every one not held back at this state
+   * (#421), and none while a seat no bot plays is due in a simultaneous step,
+   * so the bots there move after every human due in it has (#1842).
+   */
   private botSeatsToAsk(): Array<{ seat: number; level?: string }> {
+    if (this.humanDueAtOnceWithBots()) return [];
     const heldBack = this.heldBackHere()?.seats;
     return this.botSeats.filter((s) => !heldBack?.has(s.seat));
+  }
+
+  /** Whether the open step is simultaneous and a seat no bot plays still owes a move in it. */
+  private humanDueAtOnceWithBots(): boolean {
+    const flowState = this.flowState;
+    if (!flowState?.awaitingPlayers?.length) return false;
+    return dueSeats(flowState).some((seat) => !this.botSeats.some((s) => s.seat === seat));
   }
 
   /** The bot seats held back at the game as it stands, if any (#421). */
@@ -1956,8 +1968,8 @@ export class SnapshotSessionHost {
     move: Extract<MutatingOp, { type: 'action' }>,
     seats: Array<{ seat: number }>,
   ): Promise<BotStep> {
-    // A human took the seat while the bot searched: ask the bot seats the table has now.
-    if (!this.botSeats.some((s) => s.seat === move.player)) return 'again';
+    // A human took the seat, or became due with the bots, while the bot searched: ask the bot seats the table has now.
+    if (!this.botSeatsToAsk().some((s) => s.seat === move.player)) return 'again';
     const made = await this.commitMutatingOp(move.player, move);
     if (made.success) return 'moved';
     // A refused move changed nothing, so the game still stands where it did.

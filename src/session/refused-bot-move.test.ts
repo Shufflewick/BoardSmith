@@ -87,7 +87,12 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     const refusalLogs = () =>
       errors.mock.calls.map((c) => String(c[0])).filter((m) => m.includes(REFUSAL));
 
-    await host.runBotTurns();
+    // The bots wait for the human, who moves with them (#1842).
+    const human = await host.handleOp(1, {
+      type: 'action', actionName: 'move', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
+    });
+    expect(human.success).toBe(true);
+    await host.settled();
     // Seat 2 is asked first and refused. Seat 3 still moves, which changes the
     // game, so seat 2 is asked once more, at the new state, and refused again.
     expect(botMoves.filter((m) => m.seat === 3 && m.made)).toHaveLength(1);
@@ -99,16 +104,6 @@ describe('#421: SnapshotSessionHost with a bot seat whose move is refused', () =
     await host.runBotTurns();
     await host.runBotTurns();
     expect(refusalsOfSeat2()).toBe(2);
-
-    // The human moves, so the state changed: seat 2 gets exactly one more try.
-    const human = await host.handleOp(1, {
-      type: 'action', actionName: 'move', player: 1, args: {}, boundaryKey: boundaryKeyOfHost(host),
-    });
-    expect(human.success).toBe(true);
-    await host.settled();
-    expect(refusalsOfSeat2()).toBe(3);
-    await host.runBotTurns();
-    expect(refusalsOfSeat2()).toBe(3);
-    expect(refusalLogs()).toHaveLength(3);
+    expect(refusalLogs()).toHaveLength(2);
   });
 });
