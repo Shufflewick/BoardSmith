@@ -208,6 +208,16 @@ export function forEach<
   };
 }
 
+function refuseTimeLimitMs(builder: string, config: { name?: string }): void {
+  if (!Object.prototype.hasOwnProperty.call(config, 'timeLimitMs')) return;
+  const label = config.name ? `${builder} "${config.name}"` : builder;
+  throw new Error(
+    `${label} sets timeLimitMs, which BoardSmith no longer reads, so the step would never time out. ` +
+    `Remove timeLimitMs and set timed: true on the step; the turn length comes from the table's time per turn, ` +
+    `which defaults to "defaultTimePerTurn" in boardsmith.json.`
+  );
+}
+
 /**
  * Pause for player action
  *
@@ -229,6 +239,7 @@ export function forEach<
  * ```
  */
 export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): FlowNode<G> {
+  refuseTimeLimitMs('actionStep', config);
   return {
     type: 'action-step',
     config: {
@@ -306,6 +317,7 @@ export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): 
  * ```
  */
 export function simultaneousActionStep<G extends Game = Game>(config: SimultaneousActionStepConfig<G>): FlowNode<G> {
+  refuseTimeLimitMs('simultaneousActionStep', config);
   return {
     type: 'simultaneous-action-step',
     config: {
