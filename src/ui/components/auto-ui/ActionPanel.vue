@@ -81,18 +81,28 @@ const actionController = _actionController;
  * UI reads from the game context. Only a table publishes it; in a world it is
  * not provided and the panel draws no countdown. At zero the panel says it is
  * waiting for the server and leaves the actions alone: the host closes the step.
+ * While the turn opens on watch time (#1831) it says how long the watching
+ * lasts and how long there is to act after it.
  */
 const turnDeadline = inject(GAME_CONTEXT_KEYS.turnDeadline, undefined);
 const turnDeadlineText = computed((): string | null => {
   const deadline = turnDeadline?.value;
   if (!deadline) return null;
   if (deadline.remainingMs === 0) return 'Time is up. Waiting for the server\u2026';
+  if (deadline.watchRemainingMs > 0) {
+    return `Watching: ${clockText(deadline.watchRemainingMs)}, then ${clockText(deadline.remainingMs - deadline.watchRemainingMs)} to act`;
+  }
   if (props.formatTurnDeadline) return props.formatTurnDeadline(deadline.remainingMs);
-  const seconds = Math.ceil(deadline.remainingMs / 1000);
-  const ss = String(seconds % 60).padStart(2, '0');
-  if (seconds < 3600) return `Time left: ${Math.floor(seconds / 60)}:${ss}`;
-  return `Time left: ${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${ss}`;
+  return `Time left: ${clockText(deadline.remainingMs)}`;
 });
+
+/** M:SS, or H:MM:SS from an hour up, rounded up to the second. */
+function clockText(ms: number): string {
+  const seconds = Math.ceil(ms / 1000);
+  const ss = String(seconds % 60).padStart(2, '0');
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}:${ss}`;
+  return `${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${ss}`;
+}
 
 // Re-export types
 export type { ChoiceWithRefs, ElementRef };
@@ -169,7 +179,8 @@ const props = defineProps<{
   /**
    * Writes the countdown line from the time left on the host's clock (#1437).
    * Absent, the panel writes "Time left: M:SS", or "H:MM:SS" from an hour up. At zero the panel always says
-   * it is waiting for the server, because the host closes the step.
+   * it is waiting for the server, because the host closes the step, and while the turn opens on watch time
+   * (#1831) it writes how long the watching lasts and the time to act after it.
    */
   formatTurnDeadline?: (remainingMs: number) => string;
 }>();

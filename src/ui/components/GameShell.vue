@@ -143,7 +143,8 @@ interface GameShellProps {
   /**
    * Writes the Action Panel's countdown line from the time left on the host's
    * clock, in ms (#1437). Default: "Time left: M:SS", or "H:MM:SS" from an hour up. At zero the panel always
-   * says it is waiting for the server. A custom UI draws its own countdown
+   * says it is waiting for the server, and while the turn opens on watch time (#1831) it writes how long the
+   * watching lasts and the time to act after it. A custom UI draws its own countdown
    * from `turnDeadline` on the game context.
    */
   formatTurnDeadline?: (remainingMs: number) => string;

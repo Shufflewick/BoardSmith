@@ -185,6 +185,13 @@ Which means, precisely:
   The step need not be timed for it: a host that keeps a deadline of
   its own (a table's hours-long round) closes a seat with the same op on any
   step, and the seat is closed the same way.
+- **Watch time: the step reports it, the host caps it.** A step declared
+  `timed: { watchSeconds }` resolves its watch time once, at entry, onto its
+  frame, and publishes it as `FlowState.watchSeconds` and
+  `TurnBoundary.watchSeconds` (#1831). The host sets the deadline to turn start
+  + min(watch time, `maxWatchSeconds` from `boardsmith.json`) + time per turn
+  (`timedStepDeadline`), and sends `watchEndsAt` beside `deadlineAt`. The cap
+  is the host's to enforce: a bundle's own number is never trusted past it.
 - **How long the step has been open: the host stamps it, the engine records
   it.** A host passes its own instant with every op (`hostOptions.now`). The
   engine keeps the instant of the op that opened a timed step on the step's

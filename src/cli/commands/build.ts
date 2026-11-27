@@ -26,6 +26,7 @@ import {
   capabilityContradictions,
   isGameBackend,
   resolveCapabilities,
+  maxWatchSecondsProblem,
   timePerTurnProblem,
 } from '../../session/index.js';
 
@@ -205,6 +206,8 @@ export function deriveManifest(
   if (unknownKeys.length > 0) throw new Error(unknownKeys.join('\n\n'));
   const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
   if (timePerTurn !== undefined) throw new Error(timePerTurn);
+  const maxWatch = maxWatchSecondsProblem(config.maxWatchSeconds);
+  if (maxWatch !== undefined) throw new Error(maxWatch);
 
   // WHAT THE BUILD ACTUALLY PRODUCED HAS TO MATCH THE DECLARED BACKEND, and a
   // mismatch is refused in every direction rather than recorded.

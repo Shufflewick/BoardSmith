@@ -1977,11 +1977,11 @@ export async function computePayloadHash(): Promise<string> {
             do: actionStep({
               actions: ['draw', 'discard', 'pass'],
               player: (ctx: any) => ctx.game.getPlayer(2),
-              // A timed step (#300) is marked on the step's frame at entry, so
-              // the mark lands in the fingerprinted `position.frameData` the
-              // platform stores and restores. A change to how it is carried
-              // there moves `payloadHash`.
-              timed: true,
+              // A timed step (#300) is marked on the step's frame at entry,
+              // with its watch time (#1831), so both land in the fingerprinted
+              // `position.frameData` the platform stores and restores. A change
+              // to how they are carried there moves `payloadHash`.
+              timed: { watchSeconds: () => 123 },
             }),
           }),
         ),

@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest';
 import { createColorOption, type GameDefinition } from '../../session/index.js';
 import { Game, Player, type GameOptions } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
-import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
+import { fixedDeployDefinition, watchDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
 import { leaveNothing } from '../../world/departure.test-helper.js';
 
 // Links the files this check reads, so `vitest run --changed` runs it when only one changes; nothing loads (#1504).
@@ -205,6 +205,12 @@ describe('deriveManifest', () => {
   it('carries the declared default time per turn and refuses one outside the host\'s set (#1830)', () => {
     expect(derive({ name: 'fixture', defaultTimePerTurn: '24h' }).defaultTimePerTurn).toBe('24h');
     expect(() => derive({ name: 'fixture', defaultTimePerTurn: '3m' })).toThrow(/"defaultTimePerTurn".*"3m"/s);
+  });
+
+  it('carries the declared maxWatchSeconds and refuses one past the ceiling (#1831)', () => {
+    const watching = watchDeployDefinition as GameDefinition;
+    expect(derive({ name: 'fixture', idleAction: { name: 'commit' }, maxWatchSeconds: 123 }, watching).maxWatchSeconds).toBe(123);
+    expect(() => derive({ name: 'fixture', idleAction: { name: 'commit' }, maxWatchSeconds: 301 }, watching)).toThrow(/"maxWatchSeconds".*301/s);
   });
 
   it('refuses a timed game that declares no idleAction, naming the step', () => {

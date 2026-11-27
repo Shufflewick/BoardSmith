@@ -7,7 +7,7 @@ import {
   type GameBackend,
 } from './capabilities.js';
 import { Game, Player, type GameOptions } from '../engine/index.js';
-import { DeployGame, FixedDeployGame, UntimedDeployGame } from './testing/fixtures/timed-step-fixture.js';
+import { DeployGame, FixedDeployGame, UntimedDeployGame, WatchDeployGame } from './testing/fixtures/timed-step-fixture.js';
 import { withDeclaredGameOptions } from './game-option-selection.js';
 
 /** A game class that builds no flow. */
@@ -179,6 +179,31 @@ describe('capabilityContradictions', () => {
 
   it('is silent on a timed step whose game declares an idleAction', () => {
     expect(contradictions('table', timedDefinition, { idleAction: { name: 'commit' } })).toEqual([]);
+  });
+});
+
+describe('watch time agrees with maxWatchSeconds (#1831)', () => {
+  const watching = { ...tableDefinition, gameClass: WatchDeployGame };
+  const idleAction = { name: 'commit' };
+  const contradictions = (definition: Parameters<typeof capabilityContradictions>[0]['definition'], maxWatchSeconds?: number) =>
+    capabilityContradictions({ backend: 'table', definition, declared: { idleAction, maxWatchSeconds } });
+
+  it('refuses a step that reports watch time when boardsmith.json declares no maxWatchSeconds, naming the step', () => {
+    const [message] = contradictions(watching);
+    expect(message).toContain("'deploy'");
+    expect(message).toContain('watchSeconds');
+    expect(message).toContain('"maxWatchSeconds"');
+  });
+
+  it('refuses a maxWatchSeconds no step can use', () => {
+    const [message] = contradictions(timedDefinition, 120);
+    expect(message).toContain('"maxWatchSeconds"');
+    expect(message).toContain('no step');
+  });
+
+  it('is silent when a watching step and maxWatchSeconds come together, or neither is there', () => {
+    expect(contradictions(watching, 123)).toEqual([]);
+    expect(contradictions(timedDefinition)).toEqual([]);
   });
 });
 

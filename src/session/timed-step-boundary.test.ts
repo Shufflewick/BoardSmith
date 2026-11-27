@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { createHeadlessSession } from '../testing/headless-session.js';
-import { fixedDeployDefinition, untimedDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
+import { fixedDeployDefinition, untimedDeployDefinition, watchDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
 
 /**
  * The turn boundary a host broadcasts says whether the open step is timed
@@ -34,5 +34,22 @@ describe('turnBoundary.timed', () => {
     await untimed.start();
 
     expect(timed.metas.at(-1)!.turnBoundary.key).toBe(untimed.metas.at(-1)!.turnBoundary.key);
+  });
+});
+
+describe('turnBoundary.watchSeconds (#1831)', () => {
+  it('carries the watch time the open step started with, unchanged while seats submit', async () => {
+    const session = createHeadlessSession(watchDeployDefinition, opts);
+    await session.start();
+    expect(session.metas.at(-1)!.turnBoundary).toMatchObject({ timed: true, watchSeconds: 40 });
+
+    await session.send(1, { type: 'action', actionName: 'commit', player: 1, args: {} });
+    expect(session.metas.at(-1)!.turnBoundary.watchSeconds).toBe(40);
+  });
+
+  it('is absent on a timed step with no watch time', async () => {
+    const session = createHeadlessSession(fixedDeployDefinition, opts);
+    await session.start();
+    expect(session.metas.at(-1)!.turnBoundary).not.toHaveProperty('watchSeconds');
   });
 });

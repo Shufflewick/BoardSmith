@@ -46,7 +46,7 @@ describe('useTurnDeadline', () => {
 
     // Host now is PAGE_T0 + 10 s, so 30 s are left -- not the 40 s the page's
     // own clock would claim.
-    expect(deadline.value).toEqual({ deadlineAt: PAGE_T0 + 40_000, remainingMs: 30_000 });
+    expect(deadline.value).toEqual({ deadlineAt: PAGE_T0 + 40_000, remainingMs: 30_000, watchEndsAt: null, watchRemainingMs: 0 });
 
     vi.advanceTimersByTime(5_000);
     expect(deadline.value?.remainingMs).toBe(25_000);
@@ -76,7 +76,27 @@ describe('useTurnDeadline', () => {
       serverNow: PAGE_T0,
       receivedAt: PAGE_T0,
     });
-    expect(deadline.value).toEqual({ deadlineAt: PAGE_T0 - 5_000, remainingMs: 0 });
+    expect(deadline.value).toEqual({ deadlineAt: PAGE_T0 - 5_000, remainingMs: 0, watchEndsAt: null, watchRemainingMs: 0 });
+    scope.stop();
+  });
+
+  it('counts down the watching the turn started with, on the host clock, then stops at zero (#1831)', () => {
+    const { deadline, scope } = track({
+      deadlineAt: PAGE_T0 + 160_000,
+      watchEndsAt: PAGE_T0 + 40_000,
+      serverNow: PAGE_T0 + 10_000,
+      receivedAt: PAGE_T0,
+    });
+    expect(deadline.value).toEqual({
+      deadlineAt: PAGE_T0 + 160_000,
+      remainingMs: 150_000,
+      watchEndsAt: PAGE_T0 + 40_000,
+      watchRemainingMs: 30_000,
+    });
+
+    vi.advanceTimersByTime(40_000);
+    expect(deadline.value?.watchRemainingMs).toBe(0);
+    expect(deadline.value?.remainingMs).toBe(110_000);
     scope.stop();
   });
 
@@ -140,6 +160,18 @@ describe('readTurnDeadlineFrame', () => {
     expect(
       readTurnDeadlineFrame({ deadlineAt: PAGE_T0 + 1, serverNow: PAGE_T0, receivedAt: PAGE_T0 - 3 }),
     ).toEqual({ frame: { deadlineAt: PAGE_T0 + 1, serverNow: PAGE_T0, receivedAt: PAGE_T0 - 3 } });
+  });
+
+  it('reads when the watching ends, when the host sends it (#1831)', () => {
+    expect(
+      readTurnDeadlineFrame({ deadlineAt: PAGE_T0 + 9, watchEndsAt: PAGE_T0 + 4, serverNow: PAGE_T0, receivedAt: PAGE_T0 }),
+    ).toEqual({ frame: { deadlineAt: PAGE_T0 + 9, watchEndsAt: PAGE_T0 + 4, serverNow: PAGE_T0, receivedAt: PAGE_T0 } });
+  });
+
+  it('refuses a watchEndsAt that is not a number, naming it', () => {
+    const result = readTurnDeadlineFrame({ deadlineAt: PAGE_T0, watchEndsAt: 'soon', serverNow: PAGE_T0, receivedAt: PAGE_T0 });
+    expect(result.frame).toBeNull();
+    expect(result.error).toMatch(/watchEndsAt/);
   });
 
   it('refuses a deadline without the stamps it is measured by, naming what is missing', () => {

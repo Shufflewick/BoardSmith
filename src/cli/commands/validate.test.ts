@@ -50,7 +50,7 @@ import {
   fixedDeployDefinition,
   untimedDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
-import { TIME_PER_TURN_MS, type GameDefinition } from '../../session/index.js';
+import { TIME_PER_TURN_MS, WATCH_SECONDS_CEILING, type GameDefinition } from '../../session/index.js';
 import {
   GoodSpriteGame,
   MissingSheetSizeGame,
@@ -609,6 +609,21 @@ describe('platform-consumed blocks', () => {
 
   it('offers an editor exactly the times per turn validate accepts (#1830)', () => {
     expect(boardsmithSchema.properties.defaultTimePerTurn.enum).toEqual(Object.keys(TIME_PER_TURN_MS));
+  });
+
+  it('accepts a whole number of seconds of watch time up to the ceiling and refuses anything else (#1831)', () => {
+    for (const seconds of [1, 123, WATCH_SECONDS_CEILING]) {
+      expect(checkMetadataIssues({ ...validConfig(), maxWatchSeconds: seconds })).toEqual([]);
+    }
+    for (const bad of [0, -3, 1.5, WATCH_SECONDS_CEILING + 1, '120']) {
+      const [message] = checkMetadataIssues({ ...validConfig(), maxWatchSeconds: bad });
+      expect(message).toContain('"maxWatchSeconds" must be a whole number of seconds from 1 to 300');
+      expect(message).toContain(`Got ${JSON.stringify(bad)}`);
+    }
+  });
+
+  it('offers an editor exactly the watch time validate accepts (#1831)', () => {
+    expect(boardsmithSchema.properties.maxWatchSeconds).toMatchObject({ type: 'integer', minimum: 1, maximum: WATCH_SECONDS_CEILING });
   });
 
   it('accepts a valid idleAction + roundDeadline pair', () => {

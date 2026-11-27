@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import { styleText } from 'node:util';
 import open from 'open';
 
-import { timePerTurnProblem, type GameDefinition, type TimePerTurn } from '../../session/index.js';
+import { maxWatchSecondsProblem, timePerTurnProblem, type GameDefinition, type TimePerTurn } from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { TableDefinition } from '../dev-host/table-rules-worker.js';
@@ -262,6 +262,8 @@ interface BoardSmithConfig {
   idleAction?: { name: string; args?: Record<string, unknown> };
   /** How long the dev host gives a timed step (#1830); `timePerTurnProblem` checks it at startup. */
   defaultTimePerTurn?: TimePerTurn;
+  /** The most watch time the dev host adds to a timed step (#1831); `maxWatchSecondsProblem` checks it at startup. */
+  maxWatchSeconds?: number;
 }
 
 /**
@@ -564,6 +566,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   }
   const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
   if (timePerTurn !== undefined) throw new Error(timePerTurn);
+  const maxWatch = maxWatchSecondsProblem(config.maxWatchSeconds);
+  if (maxWatch !== undefined) throw new Error(maxWatch);
 
   // #158: the manifest's `world` block is the whole declaration -- no flag.
   const worldMode = resolveWorldMode(config);
@@ -830,6 +834,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       seedSnapshot,
       idleAction: config.idleAction,
       defaultTimePerTurn: config.defaultTimePerTurn,
+      maxWatchSeconds: config.maxWatchSeconds,
       ...(devStore
         ? {
             persistence: {

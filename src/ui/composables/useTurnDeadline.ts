@@ -13,6 +13,10 @@
  *   `request-state`, because a stamp taken at re-post time would pair an old
  *   `serverNow` with a new page time and add the frame's age back on.
  *
+ * A turn that opens on watch time (#1831) also carries `watchEndsAt`: epoch ms
+ * on the host's clock when the watching ends and the time to act begins. A
+ * frame without it has no watching.
+ *
  * `serverNow - receivedAt` is how far the host's clock is ahead of this page's,
  * so the countdown is right even when the phone's clock is not.
  *
@@ -28,6 +32,8 @@ import { computed, onScopeDispose, ref, watch, type ComputedRef, type Ref } from
 export interface TurnDeadlineFrame {
   /** Host clock, epoch ms, when the step closes. */
   deadlineAt: number;
+  /** Host clock, epoch ms, when the watching the turn opened with ends (#1831). Absent when it has none. */
+  watchEndsAt?: number;
   /** Host clock, epoch ms, when the frame was sent. */
   serverNow: number;
   /** Page clock, epoch ms, when the parent page received the frame. */
@@ -38,8 +44,12 @@ export interface TurnDeadlineFrame {
 export interface TurnDeadline {
   /** Host clock, epoch ms, when the step closes. */
   deadlineAt: number;
-  /** Time left before the host closes the step, floored at zero. */
+  /** Time left before the host closes the step, floored at zero. Includes any watching still to come. */
   remainingMs: number;
+  /** Host clock, epoch ms, when the watching the turn opened with ends (#1831), or null when it has none. */
+  watchEndsAt: number | null;
+  /** Watching left before the time to act begins, floored at zero; 0 when the turn has none. */
+  watchRemainingMs: number;
 }
 
 /**
@@ -89,11 +99,14 @@ const isEpochMs = (value: unknown): value is number =>
 export function readTurnDeadlineFrame(
   data: Record<string, unknown>,
 ): { frame: TurnDeadlineFrame | null; error?: string } {
-  const { deadlineAt, serverNow, receivedAt } = data;
+  const { deadlineAt, watchEndsAt, serverNow, receivedAt } = data;
   if (deadlineAt === undefined || deadlineAt === null) return { frame: null };
 
   const problems: string[] = [];
   if (!isEpochMs(deadlineAt)) problems.push('`deadlineAt` must be epoch milliseconds on the host clock, or null');
+  if (watchEndsAt !== undefined && watchEndsAt !== null && !isEpochMs(watchEndsAt)) {
+    problems.push('`watchEndsAt` must be epoch milliseconds on the host clock when the watching ends, or null');
+  }
   if (!isEpochMs(serverNow)) problems.push('`serverNow` must be epoch milliseconds on the host clock when the frame was sent');
   if (!isEpochMs(receivedAt)) {
     problems.push('`receivedAt` must be epoch milliseconds on the parent page\'s clock, stamped when the frame came off the socket');
@@ -106,7 +119,14 @@ export function readTurnDeadlineFrame(
         'The host sends `deadlineAt` and `serverNow`; the parent page stamps `receivedAt` on receipt and forwards all three unchanged.',
     };
   }
-  return { frame: { deadlineAt: deadlineAt as number, serverNow: serverNow as number, receivedAt: receivedAt as number } };
+  return {
+    frame: {
+      deadlineAt: deadlineAt as number,
+      ...(isEpochMs(watchEndsAt) && { watchEndsAt }),
+      serverNow: serverNow as number,
+      receivedAt: receivedAt as number,
+    },
+  };
 }
 
 /**
@@ -122,7 +142,13 @@ export function useTurnDeadline(frame: Ref<TurnDeadlineFrame | null>): ComputedR
     const current = frame.value;
     if (current === null) return null;
     const hostNow = Date.now() + (current.serverNow - current.receivedAt);
-    return { deadlineAt: current.deadlineAt, remainingMs: Math.max(0, current.deadlineAt - hostNow) };
+    const watchEndsAt = current.watchEndsAt ?? null;
+    return {
+      deadlineAt: current.deadlineAt,
+      remainingMs: Math.max(0, current.deadlineAt - hostNow),
+      watchEndsAt,
+      watchRemainingMs: watchEndsAt === null ? 0 : Math.max(0, watchEndsAt - hostNow),
+    };
   });
 
   let holding = false;
