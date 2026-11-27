@@ -68,10 +68,30 @@ const teamProject = project([
   `export const gameDefinition = { gameClass: TeamGame, gameType: 'team', displayName: 'Team', minPlayers: 2, maxPlayers: 2 };`,
 ]);
 
+/** A score-attack solo game: five moves that each add 1, 2 or 3 to the score, and its one seat wins whenever it ends. */
+const solo = (metrics: string) => project([
+  `import { Game, Action, loop, actionStep, defineMetrics } from ${engine};`,
+  `class SoloGame extends Game {`,
+  `  score = 0; moves = 0;`,
+  `  constructor(options) {`,
+  `    super(options);`,
+  `    this.registerAction(Action.create('add').chooseFrom('amount', { choices: [1, 2, 3] }).execute((args, ctx) => {`,
+  `      ctx.game.score += args.amount; ctx.game.moves++;`,
+  `    }));`,
+  `    this.setFlow({ root: loop({ while: (ctx) => ctx.game.moves < 5, maxIterations: 50, do: actionStep({ actions: ['add'] }) }) });`,
+  `  }`,
+  `  getWinners() { return [...this.players]; }`,
+  `}`,
+  `export const gameDefinition = { gameClass: SoloGame, gameType: 'solo', displayName: 'Solo', minPlayers: 1, maxPlayers: 1${metrics} };`,
+]);
+const scoredSoloProject = solo(', metrics: defineMetrics(({ finalScore }) => ({ points: finalScore((game) => game.score) }))');
+const unscoredSoloProject = solo('');
+
 /** Bundled while the file is collected (#363). */
 const bundle = (dir: string) => loadSimulation(dir, join(dir, 'src', 'rules'), tempTree('boardsmith-bot-strength-bundle-'), undefined);
 const rules = await bundle(raceProject);
 const teamRules = await bundle(teamProject);
+const scoredSoloRules = await bundle(scoredSoloProject);
 const run = { gamesPerSeat: 30, playerCounts: [2, 3], seed: 'fixed', jobs: 2 };
 
 describe('runBotStrength', () => {
@@ -79,8 +99,7 @@ describe('runBotStrength', () => {
     const result = await runBotStrength(rules, { ...run, bot: 'biggest', against: 'random' });
 
     expect(result.failing).toEqual([]);
-    expect(result.counts!.map((c) => [c.players, c.seatGames, c.stronger])).toEqual([[2, 60, true], [3, 90, true]]);
-    for (const count of result.counts!) expect(count.botShare.low).toBeGreaterThan(count.baselineShare.high);
+    expect(result.counts!.map((c) => [c.players, c.seatGames, c.by, c.stronger])).toEqual([[2, 60, 'wins', true], [3, 90, 'wins', true]]);
   }, 120_000);
 
   it('does not find a policy stronger than the same policy', async () => {
@@ -94,17 +113,32 @@ describe('runBotStrength', () => {
 
     expect(result.counts!.map((c) => c.stronger)).toEqual([true]);
   }, 120_000);
+
+  it('measures a count where every seat wins every game by final score, so a solo bot that scores more is stronger', async () => {
+    const result = await runBotStrength(scoredSoloRules, { ...run, playerCounts: [1], bot: 'biggest', against: 'random' });
+
+    expect(result.counts!.map((c) => [c.by, c.stronger])).toEqual([['score', true]]);
+  }, 120_000);
+
+  it('does not find a solo policy stronger by final score than the same policy', async () => {
+    const result = await runBotStrength(scoredSoloRules, { ...run, playerCounts: [1], bot: 'random', against: 'random' });
+
+    expect(result.counts!.map((c) => [c.by, c.stronger])).toEqual([['score', false]]);
+  }, 120_000);
 });
 
-/** Runs bot-strength from inside the race project. Returns what it printed and the exit code. */
-async function botStrengthIn(options: Parameters<typeof botStrengthCommand>[0]): Promise<{ printed: string; exitCode: unknown }> {
+/** Runs bot-strength from inside `dir`. Returns what it printed and the exit code. */
+async function botStrengthIn(
+  options: Parameters<typeof botStrengthCommand>[0],
+  dir = raceProject,
+): Promise<{ printed: string; exitCode: unknown }> {
   const originalCwd = process.cwd();
   const originalExitCode = process.exitCode;
   const printed: string[] = [];
   const capture = (...parts: unknown[]) => void printed.push(parts.map(String).join(' '));
   const log = vi.spyOn(console, 'log').mockImplementation(capture);
   const error = vi.spyOn(console, 'error').mockImplementation(capture);
-  process.chdir(raceProject);
+  process.chdir(dir);
   try {
     await botStrengthCommand(options);
     return { printed: stripVTControlCharacters(printed.join('\n')), exitCode: process.exitCode };
@@ -130,6 +164,22 @@ describe('boardsmith bot-strength', () => {
     expect(exitCode).toBe(1);
     expect(printed).toMatch(/random is not shown to beat random at 2 players/);
     expect(printed).toMatch(/--seed fixed/);
+  }, 120_000);
+
+  it('passes a solo count by final score and names the metric it compared', async () => {
+    const { printed, exitCode } = await botStrengthIn({ bot: 'biggest', games: '30', seed: 'fixed', jobs: '2' }, scoredSoloProject);
+
+    expect(exitCode).toBe(0);
+    expect(printed).toMatch(/points/);
+    expect(printed).toMatch(/biggest beats random at every player count/);
+  }, 120_000);
+
+  it('fails a count where every seat wins every game, saying a finalScore metric would let it be measured', async () => {
+    const { printed, exitCode } = await botStrengthIn({ bot: 'biggest', games: '30', seed: 'fixed', jobs: '2' }, unscoredSoloProject);
+
+    expect(exitCode).toBe(1);
+    expect(printed).toMatch(/biggest is not shown to beat random at 1 players: every seat won every game played as random, so win share cannot show/);
+    expect(printed).toMatch(/finalScore metric/);
   }, 120_000);
 
   it('refuses an unknown policy by name before playing', async () => {

@@ -62,7 +62,8 @@ export interface PlayerCountReport {
 
 const Z = 1.96;
 
-function summarize(values: number[]): Summary {
+/** `values` as a distribution, its mean's 95% interval from the normal approximation. */
+export function summarize(values: number[]): Summary {
   const n = values.length;
   const sorted = [...values].sort((a, b) => a - b);
   const mean = values.reduce((sum, v) => sum + v, 0) / n;
