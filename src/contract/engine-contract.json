@@ -1,5 +1,5 @@
 {
-  "revision": 554,
+  "revision": 555,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4375,6 +4375,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "actionStep and simultaneousActionStep now refuse a step that still sets timeLimitMs, instead of building it untimed (#1835)"
+    },
+    {
+      "revision": 555,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "A bot's threatResponseMoves with urgent: false now searches every root move, its listed moves first, instead of forcing them; bot move keys ignore arg order."
     }
   ]
 }
