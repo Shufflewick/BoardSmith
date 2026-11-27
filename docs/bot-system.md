@@ -439,6 +439,33 @@ times at single positions. So run both sides more than once when the machine
 is busy, and trust a gain only when it is larger than the spread between runs. When a change lands, write a new baseline
 with `--out docs/bot-speed-baseline.md` and commit it with the change.
 
+## Measuring bot strength
+
+`boardsmith bot-strength` measures how well the bot plays, and fails unless it
+plays better than its opponents (#1833):
+
+```bash
+boardsmith bot-strength                                   # mcts:medium against random, every player count
+boardsmith bot-strength --bot mcts:easy                   # the weakest preset
+boardsmith bot-strength --bot mcts:hard --against mcts:easy --players 2
+boardsmith bot-strength --against <name>                  # a policy src/sim/index.ts exports as <name>
+```
+
+At each player count it plays `--games` games (20 by default) with the bot in
+seat 1 and `--against` in every other seat, then the same seeds with the bot in
+seat 2, and so on, and once more with every seat playing `--against`. The bot
+passes a player count when the low end of its win share's 95% interval is above
+the high end of the share one seat wins when every seat plays `--against`, so
+a seat's own advantage counts the same on both sides. A win shared by several
+seats counts a part to each, so a cooperative game is measured too. `--bot`
+and `--against` take any `boardsmith simulate` policy name. The command exits 1
+when the bot is not shown to be stronger at some player count, or a game did not
+finish, and prints `--seed` so the same games can be played again.
+
+A fail at a small `--games` can be noise: more games narrow the interval. A
+bot that still fails needs better hooks (objectives, a playout policy, or a
+`determinize` sampler in a game with hidden information).
+
 ## Limitations
 
 - **No learning**: The bot doesn't learn from past games. Each game starts fresh.

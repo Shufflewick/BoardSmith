@@ -1,5 +1,5 @@
 {
-  "revision": 552,
+  "revision": 553,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4359,6 +4359,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith validate refuses a table game with no bot; a world is exempt (#1832)"
+    },
+    {
+      "revision": 553,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "Adds boardsmith bot-strength, which measures a bot against weaker play, and has /bs-build-bot run it"
     }
   ]
 }
