@@ -36,6 +36,7 @@ import {
   playbackDefinition,
   untimedDeployDefinition,
   validateGatedDefinition,
+  watchDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
@@ -255,6 +256,38 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     await h.seatBoth();
 
     expect(h.lastFrame('A').deadlineAt).toBe(START + 5 * 60 * 1000);
+  });
+
+  it('sends watchEndsAt null on a timed step with no watch time', async () => {
+    const h = makeHost(fixedDeployDefinition);
+    await h.seatBoth();
+
+    expect(h.lastFrame('A').watchEndsAt).toBeNull();
+  });
+
+  it('adds the watch time the step opened with to the time per turn, and says when watching ends (#1831)', async () => {
+    const h = makeHost(watchDeployDefinition, { maxWatchSeconds: 123 });
+    await h.seatBoth();
+
+    expect(h.lastFrame('A').watchEndsAt).toBe(START + 40_000);
+    expect(h.lastFrame('A').deadlineAt).toBe(START + 40_000 + WINDOW_MS);
+    expect(h.clock.armedDelay).toBe(40_000 + WINDOW_MS);
+
+    // A seat acting inside the round does not move either instant.
+    h.clock.advance(1_000);
+    await h.commit('A', 'a1');
+    expect(h.lastFrame('B').watchEndsAt).toBe(START + 40_000);
+    expect(h.lastFrame('B').deadlineAt).toBe(START + 40_000 + WINDOW_MS);
+    expect(error).not.toHaveBeenCalled();
+  });
+
+  it('cuts watch time to the game\'s maxWatchSeconds, and says so', async () => {
+    const h = makeHost(watchDeployDefinition, { maxWatchSeconds: 30 });
+    await h.host.handleMessage('A', { type: 'hello' });
+
+    expect(h.lastFrame('A').watchEndsAt).toBe(START + 30_000);
+    expect(h.lastFrame('A').deadlineAt).toBe(START + 30_000 + WINDOW_MS);
+    expect(error).toHaveBeenCalledWith(expect.stringContaining('"maxWatchSeconds" is 30'));
   });
 
   it('sends deadlineAt null on a step with no window, and arms nothing', async () => {

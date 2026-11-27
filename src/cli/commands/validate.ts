@@ -31,7 +31,7 @@ import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } fro
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
-import { GAME_BACKENDS, capabilityContradictions, isGameBackend, timePerTurnProblem } from '../../session/index.js';
+import { GAME_BACKENDS, capabilityContradictions, isGameBackend, maxWatchSecondsProblem, timePerTurnProblem } from '../../session/index.js';
 import { type TableBuild, constructBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
 import type { GameDefinition } from '../../session/index.js';
 import { parseImageInfo } from '../../ui/utils/image.js';
@@ -375,7 +375,7 @@ function checkPlatformIdsShape(raw: unknown): string[] {
 
 /**
  * Shape checks for the blocks the PUBLISHING PLATFORM reads out of the built
- * manifest: `backend`, `defaultTimePerTurn`, `idleAction` and `roundDeadline`. They reach the
+ * manifest: `backend`, `defaultTimePerTurn`, `maxWatchSeconds`, `idleAction` and `roundDeadline`. They reach the
  * platform untouched through build.ts's `deriveManifest` config spread, so a
  * malformed block is only discovered at upload unless it is caught here.
  *
@@ -402,6 +402,8 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
 
   const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
   if (timePerTurn !== undefined) issues.push(timePerTurn);
+  const maxWatch = maxWatchSecondsProblem(config.maxWatchSeconds);
+  if (maxWatch !== undefined) issues.push(maxWatch);
 
   if (config.idleAction !== undefined) {
     issues.push(...checkNamedActionShape(

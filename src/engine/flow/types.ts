@@ -242,9 +242,24 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    * `idleAction` in `boardsmith.json` -- `boardsmith validate` and `boardsmith
    * build` refuse it otherwise. See docs/simultaneous-and-interrupt-semantics.md
    * section 5.
+   *
+   * `{ watchSeconds }` times the step the same way, after a stretch everyone
+   * watches before they can act, such as a battle replay (#1831). See
+   * {@link StepTiming}.
    */
-  timed?: true;
+  timed?: StepTiming<G>;
 }
+
+/**
+ * How a step the host times opens: `true`, or `{ watchSeconds }`, a function
+ * of the flow context resolved ONCE when the step is entered, giving how many
+ * seconds of watching the turn starts with (#1831). The host adds that watch
+ * time, capped at `maxWatchSeconds` in `boardsmith.json`, to the table's time
+ * per turn, and tells screens when the watching ends. A move, an undo or a
+ * restore inside the step never resolves it again. It must be a finite number
+ * of seconds, 0 or more; 0 means no watching this turn.
+ */
+export type StepTiming<G extends Game = Game> = true | { watchSeconds: (context: FlowContext<G>) => number };
 
 /**
  * Whether a fresh entry into an action step continues the acting seat's
@@ -297,7 +312,7 @@ export interface SimultaneousActionStepConfig<G extends Game = Game> extends Bas
   /** Skip this player if returns true */
   skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
   /** The host closes this step when the table's time per turn runs out. See {@link ActionStepConfig.timed}. */
-  timed?: true;
+  timed?: StepTiming<G>;
   /**
    * Each seat's undo takes back its own last action, one at a time, whatever
    * the other seats did since (#1526). Without it, only the seat that acted
@@ -482,6 +497,12 @@ export interface FlowState {
    * input. The host that receives it owns the clock and closes the step.
    */
   timed?: true;
+  /**
+   * Seconds of watching the open timed step started with, as its
+   * {@link StepTiming} `watchSeconds` resolved when it was entered (#1831).
+   * Present only beside `timed` and only when more than 0.
+   */
+  watchSeconds?: number;
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
   /**

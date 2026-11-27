@@ -950,12 +950,17 @@ const secondsLeft = computed(() =>
 );
 ```
 
-`turnDeadline.value` is `{ deadlineAt, remainingMs }` or `null`:
+`turnDeadline.value` is `{ deadlineAt, remainingMs, watchEndsAt, watchRemainingMs }` or `null`:
 
 - `deadlineAt` is when the step closes, in epoch milliseconds on the host's clock.
 - `remainingMs` is the time left, floored at zero. It updates about four times a
   second while there is time left, from one interval the whole page shares, and
   stops at zero.
+- `watchEndsAt` is when the watching the turn opened with ends, on the host's
+  clock, or `null` when it has none (a step declared `timed: { watchSeconds }`,
+  see actions-and-flow.md). `watchRemainingMs` is the watching left, floored at
+  zero, and is 0 when there is none. `remainingMs` includes it, so the time to
+  act after the watching is `remainingMs - watchRemainingMs`.
 
 Rules that keep your board and the Action Panel telling the same story:
 
@@ -978,28 +983,31 @@ Rules that keep your board and the Action Panel telling the same story:
   changes, so a keyboard or screen-reader player can find it without being
   interrupted by it.
 - **The Action Panel shows it too.** While the panel is up it shows "Time left:
-  0:30", and "Time is up. Waiting for the server…" at zero. Your countdown is in
+  0:30", "Watching: 0:42, then 2:00 to act" while the turn opens on watch
+  time, and "Time is up. Waiting for the server…" at zero. Your countdown is in
   addition to that one, never instead of it.
 - **Choose how the Action Panel writes it.** Pass GameShell a
   `format-turn-deadline` function. It gets the time left in milliseconds and
   returns the whole line, which must read well at any length, from a minute to
   48 hours. Without it the panel writes "Time left: M:SS", or "H:MM:SS" from an
-  hour up. At zero the panel still says it is waiting for the server,
+  hour up. At zero the panel still says it is waiting for the server, and
+  while the turn opens on watch time it writes the watching line itself,
   whatever the function returns.
 - **Only a table has it.** A persistent world has no step deadline, and a world
   does not publish `turnDeadline`.
 
-**For hosts.** The platform `game_state` message carries three numbers at its
+**For hosts.** The platform `game_state` message carries these numbers at its
 top level, beside `winners` and `isDraw`:
 
 | Field | Clock | Meaning |
 |---|---|---|
 | `deadlineAt` | host | When the host closes the step, or `null` for no deadline. |
+| `watchEndsAt` | host | When the watching the turn opened with ends, or `null` (or absent) for none. |
 | `serverNow` | host | When the host sent the frame. |
 | `receivedAt` | page | When the parent page took the frame off its socket. |
 
 The parent page stamps `receivedAt` the moment the frame arrives and forwards
-all three unchanged, including when it re-posts a cached frame on iframe load or
+them all unchanged, including when it re-posts a cached frame on iframe load or
 on `request-state`. A stamp taken at re-post time would pair an old `serverNow`
 with a new page time and hand the player back the time the frame spent in the
 cache. A frame with no `deadlineAt` (or `deadlineAt: null`) means no deadline. A

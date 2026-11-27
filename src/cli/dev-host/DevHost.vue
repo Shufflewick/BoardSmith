@@ -359,6 +359,7 @@ function onHostMessage(msg: Record<string, unknown>): void {
         // socket, and every replay forwards the same stamp, because a stamp
         // taken at re-post time would add the frame's age back on.
         deadlineAt: msg.deadlineAt,
+        watchEndsAt: msg.watchEndsAt,
         serverNow: msg.serverNow,
         receivedAt: Date.now(),
       };

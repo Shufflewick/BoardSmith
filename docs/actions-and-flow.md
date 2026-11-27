@@ -2600,6 +2600,45 @@ simultaneousActionStep({
 See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
 section 5 for who enforces what.
 
+##### `timed: { watchSeconds }` - a turn that opens on something everyone watches
+
+Some turns open with something every player watches before they can act, such
+as a battle replay. A flat deadline would let a long replay eat the turn, so a
+timed step can say how many seconds of watching it starts with:
+
+```typescript
+simultaneousActionStep({
+  name: 'deploy',
+  actions: ['placeUnit', 'ready'],
+  playerDone: (ctx, player) => player.ready,
+  timed: { watchSeconds: (ctx) => ctx.game.battleReplaySeconds + 3 },
+})
+```
+
+```json
+{ "maxWatchSeconds": 123 }
+```
+
+- `watchSeconds` is resolved once, when the step is entered, and kept on the
+  step's frame, so a move, an undo, a restore, a speed vote or a reconnect never
+  changes it. It must return a finite number of seconds, 0 or more; the step
+  throws naming itself otherwise. 0 means no watching this turn.
+- The engine publishes it as `FlowState.watchSeconds` and
+  `meta.turnBoundary.watchSeconds`. The host sets the deadline to turn start +
+  min(watch time, `maxWatchSeconds`) + time per turn, and sends `watchEndsAt`
+  on every `game_state` frame, so `turnDeadline` and the Action Panel show the
+  watching and then the time to act. Players may still act while watching.
+  `timedStepDeadline` in `boardsmith/session` is that sum, for a host to call.
+- **Declare `maxWatchSeconds` in `boardsmith.json`**, the longest watch time any
+  step can report: a whole number from 1 to 300. The host never adds more, so a
+  buggy or hostile bundle cannot hold a table still. `boardsmith validate` and
+  `boardsmith build` refuse `maxWatchSeconds` with no such step, and a step
+  that reports watch time without it when that step is in the first table
+  they find a timed step in (the defaults, at the fewest seats, first). Games with no watch time declare
+  nothing.
+- `boardsmith dev` adds the watch time the same way, and when a step reports
+  more than `maxWatchSeconds` it gives the cap and shows an error saying so.
+
 ##### `game.stepOpenFor(ms)` - whether the timed step has been open that long
 
 A rule can refuse something during part of the window: say, a purchase until

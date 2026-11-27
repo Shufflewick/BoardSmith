@@ -156,6 +156,8 @@ export interface CapabilityInputs {
     /** Round policy. Table-only: a world has no rounds to put a deadline on. */
     roundDeadline?: unknown;
     idleAction?: unknown;
+    /** The most watch time a timed step may add to its turn (#1831). */
+    maxWatchSeconds?: unknown;
     /** The seat colours, which each build is constructed with, as a host seats players (#1552). */
     colorPalette?: unknown;
   };
@@ -175,7 +177,7 @@ export interface TableBuild {
   choices: Record<string, unknown>;
 }
 
-/** A build whose compiled flow has a step declared `timed: true`, and those steps' names. */
+/** A build whose compiled flow has a timed step, or one that reports watch time, and those steps' names. */
 interface TimedBuild extends TableBuild {
   steps: string[];
 }
@@ -217,11 +219,16 @@ export function constructBuild(
 }
 
 /**
- * The timed steps of the flow this game builds at `playerCount` with `choices`
- * (none if it builds no flow). A constructor that throws is rethrown naming the
- * build, since the author may never have played that combination.
+ * The timed steps of the flow this game builds at `playerCount` with `choices`,
+ * and those that report watch time (none if it builds no flow). A constructor
+ * that throws is rethrown naming the build, since the author may never have
+ * played that combination.
  */
-function timedStepsOf(definition: CapabilityInputs['definition'], colorPalette: unknown, build: TableBuild): string[] {
+function timedStepsOf(
+  definition: CapabilityInputs['definition'],
+  colorPalette: unknown,
+  build: TableBuild,
+): ReturnType<typeof timedStepNames> {
   let game;
   try {
     game = constructBuild(definition, colorPalette, build, 'compiled-flow');
@@ -230,47 +237,78 @@ function timedStepsOf(definition: CapabilityInputs['definition'], colorPalette: 
     throw new Error(`Constructing this game ${describeBuild(build)} threw: ${reason}`, { cause: error });
   }
   const root = game.getFlow()?.root;
-  return root ? timedStepNames([root]) : [];
+  return timedStepNames(root ? [root] : []);
 }
 
 /**
- * THE FIRST TABLE OF THIS GAME WHOSE FLOW HAS A TIMED STEP, or why it cannot
- * be looked for.
+ * THE FIRST TABLE OF THIS GAME WHOSE FLOW HAS A TIMED STEP, or, with `want`
+ * `'watching'`, one that reports watch time (#1831), or why it cannot be
+ * looked for.
  *
  * A game builds its flow in its constructor, so the only way to read the flow
  * is to construct the game, and a constructor may build a different flow for a
  * different seat count or game options (#812). So every seat count is built
  * with every combination of boolean and select options, the defaults first, and
- * the search stops at the first timed step. A table without integer
- * minPlayers/maxPlayers yields nothing here because `capabilityContradictions`
- * refuses it by name.
+ * the search stops at the first timed step, or for `'watching'` at the first
+ * watching one, which only a declared `maxWatchSeconds` asks for. A table
+ * without integer minPlayers/maxPlayers yields nothing here because
+ * `capabilityContradictions` refuses it by name.
  */
-function findTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
-  const cached = timedBuildSearches.get(definition);
-  if (cached !== undefined && cached.colorPalette === colorPalette) return cached.search;
-  const search = searchTimedBuild(definition, colorPalette);
-  timedBuildSearches.set(definition, { colorPalette, search });
-  return search;
+function findTimedBuild(
+  definition: CapabilityInputs['definition'],
+  colorPalette: unknown,
+  want: 'timed' | 'watching' = 'timed',
+): TimedBuildSearch {
+  let cached = timedBuildSearches.get(definition);
+  if (cached === undefined || cached.colorPalette !== colorPalette) {
+    cached = { colorPalette, searches: {} };
+    timedBuildSearches.set(definition, cached);
+  }
+  return (cached.searches[want] ??= searchTimedBuild(definition, colorPalette, want));
 }
 
-type TimedBuildSearch = { timed?: TimedBuild; refusal?: string };
+/**
+ * The first build with a timed step, the first with a step reporting watch
+ * time, and why the search could not build every table. With `timed` found,
+ * `refusal` means only that `watching` may be missing.
+ */
+type TimedBuildSearch = { timed?: TimedBuild; watching?: TimedBuild; refusal?: string };
 
 // `boardsmith build` asks both `capabilityContradictions` and `resolveCapabilities`
 // about one compiled definition and palette, and each search constructs the game per seat count.
-const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], { colorPalette: unknown; search: TimedBuildSearch }>();
+const timedBuildSearches = new WeakMap<
+  CapabilityInputs['definition'],
+  { colorPalette: unknown; searches: Partial<Record<'timed' | 'watching', TimedBuildSearch>> }
+>();
 
-function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
+function searchTimedBuild(
+  definition: CapabilityInputs['definition'],
+  colorPalette: unknown,
+  want: 'timed' | 'watching',
+): TimedBuildSearch {
   // `tableContradictions` refuses a seat range that holds no seat count, by name.
   if (seatRangeProblem(definition) !== undefined) return {};
   const { builds, refusal } = tableBuilds(definition, 'to find every step declared timed: true');
+  let timed: TimedBuild | undefined;
   for (const build of builds) {
     const steps = timedStepsOf(definition, colorPalette, build);
-    if (steps.length > 0) return { timed: { ...build, steps } };
+    timed ??= buildWith(build, steps.timed);
+    const watching = buildWith(build, steps.watching);
+    if (watching !== undefined || (want === 'timed' && timed !== undefined)) return { timed, watching };
   }
-  if (refusal === undefined) return {};
+  return { timed, refusal: timed === undefined ? untimedRefusal(refusal, builds.length) : refusal };
+}
+
+/** `build` naming `steps`, or undefined when there are none. */
+function buildWith(build: TableBuild, steps: string[]): TimedBuild | undefined {
+  return steps.length > 0 ? { ...build, steps } : undefined;
+}
+
+/** Why a search that built fewer tables than the game has and found no timed step is not an answer. */
+function untimedRefusal(refusal: string | undefined, built: number): string | undefined {
   // Only when the defaults were built at every seat count does timing one of them end the search.
-  if (builds.length === 0) return { refusal };
-  return { refusal: `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.` };
+  if (refusal === undefined || built === 0) return refusal;
+  return `${refusal} If the game has timed steps, time a step with its default options, which ends the search at the first build.`;
 }
 
 /** Why this game's seat range holds no seat count to build it at, or undefined when it holds one. */
@@ -364,7 +402,7 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
 function timedStepsResolved(backend: GameBackend, definition: CapabilityInputs['definition'], colorPalette: unknown): boolean {
   if (backend !== 'table') return false;
   const { timed, refusal } = findTimedBuild(definition, colorPalette);
-  if (refusal !== undefined) throw new Error(refusal);
+  if (timed === undefined && refusal !== undefined) throw new Error(refusal);
   return timed !== undefined;
 }
 
@@ -476,7 +514,7 @@ function timedStepContradictions(
   declared: CapabilityInputs['declared'],
 ): string[] {
   const { timed, refusal } = findTimedBuild(definition, declared.colorPalette);
-  if (refusal !== undefined) return [refusal];
+  if (timed === undefined && refusal !== undefined) return [refusal];
   if (timed === undefined || declared.idleAction !== undefined) return [];
   const one = timed.steps.length === 1;
   const steps = timed.steps.map((name) => `'${name}'`).join(', ');
@@ -487,6 +525,40 @@ function timedStepContradictions(
       'not acted, so without one nothing can close it. Add the legal no-op action your rules ' +
       'register to boardsmith.json, e.g. "idleAction": { "name": "pass" }. A bot is not an ' +
       'alternative: a timed-out seat is never handed to a bot.',
+  ];
+}
+
+/**
+ * Watch time and its cap come together (#1831). The host adds at most
+ * `maxWatchSeconds` of a step's watch time to its turn, so a step that reports
+ * watch time with no cap would get none, and a cap with no such step says
+ * something about the game that is not true. Without a cap only the first
+ * timed table is read for a watching step, so the timed search stays as short
+ * as before; with one, every table is built until a watching step turns up.
+ */
+function watchTimeContradictions(
+  definition: CapabilityInputs['definition'],
+  declared: CapabilityInputs['declared'],
+): string[] {
+  const declaresCap = declared.maxWatchSeconds !== undefined;
+  const first = findTimedBuild(definition, declared.colorPalette);
+  const { watching, refusal } = first.watching === undefined && declaresCap
+    ? findTimedBuild(definition, declared.colorPalette, 'watching')
+    : first;
+  if (watching !== undefined && !declaresCap) {
+    const steps = watching.steps.map((name) => `'${name}'`).join(', ');
+    return [
+      `This game's flow has a step that reports watch time with watchSeconds (${steps}, ${describeBuild(watching)}), ` +
+        'but boardsmith.json declares no "maxWatchSeconds". The host adds at most that many seconds of watching to a ' +
+        'turn, so without it the watching gets none. Declare the longest watch time any step can report, e.g. ' +
+        '"maxWatchSeconds": 123.',
+    ];
+  }
+  if (watching !== undefined || !declaresCap) return [];
+  if (refusal !== undefined) return [refusal];
+  return [
+    `boardsmith.json declares "maxWatchSeconds", but no step in this game's flow reports watch time, at any seat ` +
+      'count or game options. Delete "maxWatchSeconds", or declare a step timed: { watchSeconds: (ctx) => ... }.',
   ];
 }
 
@@ -504,5 +576,9 @@ export function capabilityContradictions(inputs: CapabilityInputs): string[] {
   const { backend, definition, declared } = inputs;
   return backend === 'world'
     ? [...worldSeatContradictions(definition), ...worldFieldContradictions(definition, declared)]
-    : [...tableContradictions(definition), ...timedStepContradictions(definition, declared)];
+    : [
+      ...tableContradictions(definition),
+      ...timedStepContradictions(definition, declared),
+      ...watchTimeContradictions(definition, declared),
+    ];
 }

@@ -6,7 +6,8 @@
  * a constructor argument, so the same flow can be declared timed or not and
  * nothing else differs between them. `TimedTurnGame` is the same game played
  * one seat after another, so the sequential `actionStep` is covered by the
- * same fixture.
+ * same fixture. The `Watch*`, `NoBattle*` and `BadWatch*` games open each turn
+ * on watch time (#1831).
  *
  * Consumers: `src/engine/flow/timed-step.test.ts` (the flow state and every
  * restore path), `src/session/timed-step-boundary.test.ts` (the turn
@@ -33,6 +34,7 @@ import {
   simultaneousActionStep,
   type FlowNode,
   type GameOptions,
+  type StepTiming,
 } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 import type { BotStrategy } from '../../../bot/types.js';
@@ -40,8 +42,8 @@ import type { BotStrategy } from '../../../bot/types.js';
 /** The step a round is made of: every seat at once, or one seat after another. */
 type Shape = 'simultaneous' | 'sequential';
 
-function roundStep(shape: Shape, timed: boolean, actions: string[]): FlowNode<DeployGame> {
-  const mark = timed ? { timed: true as const } : {};
+function roundStep(shape: Shape, timed: StepTiming<DeployGame> | false, actions: string[]): FlowNode<DeployGame> {
+  const mark = timed === false ? {} : { timed };
   if (shape === 'sequential') {
     return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions, ...mark }) });
   }
@@ -64,7 +66,7 @@ export class DeployGame extends Game<DeployGame, Player> {
   /** Seats that committed in the current round. */
   committed: number[] = [];
 
-  constructor(options: GameOptions, timed = false, shape: Shape = 'simultaneous', actions = ['commit']) {
+  constructor(options: GameOptions, timed: StepTiming<DeployGame> | false = false, shape: Shape = 'simultaneous', actions = ['commit']) {
     super(options);
     this.registerAction(
       Action.create('commit').execute((_args, ctx) => {
@@ -105,7 +107,40 @@ function twoSeat(gameClass: GameDefinitionLike['gameClass'], gameType: string): 
   return { gameClass, gameType, minPlayers: 2, maxPlayers: 2 };
 }
 
+/**
+ * Timed, every round opening on a battle both seats watch (#1831): 40 seconds
+ * plus 10 for every commit made before the round, so a commit inside the round
+ * would move it if it were resolved again.
+ */
+export class WatchDeployGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, { watchSeconds: (ctx) => 40 + 10 * ctx.game.commits });
+  }
+}
+
+/** Sequential turns, each opening on a 40-second replay the seat watches. */
+export class WatchTurnGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, { watchSeconds: () => 40 }, 'sequential');
+  }
+}
+
+/** Timed with watch time that reports 0, as a turn with no battle does. */
+export class NoBattleDeployGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, { watchSeconds: () => 0 });
+  }
+}
+
+/** A step whose watch time is not a number of seconds. */
+export class BadWatchDeployGame extends DeployGame {
+  constructor(options: GameOptions) {
+    super(options, { watchSeconds: () => -5 });
+  }
+}
+
 export const fixedDeployDefinition = twoSeat(FixedDeployGame, 'timed-step-fixed');
+export const watchDeployDefinition = twoSeat(WatchDeployGame, 'timed-step-watch');
 export const untimedDeployDefinition = twoSeat(UntimedDeployGame, 'timed-step-untimed');
 export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
 

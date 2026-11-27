@@ -7,7 +7,7 @@ import {
   type GameBackend,
 } from './capabilities.js';
 import { Game, Player, type GameOptions } from '../engine/index.js';
-import { DeployGame, FixedDeployGame, UntimedDeployGame } from './testing/fixtures/timed-step-fixture.js';
+import { DeployGame, FixedDeployGame, UntimedDeployGame, WatchDeployGame } from './testing/fixtures/timed-step-fixture.js';
 import { withDeclaredGameOptions } from './game-option-selection.js';
 
 /** A game class that builds no flow. */
@@ -182,6 +182,31 @@ describe('capabilityContradictions', () => {
   });
 });
 
+describe('watch time agrees with maxWatchSeconds (#1831)', () => {
+  const watching = { ...tableDefinition, gameClass: WatchDeployGame };
+  const idleAction = { name: 'commit' };
+  const contradictions = (definition: Parameters<typeof capabilityContradictions>[0]['definition'], maxWatchSeconds?: number) =>
+    capabilityContradictions({ backend: 'table', definition, declared: { idleAction, maxWatchSeconds } });
+
+  it('refuses a step that reports watch time when boardsmith.json declares no maxWatchSeconds, naming the step', () => {
+    const [message] = contradictions(watching);
+    expect(message).toContain("'deploy'");
+    expect(message).toContain('watchSeconds');
+    expect(message).toContain('"maxWatchSeconds"');
+  });
+
+  it('refuses a maxWatchSeconds no step can use', () => {
+    const [message] = contradictions(timedDefinition, 120);
+    expect(message).toContain('"maxWatchSeconds"');
+    expect(message).toContain('no step');
+  });
+
+  it('is silent when a watching step and maxWatchSeconds come together, or neither is there', () => {
+    expect(contradictions(watching, 123)).toEqual([]);
+    expect(contradictions(timedDefinition)).toEqual([]);
+  });
+});
+
 /** A deploy game whose round is timed only for some options: `blitz`, or the "rapid" `pace`. */
 class OptionTimedGame extends DeployGame {
   constructor(options: GameOptions & { blitz?: boolean; pace?: string; minutes?: number; teams?: boolean }) {
@@ -238,6 +263,11 @@ describe('timed steps that depend on game options (#812)', () => {
     const many = Array.from({ length: 7 }, (_, i) => ({ ...blitz(false), id: `flag${i}` }));
     const definition = optionTimedDefinition([blitz(true), ...many]);
     expect(capabilities('table', definition).timedSteps).toBe(true);
+    expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
+  });
+
+  it('stops at the first timed build when no maxWatchSeconds asks for a watching step (#1831)', () => {
+    const definition = optionTimedDefinition([blitz(true), { ...blitz(false), id: 'teams' }]);
     expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
   });
 

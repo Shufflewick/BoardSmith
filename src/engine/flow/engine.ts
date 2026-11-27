@@ -30,6 +30,7 @@ import type {
   PlayerAwaitingState,
 } from './types.js';
 import { flowChildCount, resolveFlowChild, SWITCH_DEFAULT_KEY } from './flow-navigation.js';
+import { resolveWatchSeconds, timedStepFields } from './timed-step.js';
 
 /**
  * What running one flow node reports: whether the flow now waits for input.
@@ -1439,9 +1440,7 @@ export class FlowEngine<G extends Game = Game> {
   private publishOpenStep(state: FlowState): void {
     // Kept on the step's frame (see `openStepWindow`), so every restore path
     // that rebuilds the frame from `position.frameData` publishes it the same.
-    if (this.awaitingInput && this.stack[this.stack.length - 1]?.data?.timed === true) {
-      state.timed = true;
-    }
+    if (this.awaitingInput) Object.assign(state, timedStepFields(this.stack[this.stack.length - 1]?.data));
 
     // Include action error if present
     if (this.actionError) {
@@ -2153,15 +2152,24 @@ export class FlowEngine<G extends Game = Game> {
    * the opening it is acting inside. A fresh frame -- the next round of a loop,
    * the next seat of an `eachPlayer` -- opens its own. The frame is the durable
    * home because `getPosition`/`restore` round-trip `frame.data`, so a snapshot
-   * restore, an undo checkpoint and an MCTS clone all carry it.
+   * restore, an undo checkpoint and an MCTS clone all carry it, and the step's
+   * watch time (#1831) is resolved here once, never against later state.
    */
   private openStepWindow(
     frame: ExecutionFrame<G>,
     config: ActionStepConfig<G> | SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    stepType: 'action-step' | 'simultaneous-action-step',
   ): void {
-    if (config.timed !== true || frame.data?.timed === true) return;
+    if (!config.timed || frame.data?.timed === true) return;
+    const watchSeconds = config.timed === true ? 0 : resolveWatchSeconds(config.timed, context, config.name ?? stepType);
     const openedAt = this.game._hostNow;
-    frame.data = { ...frame.data, timed: true, ...(openedAt !== undefined && { openedAt }) };
+    frame.data = {
+      ...frame.data,
+      timed: true,
+      ...(watchSeconds > 0 && { watchSeconds }),
+      ...(openedAt !== undefined && { openedAt }),
+    };
   }
 
   private executeActionStep(
@@ -2219,7 +2227,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Current while its conditions are checked, so `ctx.player.isCurrent()` holds for it.
     this.currentPlayer = player;
-    this.openStepWindow(frame, config);
+    this.openStepWindow(frame, config, context, 'action-step');
     const available = this.offeredSequentialActions(config, context, player);
 
     // If no available actions and minMoves met, complete
@@ -2272,7 +2280,7 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Action step holds a follow-up for seat ${seat}, but this game has no seat ${seat}.`);
     }
     this.currentPlayer = player;
-    this.openStepWindow(frame, config);
+    this.openStepWindow(frame, config, context, 'action-step');
     const available = this.offeredSequentialActions(config, context, player);
 
     this.warnIfFollowUpStalls(config.name ?? 'action-step', seat, this.heldFollowUp(frame, seat)!);
@@ -2311,7 +2319,7 @@ export class FlowEngine<G extends Game = Game> {
     // boundary comes from `simultaneousUndoBoundary` (session/utils.ts), not
     // from a sequential run, so no run survives across it.
     this.turnRun = undefined;
-    this.openStepWindow(frame, config);
+    this.openStepWindow(frame, config, context, 'simultaneous-action-step');
 
     for (const player of players) {
       if (this.seatEligibility(config, context, player, frame) !== 'awaited') continue;

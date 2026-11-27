@@ -19,7 +19,7 @@ import { createDevSession, type DevSession } from './bridge.js';
 import {
   DEFAULT_TIME_PER_TURN,
   StatePushGate,
-  TIME_PER_TURN_MS,
+  timedStepDeadline,
   type TimePerTurn,
   type ExecutableOp,
   type ExecuteOpAdapter,
@@ -123,6 +123,11 @@ type GameStateFields = {
    * #302). The page counts down with `serverNow` and its own `receivedAt`.
    */
   deadlineAt: number | null;
+  /**
+   * Host clock, epoch ms, when the watching the open step started with ends
+   * (#1831), or null when it reported no watch time.
+   */
+  watchEndsAt: number | null;
   /**
    * Host clock, epoch ms, when an offer the step clock greyed goes out of
    * date before the step closes (#1536), or null when none does. The dev
@@ -355,6 +360,11 @@ export interface MultiplayerHostOptions {
    */
   defaultTimePerTurn?: TimePerTurn;
   /**
+   * boardsmith.json's `maxWatchSeconds` (#1831): the most watch time the host
+   * adds to a timed step's time per turn. Absent means none.
+   */
+  maxWatchSeconds?: number;
+  /**
    * The clock step windows are measured and armed on. Defaults to the Node
    * clock the world host uses (#197), which serves a long window as a chain of
    * bounded sleeps; a test passes one it drives by hand.
@@ -404,6 +414,7 @@ interface StepWindow {
   session: DevSession;
   boundary: TurnBoundary;
   deadlineAt: number | null;
+  watchEndsAt: number | null;
 }
 
 /** When the open window's next re-offer comes before its deadline, else null: the instant "Skip wait" moves to. */
@@ -1861,6 +1872,7 @@ export class MultiplayerHost {
       winners: meta.winners,
       isDraw: meta.isDraw,
       deadlineAt: this.window?.deadlineAt ?? null,
+      watchEndsAt: this.window?.watchEndsAt ?? null,
       reofferAt: this.window === null ? null : skipTo(this.window),
       serverNow: this.now(),
       seed: this.dealtFrom,
@@ -1893,13 +1905,31 @@ export class MultiplayerHost {
       if (moved) this.armWindow(open);
       return;
     }
-    const window: StepWindow = {
-      session,
-      boundary,
-      deadlineAt: timed ? this.now() + TIME_PER_TURN_MS[this.opts.defaultTimePerTurn ?? DEFAULT_TIME_PER_TURN] : null,
-    };
+    const window: StepWindow = { session, boundary, ...(timed ? this.timedWindow(boundary) : { deadlineAt: null, watchEndsAt: null }) };
     this.window = window;
     this.armWindow(window);
+  }
+
+  /**
+   * When a timed step that opens now closes, and when its watching ends
+   * (#1831). A step that asks for more watch time than boardsmith.json's
+   * `maxWatchSeconds` gets the cap, and the terminal and every browser say so.
+   */
+  private timedWindow({ watchSeconds }: TurnBoundary): { deadlineAt: number; watchEndsAt: number | null } {
+    const { maxWatchSeconds } = this.opts;
+    if (watchSeconds !== undefined && watchSeconds > (maxWatchSeconds ?? 0)) {
+      this.reportDeadlineFailure(
+        `The open step reported ${watchSeconds} seconds of watch time, but boardsmith.json's "maxWatchSeconds" is ` +
+          `${maxWatchSeconds ?? 'not declared'}, so the host gave ${maxWatchSeconds ?? 0}. ` +
+          'Raise "maxWatchSeconds" to the longest watch time your steps can report, or report less.',
+      );
+    }
+    return timedStepDeadline({
+      openedAt: this.now(),
+      timePerTurn: this.opts.defaultTimePerTurn ?? DEFAULT_TIME_PER_TURN,
+      watchSeconds,
+      maxWatchSeconds,
+    });
   }
 
   /**
