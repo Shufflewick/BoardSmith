@@ -1,6 +1,6 @@
 {
-  "revision": 559,
-  "surfaceHash": "cb764ea4d21bd43e",
+  "revision": 560,
+  "surfaceHash": "3b2913fd175d0219",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4415,6 +4415,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith mutate counts a mutant whose run failed only on vitest time-outs as timed out, not killed, and names why each red test file failed"
+    },
+    {
+      "revision": 560,
+      "date": "2026-11-27",
+      "surfaceHash": "3b2913fd175d0219",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "In a step where every seat moves at once, the session host asks no bot while a seat no bot plays is still due, so bots move after the humans or once a deadline converts or closes the idle seats (#1842)."
     }
   ]
 }
