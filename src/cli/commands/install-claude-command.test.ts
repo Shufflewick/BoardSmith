@@ -229,6 +229,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
       // Typed by BotStrategy's keys, so a hook added there fails typecheck until it is listed here and in the skill (#1392).
       const hooks: Record<keyof BotStrategy, true> = {
         objectives: true,
+        sharedObjectives: true,
         threatResponseMoves: true,
         playoutPolicy: true,
         moveOrdering: true,

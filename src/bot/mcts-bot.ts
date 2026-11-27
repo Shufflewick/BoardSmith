@@ -126,6 +126,8 @@ export class MCTSBot<G extends Game = Game> {
   private gameType: string;
   private playerIndex: number;
   private config: BotConfig;
+  /** The game's strategy, handed whole to each parallel sub-search so none of it is left out. */
+  private botStrategy?: BotStrategy;
   private objectives?: (game: Game, playerIndex: number) => Record<string, Objective>;
   private threatResponseMoves?: (game: Game, playerIndex: number, availableMoves: BotMove[]) => ThreatResponse;
   private playoutPolicy?: (game: Game, playerIndex: number, availableMoves: BotMove[], rng: () => number) => BotMove;
@@ -207,6 +209,7 @@ export class MCTSBot<G extends Game = Game> {
     this.gameType = gameType;
     this.playerIndex = playerIndex;
     this.config = { ...DEFAULT_CONFIG, ...config };
+    this.botStrategy = botStrategy;
     this.objectives = botStrategy?.objectives;
     this.threatResponseMoves = botStrategy?.threatResponseMoves;
     this.playoutPolicy = botStrategy?.playoutPolicy;
@@ -343,15 +346,7 @@ export class MCTSBot<G extends Game = Game> {
         this.gameType,
         this.playerIndex,
         subConfig,
-        {
-          objectives: this.objectives,
-          threatResponseMoves: this.threatResponseMoves,
-          playoutPolicy: this.playoutPolicy,
-          moveOrdering: this.moveOrdering,
-          candidateMoves: this.candidateMoves,
-          uctConstant: this.uctConstant,
-          determinize: this.determinize,
-        }
+        this.botStrategy,
       );
 
       const { move, root } = await subBot.runSearch();
@@ -1637,8 +1632,8 @@ export class MCTSBot<G extends Game = Game> {
         const normalized = (totalScore - minPossibleScore) / scoreRange;
         const result = 0.1 + normalized * 0.8;
 
-        // Objectives score the bot's seat alone, so another seat's is taken as the opposite
-        return seat => seat === this.playerIndex ? result : 1 - result;
+        // Unless the game says every seat shares the objectives, another seat's score is taken as the opposite
+        return seat => this.botStrategy?.sharedObjectives || seat === this.playerIndex ? result : 1 - result;
       }
       return () => 0.5; // Draw/unknown
     }
