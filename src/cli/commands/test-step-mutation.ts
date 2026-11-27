@@ -610,8 +610,8 @@ interface Runner {
   /** Waits for the active process group to stop and disappear; refuses any later run. */
   stop(): Promise<void>;
   /**
-   * With `bail`, a run stops after a confirmed test failure, including running workers; a mutant's
-   * run goes on past a test that failed only on a time-out (`VITEST_TIME_OUT`). With
+   * With `bail`, a mutant's run stops after a confirmed test failure, including running workers, but
+   * goes on past a test that failed only on a time-out (`VITEST_TIME_OUT`). With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
    * with `reach`, which project files its worker loaded (`readReach`). With `workers`, vitest runs at
    * most that many test workers, and the reporter refuses a config that would run more (#955). With a null
@@ -709,6 +709,17 @@ async function reportOnFile(reportPath: string): Promise<{ files: ReportedFile[]
   );
 }
 
+/** Whether a run failed and every error its report holds, in a test, a file or outside them, is a time-out (`VITEST_TIME_OUT`). */
+function failedOnlyOnTimeOuts(report: { files: ReportedFile[]; errors: string[] }): boolean {
+  // Undefined stands for a failure that gave no error to read.
+  const errors = [...report.errors, ...report.files.filter((file) => file.failed).flatMap((file) => {
+    const failedTests = file.tests.filter((t) => t.status === 'failed');
+    const testErrors = failedTests.flatMap((t) => (t.errors.length > 0 ? t.errors.map((e) => e.message) : [undefined]));
+    return [...file.errors, ...testErrors, ...(file.errors.length + failedTests.length === 0 ? [undefined] : [])];
+  })];
+  return errors.length > 0 && errors.every((error) => error !== undefined && VITEST_TIME_OUT.test(error));
+}
+
 /**
  * The outcomes in the run's report, for the test files `pathOf` names (it returns undefined for a
  * file the run is not about). A file that failed with no failing test, such as one that could not
@@ -724,19 +735,14 @@ async function readReport(
   const outcomes: Outcome[] = [];
   const filesRun = new Set<string>();
   const failedFiles: FailedFile[] = [];
-  // Every error of the run; undefined for a failure that gave none.
-  const errors: Array<string | undefined> = [...report.errors];
   for (const file of report.files) {
     const path = pathOf(realpathSync(file.path));
     if (path === undefined) continue;
     filesRun.add(path);
-    const failedTests = file.tests.filter((t) => t.status === 'failed');
-    if (file.failed && failedTests.length === 0) {
+    if (file.failed && !file.tests.some((t) => t.status === 'failed')) {
       // The reason is quoted mid-sentence, so its own closing period would double the one after it.
       failedFiles.push({ path, reason: file.errors[0]?.replaceAll(projectDir + sep, '').replace(/\.$/, '') });
-      if (file.errors.length === 0) errors.push(undefined);
     }
-    errors.push(...file.errors, ...failedTests.flatMap((t) => (t.errors.length > 0 ? t.errors.map((e) => e.message) : [undefined])));
     for (const test of file.tests) {
       outcomes.push({
         path,
@@ -754,7 +760,7 @@ async function readReport(
     filesRun,
     failedFiles,
     unhandled: report.errors.map((error) => error.replaceAll(projectDir + sep, '')),
-    onlyTimeOuts: errors.length > 0 && errors.every((error) => error !== undefined && VITEST_TIME_OUT.test(error)),
+    onlyTimeOuts: failedOnlyOnTimeOuts(report),
   };
 }
 
@@ -862,8 +868,6 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       ...('related' in scope ? ['related', '--run', '--passWithNoTests', ...scope.related] : ['run']),
       '--root', projectDir,
       '--config', configPath,
-      // A mutant's run stops through the reporter instead, which lets a time-out alone run on.
-      ...(options.bail && !mutant ? ['--bail=1'] : []),
       ...workerFlags,
       ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
     ];
