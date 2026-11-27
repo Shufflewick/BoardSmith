@@ -22,7 +22,7 @@ import { smokeProject } from './smoke-project.test-helper.js';
 import { buildProject } from './build.js';
 import { validateProject } from './validate.js';
 
-const project = await smokeProject(false);
+const project = await smokeProject(false, {}, { bot: true });
 const linkTree = tempTree('bs-in-process-link-');
 const link = join(linkTree, 'game');
 symlinkSync(project, link, 'dir');

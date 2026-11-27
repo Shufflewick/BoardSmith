@@ -1,5 +1,13 @@
 # Migration Guide
 
+## `boardsmith validate` refuses a table game with no bot (#1832)
+
+Every seat no one has taken is played by a bot, so a game without one cannot be
+played until enough people join. `boardsmith validate`, and so `boardsmith
+verify` and publishing, now refuses a table game whose `gameDefinition` has no
+`bot`. Run `/bs-build-bot` in Claude Code to write one. A persistent world has
+no bots and is not asked.
+
 ## The seat that acted last can undo after the turn passes on: `actionStep({ handoffUndo: true })` (#1788)
 
 A step declared `handoffUndo: true` lets the seat that took the last action

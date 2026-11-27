@@ -149,6 +149,9 @@ async function runValidation(
   // 9. Every sprite the table builds carries the sizes getSpriteStyle needs (#1021).
   if (!worldMode) results.push(await validateSpriteImages(rules));
 
+  // 9b. A table ships a bot for the seats no one has taken; a world has no bots (#1832).
+  if (!worldMode) results.push(await validateBot(rules));
+
   // 10. Every world fixture is started by a test, since nothing else runs one (#1825).
   if (worldMode) results.push(await validateWorldFixtures(rules));
 
@@ -1366,6 +1369,47 @@ async function validateRulesAgreement(rules: ProjectRules): Promise<ValidationRe
 
   if (result.passed) spinner.succeed('Rules agree with boardsmith.json');
   else spinner.fail('Rules and boardsmith.json disagree');
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Bot (#1832)
+// ---------------------------------------------------------------------------
+
+/**
+ * A table game ships a `bot`. Every seat no one has taken is played by one, so a
+ * game without a bot cannot be played by someone who has not brought a friend.
+ */
+export function checkBot(gameDefinition: Pick<GameDefinition, 'bot'>): ValidationResult {
+  const name = 'Bot';
+  if (gameDefinition.bot !== undefined && gameDefinition.bot !== null) {
+    return { name, passed: true, message: 'Your game ships a bot for the seats no one has taken.' };
+  }
+  return {
+    name,
+    passed: false,
+    message:
+      'Your gameDefinition has no `bot`. Every seat no one has taken is played by a bot, so without one this game ' +
+      'cannot be played until enough people join. Run /bs-build-bot in Claude Code to write one, then run boardsmith validate again.',
+  };
+}
+
+/** Run {@link checkBot} on the project's compiled rules. */
+async function validateBot(rules: ProjectRules): Promise<ValidationResult> {
+  const spinner = ora('Checking for a bot...').start();
+  let result: ValidationResult;
+  try {
+    result = checkBot(await rules.load());
+  } catch (error) {
+    spinner.fail('Rules could not be loaded');
+    return {
+      name: 'Bot',
+      passed: false,
+      message: `Your rules could not be loaded, so their bot could not be checked: ${(error as Error).message}. Fix that error and run boardsmith validate again.`,
+    };
+  }
+  if (result.passed) spinner.succeed('Bot found');
+  else spinner.fail('No bot');
   return result;
 }
 
