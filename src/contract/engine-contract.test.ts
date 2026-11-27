@@ -14,6 +14,7 @@ import {
   computeFingerprints,
   computeFormatHash,
   computePayloadHash,
+  computeSurfaceHash,
   PLATFORM_ENTRYPOINTS,
   WORLD_FIXTURE_COVERAGE,
   WORLD_VERBS_THE_FIXTURE_DRIVES,
@@ -21,6 +22,7 @@ import {
 import { Game, GameElement } from '../engine/index.js';
 import { BoardSmithWorldEngine, WORLD_ENGINE_METHODS } from '../world/index.js';
 import { SeededRandom } from '../utils/random.js';
+import { RETIRED_OPTIONS } from '../engine/flow/retired-options.js';
 
 const UPDATE_HINT = (dimension: string) =>
   `The engine's ${dimension} no longer matches src/contract/engine-contract.json.\n\n`
@@ -104,6 +106,16 @@ const formatWithLossyReader = await withReplaced(GameElement as { fromJSON: type
   const { visibility: _dropped, ...withoutVisibility } = json as Record<string, unknown>;
   return (fromJSON as (...args: unknown[]) => unknown).call(GameElement, withoutVisibility, ...rest) as ReturnType<typeof fromJSON>;
 } as typeof GameElement.fromJSON }, computeFormatHash);
+
+// Refusing an option key an earlier revision accepted breaks rules built on
+// that revision, so the platform must not route them to this engine (#1843).
+const retiredOptions: Record<string, Readonly<Record<string, string>>> = RETIRED_OPTIONS;
+const surfaceWithAnotherRetiredOption = await withReplaced(retiredOptions, {
+  actionStep: { ...retiredOptions.actionStep, maxMoves: 'Remove maxMoves.' },
+}, computeSurfaceHash);
+const surfaceWithReworded = await withReplaced(retiredOptions, {
+  actionStep: Object.fromEntries(Object.keys(retiredOptions.actionStep!).map((key) => [key, 'Reworded.'])),
+}, computeSurfaceHash);
 
 // What a seat is OFFERED and what a command DOES are covered by payloadHash and
 // by nothing, respectively. Neither is a byte a partition holds, and a format
@@ -245,6 +257,16 @@ describe('engine contract', () => {
 
     it('moves when the generator writes its stored state differently', () => {
       expect(valueOf(payloadWithOtherStoredState)).not.toBe(fingerprints.payloadHash);
+    });
+  });
+
+  describe('the surface fingerprint covers retired options', () => {
+    it('moves when a builder refuses an option it used to accept', () => {
+      expect(valueOf(surfaceWithAnotherRetiredOption)).not.toBe(fingerprints.surfaceHash);
+    });
+
+    it('stands still when only the advice for a retired option is reworded', () => {
+      expect(valueOf(surfaceWithReworded)).toBe(fingerprints.surfaceHash);
     });
   });
 
