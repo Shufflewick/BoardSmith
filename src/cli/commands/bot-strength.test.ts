@@ -87,11 +87,32 @@ const solo = (metrics: string) => project([
 const scoredSoloProject = solo(', metrics: defineMetrics(({ finalScore }) => ({ points: finalScore((game) => game.score) }))');
 const unscoredSoloProject = solo('');
 
+/** A cooperative game for 2 players, scored by its total: six moves, lost only when every move adds 3. */
+const scoredTeamProject = project([
+  `import { Game, Action, loop, eachPlayer, actionStep, defineMetrics } from ${engine};`,
+  `class ScoredTeamGame extends Game {`,
+  `  total = 0; moves = 0; lost = false;`,
+  `  constructor(options) {`,
+  `    super(options);`,
+  `    this.registerAction(Action.create('add').chooseFrom('amount', { choices: [1, 2, 3] }).execute((args, ctx) => {`,
+  `      ctx.game.total += args.amount; ctx.game.moves++;`,
+  `      if (ctx.game.total === 18) ctx.game.lost = true;`,
+  `    }));`,
+  `    this.setFlow({ root: loop({ while: (ctx) => ctx.game.moves < 6, maxIterations: 50,`,
+  `      do: eachPlayer({ do: actionStep({ actions: ['add'] }) }) }) });`,
+  `  }`,
+  `  getWinners() { return this.lost ? [] : [...this.players]; }`,
+  `}`,
+  `export const gameDefinition = { gameClass: ScoredTeamGame, gameType: 'scored-team', displayName: 'Scored team',`,
+  `  minPlayers: 2, maxPlayers: 2, metrics: defineMetrics(({ finalScore }) => ({ total: finalScore((game) => game.total) })) };`,
+]);
+
 /** Bundled while the file is collected (#363). */
 const bundle = (dir: string) => loadSimulation(dir, join(dir, 'src', 'rules'), tempTree('boardsmith-bot-strength-bundle-'), undefined);
 const rules = await bundle(raceProject);
 const teamRules = await bundle(teamProject);
 const scoredSoloRules = await bundle(scoredSoloProject);
+const scoredTeamRules = await bundle(scoredTeamProject);
 const run = { gamesPerSeat: 30, playerCounts: [2, 3], seed: 'fixed', jobs: 2 };
 
 describe('runBotStrength', () => {
@@ -118,6 +139,12 @@ describe('runBotStrength', () => {
     const result = await runBotStrength(scoredSoloRules, { ...run, playerCounts: [1], bot: 'biggest', against: 'random' });
 
     expect(result.counts!.map((c) => [c.by, c.stronger])).toEqual([['score', true]]);
+  }, 120_000);
+
+  it('measures by wins, not score, when the bot loses games every seat always won without it', async () => {
+    const result = await runBotStrength(scoredTeamRules, { ...run, playerCounts: [2], bot: 'biggest', against: 'random' });
+
+    expect(result.counts!.map((c) => [c.by, c.stronger])).toEqual([['wins', false]]);
   }, 120_000);
 
   it('does not find a solo policy stronger by final score than the same policy', async () => {
@@ -178,7 +205,7 @@ describe('boardsmith bot-strength', () => {
     const { printed, exitCode } = await botStrengthIn({ bot: 'biggest', games: '30', seed: 'fixed', jobs: '2' }, unscoredSoloProject);
 
     expect(exitCode).toBe(1);
-    expect(printed).toMatch(/biggest is not shown to beat random at 1 players: every seat won every game played as random, so win share cannot show/);
+    expect(printed).toMatch(/biggest is not shown to beat random at 1 player: every seat won every game played as random, so win share cannot show/);
     expect(printed).toMatch(/finalScore metric/);
   }, 120_000);
 

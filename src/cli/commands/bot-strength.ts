@@ -53,11 +53,11 @@ export type StrengthAtCount = {
       botShare: Share;
       /** One seat's share of the wins when every seat plays the opponents' policy, on the same seeds. */
       baselineShare: Share;
-      /** Every seat won every game playing the opponents' policy, so win share cannot show the bot is stronger. */
-      baselineAlwaysWon: boolean;
+      /** Every seat won every game, with the bot and without, and the game declares no `finalScore` metric to measure it by. */
+      unmeasured: boolean;
     }
   | {
-      /** Every seat won every baseline game, so the bot's final score is compared with the baseline's instead. */
+      /** Every seat won every game, with the bot and without, so the bot's final score is compared with the baseline's instead. */
       by: 'score';
       /** The `finalScore` metric compared. */
       metric: string;
@@ -113,8 +113,8 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
       botRuns.push(run.games);
     }
     const seatGames = options.gamesPerSeat * players;
-    const baselineAlwaysWon = baseline.games.every((game) => game.winners.length === players);
-    if (baselineAlwaysWon && scoreMetric !== undefined) {
+    const everySeatWon = [baseline.games, ...botRuns].every((games) => games.every((game) => game.winners.length === players));
+    if (everySeatWon && scoreMetric !== undefined) {
       const scores = (game: { metrics: GameMetricSummary }) => game.metrics.values[scoreMetric];
       const gain = summarize(botRuns.flatMap((games, i) => games.map((game, g) => scores(game)[i] - scores(baseline.games[g])[i])));
       counts.push({ players, seatGames, by: 'score', metric: scoreMetric, gain, stronger: gain.low > 0 });
@@ -123,7 +123,7 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
     const botShare = share(botRuns.reduce((sum, games, i) => sum + winCredit(games, i + 1), 0), seatGames);
     const anyoneWon = baseline.games.filter((game) => game.winners.length > 0).length;
     const baselineShare = perSeat(share(anyoneWon, options.gamesPerSeat), players);
-    counts.push({ players, seatGames, by: 'wins', botShare, baselineShare, baselineAlwaysWon, stronger: botShare.low > baselineShare.high });
+    counts.push({ players, seatGames, by: 'wins', botShare, baselineShare, unmeasured: everySeatWon, stronger: botShare.low > baselineShare.high });
   }
   return { failing: [], gameOptions, counts };
 }
@@ -131,6 +131,7 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
 const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
 const interval = (s: Share) => `${percent(s.share)} (${percent(s.low)}-${percent(s.high)})`;
 
+const playersAt = (counts: StrengthAtCount[]) => counts.map((c) => `${c.players} player${c.players === 1 ? '' : 's'}`).join(' and ');
 const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 
 function printCounts(counts: StrengthAtCount[]): void {
@@ -144,8 +145,8 @@ function printCounts(counts: StrengthAtCount[]): void {
   const byScore = counts.filter((c) => c.by === 'score');
   if (byScore.length > 0) {
     console.log(
-      `\nAt ${byScore.map((c) => c.players).join(' and ')} players every seat won every game, so the bot is measured by ` +
-        `how much more of its ${byScore[0].metric} it scores than the same seat scores on the same seeds.`,
+      `\nAt ${playersAt(byScore)} every seat won every game, so the bot is measured by how much more ${byScore[0].metric} ` +
+        `it scores than the same seat on the same seeds: the first finalScore metric gameDefinition.metrics declares, higher taken as better.`,
     );
   }
 }
@@ -158,12 +159,12 @@ function printVerdict(run: RunBotStrengthOptions, counts: StrengthAtCount[]): bo
     return true;
   }
   const notShown = (kept: StrengthAtCount[], why: string) =>
-    kept.length === 0 ? [] : [`${run.bot} is not shown to beat ${run.against} at ${kept.map((c) => `${c.players} players`).join(' and ')}: ${why}`];
+    kept.length === 0 ? [] : [`${run.bot} is not shown to beat ${run.against} at ${playersAt(kept)}: ${why}`];
   const strengthen =
     `Strengthen the bot's hooks in src/rules/bot.ts (see /bs-build-bot), or play more games with --games to narrow the interval.`;
   const lines = [
     ...notShown(
-      weak.filter((c) => c.by === 'wins' && !c.baselineAlwaysWon),
+      weak.filter((c) => c.by === 'wins' && !c.unmeasured),
       `the low end of its win share's 95% interval is not above the high end of a seat's share when every seat plays ${run.against}. ${strengthen}`,
     ),
     ...notShown(
@@ -171,7 +172,7 @@ function printVerdict(run: RunBotStrengthOptions, counts: StrengthAtCount[]): bo
       `the low end of the 95% interval of how much more it scores than ${run.against} on the same seeds is not above 0. ${strengthen}`,
     ),
     ...notShown(
-      weak.filter((c) => c.by === 'wins' && c.baselineAlwaysWon),
+      weak.filter((c) => c.by === 'wins' && c.unmeasured),
       `every seat won every game played as ${run.against}, so win share cannot show the bot is stronger. ` +
         'Declare a finalScore metric in gameDefinition.metrics (see defineMetrics) to measure such a count by score.',
     ),
