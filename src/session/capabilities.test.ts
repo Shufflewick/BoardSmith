@@ -19,7 +19,7 @@ const tableDefinition = { gameClass: PlainGame, minPlayers: 2, maxPlayers: 4 };
 /** A world game's compiled definition: a world block with its own seat count. */
 const worldDefinition = { gameClass: PlainGame, world: { maxPlayers: 40 } };
 
-/** A table whose compiled flow has one step declaring a time limit, 'deploy'. */
+/** A table whose compiled flow has one timed step, 'deploy'. */
 const timedDefinition = { ...tableDefinition, gameClass: FixedDeployGame };
 
 function capabilities(
@@ -68,7 +68,7 @@ describe('resolveCapabilities — the table backend', () => {
     ).toBe(true);
   });
 
-  it('offers timedSteps exactly when a step of the compiled flow declares a time limit', () => {
+  it('offers timedSteps exactly when a step of the compiled flow is timed', () => {
     expect(capabilities('table', tableDefinition).timedSteps).toBe(false);
     expect(capabilities('table', { ...tableDefinition, gameClass: UntimedDeployGame }).timedSteps).toBe(false);
     expect(capabilities('table', timedDefinition).timedSteps).toBe(true);
@@ -165,7 +165,7 @@ describe('capabilityContradictions', () => {
   it('refuses a timed step without an idleAction, naming the step and the fix', () => {
     const [message] = contradictions('table', timedDefinition);
     expect(message).toContain("'deploy'");
-    expect(message).toContain('timeLimitMs');
+    expect(message).toContain('timed: true');
     expect(message).toContain('"idleAction"');
     expect(message).toContain('boardsmith.json');
   });
@@ -187,7 +187,7 @@ class OptionTimedGame extends DeployGame {
   constructor(options: GameOptions & { blitz?: boolean; pace?: string; minutes?: number; teams?: boolean }) {
     if (options.teams === true && options.playerCount === 3) throw new Error('teams need an even seat count');
     const timed = options.blitz === true || options.pace === 'rapid' || options.minutes === 5;
-    super(options, timed ? 60_000 : undefined);
+    super(options, timed);
   }
 }
 
@@ -230,7 +230,7 @@ describe('timed steps that depend on game options (#812)', () => {
     const [message] = capabilityContradictions({ backend: 'table', definition, declared: {} });
     expect(message).toContain('384');
     expect(message).toContain('256');
-    expect(message).toContain('timeLimitMs');
+    expect(message).toContain('timed: true');
     expect(() => capabilities('table', definition)).toThrow(/384/);
   });
 
@@ -290,7 +290,7 @@ describe('a table seat range must hold a seat count (#1303)', () => {
 
   it('refuses a seat range too wide to build each seat count, rather than building it', () => {
     const [message] = contradictions('table', { ...tableDefinition, minPlayers: 2, maxPlayers: 1000 });
-    expect(message).toMatch(/^This game would have to be built 999 times to find every step that declares timeLimitMs/);
+    expect(message).toMatch(/^This game would have to be built 999 times to find every step declared timed: true/);
   });
 
   it('does not tell a game too wide to build at all to time a step with its default options, which builds nothing either', () => {

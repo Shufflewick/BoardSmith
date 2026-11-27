@@ -959,6 +959,15 @@ const secondsLeft = computed(() =>
 
 Rules that keep your board and the Action Panel telling the same story:
 
+- **Show the deadline the host sends, and infer nothing from its length.** The
+  table picks its time per turn, anywhere from 1 minute to 48 hours, so the
+  same step can close in 60 seconds at one table and in two days at another.
+  Write the time left in a format that fits every length: "0:42" and
+  "47:59:59" are both a correct reading. Never decide what a deadline means
+  from how long it is (a short one is not "the deploy phase"), never cap or
+  scale it by a number of your own, and never run a timer of your own beside
+  it. What phase the game is in comes from the game state.
+
 - **Zero is not the end of the step.** The host closes it, and the next frame
   says what happened. At zero, say you are waiting for the server. Do not
   disable actions yourself: a move the player makes in the last moment is the
@@ -973,10 +982,9 @@ Rules that keep your board and the Action Panel telling the same story:
   addition to that one, never instead of it.
 - **Choose how the Action Panel writes it.** Pass GameShell a
   `format-turn-deadline` function. It gets the time left in milliseconds and
-  returns the whole line, so a game that counts in seconds writes
-  `` :format-turn-deadline="(ms) => `${Math.ceil(ms / 1000)}s left`" ``, and one
-  that holds its own number can show that instead. Without it the panel writes
-  "Time left: M:SS". At zero the panel still says it is waiting for the server,
+  returns the whole line, which must read well at any length, from a minute to
+  48 hours. Without it the panel writes "Time left: M:SS", or "H:MM:SS" from an
+  hour up. At zero the panel still says it is waiting for the server,
   whatever the function returns.
 - **Only a table has it.** A persistent world has no step deadline, and a world
   does not publish `turnDeadline`.

@@ -89,7 +89,9 @@ const turnDeadlineText = computed((): string | null => {
   if (deadline.remainingMs === 0) return 'Time is up. Waiting for the server\u2026';
   if (props.formatTurnDeadline) return props.formatTurnDeadline(deadline.remainingMs);
   const seconds = Math.ceil(deadline.remainingMs / 1000);
-  return `Time left: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+  const ss = String(seconds % 60).padStart(2, '0');
+  if (seconds < 3600) return `Time left: ${Math.floor(seconds / 60)}:${ss}`;
+  return `Time left: ${Math.floor(seconds / 3600)}:${String(Math.floor(seconds / 60) % 60).padStart(2, '0')}:${ss}`;
 });
 
 // Re-export types
@@ -166,7 +168,7 @@ const props = defineProps<{
   boardFailed?: boolean;
   /**
    * Writes the countdown line from the time left on the host's clock (#1437).
-   * Absent, the panel writes "Time left: M:SS". At zero the panel always says
+   * Absent, the panel writes "Time left: M:SS", or "H:MM:SS" from an hour up. At zero the panel always says
    * it is waiting for the server, because the host closes the step.
    */
   formatTurnDeadline?: (remainingMs: number) => string;

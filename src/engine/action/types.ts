@@ -975,9 +975,9 @@ export interface SerializedAction {
 }
 
 /**
- * A seat's part of a timed step, ended by the host because the step's window
+ * A seat's part of a timed step, ended by the host because the time per turn
  * ran out while the seat held a follow-up the step offered no idle action
- * beside (#494: time limits always win). No action ran, so there is nothing to
+ * beside (#494: host deadlines always win). No action ran, so there is nothing to
  * deserialize: a replay re-applies it through `Game.expireHeldSeat`. It is
  * never undoable, because a seat cannot take back a closure the host made, and
  * it counts as one entry in the step's undo window like the actions around it.

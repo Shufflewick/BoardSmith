@@ -46,6 +46,13 @@ describe('ActionPanel turn deadline (#301)', () => {
     expect(countdown(wrapper).text()).toBe('Time left: 1:13');
   });
 
+  it('writes hours once an hour or more is left, up to a 48-hour turn (#1830)', () => {
+    expect(countdown(mountPanel({ deadlineAt: 1, remainingMs: 48 * 3_600_000 })).text()).toBe('Time left: 48:00:00');
+    expect(countdown(mountPanel({ deadlineAt: 1, remainingMs: 3_600_000 })).text()).toBe('Time left: 1:00:00');
+    expect(countdown(mountPanel({ deadlineAt: 1, remainingMs: 3_599_500 })).text()).toBe('Time left: 1:00:00');
+    expect(countdown(mountPanel({ deadlineAt: 1, remainingMs: 3_599_000 })).text()).toBe('Time left: 59:59');
+  });
+
   it('shows it while waiting on another player too, because the deadline is the table\'s', () => {
     const wrapper = mountPanel({ deadlineAt: 1, remainingMs: 9_000 }, false);
     expect(countdown(wrapper).text()).toBe('Time left: 0:09');

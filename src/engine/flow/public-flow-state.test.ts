@@ -25,7 +25,7 @@ const server: FlowState = {
   ],
   currentPhase: 'deploy',
   moveCount: 5,
-  timeLimitMs: 30000,
+  timed: true,
   turnScopeUndeclared: 'deploy',
   actionError: "seat 1's error",
   followUps: [{ action: 'peek', args: { card: 12 }, seat: 1 }],
@@ -42,7 +42,6 @@ describe('toPublicFlowState (#449)', () => {
         { playerIndex: 2, completed: false },
       ],
       currentPhase: 'deploy',
-      timeLimitMs: 30000,
     });
   });
 

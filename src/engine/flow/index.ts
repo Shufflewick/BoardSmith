@@ -32,9 +32,6 @@ export type { BoundaryKeyState } from './boundary-key.js';
 export { toPublicFlowState } from './public-flow-state.js';
 export type { PublicFlowState } from './public-flow-state.js';
 
-// The shortest window a step's timeLimitMs may declare.
-export { MIN_STEP_TIME_LIMIT_MS } from './step-time-limit.js';
-
 // Types
 export type {
   FlowNodeType,
@@ -53,7 +50,6 @@ export type {
   ForEachConfig,
   ActionStepConfig,
   TurnScope,
-  StepTimeLimit,
   TurnRun,
   SimultaneousActionStepConfig,
   SwitchConfig,

@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import { styleText } from 'node:util';
 import open from 'open';
 
-import type { GameDefinition } from '../../session/index.js';
+import { timePerTurnProblem, type GameDefinition, type TimePerTurn } from '../../session/index.js';
 import type { GameStateSnapshot } from '../../engine/utils/index.js';
 import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import type { TableDefinition } from '../dev-host/table-rules-worker.js';
@@ -260,6 +260,8 @@ interface BoardSmithConfig {
    * does.
    */
   idleAction?: { name: string; args?: Record<string, unknown> };
+  /** How long the dev host gives a timed step (#1830); `timePerTurnProblem` checks it at startup. */
+  defaultTimePerTurn?: TimePerTurn;
 }
 
 /**
@@ -560,6 +562,8 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
   for (const warning of formatUnknownKeyWarnings(config as unknown as Record<string, unknown>)) {
     console.warn(styleText('yellow', `  ${warning}`));
   }
+  const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
+  if (timePerTurn !== undefined) throw new Error(timePerTurn);
 
   // #158: the manifest's `world` block is the whole declaration -- no flag.
   const worldMode = resolveWorldMode(config);
@@ -825,6 +829,7 @@ async function startDev(options: DevOptions, holdings: HostHoldings): Promise<vo
       debug: options.debug === true,
       seedSnapshot,
       idleAction: config.idleAction,
+      defaultTimePerTurn: config.defaultTimePerTurn,
       ...(devStore
         ? {
             persistence: {

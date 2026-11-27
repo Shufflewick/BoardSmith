@@ -202,6 +202,11 @@ describe('deriveManifest', () => {
     expect(derive({ name: 'fixture' }).capabilities).toMatchObject({ timedSteps: false });
   });
 
+  it('carries the declared default time per turn and refuses one outside the host\'s set (#1830)', () => {
+    expect(derive({ name: 'fixture', defaultTimePerTurn: '24h' }).defaultTimePerTurn).toBe('24h');
+    expect(() => derive({ name: 'fixture', defaultTimePerTurn: '3m' })).toThrow(/"defaultTimePerTurn".*"3m"/s);
+  });
+
   it('refuses a timed game that declares no idleAction, naming the step', () => {
     const timed = fixedDeployDefinition as GameDefinition;
     expect(() => derive({ name: 'fixture' }, timed)).toThrow(/'deploy'.*"idleAction"/s);

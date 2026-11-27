@@ -142,7 +142,7 @@ interface GameShellProps {
   playerColorMarks?: readonly PlayerColorMark[];
   /**
    * Writes the Action Panel's countdown line from the time left on the host's
-   * clock, in ms (#1437). Default: "Time left: M:SS". At zero the panel always
+   * clock, in ms (#1437). Default: "Time left: M:SS", or "H:MM:SS" from an hour up. At zero the panel always
    * says it is waiting for the server. A custom UI draws its own countdown
    * from `turnDeadline` on the game context.
    */

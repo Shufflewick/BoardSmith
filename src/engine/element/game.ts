@@ -3354,7 +3354,7 @@ export class Game<
    * Whether the open timed step has been open for at least `ms` milliseconds
    * (#1532): the host's instant for the op being run, less the host's instant
    * for the op that opened the step. Read it in the rules of an `actionStep`
-   * or `simultaneousActionStep` that declares `timeLimitMs` -- an action's
+   * or `simultaneousActionStep` declared `timed: true` -- an action's
    * `disabled`, `validate` or `execute` -- to refuse something during part of
    * the window:
    *
@@ -3423,9 +3423,9 @@ export class Game<
     const openedAt = this._flowEngine?.openTimedStepOpenedAt();
     if (openedAt === undefined) {
       throw new Error(
-        `${reader}() measures how long the open timed step has been open, but no step with timeLimitMs ` +
-          'is open now. Read it only in the rules of an actionStep or simultaneousActionStep that declares ' +
-          `timeLimitMs: ${where}.`,
+        `${reader}() measures how long the open timed step has been open, but no step declared timed: true ` +
+          'is open now. Read it only in the rules of an actionStep or simultaneousActionStep declared ' +
+          `timed: true: ${where}.`,
       );
     }
     if (openedAt === null || this._hostNow === undefined) {
@@ -3447,15 +3447,6 @@ export class Game<
    */
   reopenStepClock(): void {
     if (this._hostNow !== undefined) this._flowEngine?.reopenTimedStep(this._hostNow);
-  }
-
-  /**
-   * The host instant the open timed step's time limit ends at (#1541), or
-   * `undefined` when no timed step with a stamped opening is open.
-   * @internal
-   */
-  stepClosesAt(): number | undefined {
-    return this._flowEngine?.openTimedStepClosesAt();
   }
 
   /**

@@ -206,10 +206,16 @@
         "prod": { "$ref": "#/definitions/platformIds" }
       }
     },
+    "defaultTimePerTurn": {
+      "x-convex-sink": true,
+      "type": "string",
+      "enum": ["1m", "2m", "5m", "10m", "15m", "1h", "6h", "12h", "24h", "48h"],
+      "description": "The time per turn a new table of this game starts with (#1830). The table may choose another from the same set until the game starts. The host runs the only clock: when a step declared `timed: true` is open, it closes the step at the end of the table's time per turn by submitting `idleAction` for every seat still due, and sends that deadline to every screen. Leave it out for five minutes. Read by the platform's lobby and by `boardsmith dev`, which times every timed step with it; `boardsmith validate` and `boardsmith build` refuse a value outside the set (`src/session/time-per-turn.ts`)."
+    },
     "idleAction": {
       "x-convex-sink": false,
       "$ref": "#/definitions/namedAction",
-      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when the bundle ships no bot. Whether it does is not authorable: `boardsmith build` derives it from the compiled `gameDefinition.bot` and sends it as `capabilities.bots`. Also required whenever a flow step declares `timeLimitMs`: the host closes a timed step by submitting this action for every seat that has not acted, never by handing the seat to a bot, so `boardsmith validate` and `boardsmith build` refuse a timed game without it (`capabilities.timedSteps`). Consumed by the platform (manifest-schema.ts `idleAction`)."
+      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when the bundle ships no bot. Whether it does is not authorable: `boardsmith build` derives it from the compiled `gameDefinition.bot` and sends it as `capabilities.bots`. Also required whenever a flow step is declared `timed: true`: the host closes a timed step by submitting this action for every seat that has not acted, never by handing the seat to a bot, so `boardsmith validate` and `boardsmith build` refuse a timed game without it (`capabilities.timedSteps`). Consumed by the platform (manifest-schema.ts `idleAction`)."
     },
     "imageSources": {
       "x-convex-sink": false,

@@ -31,7 +31,7 @@ import { requireGameProject, resolveRulesDir, tableUiState, TABLE_UI_ENTRY } fro
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
 import { runToolCapturingStdout } from '../lib/run-tool.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
-import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
+import { GAME_BACKENDS, capabilityContradictions, isGameBackend, timePerTurnProblem } from '../../session/index.js';
 import { type TableBuild, constructBuild, describeBuild, tableBuilds } from '../../session/capabilities.js';
 import type { GameDefinition } from '../../session/index.js';
 import { parseImageInfo } from '../../ui/utils/image.js';
@@ -375,7 +375,7 @@ function checkPlatformIdsShape(raw: unknown): string[] {
 
 /**
  * Shape checks for the blocks the PUBLISHING PLATFORM reads out of the built
- * manifest: `backend`, `idleAction` and `roundDeadline`. They reach the
+ * manifest: `backend`, `defaultTimePerTurn`, `idleAction` and `roundDeadline`. They reach the
  * platform untouched through build.ts's `deriveManifest` config spread, so a
  * malformed block is only discovered at upload unless it is caught here.
  *
@@ -399,6 +399,9 @@ function checkPlatformBlockShapes(config: Record<string, unknown>): string[] {
       + `Got ${JSON.stringify(config.backend)}.`,
     );
   }
+
+  const timePerTurn = timePerTurnProblem(config.defaultTimePerTurn);
+  if (timePerTurn !== undefined) issues.push(timePerTurn);
 
   if (config.idleAction !== undefined) {
     issues.push(...checkNamedActionShape(
@@ -1306,7 +1309,7 @@ async function withProjectBundle<T>(
  * Hold the compiled rules and boardsmith.json to the agreement `boardsmith
  * build` enforces (`capabilityContradictions`), so a project that passes
  * validate is not refused a moment later by build. Among other things this is
- * where a step declaring `timeLimitMs` without an `idleAction` to close it is
+ * where a step declared `timed: true` without an `idleAction` to close it is
  * refused, naming the step.
  *
  * Pure over an already-loaded definition; {@link validateRulesAgreement} loads it.

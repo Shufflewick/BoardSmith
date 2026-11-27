@@ -36,8 +36,6 @@ export interface PublicFlowState {
   awaitingPlayers?: Array<{ playerIndex: number; completed: boolean; availableActions?: string[] }>;
   /** The current named phase. */
   currentPhase?: string;
-  /** How long the open step stays open, in milliseconds, when it declared a limit. */
-  timeLimitMs?: number;
 }
 
 /** Cut a server-side flow state down to what `seat` may be sent; seat 0 is a spectator. */
@@ -64,7 +62,6 @@ export function toPublicFlowState(flowState: FlowState | undefined, seat: number
     );
   }
   if (flowState.currentPhase !== undefined) pub.currentPhase = flowState.currentPhase;
-  if (flowState.timeLimitMs !== undefined) pub.timeLimitMs = flowState.timeLimitMs;
   return pub;
 }
 

@@ -2444,18 +2444,18 @@ function spin() {
 export const PLAYBACK_REASON = 'Buying waits until the battle playback ends.';
 
 /**
- * THE PLAYBACK GAME (#1547): Windup Warfare's step clock. Each seat's turn is a step open for an
- * hour, and `levelUp` is greyed by `game.stepOpenFor` for its first ten minutes, while `ready` ends
- * the turn at once. A walk that never waits for the step clock takes `ready` every turn and never
- * sees `levelUp` enabled. With `cheer`, a `cheer` action is enabled only for those first ten
- * minutes, as Windup Warfare's 2x vote is only while the battle plays back (#1659).
+ * THE PLAYBACK GAME (#1547): Windup Warfare's step clock. Each seat's turn is a timed step, open
+ * for the dev host's five-minute default time per turn, and `levelUp` is greyed by
+ * `game.stepOpenFor` for its first minute, while `ready` ends the turn at once. A walk that never
+ * waits for the step clock takes `ready` every turn and never sees `levelUp` enabled. With
+ * `cheer`, a `cheer` action is enabled only for that first minute, as Windup Warfare's 2x vote is only while the battle plays back (#1659).
  */
 export function playbackGame(options: { cheer?: boolean } = {}): Record<string, string> {
   const cheer = options.cheer
     ? `
     Action.create('cheer')
       .prompt('Cheer')
-      .disabled(() => game.stepOpenFor(600_000) && 'The battle has finished playing back.')
+      .disabled(() => game.stepOpenFor(60_000) && 'The battle has finished playing back.')
       .execute(() => ({ success: true })),`
     : '';
   const cheerStep = options.cheer ? ", 'cheer'" : '';
@@ -2485,7 +2485,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
   return [
     Action.create('levelUp')
       .prompt('Level up')
-      .disabled(() => !game.stepOpenFor(600_000) && ${JSON.stringify(PLAYBACK_REASON)})
+      .disabled(() => !game.stepOpenFor(60_000) && ${JSON.stringify(PLAYBACK_REASON)})
       .execute(() => {
         game.levelUps += 1;
         return { success: true };
@@ -2503,7 +2503,7 @@ export function createGameFlow(_game: DevGameGame): FlowDefinition {
   return {
     root: loop({
       maxIterations: 100,
-      do: eachPlayer({ do: actionStep({ name: 'turn', actions: ['levelUp'${cheerStep}, 'ready'], timeLimitMs: 3_600_000 }) }),
+      do: eachPlayer({ do: actionStep({ name: 'turn', actions: ['levelUp'${cheerStep}, 'ready'], timed: true }) }),
     }),
   };
 }

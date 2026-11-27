@@ -111,3 +111,6 @@ export {
   capabilityContradictions,
 } from './capabilities.js';
 export type { GameBackend, GameCapabilities } from './capabilities.js';
+
+// The time per turn a table plays at, and a game's declared default (#1830).
+export { TIME_PER_TURN_MS, DEFAULT_TIME_PER_TURN, timePerTurnProblem, type TimePerTurn } from './time-per-turn.js';

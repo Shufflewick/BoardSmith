@@ -33,7 +33,7 @@ import type { GameClass } from '../engine/index.js';
 import type { GameOptionDefinition } from '../types/protocol.js';
 import { valuesEqual } from '../engine/action/choice-matching.js';
 import { declaredGameOptionsOf, selectGameOptions } from './game-option-selection.js';
-import { timedStepNames } from '../engine/flow/step-time-limit.js';
+import { timedStepNames } from '../engine/flow/timed-step.js';
 import { constructGame } from '../engine/element/game.js';
 import { paletteGameOptions } from './colors.js';
 
@@ -117,8 +117,8 @@ export interface GameCapabilities {
   /**
    * Does a step of this game close on a clock?
    *
-   * table: true exactly when a step of the COMPILED flow declares `timeLimitMs`
-   * -- derived from the code, like `bots`. The engine states the window on the
+   * table: true exactly when a step of the COMPILED flow is declared `timed: true`
+   * -- derived from the code, like `bots`. The engine marks the step on the
    * turn boundary and never closes the step itself; the host does, by
    * submitting the game's `idleAction` for every seat still due. So a host
    * reading `true` must hold the bundle's `idleAction`, and `boardsmith build`
@@ -175,7 +175,7 @@ export interface TableBuild {
   choices: Record<string, unknown>;
 }
 
-/** A build whose compiled flow has a step declaring `timeLimitMs`, and those steps' names. */
+/** A build whose compiled flow has a step declared `timed: true`, and those steps' names. */
 interface TimedBuild extends TableBuild {
   steps: string[];
 }
@@ -262,7 +262,7 @@ const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], { colorPa
 function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
   // `tableContradictions` refuses a seat range that holds no seat count, by name.
   if (seatRangeProblem(definition) !== undefined) return {};
-  const { builds, refusal } = tableBuilds(definition, 'to find every step that declares timeLimitMs');
+  const { builds, refusal } = tableBuilds(definition, 'to find every step declared timed: true');
   for (const build of builds) {
     const steps = timedStepsOf(definition, colorPalette, build);
     if (steps.length > 0) return { timed: { ...build, steps } };
@@ -481,9 +481,9 @@ function timedStepContradictions(
   const one = timed.steps.length === 1;
   const steps = timed.steps.map((name) => `'${name}'`).join(', ');
   return [
-    `This game's flow has ${one ? 'a step' : 'steps'} that declare${one ? 's' : ''} ` +
-      `timeLimitMs (${steps}, ${describeBuild(timed)}), but boardsmith.json declares no "idleAction". The host closes a ` +
-      'timed step when its window elapses by submitting the idle action for every seat that has ' +
+    `This game's flow has ${one ? 'a step' : 'steps'} declared ` +
+      `timed: true (${steps}, ${describeBuild(timed)}), but boardsmith.json declares no "idleAction". The host closes a ` +
+      'timed step when the time per turn runs out by submitting the idle action for every seat that has ' +
       'not acted, so without one nothing can close it. Add the legal no-op action your rules ' +
       'register to boardsmith.json, e.g. "idleAction": { "name": "pass" }. A bot is not an ' +
       'alternative: a timed-out seat is never handed to a bot.',

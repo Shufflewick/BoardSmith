@@ -34,9 +34,7 @@ export class ClockWaits {
   /**
    * The seats to ask now, from `canMove()`, the seats that can move: those not
    * waiting. When every one waits, the clock moves first and all are asked.
-   * Returns why the game stops instead when no seat waits for an instant, or
-   * when the earliest wait reaches the open step's time limit, when a host
-   * would close the seats: these harnesses run no deadlines.
+   * Returns why the game stops instead when no seat waits for an instant.
    */
   seatsToAsk<S extends { seat: number }>(runner: GameRunner, canMove: () => S[]): S[] | string {
     const seats = canMove();
@@ -62,13 +60,6 @@ export class ClockWaits {
       throw new Error(
         `${who} waits until instant ${until}, which is not after the game's instant ${now}, so the game would never move on. ` +
           "Wait only for an instant later than the game's, or return the move the seat makes now.",
-      );
-    }
-    const closesAt = runner.game.stepClosesAt();
-    if (closesAt !== undefined && until >= closesAt) {
-      return (
-        `${who} waits until instant ${until}, but the open step's time limit ends at instant ${closesAt}, when a host would close the seat. ` +
-        'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.'
       );
     }
     runner.setNow(until);

@@ -20,7 +20,6 @@ import {
   playbackTurnDefinition,
   validateGatedDefinition,
   disabledGatedDefinition,
-  shortWindowGatedDefinition,
   commitRoundDefinition,
   levelUpWhenAllowed,
   seatOneWaitsForSeatTwo,
@@ -546,18 +545,6 @@ describe('playGame with policies (#556)', () => {
     expect(instants).toEqual([0, 0, 0, 0]);
   });
 
-  it('stops a game whose bot waits past the open step\'s time limit, which a host would close it at (#1541)', async () => {
-    const result = await playGame(
-      { ...shortWindowGatedDefinition, bot: levelUpWhenAllowed },
-      { playerCount: 2, seed: 'late', policies: [mcts(1), mcts(1)], maxActions: 20 },
-    );
-    expect(result.stuck).toBe(true);
-    expect(result.error).toBe(
-      "Policy 'mcts:1' waits until instant 30000, but the open step's time limit ends at instant 10000, when a host would close the seat. " +
-        'The simulator and the benchmark run no deadlines, so the game stops here. Have the bot stop waiting before the time limit ends.',
-    );
-  });
-
   // #1719: as the live host does, the simulator holds a seat that waits with no instant until the game changes.
   it('lets the other seat move while a bot waits with no instant, then asks it again', async () => {
     for (const seed of ['a', 'b', 'c', 'd']) {
@@ -739,7 +726,7 @@ class SeatTwoGatedGame extends Game<SeatTwoGatedGame, Player> {
         actions: ['levelUp', 'done'],
         playerDone: (ctx, player) => ctx.game.done.includes(player.seat),
         allDone: (ctx) => ctx.game.done.length === 2,
-        timeLimitMs: 120_000,
+        timed: true,
       }),
     });
   }

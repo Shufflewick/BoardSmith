@@ -1883,7 +1883,7 @@ Two things end a hold anyway, by ruling:
 - **Host deadlines always win.** When a host deadline passes, a timed step's
   window or any deadline the host keeps itself on any step (a table's
   hours-long round, say), the host closes each seat still due with an
-  `expireSeat` op naming the game's `idleAction`. The step needs no time limit
+  `expireSeat` op naming the game's `idleAction`. The step need not be timed
   for the op: the deadline is the host's. A seat holding a follow-up takes the
   idle action if the step offers it (which drops the follow-up, like any other
   action); if the step does not offer it, the follow-up is dropped and the
@@ -1894,7 +1894,7 @@ Two things end a hold anyway, by ruling:
   false }`, a `HistoryEntry` beside the `SerializedAction` entries): a replay
   of the history closes the seat again at the same point, and undo counts it
   but never reaches behind it, because a closure the host made is not the
-  seat's to take back. See `timeLimitMs` below.
+  seat's to take back. See `timed` below.
 
 So **an optional follow-up needs a way out**: give the follow-up action a
 "done" choice, or list an end action (such as `endTurn`) in the step. A seat
@@ -2532,43 +2532,41 @@ A seat's undo is not a checkpoint restore, so the step keeps no checkpoint
 behind the newest one. Each seat keeps one copy of its `Player` per action it
 can still take back, which `checkpoints: { max }` caps.
 
-#### `timeLimitMs` - a step that closes on a clock
+#### `timed` - a step that closes on the host's clock
 
-`actionStep` and `simultaneousActionStep` both accept `timeLimitMs`: how long the
-step stays open once it is entered, in milliseconds.
+`actionStep` and `simultaneousActionStep` both accept `timed: true`: the host
+closes the step when the table's **time per turn** runs out.
 
 ```typescript
 simultaneousActionStep({
   name: 'deploy',
   actions: ['placeUnit', 'ready'],
   playerDone: (ctx, player) => player.ready,
-  timeLimitMs: 120_000, // two minutes
-})
-
-// Or resolved from state when the step is entered:
-actionStep({
-  name: 'turn',
-  actions: ['move', 'pass'],
-  timeLimitMs: (ctx) => (ctx.game.round === 1 ? 60_000 : 30_000),
+  timed: true,
 })
 ```
 
-- It is resolved **once, when the step is entered**, and fixed while the step
-  stays open: a seat submitting mid-round does not move it. The next entry (the
-  next round of a `loop`, the next seat of an `eachPlayer`) resolves its own.
-- It must be a whole number of milliseconds, and at least
-  `MIN_STEP_TIME_LIMIT_MS` (10 000, ten seconds). The host needs time to close
-  a step, so a shorter window would be over before it could. A bad number is
-  refused when the flow is built; a function that answers one is refused when
-  the step is entered. Both errors name the step.
-- It is a **duration, never an instant**. The engine keeps no clock and never
-  closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
-  on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
-  closes the step when the window elapses with one `expireSeat` op per
+- **The step does not say how long.** The table chooses its time per turn
+  before the game starts, from 1, 2, 5, 10 or 15 minutes, or 1, 6, 12, 24 or
+  48 hours, and it is locked once play begins. Your game declares the default
+  a new table starts with in `boardsmith.json`, and gets five minutes without
+  one:
+
+  ```json
+  { "defaultTimePerTurn": "24h" }
+  ```
+
+  `boardsmith validate` and `boardsmith build` refuse any value outside that
+  set. Rules never learn the length, so write them to play the same at any of
+  them.
+- **The host runs the only clock.** The engine keeps none and never closes the
+  step itself. It marks the open step as `FlowState.timed` and on the host's
+  turn boundary (`meta.turnBoundary.timed`), and the host closes the step when
+  the time per turn runs out with one `expireSeat` op per
   seat that has not acted, naming your `idleAction`. That op is the host's
   alone: no client message maps to it, so a player cannot close a seat by
   dressing an action up as a timeout. The same op closes a seat at any other
-  deadline the host keeps, on a step with no time limit too. Time limits always
+  deadline the host keeps, on a step that is not timed too. Host deadlines always
   win: a seat holding a follow-up is closed too, by the idle action when the
   step offers it, and otherwise by dropping its follow-up and ending its part,
   which the history records as a seat expiry (see "A Follow-up Holds Its
@@ -2578,22 +2576,22 @@ actionStep({
   otherwise, naming the step. A bot is not an alternative: a timed-out seat is
   never handed to a bot.
 - `boardsmith build` stamps `capabilities.timedSteps: true` into the manifest
-  when any step of the compiled flow declares a limit. A flow can depend on
+  when any step of the compiled flow is timed. A flow can depend on
   the seat count and the game options, so build and validate construct the
   game at every seat count with every combination of its boolean and select
   options (number and designer-only options at their defaults), defaults
   first, and stop at the first timed step; the `idleAction` refusal names the
   seat count and options that produced it. Past 256 constructions they refuse
   the game rather than sample it, unless the defaults already time a step.
-- `boardsmith dev` enforces the window locally, the same way the platform
-  does. The dev host starts one timer when the step opens, sends the deadline
+- `boardsmith dev` enforces the deadline locally, the same way the platform
+  does, with your `defaultTimePerTurn`. The dev host starts one timer when the step opens, sends the deadline
   on every `game_state` frame (so `turnDeadline` and the Action Panel count
   down), and when it runs out submits `idleAction` for every human seat still
   due. Then it wakes the bots, and submits `idleAction` for every bot seat
   that still has not moved. If the game refuses the idle action, or
   the idle action does not move the round on, the terminal and every browser
   show an error saying so. **End step** in the Dev bar closes the open step
-  straight away, so you do not have to wait out a long window. **Skip wait**,
+  straight away, so you do not have to wait out a long turn. **Skip wait**,
   shown while an action the step clock greyed will open before the deadline,
   moves the dev host's time on to that instant and offers the actions again,
   so you do not wait out a playback either; the deadline comes as much sooner
@@ -2665,7 +2663,7 @@ Action.create<MyGame>('levelUp')
   carries the same game, so its open step keeps the instant it opened, as it
   keeps its deadline, and the offers are worked out again at the reload's
   instant.
-- **It throws, saying why**, when no step with `timeLimitMs` is open, or when
+- **It throws, saying why**, when no step declared `timed: true` is open, or when
   the host stamped no instant. `GameRunner.replay` (the dev host's last resort
   when an edited flow no longer fits a saved position) has none, because the
   history records no instants, so a game that reads the clock in a replayed
@@ -2678,8 +2676,7 @@ Action.create<MyGame>('levelUp')
   move waits, the clock moves to the earliest instant they wait for, and they
   are asked again. A seat that waits with no instant is held until another
   seat moves (#1719), and when every seat that can move waits with no instant
-  the game stops. A wait that reaches the step's time limit stops the game,
-  since they run no deadlines.
+  the game stops. They run no deadlines, so a wait is never cut short.
 - In a test, stamp the instant yourself: `createTestGame(Game, { playerCount, now: ms })`
   for the start and `testGame.runner.setNow(ms)` before a later move, or
   `createHeadlessSession(def, { ..., now: () => ms })`, where

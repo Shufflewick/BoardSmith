@@ -210,7 +210,6 @@ export {
   orderSeatsByTurn,
   flowBoundaryKey,
   toPublicFlowState,
-  MIN_STEP_TIME_LIMIT_MS,
 } from './flow/index.js';
 
 export type {
@@ -230,7 +229,6 @@ export type {
   ForEachConfig,
   ActionStepConfig,
   TurnScope,
-  StepTimeLimit,
   TurnRun,
   SimultaneousActionStepConfig,
   SwitchConfig,

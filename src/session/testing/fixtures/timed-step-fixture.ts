@@ -1,19 +1,15 @@
 /**
- * Steps that declare how long they stay open (#300).
+ * Steps the host times (#300, #1830).
  *
  * `DeployGame` is Windup Warfare's shape: two seats deploy at once, a round
- * closes when both have committed, and the round loops. Its limit is a
- * constructor argument so the same flow can be declared with a number, with a
- * function, or with no limit at all, and nothing else differs between them.
- * `TimedTurnGame` is the same game played one seat after another, so the
- * sequential `actionStep` is covered by the same fixture.
+ * closes when both have committed, and the round loops. Whether it is timed is
+ * a constructor argument, so the same flow can be declared timed or not and
+ * nothing else differs between them. `TimedTurnGame` is the same game played
+ * one seat after another, so the sequential `actionStep` is covered by the
+ * same fixture.
  *
- * `GrowingDeployGame`'s function answers 30 s plus one second per commit EVER
- * made, so a limit that was re-resolved after a seat submitted mid-round would
- * be visible, and so would a round that failed to resolve it afresh.
- *
- * Consumers: `src/engine/flow/step-time-limit.test.ts` (the flow state and every
- * restore path), `src/session/step-time-limit-boundary.test.ts` (the turn
+ * Consumers: `src/engine/flow/timed-step.test.ts` (the flow state and every
+ * restore path), `src/session/timed-step-boundary.test.ts` (the turn
  * boundary a host broadcasts), the build and validate suites (a timed step
  * needs an `idleAction`), and `flow-state-clone.test.ts`, which drives every
  * definition exported here. `PlaybackTurnGame` is played by the simulator and
@@ -23,8 +19,7 @@
  * have a bot that waits for the playback to level up (#1537), for
  * `src/session/step-clock.test.ts` and the dev host's deadline suite, and for
  * the simulator and the benchmark, which move their clock to the instant the
- * bot waits for (#1541). `ShortWindowGatedGame` closes its step before the
- * playback ends, so the bot waits past the deadline. `CommitRoundGame`, played
+ * bot waits for (#1541). `CommitRoundGame`, played
  * with `seatOneWaitsForSeatTwo`, has a seat that waits with no instant while the
  * other can move, which the simulator and the benchmark hold as a host does (#1719).
  */
@@ -36,22 +31,19 @@ import {
   eachPlayer,
   actionStep,
   simultaneousActionStep,
-  type FlowContext,
   type FlowNode,
   type GameOptions,
 } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
 import type { BotStrategy } from '../../../bot/types.js';
 
-type Limit = number | ((ctx: FlowContext<DeployGame>) => number);
-
 /** The step a round is made of: every seat at once, or one seat after another. */
 type Shape = 'simultaneous' | 'sequential';
 
-function roundStep(shape: Shape, limit: Limit | undefined, actions: string[]): FlowNode<DeployGame> {
-  const timeLimitMs = limit === undefined ? {} : { timeLimitMs: limit };
+function roundStep(shape: Shape, timed: boolean, actions: string[]): FlowNode<DeployGame> {
+  const mark = timed ? { timed: true as const } : {};
   if (shape === 'sequential') {
-    return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions, ...timeLimitMs }) });
+    return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions, ...mark }) });
   }
   return simultaneousActionStep<DeployGame>({
     name: 'deploy',
@@ -62,7 +54,7 @@ function roundStep(shape: Shape, limit: Limit | undefined, actions: string[]): F
       ctx.game.committed = [];
       return true;
     },
-    ...timeLimitMs,
+    ...mark,
   });
 }
 
@@ -72,7 +64,7 @@ export class DeployGame extends Game<DeployGame, Player> {
   /** Seats that committed in the current round. */
   committed: number[] = [];
 
-  constructor(options: GameOptions, limit?: Limit, shape: Shape = 'simultaneous', actions = ['commit']) {
+  constructor(options: GameOptions, timed = false, shape: Shape = 'simultaneous', actions = ['commit']) {
     super(options);
     this.registerAction(
       Action.create('commit').execute((_args, ctx) => {
@@ -83,36 +75,29 @@ export class DeployGame extends Game<DeployGame, Player> {
       }),
     );
     this.setFlow({
-      root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit, actions) }),
+      root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, timed, actions) }),
     });
   }
 }
 
-/** Open for 120 s, every round. */
+/** Timed, every round. */
 export class FixedDeployGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 120_000);
+    super(options, true);
   }
 }
 
-/** Open for 30 s plus one second per commit ever made, resolved at each round's entry. */
-export class GrowingDeployGame extends DeployGame {
-  constructor(options: GameOptions) {
-    super(options, (ctx) => 30_000 + 1_000 * ctx.game.commits);
-  }
-}
-
-/** The same flow with no limit declared. */
+/** The same flow, untimed. */
 export class UntimedDeployGame extends DeployGame {
   constructor(options: GameOptions) {
     super(options);
   }
 }
 
-/** Sequential turns, one seat after another, each open for 45 s. */
+/** Sequential turns, one seat after another, each timed. */
 export class TimedTurnGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options, 45_000, 'sequential');
+    super(options, true, 'sequential');
   }
 }
 
@@ -121,7 +106,6 @@ function twoSeat(gameClass: GameDefinitionLike['gameClass'], gameType: string): 
 }
 
 export const fixedDeployDefinition = twoSeat(FixedDeployGame, 'timed-step-fixed');
-export const growingDeployDefinition = twoSeat(GrowingDeployGame, 'timed-step-growing');
 export const untimedDeployDefinition = twoSeat(UntimedDeployGame, 'timed-step-untimed');
 export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
 
@@ -129,7 +113,7 @@ export const timedTurnDefinition = twoSeat(TimedTurnGame, 'timed-step-turn');
 class CommitRoundGame extends DeployGame {
   constructor(options: GameOptions) {
     super(options);
-    this.setFlow({ root: roundStep('simultaneous', undefined, ['commit']) });
+    this.setFlow({ root: roundStep('simultaneous', false, ['commit']) });
   }
 }
 
@@ -154,7 +138,7 @@ function levelUp<G extends Game & { levelUps: number }>() {
 }
 
 /**
- * Windup Warfare's level-up rule (#1532): each 120 s deploy round opens on a
+ * Windup Warfare's level-up rule (#1532): each timed deploy round opens on a
  * battle both screens play back, and `levelUp` is refused until the playback
  * has ended, measured on the step's own clock rather than on a client's word.
  */
@@ -162,7 +146,7 @@ export class PlaybackGame extends DeployGame {
   levelUps = 0;
 
   constructor(options: GameOptions) {
-    super(options, 120_000, 'simultaneous', ['levelUp', 'commit']);
+    super(options, true, 'simultaneous', ['levelUp', 'commit']);
     this.registerAction(levelUp());
   }
 }
@@ -181,7 +165,7 @@ export class PlaybackTurnGame extends Game<PlaybackTurnGame, Player> {
     this.registerAction(levelUp());
     this.registerAction(Action.create('commit').execute(() => {}));
     this.setFlow({
-      root: eachPlayer<PlaybackTurnGame>({ do: actionStep({ name: 'turn', actions: ['levelUp', 'commit'], timeLimitMs: 120_000 }) }),
+      root: eachPlayer<PlaybackTurnGame>({ do: actionStep({ name: 'turn', actions: ['levelUp', 'commit'], timed: true }) }),
     });
   }
 }
@@ -200,7 +184,7 @@ export const levelUpWhenAllowed: BotStrategy = {
 };
 
 /**
- * A 120 s round of `levelUp` and `done`, where `levelUp` waits for the
+ * A timed round of `levelUp` and `done`, where `levelUp` waits for the
  * playback (#1537), refused by `validate` or greyed by `disabled`. A seat that
  * is done is out of the round; the round waits for both.
  */
@@ -208,7 +192,7 @@ class ClockGatedGame extends Game<ClockGatedGame, Player> {
   levelledUp: number[] = [];
   done: number[] = [];
 
-  constructor(options: GameOptions, gate: 'validate' | 'disabled', timeLimitMs = 120_000) {
+  constructor(options: GameOptions, gate: 'validate' | 'disabled') {
     super(options);
     const offered = Action.create<ClockGatedGame>('levelUp')
       .condition({ 'not levelled up yet': (ctx) => !ctx.game.levelledUp.includes(ctx.player.seat) });
@@ -231,7 +215,7 @@ class ClockGatedGame extends Game<ClockGatedGame, Player> {
         actions: ['levelUp', 'done'],
         playerDone: (ctx, player) => ctx.game.done.includes(player.seat),
         allDone: (ctx) => ctx.game.done.length === 2,
-        timeLimitMs,
+        timed: true,
       }),
     });
   }
@@ -249,13 +233,5 @@ class DisabledGatedGame extends ClockGatedGame {
   }
 }
 
-/** A 10 s round, which a host closes before the 30 s playback ends (#1541). */
-class ShortWindowGatedGame extends ClockGatedGame {
-  constructor(options: GameOptions) {
-    super(options, 'disabled', 10_000);
-  }
-}
-
 export const validateGatedDefinition = twoSeat(ValidateGatedGame, 'timed-step-validate-gated');
 export const disabledGatedDefinition = twoSeat(DisabledGatedGame, 'timed-step-disabled-gated');
-export const shortWindowGatedDefinition = twoSeat(ShortWindowGatedGame, 'timed-step-short-window-gated');

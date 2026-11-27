@@ -20,6 +20,7 @@ import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { createDevHostConnectionHandler } from './connection-handler.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { DEFAULT_TIME_PER_TURN, TIME_PER_TURN_MS } from '../../session/index.js';
 import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 import { bundledTable, openTable, tableProject } from './table-host.test-helper.js';
 import { buildFailure } from './rules-project.test-helper.js';
@@ -48,20 +49,23 @@ const FLOWS = {
   /** Each seat bumps in turn, three rounds. */
   turns: `loop({ name: 'rounds', maxIterations: 3, do: eachPlayer({ name: 'turn', do: actionStep({ name: 'a', actions: ['bump'] }) }) })`,
   /** One timed step, repeated. */
-  timed: (limitMs: number) => `sequence(
-    loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['bump'], turnScope: 'restart', timeLimitMs: ${limitMs} }) }),
+  timed: `sequence(
+    loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['bump'], turnScope: 'restart', timed: true }) }),
   )`,
   /** One timed step offering `level` beside `bump`, repeated. */
   clocked: `sequence(
-    loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }) }),
+    loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timed: true }) }),
   )`,
   /** Three timed steps offering `level` beside `bump`, one after another. */
   clockedThree: `sequence(
-    actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
-    actionStep({ name: 'b', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
-    actionStep({ name: 'c', actions: ['level', 'bump'], turnScope: 'restart', timeLimitMs: 60_000 }),
+    actionStep({ name: 'a', actions: ['level', 'bump'], turnScope: 'restart', timed: true }),
+    actionStep({ name: 'b', actions: ['level', 'bump'], turnScope: 'restart', timed: true }),
+    actionStep({ name: 'c', actions: ['level', 'bump'], turnScope: 'restart', timed: true }),
   )`,
 };
+
+/** The time per turn of a game that declares none, which these hosts are given (#1830). */
+const TURN_MS = TIME_PER_TURN_MS[DEFAULT_TIME_PER_TURN];
 
 /** How long into its step `level` stays greyed (#1535). */
 const LEVEL_GATE_MS = 5_000;
@@ -256,29 +260,26 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     expect(shownCount(table.frames())).toBe(1);
   }, 30_000);
 
-  it("keeps a timed step's deadline across the reload, and the edited limit from the next step", async () => {
-    const project = counterProject({ step: 1, flow: FLOWS.timed(10_000) });
+  it("keeps a timed step's deadline across the reload, and gives the next step a whole turn", async () => {
+    const project = counterProject({ step: 1, flow: FLOWS.timed });
     const time = fakeClock();
     const table = await openCounterTable(await project.load(), time);
-    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 10_000);
+    expect(table.frames().at(-1)?.deadlineAt).toBe(START + TURN_MS);
 
     time.advance(4_000);
     time.armed.length = 0;
-    project.save({ step: 1, flow: FLOWS.timed(20_000) });
+    project.save({ step: 2, flow: FLOWS.timed });
     const outcome = await table.host.reloadRules((await project.load()).rules);
 
     expect(outcome?.kind).toBe('restored');
     // The carried game is at the same step, so the step keeps its window: a
-    // save gives nobody more time (#387). The open step keeps the limit it
-    // opened with, too: a step's limit is resolved when the step opens, and is
-    // part of its state.
+    // save gives nobody more time (#387).
     expect(time.armed).toEqual([]);
-    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 10_000);
+    expect(table.frames().at(-1)?.deadlineAt).toBe(START + TURN_MS);
 
-    // The next step opens under the edited rules, with the edited limit.
     await table.bump();
-    expect(time.armed.at(-1)).toBe(20_000);
-    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 4_000 + 20_000);
+    expect(time.armed.at(-1)).toBe(TURN_MS);
+    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 4_000 + TURN_MS);
   }, 30_000);
 
   // #1535: the carried game is the same game, so its open step keeps the instant it opened, as it keeps its deadline.
@@ -489,8 +490,8 @@ describe('#379: a move sent while the edited rules are still building', () => {
  * refused: on the edited rules once they are in place, and on the old ones only
  * when the edit does not build.
  */
-const timedBefore = await counterRules({ step: 1, flow: FLOWS.timed(10_000) });
-const timedAfter = await counterRules({ step: 10, flow: FLOWS.timed(10_000) });
+const timedBefore = await counterRules({ step: 1, flow: FLOWS.timed });
+const timedAfter = await counterRules({ step: 10, flow: FLOWS.timed });
 
 const turnsBefore = await counterRules({ step: 1, flow: FLOWS.turns, seats: 2 });
 const turnsAfter = await counterRules({ step: 10, flow: FLOWS.turns, seats: 2 });
@@ -544,7 +545,7 @@ describe('#387: a step deadline that runs out while the edited rules are still b
     expect(shownCount(table.frames())).toBe(1);
 
     const reloaded = table.queue.saved('src/rules/index.ts');
-    table.time.advance(10_000);
+    table.time.advance(TURN_MS);
     table.time.fire();
     await reloaded;
     // The idle action the deadline submitted bumps by the step of the rules it ran on.

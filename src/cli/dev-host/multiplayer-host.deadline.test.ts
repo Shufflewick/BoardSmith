@@ -1,8 +1,9 @@
 /**
  * `boardsmith dev` closes a timed step the way the platform does (#302).
  *
- * A step that declares `timeLimitMs` reports it on the turn boundary (#300).
- * The dev host arms ONE timer per boundary key on its own clock, stamps every
+ * A step declared `timed: true` says so on the turn boundary (#300, #1830).
+ * The dev host arms ONE timer per boundary key on its own clock, for the
+ * game's declared `defaultTimePerTurn`, stamps every
  * `game_state` frame with `deadlineAt` and `serverNow` (#301's contract), and
  * when the window elapses submits the manifest's `idleAction` for every human
  * seat still due, then wakes the bots and submits it for every bot seat that
@@ -45,7 +46,7 @@ import { succeeded } from '../../session/op-result.test-helper.js';
 const clients = createDevHostClientMemory();
 beforeEach(() => clients.reset());
 
-/** The fixture's window: 120 s, every round. */
+/** The time per turn every host here is given: two minutes. */
 const WINDOW_MS = 120_000;
 const START = 1_700_000_000_000;
 
@@ -99,7 +100,7 @@ class StuckGame extends Game<StuckGame, Player> {
           name: 'stuck',
           actions: ['wait'],
           playerDone: () => false,
-          timeLimitMs: 10_000,
+          timed: true,
         }),
       }),
     });
@@ -131,7 +132,7 @@ class HeldGame extends Game<HeldGame, Player> {
       root: loop({
         maxIterations: 3,
         while: (ctx) => (ctx.game as HeldGame).scouted.length < 2,
-        do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timeLimitMs: 10_000 }),
+        do: simultaneousActionStep<HeldGame>({ name: 'raid', actions: ['scout'], timed: true }),
       }),
     });
   }
@@ -154,6 +155,7 @@ function makeHost(
     maxPlayers: 2,
     makeSeed: () => 'deadline',
     clock,
+    defaultTimePerTurn: '2m',
     idleAction: { name: 'commit' },
     executeOp: async (gameOptions, snap, pend, op, hostOptions) => {
       // A bot that never moves: the pump asks with no seats, so it is told
@@ -241,6 +243,20 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(h.lastFrame('B').deadlineAt).toBe(START + WINDOW_MS);
   });
 
+  it('gives a timed step the game\'s declared time per turn, however long', async () => {
+    const h = makeHost(fixedDeployDefinition, { defaultTimePerTurn: '48h' });
+    await h.seatBoth();
+
+    expect(h.lastFrame('A').deadlineAt).toBe(START + 48 * 60 * 60 * 1000);
+  });
+
+  it('gives a timed step five minutes when the game declares no time per turn', async () => {
+    const h = makeHost(fixedDeployDefinition, { defaultTimePerTurn: undefined });
+    await h.seatBoth();
+
+    expect(h.lastFrame('A').deadlineAt).toBe(START + 5 * 60 * 1000);
+  });
+
   it('sends deadlineAt null on a step with no window, and arms nothing', async () => {
     const h = makeHost(untimedDeployDefinition);
     await h.seatBoth();
@@ -284,7 +300,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     }
     expect(h.due('A')).toEqual([1, 2]);
 
-    h.clock.advance(10_000);
+    h.clock.advance(WINDOW_MS);
 
     await vi.waitFor(() => expect(h.expiries()).toHaveLength(2));
     for (const idle of h.expiries()) {
@@ -408,7 +424,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     const h = makeHost(stuckDefinition, { idleAction: { name: 'wait' }, stallBots: true });
     await h.seatBoth();
 
-    h.clock.advance(10_000);
+    h.clock.advance(WINDOW_MS);
 
     expect(await h.reported()).toMatch(/did not move/);
     expect(h.actionsFor(1)).toHaveLength(1);
