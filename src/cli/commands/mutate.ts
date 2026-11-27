@@ -71,9 +71,10 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
   // A timeout alone shows nothing: a busy machine and a never-ending loop look the same.
   const onlyTimedOut = said.length === 0 && summary.killed === 0 && timedOut.length > 0;
   if (onlyTimedOut) {
-    said.push(`${timedOut.length} ${of} made their tests run past the time limit, and none was killed, so no test was shown to notice a change`);
+    said.push(`${timedOut.length} ${of} made their tests time out, and none was killed, so no test was shown to notice a change`);
     next.push(
-      'A run times out when the machine is busy, or when the change makes a loop never end. Run `boardsmith mutate` again when the machine is less busy.',
+      'A run times out when the machine is busy, or when the change makes a loop never end or a promise never settle. Run `boardsmith mutate` again when the machine is less busy; ' +
+        'a mutant that times out every time makes a test hang, so add a test that checks what the changed line does without waiting on it.',
     );
   }
   if (said.length > 0) {
@@ -84,7 +85,7 @@ function verdict(since: string, run: DiffMutationRun): MutateVerdict {
       findings: [
         ...survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
         ...unreached.map((u) => ({ file: u.file, line: u.line, detail: `${u.description}: no test imports ${u.file}` })),
-        ...timedOut.map((t) => ({ file: t.file, line: t.line, detail: `${t.description}: its tests ran past the time limit` })),
+        ...timedOut.map((t) => ({ file: t.file, line: t.line, detail: `${t.description}: its tests timed out` })),
       ],
     };
   }

@@ -1147,7 +1147,7 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
   it('names why a red test file failed as a whole (#1840)', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
     await suite(project, {
-      'tests/broken.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nbid(1, 2);\nthrow new Error('setup broke');\nit('never runs', () => {});\n",
+      'tests/broken.test.ts': "import { it } from 'vitest';\nimport { bid } from '../src/rules';\nbid(1, 2);\nthrow new Error('setup broke.');\nit('never runs', () => {});\n",
     });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toEqual(['tests/broken.test.ts: setup broke']);
@@ -1165,6 +1165,20 @@ it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
     const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
     expect(result.notGreen).toBeUndefined();
     expect(result.summary).toEqual({ files: 1, mutants: 2, killed: 0, survived: 0, timedOut: 2, unreached: 0 });
+  }, 60_000);
+
+  // Under the mutant: "rules a bid" fails its assertion after "waits" has timed out (or, in a hook, after the time-out).
+  it.each([
+    ['a test after it', "it('waits', () => (mutated ? new Promise(() => {}) : undefined), 50);\nit('rules a bid', () => { expect(bid(3, 3)).toBe(false); expect(bid(3, 4)).toBe(true); });"],
+    ['an afterAll hook', "it('waits', () => (mutated ? new Promise(() => {}) : undefined), 50);\nafterAll(() => { expect(bid(3, 3)).toBe(false); expect(bid(3, 4)).toBe(true); });"],
+  ])('counts a mutant as killed when %s fails on an assertion besides a time-out (#1840)', async (_, body) => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/slow.test.ts': `import { it, expect, afterAll } from 'vitest';\nimport { bid } from '../src/rules';\nconst mutated = Boolean(process.env.BOARDSMITH_MUTANT);\n${body}\n`,
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toBeUndefined();
+    expect(result.summary).toEqual({ files: 1, mutants: 2, killed: 2, survived: 0, timedOut: 0, unreached: 0 });
   }, 60_000);
 
   it('names a red test that threw a value with no message by the test alone (#1515 review F3)', async () => {

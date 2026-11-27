@@ -423,6 +423,7 @@ ${importBase}
 const projectDir = ${JSON.stringify(projectDir)};
 const writeReport = (report) => writeFileSync(${JSON.stringify(join(workDir, REPORT_NAME))}, JSON.stringify(report));
 const STATUS = { pass: 'passed', fail: 'failed' };
+const TIME_OUT = ${VITEST_TIME_OUT};
 // Vitest 3 sizes each pool from the root poolOptions before maxWorkers, and runs each pool's files at once (#955).
 // Vitest 4 runs a project's files with that project's own maxWorkers.
 const budgetProblems = (ctx, configs) => {
@@ -472,7 +473,9 @@ const reporter = {
   onTaskUpdate(packs) {
     if (!mutant || !process.send || this.stopped) return;
     // Vitest sets duration only after retries, repeats and expected-failure inversion finish.
-    const failed = new Set(packs.filter(([, result]) => result?.state === 'fail' && typeof result.duration === 'number').map(([id]) => id));
+    // A time-out alone does not stop the run, since a later failure may still show the mutant caught.
+    const failed = new Set(packs.filter(([, result]) => result?.state === 'fail' && typeof result.duration === 'number' &&
+      !(result.errors?.length > 0 && result.errors.every((error) => TIME_OUT.test(String(error.message))))).map(([id]) => id));
     if (failed.size === 0) return;
     const files = this.ctx.state.getFiles();
     if (!files.some((file) => testsIn(file.tasks).some((test) => failed.has(test.id)))) return;
@@ -544,6 +547,13 @@ interface ReportedError {
  */
 export const isAssertionFailure = ({ name, diff }: Pick<ReportedError, 'name' | 'diff'>): boolean => name === 'AssertionError' || diff;
 
+/**
+ * The first line of a vitest test or hook time-out, or of a worker's message to vitest that timed
+ * out, as an error's message or an unhandled error (`name: message`) reads. A busy machine gives
+ * these to a run whose tests would otherwise pass, so a failure on one shows nothing caught.
+ */
+const VITEST_TIME_OUT = /^(?:\w*Error: )?(?:(?:Test|Hook) timed out in \d+ms|\[(?:vitest-[\w-]+|birpc)\]:? [Tt]imeout (?:on )?calling ")/;
+
 /** One test file's entry in the report (`wrapperConfig`), with the project's absolute path of the file. */
 interface ReportedFile {
   path: string;
@@ -575,6 +585,8 @@ type RunResult =
       failedFiles: FailedFile[];
       /** The first line of each error vitest reported outside any test file, such as an unhandled rejection. */
       unhandled: string[];
+      /** The run failed, and every error it reported, in a test, a file or outside them, is a time-out (`VITEST_TIME_OUT`). */
+      onlyTimeOuts: boolean;
       exitCode: number | null;
       ms: number;
     }
@@ -598,7 +610,8 @@ interface Runner {
   /** Waits for the active process group to stop and disappear; refuses any later run. */
   stop(): Promise<void>;
   /**
-   * With `bail`, a mutant's run stops after a confirmed test failure, including running workers. With
+   * With `bail`, a run stops after a confirmed test failure, including running workers; a mutant's
+   * run goes on past a test that failed only on a time-out (`VITEST_TIME_OUT`). With
    * `coverage`, each test file writes which game code it ran into that directory (`readCoverage`);
    * with `reach`, which project files its worker loaded (`readReach`). With `workers`, vitest runs at
    * most that many test workers, and the reporter refuses a config that would run more (#955). With a null
@@ -705,19 +718,25 @@ async function readReport(
   reportPath: string,
   projectDir: string,
   pathOf: (realPath: string) => string | undefined,
-): Promise<{ outcomes: Outcome[]; filesRun: Set<string>; failedFiles: FailedFile[]; unhandled: string[] }> {
+): Promise<Omit<RunResult & { kind: 'ran' }, 'kind' | 'exitCode' | 'ms'>> {
   const report = await reportOnFile(reportPath);
   if ('refused' in report) throw new Error(report.refused);
   const outcomes: Outcome[] = [];
   const filesRun = new Set<string>();
   const failedFiles: FailedFile[] = [];
+  // Every error of the run; undefined for a failure that gave none.
+  const errors: Array<string | undefined> = [...report.errors];
   for (const file of report.files) {
     const path = pathOf(realpathSync(file.path));
     if (path === undefined) continue;
     filesRun.add(path);
-    if (file.failed && !file.tests.some((t) => t.status === 'failed')) {
-      failedFiles.push({ path, reason: file.errors[0]?.replaceAll(projectDir + sep, '') });
+    const failedTests = file.tests.filter((t) => t.status === 'failed');
+    if (file.failed && failedTests.length === 0) {
+      // The reason is quoted mid-sentence, so its own closing period would double the one after it.
+      failedFiles.push({ path, reason: file.errors[0]?.replaceAll(projectDir + sep, '').replace(/\.$/, '') });
+      if (file.errors.length === 0) errors.push(undefined);
     }
+    errors.push(...file.errors, ...failedTests.flatMap((t) => (t.errors.length > 0 ? t.errors.map((e) => e.message) : [undefined])));
     for (const test of file.tests) {
       outcomes.push({
         path,
@@ -730,7 +749,13 @@ async function readReport(
       });
     }
   }
-  return { outcomes, filesRun, failedFiles, unhandled: report.errors.map((error) => error.replaceAll(projectDir + sep, '')) };
+  return {
+    outcomes,
+    filesRun,
+    failedFiles,
+    unhandled: report.errors.map((error) => error.replaceAll(projectDir + sep, '')),
+    onlyTimeOuts: errors.length > 0 && errors.every((error) => error !== undefined && VITEST_TIME_OUT.test(error)),
+  };
 }
 
 /** Writes the generated vitest config of a run and the modules it loads; returns the config's path. */
@@ -837,7 +862,8 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[], work
       ...('related' in scope ? ['related', '--run', '--passWithNoTests', ...scope.related] : ['run']),
       '--root', projectDir,
       '--config', configPath,
-      ...(options.bail ? ['--bail=1'] : []),
+      // A mutant's run stops through the reporter instead, which lets a time-out alone run on.
+      ...(options.bail && !mutant ? ['--bail=1'] : []),
       ...workerFlags,
       ...(scopePaths ?? []).map((path) => relative(projectDir, path).split(sep).join('/')),
     ];
@@ -1453,15 +1479,6 @@ function suiteNoticed(result: RunResult & { kind: 'ran' }): boolean {
   return result.exitCode !== 0 || result.unhandled.length > 0 || result.failedFiles.length > 0 || result.outcomes.some((o) => o.status === 'failed');
 }
 
-/** A vitest test or hook time-out, or a worker's message to vitest that timed out, as a reason or unhandled error reads. */
-const VITEST_TIME_OUT = /^(?:\w*Error: )?(?:(?:Test|Hook) timed out in \d+ms|\[(?:vitest-\w+|birpc)\]:? [Tt]imeout (?:on )?calling ")/;
-
-/** Whether a finished run failed only on time-outs (`VITEST_TIME_OUT`), which a busy machine gives a run the tests pass as well. */
-function failedOnlyOnTimeOuts(result: RunResult & { kind: 'ran' }): boolean {
-  const reasons = [...result.outcomes.filter((o) => o.status === 'failed').map((o) => o.reason), ...result.failedFiles.map((f) => f.reason), ...result.unhandled];
-  return reasons.length > 0 && reasons.every((reason) => reason !== undefined && VITEST_TIME_OUT.test(reason));
-}
-
 /** The tests and files of an unmutated run that failed, as `file > test: reason` and `file: reason`, or why vitest failed the run without one. */
 function redParts(result: RunResult & { kind: 'ran' }): string[] {
   const named = (name: string, reason: string | undefined) => (reason ? `${name}: ${reason}` : name);
@@ -1535,7 +1552,7 @@ async function greenRunner(runner: Runner, projectDir: string, mutants: LocatedM
 async function runMutant(run: GreenRunner, mutant: LocatedMutant): Promise<DiffOutcome> {
   if (run.testsLoading(mutant.file).length === 0) return 'unreached';
   const result = await run.runner.run(run.scope, mutant, run.timeoutMs, { bail: true, workers: run.workers });
-  if (result.kind === 'timed-out' || failedOnlyOnTimeOuts(result)) return 'timed-out';
+  if (result.kind === 'timed-out' || result.onlyTimeOuts) return 'timed-out';
   return suiteNoticed(result) ? 'killed' : 'survived';
 }
 
@@ -1579,8 +1596,9 @@ function apartError(what: string, red: string[], rerun: string): Error {
  * loads (`test-step-reach.ts`, #981) is reported as unreached, since no test could catch it; that
  * includes a file a test reaches only by a path built at run time or through a setup file, which
  * `vitest related` cannot follow (it walks only each test file's own imports, #1499). A mutant that
- * makes its run go past its time limit (an infinite loop, or a busy machine) is counted as timed
- * out, neither survivor nor caught: `timedOut` names it, for the caller to judge.
+ * makes its run go past its time limit (an infinite loop, or a busy machine), or whose run fails
+ * only on vitest time-outs (`VITEST_TIME_OUT`), is counted as timed out, neither survivor nor
+ * caught: `timedOut` names it, for the caller to judge.
  *
  * Those test files first run once unmutated and must pass: `notGreen` then names what failed, and
  * no mutant is tried. The mutants then run side by side, as many at once as `budget` allows, or all of them.

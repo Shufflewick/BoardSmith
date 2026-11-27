@@ -104,7 +104,7 @@ describe('boardsmith mutate', () => {
     expect(run.code).toBe(1);
     expect(run.stdout).toContain('1 of 1 mutant of the lines changed since HEAD~1');
     expect(run.stdout).toContain('none was killed');
-    expect(run.stdout).toContain('src/spin.ts:4 statement removed: its tests ran past the time limit');
+    expect(run.stdout).toContain('src/spin.ts:4 statement removed: its tests timed out');
     expect(run.stdout).toContain('Run `boardsmith mutate` again when the machine is less busy');
   });
 
