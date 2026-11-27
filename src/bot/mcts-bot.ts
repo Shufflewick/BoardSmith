@@ -189,6 +189,8 @@ export class MCTSBot<G extends Game = Game> {
    * refresh must not widen past it. Undefined for every other search.
    */
   private forcedRootMoves?: BotMove[];
+  /** Root moves a `threatResponseMoves` hook listed with `urgent: false` for THIS search: expanded first, never alone (#1839). */
+  private preferredRootMoves?: BotMove[];
   /** RAVE table for move value estimation across all playouts */
   private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
@@ -458,20 +460,22 @@ export class MCTSBot<G extends Game = Game> {
     // The threat response needs to see every move (every candidate move, with candidateMoves) to find blocking cells
     let moves: BotMove[];
     this.forcedRootMoves = undefined;
+    this.preferredRootMoves = undefined;
 
-    if (this.threatResponseMoves) {
-      const threatResponse = this.threatResponseMoves(this.searchGame, this.playerIndex, hookViews(allMoves, listing.views));
-      if (threatResponse.moves.length > 0) {
-        // FORCE blocking when threat is detected - no half measures!
-        // If threat response finds blocking moves, the bot MUST use them
-        moves = this.fromHook(threatResponse.moves, listing.views, this.searchGame, this.playerIndex);
-        // #73: a forced block stays forced under determinization. Without this
-        // the per-world root refresh would widen the root straight back to
-        // every move, quietly undoing the game's "you MUST block" ruling.
-        this.forcedRootMoves = moves;
-      } else {
-        moves = this.sampleRootMoves(allMoves);
-      }
+    const threatResponse = this.threatResponseMoves?.(this.searchGame, this.playerIndex, hookViews(allMoves, listing.views));
+    const listed = threatResponse?.moves.length
+      ? this.fromHook(threatResponse.moves, listing.views, this.searchGame, this.playerIndex)
+      : undefined;
+    if (listed && threatResponse?.urgent) {
+      // #73: a forced block stays forced under determinization. Without this
+      // the per-world root refresh would widen the root straight back to
+      // every move, quietly undoing the game's "you MUST block" ruling.
+      this.forcedRootMoves = listed;
+      moves = listed;
+    } else if (listed) {
+      this.preferredRootMoves = listed;
+      const listedKeys = new Set(listed.map((move) => this.getMoveKey(move)));
+      moves = [...listed, ...this.sampleRootMoves(allMoves).filter((move) => !listedKeys.has(this.getMoveKey(move)))];
     } else {
       moves = this.sampleRootMoves(allMoves);
     }
@@ -481,6 +485,7 @@ export class MCTSBot<G extends Game = Game> {
 
     // Create root node with moves (blocking-only when threatened, sampled otherwise)
     const root = this.createNode(flowState, null, null, moves, this.playerIndex, listing.sampled || (!this.forcedRootMoves && moves.length < allMoves.length), listing.views);
+    root.untriedMoves = this.preferListedRootMoves(root.untriedMoves);
 
     // Run MCTS iterations with timeout failsafe
     const startTime = Date.now();
@@ -746,21 +751,25 @@ export class MCTSBot<G extends Game = Game> {
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
     // The world's own flow state, not the one `node` was grown in (#421).
     const live = this.worldFlowState();
-    const forced = node.parent === null ? this.forcedRootMoves : undefined;
+    const root = node.parent === null;
+    const forced = root ? this.forcedRootMoves : undefined;
+    const preferred = root ? (this.preferredRootMoves ?? []) : [];
+    const allows = (move: BotMove) => this.worldAllows(live, node.currentPlayer, move);
     const legalMoves = live.complete
       ? []
       : forced
-        ? forced.filter((move) => this.worldAllows(live, node.currentPlayer, move))
-        : this.takeInWorldMoves(node, this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true }));
+        ? forced.filter(allows)
+        : [...preferred.filter(allows), ...this.takeInWorldMoves(node, this.movesFor(this.searchGame!, live, node.currentPlayer, { sample: true }))];
     const legal = new Set(legalMoves.map((move) => this.getMoveKey(move)));
 
     const explored = new Set(
       node.children.map((child) => this.getMoveKey(child.parentMove!)),
     );
-    node.untriedMoves = node.allMoves.filter((move) => {
+    const untried = node.allMoves.filter((move) => {
       const key = this.getMoveKey(move);
       return legal.has(key) && !explored.has(key) && !node.refusedMoveKeys.has(key);
     });
+    node.untriedMoves = root ? this.preferListedRootMoves(untried) : untried;
 
     return legal;
   }
@@ -1355,6 +1364,17 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */
+  /** `moves` with the ones `threatResponseMoves` listed unforced moved to the front, in the hook's order (#1839). */
+  private preferListedRootMoves(moves: BotMove[]): BotMove[] {
+    if (!this.preferredRootMoves) return moves;
+    const keys = this.preferredRootMoves.map((move) => this.getMoveKey(move));
+    const rank = (move: BotMove) => {
+      const at = keys.indexOf(this.getMoveKey(move));
+      return at === -1 ? keys.length : at;
+    };
+    return [...moves].sort((a, b) => rank(a) - rank(b));
+  }
+
   private sampleRootMoves(moves: BotMove[]): BotMove[] {
     return moves.length > MAX_SAMPLED_ARGS ? this.rng.shuffle(moves).slice(0, MAX_SAMPLED_ARGS) : moves;
   }
