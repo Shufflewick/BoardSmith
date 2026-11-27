@@ -176,7 +176,10 @@ Which means, precisely:
   take part in the boundary key. The HOST arms its own deadline when the key
   changes, from its own clock, for the table's time per turn (#1830; a game
   declares the default as `defaultTimePerTurn` in `boardsmith.json`), and when
-  it runs out submits one `expireSeat` op per seat still due,
+  it runs out submits one `expireSeat` op per seat still due, the seats no
+  bot plays first (a bot waits in a simultaneous step until those have moved,
+  and an `expireSeat` for a bot seat lets that bot move before it closes the
+  seat, #1842),
   naming the game's `idleAction` and stamped with the key it armed under — so a
   round a human closed while the timer ran refuses the op as stale rather than
   letting it land in the next round (§7: the host carries a boundary it

@@ -1370,6 +1370,10 @@ export class SnapshotSessionHost {
    * they change reaches every seat as an ordinary publish.
    */
   private async applyMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
+    // A bot waits for the humans in a simultaneous step (#1842), so a deadline closing it lets it move first.
+    if (op.type === 'expireSeat' && this.botSeats.some((s) => s.seat === op.player)) {
+      await this.afterMove(`the deadline for bot seat ${op.player}`, false);
+    }
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
     if (!res.success) return res;
     const actionCompleted = completesAction(op, res);
@@ -1769,20 +1773,25 @@ export class SnapshotSessionHost {
 
   /**
    * The bot seats the pump may ask now: every one not held back at this state
-   * (#421), and none while a seat no bot plays is due in a simultaneous step,
-   * so the bots there move after every human due in it has (#1842).
+   * (#421), and none while a seat no bot plays is due in a simultaneous step
+   * and has not moved in it yet, so the bots there move after the humans have
+   * checked in (#1842). A human who has moved once holds no bot, so a step
+   * that closes only once the bots move cannot hang.
    */
   private botSeatsToAsk(): Array<{ seat: number; level?: string }> {
-    if (this.humanDueAtOnceWithBots()) return [];
+    if (this.humanYetToMoveAtOnceWithBots()) return [];
     const heldBack = this.heldBackHere()?.seats;
     return this.botSeats.filter((s) => !heldBack?.has(s.seat));
   }
 
-  /** Whether the open step is simultaneous and a seat no bot plays still owes a move in it. */
-  private humanDueAtOnceWithBots(): boolean {
+  /** Whether the open step is simultaneous and a seat no bot plays is due in it with no move of its own in it yet. */
+  private humanYetToMoveAtOnceWithBots(): boolean {
     const flowState = this.flowState;
     if (!flowState?.awaitingPlayers?.length) return false;
-    return dueSeats(flowState).some((seat) => !this.botSeats.some((s) => s.seat === seat));
+    // The step's own moves are the last `moveCount` entries of the history.
+    const history = this._snapshot?.actionHistory ?? [];
+    const moved = new Set(history.slice(Math.max(0, history.length - (flowState.moveCount ?? 0))).map((entry) => entry.player));
+    return dueSeats(flowState).some((seat) => !moved.has(seat) && !this.botSeats.some((s) => s.seat === seat));
   }
 
   /** The bot seats held back at the game as it stands, if any (#421). */
@@ -1968,8 +1977,8 @@ export class SnapshotSessionHost {
     move: Extract<MutatingOp, { type: 'action' }>,
     seats: Array<{ seat: number }>,
   ): Promise<BotStep> {
-    // A human took the seat, or became due with the bots, while the bot searched: ask the bot seats the table has now.
-    if (!this.botSeatsToAsk().some((s) => s.seat === move.player)) return 'again';
+    // A human took the seat, or is due with the bots again, while the bot searched: ask the bot seats the table has now.
+    if (!this.botSeats.some((s) => s.seat === move.player) || this.humanYetToMoveAtOnceWithBots()) return 'again';
     const made = await this.commitMutatingOp(move.player, move);
     if (made.success) return 'moved';
     // A refused move changed nothing, so the game still stands where it did.

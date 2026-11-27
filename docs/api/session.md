@@ -196,8 +196,9 @@ await session.send(1, { type: 'action', actionName: 'move', player: 1, args: { f
 
 `start()` does not run the bot pump. When a bot seat moves first, run it once
 with `await session.host.runBotTurns()`. In a step where every seat moves at
-once, the pump asks no bot while a seat no bot plays is still due in it, so the
-bots there move after the humans (#1842). A bot's search (`botSuggest`, which
+once, the pump asks no bot while a seat no bot plays is due in it and has made
+no move in it yet, so the bots there move after the humans have checked in, and
+an `expireSeat` for a bot seat runs the bots before it closes the seat (#1842). A bot's search (`botSuggest`, which
 changes nothing) does not hold the table: another seat's move or undo is made
 and published while the bot thinks. The bot's move is then made as an
 ordinary `action` for its seat, and a move found for a position that has since

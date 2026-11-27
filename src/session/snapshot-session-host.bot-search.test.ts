@@ -18,6 +18,7 @@ import { simultaneousRoundsFixtureDefinition } from './testing/fixtures/simultan
 import { fixedDeployDefinition } from './testing/fixtures/timed-step-fixture.js';
 import { stubExecuteOp, succeeded } from './op-result.test-helper.js';
 import { ErrorCode } from '../types/protocol.js';
+import { Action, Game, Player, simultaneousActionStep, type GameOptions } from '../engine/index.js';
 
 interface Snap {
   v: number;
@@ -33,6 +34,33 @@ const answer = (snapshot: Snap, extra: Record<string, unknown> = {}) => ({
   playerViews: [null, null],
   ...extra,
 });
+
+/** A simultaneous step that closes once every seat has committed, where a seat that committed may still commit again. */
+class CommitsUntilAllHaveGame extends Game<CommitsUntilAllHaveGame, Player> {
+  committed: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<CommitsUntilAllHaveGame>('commit').execute((_args, ctx) => {
+        if (!ctx.game.committed.includes(ctx.player.seat)) ctx.game.committed = [...ctx.game.committed, ctx.player.seat];
+      }),
+    );
+    this.setFlow({
+      root: simultaneousActionStep<CommitsUntilAllHaveGame>({
+        actions: ['commit'],
+        allDone: (ctx) => ctx.game.committed.length === ctx.game.players.length,
+      }),
+    });
+  }
+}
+
+const commitsUntilAllHaveDefinition: GameDefinitionLike = {
+  gameClass: CommitsUntilAllHaveGame,
+  gameType: 'commits-until-all-have',
+  minPlayers: 2,
+  maxPlayers: 2,
+};
 
 /** A simultaneous step in which seats 1 and 2 both still owe a move. */
 const seatsOneAndTwoDueAtOnce = {
@@ -526,6 +554,18 @@ describe('a bot in a simultaneous step waits for every human due in it (#1842)',
     expect(await t.history()).toEqual([1, 2, 3]);
   });
 
+  it('a human still due after moving once holds no bot, so a step that closes only once the bot moves does not hang', async () => {
+    const t = await realTable(commitsUntilAllHaveDefinition, 2, [2]);
+    succeeded(await t.host.handleOp(1, commit(t.host, 1)));
+    expect(t.due.at(-1)).toEqual([1, 2]);
+    await settle();
+    expect(t.held).toHaveLength(1);
+    await t.releaseAll(t.host.settled());
+
+    expect(await t.history()).toEqual([1, 2]);
+    expect(t.host.isComplete).toBe(true);
+  });
+
   it('a deadline that hands the idle human to a bot lets every bot move', async () => {
     const t = await realTable(simultaneousRoundsFixtureDefinition, 2, [2]);
     await t.host.runBotTurns();
@@ -536,6 +576,20 @@ describe('a bot in a simultaneous step waits for every human due in it (#1842)',
 
     expect([...(await t.history()).slice(0, 2)].sort()).toEqual([1, 2]);
     expect(t.host.isComplete).toBe(true);
+  });
+
+  it("a deadline that closes every seat still due at once lets the bot make its own move before its seat is closed", async () => {
+    const t = await realTable(fixedDeployDefinition, 2, [2]);
+    const expire = (seat: number) => t.host.handleOp(seat, {
+      type: 'expireSeat', player: seat, idleAction: 'commit', args: {}, boundaryKey: boundaryKeyOfHost(t.host),
+    });
+    const human = expire(1);
+    const bot = expire(2);
+    await t.releaseAll(human, bot, t.host.settled());
+    succeeded(await human);
+
+    const round = t.host.snapshot!.actionHistory.slice(0, 2);
+    expect(round.map((entry) => [entry.player, 'timedOut' in entry && entry.timedOut === true])).toEqual([[1, true], [2, false]]);
   });
 
   it("a deadline that closes the idle human's seat with its idle action lets the bot commit", async () => {

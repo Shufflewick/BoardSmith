@@ -327,9 +327,11 @@ await session.host.runBotTurns();
 
 A bot moves when the game hands it a turn. In a step where every seat moves
 at once, a bot waits until every seat no bot plays that is due in the step has
-moved, so it acts last; a deadline that hands an idle seat to a bot
-(`convertSeatToBot`) or closes it with the idle action (`expireSeat`) then lets
-the bots move (#1842). `setBotSeats` still says only which seats a bot plays.
+made a move in it, so it acts after the humans have checked in; a deadline that
+hands an idle seat to a bot (`convertSeatToBot`) or closes it with the idle
+action (`expireSeat`) then lets the bots move, and an `expireSeat` for a bot
+seat lets that bot make its own move first (#1842). `setBotSeats` still says
+only which seats a bot plays.
 
 A move the game refuses is
 reported once on the console, naming the seat and the game's reason. The bot is

@@ -2563,7 +2563,10 @@ simultaneousActionStep({
   step itself. It marks the open step as `FlowState.timed` and on the host's
   turn boundary (`meta.turnBoundary.timed`), and the host closes the step when
   the time per turn runs out with one `expireSeat` op per
-  seat that has not acted, naming your `idleAction`. That op is the host's
+  seat that has not acted, naming your `idleAction`, the seats no bot plays
+  first: in a step where every seat moves at once a bot waits until those
+  have moved, and an `expireSeat` for a bot seat lets the bot make its own
+  move before it closes the seat (#1842). That op is the host's
   alone: no client message maps to it, so a player cannot close a seat by
   dressing an action up as a timeout. The same op closes a seat at any other
   deadline the host keeps, on a step that is not timed too. Host deadlines always
