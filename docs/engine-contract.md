@@ -162,6 +162,13 @@ same. Those changes are a judgement call. If you make one, extend the fixture
 so the change becomes visible and update the contract; if no fixture can show
 it, record it with `--adopt`.
 
+One such change is not a judgement call: making the engine **refuse** an option
+key an earlier revision accepted (r554's `timeLimitMs`, #1843). Rules built on
+that earlier revision break on the new one, so the platform must not route them
+there. Retire the key in `RETIRED_OPTIONS`
+(`src/engine/flow/retired-options.ts`) and have the builder refuse it with
+`refuseRetiredOptions`; the surface names every retired key, so it moves.
+
 The surface also opens values only one level deep: a class's or function's
 members and a plain object's or enum's own keys. Any other exported value (an
 array, a class instance, a `Map`) is its name only, a plain object's nested keys

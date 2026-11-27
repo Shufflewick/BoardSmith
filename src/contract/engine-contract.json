@@ -1,6 +1,6 @@
 {
-  "revision": 560,
-  "surfaceHash": "c3607ec8e08a2455",
+  "revision": 561,
+  "surfaceHash": "aca3c199c718b9ea",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
   "history": [
@@ -4423,6 +4423,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "In a step where every seat moves at once, the session host asks no bot while a seat no bot plays is due and has not moved in the step yet, so bots move after the humans check in or a deadline converts or closes their seats; an expireSeat for a bot seat runs the bots first (#1842)."
+    },
+    {
+      "revision": 561,
+      "date": "2026-11-27",
+      "surfaceHash": "aca3c199c718b9ea",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "The surface now names every option key a builder refuses because BoardSmith once read it (today timeLimitMs on actionStep and simultaneousActionStep), so retiring a key moves surfaceHash and a world built before it is not routed to an engine that refuses its rules (#1843). Worlds built on r552 or r553 still share r559's surface, which refuses timeLimitMs."
     }
   ]
 }

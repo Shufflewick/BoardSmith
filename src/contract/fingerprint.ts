@@ -41,7 +41,9 @@
  *   real payload. INPUT shapes carried only by types are the sharp end of
  *   this: a renamed option key in `actionStep({ actions })` or in a
  *   `TurnOrderConfig` changes what a game must pass and moves neither hash.
- *   Such a change is a judgement call. See `describeExport` for why.
+ *   Such a change is a judgement call. See `describeExport` for why. A key a
+ *   builder now REFUSES is not: it goes in `RETIRED_OPTIONS`, which the surface
+ *   names (#1843).
  * - `surfaceHash` opens classes, functions, plain objects and enums one level
  *   deep. Any other exported value (an array, a class instance, a `Map`) is
  *   its name only, a plain object's nested keys are not described, and
@@ -127,6 +129,7 @@ import formatFixtureGolden from './format-fixture.json' with { type: 'json' };
 import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
 import { WORLD_ENGINE_METHODS } from '../world/contract.js';
 import { WORLD_REFUSALS } from '../world/refusals.js';
+import { RETIRED_OPTIONS } from '../engine/flow/retired-options.js';
 import type { WorldEngine } from '../world/contract.js';
 import type {
   WorldCreatedPartition,
@@ -864,8 +867,8 @@ export async function describeSurface(entrypoints: readonly SurfaceEntrypoint[])
 
 /**
  * Hash the runtime export surface of every platform-reachable entrypoint:
- * export names plus their members and keys (`describeExport`), and the world
- * refusal registry.
+ * export names plus their members and keys (`describeExport`), the world
+ * refusal registry, and the option keys builders refuse (`RETIRED_OPTIONS`).
  *
  * Shapes only, never implementations — a changed function body is a semantic
  * change, which is `payloadHash`'s job. Conflating the two would make this hash
@@ -890,6 +893,13 @@ export async function computeSurfaceHash(): Promise<string> {
     .map(([code, entry]) => `${code}:${entry.owner}`)
     .sort();
   lines.push(`world-refusals: ${refusals.join(',')}`);
+
+  // Types carry option keys, so the surface cannot see one, but a key a builder
+  // now refuses breaks rules built when it was accepted (#1843). Keys only, as above.
+  const retired = Object.entries(RETIRED_OPTIONS)
+    .flatMap(([builder, options]) => Object.keys(options).map((key) => `${builder}.${key}`))
+    .sort();
+  lines.push(`retired-options: ${retired.join(',')}`);
 
   lines.push(...(await describeSurface(PLATFORM_ENTRYPOINTS)));
 
