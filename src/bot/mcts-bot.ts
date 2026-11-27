@@ -1220,7 +1220,8 @@ export class MCTSBot<G extends Game = Game> {
       if (isElement(v)) return { elementId: v.id };
       if (Array.isArray(v)) return v.map(keyOf);
       if (isPlainObject(v)) {
-        return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, keyOf(x)]));
+        // Sorted, so a move the game wrote with its args in another order keys the same (#1839).
+        return Object.fromEntries(Object.entries(v).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, x]) => [k, keyOf(x)]));
       }
       return v;
     };
@@ -1363,18 +1364,17 @@ export class MCTSBot<G extends Game = Game> {
     }
   }
 
-  /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */
   /** `moves` with the ones `threatResponseMoves` listed unforced moved to the front, in the hook's order (#1839). */
   private preferListedRootMoves(moves: BotMove[]): BotMove[] {
     if (!this.preferredRootMoves) return moves;
-    const keys = this.preferredRootMoves.map((move) => this.getMoveKey(move));
-    const rank = (move: BotMove) => {
-      const at = keys.indexOf(this.getMoveKey(move));
-      return at === -1 ? keys.length : at;
-    };
-    return [...moves].sort((a, b) => rank(a) - rank(b));
+    const rankOf = new Map(this.preferredRootMoves.map((move, at) => [this.getMoveKey(move), at]));
+    return moves
+      .map((move) => ({ move, rank: rankOf.get(this.getMoveKey(move)) ?? rankOf.size }))
+      .sort((a, b) => a.rank - b.rank)
+      .map(({ move }) => move);
   }
 
+  /** The root's moves, sampled down to {@link MAX_SAMPLED_ARGS} when there are more. */
   private sampleRootMoves(moves: BotMove[]): BotMove[] {
     return moves.length > MAX_SAMPLED_ARGS ? this.rng.shuffle(moves).slice(0, MAX_SAMPLED_ARGS) : moves;
   }

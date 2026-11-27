@@ -23,6 +23,22 @@ class PickGame extends Game<PickGame, Player> {
   }
 }
 
+/** One cell from a 2x2 grid, and the game is over. */
+class CellGame extends Game<CellGame, Player> {
+  constructor(gameOptions: GameOptions) {
+    super(gameOptions);
+    this.registerAction(
+      Action.create('place')
+        .chooseFrom('x', { prompt: 'Column', choices: ['0', '1'] })
+        .chooseFrom('y', { prompt: 'Row', choices: ['0', '1'] })
+        .execute((args) => {
+          made.push(`${args.x},${args.y}`);
+        }),
+    );
+    this.setFlow({ root: actionStep({ actions: ['place'] }) });
+  }
+}
+
 const preferO3: BotStrategy = {
   threatResponseMoves: () => ({ moves: [{ action: 'pick', args: { option: 'o3' } }], urgent: false }),
   moveOrdering: (_game, _seat, moves) => [...moves].reverse(),
@@ -42,5 +58,24 @@ describe('threatResponseMoves with urgent: false (#1839)', () => {
 
     expect(made[0]).toBe('o3');
     expect(new Set(made)).toEqual(new Set(options));
+  });
+
+  it.each([
+    ['without a sampler', {}],
+    ['under a determinize sampler', { determinize: () => {} }],
+  ])('searches a listed move once when the hook writes its args in another order, %s', async (_label, sampler) => {
+    const game = new CellGame({ playerCount: 2, playerNames: ['A', 'B'], seed: 'cell' });
+    game.startFlow();
+    const strategy: BotStrategy = {
+      ...sampler,
+      threatResponseMoves: () => ({ moves: [{ action: 'place', args: { y: '1', x: '0' } }], urgent: false }),
+    };
+    const bot = new MCTSBot(game, CellGame, 'cell', 1, { iterations: 30, seed: 's', timeout: Infinity }, strategy);
+    made = [];
+
+    await bot.play();
+
+    expect(made[0]).toBe('0,1');
+    expect(new Set(made.slice(0, 4))).toEqual(new Set(['0,0', '0,1', '1,0', '1,1']));
   });
 });
