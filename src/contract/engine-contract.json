@@ -1,5 +1,5 @@
 {
-  "revision": 557,
+  "revision": 558,
   "surfaceHash": "cb764ea4d21bd43e",
   "payloadHash": "31cc39ceb5e51a98",
   "formatHash": "e7644203601ae348",
@@ -4399,6 +4399,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "boardsmith bot-strength measures a count where every seat wins every game (a score-attack solo) by the game's first finalScore metric."
+    },
+    {
+      "revision": 558,
+      "date": "2026-11-27",
+      "surfaceHash": "cb764ea4d21bd43e",
+      "payloadHash": "31cc39ceb5e51a98",
+      "formatHash": "e7644203601ae348",
+      "summary": "boardsmith bot-strength compares the bot with the baseline seed by seed, passing when the paired gain's 95% interval is above 0 and a sign test on the seeds that differ agrees, so a cooperative bot can pass when random play already wins most games (#1837)."
     }
   ]
 }

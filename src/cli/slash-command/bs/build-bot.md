@@ -529,8 +529,12 @@ or, in a game with hidden information, a `determinize` sampler: without one, the
 search drops every move that touches what the seat cannot see. A count where
 every seat wins every game (a score-attack solo) is measured by the game's
 `finalScore` metric, so a game without one says to declare it in
-`gameDefinition.metrics`, never to change who wins. Put the passing commands'
-output in the report.
+`gameDefinition.metrics`, never to change who wins. When the game has no score to
+declare, that check says the comparison has no room to show a difference (most
+often `--against mcts:easy` in a cooperative game both levels always win): record
+its output as it is, since no hook change can pass it, and do not change the
+hooks for it. Put the passing commands' output, and any such recorded result, in
+the report.
 
 ---
 
