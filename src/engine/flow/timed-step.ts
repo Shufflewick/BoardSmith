@@ -43,7 +43,7 @@ export function timedStepNames(roots: readonly FlowNode[]): { timed: string[]; w
     for (const node of walkFlowNodes(root)) {
       if (node.type !== 'action-step' && node.type !== 'simultaneous-action-step') continue;
       const timing = node.config.timed;
-      if (timing === undefined) continue;
+      if (!timing) continue;
       const name = node.config.name ?? node.type;
       timed.add(name);
       if (timing !== true) watching.add(name);

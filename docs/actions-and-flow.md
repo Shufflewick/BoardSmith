@@ -2632,8 +2632,9 @@ simultaneousActionStep({
 - **Declare `maxWatchSeconds` in `boardsmith.json`**, the longest watch time any
   step can report: a whole number from 1 to 300. The host never adds more, so a
   buggy or hostile bundle cannot hold a table still. `boardsmith validate` and
-  `boardsmith build` refuse a step that reports watch time without it, and
-  `maxWatchSeconds` with no such step. Games with no watch time declare
+  `boardsmith build` refuse `maxWatchSeconds` with no such step, and a step
+  that reports watch time without it when that step is in the first table
+  they find a timed step in (the defaults, at the fewest seats, first). Games with no watch time declare
   nothing.
 - `boardsmith dev` adds the watch time the same way, and when a step reports
   more than `maxWatchSeconds` it gives the cap and shows an error saying so.

@@ -2164,7 +2164,7 @@ export class FlowEngine<G extends Game = Game> {
     context: FlowContext<G>,
     stepType: 'action-step' | 'simultaneous-action-step',
   ): void {
-    if (config.timed === undefined || frame.data?.timed === true) return;
+    if (!config.timed || frame.data?.timed === true) return;
     const watchSeconds = config.timed === true ? 0 : config.timed.watchSeconds(context);
     if (!Number.isFinite(watchSeconds) || watchSeconds < 0) {
       throw new Error(

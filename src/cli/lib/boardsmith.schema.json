@@ -217,7 +217,7 @@
       "type": "integer",
       "minimum": 1,
       "maximum": 300,
-      "description": "The longest watch time, in seconds, any step of this game can report with `timed: { watchSeconds }` (#1831), such as a battle replay everyone watches before they can act. The host sets a timed step's deadline to turn start + min(the step's watch time, this) + the table's time per turn, and tells screens when the watching ends, so a buggy or hostile bundle cannot hold a table still past it. 1 to 300. Declare it exactly when a step reports watch time: `boardsmith validate` and `boardsmith build` refuse it without one, and refuse a step that reports watch time without it (`src/session/time-per-turn.ts`)."
+      "description": "The longest watch time, in seconds, any step of this game can report with `timed: { watchSeconds }` (#1831), such as a battle replay everyone watches before they can act. The host sets a timed step's deadline to turn start + min(the step's watch time, this) + the table's time per turn, and tells screens when the watching ends, so a buggy or hostile bundle cannot hold a table still past it. 1 to 300. Declare it exactly when a step reports watch time: `boardsmith validate` and `boardsmith build` refuse it when no step reports watch time, and refuse a step that reports watch time without it when that step is in the first table they find a timed step in (`src/session/time-per-turn.ts`)."
     },
     "idleAction": {
       "x-convex-sink": false,

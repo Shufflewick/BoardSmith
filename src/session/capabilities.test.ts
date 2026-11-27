@@ -266,6 +266,11 @@ describe('timed steps that depend on game options (#812)', () => {
     expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
   });
 
+  it('stops at the first timed build when no maxWatchSeconds asks for a watching step (#1831)', () => {
+    const definition = optionTimedDefinition([blitz(true), { ...blitz(false), id: 'teams' }]);
+    expect(capabilityContradictions({ backend: 'table', definition, declared: { idleAction: { name: 'commit' } } })).toEqual([]);
+  });
+
   it('names the seat count and options of a combination whose constructor throws', () => {
     const definition = optionTimedDefinition([{ ...blitz(false), id: 'teams' }]);
     expect(() => capabilityContradictions({ backend: 'table', definition, declared: {} })).toThrow(

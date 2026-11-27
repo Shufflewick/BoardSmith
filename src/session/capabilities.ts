@@ -241,23 +241,30 @@ function timedStepsOf(
 }
 
 /**
- * THE FIRST TABLE OF THIS GAME WHOSE FLOW HAS A TIMED STEP, or why it cannot
- * be looked for.
+ * THE FIRST TABLE OF THIS GAME WHOSE FLOW HAS A TIMED STEP, or, with `want`
+ * `'watching'`, one that reports watch time (#1831), or why it cannot be
+ * looked for.
  *
  * A game builds its flow in its constructor, so the only way to read the flow
  * is to construct the game, and a constructor may build a different flow for a
  * different seat count or game options (#812). So every seat count is built
  * with every combination of boolean and select options, the defaults first, and
- * the search stops at the first timed step. A table without integer
- * minPlayers/maxPlayers yields nothing here because `capabilityContradictions`
- * refuses it by name.
+ * the search stops at the first timed step, or for `'watching'` at the first
+ * watching one, which only a declared `maxWatchSeconds` asks for. A table
+ * without integer minPlayers/maxPlayers yields nothing here because
+ * `capabilityContradictions` refuses it by name.
  */
-function findTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
-  const cached = timedBuildSearches.get(definition);
-  if (cached !== undefined && cached.colorPalette === colorPalette) return cached.search;
-  const search = searchTimedBuild(definition, colorPalette);
-  timedBuildSearches.set(definition, { colorPalette, search });
-  return search;
+function findTimedBuild(
+  definition: CapabilityInputs['definition'],
+  colorPalette: unknown,
+  want: 'timed' | 'watching' = 'timed',
+): TimedBuildSearch {
+  let cached = timedBuildSearches.get(definition);
+  if (cached === undefined || cached.colorPalette !== colorPalette) {
+    cached = { colorPalette, searches: {} };
+    timedBuildSearches.set(definition, cached);
+  }
+  return (cached.searches[want] ??= searchTimedBuild(definition, colorPalette, want));
 }
 
 /**
@@ -269,9 +276,16 @@ type TimedBuildSearch = { timed?: TimedBuild; watching?: TimedBuild; refusal?: s
 
 // `boardsmith build` asks both `capabilityContradictions` and `resolveCapabilities`
 // about one compiled definition and palette, and each search constructs the game per seat count.
-const timedBuildSearches = new WeakMap<CapabilityInputs['definition'], { colorPalette: unknown; search: TimedBuildSearch }>();
+const timedBuildSearches = new WeakMap<
+  CapabilityInputs['definition'],
+  { colorPalette: unknown; searches: Partial<Record<'timed' | 'watching', TimedBuildSearch>> }
+>();
 
-function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalette: unknown): TimedBuildSearch {
+function searchTimedBuild(
+  definition: CapabilityInputs['definition'],
+  colorPalette: unknown,
+  want: 'timed' | 'watching',
+): TimedBuildSearch {
   // `tableContradictions` refuses a seat range that holds no seat count, by name.
   if (seatRangeProblem(definition) !== undefined) return {};
   const { builds, refusal } = tableBuilds(definition, 'to find every step declared timed: true');
@@ -279,7 +293,8 @@ function searchTimedBuild(definition: CapabilityInputs['definition'], colorPalet
   for (const build of builds) {
     const steps = timedStepsOf(definition, colorPalette, build);
     timed ??= steps.timed.length > 0 ? { ...build, steps: steps.timed } : undefined;
-    if (steps.watching.length > 0) return { timed, watching: { ...build, steps: steps.watching } };
+    const watching = steps.watching.length > 0 ? { ...build, steps: steps.watching } : undefined;
+    if (watching !== undefined || (want === 'timed' && timed !== undefined)) return { timed, watching };
   }
   if (refusal === undefined || timed !== undefined) return { timed, refusal };
   // Only when the defaults were built at every seat count does timing one of them end the search.
@@ -508,14 +523,19 @@ function timedStepContradictions(
  * Watch time and its cap come together (#1831). The host adds at most
  * `maxWatchSeconds` of a step's watch time to its turn, so a step that reports
  * watch time with no cap would get none, and a cap with no such step says
- * something about the game that is not true.
+ * something about the game that is not true. Without a cap only the first
+ * timed table is read for a watching step, so the timed search stays as short
+ * as before; with one, every table is built until a watching step turns up.
  */
 function watchTimeContradictions(
   definition: CapabilityInputs['definition'],
   declared: CapabilityInputs['declared'],
 ): string[] {
-  const { watching, refusal } = findTimedBuild(definition, declared.colorPalette);
   const declaresCap = declared.maxWatchSeconds !== undefined;
+  const first = findTimedBuild(definition, declared.colorPalette);
+  const { watching, refusal } = first.watching === undefined && declaresCap
+    ? findTimedBuild(definition, declared.colorPalette, 'watching')
+    : first;
   if (watching !== undefined && !declaresCap) {
     const steps = watching.steps.map((name) => `'${name}'`).join(', ');
     return [
