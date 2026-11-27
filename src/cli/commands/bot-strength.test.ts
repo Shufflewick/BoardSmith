@@ -145,6 +145,12 @@ describe('runBotStrength', () => {
     expect(result.counts!.map((c) => c.stronger)).toEqual([true]);
   }, 120_000);
 
+  it('does not find a bot stronger on one game, however it went', async () => {
+    const result = await runBotStrength(teamRules, { ...run, gamesPerSeat: 1, playerCounts: [2], bot: 'biggest', against: 'random' });
+
+    expect(result.counts!.map((c) => [c.gain.mean > 0, c.stronger])).toEqual([[true, false]]);
+  }, 120_000);
+
   it('measures a count where every seat wins every game by final score, so a solo bot that scores more is stronger', async () => {
     const result = await runBotStrength(scoredSoloRules, { ...run, playerCounts: [1], bot: 'biggest', against: 'random' });
 

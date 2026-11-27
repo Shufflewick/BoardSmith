@@ -460,14 +460,16 @@ seed it takes the bot seat's share of the win minus the same seat's share with
 every seat playing `--against`, averaged over the seats the bot took, so a seat's
 own advantage and the seed's luck count the same on both sides. The bot passes a
 player count when the low end of the 95% interval of the mean of those paired
-gains is above 0 (#1837). A win shared by several seats counts a part to each,
+gains is above 0 and the seeds it did better on outnumber those it did worse on
+by more than chance allows (an exact one-sided sign test at 2.5%, so a few lucky
+seeds cannot pass it, #1837). A win shared by several seats counts a part to each,
 so a cooperative game is measured too, even one random play already wins most of.
 When every seat won every game playing `--against` (a score-attack solo game, where the one
 seat always wins) and in every game the bot played, win share cannot show
 anything, so the count is measured by the first `finalScore` metric
 `gameDefinition.metrics` declares, a higher score taken as better, paired the same
-way: the bot passes when the low end of the 95% interval of its seat's score minus
-the same seat's score with every seat playing `--against`, seed by seed, is above 0.
+way: the bot passes on its seat's score minus the same seat's score with every
+seat playing `--against`, seed by seed, by the same two tests.
 A game that declares no `finalScore` metric fails such a count, and the command
 says the comparison has no room to show a difference: declare one, or record the
 result as it is, since no change to the bot can pass it. `--bot`

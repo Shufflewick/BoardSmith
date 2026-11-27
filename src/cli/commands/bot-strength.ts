@@ -50,7 +50,11 @@ export type StrengthAtCount = {
    * opponents' policy, averaged over the seats the bot took: one value per seed, so the seats share its luck.
    */
   gain: Summary;
-  /** The low end of `gain`'s 95% interval is above 0. */
+  /** Seeds whose gain is above 0. */
+  better: number;
+  /** Seeds whose gain is below 0. */
+  worse: number;
+  /** The low end of `gain`'s 95% interval is above 0, and an exact one-sided sign test of `better` against `worse` passes at 2.5%. */
   stronger: boolean;
 } & (
   | {
@@ -86,9 +90,27 @@ type PlayedGame = { winners: number[]; metrics: GameMetricSummary };
 /** `seat`'s share of `game`'s win: 1/k when it is one of k winners. */
 const winCredit = (game: PlayedGame, seat: number) => (game.winners.includes(seat) ? 1 / game.winners.length : 0);
 
+/** The chance of `k` or more heads in `n` fair coin flips. */
+function chanceOfAtLeast(k: number, n: number): number {
+  let logWays = 0;
+  let chance = 0;
+  for (let j = 0; j <= n; j++) {
+    if (j >= k) chance += Math.exp(logWays - n * Math.LN2);
+    logWays += Math.log(n - j) - Math.log(j + 1);
+  }
+  return chance;
+}
+
 /** Seed by seed, `value` of the bot's seat minus the same seat's in the baseline game, averaged over the seats. */
-const pairedGain = (baseline: PlayedGame[], botRuns: PlayedGame[][], value: (game: PlayedGame, seat: number) => number) =>
-  summarize(baseline.map((game, g) => botRuns.reduce((sum, games, i) => sum + value(games[g], i + 1) - value(game, i + 1), 0) / botRuns.length));
+function pairedGain(baseline: PlayedGame[], botRuns: PlayedGame[][], value: (game: PlayedGame, seat: number) => number) {
+  const gains = baseline.map((game, g) => botRuns.reduce((sum, games, i) => sum + value(games[g], i + 1) - value(game, i + 1), 0) / botRuns.length);
+  const gain = summarize(gains);
+  // Win credits of 1/2, 1/3 and 1/6 can cancel to a rounding error rather than exactly 0.
+  const better = gains.filter((g) => g > 1e-9).length;
+  const worse = gains.filter((g) => g < -1e-9).length;
+  // The normal interval alone is too narrow when few seeds differ, and has no width at all on one seed.
+  return { gain, better, worse, stronger: gain.low > 0 && chanceOfAtLeast(better, better + worse) <= 0.025 };
+}
 
 /**
  * Play the bot in each seat in turn against `against` in every other seat, and every seat as
@@ -121,30 +143,36 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
     const seatGames = options.gamesPerSeat * players;
     const everySeatWon = [baseline.games, ...botRuns].every((games) => games.every((game) => game.winners.length === players));
     if (everySeatWon && scoreMetric !== undefined) {
-      const gain = pairedGain(baseline.games, botRuns, (game, seat) => game.metrics.values[scoreMetric][seat - 1]);
-      counts.push({ players, seatGames, gain, stronger: gain.low > 0, by: 'score', metric: scoreMetric });
+      const paired = pairedGain(baseline.games, botRuns, (game, seat) => game.metrics.values[scoreMetric][seat - 1]);
+      counts.push({ players, seatGames, ...paired, by: 'score', metric: scoreMetric });
       continue;
     }
-    const gain = pairedGain(baseline.games, botRuns, winCredit);
+    const paired = pairedGain(baseline.games, botRuns, winCredit);
     const botShare = botRuns.reduce((sum, games, i) => sum + games.reduce((s, game) => s + winCredit(game, i + 1), 0), 0) / seatGames;
     const baselineShare = baseline.games.filter((game) => game.winners.length > 0).length / options.gamesPerSeat / players;
-    counts.push({ players, seatGames, gain, stronger: gain.low > 0, by: 'wins', botShare, baselineShare, unmeasured: everySeatWon });
+    counts.push({ players, seatGames, ...paired, by: 'wins', botShare, baselineShare, unmeasured: everySeatWon });
   }
   return { failing: [], gameOptions, counts };
 }
 
 const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
-const signed = (value: number, format: (value: number) => string) => `${value >= 0 ? '+' : ''}${format(value)}`;
+/** `value` with its sign, none when it rounds to 0. */
+function signed(value: number, format: (value: number) => string): string {
+  const magnitude = format(Math.abs(value));
+  return `${format(0) === magnitude ? '' : value < 0 ? '-' : '+'}${magnitude}`;
+}
 const playersAt = (counts: StrengthAtCount[]) => counts.map((c) => `${c.players} player${c.players === 1 ? '' : 's'}`).join(' and ');
 
 function printCounts(counts: StrengthAtCount[]): void {
-  console.log('Players  Bot                  Baseline    Gain on the same seeds (95%)   Stronger');
+  const rows = [['Players', 'Bot', 'Baseline', 'Gain on the same seeds (95%)', 'Seeds better/worse', 'Stronger']];
   for (const c of counts) {
     const format = c.by === 'wins' ? percent : (value: number) => value.toFixed(1);
     const [bot, baseline] = c.by === 'wins' ? [`${percent(c.botShare)} of ${c.seatGames}`, percent(c.baselineShare)] : [`${c.metric} of ${c.seatGames}`, ''];
     const gain = `${signed(c.gain.mean, format)} (${signed(c.gain.low, format)} to ${signed(c.gain.high, format)})`;
-    console.log(`${String(c.players).padEnd(9)}${bot.padEnd(21)}${baseline.padEnd(12)}${gain.padEnd(31)}${c.stronger ? 'yes' : 'no'}`);
+    rows.push([String(c.players), bot, baseline, gain, `${c.better}/${c.worse}`, c.stronger ? 'yes' : 'no']);
   }
+  const widths = rows[0].map((_, column) => Math.max(...rows.map((row) => row[column].length)));
+  for (const row of rows) console.log(row.map((cell, column) => cell.padEnd(widths[column])).join('  ').trimEnd());
   const byScore = counts.filter((c) => c.by === 'score');
   if (byScore.length > 0) {
     console.log(
@@ -166,7 +194,8 @@ function printVerdict(run: RunBotStrengthOptions, counts: StrengthAtCount[]): bo
   const strengthen =
     `Strengthen the bot's hooks in src/rules/bot.ts (see /bs-build-bot), or play more games with --games to narrow the interval.`;
   const gainNotAbove = (measure: string) =>
-    `the low end of the 95% interval of how much more ${measure} than the same seat with every seat playing ${run.against}, on the same seeds, is not above 0. ${strengthen}`;
+    `the low end of the 95% interval of how much more ${measure} than the same seat with every seat playing ${run.against}, on the same seeds, ` +
+    `is not above 0, or the seeds it did better on do not outnumber those it did worse on by more than chance allows. ${strengthen}`;
   const lines = [
     ...notShown(weak.filter((c) => c.by === 'wins' && !c.unmeasured), gainNotAbove('win share it takes')),
     ...notShown(weak.filter((c) => c.by === 'score'), gainNotAbove('it scores')),
