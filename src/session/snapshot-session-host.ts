@@ -1370,10 +1370,7 @@ export class SnapshotSessionHost {
    * they change reaches every seat as an ordinary publish.
    */
   private async applyMutatingOp(seat: number | null, op: MutatingOp): Promise<OpResult> {
-    // A bot waits for the humans in a simultaneous step (#1842), so a deadline closing it lets it move first.
-    if (op.type === 'expireSeat' && this.botSeats.some((s) => s.seat === op.player)) {
-      await this.afterMove(`the deadline for bot seat ${op.player}`, false);
-    }
+    await this.letBotMoveBeforeItsSeatExpires(op);
     const res = await this.enqueue(() => this.commitMutatingOp(seat, op));
     if (!res.success) return res;
     const actionCompleted = completesAction(op, res);
@@ -1392,6 +1389,12 @@ export class SnapshotSessionHost {
     );
     this.backgroundWork.add(tracked);
     return res;
+  }
+
+  /** A bot waits for the humans in a simultaneous step (#1842), so a deadline that closes its seat runs the bots first. */
+  private async letBotMoveBeforeItsSeatExpires(op: MutatingOp): Promise<void> {
+    if (op.type !== 'expireSeat' || !this.botSeats.some((s) => s.seat === op.player)) return;
+    await this.afterMove(`the deadline for bot seat ${op.player}`, false);
   }
 
   /**
