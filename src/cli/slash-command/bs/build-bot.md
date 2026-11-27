@@ -526,8 +526,11 @@ Each exits 1 when the bot is not shown to be stronger at some player count. A
 fail with few games can be noise, so play more with `--games` before changing the
 hooks. A bot that still fails needs better objectives or a better playout policy,
 or, in a game with hidden information, a `determinize` sampler: without one, the
-search drops every move that touches what the seat cannot see. Put the passing
-commands' output in the report.
+search drops every move that touches what the seat cannot see. A count where
+every seat wins every game (a score-attack solo) is measured by the game's
+`finalScore` metric, so a game without one says to declare it in
+`gameDefinition.metrics`, never to change who wins. Put the passing commands'
+output in the report.
 
 ---
 

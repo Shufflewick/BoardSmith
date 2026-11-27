@@ -459,7 +459,14 @@ seat 2, and so on, and once more with every seat playing `--against`. The bot
 passes a player count when the low end of its win share's 95% interval is above
 the high end of the share one seat wins when every seat plays `--against`, so
 a seat's own advantage counts the same on both sides. A win shared by several
-seats counts a part to each, so a cooperative game is measured too. `--bot`
+seats counts a part to each, so a cooperative game is measured too. When every
+seat won every game playing `--against` (a score-attack solo game, where the one
+seat always wins) and in every game the bot played, win share cannot show
+anything, so the count is measured by the first `finalScore` metric
+`gameDefinition.metrics` declares, a higher score taken as better: the bot passes
+when the low end of the 95% interval of its seat's score minus the same seat's
+score with every seat playing `--against`, on the same seeds, is above 0. A game that declares no
+`finalScore` metric fails such a count, and the command says to declare one. `--bot`
 and `--against` take any `boardsmith simulate` policy name. The command exits 1
 when the bot is not shown to be stronger at some player count, or a game did not
 finish, and prints `--seed` so the same games can be played again.
