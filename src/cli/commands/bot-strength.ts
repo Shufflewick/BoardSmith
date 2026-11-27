@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { styleText } from 'node:util';
 
-import { share, summarize, type Share, type Summary } from '../../sim/report.js';
+import { summarize, type Summary } from '../../sim/report.js';
 import { declaredGameOptionsOf } from '../../session/game-option-selection.js';
 import { parsePositiveWholeNumber } from '../../utils/positive-whole-number.js';
 import { withCommandBuildDir } from '../lib/command-build-dir.js';
@@ -45,14 +45,20 @@ export type StrengthAtCount = {
   players: number;
   /** Games played times seats the bot took: one per game per seat. */
   seatGames: number;
+  /**
+   * Seed by seed, the bot seat's win credit or score minus the same seat's when every seat plays the
+   * opponents' policy, averaged over the seats the bot took: one value per seed, so the seats share its luck.
+   */
+  gain: Summary;
+  /** The low end of `gain`'s 95% interval is above 0. */
   stronger: boolean;
 } & (
   | {
       by: 'wins';
       /** The bot's share of the wins, a win shared by k seats counting 1/k to each. */
-      botShare: Share;
+      botShare: number;
       /** One seat's share of the wins when every seat plays the opponents' policy, on the same seeds. */
-      baselineShare: Share;
+      baselineShare: number;
       /** Every seat won every game, with the bot and without, and the game declares no `finalScore` metric to measure it by. */
       unmeasured: boolean;
     }
@@ -61,8 +67,6 @@ export type StrengthAtCount = {
       by: 'score';
       /** The `finalScore` metric compared. */
       metric: string;
-      /** The bot seat's score minus the same seat's under the baseline, game by game on the same seeds. */
-      gain: Summary;
     }
 );
 
@@ -77,12 +81,14 @@ export interface BotStrengthResult {
   counts: StrengthAtCount[] | null;
 }
 
-/** `seat`'s share of each game's win: 1/k when it is one of k winners. */
-const winCredit = (games: Array<{ winners: number[] }>, seat: number) =>
-  games.reduce((sum, { winners }) => sum + (winners.includes(seat) ? 1 / winners.length : 0), 0);
+type PlayedGame = { winners: number[]; metrics: GameMetricSummary };
 
-/** A share whose bounds are divided by `seats`: one seat's part of a share of the games. */
-const perSeat = (games: Share, seats: number): Share => ({ share: games.share / seats, low: games.low / seats, high: games.high / seats });
+/** `seat`'s share of `game`'s win: 1/k when it is one of k winners. */
+const winCredit = (game: PlayedGame, seat: number) => (game.winners.includes(seat) ? 1 / game.winners.length : 0);
+
+/** Seed by seed, `value` of the bot's seat minus the same seat's in the baseline game, averaged over the seats. */
+const pairedGain = (baseline: PlayedGame[], botRuns: PlayedGame[][], value: (game: PlayedGame, seat: number) => number) =>
+  summarize(baseline.map((game, g) => botRuns.reduce((sum, games, i) => sum + value(games[g], i + 1) - value(game, i + 1), 0) / botRuns.length));
 
 /**
  * Play the bot in each seat in turn against `against` in every other seat, and every seat as
@@ -115,32 +121,29 @@ export async function runBotStrength(rules: LoadedSimulation, options: RunBotStr
     const seatGames = options.gamesPerSeat * players;
     const everySeatWon = [baseline.games, ...botRuns].every((games) => games.every((game) => game.winners.length === players));
     if (everySeatWon && scoreMetric !== undefined) {
-      const scores = (game: { metrics: GameMetricSummary }) => game.metrics.values[scoreMetric];
-      const gain = summarize(botRuns.flatMap((games, i) => games.map((game, g) => scores(game)[i] - scores(baseline.games[g])[i])));
-      counts.push({ players, seatGames, by: 'score', metric: scoreMetric, gain, stronger: gain.low > 0 });
+      const gain = pairedGain(baseline.games, botRuns, (game, seat) => game.metrics.values[scoreMetric][seat - 1]);
+      counts.push({ players, seatGames, gain, stronger: gain.low > 0, by: 'score', metric: scoreMetric });
       continue;
     }
-    const botShare = share(botRuns.reduce((sum, games, i) => sum + winCredit(games, i + 1), 0), seatGames);
-    const anyoneWon = baseline.games.filter((game) => game.winners.length > 0).length;
-    const baselineShare = perSeat(share(anyoneWon, options.gamesPerSeat), players);
-    counts.push({ players, seatGames, by: 'wins', botShare, baselineShare, unmeasured: everySeatWon, stronger: botShare.low > baselineShare.high });
+    const gain = pairedGain(baseline.games, botRuns, winCredit);
+    const botShare = botRuns.reduce((sum, games, i) => sum + games.reduce((s, game) => s + winCredit(game, i + 1), 0), 0) / seatGames;
+    const baselineShare = baseline.games.filter((game) => game.winners.length > 0).length / options.gamesPerSeat / players;
+    counts.push({ players, seatGames, gain, stronger: gain.low > 0, by: 'wins', botShare, baselineShare, unmeasured: everySeatWon });
   }
   return { failing: [], gameOptions, counts };
 }
 
 const percent = (value: number) => `${(value * 100).toFixed(0)}%`;
-const interval = (s: Share) => `${percent(s.share)} (${percent(s.low)}-${percent(s.high)})`;
-
+const signed = (value: number, format: (value: number) => string) => `${value >= 0 ? '+' : ''}${format(value)}`;
 const playersAt = (counts: StrengthAtCount[]) => counts.map((c) => `${c.players} player${c.players === 1 ? '' : 's'}`).join(' and ');
-const signed = (value: number) => `${value >= 0 ? '+' : ''}${value.toFixed(1)}`;
 
 function printCounts(counts: StrengthAtCount[]): void {
-  console.log('Players  Bot win share (95%)      Baseline (95%)        Stronger');
+  console.log('Players  Bot                  Baseline    Gain on the same seeds (95%)   Stronger');
   for (const c of counts) {
-    const [bot, baseline] = c.by === 'wins'
-      ? [`${interval(c.botShare)} of ${c.seatGames}`, interval(c.baselineShare)]
-      : [`${c.metric} ${signed(c.gain.mean)} (${signed(c.gain.low)} to ${signed(c.gain.high)}) of ${c.seatGames}`, 'same seeds'];
-    console.log(`${String(c.players).padEnd(9)}${bot.padEnd(25)} ${baseline.padEnd(21)} ${c.stronger ? 'yes' : 'no'}`);
+    const format = c.by === 'wins' ? percent : (value: number) => value.toFixed(1);
+    const [bot, baseline] = c.by === 'wins' ? [`${percent(c.botShare)} of ${c.seatGames}`, percent(c.baselineShare)] : [`${c.metric} of ${c.seatGames}`, ''];
+    const gain = `${signed(c.gain.mean, format)} (${signed(c.gain.low, format)} to ${signed(c.gain.high, format)})`;
+    console.log(`${String(c.players).padEnd(9)}${bot.padEnd(21)}${baseline.padEnd(12)}${gain.padEnd(31)}${c.stronger ? 'yes' : 'no'}`);
   }
   const byScore = counts.filter((c) => c.by === 'score');
   if (byScore.length > 0) {
@@ -162,19 +165,16 @@ function printVerdict(run: RunBotStrengthOptions, counts: StrengthAtCount[]): bo
     kept.length === 0 ? [] : [`${run.bot} is not shown to beat ${run.against} at ${playersAt(kept)}: ${why}`];
   const strengthen =
     `Strengthen the bot's hooks in src/rules/bot.ts (see /bs-build-bot), or play more games with --games to narrow the interval.`;
+  const gainNotAbove = (measure: string) =>
+    `the low end of the 95% interval of how much more ${measure} than the same seat with every seat playing ${run.against}, on the same seeds, is not above 0. ${strengthen}`;
   const lines = [
-    ...notShown(
-      weak.filter((c) => c.by === 'wins' && !c.unmeasured),
-      `the low end of its win share's 95% interval is not above the high end of a seat's share when every seat plays ${run.against}. ${strengthen}`,
-    ),
-    ...notShown(
-      weak.filter((c) => c.by === 'score'),
-      `the low end of the 95% interval of how much more it scores than ${run.against} on the same seeds is not above 0. ${strengthen}`,
-    ),
+    ...notShown(weak.filter((c) => c.by === 'wins' && !c.unmeasured), gainNotAbove('win share it takes')),
+    ...notShown(weak.filter((c) => c.by === 'score'), gainNotAbove('it scores')),
     ...notShown(
       weak.filter((c) => c.by === 'wins' && c.unmeasured),
-      `every seat won every game played as ${run.against}, so win share cannot show the bot is stronger. ` +
-        'Declare a finalScore metric in gameDefinition.metrics (see defineMetrics) to measure such a count by score.',
+      `every seat won every game, both with ${run.bot} and with every seat playing ${run.against}, so this comparison has no room to show a difference. ` +
+        'Declare a finalScore metric in gameDefinition.metrics (see defineMetrics) to measure such a count by score; ' +
+        'without one, record this result as it is: no change to the hooks can pass it.',
     ),
   ];
   console.error(styleText('red', `\n${lines.join('\n')}\nThe same run again: --seed ${run.seed}`));
