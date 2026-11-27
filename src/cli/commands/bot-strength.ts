@@ -68,7 +68,7 @@ const winCredit = (winners: number[][], seat: number) =>
   winners.reduce((sum, won) => sum + (won.includes(seat) ? 1 / won.length : 0), 0);
 
 /** A share whose bounds are divided by `seats`: one seat's part of a share of the games. */
-const perSeat = ({ share, low, high }: Share, seats: number): Share => ({ share: share / seats, low: low / seats, high: high / seats });
+const perSeat = (games: Share, seats: number): Share => ({ share: games.share / seats, low: games.low / seats, high: games.high / seats });
 
 /**
  * Play the bot in each seat in turn against `against` in every other seat, and every seat as
