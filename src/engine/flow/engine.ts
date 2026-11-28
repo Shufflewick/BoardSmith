@@ -1377,16 +1377,17 @@ export class FlowEngine<G extends Game = Game> {
     // An action step publishes its committed actions (every link of a
     // follow-up chain), not its moves: this is undo's boundary (#495).
     const top = this.stack[this.stack.length - 1];
-    state.moveCount = top?.node.type === 'action-step' && typeof top.data?.actionCount === 'number'
-      ? top.data.actionCount
+    const data = top?.data ?? {};
+    state.moveCount = top?.node.type === 'action-step' && typeof data.actionCount === 'number'
+      ? data.actionCount
       : this.moveCount;
-    const counts = top?.data?.simultaneousActionCounts as FlowState['simultaneousActionCounts'];
+    const counts = data.simultaneousActionCounts as FlowState['simultaneousActionCounts'];
     if (counts) state.simultaneousActionCounts = { ...counts };
     // Why moveCount is 0 here, when the seat plainly just acted: the step
     // this frame belongs to never said whether re-entering it continues the
     // same turn. Published so the undo refusal can name the cause instead of
     // reporting "No actions to undo" -- see `entryRun`.
-    const undeclared = this.stack[this.stack.length - 1]?.data?.turnScopeUndeclared;
+    const undeclared = data.turnScopeUndeclared;
     if (typeof undeclared === 'string') {
       state.turnScopeUndeclared = undeclared;
     }
