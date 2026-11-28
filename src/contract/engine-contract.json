@@ -1,5 +1,5 @@
 {
-  "revision": 562,
+  "revision": 563,
   "surfaceHash": "193b1497d78e8f8b",
   "payloadHash": "7b6a878eb665f383",
   "formatHash": "e7644203601ae348",
@@ -4439,6 +4439,14 @@
       "payloadHash": "7b6a878eb665f383",
       "formatHash": "e7644203601ae348",
       "summary": "Bots keep moving after every human has acted in a simultaneous step with undo-only history."
+    },
+    {
+      "revision": 563,
+      "date": "2026-11-28",
+      "surfaceHash": "193b1497d78e8f8b",
+      "payloadHash": "7b6a878eb665f383",
+      "formatHash": "e7644203601ae348",
+      "summary": "The verbs check counts a verb dispatched in a test a helper under tests/ registers when a test file calls that helper (#1845)."
     }
   ]
 }
