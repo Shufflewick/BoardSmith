@@ -1,7 +1,7 @@
 {
-  "revision": 561,
-  "surfaceHash": "aca3c199c718b9ea",
-  "payloadHash": "31cc39ceb5e51a98",
+  "revision": 562,
+  "surfaceHash": "193b1497d78e8f8b",
+  "payloadHash": "7b6a878eb665f383",
   "formatHash": "e7644203601ae348",
   "history": [
     {
@@ -4431,6 +4431,14 @@
       "payloadHash": "31cc39ceb5e51a98",
       "formatHash": "e7644203601ae348",
       "summary": "The surface now names every option key a builder refuses because BoardSmith once read it (today timeLimitMs on actionStep and simultaneousActionStep), so retiring a key moves surfaceHash and a world built before it is not routed to an engine that refuses its rules (#1843). Worlds built on r552 or r553 still share r559's surface, which refuses timeLimitMs."
+    },
+    {
+      "revision": 562,
+      "date": "2026-11-28",
+      "surfaceHash": "193b1497d78e8f8b",
+      "payloadHash": "7b6a878eb665f383",
+      "formatHash": "e7644203601ae348",
+      "summary": "Bots keep moving after every human has acted in a simultaneous step with undo-only history."
     }
   ]
 }

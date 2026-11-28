@@ -1791,10 +1791,14 @@ export class SnapshotSessionHost {
   private humanYetToMoveAtOnceWithBots(): boolean {
     const flowState = this.flowState;
     if (!flowState?.awaitingPlayers?.length) return false;
-    // The step's own moves are the last `moveCount` entries of the history.
+    const humansDue = dueSeats(flowState).filter((seat) => !this.botSeats.some((s) => s.seat === seat));
+    const counts = flowState.simultaneousActionCounts;
+    if (counts) return humansDue.some((seat) => (counts[seat] ?? 0) === 0);
+
+    // Archived engines report only the length of the step's history window.
     const history = this._snapshot?.actionHistory ?? [];
     const moved = new Set(history.slice(Math.max(0, history.length - (flowState.moveCount ?? 0))).map((entry) => entry.player));
-    return dueSeats(flowState).some((seat) => !moved.has(seat) && !this.botSeats.some((s) => s.seat === seat));
+    return humansDue.some((seat) => !moved.has(seat));
   }
 
   /** The bot seats held back at the game as it stands, if any (#421). */
