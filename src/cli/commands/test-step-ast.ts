@@ -1102,18 +1102,9 @@ function skippedTestCheck(scoped: ScopedSource): (node: AstNode) => boolean {
   return (node) => ranges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
 }
 
-/** Every verb a file dispatches through the engine in a call `counts` accepts, with its line, in source order. */
-function dispatchesIn(scoped: ScopedSource, wrappers: DispatchWrappers, counts: (node: AstNode) => boolean): Array<{ verb: string; line: number }> {
-  const dispatches: Array<{ verb: string; line: number }> = [];
-  walk(scoped.ast, (node) => {
-    if (node.type !== 'CallExpression' || !counts(node)) return;
-    for (const value of carriedValues(scoped, node, dispatchCarriers, wrappers)) {
-      const verb = isNode(value) ? literalText(value) : undefined;
-      if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
-    }
-  });
-  return dispatches;
-}
+/** Every verb a call dispatches through the engine by a name written as a literal. */
+const literalDispatches = (scoped: ScopedSource, call: AstNode, wrappers: DispatchWrappers): string[] =>
+  carriedValues(scoped, call, dispatchCarriers, wrappers).flatMap((value) => (isNode(value) ? (literalText(value) ?? []) : []));
 
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
 export function findDispatches(
@@ -1123,64 +1114,73 @@ export function findDispatches(
 ): Array<{ verb: string; line: number }> {
   const scoped = parseScoped(source, file);
   const inSkipped = skippedTestCheck(scoped);
-  return dispatchesIn(scoped, wrappers, (node) => !inSkipped(node));
+  const dispatches: Array<{ verb: string; line: number }> = [];
+  walk(scoped.ast, (node) => {
+    if (node.type !== 'CallExpression' || inSkipped(node)) return;
+    for (const verb of literalDispatches(scoped, node, wrappers)) dispatches.push({ verb, line: node.loc.start.line });
+  });
+  return dispatches;
 }
 
-const within = (outer: { range: [number, number] }, node: AstNode) => outer.range[0] <= node.range[0] && node.range[1] <= outer.range[1];
+/** The module and export a `namespace.member` expression names, when `namespace` is an `import * as`. */
+function namespaceMember(source: ScopedSource, node: AstNode): Import | undefined {
+  if (node.type !== 'MemberExpression' || node.computed) return undefined;
+  const def = source.references.get(node.object)?.resolved?.defs[0];
+  const declaration = def?.parent as unknown as AstNode | undefined;
+  const name = identifierName(node.property);
+  if (def?.type !== 'ImportBinding' || (def.node as unknown as AstNode).type !== 'ImportNamespaceSpecifier' || name === undefined) return undefined;
+  return { specifier: (declaration?.source as AstNode).value as string, name };
+}
 
 /**
- * Every verb a test file dispatches through the engine, itself or in a test a function of another
- * file read registers when the test file calls it, outside skipped tests. Only a call registers:
- * a function a test file imports and never calls registers nothing (#1845).
+ * Every verb a test file dispatches through the engine, outside skipped tests: in its own text,
+ * or in a function of a file read that it calls or hands to a call, such as a helper under
+ * `tests/` that registers shared tests, followed through the functions that one calls in turn.
+ * A function a test file imports and never calls counts nothing (#1845).
  */
 export function findTestFileDispatchedVerbs(tests: readonly SourceFile[], sources: readonly SourceFile[], wrappers: DispatchWrappers): Set<string> {
   const texts = new Map([...sources, ...tests].map((file) => [file.path, file.text]));
   const files = new Set(texts.keys());
-  const parsed = new Map<string, ScopedSource>();
-  const scoped = (path: string): ScopedSource => {
-    const source = parsed.get(path) ?? parseScoped(texts.get(path)!, path);
-    parsed.set(path, source);
-    return source;
+  const parsed = new Map<string, { source: ScopedSource; inSkipped: (node: AstNode) => boolean }>();
+  const read = (path: string) => {
+    const known = parsed.get(path);
+    if (known) return known;
+    const source = parseScoped(texts.get(path)!, path);
+    const entry = { source, inSkipped: skippedTestCheck(source) };
+    parsed.set(path, entry);
+    return entry;
   };
   const modules = new Map<string, ModuleExports>();
   const exportsOf = (path: string): ModuleExports => {
-    const module = modules.get(path) ?? moduleExports(scoped(path), files);
+    const module = modules.get(path) ?? moduleExports(read(path).source, files);
     modules.set(path, module);
     return module;
   };
-  const called = (source: ScopedSource, callee: AstNode): FileFunction[] => {
-    if (callee.type !== 'Identifier') return [];
-    const imported = importOf(source, callee);
+  const functionsNamed = (source: ScopedSource, node: AstNode): FileFunction[] => {
+    const imported = node.type === 'Identifier' ? importOf(source, node) : namespaceMember(source, node);
     if (imported) {
       const from = resolveImport(source.file, imported.specifier, files);
       return from === undefined ? [] : exportedFunctions(exportsOf, from, imported.name);
     }
-    const local = localFunction(source, callee);
+    const local = node.type === 'Identifier' ? localFunction(source, node) : undefined;
     return local ? [{ file: source.file, fn: local }] : [];
   };
   const verbs = new Set<string>();
   const visited = new Set<string>();
-  const registered = (source: ScopedSource, counts: (node: AstNode) => boolean): void =>
-    walk(source.ast, (node) => {
-      if (node.type !== 'CallExpression' || !counts(node)) return;
-      for (const target of called(source, node.callee as AstNode)) {
-        if (visited.has(functionKey(target.file, target.fn))) continue;
-        visited.add(functionKey(target.file, target.fn));
-        const helper = scoped(target.file);
-        const inSkipped = skippedTestCheck(helper);
-        const inFunction = (n: AstNode) => within(target.fn, n) && !inSkipped(n);
-        const tests = collectBlocks(helper).filter((block) => block.kind === 'test');
-        const inTest = (n: AstNode) => inFunction(n) && tests.some((test) => within(test, n));
-        for (const { verb } of dispatchesIn(helper, wrappers, inTest)) verbs.add(verb);
-        registered(helper, inFunction);
+  const visit = (path: string, root: AstNode): void => {
+    const { source, inSkipped } = read(path);
+    walk(root, (node) => {
+      if (node.type !== 'CallExpression' || inSkipped(node)) return;
+      for (const verb of literalDispatches(source, node, wrappers)) verbs.add(verb);
+      for (const target of [node.callee, ...(node.arguments as AstNode[])].flatMap((n) => functionsNamed(source, n as AstNode))) {
+        const key = functionKey(target.file, target.fn);
+        if (visited.has(key)) continue;
+        visited.add(key);
+        visit(target.file, target.fn);
       }
     });
-  for (const test of tests) {
-    const source = scoped(test.path);
-    const inSkipped = skippedTestCheck(source);
-    for (const { verb } of dispatchesIn(source, wrappers, (node) => !inSkipped(node))) verbs.add(verb);
-    registered(source, (node) => !inSkipped(node));
-  }
+  };
+  for (const test of tests) visit(test.path, read(test.path).source.ast);
   return verbs;
 }
 
