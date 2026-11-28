@@ -253,4 +253,50 @@ it('from an order', async () => {
     });
     expect(await verbs(dir)).toEqual({ passed: true, summary: 'Every one of the 6 verbs the game defines is dispatched through the engine by a test.' });
   });
+
+  it('counts a verb dispatched in tests a helper registers when a test file calls it, and not when one only imports it (#1845)', async () => {
+    const defined = ['repair', 'viewPage', 'hooked', 'shared', 'nested', 'viaNamespace', 'asSuite', 'skipped', 'uncalled'];
+    const dir = await repo({
+      'src/rules/game.ts': [
+        "import { worldAction } from 'boardsmith/world';",
+        ...defined.map((verb) => `export const ${verb} = worldAction('${verb}');`),
+        '',
+      ].join('\n'),
+      'tests/helpers/world.ts': 'export async function run(name: string) { await runner.apply({ command: { name, args: {} } }); }\n',
+      'tests/helpers/repair-batch.ts': `import { beforeEach, it } from 'vitest';
+import { run } from './world.js';
+import { nestedTests } from './nested.js';
+const sharedStep = () => run('shared');
+export function repairBatchTests(build: () => unknown) {
+  beforeEach(() => run('hooked'));
+  it('repairs', async () => {
+    build();
+    await run('repair');
+    await run('viewPage');
+    await sharedStep();
+  });
+  it.skip('skipped', async () => { await run('skipped'); });
+  nestedTests();
+}
+export function uncalledTests() {
+  it('never registered', async () => { await run('uncalled'); });
+}
+`,
+      'tests/helpers/nested.ts': "import { it } from 'vitest';\nimport { run } from './world.js';\nexport const nestedTests = () => it('nested', () => run('nested'));\n",
+      'tests/helpers/suites.ts': `import { it } from 'vitest';
+import { run } from './world.js';
+export const namespaced = () => it('namespaced', () => run('viaNamespace'));
+export const suite = () => it('in a suite', () => run('asSuite'));
+`,
+      'tests/repair-batch.test.ts': `import { describe } from 'vitest';
+import { repairBatchTests, uncalledTests } from './helpers/repair-batch.js';
+import * as suites from './helpers/suites.js';
+void uncalledTests;
+repairBatchTests(() => ({}));
+suites.namespaced();
+describe('as a suite', suites.suite);
+`,
+    });
+    expect((await verbs(dir)).summary).toBe('2 of 9 verbs the game defines are not dispatched through the engine by any test: skipped, uncalled.');
+  });
 });
