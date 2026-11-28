@@ -699,10 +699,20 @@ export class FlowEngine<G extends Game = Game> {
     const config = frame.node.config as SimultaneousActionStepConfig;
     const playerState = this.awaitingPlayers.find((p) => p.playerIndex === seat);
     if (playerState) playerState.completed = true;
-    const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
-    frame.data = { ...frame.data, moveCount };
-    this.moveCount = moveCount;
+    this.countSimultaneousOp(frame);
     return this.endSimultaneousStepIfAllDone(frame, config);
+  }
+
+  /** Count every recorded op for the undo window and track actions still in effect per seat. */
+  private countSimultaneousOp(frame: ExecutionFrame<G>, action?: { seat: number; delta: 1 | -1 }): void {
+    const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
+    const counts = frame.data?.simultaneousActionCounts as FlowState['simultaneousActionCounts'];
+    frame.data = { ...frame.data, moveCount };
+    if (counts && action) {
+      const { seat, delta } = action;
+      frame.data.simultaneousActionCounts = { ...counts, [seat]: (counts[seat] ?? 0) + delta };
+    }
+    this.moveCount = moveCount;
   }
 
   /** End the open simultaneous step `frame` and run the flow on when its `allDone` holds; otherwise it stays open. */
@@ -735,9 +745,7 @@ export class FlowEngine<G extends Game = Game> {
     if (!this.awaitingInput || frame?.node.type !== 'simultaneous-action-step' || !playerState || !player) {
       throw new Error(`Seat ${seat} is not part of an open simultaneous step, so it has no action to take back there.`);
     }
-    const moveCount = ((frame.data?.moveCount as number) ?? 0) + 1;
-    frame.data = { ...frame.data, moveCount };
-    this.moveCount = moveCount;
+    this.countSimultaneousOp(frame, { seat, delta: -1 });
     playerState.completed = false;
     const config = frame.node.config as SimultaneousActionStepConfig;
     this.reevaluateSimultaneousSeat(frame, config, playerState, player, this.createContext());
@@ -1266,15 +1274,7 @@ export class FlowEngine<G extends Game = Game> {
     const config = frame.node.config as SimultaneousActionStepConfig;
     if (!this.recordActionResult(result, player.seat)) return this.getState();
 
-    // 160-02 (D4 step-window bound): count this action toward the CURRENT
-    // simultaneous-step frame's move counter (mirrors
-    // `handleActionStepCompletion`'s sequential moveCount increment).
-    // `frame.data` is the durable, checkpoint-restorable copy;
-    // `this.moveCount` is the live mirror `getState()` publishes.
-    const currentFrameMoveCount = (frame.data?.moveCount as number) ?? 0;
-    const newFrameMoveCount = currentFrameMoveCount + 1;
-    frame.data = { ...frame.data, moveCount: newFrameMoveCount };
-    this.moveCount = newFrameMoveCount;
+    this.countSimultaneousOp(frame, { seat: player.seat, delta: 1 });
 
     // Everything below runs AFTER the action committed its state changes.
     // playerDone / actions re-eval / allDone are developer callbacks
@@ -1380,6 +1380,8 @@ export class FlowEngine<G extends Game = Game> {
     state.moveCount = top?.node.type === 'action-step' && typeof top.data?.actionCount === 'number'
       ? top.data.actionCount
       : this.moveCount;
+    const counts = top?.data?.simultaneousActionCounts as FlowState['simultaneousActionCounts'];
+    if (counts) state.simultaneousActionCounts = { ...counts };
     // Why moveCount is 0 here, when the seat plainly just acted: the step
     // this frame belongs to never said whether re-entering it continues the
     // same turn. Published so the undo refusal can name the cause instead of
@@ -2313,7 +2315,7 @@ export class FlowEngine<G extends Game = Game> {
     // simultaneous-step cross-phase trap. Stored in `frame.data` (not just
     // the private field) so it survives the position round-trip exactly
     // like `executeActionStep`'s moveCount (`getPosition`/`restore`).
-    frame.data = { ...frame.data, moveCount: 0 };
+    frame.data = { ...frame.data, moveCount: 0, simultaneousActionCounts: {} };
     this.moveCount = 0;
     // A simultaneous step is a turn boundary in its own right: its undo
     // boundary comes from `simultaneousUndoBoundary` (session/utils.ts), not

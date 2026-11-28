@@ -466,6 +466,8 @@ export interface FlowState {
    * only when the flow isn't awaiting an action-step's input at all.
    */
   moveCount?: number;
+  /** Committed actions still in effect, by seat, in the open simultaneous step. Server-side only. */
+  simultaneousActionCounts?: Readonly<Partial<Record<number, number>>>;
   /**
    * Name of the action step whose fresh entry re-prompted the seat that had
    * just acted WITHOUT declaring {@link ActionStepConfig.turnScope}.
