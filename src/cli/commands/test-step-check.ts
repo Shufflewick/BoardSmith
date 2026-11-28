@@ -54,9 +54,9 @@ import {
   DISPATCH_FORMS,
   findDefinedVerbs,
   findDispatchWrappers,
-  findDispatchedVerbs,
   findFixtureWrappers,
   findStartedFixtures,
+  findTestFileDispatchedVerbs,
   findTestBlocks,
   findUnreachableGuards,
   findVerbWrappers,
@@ -493,10 +493,10 @@ async function definedVerbs(projectDir: string, added?: ReadonlyMap<string, Read
   return [...verbs];
 }
 
-/** Every verb one of `tests` dispatches through the engine, itself or through a helper under `tests/`. */
+/** Every verb one of `tests` dispatches through the engine, itself, through a helper under `tests/`, or in a test a helper registers. */
 async function dispatchedVerbs(projectDir: string, tests: readonly SourceFile[]): Promise<Set<string>> {
-  const wrappers = findDispatchWrappers([...(await testSupportSources(projectDir)), ...tests]);
-  return new Set(tests.flatMap((f) => findDispatchedVerbs(f.text, f.path, wrappers)));
+  const support = await testSupportSources(projectDir);
+  return findTestFileDispatchedVerbs(tests, support, findDispatchWrappers([...support, ...tests]));
 }
 
 /**

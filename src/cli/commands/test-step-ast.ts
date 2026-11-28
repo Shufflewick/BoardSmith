@@ -775,6 +775,25 @@ function moduleExports(source: ScopedSource, files: ReadonlySet<string>): Module
 
 const functionKey = (file: string, fn: AstNode) => `${file}:${fn.range[0]}`;
 
+/** A function a file declares. */
+interface FileFunction {
+  file: string;
+  fn: AstNode;
+}
+
+/** The functions a file read exports by `name`, followed through its re-exports. */
+function exportedFunctions(exportsOf: (file: string) => ModuleExports, file: string, name: string, seen = new Set<string>()): FileFunction[] {
+  const key = `${file}:${name}`;
+  if (seen.has(key)) return [];
+  seen.add(key);
+  const module = exportsOf(file);
+  const target = module.named.get(name);
+  if (target && 'fn' in target) return [{ file, fn: target.fn }];
+  // `export *` never passes on a default export.
+  const passed = target ? [target] : name === 'default' ? [] : module.star.map((from) => ({ from, name }));
+  return passed.flatMap((next) => (next.from === undefined ? [] : exportedFunctions(exportsOf, next.from, next.name, seen)));
+}
+
 /** The function an identifier names when its own file declares it as one. */
 function localFunction(source: ScopedSource, id: AstNode): AstNode | undefined {
   const def = stableVariable(source, id)?.defs[0];
@@ -910,18 +929,10 @@ function findWrappers(sources: readonly SourceFile[], carriers: Carriers, seedNa
     modules.set(path, module);
     return module;
   };
-  const exported = (file: string, name: string, seen = new Set<string>()): Slots | undefined => {
-    const key = `${file}:${name}`;
-    if (seen.has(key)) return undefined;
-    seen.add(key);
-    const module = exportsOf(file);
-    const target = module.named.get(name);
-    if (target && 'fn' in target) return wrappers.byFunction.get(functionKey(file, target.fn)) ?? NO_SLOTS;
-    // `export *` never passes on a default export.
-    const passed = target ? [target] : name === 'default' ? [] : module.star.map((from) => ({ from, name }));
-    const found = passed.flatMap((next) => (next.from === undefined ? [] : [exported(next.from, next.name, seen)]));
-    const read = found.filter((slots) => slots !== undefined);
-    return read.length === 0 ? undefined : new Map(read.flatMap((slots) => [...slots]));
+  const exported = (file: string, name: string): Slots | undefined => {
+    const fns = exportedFunctions(exportsOf, file, name);
+    if (fns.length === 0) return undefined;
+    return new Map(fns.flatMap((target) => [...(wrappers.byFunction.get(functionKey(target.file, target.fn)) ?? NO_SLOTS)]));
   };
   const wrappers = {
     byName: new Map<string, Map<string, Slot>>(),
@@ -1091,6 +1102,19 @@ function skippedTestCheck(scoped: ScopedSource): (node: AstNode) => boolean {
   return (node) => ranges.some(([start, end]) => start <= node.range[0] && node.range[1] <= end);
 }
 
+/** Every verb a file dispatches through the engine in a call `counts` accepts, with its line, in source order. */
+function dispatchesIn(scoped: ScopedSource, wrappers: DispatchWrappers, counts: (node: AstNode) => boolean): Array<{ verb: string; line: number }> {
+  const dispatches: Array<{ verb: string; line: number }> = [];
+  walk(scoped.ast, (node) => {
+    if (node.type !== 'CallExpression' || !counts(node)) return;
+    for (const value of carriedValues(scoped, node, dispatchCarriers, wrappers)) {
+      const verb = isNode(value) ? literalText(value) : undefined;
+      if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
+    }
+  });
+  return dispatches;
+}
+
 /** Every verb the file dispatches through the engine, outside skipped tests, with its line, in source order. */
 export function findDispatches(
   source: string,
@@ -1099,15 +1123,65 @@ export function findDispatches(
 ): Array<{ verb: string; line: number }> {
   const scoped = parseScoped(source, file);
   const inSkipped = skippedTestCheck(scoped);
-  const dispatches: Array<{ verb: string; line: number }> = [];
-  walk(scoped.ast, (node) => {
-    if (node.type !== 'CallExpression' || inSkipped(node)) return;
-    for (const value of carriedValues(scoped, node, dispatchCarriers, wrappers)) {
-      const verb = isNode(value) ? literalText(value) : undefined;
-      if (verb !== undefined) dispatches.push({ verb, line: node.loc.start.line });
+  return dispatchesIn(scoped, wrappers, (node) => !inSkipped(node));
+}
+
+const within = (outer: { range: [number, number] }, node: AstNode) => outer.range[0] <= node.range[0] && node.range[1] <= outer.range[1];
+
+/**
+ * Every verb a test file dispatches through the engine, itself or in a test a function of another
+ * file read registers when the test file calls it, outside skipped tests. Only a call registers:
+ * a function a test file imports and never calls registers nothing (#1845).
+ */
+export function findTestFileDispatchedVerbs(tests: readonly SourceFile[], sources: readonly SourceFile[], wrappers: DispatchWrappers): Set<string> {
+  const texts = new Map([...sources, ...tests].map((file) => [file.path, file.text]));
+  const files = new Set(texts.keys());
+  const parsed = new Map<string, ScopedSource>();
+  const scoped = (path: string): ScopedSource => {
+    const source = parsed.get(path) ?? parseScoped(texts.get(path)!, path);
+    parsed.set(path, source);
+    return source;
+  };
+  const modules = new Map<string, ModuleExports>();
+  const exportsOf = (path: string): ModuleExports => {
+    const module = modules.get(path) ?? moduleExports(scoped(path), files);
+    modules.set(path, module);
+    return module;
+  };
+  const called = (source: ScopedSource, callee: AstNode): FileFunction[] => {
+    if (callee.type !== 'Identifier') return [];
+    const imported = importOf(source, callee);
+    if (imported) {
+      const from = resolveImport(source.file, imported.specifier, files);
+      return from === undefined ? [] : exportedFunctions(exportsOf, from, imported.name);
     }
-  });
-  return dispatches;
+    const local = localFunction(source, callee);
+    return local ? [{ file: source.file, fn: local }] : [];
+  };
+  const verbs = new Set<string>();
+  const visited = new Set<string>();
+  const registered = (source: ScopedSource, counts: (node: AstNode) => boolean): void =>
+    walk(source.ast, (node) => {
+      if (node.type !== 'CallExpression' || !counts(node)) return;
+      for (const target of called(source, node.callee as AstNode)) {
+        if (visited.has(functionKey(target.file, target.fn))) continue;
+        visited.add(functionKey(target.file, target.fn));
+        const helper = scoped(target.file);
+        const inSkipped = skippedTestCheck(helper);
+        const inFunction = (n: AstNode) => within(target.fn, n) && !inSkipped(n);
+        const tests = collectBlocks(helper).filter((block) => block.kind === 'test');
+        const inTest = (n: AstNode) => inFunction(n) && tests.some((test) => within(test, n));
+        for (const { verb } of dispatchesIn(helper, wrappers, inTest)) verbs.add(verb);
+        registered(helper, inFunction);
+      }
+    });
+  for (const test of tests) {
+    const source = scoped(test.path);
+    const inSkipped = skippedTestCheck(source);
+    for (const { verb } of dispatchesIn(source, wrappers, (node) => !inSkipped(node))) verbs.add(verb);
+    registered(source, (node) => !inSkipped(node));
+  }
+  return verbs;
 }
 
 /** Every verb the file dispatches through the engine, outside skipped tests, in source order. */
